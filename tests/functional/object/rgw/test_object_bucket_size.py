@@ -67,7 +67,7 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
 @pytest.mark.polarion_id("OCS-2476")
 @skipif_mcg_only
 @tier1
-def deprecated_test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
+def deprecated_test_rgw_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     """
     Test to verify object bucket(backed by RGW) available size
 

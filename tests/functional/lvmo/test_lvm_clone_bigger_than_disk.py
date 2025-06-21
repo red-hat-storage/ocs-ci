@@ -3,7 +3,6 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier2,
     skipif_lvm_not_installed,
     aqua_squad,
 )
@@ -16,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 @aqua_squad
-@tier2
 @skipif_lvm_not_installed
 @skipif_ocs_version("<4.11")
 class TestLvmCloneBiggerThanDisk(ManageTest):
@@ -49,7 +47,7 @@ class TestLvmCloneBiggerThanDisk(ManageTest):
             ),
         ],
     )
-    def test_create_clone_from_pvc_bigger_than_disk(
+    def deprecated_test_create_clone_from_pvc_bigger_than_disk(
         self,
         volume_mode,
         volume_binding_mode,

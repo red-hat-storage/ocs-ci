@@ -5,7 +5,7 @@ import random
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     MCGTest,
-    tier1,
+    tier2,
     red_squad,
     mcg,
 )
@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 mcg_cli = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
 
 
-@tier1
 @red_squad
 @mcg
 class TestCustomCredsUsingMcgCli(MCGTest):
@@ -39,6 +38,7 @@ class TestCustomCredsUsingMcgCli(MCGTest):
         logger.info(output)
 
     @skipif_ocs_version("<4.17")
+    @tier2
     def test_account_update_with_custom_creds_using_cli(self, mcg_account_factory):
         """
         1. Create a new account using MCG CLI

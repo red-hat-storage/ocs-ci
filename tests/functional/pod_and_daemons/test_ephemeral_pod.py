@@ -10,7 +10,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
+    tier2,
     brown_squad,
     polarion_id,
     run_on_all_clients,
@@ -19,7 +19,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = getLogger(__name__)
 
 
-@tier1
+@tier2
 @brown_squad
 @polarion_id("OCS-5792")
 class TestEphemeralPod:

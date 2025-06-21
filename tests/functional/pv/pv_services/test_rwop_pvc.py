@@ -9,7 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     polarion_id,
-    tier1,
+    tier2,
     post_upgrade,
     skipif_ocs_version,
 )
@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
     ],
 )
 @green_squad
-@tier1
+@tier2
 @post_upgrade
 @skipif_ocs_version("<4.15")
 class TestRwopPvc(ManageTest):

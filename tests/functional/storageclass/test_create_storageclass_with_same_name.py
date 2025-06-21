@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier3, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
@@ -74,7 +74,7 @@ def create_storageclass(sc_name, expect_fail=False):
 
 
 @green_squad
-@tier1
+@tier3
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )

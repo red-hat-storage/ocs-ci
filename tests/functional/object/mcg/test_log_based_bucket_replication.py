@@ -251,7 +251,7 @@ class TestLogBasedBucketReplication(MCGTest):
         mockup_logger_b.delete_objs_and_log(bucket_b.name, objs, prefix=BUCKET_B_PREFIX)
         _assert_compare_bucket_object_list(DEL_SYNC_FAIL_MSG)
 
-    @tier1
+    @tier2
     @polarion_id("OCS-4937")
     def test_deletion_sync_opt_out(self, mcg_obj_session, log_based_replication_setup):
         """

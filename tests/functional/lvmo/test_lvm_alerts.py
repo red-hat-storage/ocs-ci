@@ -3,7 +3,6 @@ import time
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
     skipif_lvm_not_installed,
     aqua_squad,
 )
@@ -80,10 +79,9 @@ class TestLvmCapacityAlerts(ManageTest):
         self.proj_obj = project_factory()
         self.proj = self.proj_obj.namespace
 
-    @tier1
     @skipif_lvm_not_installed
     @skipif_ocs_version("<4.11")
-    def test_thin_pool_capacity_alert(
+    def deprecated_test_thin_pool_capacity_alert(
         self,
         namespace,
         init_lvm,

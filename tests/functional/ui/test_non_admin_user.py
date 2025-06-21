@@ -17,7 +17,6 @@ from ocs_ci.framework.testlib import (
     ui,
     polarion_id,
     tier2,
-    tier1,
     E2ETest,
 )
 from ocs_ci.utility.utils import ceph_health_check
@@ -77,7 +76,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
     """
 
     @ui
-    @tier1
+    @tier2
     @runs_on_provider
     @skipif_ibm_cloud_managed
     @polarion_id("OCS-4667")

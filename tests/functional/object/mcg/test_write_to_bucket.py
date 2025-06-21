@@ -128,7 +128,7 @@ class TestBucketIO(MCGTest):
                     "CLI",
                     {"interface": "CLI", "backingstore_dict": {"rgw": [(1, None)]}},
                 ],
-                marks=[tier1, on_prem_platform_required],
+                marks=[tier2, on_prem_platform_required],
             ),
             pytest.param(
                 *[
@@ -142,7 +142,7 @@ class TestBucketIO(MCGTest):
                     },
                 ],
                 marks=[
-                    tier1,
+                    tier2,
                     on_prem_platform_required,
                     jira("DFBUGS-1035", run=False),
                 ],
@@ -198,19 +198,19 @@ class TestBucketIO(MCGTest):
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1, skipif_fips_enabled],
+                marks=[tier2, skipif_fips_enabled],
             ),
         ],
         ids=[
@@ -283,11 +283,11 @@ class TestBucketIO(MCGTest):
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
         ],
         ids=[

@@ -5,7 +5,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
     turquoise_squad,
     polarion_id,
-    tier1,
+    tier4a,
+    tier4,
     jira,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
@@ -18,7 +19,8 @@ from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 logger = logging.getLogger(__name__)
 
 
-@tier1
+@tier4a
+@tier4
 @stretchcluster_required
 @turquoise_squad
 @jira("DFBUGS-1273")

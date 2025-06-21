@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier2,
     skipif_ocs_version,
     kms_config_required,
     skipif_managed_service,
@@ -32,19 +33,31 @@ else:
     if config.ENV_DATA.get("vault_hcp"):
         argvalues = [
             pytest.param(
-                "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-5389")
+                "v1",
+                kmsprovider,
+                True,
+                marks=[tier2, pytest.mark.polarion_id("OCS-5389")],
             ),
             pytest.param(
-                "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-5390")
+                "v2",
+                kmsprovider,
+                True,
+                marks=[tier1, pytest.mark.polarion_id("OCS-5390")],
             ),
         ]
     else:
         argvalues = [
             pytest.param(
-                "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-5387")
+                "v1",
+                kmsprovider,
+                False,
+                marks=[tier2, pytest.mark.polarion_id("OCS-5387")],
             ),
             pytest.param(
-                "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-5388")
+                "v2",
+                kmsprovider,
+                False,
+                marks=[tier1, pytest.mark.polarion_id("OCS-5388")],
             ),
         ]
 
@@ -77,7 +90,6 @@ class TestEncryptedVolumeExpansion(ManageTest):
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=argnames,
         argvalues=argvalues,

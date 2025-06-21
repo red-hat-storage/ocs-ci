@@ -9,7 +9,7 @@ from flaky import flaky
 import logging
 
 from ocs_ci.framework.pytest_customization import marks
-from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.testlib import tier2
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.prometheus import check_query_range_result_limits
 from ocs_ci.utility.workloadfixture import ignore_next_measurement_file
@@ -34,7 +34,7 @@ CPU_USAGE_POD = (
 @provider_mode
 @mcg
 @blue_squad
-@tier1
+@tier2
 @flaky(rerun_filter=ignore_next_measurement_file)
 @marks.polarion_id("OCS-2364")
 @skipif_managed_service

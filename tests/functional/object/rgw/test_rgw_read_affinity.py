@@ -55,7 +55,7 @@ class TestRGWReadAffinityMode:
 
         request.addfinalizer(teardown)
 
-    def get_read_affinity_from_ceph(self):
+    def get_rgw_read_affinity_from_ceph(self):
         """
         Returns current readAffinity set in ceph cluster
         Returns :

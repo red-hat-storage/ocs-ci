@@ -4,13 +4,13 @@ import logging
 from ocs_ci.helpers.helpers import get_ceph_log_level
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.framework.testlib import tier1, skipif_kms_deployment, skipif_external_mode
+from ocs_ci.framework.testlib import tier2, skipif_kms_deployment, skipif_external_mode
 
 log = logging.getLogger(__name__)
 
 
 @brown_squad
-@tier1
+@tier2
 @skipif_kms_deployment
 @skipif_external_mode
 class TestDebugVerbosityOfCephComponents:

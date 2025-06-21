@@ -8,7 +8,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     polarion_id,
-    tier1,
     tier2,
     pre_upgrade,
     post_upgrade,
@@ -44,7 +43,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
 
     """
 
-    @tier1
+    @tier2
     @polarion_id("OCS-5193")
     def test_default_buckets_backingstore(
         self,

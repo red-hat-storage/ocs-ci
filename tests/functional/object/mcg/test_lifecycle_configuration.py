@@ -8,7 +8,6 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
     tier2,
     tier3,
     jira,
@@ -83,7 +82,7 @@ class TestLifecycleConfiguration(MCGTest):
             ]
         )
 
-    @tier1
+    @tier3
     @pytest.mark.polarion_id("OCS-6541")
     def test_abort_incomplete_multipart_upload(
         self, mcg_obj, bucket_factory, awscli_pod, test_directory_setup
@@ -151,6 +150,7 @@ class TestLifecycleConfiguration(MCGTest):
             logger.warning(f"Upload has not expired yet: \n{http_response}")
 
     @pytest.mark.polarion_id("OCS-6559")
+    @tier2
     def test_noncurrent_version_expiration(self, mcg_obj, bucket_factory, awscli_pod):
         """
         1. Create an MCG bucket with versioning enabled
@@ -256,7 +256,7 @@ class TestLifecycleConfiguration(MCGTest):
                     )
                 )
 
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-6802")
     def test_expired_object_delete_marker(self, mcg_obj, bucket_factory, awscli_pod):
         """

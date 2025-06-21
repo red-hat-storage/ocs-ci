@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.framework.pytest_customization.marks import (
@@ -25,7 +25,6 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @ui
-@tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.9")
 @skipif_ibm_cloud_managed
@@ -46,7 +45,7 @@ class TestRbDPool(ManageTest):
                     constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
                 ],
-                marks=pytest.mark.polarion_id("OCS-3886"),
+                marks=[tier1, pytest.mark.polarion_id("OCS-3886")],
             ),
             pytest.param(
                 *[
@@ -55,7 +54,7 @@ class TestRbDPool(ManageTest):
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
                 ],
-                marks=pytest.mark.polarion_id("OCS-3885"),
+                marks=[tier2, pytest.mark.polarion_id("OCS-3885")],
             ),
         ],
     )
@@ -152,6 +151,7 @@ class TestRbDPool(ManageTest):
         assert all(checks.values())
 
     @pytest.mark.polarion_id("OCS-3890")
+    @tier2
     def test_multiple_sc_one_pool(
         self,
         setup_ui_class,

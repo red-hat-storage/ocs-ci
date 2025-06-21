@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_external_mode
+from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
 from tests.fixtures import (
     create_ceph_block_pool,
     create_rbd_secret,
@@ -20,7 +20,7 @@ SC_OBJ = None
 
 @green_squad
 @skipif_external_mode
-@tier1
+@tier2
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
     create_cephfs_secret.__name__,

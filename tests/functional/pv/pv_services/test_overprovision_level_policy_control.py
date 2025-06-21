@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier2,
     skipif_ocs_version,
     skipif_managed_service,
     skipif_hci_provider_and_client,
@@ -76,15 +77,19 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
     @pytest.mark.parametrize(
         argnames=["sc_name", "sc_type"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
-            pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL], marks=[tier1]
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM], marks=[tier2]
+            ),
             pytest.param(
                 *["sc-test-blk", constants.CEPHBLOCKPOOL],
-                marks=[skipif_ocs_version("<4.10")],
+                marks=[tier2, skipif_ocs_version("<4.10")],
             ),
             pytest.param(
                 *["sc-test-fs", constants.CEPHFILESYSTEM],
-                marks=[skipif_ocs_version("<4.10")],
+                marks=[tier2, skipif_ocs_version("<4.10")],
             ),
         ],
     )

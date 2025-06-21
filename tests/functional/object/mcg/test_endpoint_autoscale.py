@@ -1,7 +1,7 @@
 import time
 import logging
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import MCGTest, tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import MCGTest, tier2, skipif_ocs_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 @runs_on_provider
 @skipif_ocs_version(["<4.5", "<4.14"])
 @skipif_managed_service
-@tier1
+@tier2
 class TestEndpointAutoScale(MCGTest):
     """
     Test MCG endpoint auto-scaling

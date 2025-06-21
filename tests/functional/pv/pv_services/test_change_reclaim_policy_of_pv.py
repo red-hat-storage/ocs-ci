@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier2,
     skipif_managed_service,
     skipif_hci_provider_and_client,
 )
@@ -27,17 +28,17 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @pytest.mark.parametrize(
     argnames=["interface", "reclaim_policy"],
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_DELETE],
-            marks=[pytest.mark.polarion_id("OCS-939"), provider_mode],
+            marks=[tier1, pytest.mark.polarion_id("OCS-939"), provider_mode],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_RETAIN],
             marks=[
+                tier2,
                 pytest.mark.polarion_id("OCS-962"),
                 skipif_managed_service,
                 skipif_hci_provider_and_client,
@@ -45,11 +46,12 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_DELETE],
-            marks=[pytest.mark.polarion_id("OCS-963"), provider_mode],
+            marks=[tier2, pytest.mark.polarion_id("OCS-963"), provider_mode],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_RETAIN],
             marks=[
+                tier2,
                 pytest.mark.polarion_id("OCS-964"),
                 skipif_managed_service,
                 skipif_hci_provider_and_client,
