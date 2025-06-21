@@ -3383,3 +3383,8 @@ LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
 
 # Auto-scaling Yaml files
 AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
+
+# ODF recovery profiles
+LOW_RECOVERY_OPS = "low_recovery_ops"
+BALANCED = "balanced"
+HIGH_RECOVERY_OPS = "high_recovery_ops"

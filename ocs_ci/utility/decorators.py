@@ -1,7 +1,10 @@
 import logging
+import functools
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 
+# from ocs_ci.ocs.constants import
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +106,126 @@ def switch_to_provider_for_function(func):
                 config.switch_ctx(orig_index)
 
     return inner
+
+
+def safe_exec(exception_type=Exception):
+    """
+    A decorator factory that wraps a function in a try-except block to catch and suppress
+    specified exceptions, logging the full traceback.
+
+    This is useful for non-critical operations where failure should not interrupt
+    the main flow of the program.
+
+    Args:
+        exception_type (Exception or tuple of Exceptions): The type(s) of exceptions to catch.
+            Defaults to the base Exception class.
+
+    Returns:
+        A decorator that wraps a function, returning None if an exception is caught.
+
+    Examples::
+
+        @safe_exec()
+        def risky_division(x, y):
+            return x / y
+
+        risky_division(1, 0)
+        # WARNING - Exception in risky_division: division by zero
+        # None
+
+        @safe_exec(KeyError)
+        def get_item(d, key):
+            return d[key]
+
+        get_item({'a': 1}, 'b')
+        # WARNING - Exception in get_item: 'b'
+        # None
+
+        # Manual usage without decorator syntax:
+        def get_item(d, key):
+            return d[key]
+
+        safe_exec(KeyError)(get_item)({'a': 1}, 'b')
+        # WARNING - Exception in get_item: 'b'
+        # None
+    """
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except exception_type as ex:
+                func_name = getattr(func, "__name__", "unknown")
+                logger.exception(f"Exception in {func_name}: {ex}")
+                return None
+
+        return wrapper
+
+    return decorator
+
+
+def enable_high_recovery(func):
+    """
+    Decorator to temporarily switch the Ceph recovery profile to 'high_recovery_ops'
+    during the execution of the wrapped function, and revert it back afterward.
+
+    This is useful when performing operations like OSD replacement or data rebalancing
+    that benefit from faster Ceph recovery performance.
+
+    If the ODF CLI runner or current profile cannot be determined, the function executes without change.
+
+    The switch is always reverted, even if the function raises an exception.
+
+    Returns:
+        The result of the wrapped function.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        odf_cli_runner = safe_exec()(odf_cli_setup_helper)()
+        if not odf_cli_runner:
+            logger.warning(
+                "ODF CLI runner not available, proceeding without profile switch"
+            )
+            return func(*args, **kwargs)
+
+        original_profile = safe_exec()(odf_cli_runner.get_recovery_profile)()
+        if not original_profile:
+            logger.warning(
+                "Failed to get current recovery profile, proceeding without profile switch"
+            )
+            return func(*args, **kwargs)
+
+        logger.info("Setting recovery profile to 'high_recovery_ops'")
+        safe_exec()(odf_cli_runner.run_set_recovery_profile_high)()
+
+        try:
+            return func(*args, **kwargs)
+        finally:
+            logger.info(f"Switch to the original recovery profile '{original_profile}'")
+            safe_exec()(odf_cli_runner.run_set_recovery_profile)(original_profile)
+
+    return wrapper
+
+
+def enable_high_recovery_if_io_flag(func):
+    """
+    Decorator that applies 'enable_high_recovery' only if the 'io_in_bg' flag
+    is set to True in the test configuration. Otherwise, the function is run as-is.
+
+    Returns:
+        The result of the wrapped function.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if not config.RUN.get("io_in_bg"):
+            logger.info(
+                "The 'io_in_bg' param is not set. Proceeding with the original function..."
+            )
+            return func(*args, **kwargs)
+
+        # Apply the real decorator 'enable_high_recovery'
+        return enable_high_recovery(func)(*args, **kwargs)
+
+    return wrapper
