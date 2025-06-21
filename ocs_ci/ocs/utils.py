@@ -2028,6 +2028,20 @@ def is_dr_scenario():
     )
 
 
+def is_mdr_provider():
+    """
+    Check if it is MDR provider setup
+
+    Returns:
+        bool: True if MDR provider setup else False
+
+    """
+    return (
+        ocsci_config.MULTICLUSTER.get("multicluster_mode")
+        == constants.MDR_PROVIDER_MODE
+    )
+
+
 def get_dr_operator_versions():
     """
     Get all DR operator versions on hub and primary clusters
