@@ -175,6 +175,8 @@ class BenchmarkOperatorFIO(object):
             )
         else:
             cmd = f"make deploy IMG={bo_image}"
+            self.env = os.environ.copy()
+            self.env["KUBECONFIG"] = config.RUN.get("kubeconfig")
         run(
             cmd,
             shell=True,
@@ -281,6 +283,8 @@ class BenchmarkOperatorFIO(object):
             cmd = f"kustomize build config/default | oc --kubeconfig={self.kubeconfig} delete -f -"
         else:
             cmd = "make undeploy"
+            self.env = os.environ.copy()
+            self.env["KUBECONFIG"] = config.RUN.get("kubeconfig")
         run(
             cmd,
             shell=True,

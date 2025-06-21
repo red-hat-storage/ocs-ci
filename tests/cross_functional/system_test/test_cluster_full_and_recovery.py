@@ -18,9 +18,9 @@ from ocs_ci.ocs.resources.pod import cal_md5sum, wait_for_storage_pods
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs.cluster import (
     change_ceph_full_ratio,
-    get_percent_used_capacity,
-    get_osd_utilization,
-    get_ceph_df_detail,
+)
+from ocs_ci.helpers.managed_services import (
+    verify_osd_used_capacity_greater_than_expected,
 )
 
 log = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ class TestClusterFullAndRecovery(E2ETest):
         sample = TimeoutSampler(
             timeout=2500,
             sleep=40,
-            func=self.verify_osd_used_capacity_greater_than_expected,
+            func=verify_osd_used_capacity_greater_than_expected,
             expected_used_capacity=85.0,
         )
         if not sample.wait_for_func_status(result=True):
@@ -155,10 +155,11 @@ class TestClusterFullAndRecovery(E2ETest):
         )
         log.info("Verify used capacity bigger than 85%")
         expected_alerts = ["CephOSDCriticallyFull", "CephOSDNearFull"]
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
         sample = TimeoutSampler(
             timeout=600,
             sleep=50,
-            func=self.verify_alerts_via_prometheus,
+            func=prometheus.verify_alerts_via_prometheus,
             expected_alerts=expected_alerts,
             threading_lock=threading_lock,
         )
@@ -295,55 +296,3 @@ class TestClusterFullAndRecovery(E2ETest):
             f"md5sum of restore_rbd1 {pod_restore_rbd1_obj.md5} is not equal "
             f"to pod_rbd1_obj {pod_rbd1_obj.md5}"
         )
-
-    def verify_osd_used_capacity_greater_than_expected(self, expected_used_capacity):
-        """
-        Verify OSD percent used capacity greate than ceph_full_ratio
-
-        Args:
-            expected_used_capacity (float): expected used capacity
-
-        Returns:
-             bool: True if used_capacity greater than expected_used_capacity, False otherwise
-
-        """
-        used_capacity = get_percent_used_capacity()
-        log.info(f"Used Capacity is {used_capacity}%")
-        ceph_df_detail = get_ceph_df_detail()
-        log.info(f"ceph df detail: {ceph_df_detail}")
-        osds_utilization = get_osd_utilization()
-        log.info(f"osd utilization: {osds_utilization}")
-        for osd_id, osd_utilization in osds_utilization.items():
-            if osd_utilization > expected_used_capacity:
-                log.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
-                return True
-        return False
-
-    def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
-        """
-        Verify Alerts on prometheus
-
-        Args:
-            expected_alerts (list): list of alert names
-            threading_lock (threading.Rlock): Lock object to prevent simultaneous calls to 'oc'
-
-        Returns:
-            bool: True if expected_alerts exist, False otherwise
-
-        """
-        prometheus = PrometheusAPI(threading_lock=threading_lock)
-        log.info("Logging of all prometheus alerts started")
-        alerts_response = prometheus.get(
-            "alerts", payload={"silenced": False, "inhibited": False}
-        )
-        actual_alerts = list()
-        for alert in alerts_response.json().get("data").get("alerts"):
-            actual_alerts.append(alert.get("labels").get("alertname"))
-        for expected_alert in expected_alerts:
-            if expected_alert not in actual_alerts:
-                log.error(
-                    f"{expected_alert} alert does not exist in alerts list."
-                    f"The actaul alerts: {actual_alerts}"
-                )
-                return False
-        return True
