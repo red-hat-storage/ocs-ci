@@ -13,6 +13,7 @@ import tarfile
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -34,7 +35,7 @@ from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
-from ocs_ci.utility.retry import retry
+from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -138,6 +139,8 @@ class CNVInstaller(object):
         cnv_subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cnv_subscription_manifest", delete=False
         )
+        # namespace attribute can be set in a child object. We avoid this behavior by assigning ns to the one from yaml
+        self.namespace = cnv_subscription_yaml_data.get("metadata").get("namespace")
         templating.dump_data_to_temp_yaml(
             cnv_subscription_yaml_data, cnv_subscription_manifest.name
         )
@@ -214,6 +217,7 @@ class CNVInstaller(object):
             resource_name=catalogsource_name,
         )
 
+    @catch_exceptions((CommandFailed))
     def deploy_hyper_converged(self):
         """
         Deploys the HyperConverged CR.
