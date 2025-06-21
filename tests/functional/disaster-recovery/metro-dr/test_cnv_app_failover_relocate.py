@@ -26,6 +26,7 @@ from ocs_ci.helpers.dr_helpers import (
 )
 
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.ocs.utils import is_mdr_provider
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,9 @@ class TestCnvApplicationMDR:
 
         # Create CNV applications(appset+sub)
         cnv_workloads = cnv_dr_workload(
-            num_of_vm_subscription=1, num_of_vm_appset_push=1, num_of_vm_appset_pull=1
+            num_of_vm_subscription=1 if not is_mdr_provider() else 0,
+            num_of_vm_appset_push=1,
+            num_of_vm_appset_pull=1,
         )
         self.wl_namespace = cnv_workloads[0].workload_namespace
 

@@ -70,13 +70,19 @@ class TestApplicationFailoverAndRelocate:
             pytest.param(
                 constants.SUBSCRIPTION,
                 False,
-                marks=pytest.mark.polarion_id(polarion_id_primary_up),
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_up),
+                    pytest.mark.skipif_mdr_provider,
+                ],
                 id="primary_up_subscription",
             ),
             pytest.param(
                 constants.SUBSCRIPTION,
                 True,
-                marks=pytest.mark.polarion_id(polarion_id_primary_down),
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_down),
+                    pytest.mark.skipif_mdr_provider,
+                ],
                 id="primary_down_subscription",
             ),
             pytest.param(
