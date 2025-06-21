@@ -2019,7 +2019,7 @@ def email_reports(session):
     move_summary_to_top(soup)
     add_info_about_mg_skips(soup)
     add_time_report_to_email(session, soup)
-    part1 = MIMEText(soup, "html")
+    part1 = MIMEText(soup.decode(formatter="minimal"), "html")
     add_mem_stats(soup)
     msg.attach(part1)
     try:
@@ -5191,9 +5191,9 @@ def create_unreleased_oadp_catalog():
             mode="w+", prefix="brew-catalog", delete=False
         )
         dump_data_to_temp_yaml(brew_catalog_data, brew_catalog_data_yaml.name)
-        run_cmd(f"oc create -f {constants.BREW_ICSP}", timeout=300)
+        run_cmd(f"oc apply -f {constants.BREW_ICSP}", timeout=300)
         wait_for_machineconfigpool_status("all")
-        run_cmd(f"oc create -f {brew_catalog_data_yaml.name}", timeout=300)
+        run_cmd(f"oc apply -f {brew_catalog_data_yaml.name}", timeout=300)
         catalog_source = CatalogSource(
             resource_name=constants.OADP_CATALOG_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,

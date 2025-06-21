@@ -158,7 +158,7 @@ class Submariner(object):
             mode="w+", prefix="acm_icsp", delete=False
         )
         templating.dump_data_to_temp_yaml(icsp_data, icsp_data_yaml.name)
-        run_cmd(f"oc create -f {icsp_data_yaml.name}", timeout=300)
+        run_cmd(f"oc apply -f {icsp_data_yaml.name}", timeout=300)
         wait_for_machineconfigpool_status(node_type="all")
 
     def download_binary(self):

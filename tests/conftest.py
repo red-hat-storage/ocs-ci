@@ -7272,7 +7272,7 @@ def discovered_apps_dr_workload(request):
             for index in range(kubeobject):
                 instances[index].discovered_apps_placement_name = drpc_name
             instances[0].create_placement(placement_name=placement_name)
-            instances[0].create_dprc(
+            instances[0].create_drpc(
                 drpc_name=drpc_name,
                 placement_name=placement_name,
                 protected_namespaces=multi_ns_list,
