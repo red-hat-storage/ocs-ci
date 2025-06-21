@@ -1925,7 +1925,16 @@ class VSPHERE(object):
         container_view = content.viewManager.CreateContainerView(
             container, view_type, recursive
         )
-        vms = [vm for vm in container_view.view if str_to_match in vm.name]
+
+        vms = []
+        for vm in container_view.view:
+            try:
+                if str_to_match in vm.name:
+                    vms.append(vm)
+            except vmodl.fault.ManagedObjectNotFound:
+                # VM was deleted or invalid, skip it
+                continue
+
         container_view.Destroy()
         return vms
 
