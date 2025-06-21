@@ -3,7 +3,11 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
-from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+    run_on_all_clients,
+)
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.helpers.helpers import wait_for_resource_state
 
@@ -20,6 +24,7 @@ log = logging.getLogger(__name__)
             *[constants.CEPHBLOCKPOOL],
             marks=[
                 pytest.mark.polarion_id("OCS-1177"),
+                run_on_all_clients,
             ],
         ),
     ],
@@ -54,7 +59,9 @@ class TestRwoUsingMultiplePods(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
-    def test_verify_rwo_using_multiple_pods(self, interface, pod_factory):
+    def test_verify_rwo_using_multiple_pods(
+        self, interface, pod_factory, cluster_index
+    ):
         """
         This test case verifies RWO access mode by trying to mount same RWO
         PVC on different pods, delete running pods one by one and ensure that

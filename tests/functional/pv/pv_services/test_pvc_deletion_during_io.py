@@ -3,7 +3,11 @@ import logging
 
 from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+    run_on_all_clients,
+)
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 
@@ -40,7 +44,8 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         self.pvc_obj = pvc_factory(interface=interface)
         self.pod_obj = pod_factory(pvc=self.pvc_obj)
 
-    def test_run_io_and_delete_pvc(self):
+    @run_on_all_clients
+    def test_run_io_and_delete_pvc(self, cluster_index):
         """
         Delete PVC while IO is in progress
 

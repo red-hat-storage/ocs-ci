@@ -6,6 +6,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
+    run_on_all_clients,
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -61,8 +62,9 @@ class TestRbdBlockPvcSnapshot(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
+    @run_on_all_clients
     def test_rbd_block_pvc_snapshot(
-        self, snapshot_factory, snapshot_restore_factory, pod_factory
+        self, snapshot_factory, snapshot_restore_factory, pod_factory, cluster_index
     ):
         """
         Test to take snapshots of RBD Block VolumeMode PVCs
