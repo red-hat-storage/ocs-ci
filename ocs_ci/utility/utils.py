@@ -5666,7 +5666,7 @@ def wait_custom_resource_defenition_available(crd_name, timeout=600):
     )
 
 
-def clean_up_pods_for_provider(node_type, max_retries=30, retry_delay_seconds=30):
+def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30):
     """
     Manually clean up pods if nodes get stuck in Ready,SchedulingDisabled during OCP upgrade.
     Checks machine-config-controller logs for eviction errors or completion messages.
