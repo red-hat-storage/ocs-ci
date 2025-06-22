@@ -8,8 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ignore_resource_not_found_error_label,
-    tier1,
-    tier2,
+    tier3,
     green_squad,
     skipif_ibm_cloud_managed,
 )
@@ -101,7 +100,7 @@ class TestDeleteRbdPool(ManageTest):
                     constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
                 ],
-                marks=pytest.mark.polarion_id("OCS-5134"),
+                marks=[tier3, pytest.mark.polarion_id("OCS-5134")],
             ),
             pytest.param(
                 *[
@@ -110,7 +109,7 @@ class TestDeleteRbdPool(ManageTest):
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
                 ],
-                marks=[tier2, pytest.mark.polarion_id("OCS-5135")],
+                marks=[tier3, pytest.mark.polarion_id("OCS-5135")],
             ),
             pytest.param(
                 *[
@@ -119,7 +118,7 @@ class TestDeleteRbdPool(ManageTest):
                     constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
                 ],
-                marks=[tier2, pytest.mark.polarion_id("OCS-5136")],
+                marks=[tier3, pytest.mark.polarion_id("OCS-5136")],
             ),
             pytest.param(
                 *[
@@ -128,7 +127,7 @@ class TestDeleteRbdPool(ManageTest):
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
                 ],
-                marks=[tier2, pytest.mark.polarion_id("OCS-5137")],
+                marks=[tier3, pytest.mark.polarion_id("OCS-5137")],
             ),
         ],
     )
@@ -180,7 +179,7 @@ class TestDeleteRbdPool(ManageTest):
                 "cephblockpool deletion should fail if referenced by storageclass"
             )
 
-    @tier1
+    @tier3
     @skipif_external_mode
     @skipif_ibm_cloud_managed
     @pytest.mark.parametrize(
