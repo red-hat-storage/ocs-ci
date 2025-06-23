@@ -35,24 +35,6 @@ class TestUserInterfaceValidation(object):
     @ui
     @runs_on_provider
     @tier1
-    @polarion_id("OCS-4925")
-    @skipif_ui_not_support("validation")
-    def test_storage_cluster_validation_ui(self, setup_ui_class_factory):
-        """
-        Validate Storage Cluster status on UI
-
-        Args:
-            setup_ui_class: login function on conftest file
-
-        """
-        setup_ui_class_factory()
-
-        validation_ui_obj = ValidationUI()
-        validation_ui_obj.validate_storage_cluster_ui()
-
-    @ui
-    @runs_on_provider
-    @tier1
     @polarion_id("OCS-2575")
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui_class_factory):
