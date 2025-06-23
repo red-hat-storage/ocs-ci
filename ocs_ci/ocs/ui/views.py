@@ -320,7 +320,9 @@ generic_locators = {
     ),
     "resource_link": (
         "//a[@data-test='resource-link-{}'] | "
-        "//td[@data-label='Name']//a[contains(text(),'{}')]",
+        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//td[@data-label='Name']//a[contains(text(),'{}')] | "
+        "//td[@data-label='name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
     "confirm_action": (
@@ -364,7 +366,11 @@ generic_locators = {
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
     "searchbar-select-name": ("//button[@id='NAME-link']", By.XPATH),
     "searchbar-select-label": ("//button[@id='LABEL-link']", By.XPATH),
-    "searchbar_input": ("//input[@data-test-id='item-filter']", By.XPATH),
+    "searchbar_input": (
+        "//input[@data-test-id='item-filter'] | "
+        "//input[@placeholder='Search by name...']",
+        By.XPATH,
+    ),
     "resource_from_list_by_name": (
         "//td[@id='name']//a[contains(text(), '{}')]",
         By.XPATH,
@@ -1685,7 +1691,8 @@ validation_4_9 = {
         By.XPATH,
     ),
     "ocs-storagecluster-storagesystem": (
-        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']"
+        "a[href='/odf/system/ns/openshift-storage/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
         By.CSS_SELECTOR,
     ),
     "ocs-external-storagecluster-storagesystem": (
@@ -1768,7 +1775,8 @@ validation_4_9 = {
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
     "storage-system-status-card-hyperlink": (
-        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')] | "
+        "//div[@class='odf-status-card__popup--margin']//a[contains(text(),'ocs-storagecluster')]",
         By.XPATH,
     ),
     "storage-system-external-status-card-hyperlink": (
@@ -1780,11 +1788,13 @@ validation_4_9 = {
         By.XPATH,
     ),
     "storagesystem-details-compress-state": (
-        "#compressionStatus",
+        "#compressionStatus, "
+        "span[data-test='ocs-storagecluster-cephblockpool-compression']",
         By.CSS_SELECTOR,
     ),
     "storagecluster-blockpool-details-compress-status": (
-        "[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
+        "[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value'], "
+        "div[data-test-id='compression-details-card'] div[class='pf-v5-c-description-list__text']",
         By.CSS_SELECTOR,
     ),
     "performance-card": (
@@ -1878,12 +1888,14 @@ validation_4_13 = {
     # locator presented only if the tab is active
     "odf-overview-tab-active": (
         "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
-        "//a[@data-test-id='horizontal-link-Overview']",
+        "//a[@data-test-id='horizontal-link-Overview'] | "
+        "//a[@data-test-id='horizontal-link-Overview' and @aria-selected='true']",
         By.XPATH,
     ),
     "status-storage-popup-content": (
         "//div[@class='pf-v5-c-popover pf-m-top']//*[contains(text(), 'Storage System')] | "
-        "//div[@class='pf-c-popover pf-m-top']//*[contains(text(), 'Storage System')]",
+        "//div[@class='pf-c-popover pf-m-top']//*[contains(text(), 'Storage System')] |"
+        "//div[@class='odf-status-card__popup--margin']//a[contains(text(),'ocs-storagecluster')]",
         By.XPATH,
     ),
     "namespace-store-tab-active": (
