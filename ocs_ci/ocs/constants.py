@@ -3134,7 +3134,7 @@ UI_INPUT_RULES_OBJECT_BUCKET_CLAIM = {
     "rule1": UI_INPUT_RULES_GENERAL["rule4"],
     "rule2": UI_INPUT_RULES_GENERAL["rule1"],
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
-    "rule4": UI_INPUT_RULES_GENERAL["rule3"],
+    "rule4": "Cannot be used before within the same namespace",
 }
 
 UI_INPUT_RULES_NAMESPACE_STORE = {
