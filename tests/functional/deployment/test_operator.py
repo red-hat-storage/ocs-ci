@@ -36,7 +36,10 @@ class TestOperator(ManageTest):
         false_positives = [" sed 's/error: <nil>,//g' |"]
         for operator_pod in operator_pods:
             pod_logs = exec_cmd(
-                f"oc logs -n {config.ENV_DATA['cluster_namespace']} {operator_pod} |{''.join(false_positives)} grep -i error",
+                (
+                    f"oc logs -n {config.ENV_DATA['cluster_namespace']} "
+                    f"{operator_pod} |{''.join(false_positives)} grep -i error"
+                ),
                 shell=True,
             )
             pods_logs[operator_pod] = pod_logs
