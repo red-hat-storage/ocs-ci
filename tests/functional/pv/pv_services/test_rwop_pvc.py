@@ -49,7 +49,7 @@ class TestRwopPvc(ManageTest):
             size=10,
         )
 
-    @polarion_id("OCS-5899")
+    @polarion_id("OCS-5924")
     def test_pod_with_same_priority(self, pod_factory, interface):
         """
         Test RBD Block volume mode RWOP PVC
