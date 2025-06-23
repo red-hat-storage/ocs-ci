@@ -12,8 +12,8 @@ from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
     Deployment,
-    get_and_apply_icsp_from_catalog,
 )
+from ocs_ci.utility.deployment import get_and_apply_idms_from_catalog
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -635,7 +635,7 @@ class OCSUpgrade(object):
                 ocs_catalog.apply(cs_yaml.name)
                 if not config.DEPLOYMENT.get("disconnected"):
                     # on Disconnected cluster, ICSP from the ocs-registry image is not needed/valid
-                    get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
+                    get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
 
 
 def run_ocs_upgrade(
