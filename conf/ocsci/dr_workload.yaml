@@ -220,4 +220,19 @@ ENV_DATA:
     }
   ]
 
+  dr_cnv_discovered_apps_using_custom_pool_and_sc: [
+    {
+      name: "vm-discovered-1-custom-sc", workload_dir: "rdr/cnv-workload/vm-custom-sc-resources/vm-workload-1",
+      pod_count: 1, pvc_count: 1,
+      dr_workload_app_pod_selector_key: "appname",
+      dr_workload_app_pod_selector_value: "kubevirt",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "kubevirt",
+      workload_namespace: "cnv-dict-1-custom",
+      dr_workload_app_placement_name: "cnv-dict-1",
+      vm_name: "vm-workload-1",
+      vm_secret: "vm-secret-1", vm_username: "cirros",
+    }
+  ]
+
   # dr_policy_name: PLACEHOLDER
