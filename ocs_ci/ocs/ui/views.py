@@ -285,6 +285,14 @@ deployment_4_17 = {
     ),
 }
 
+deployment_4_19 = {
+    "click_odf_operator": (
+        '//div[@data-test="odf-operator-redhat-operators-openshift-marketplace"] | '
+        '//a[@data-test="odf-operator-redhat-operators-openshift-marketplace"]',
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
@@ -2290,6 +2298,7 @@ locators = {
             **deployment_4_15,
             **deployment_4_16,
             **deployment_4_17,
+            **deployment_4_19,
         },
         "obc": obc,
         "pvc": {

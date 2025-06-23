@@ -125,6 +125,8 @@ class BaseUI:
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
         logger.debug(f"dom files folder:{self.dom_folder}")
 
+        # Don't remove self.ocp_version as it's heavily used in child classes
+        self.ocp_version = get_ocp_version()
         self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
