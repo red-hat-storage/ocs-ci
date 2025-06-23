@@ -158,7 +158,7 @@ class Submariner(object):
             mode="w+", prefix="acm_idms", delete=False
         )
         templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
-        run_cmd(f"oc create -f {idms_data_yaml.name}", timeout=300)
+        run_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
         wait_for_machineconfigpool_status(node_type="all")
 
     def download_binary(self):

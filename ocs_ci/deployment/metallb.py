@@ -826,7 +826,7 @@ class MetalLBInstaller:
             mode="w+", prefix="acm_idms", delete=False
         )
         templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
-        exec_cmd(f"oc create -f {idms_data_yaml.name}", timeout=300)
+        exec_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
         wait_for_machineconfigpool_status(node_type="all")
         logger.info("IDMS applied successfully")
         return self.idms_brew_registry_exists()
