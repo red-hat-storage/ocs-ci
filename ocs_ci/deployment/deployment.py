@@ -1197,7 +1197,8 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.OLM_YAML}")
         except CommandFailed as ex:
             if "AlreadyExists" in str(ex):
-                logger.info("OLM resources already exist")
+                logger.info("OLM resources already exist, calling apply to update!")
+                run_cmd(f"oc apply -f {constants.OLM_YAML}")
             else:
                 raise
 
@@ -1953,7 +1954,7 @@ class Deployment(object):
             ui_deployment = config.DEPLOYMENT.get("ui_deployment")
             if not ui_deployment:
                 logger.info("Creating namespace and operator group.")
-                run_cmd(f"oc create -f {constants.OLM_YAML}")
+                run_cmd(f"oc apply -f {constants.OLM_YAML}")
             if not live_deployment:
                 create_catalog_source()
             self.subscribe_ocs()
@@ -2688,7 +2689,7 @@ class Deployment(object):
             f.write(data)
 
         logger.info("Creating ImageContentSourcePolicy")
-        run_cmd(f"oc create -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
+        run_cmd(f"oc apply -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
         acm_version = config.ENV_DATA.get("acm_version")
@@ -2733,7 +2734,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_namespace_yaml_data, acm_hub_namespace_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_namespace_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_namespace_manifest.name}")
 
         logger.info("Creating OperationGroup for ACM deployment")
         package_manifest = PackageManifest(
@@ -2741,7 +2742,7 @@ class Deployment(object):
         )
 
         run_cmd(
-            f"oc create -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+            f"oc apply -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
 
         logger.info("Creating ACM HUB Subscription")
