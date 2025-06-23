@@ -225,7 +225,6 @@ from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_exp
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
 
-
 log = logging.getLogger(__name__)
 
 
@@ -7532,10 +7531,11 @@ def discovered_apps_dr_workload_cnv(request):
 
     instances = []
 
-    def factory(pvc_vm=1):
+    def factory(pvc_vm=1, custom_sc=False):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+            custom_sc (bool): False by default, will use custom Pool and Storage Class when set to True for CNV workload
 
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
@@ -7546,6 +7546,8 @@ def discovered_apps_dr_workload_cnv(request):
         """
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
+        if custom_sc:
+            workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = CnvWorkloadDiscoveredApps(
