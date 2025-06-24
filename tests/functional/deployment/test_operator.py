@@ -39,13 +39,13 @@ class TestOperator(ManageTest):
             try:
                 pod_logs = exec_cmd(
                     (
-                        f"oc logs -n {config.ENV_DATA['cluster_namespace']} "
+                        f"oc logs --all-containers=true --namespace={config.ENV_DATA['cluster_namespace']} "
                         f"{operator_pod} |{''.join(false_positives)} grep -i error"
                     ),
                     shell=True,
                 )
             except CommandFailed as exception:
-                if not str(exception) == "" or str(exception).strip() == "Error is":
+                if not (str(exception) == "" or str(exception).strip() == "Error is"):
                     raise
             pods_logs[operator_pod] = pod_logs
         for operator_pod in operator_pods:
