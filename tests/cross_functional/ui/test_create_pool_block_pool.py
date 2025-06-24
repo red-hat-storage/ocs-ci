@@ -1,7 +1,7 @@
 import logging
 import pytest
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
+    tier2,
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
     green_squad,
@@ -74,8 +74,8 @@ class TestPoolUserInterface(ManageTest):
         self.pod_obj = pod_factory(pvc=self.pvc_obj)
 
     @ui
-    @tier1
-    @skipif_ocs_version("<4.8")
+    @tier2
+    @skipif_ocs_version("<4.16")
     @green_squad
     def test_create_delete_pool(
         self,
