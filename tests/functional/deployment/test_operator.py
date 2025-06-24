@@ -34,7 +34,10 @@ class TestOperator(ManageTest):
         2. Check that there is no error in any of the logs.
         """
         pods_logs = {}
-        false_positives = [" sed 's/error: <nil>,//g' |"]
+        false_positives = [
+            " sed 's/Error: <nil>,//g' |",
+            " sed 's/error_severity,\":\"LOG//g' |",
+        ]
         for operator_pod in operator_pods:
             try:
                 pod_logs = exec_cmd(
