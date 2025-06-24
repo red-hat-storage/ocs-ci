@@ -114,23 +114,32 @@ class TestVmShutdownStart(E2ETest):
                 if vm_obj.printableStatus() != constants.CNV_VM_STOPPED:
                     vm_obj.stop(wait=True)
 
-            # unschedule nodes
+            # unschedule Worker nodes
             unschedule_nodes(worker_node_names)
-            unschedule_nodes(master_nodes_names)
-
             # drain nodes
             drain_nodes(worker_node_names, disable_eviction=True)
+            # shutting down worker nodes
+            nodes.stop_nodes(nodes=worker_nodes, force=force)
+
+            # unschedule master nodes
+            unschedule_nodes(master_nodes_names)
+            # drain master nodes
+            drain_nodes(master_nodes_names, disable_eviction=True)
+            # shutting down master nodes
+            nodes.stop_nodes(nodes=master_nodes, force=force)
 
         else:
             # Keep vms in different states (power on, paused, stoped)
             vm_for_stop.stop()
             vm_for_snap.pause()
 
-        shutdown_type = "abruptly" if force else "gracefully"
-        logger.info(f"{shutdown_type.capitalize()} shutting down worker & master nodes")
+            shutdown_type = "abruptly" if force else "gracefully"
+            logger.info(
+                f"{shutdown_type.capitalize()} shutting down worker & master nodes"
+            )
 
-        nodes.stop_nodes(nodes=worker_nodes, force=force)
-        nodes.stop_nodes(nodes=master_nodes, force=force)
+            nodes.stop_nodes(nodes=worker_nodes, force=force)
+            nodes.stop_nodes(nodes=master_nodes, force=force)
 
         logger.info("waiting for 5 min before starting nodes")
         time.sleep(300)
@@ -157,6 +166,7 @@ class TestVmShutdownStart(E2ETest):
 
         # Schedule node
         schedule_nodes(worker_node_names)
+        schedule_nodes(master_nodes_names)
 
         logger.info("Waiting for pods to come in running state.")
         wait_for_pods_to_be_running(timeout=500)
