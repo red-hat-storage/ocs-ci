@@ -344,11 +344,7 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
-        cluster_set_name = (
-            self.install_submariner_ui()
-            if self.install_submariner_ui() is not None
-            else get_cluster_set_name()
-        )
+        cluster_set_name = get_cluster_set_name()
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
