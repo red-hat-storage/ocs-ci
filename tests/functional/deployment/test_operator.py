@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     tier1,
 )
 from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.storage_cluster import check_unnecessary_pods_present
 
 
@@ -35,13 +36,17 @@ class TestOperator(ManageTest):
         pods_logs = {}
         false_positives = [" sed 's/error: <nil>,//g' |"]
         for operator_pod in operator_pods:
-            pod_logs = exec_cmd(
-                (
-                    f"oc logs -n {config.ENV_DATA['cluster_namespace']} "
-                    f"{operator_pod} |{''.join(false_positives)} grep -i error"
-                ),
-                shell=True,
-            )
+            try:
+                pod_logs = exec_cmd(
+                    (
+                        f"oc logs -n {config.ENV_DATA['cluster_namespace']} "
+                        f"{operator_pod} |{''.join(false_positives)} grep -i error"
+                    ),
+                    shell=True,
+                )
+            except CommandFailed as exception:
+                if not str(exception) == "":
+                    raise
             pods_logs[operator_pod] = pod_logs
         for operator_pod in operator_pods:
             test_string = pods_logs[operator_pod].lower()
