@@ -348,7 +348,7 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
-        cluster_set_name = get_cluster_set_name()
+        cluster_set_name = get_cluster_set_name()[0]
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
