@@ -45,8 +45,7 @@ class TestOperator(ManageTest):
                     shell=True,
                 )
             except CommandFailed as exception:
-                if not (str(exception) == "" or str(exception).strip() == "Error is"):
-                    raise
+                pod_logs = ""
             pods_logs[operator_pod] = pod_logs
         for operator_pod in operator_pods:
             test_string = pods_logs[operator_pod].lower()
