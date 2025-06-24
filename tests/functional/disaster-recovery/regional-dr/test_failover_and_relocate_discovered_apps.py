@@ -90,6 +90,22 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 marks=[skipif_ocs_version("<4.19")],
                 id="primary_down-cephfs-recipe",
             ),
+            pytest.param(
+                False,
+                "Mix",
+                1,
+                0,
+                marks=[skipif_ocs_version("<4.19")],
+                id="primary_up-mix",
+            ),
+            pytest.param(
+                True,
+                "Mix",
+                1,
+                0,
+                marks=[skipif_ocs_version("<4.19")],
+                id="primary_down-mix",
+            ),
         ],
     )
     def test_failover_and_relocate_discovered_apps(
@@ -198,6 +214,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             vrg_name=rdr_workload.discovered_apps_placement_name,
         )
 
+        if not pvc_interface == "Mix":
+            mix_workload_data = None
+
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
         dr_helpers.wait_for_all_resources_creation(
@@ -207,9 +226,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
+            mix_workload=True if pvc_interface == "Mix" else False,
+            mix_workload_data=rdr_workload.mix_workload_data,
         )
 
-        if pvc_interface == constants.CEPHFILESYSTEM:
+        if pvc_interface == constants.CEPHFILESYSTEM or "Mix":
             config.switch_to_cluster_by_name(secondary_cluster_name)
             dr_helpers.wait_for_replication_destinations_deletion(
                 rdr_workload.workload_namespace
@@ -217,7 +238,12 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             # Verify the creation of ReplicationDestination resources on primary cluster
             config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
             dr_helpers.wait_for_replication_destinations_creation(
-                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+                (
+                    rdr_workload.workload_pvc_count
+                    if not pvc_interface == "Mix"
+                    else rdr_workload.mix_workload_data["cephfs"]
+                ),
+                rdr_workload.workload_namespace,
             )
         # Doing Relocate
         primary_cluster_name_after_failover = (
@@ -273,6 +299,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
+            mix_workload=True if pvc_interface == "Mix" else False,
+            mix_workload_data=rdr_workload.mix_workload_data,
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
@@ -283,5 +311,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             # Verify the creation of ReplicationDestination resources on primary cluster
             config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
             dr_helpers.wait_for_replication_destinations_creation(
-                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+                (
+                    rdr_workload.workload_pvc_count
+                    if not pvc_interface == "Mix"
+                    else rdr_workload.mix_workload_data["cephfs"]
+                ),
+                rdr_workload.workload_namespace,
             )
