@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier2,
     acceptance,
     skipif_upgraded_from,
 )
@@ -19,7 +20,6 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])
 class TestPvcExpand(ManageTest):
@@ -177,6 +177,7 @@ class TestPvcExpand(ManageTest):
 
     @provider_mode
     @acceptance
+    @tier1
     @pytest.mark.polarion_id("OCS-2219")
     def test_pvc_expansion(self):
         """
@@ -194,6 +195,7 @@ class TestPvcExpand(ManageTest):
         log.info(f"Expanding PVCs to {pvc_size_new}G")
         self.expand_and_verify(pvc_size_new)
 
+    @tier2
     @pytest.mark.polarion_id("OCS-302")
     def test_pvc_expand_expanded_pvc(self):
         """

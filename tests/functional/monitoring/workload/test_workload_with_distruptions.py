@@ -34,7 +34,6 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     blue_squad,
-    tier1,
     tier2,
     pre_upgrade,
     post_upgrade,
@@ -183,7 +182,7 @@ def test_workload_with_checksum_verify(
 
 @blue_squad
 @skipif_mcg_only
-@tier1
+@tier2
 @pytest.mark.polarion_id("OCS-2125")
 @skipif_managed_service
 def test_workload_rbd_cephfs_10g(
