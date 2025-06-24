@@ -1,5 +1,4 @@
 import pytest
-import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
@@ -11,7 +10,6 @@ from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.storage_cluster import check_unnecessary_pods_present
 
-logger = logging.getLogger(__name__)
 
 @brown_squad
 class TestOperator(ManageTest):
@@ -47,8 +45,7 @@ class TestOperator(ManageTest):
                     shell=True,
                 )
             except CommandFailed as exception:
-                logger.warning(exception)
-                if not str(exception) == "":
+                if not str(exception) == "" or str(exception).strip() == "Error is":
                     raise
             pods_logs[operator_pod] = pod_logs
         for operator_pod in operator_pods:
