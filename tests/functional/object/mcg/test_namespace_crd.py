@@ -140,7 +140,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6339"),
                 ],
@@ -154,7 +154,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6353"),
                 ],
             ),
@@ -167,7 +167,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6354"),
                 ],
             ),
@@ -180,7 +180,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6355"),
                 ],
             ),
@@ -193,7 +193,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6356"),
                 ],
             ),
@@ -209,7 +209,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6338"),
                 ],
@@ -225,7 +225,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6351"),
                 ],
@@ -239,7 +239,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-5442"),
                     skipif_fips_enabled,
                 ],
@@ -470,7 +470,7 @@ class TestNamespace(MCGTest):
             amount=3,
         )
 
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-2258")
     @on_prem_platform_required
     def test_distribution_of_objects_in_ns_bucket_crd(
@@ -719,7 +719,7 @@ class TestNamespace(MCGTest):
         ):
             raise UnexpectedBehaviour("Cached object was not downloaded")
 
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
         argvalues=[

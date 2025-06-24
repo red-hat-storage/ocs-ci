@@ -5,6 +5,7 @@ from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework.testlib import (
     tier1,
+    tier2,
     skipif_ui_not_support,
     skipif_ocs_version,
     polarion_id,
@@ -148,7 +149,7 @@ class TestUserInterfaceValidation(object):
         )
 
     @ui
-    @tier1
+    @tier2
     @runs_on_provider
     def test_ocs_operator_is_not_present(self, setup_ui_class_factory):
         """

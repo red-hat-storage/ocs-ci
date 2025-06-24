@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
@@ -18,7 +18,6 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 class TestCreateNewScWithNeWRbDPool(ManageTest):
@@ -37,7 +36,7 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
                     constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
                 ],
-                marks=pytest.mark.polarion_id("OCS-2400"),
+                marks=[tier1, pytest.mark.polarion_id("OCS-2400")],
             ),
             pytest.param(
                 *[
@@ -46,7 +45,7 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
                 ],
-                marks=pytest.mark.polarion_id("OCS-2397"),
+                marks=[tier2, pytest.mark.polarion_id("OCS-2397")],
             ),
             pytest.param(
                 *[
@@ -55,7 +54,7 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
                     constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
                 ],
-                marks=pytest.mark.polarion_id("OCS-2401"),
+                marks=[tier2, pytest.mark.polarion_id("OCS-2401")],
             ),
             pytest.param(
                 *[
@@ -64,7 +63,7 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
                 ],
-                marks=pytest.mark.polarion_id("OCS-2406"),
+                marks=[tier2, pytest.mark.polarion_id("OCS-2406")],
             ),
         ],
     )
