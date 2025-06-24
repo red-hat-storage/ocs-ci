@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
+    run_on_all_clients,
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -58,7 +59,8 @@ class TestPvcSnapshot(ManageTest):
             interface=interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-    def test_pvc_snapshot(self, interface, teardown_factory):
+    @run_on_all_clients
+    def test_pvc_snapshot(self, interface, teardown_factory, cluster_index):
         """
         1. Run I/O on a pod file.
         2. Calculate md5sum of the file.

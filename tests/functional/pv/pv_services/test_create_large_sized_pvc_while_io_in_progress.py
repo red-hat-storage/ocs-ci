@@ -3,7 +3,11 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+    run_on_all_clients,
+)
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 
@@ -30,8 +34,9 @@ class TestCreateLargeSizedPVCWhileIOInProgress(ManageTest):
             ),
         ],
     )
+    @run_on_all_clients
     def test_create_large_sized_pvc_while_io_in_progress(
-        self, interface, pvc_factory, pod_factory
+        self, interface, pvc_factory, pod_factory, cluster_index
     ):
         """
         Flow is as below
