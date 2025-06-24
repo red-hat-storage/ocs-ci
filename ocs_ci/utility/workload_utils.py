@@ -107,34 +107,35 @@ def deploy_and_run_workload(workload_params, target_indexes):
         workload_params (dict): A dictionary with fio and fiooperator parameters
         target_indexes (list): of integer indexes of clusters on which we need to run the workload
 
-    sample fio_workload_param might look like
+    sample fio_workload_param might look like::
 
-    WORKLOAD:
-      - name: "fio-block" # This name will be used in the CR
-        type: "fio"       # type is used to accomodate different workloads in the future
-        fioArgs:
-          size: "1G"
-          io_depth: 4
-          filename: 'testfile'
-          readwrite: 'read'
-          bs: "4k"
-          runtime: "60s"
-        storage_class: "RBD"
-        fiooperator:
-          autoscale: False
 
-      - name: "fio-cephfs"
-        type: "fio"
-        fioArgs:
-          size: "1G"
-          io_depth: 4
-          filename: 'testfile'
-          readwrite: 'read'
-          bs: "4k"
-          runtime: "60s"
-        storage_class: "CEPHFS"
-        fiooperator:
-          autoscale: False
+        WORKLOAD:
+        - name: "fio-block" # This name will be used in the CR
+            type: "fio"       # type is used to accomodate different workloads in the future
+            fioArgs:
+            size: "1G"
+            io_depth: 4
+            filename: 'testfile'
+            readwrite: 'read'
+            bs: "4k"
+            runtime: "60s"
+            storage_class: "RBD"
+            fiooperator:
+            autoscale: False
+
+        - name: "fio-cephfs"
+            type: "fio"
+            fioArgs:
+            size: "1G"
+            io_depth: 4
+            filename: 'testfile'
+            readwrite: 'read'
+            bs: "4k"
+            runtime: "60s"
+            storage_class: "CEPHFS"
+            fiooperator:
+            autoscale: False
 
     in its yaml form.
     """
