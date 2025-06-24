@@ -47,7 +47,7 @@ class TestOperator(ManageTest):
                     ),
                     shell=True,
                 ).stdout
-            except CommandFailed as exception:
+            except CommandFailed:
                 pod_logs = ""
             pods_logs[operator_pod] = pod_logs
         for operator_pod in operator_pods:
