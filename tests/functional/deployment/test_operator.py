@@ -43,12 +43,12 @@ class TestOperator(ManageTest):
                         f"{operator_pod} |{''.join(false_positives)} grep -i error"
                     ),
                     shell=True,
-                )
+                ).stdout
             except CommandFailed as exception:
                 pod_logs = ""
             pods_logs[operator_pod] = pod_logs
         for operator_pod in operator_pods:
-            test_string = pods_logs[operator_pod].lower()
+            test_string = str(pods_logs[operator_pod]).lower()
             assert (
                 "error" not in test_string
             ), f"error in {operator_pod} logs, operator pod logs: {test_string}"
