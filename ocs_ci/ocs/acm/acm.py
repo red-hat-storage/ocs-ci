@@ -162,7 +162,7 @@ class AcmAddClusters(AcmPageNavigator):
             globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
 
         Returns:
-            cluster_set_name (str): Returns cluster set name to which managed clusters are tied for Submariner
+            str: cluster set name created during the function to which managed clusters are tied for Submariner
             installation
 
         """
