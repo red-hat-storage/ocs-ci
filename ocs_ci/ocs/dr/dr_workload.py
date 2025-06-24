@@ -1182,6 +1182,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
+        self.pvc_interface = kwargs.get("pvc_interface")
         self.dr_policy_name = kwargs.get(
             "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
         ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
@@ -1228,6 +1229,12 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.discovered_apps_name_selector_value = kwargs.get(
             "discovered_apps_name_selector_value"
         )
+        self.mix_workload_rbd_pvc_count = kwargs.get("mix_workload_rbd_pvc_count")
+        self.mix_workload_cephfs_pvc_count = kwargs.get("mix_workload_cephfs_pvc_count")
+        self.mix_workload_data = {
+            "rbd": self.mix_workload_rbd_pvc_count,
+            "cephfs": self.mix_workload_cephfs_pvc_count,
+        }
 
     def deploy_workload(self, recipe=None):
         """
@@ -1265,7 +1272,14 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         elif not self.discovered_apps_multi_ns:
             self.create_drpc()
-            self.verify_workload_deployment()
+
+        if not self.pvc_interface == "Mix":
+            mix_workload_data = None
+
+        self.verify_workload_deployment(
+            mix_workload=True if self.pvc_interface == "Mix" else False,
+            mix_workload_data=self.mix_workload_data,
+        )
 
     def _deploy_prereqs(self):
         """
@@ -1279,12 +1293,16 @@ class BusyboxDiscoveredApps(DRWorkload):
             branch=self.workload_repo_branch,
         )
 
-    def verify_workload_deployment(self, vrg_name=None):
+    def verify_workload_deployment(
+        self, vrg_name=None, mix_workload=False, mix_workload_data=None
+    ):
         """
         Verify busybox workload Discovered App
 
         Args:
             vrg_name (str): Name of vrg
+            mix_workload (bool): If true then mix workload
+            mix_workload_data (dict): Contains pvc count for both interfaces
 
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -1294,6 +1312,8 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.workload_namespace,
             discovered_apps=True,
             vrg_name=vrg_name or self.discovered_apps_placement_name,
+            mix_workload=mix_workload,
+            mix_workload_data=mix_workload_data,
         )
 
     def create_recipe_with_checkhooks(self):
