@@ -13,6 +13,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.utility.utils import exec_cmd
 
@@ -378,6 +379,7 @@ class StorageConsumer:
                 self.ocp.patch(resource_name=self.name, params=patch_param)
 
     @if_version(">4.18")
+    @retry((AttributeError, KeyError), tries=10, delay=5)
     def get_onboarding_ticket_secret(self):
         """
         Get OnboardingTicketSecret from storageconsumer resource status. Optional field.
