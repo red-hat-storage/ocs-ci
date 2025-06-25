@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier2,
     tier3,
     skipif_ocp_version,
     skipif_managed_service,
@@ -50,7 +51,7 @@ class TestMetadataUnavailable(ManageTest):
         ],
     )
     @polarion_id("OCS-4669")
-    def test_metadata_feature_unavailable_for_previous_versions(
+    def deprecated_test_metadata_feature_unavailable_for_previous_versions(
         self, project_factory_class, sc_name, fs
     ):
         """
@@ -281,19 +282,19 @@ class TestMetadata(ManageTest):
             self.pod_obj,
         )
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
-                marks=pytest.mark.polarion_id("OCS-4676"),
+                marks=[tier1, pytest.mark.polarion_id("OCS-4676")],
             ),
             pytest.param(
                 "ocs-storagecluster-cephblockpool",
                 constants.DEFAULT_STORAGECLASS_RBD,
                 marks=[
+                    tier2,
                     pytest.mark.polarion_id("OCS-4679"),
                     pytest.mark.bugzilla("2039269"),
                 ],
@@ -420,7 +421,7 @@ class TestMetadata(ManageTest):
             resource_name=clone_pvc_obj.name, timeout=300
         ), f"PVC {clone_pvc_obj.name} is not deleted"
 
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -516,7 +517,7 @@ class TestMetadata(ManageTest):
             resource_name=pvc_obj.name, timeout=300
         ), f"PVC {pvc_obj.name} is not deleted"
 
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -783,7 +784,6 @@ class TestMetadata(ManageTest):
             resource_name=pvc_obj_with_metadata_disabled.name, timeout=300
         ), f"PVC {pvc_obj_with_metadata_disabled.name} is not deleted"
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -794,6 +794,7 @@ class TestMetadata(ManageTest):
     )
     @polarion_id("OCS-4680")
     @polarion_id("OCS-4681")
+    @tier2
     def test_metadata_update_for_PV_Retain(self, fs, sc_name, project_factory_class):
         """
         This test is to validate metadata is updated after a PVC is deleted by setting ReclaimPloicy: Retain on PV

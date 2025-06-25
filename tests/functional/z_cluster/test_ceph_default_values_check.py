@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier2,
     skipif_external_mode,
     skipif_mcg_only,
     post_ocs_upgrade,
@@ -191,6 +192,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
     @skipif_ocs_version("<4.9")
+    @tier2
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Validate noobaa postgres configmap post OCS upgrade

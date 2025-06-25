@@ -5,6 +5,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier2,
     green_squad,
 )
 from ocs_ci.ocs import constants
@@ -16,12 +17,12 @@ from ocs_ci.framework.testlib import ignore_leftovers
 logger = logging.getLogger(__name__)
 
 
-@tier1
 @ignore_leftovers
 @green_squad
 class TestSubvolumesCommand(ManageTest):
     @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5794")
+    @tier1
     def test_pvc_stale_volume_cleanup_cli(self, storageclass_factory, pvc_factory):
         """
         1. Create a new PVC with Retain strategy.
@@ -76,6 +77,7 @@ class TestSubvolumesCommand(ManageTest):
             subvolumes.append((fs, sv, svg, status))
         return subvolumes
 
+    @tier2
     @skipif_ocs_version("<4.17")
     @pytest.mark.polarion_id("OCS-6194")
     def test_rox_pvc_stale_volume_cleanup_cli(
@@ -162,6 +164,7 @@ class TestSubvolumesCommand(ManageTest):
 
     @skipif_ocs_version("<4.17")
     @pytest.mark.polarion_id("OCS-6195")
+    @tier2
     def test_stale_volume_snapshot_cleanup_cli(
         self,
         storageclass_factory,

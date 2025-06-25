@@ -8,8 +8,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     polarion_id,
-    bugzilla,
-    tier1,
     tier2,
     pre_upgrade,
     post_upgrade,
@@ -43,7 +41,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
 
     """
 
-    @tier1
+    @tier2
     @polarion_id("OCS-5193")
     def test_default_buckets_backingstore(
         self,
@@ -146,7 +144,6 @@ class TestDefaultBackingstoreOverride(MCGTest):
     @tier2
     @skipif_aws_creds_are_missing
     @polarion_id("OCS-5195")
-    @bugzilla("2237427")
     def test_bucketclass_replication_after_default_backingstore_override(
         self,
         mcg_obj_session,

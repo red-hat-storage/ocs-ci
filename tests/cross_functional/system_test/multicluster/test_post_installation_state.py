@@ -11,8 +11,8 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     pc_or_ms_provider_required,
     tier1,
+    tier2,
     runs_on_provider,
-    bugzilla,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -79,7 +79,7 @@ class TestPostInstallationState(ManageTest):
             )
 
     @provider_mode
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-3917")
     @runs_on_provider
     def test_provider_server_logs(self):
@@ -141,7 +141,7 @@ class TestPostInstallationState(ManageTest):
                     client in found_clients
                 ), f"Ceph client {client} for {consumer_name} not found"
 
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-2694")
     def test_deployer_logs_not_empty(self):
         """
@@ -160,8 +160,7 @@ class TestPostInstallationState(ManageTest):
         log.info(f"Deployer log has {len(log_lines)} lines.")
         assert len(log_lines) > 100
 
-    @tier1
-    @bugzilla("2117312")
+    @tier2
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2695")
     def test_connection_time_out(self):
