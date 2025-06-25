@@ -7510,7 +7510,16 @@ def operator_pods():
             for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         ]
     operator_pods = []
-    if not no_noobaa:
+    # due to changes introduced in odf 4.19 pod lists could differ
+    # during upgrade are not scaled down pods that would be otherwise down
+    if (
+        version.get_running_odf_version() >= version.VERSION_4_19
+        and version.get_semantic_ocs_version_from_config() < version.VERSION_4_19
+    ):
+        upgraded_cluster = True
+    else:
+        upgraded_cluster = False
+    if not no_noobaa or upgraded_cluster:
         for expected_pod_name in constants.NOOBAA_POD_NAMES:
             operator_pods.extend(
                 [
@@ -7519,7 +7528,7 @@ def operator_pods():
                     if pod_name.startswith(expected_pod_name)
                 ]
             )
-    if not no_ceph:
+    if not no_ceph or upgraded_cluster:
         for expected_pod_name in constants.CEPH_PODS_NAMES:
             operator_pods.extend(
                 [
