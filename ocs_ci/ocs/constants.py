@@ -1675,6 +1675,7 @@ BAREMETAL_PLATFORMS = [
     IBM_POWER_PLATFORM,
 ]
 AWS_STS_PLATFORMS = [AWS_PLATFORM, ROSA_PLATFORM, ROSA_HCP_PLATFORM]
+NFS_OUTCLUSTER_TEST_PLATFORMS = [AWS_PLATFORM, IBMCLOUD_PLATFORM, HCI_BAREMETAL]
 
 IPI_DEPL_TYPE = "ipi"
 UPI_DEPL_TYPE = "upi"
@@ -3392,7 +3393,10 @@ NFS_DEPLOYMENT_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "deployment.yaml")
 NFS_SC_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "storageclass.yaml")
 NFS_SCC_NAME = "nfs-client-provisioner"
 NFS_SC_NAME = "nfs-client"
-
+NFS_CSI_PLUGIN_PROVISIONER_LABEL = "app=csi-nfsplugin-provisioner"
+NFS_CSI_PLUGIN_LABEL = "app=csi-nfsplugin"
+NFS_CSI_CTRLPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-ctrlplugin"
+NFS_CSI_NODEPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-nodeplugin"
 # The expected mds cache memory values
 MDS_CACHE_MEMORY = 3221225472
 LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
