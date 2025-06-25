@@ -41,6 +41,7 @@ from ocs_ci.helpers.dr_helpers import (
     remove_parameter_klusterlet_config,
 )
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.utils import is_mdr_provider
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from ocs_ci.utility import vsphere
 
@@ -127,7 +128,9 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         # Deploy applications on managed clusters
         # ToDO: deploy application on both managed clusters
         workloads = dr_workload(
-            num_of_subscription=1, num_of_appset=1, switch_ctx=get_passive_acm_index()
+            num_of_subscription=1 if not is_mdr_provider() else 0,
+            num_of_appset=1,
+            switch_ctx=get_passive_acm_index(),
         )
         self.namespace = workloads[0].workload_namespace
 

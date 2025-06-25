@@ -39,6 +39,7 @@ from ocs_ci.ocs.constants import (
     AZURE_KV_PROVIDER_NAME,
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
+    MDR_PROVIDER_MODE,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -247,6 +248,11 @@ stretchcluster_required_skipif = pytest.mark.skipif(
 
 stretchcluster_required = compose(
     stretchcluster_required_skipif, pytest.mark.stretchcluster_required
+)
+
+skipif_mdr_provider = pytest.mark.skipif(
+    config.MULTICLUSTER["multicluster_mode"] == MDR_PROVIDER_MODE,
+    reason="Test doesn't run on MDR provider cluster",
 )
 
 sts_deployment_required = pytest.mark.skipif(
