@@ -534,13 +534,8 @@ class TestNfsEnable(ManageTest):
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-<<<<<<< HEAD
     @tier2
-    @aws_platform_required
-=======
-    @tier1
     @nfs_outcluster_test_platform_required
->>>>>>> 436ffaa03 (Updated nfs outmount testcases to run for provider clusters from 4.19)
     @polarion_id("OCS-4274")
     def test_multiple_nfs_based_PVs(
         self,
@@ -682,13 +677,8 @@ class TestNfsEnable(ManageTest):
             log.info("Check nfs pv is deleted")
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-<<<<<<< HEAD
     @tier2
-    @aws_platform_required
-=======
-    @tier1
     @nfs_outcluster_test_platform_required
->>>>>>> 436ffaa03 (Updated nfs outmount testcases to run for provider clusters from 4.19)
     @polarion_id("OCS-4293")
     def test_multiple_mounts_of_same_nfs_volume(
         self,
