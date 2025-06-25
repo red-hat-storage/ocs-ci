@@ -65,6 +65,7 @@ from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 from psutil._common import bytes2human
+from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
 
 log = logging.getLogger(__name__)
@@ -5840,3 +5841,28 @@ def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30
         f"Nodes may still be stuck in {constants.NODE_READY_SCHEDULING_DISABLED} state."
     )
     return False  # Failure
+
+
+def skip_for_provider_if_ocs_version(expressions):
+    """
+    This function evaluates the condition for test skip
+    for provider clusters based on expression
+
+    Args:
+        expressions (str OR list): condition for which we need to check,
+        eg: A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+    """
+    expr_list = [expressions] if isinstance(expressions, str) else expressions
+    if (
+        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+        or config.hci_provider_exist()
+        or config.hci_client_exist()
+    ):
+        return any(
+            version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
+            for expr in expr_list
+        )

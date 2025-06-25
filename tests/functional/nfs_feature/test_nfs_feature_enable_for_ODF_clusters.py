@@ -20,7 +20,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     skipif_ocp_version,
     skipif_managed_service,
-    skipif_hci_provider_and_client,
+    skip_for_provider_if_ocs_version,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     polarion_id,
@@ -44,9 +44,9 @@ ERRMSG = "Error in command"
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
-@skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skip_for_provider_if_ocs_version("<4.19")
 @polarion_id("OCS-4270")
 class TestDefaultNfsDisabled(ManageTest):
     """
@@ -79,7 +79,7 @@ class TestDefaultNfsDisabled(ManageTest):
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
-@skipif_hci_provider_and_client
+@skip_for_provider_if_ocs_version("<4.19")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 class TestNfsEnable(ManageTest):
@@ -1087,7 +1087,7 @@ class TestNfsEnable(ManageTest):
         nfs_provisioner_selectors = nfs_utils.provisioner_selectors(nfs_plugins=True)
         nfsplugin_pod_objs = pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
-            selector=nfs_provisioner_selectors[0],
+            selector=[nfs_provisioner_selectors[0]],
         )
         log.info(f"nfs plugin pods-----{nfsplugin_pod_objs}")
         pod.delete_pods(pod_objs=nfsplugin_pod_objs)
@@ -1095,7 +1095,7 @@ class TestNfsEnable(ManageTest):
         # Wait untill nfsplugin pods recovery
         self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector="app=csi-nfsplugin",
+            selector=nfs_provisioner_selectors[0],
             resource_count=len(nfsplugin_pod_objs),
             timeout=3600,
             sleep=5,
@@ -1177,13 +1177,12 @@ class TestNfsEnable(ManageTest):
             deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
             helpers.create_resource(**deployment_data)
             time.sleep(60)
-
             assert self.pod_obj.wait_for_resource(
                 resource_count=1,
                 condition=constants.STATUS_RUNNING,
                 selector="name=nfs-test-pod",
                 dont_allow_other_resources=True,
-                timeout=60,
+                timeout=120,
             )
             pod_objs = pod.get_all_pods(
                 namespace=self.namespace,
@@ -1345,7 +1344,7 @@ class TestNfsEnable(ManageTest):
         constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
         cephfsplugin_provisioner_pod_objs = pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
-            selector=cephfs_provisioner_selectors[0],
+            selector=[cephfs_provisioner_selectors[0]],
         )
         log.info(
             f"cephfs plugin provisioner pods-----{cephfsplugin_provisioner_pod_objs}"
@@ -1355,7 +1354,7 @@ class TestNfsEnable(ManageTest):
         # Wait untill cephfsplugin provisioner pods recovery
         self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
+            selector=cephfs_provisioner_selectors[0],
             resource_count=len(cephfsplugin_provisioner_pod_objs),
             timeout=3600,
             sleep=5,

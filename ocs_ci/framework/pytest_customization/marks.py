@@ -529,6 +529,9 @@ skipif_hci_provider_or_client = pytest.mark.skipif(
     reason="Test will not run on Fusion HCI provider or Client clusters",
 )
 
+# Marker for skipping tests for provider clusters based on OCS version
+skip_for_provider_if_ocs_version = pytest.mark.skip_for_provider_if_ocs_version
+
 skipif_rosa = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
     reason="Test will not run on ROSA cluster",
