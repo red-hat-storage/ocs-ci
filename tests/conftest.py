@@ -1151,7 +1151,7 @@ def storageclass_factory_fixture(
         """
         for instance in instances:
             instance.delete()
-            instance.ocp.wait_for_delete(instance.name, timeout=120)
+            instance.ocp.wait_for_delete(instance.name)
 
     request.addfinalizer(finalizer)
     return factory
