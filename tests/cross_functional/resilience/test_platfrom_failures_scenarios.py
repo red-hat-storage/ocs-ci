@@ -62,9 +62,23 @@ class TestPlatformFailureScenarios:
     @pytest.mark.parametrize(
         "failure_case",
         [
-            "PLATFORM_INSTANCE_FAILURES",
-            "PLATFORM_NETWORK_FAILURES",
-            "PLATFORM_NETWORK_FAULTS",
+            pytest.param(
+                "PLATFORM_INSTANCE_FAILURES",
+                marks=[
+                    pytest.mark.polarion_id("OCS-6816"),
+                    pytest.mark.polarion_id("OCS-6817"),
+                ],
+            ),
+            pytest.param(
+                "PLATFORM_NETWORK_FAILURES",
+                marks=[
+                    pytest.mark.polarion_id("OCS-6809"),
+                    pytest.mark.polarion_id("OCS-6810"),
+                ],
+            ),
+            pytest.param(
+                "PLATFORM_NETWORK_FAULTS", marks=[pytest.mark.polarion_id("OCS-6817")]
+            ),
         ],
     )
     def test_platform_failure_scenarios(
@@ -98,8 +112,21 @@ class TestPlatformFailureScenarios:
     @pytest.mark.parametrize(
         "failure_case",
         [
-            "PLATFORM_INSTANCE_FAILURES",
-            "PLATFORM_NETWORK_FAILURES",
+            pytest.param(
+                "PLATFORM_INSTANCE_FAILURES",
+                marks=[
+                    pytest.mark.polarion_id("OCS-6819"),
+                    pytest.mark.polarion_id("OCS-6813"),
+                    pytest.mark.polarion_id("OCS-6819"),
+                ],
+            ),
+            pytest.param(
+                "PLATFORM_NETWORK_FAILURES",
+                marks=[
+                    pytest.mark.polarion_id("OCS-6812"),
+                    pytest.mark.polarion_id("OCS-6814"),
+                ],
+            ),
         ],
     )
     def test_platform_failures_with_stress(
