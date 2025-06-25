@@ -39,6 +39,7 @@ from ocs_ci.ocs.constants import (
     AZURE_KV_PROVIDER_NAME,
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
+    NFS_OUTCLUSTER_TEST_PLATFORMS,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -294,6 +295,10 @@ ibmcloud_platform_required = pytest.mark.skipif(
 on_prem_platform_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() not in ON_PREM_PLATFORMS,
     reason="Test runs ONLY on on-prem based deployed cluster",
+)
+nfs_outcluster_test_platform_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() not in NFS_OUTCLUSTER_TEST_PLATFORMS,
+    reason="Test runs ONLY on the platforms part of NFS_OUTCLUSTER_TEST_PLATFORMS",
 )
 
 rh_internal_lab_required = pytest.mark.skipif(

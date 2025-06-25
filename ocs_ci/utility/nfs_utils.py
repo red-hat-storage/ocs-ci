@@ -177,11 +177,18 @@ def create_nfs_load_balancer_service(
         "get service rook-ceph-nfs-my-nfs-load-balancer"
         + " --output jsonpath='{.status.loadBalancer.ingress}'"
     )
-    hostname = ingress_add[0]
-    hostname_add = hostname["hostname"]
-    log.info(f"ingress hostname, {hostname_add}")
 
-    return hostname_add
+    host_details = ingress_add[0]
+    if "hostname" in host_details:
+        hostname_add = host_details["hostname"]
+        log.info(f"ingress hostname, {hostname_add}")
+        return hostname_add
+    elif "ip" in host_details:
+        host_ip = host_details["ip"]
+        log.info(f"ingress host ip, {host_ip}")
+        return host_ip
+    else:
+        log.error("host details unavailable")
 
 
 def delete_nfs_load_balancer_service(
