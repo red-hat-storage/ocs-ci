@@ -276,7 +276,6 @@ class TestCorsConfig:
             "OBC-IBM-NSS",
         ],
     )
-    @tier1
     def test_basic_cors_operations(
         self, mcg_obj_session, awscli_pod_session, bucket_factory, bucketclass_dict
     ):
@@ -721,7 +720,7 @@ class TestCorsConfig:
         )
         sample.wait_for_func_value(self.POSITIVE_RESPONSE)
 
-    @tier1
+    @tier2
     def test_expose_header_cors_element(
         self, mcg_obj_session, awscli_pod_session, bucket_factory
     ):
@@ -942,7 +941,6 @@ class TestCorsConfig:
         ],
     )
     @pre_upgrade
-    @tier1
     def test_default_cors_pre_upgrade(
         self,
         request,
