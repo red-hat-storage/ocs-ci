@@ -7,7 +7,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     polarion_id,
-    tier1,
+    tier2,
 )
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class TestStorageClassReclamespace:
         log.info(f" RBD Image { rbd_image_name} is size of {image_size}GiB")
         return True
 
-    @tier1
+    @tier2
     def test_storageclass_reclaimspace(
         self, storageclass_factory, multi_pvc_factory, pod_factory
     ):
