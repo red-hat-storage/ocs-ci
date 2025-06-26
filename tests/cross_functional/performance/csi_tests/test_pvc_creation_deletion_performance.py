@@ -53,6 +53,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.benchmark_name = "PVC_Creation-Deletion"
         self.create_test_project()
         set_configmap_log_level_csi_sidecar(value=5)
+    def teardown(self):
+        log.info("Starting the test environment celanup")
+        set_configmap_log_level_csi_sidecar(value=1)
 
     def create_fio_pod_yaml(self, pvc_size=1):
         """
