@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier2,
     tier4c,
     skipif_ocp_version,
     skipif_managed_service,
@@ -516,7 +517,7 @@ class TestNfsEnable(ManageTest):
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-    @tier1
+    @tier2
     @aws_platform_required
     @polarion_id("OCS-4274")
     def test_multiple_nfs_based_PVs(
@@ -659,7 +660,7 @@ class TestNfsEnable(ManageTest):
             log.info("Check nfs pv is deleted")
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-    @tier1
+    @tier2
     @aws_platform_required
     @polarion_id("OCS-4293")
     def test_multiple_mounts_of_same_nfs_volume(
@@ -797,7 +798,7 @@ class TestNfsEnable(ManageTest):
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-    @tier1
+    @tier2
     @aws_platform_required
     @polarion_id("OCS-4312")
     def test_external_nfs_client_can_write_read_new_file(

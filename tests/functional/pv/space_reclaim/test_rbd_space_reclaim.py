@@ -142,7 +142,7 @@ class TestRbdSpaceReclaim(ManageTest):
             log.info(f"{fio_filename2} is intact")
 
     @polarion_id("OCS-2774")
-    @tier1
+    @tier2
     @skipif_managed_service
     @skipif_hci_provider_and_client
     @skipif_external_mode

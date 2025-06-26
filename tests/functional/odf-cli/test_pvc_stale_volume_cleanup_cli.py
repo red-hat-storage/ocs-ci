@@ -15,12 +15,12 @@ from ocs_ci.framework.testlib import ignore_leftovers
 logger = logging.getLogger(__name__)
 
 
-@tier1
 @ignore_leftovers
 @green_squad
 class TestSubvolumesCommand(ManageTest):
     @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5794")
+    @tier1
     def test_pvc_stale_volume_cleanup_cli(self, storageclass_factory, pvc_factory):
         """
         1. Create a new PVC with Retain strategy.
