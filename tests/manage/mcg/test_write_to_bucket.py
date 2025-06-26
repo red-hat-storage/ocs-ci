@@ -187,15 +187,15 @@ class TestBucketIO(MCGTest):
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                 },
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
@@ -203,7 +203,7 @@ class TestBucketIO(MCGTest):
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
         ],
         ids=[
@@ -277,11 +277,11 @@ class TestBucketIO(MCGTest):
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},

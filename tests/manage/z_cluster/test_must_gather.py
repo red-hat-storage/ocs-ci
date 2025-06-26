@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier2,
     skipif_external_mode,
     skipif_ms_consumer,
 )
@@ -37,6 +38,7 @@ class TestMustGather(ManageTest):
             pytest.param(
                 *["CEPH"],
                 marks=[
+                    tier2,
                     pytest.mark.polarion_id("OCS-1583"),
                     skipif_external_mode,
                     skipif_ms_consumer,
@@ -45,12 +47,15 @@ class TestMustGather(ManageTest):
             pytest.param(
                 *["JSON"],
                 marks=[
+                    tier1,
                     pytest.mark.polarion_id("OCS-1583"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                 ]
             ),
-            pytest.param(*["OTHERS"], marks=pytest.mark.polarion_id("OCS-1583")),
+            pytest.param(
+                *["OTHERS"], marks=[tier2, pytest.mark.polarion_id("OCS-1583")]
+            ),
         ],
     )
     @pytest.mark.skipif(

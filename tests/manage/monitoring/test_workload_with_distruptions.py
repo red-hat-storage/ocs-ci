@@ -33,9 +33,10 @@ import logging
 import time
 import pytest
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad, tier3
-from ocs_ci.framework.testlib import (
+from ocs_ci.framework.pytest_customization.marks import (
+    blue_squad,
     tier2,
+    tier3,
     pre_upgrade,
     post_upgrade,
     skipif_managed_service,

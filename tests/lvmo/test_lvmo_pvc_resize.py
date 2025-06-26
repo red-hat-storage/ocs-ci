@@ -2,7 +2,6 @@ import pytest
 import logging
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
     skipif_lvm_not_installed,
     aqua_squad,
 )
@@ -77,10 +76,9 @@ class TestLVMPVCResize(ManageTest):
         self.proj_obj = project_factory()
         self.proj = self.proj_obj.namespace
 
-    @tier1
     @skipif_ocs_version("<4.11")
     @skipif_lvm_not_installed
-    def test_pvc_resize(
+    def deprecated_test_pvc_resize(
         self,
         init_lvm,
         status,

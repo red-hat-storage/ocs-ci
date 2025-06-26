@@ -2,9 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    tier1,
     config,
-    bugzilla,
     skipif_ocs_version,
 )
 from ocs_ci.ocs import constants, ocp
@@ -64,11 +62,8 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
 @skipif_managed_service
 @skipif_ocs_version("<4.7")
 @pytest.mark.polarion_id("OCS-2476")
-@bugzilla("1880747")
-@bugzilla("1880748")
 @skipif_mcg_only
-@tier1
-def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
+def deprecated_test_rgw_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     """
     Test to verify object bucket(backed by RGW) available size
 

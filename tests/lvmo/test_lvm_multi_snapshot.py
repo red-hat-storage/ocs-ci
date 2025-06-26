@@ -5,11 +5,10 @@ import pytest
 import concurrent.futures
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
     skipif_lvm_not_installed,
     aqua_squad,
 )
-from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, acceptance
+from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.cluster import LVM
@@ -52,11 +51,9 @@ class TestLvmMultiSnapshot(ManageTest):
     access_mode = constants.ACCESS_MODE_RWO
     pvc_num = 5
 
-    @tier1
-    @acceptance
     @skipif_lvm_not_installed
     @skipif_ocs_version("<4.11")
-    def test_create_multi_snapshot_from_pvc(
+    def deprecated_test_create_multi_snapshot_from_pvc(
         self,
         volume_mode,
         volume_binding_mode,

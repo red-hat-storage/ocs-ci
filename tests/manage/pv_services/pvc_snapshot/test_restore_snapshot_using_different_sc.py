@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
-    tier1,
+    tier2,
     skipif_ocp_version,
     skipif_managed_service,
 )
@@ -21,7 +21,6 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @skipif_managed_service
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
@@ -52,6 +51,7 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
             access_modes_cephfs=[constants.ACCESS_MODE_RWO],
         )
 
+    @tier2
     def test_snapshot_restore_using_different_sc(
         self,
         storageclass_factory,

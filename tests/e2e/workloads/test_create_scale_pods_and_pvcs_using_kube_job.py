@@ -6,6 +6,7 @@ from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier1,
+    tier2,
     ManageTest,
     ignore_leftovers,
 )
@@ -28,7 +29,6 @@ log = logging.getLogger(__name__)
 
 
 @magenta_squad
-@tier1
 @ignore_leftovers
 class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
     """
@@ -46,6 +46,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @tier2
     @skipif_bm
     @skipif_external_mode
     @ipi_deployment_required
@@ -66,6 +67,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         ceph_health_check()
         log.info("The resources created successfully using the kube job")
 
+    @tier2
     @ms_provider_and_consumer_required
     def test_create_scale_pods_and_pvcs_using_kube_job_ms(
         self, create_scale_pods_and_pvcs_using_kube_job
@@ -95,6 +97,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         log.info("The resources created successfully using the kube job")
 
     @skipif_ms_provider_and_consumer
+    @tier1
     @ms_consumer_required
     def test_create_scale_pods_and_pvcs_with_ms_consumer(
         self, create_scale_pods_and_pvcs_using_kube_job
@@ -170,6 +173,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
         log.info("All the pods and PVCs were deleted successfully on the consumers")
 
+    @tier1
     def test_create_scale_pods_and_pvcs_with_ms_consumers(
         self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
     ):
@@ -205,6 +209,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
             "The scale pods and PVCs using a kube job with MS consumers created successfully"
         )
 
+    @tier1
     def test_create_and_delete_scale_pods_and_pvcs_with_ms_consumers(
         self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
     ):

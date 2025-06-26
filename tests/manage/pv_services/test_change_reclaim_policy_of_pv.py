@@ -4,7 +4,12 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.framework.testlib import ManageTest, tier1, skipif_managed_service
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    tier2,
+    skipif_managed_service,
+)
 from ocs_ci.ocs.constants import RECLAIM_POLICY_DELETE, RECLAIM_POLICY_RETAIN
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
@@ -18,25 +23,32 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @pytest.mark.parametrize(
     argnames=["interface", "reclaim_policy"],
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-939"),
+            marks=[tier1, pytest.mark.polarion_id("OCS-939")],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_RETAIN],
-            marks=[pytest.mark.polarion_id("OCS-962"), skipif_managed_service],
+            marks=[
+                tier2,
+                pytest.mark.polarion_id("OCS-962"),
+                skipif_managed_service,
+            ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-963"),
+            marks=[tier2, pytest.mark.polarion_id("OCS-963")],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_RETAIN],
-            marks=[pytest.mark.polarion_id("OCS-964"), skipif_managed_service],
+            marks=[
+                tier2,
+                pytest.mark.polarion_id("OCS-964"),
+                skipif_managed_service,
+            ],
         ),
     ],
 )

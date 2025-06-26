@@ -8,10 +8,9 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
-    tier1,
+    tier2,
     polarion_id,
     skipif_external_mode,
-    bugzilla,
 )
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import (
@@ -55,7 +54,7 @@ class TestRbdSpaceReclaim(ManageTest):
         )
 
     @polarion_id("OCS-2759")
-    @tier1
+    @tier2
     def test_rbd_space_reclaim_cronjob(self, pause_and_resume_cluster_load):
         """
         Test to verify RBD space reclamation
@@ -146,8 +145,7 @@ class TestRbdSpaceReclaim(ManageTest):
         if check_file_existence(pod_obj=pod_obj, file_path=file_path):
             log.info(f"{fio_filename4} is intact")
 
-    @tier1
-    @bugzilla("2046677")
+    @tier2
     @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
