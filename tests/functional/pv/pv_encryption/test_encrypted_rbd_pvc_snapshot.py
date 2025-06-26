@@ -66,7 +66,6 @@ else:
     argnames=argnames,
     argvalues=argvalues,
 )
-@tier1
 @skipif_ocs_version("<4.8")
 @skipif_ocp_version("<4.8")
 @kms_config_required
@@ -156,6 +155,7 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
                         f"Vault: Key not found for {pvc_obj.name}"
                     )
 
+    @tier1
     def test_encrypted_rbd_block_pvc_snapshot(
         self,
         kms_provider,
