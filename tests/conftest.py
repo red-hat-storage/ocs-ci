@@ -7512,8 +7512,10 @@ def operator_pods():
     operator_pods = []
     # due to changes introduced in odf 4.19 pod lists could differ
     # during upgrade are not scaled down pods that would be otherwise down
+    running_version = version.get_running_odf_version()
+    running_version = version.get_semantic_version(running_version, True)
     if (
-        version.get_semantic_running_odf_version() >= version.VERSION_4_19
+        running_version >= version.VERSION_4_19
         and version.get_semantic_ocs_version_from_config() < version.VERSION_4_19
     ):
         upgraded_cluster = True
