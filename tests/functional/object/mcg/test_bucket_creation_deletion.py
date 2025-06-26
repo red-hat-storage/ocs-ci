@@ -6,6 +6,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
+    tier2,
     tier3,
     acceptance,
     performance,
@@ -98,7 +99,7 @@ class TestBucketCreationAndDeletion(MCGTest):
             pytest.param(
                 *[3, "CLI", None],
                 marks=[
-                    tier1,
+                    tier2,
                     acceptance,
                     pytest.mark.polarion_id("OCS-1298"),
                 ],
@@ -143,7 +144,7 @@ class TestBucketCreationAndDeletion(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
+                marks=[tier2, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
             ),
         ],
         ids=[
