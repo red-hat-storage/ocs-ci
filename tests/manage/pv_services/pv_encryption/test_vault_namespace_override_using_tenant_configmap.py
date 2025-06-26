@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     ManageTest,
     tier1,
-    bugzilla,
+    tier2,
     config,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_pods
@@ -25,20 +25,20 @@ argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
 if config.ENV_DATA.get("vault_hcp"):
     argvalues = [
         pytest.param(
-            "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-4639")
+            "v1", kmsprovider, True, marks=[tier2, pytest.mark.polarion_id("OCS-4639")]
         ),
         pytest.param(
-            "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-4641")
+            "v2", kmsprovider, True, marks=[tier1, pytest.mark.polarion_id("OCS-4641")]
         ),
     ]
 
 else:
     argvalues = [
         pytest.param(
-            "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-4638")
+            "v1", kmsprovider, False, marks=[tier2, pytest.mark.polarion_id("OCS-4638")]
         ),
         pytest.param(
-            "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-4640")
+            "v2", kmsprovider, False, marks=[tier1, pytest.mark.polarion_id("OCS-4640")]
         ),
     ]
 
@@ -48,9 +48,7 @@ else:
     argnames=argnames,
     argvalues=argvalues,
 )
-@tier1
 @skipif_ocs_version("<4.10")
-@bugzilla("2050056")
 @kms_config_required
 @skipif_managed_service
 @skipif_disconnected_cluster

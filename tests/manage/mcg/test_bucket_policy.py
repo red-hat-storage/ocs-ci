@@ -346,7 +346,7 @@ class TestS3BucketPolicy(MCGTest):
             assert False, "Delete object succeeded when it should have failed"
 
     @pytest.mark.polarion_id("OCS-2145")
-    @tier1
+    @tier2
     def test_anonymous_read_only(self, mcg_obj, bucket_factory):
         """
         Tests read only access by an anonymous user
@@ -847,7 +847,7 @@ class TestS3BucketPolicy(MCGTest):
     @pytest.mark.polarion_id("OCS-2451")
     @pytest.mark.bugzilla("1893163")
     @skipif_ocs_version("<4.6")
-    @tier1
+    @tier2
     def test_public_website(self, mcg_obj, bucket_factory):
         """
         Tests public bucket website access

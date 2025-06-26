@@ -13,7 +13,6 @@ from ocs_ci.utility.lvmo_utils import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_lvm_not_installed,
-    tier1,
     aqua_squad,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version
@@ -55,7 +54,6 @@ def create_lvm_cluster_cr_with_device_selector(disks):
 
 
 @aqua_squad
-@tier1
 @skipif_lvm_not_installed
 @skipif_ocs_version("<4.12")
 @pytest.mark.parametrize(
@@ -75,7 +73,9 @@ def create_lvm_cluster_cr_with_device_selector(disks):
         ),
     ],
 )
-def test_create_lvm_cluster_w_manual_disk_selection(remove_lvm_cluster, by, select_all):
+def deprecated_test_create_lvm_cluster_w_manual_disk_selection(
+    remove_lvm_cluster, by, select_all
+):
     """
     Test creation of lvm cluster with manual disk selection,
     by disks name or by disks path

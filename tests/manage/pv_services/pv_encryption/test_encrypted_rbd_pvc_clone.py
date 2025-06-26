@@ -154,7 +154,7 @@ class TestEncryptedRbdClone(ManageTest):
                         f"Vault: Key not found for {pvc_obj.name}"
                     )
 
-    def test_pvc_to_pvc_clone(self, kv_version, kms_provider, pod_factory):
+    def test_encrypted_pvc_to_pvc_clone(self, kv_version, kms_provider, pod_factory):
         """
         Test to create a clone from an existing encrypted RBD PVC.
         Verify that the cloned PVC is encrypted and all the data is preserved.

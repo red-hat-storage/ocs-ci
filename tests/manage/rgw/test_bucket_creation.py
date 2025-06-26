@@ -35,7 +35,7 @@ class TestRGWBucketCreation:
             ),
         ],
     )
-    def test_bucket_creation(self, rgw_bucket_factory, amount, interface):
+    def test_rgw_bucket_creation(self, rgw_bucket_factory, amount, interface):
         """
         Test RGW OBC creation using the OC command.
         The factory checks the bucket's health by default.
@@ -50,7 +50,7 @@ class TestRGWBucketCreation:
             ),
         ],
     )
-    def test_duplicate_bucket_creation(
+    def test_rgw_duplicate_bucket_creation(
         self, rgw_obj, rgw_bucket_factory, amount, interface
     ):
         """

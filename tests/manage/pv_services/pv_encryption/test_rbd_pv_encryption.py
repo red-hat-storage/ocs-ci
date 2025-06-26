@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier2,
     skipif_ocs_version,
     kms_config_required,
     skipif_managed_service,
@@ -40,19 +41,31 @@ else:
     if config.ENV_DATA.get("vault_hcp"):
         argvalues = [
             pytest.param(
-                "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3973")
+                "v1",
+                kmsprovider,
+                True,
+                marks=[tier1, pytest.mark.polarion_id("OCS-3973")],
             ),
             pytest.param(
-                "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3974")
+                "v2",
+                kmsprovider,
+                True,
+                marks=[tier2, pytest.mark.polarion_id("OCS-3974")],
             ),
         ]
     else:
         argvalues = [
             pytest.param(
-                "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2585")
+                "v1",
+                kmsprovider,
+                False,
+                marks=[tier1, pytest.mark.polarion_id("OCS-2585")],
             ),
             pytest.param(
-                "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2592")
+                "v2",
+                kmsprovider,
+                False,
+                marks=[tier2, pytest.mark.polarion_id("OCS-2592")],
             ),
         ]
 
@@ -88,7 +101,6 @@ class TestRbdPvEncryption(ManageTest):
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
-    @tier1
     def test_rbd_pv_encryption(
         self,
         kms_provider,
