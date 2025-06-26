@@ -40,7 +40,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_ocs_version,
     on_prem_platform_required,
-    skipif_fips_enabled,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from uuid import uuid4

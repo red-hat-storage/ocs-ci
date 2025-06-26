@@ -97,8 +97,6 @@ class TestLvmMultiSnapshot(ManageTest):
         for exec_num in range(0, self.pvc_num):
             futures.append(
                 executor.submit(
-                    config_safe_thread_pool_task,
-                    config.default_cluster_index,
                     pvc_factory,
                     project=proj_obj,
                     interface=None,
