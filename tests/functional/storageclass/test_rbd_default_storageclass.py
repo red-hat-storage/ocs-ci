@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
+    tier3,
     green_squad,
     polarion_id,
     baremetal_deployment_required,
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 @baremetal_deployment_required
 @ui_deployment_required
 class TestRBDStorageClassAsDefaultStorageClass:
-    @tier1
+    @tier3
     @polarion_id("OCS-5459")
     def test_pvc_creation_without_storageclass_name(self, pvc_factory, pod_factory):
         """

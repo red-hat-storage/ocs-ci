@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier2,
     acceptance,
     skipif_ocp_version,
     config,
@@ -20,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @skipif_ocs_version("<4.9")
 @skipif_ocp_version("<4.9")
 class TestClone(ManageTest):
@@ -71,6 +71,7 @@ class TestClone(ManageTest):
             ),
         ],
     )
+    @tier1
     def test_pvc_to_pvc_clone(self, interface_type, setup, teardown_factory):
         """
         Create a clone from an existing pvc,
@@ -166,6 +167,7 @@ class TestClone(ManageTest):
             ),
         ],
     )
+    @tier2
     def test_pvc_to_pvc_rox_clone(
         self,
         interface_type,
@@ -264,6 +266,7 @@ class TestClone(ManageTest):
             ),
         ],
     )
+    @tier2
     def test_pvc_to_pvc_rox_shallow_vol_clone(
         self,
         interface_type,
@@ -392,6 +395,7 @@ class TestClone(ManageTest):
             ),
         ],
     )
+    @tier2
     def test_pvc_to_pvc_rox_shallow_vol_post_clone(
         self,
         interface_type,

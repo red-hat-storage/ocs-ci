@@ -44,7 +44,7 @@ class TestOBCQuota:
             ),
         ],
     )
-    def test_obc_quota(
+    def test_rgw_obc_quota(
         self,
         awscli_pod_session,
         rgw_bucket_factory,

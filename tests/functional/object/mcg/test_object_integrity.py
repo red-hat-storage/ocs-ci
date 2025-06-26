@@ -54,19 +54,19 @@ class TestObjectIntegrity(MCGTest):
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier1, skipif_disconnected_cluster],
+                marks=[tier2, skipif_disconnected_cluster],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1, skipif_disconnected_cluster],
+                marks=[tier2, skipif_disconnected_cluster],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1, skipif_disconnected_cluster, skipif_fips_enabled],
+                marks=[tier2, skipif_disconnected_cluster, skipif_fips_enabled],
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1, skipif_disconnected_cluster],
+                marks=[tier2, skipif_disconnected_cluster],
             ),
             pytest.param(
                 {
