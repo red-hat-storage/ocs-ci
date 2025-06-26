@@ -24,6 +24,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ui_not_support,
     ui,
+    post_upgrade,
 )
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
@@ -418,8 +419,9 @@ class TestObcUserInterface(object):
 
 @ui
 @black_squad
-@tier1
 class TestBucketCreate:
+    @tier1
+    @post_upgrade
     @pytest.mark.polarion_id("OCS-6334")
     def test_bucket_create(self, setup_ui_class_factory):
         """
@@ -442,6 +444,8 @@ class TestBucketCreate:
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
 
+    @post_upgrade
+    @tier2
     @pytest.mark.polarion_id("OCS-6397")
     def test_empty_bucket_delete(self, setup_ui_class_factory):
         """
@@ -493,6 +497,7 @@ class TestBucketCreate:
         logger.info(f"Successfully deleted bucket: {bucket_to_delete}")
 
     @pytest.mark.polarion_id("OCS-6398")
+    @tier2
     def test_bucket_list_comparison(self, setup_ui_class_factory, mcg_obj):
         """
         Test that the bucket list from UI matches the bucket list from CLI.

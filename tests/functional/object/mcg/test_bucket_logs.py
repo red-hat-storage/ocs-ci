@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     red_squad,
     skipif_mcg_only,
     tier1,
+    tier2,
     polarion_id,
     skipif_external_mode,
 )
@@ -54,14 +55,13 @@ class TestBucketLogs(MCGTest):
             ]
         )
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["use_provided_logs_pvc"],
         argvalues=[
-            pytest.param(False, marks=[polarion_id("OCS-6242")]),
+            pytest.param(False, marks=[tier1, polarion_id("OCS-6242")]),
             pytest.param(
                 True,
-                marks=[polarion_id("OCS-6243"), skipif_mcg_only],
+                marks=[tier2, polarion_id("OCS-6243"), skipif_mcg_only],
             ),
         ],
         ids=[
@@ -166,14 +166,13 @@ class TestBucketLogs(MCGTest):
             pvc.name == logs_manager.cur_logs_pvc for pvc in pvc_dicts
         ), f"The logs PVC {logs_manager.cur_logs_pvc} was deleted"
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["use_provided_logs_pvc"],
         argvalues=[
-            pytest.param(False, marks=[polarion_id("OCS-6244")]),
+            pytest.param(False, marks=[tier1, polarion_id("OCS-6244")]),
             pytest.param(
                 True,
-                marks=[polarion_id("OCS-6245"), skipif_mcg_only],
+                marks=[tier2, polarion_id("OCS-6245"), skipif_mcg_only],
             ),
         ],
         ids=[

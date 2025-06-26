@@ -6,12 +6,12 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.odf_cli import ODFCLIRetriever, ODFCliRunner
-from ocs_ci.framework.testlib import tier1, brown_squad, polarion_id
+from ocs_ci.framework.testlib import tier3, brown_squad, polarion_id
 
 logger = logging.getLogger(__name__)
 
 
-@tier1
+@tier3
 @brown_squad
 @polarion_id("OCS-6235")
 class TestOperatorRestart:

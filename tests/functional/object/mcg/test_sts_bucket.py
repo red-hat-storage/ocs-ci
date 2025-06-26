@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
+    tier2,
     sts_deployment_required,
     red_squad,
     mcg,
@@ -35,7 +36,7 @@ class TestSTSBucket:
                         "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
                     },
                 ],
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 *[None],
