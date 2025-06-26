@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
-    skipif_fips_enabled,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -223,7 +222,7 @@ class TestBucketIO(MCGTest):
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier2, skipif_fips_enabled],
+                marks=[tier2],
             ),
         ],
         ids=[
