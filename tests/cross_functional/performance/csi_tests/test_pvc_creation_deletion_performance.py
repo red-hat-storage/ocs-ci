@@ -53,16 +53,6 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.benchmark_name = "PVC_Creation-Deletion"
         self.create_test_project()
 
-    def teardown(self):
-        """
-        Cleanup the test environment
-        """
-
-        log.info("Starting the test environment celanup")
-        # Delete the test project (namespace)
-        self.delete_test_project()
-        super(TestPVCCreationDeletionPerformance, self).teardown()
-
     def create_fio_pod_yaml(self, pvc_size=1):
         """
         This function create a new performance pod yaml file, which will trigger
@@ -451,7 +441,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         # Initialize the test variables
         self.interface = interface_type
 
-        number_of_pvcs = 120
+        number_of_pvcs = 500
         if self.dev_mode:
             number_of_pvcs = 5
 
