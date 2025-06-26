@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
-    tier1,
+    tier2,
     skipif_ocs_version,
     kms_config_required,
     skipif_managed_service,
@@ -77,7 +77,7 @@ class TestEncryptedPVCNOExpansionOption(ManageTest):
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
 
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         argnames=argnames,
         argvalues=argvalues,
