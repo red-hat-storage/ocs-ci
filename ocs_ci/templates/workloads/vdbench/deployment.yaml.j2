@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ deployment_name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ deployment_name }}
+    workload-type: vdbench
+spec:
+  replicas: {{ replicas }}
+  selector:
+    matchLabels:
+      app: {{ deployment_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ deployment_name }}
+        workload-type: vdbench
+    spec:
+      containers:
+      - name: vdbench-container
+        image: {{ image }}
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          echo "Starting Vdbench workload..."
+
+          echo "Configuration file:"
+          cat /config/vdbench.conf || { echo "Missing config"; exit 1; }
+          cp /config/vdbench.conf /tmp/vdbench.conf
+
+          mkdir -p /tmp/vdbench-work
+          cd /tmp/vdbench-work
+
+{% if volume_mode == "Block" %}
+          echo "Block device information:"
+          ls -la {{ device_path }}
+          lsblk {{ device_path }} || true
+{% else %}
+          echo "Filesystem path:"
+          ls -la {{ mount_path }}
+{% endif %}
+
+          echo "Running Vdbench..."
+          /vdbench/vdbench -f /tmp/vdbench.conf || { echo "Vdbench failed"; exit 1; }
+          echo "Vdbench completed"
+
+          # Prevent container from exiting
+          sleep infinity
+
+{% if volume_mode == "Block" %}
+        volumeDevices:
+        - name: vdbench-storage
+          devicePath: {{ device_path }}
+        volumeMounts:
+        - name: vdbench-config
+          mountPath: /config
+{% else %}
+        volumeMounts:
+        - name: vdbench-storage
+          mountPath: {{ mount_path }}
+        - name: vdbench-config
+          mountPath: /config
+{% endif %}
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        env:
+        - name: VDBENCH_OPTS
+          value: "-Xmx1g"
+        terminationMessagePolicy: FallbackToLogsOnError
+      restartPolicy: Always
+      volumes:
+      - name: vdbench-storage
+        persistentVolumeClaim:
+          claimName: {{ pvc_name }}
+      - name: vdbench-config
+        configMap:
+          name: {{ deployment_name }}-config
