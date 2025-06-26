@@ -52,7 +52,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
-from ocs_ci.utility.retry import retry
+from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
@@ -61,6 +61,59 @@ from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.version import get_running_odf_version
 
 logger = logging.getLogger(__name__)
+
+
+@if_version(">4.17")
+@catch_exceptions((CommandFailed, TimeoutExpiredError))
+def apply_hosted_cluster_mirrors_max_items_wa():
+    """
+    Apply workaround for MCE mirrors max items issue.
+    This workaround is needed to avoid the error:
+    "The number of items in the mirrors list exceeds the maximum allowed limit of 25"
+    """
+    logger.warning(
+        "!!! Workaround for OCPBUGS-57957: apply MCE mirrors max items workaround !!!"
+    )
+    logger.warning("!!! Remove when resolved !!!")
+    ocp_obj = OCP(kind=constants.CRD_KIND)
+    params = (
+        '[{"op": "replace", '
+        '"path": "/spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/imageContentSources/items'
+        '/properties/mirrors/maxItems",'
+        '"value": 255}]'
+    )
+    ocp_obj.patch(
+        resource_name=constants.HOSTED_CLUSTERS_CRD_NAME,
+        params=params,
+        format_type="json",
+    )
+
+
+@if_version(">4.17")
+@catch_exceptions((CommandFailed, TimeoutExpiredError))
+def apply_hosted_control_plane_mirrors_max_items_wa():
+    """
+    Apply workaround for Hosted Control Plane mirrors max items issue.
+    This workaround is needed to avoid the error:
+    "The number of items in the mirrors list exceeds the maximum allowed limit of 25"
+    """
+    logger.warning(
+        "!!! Workaround for OCPBUGS-56015: apply Hosted Control Plane mirrors max items workaround !!!"
+    )
+    logger.warning("!!! Remove when resolved !!!")
+    ocp_obj = OCP(kind=constants.CRD_KIND)
+    patch_paths = [
+        "/spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/imageContentSources/items/properties"
+        "/mirrors/maxItems",
+        "/spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/imageContentSources/maxItems",
+    ]
+    for path in patch_paths:
+        params = f'[{{"op": "replace", "path": "{path}", "value": 255}}]'
+        ocp_obj.patch(
+            resource_name=constants.HOSTED_CONTROL_PLANE_CRD_NAME,
+            params=params,
+            format_type="json",
+        )
 
 
 def apply_cluster_roles_wa(cluster_names):
@@ -730,6 +783,12 @@ class HypershiftHostedOCP(
                 "Both deploy_acm_hub and deploy_mce are set to True. "
                 "Please choose only one of them."
             )
+
+        logger.info("Correct max items in hostedclsuters crd")
+        apply_hosted_cluster_mirrors_max_items_wa()
+
+        logger.info("Correct max items in hostedcontrolplane crd")
+        apply_hosted_control_plane_mirrors_max_items_wa()
 
         if deploy_metallb:
             self.deploy_lb()
