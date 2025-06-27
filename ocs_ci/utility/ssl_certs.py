@@ -497,8 +497,8 @@ def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=
         f"Checking cluster status of {constants.OPENSHIFT_API_CLUSTER_OPERATOR}"
     )
     for sampler in TimeoutSampler(
-        timeout=1000,
-        sleep=10,
+        timeout=1800,
+        sleep=60,
         func=ocp.verify_cluster_operator_status,
         cluster_operator=constants.OPENSHIFT_API_CLUSTER_OPERATOR,
     ):
