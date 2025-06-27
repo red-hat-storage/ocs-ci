@@ -7,12 +7,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     turquoise_squad,
 )
-from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
     taint_nodes,
     get_worker_nodes,
-    get_node_objs,
-    get_all_nodes,
     untaint_nodes,
 )
 from ocs_ci.helpers.helpers import (
@@ -26,13 +23,11 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     CommandFailed,
     ResourceWrongStatusException,
-    CephHealthException,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     Pod,
-    get_ceph_tools_pod,
     wait_for_pods_to_be_in_statuses,
     logger,
 )
@@ -49,64 +44,6 @@ log = logging.getLogger(__name__)
 class TestZoneUnawareApps:
 
     nodes_to_shutdown = []
-
-    @pytest.fixture()
-    def init_sanity(self, request, nodes):
-        """
-        Initial Cluster sanity
-        """
-        self.sanity_helpers = Sanity()
-
-        def finalizer():
-            """
-            Make sure all the nodes are Running and
-            the ceph health is OK at the end of the test
-            """
-
-            # check if all the nodes are Running
-            log.info("Checking if all the nodes are READY")
-            nodes_not_ready = [
-                node_obj
-                for node_obj in get_node_objs(get_all_nodes())
-                if node_obj.status() != constants.STATUS_READY
-            ]
-            if len(nodes_not_ready) != 0:
-                try:
-                    nodes.start_nodes(nodes=nodes_not_ready)
-                except Exception:
-                    log.error(
-                        f"Something went wrong while starting the nodes {nodes_not_ready}!"
-                    )
-                    raise
-
-                retry(
-                    (
-                        CommandFailed,
-                        TimeoutError,
-                        AssertionError,
-                        ResourceWrongStatusException,
-                    ),
-                    tries=10,
-                    delay=15,
-                )(wait_for_nodes_status(timeout=1800))
-                log.info(
-                    f"Following nodes {nodes_not_ready} were NOT READY, are now in READY state"
-                )
-            else:
-                log.info("All nodes are READY")
-
-            # check cluster health
-            try:
-                log.info("Making sure ceph health is OK")
-                self.sanity_helpers.health_check(tries=50, cluster_check=False)
-            except CephHealthException as e:
-                assert (
-                    "HEALTH_WARN" in e.args[0]
-                ), f"Ignoring Ceph health warnings: {e.args[0]}"
-                get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-                log.info("Archived ceph crash!")
-
-        request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
     def remove_taint_unfence_teardown(self, request):
