@@ -699,6 +699,7 @@ class AzureAroUtil(AZURE):
             subnet_prefixes_cmd = (
                 f"az network vnet subnet create --resource-group {resource_group} --vnet-name {vnet} "
                 f"--name {subnet} --address-prefixes {prefixes_address} --service-endpoints Microsoft.ContainerRegistry"
+                " --disable-private-link-service-network-policies true"
             )
 
             exec_cmd(subnet_prefixes_cmd)
