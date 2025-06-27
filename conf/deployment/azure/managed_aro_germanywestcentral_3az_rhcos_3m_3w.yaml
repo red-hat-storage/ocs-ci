@@ -1,0 +1,31 @@
+---
+DEPLOYMENT:
+  openshift_install_timeout: 4800
+  allow_lower_instance_requirements: false
+  use_custom_ingress_ssl_cert: true
+  use_custom_api_ssl_cert: true
+ENV_DATA:
+  platform: 'azure'
+  deployment_type: 'managed'
+  azure_aro: true
+  base_domain: 'azure-germanywestcentral.qe.rh-ocs.com'
+  # Based on documentation:
+  # https://learn.microsoft.com/en-us/azure/openshift/support-policies-v4#logging-and-monitoring
+  # We should not modify monitoring
+  # Disucssed here:
+  # https://redhat-internal.slack.com/archives/CCV9YF9PD/p1702632274870529
+  persistent-monitoring: false
+  monitoring_enabled: false
+  region: 'germanywestcentral'
+  azure_base_domain_resource_group_name: 'odfqe-germanywestcentral'
+  worker_availability_zones:
+    - '3'
+  master_availability_zones:
+    - '3'
+  worker_replicas: 3
+  master_replicas: 3
+  master_instance_type: 'Standard_D8s_v3'
+  worker_instance_type: 'Standard_D16s_v3'
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-4924'
