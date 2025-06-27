@@ -1022,16 +1022,24 @@ def storageclass_factory_class(request, secret_factory_class, ceph_pool_factory_
 
 @pytest.fixture(scope="session")
 def storageclass_factory_session(
-    request, secret_factory_session, ceph_pool_factory_session
+    request,
+    secret_factory_session,
+    ceph_pool_factory_session,
 ):
     return storageclass_factory_fixture(
-        request, secret_factory_session, ceph_pool_factory_session
+        request,
+        secret_factory_session,
+        ceph_pool_factory_session,
     )
 
 
 @pytest.fixture(scope="function")
 def storageclass_factory(request, secret_factory, ceph_pool_factory):
-    return storageclass_factory_fixture(request, secret_factory, ceph_pool_factory)
+    return storageclass_factory_fixture(
+        request,
+        secret_factory,
+        ceph_pool_factory,
+    )
 
 
 def storageclass_factory_fixture(
@@ -7681,7 +7689,7 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
                     else:
                         vm_list_default_compr.append(vm_obj)
                 except Exception as e:
-                    log.info(f"Error occurred while creating VM: {e}")
+                    log.error(f"Error occurred while creating VM: {e}")
 
         return (
             vm_list_default_compr,
@@ -10069,7 +10077,6 @@ def vm_snapshot_restore_fixture(request):
         """
         from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
         from ocp_resources.virtual_machine_restore import VirtualMachineRestore
-        from ocs_ci.utility.utils import create_unique_resource_name
 
         snapshot_name = f"snapshot-{vm.name}"
         vm_snapshot = VirtualMachineSnapshot(
