@@ -951,16 +951,46 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
         for instance in instances:
             try:
                 instance.delete(wait=False)
-                radosns_obj = ocp.OCP(
-                    kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=instance.namespace
-                )
-                radosnamespaces = [
-                    OCS(**radosns)
-                    for radosns in radosns_obj.get()["items"]
-                    if radosns["spec"]["blockPoolName"] == instance.name
-                ]
-                for radosnamespace in radosnamespaces:
-                    radosnamespace.delete()
+
+                try:
+                    radosns_obj = ocp.OCP(
+                        kind=constants.CEPHBLOCKPOOLRADOSNS,
+                        namespace=instance.namespace,
+                    )
+                    radosnamespaces = [
+                        OCS(**radosns)
+                        for radosns in radosns_obj.get()["items"]
+                        if radosns["spec"]["blockPoolName"] == instance.name
+                    ]
+                    for radosnamespace in radosnamespaces:
+                        try:
+                            radosnamespace.delete()
+                        except CommandFailed as radosns_ex:
+                            if "NotFound" in str(radosns_ex):
+                                log.info(
+                                    f"RadosNamespace {radosnamespace.name} not found in "
+                                    f"namespace {radosnamespace.namespace}. Skipping deletion"
+                                )
+                            elif skip_resource_not_found_error:
+                                log.info(
+                                    f"Resource {radosnamespace.kind} {radosnamespace.name} not found in "
+                                    f"namespace {radosnamespace.namespace},ignore_resource_not_found_error_label "
+                                    "applied. Skipping deletion"
+                                )
+                            else:
+                                raise
+                except Exception as radosns_list_ex:
+                    if (
+                        "NotFound" in str(radosns_list_ex)
+                        or skip_resource_not_found_error
+                    ):
+                        log.info(
+                            f"Could not list RadosNamespaces for pool {instance.name}. "
+                            "Likely already cleaned up or pool doesn't exist."
+                        )
+                    else:
+                        log.warning(f"Error listing RadosNamespaces: {radosns_list_ex}")
+
             except CommandFailed as ex:
                 if "NotFound" in str(ex) and skip_resource_not_found_error:
                     log.info(
@@ -970,7 +1000,14 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
                     )
                 else:
                     raise
-            instance.ocp.wait_for_delete(instance.name)
+
+            try:
+                instance.ocp.wait_for_delete(instance.name)
+            except CommandFailed as wait_ex:
+                if "NotFound" in str(wait_ex) or skip_resource_not_found_error:
+                    log.info(f"Resource {instance.name} already deleted or not found")
+                else:
+                    raise
 
     request.addfinalizer(finalizer)
     return factory
@@ -1114,7 +1151,7 @@ def storageclass_factory_fixture(
         """
         for instance in instances:
             instance.delete()
-            instance.ocp.wait_for_delete(instance.name)
+            instance.ocp.wait_for_delete(instance.name, timeout=120)
 
     request.addfinalizer(finalizer)
     return factory
