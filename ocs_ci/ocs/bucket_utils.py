@@ -1106,6 +1106,7 @@ def check_pv_backingstore_status(
     return True if res in desired_status else False
 
 
+@retry((AssertionError), tries=10, delay=10)
 def check_pv_backingstore_type(
     backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
     namespace=config.ENV_DATA["cluster_namespace"],
@@ -2696,7 +2697,7 @@ def wait_for_bucket_count_stability(
         current_count = len(cli_buckets)
 
         logger.info(
-            f"Bucket count from CLI (attempt {attempt+1}/{max_retries}): {current_count}"
+            f"Bucket count from CLI (attempt {attempt + 1}/{max_retries}): {current_count}"
         )
 
         previous_counts.append(current_count)
