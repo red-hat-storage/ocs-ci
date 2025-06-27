@@ -32,6 +32,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources.fips import check_fips_enabled
+from ocs_ci.utility.utils import enable_huge_pages
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class TestGracefulNodesShutdown(E2ETest):
             )
 
         nodes = get_nodes()
+        enable_huge_pages()
         for node in nodes:
             assert (
                 node.get()["status"]["allocatable"]["hugepages-2Mi"] == "64Mi"
