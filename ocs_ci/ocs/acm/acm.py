@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
 )
 
+from ocs_ci.helpers.dr_helpers import get_cluster_set_name
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
@@ -160,6 +161,10 @@ class AcmAddClusters(AcmPageNavigator):
         Args:
             globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
 
+        Returns:
+            str: cluster set name created during the function to which managed clusters are tied for Submariner
+            installation
+
         """
         ocs_version = version.get_semantic_ocs_version_from_config()
 
@@ -301,6 +306,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+        return cluster_set_name
 
     def submariner_unreleased_downstream_info(self):
         log.info("Use custom Submariner subscription ")
@@ -342,6 +348,7 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
+        cluster_set_name = get_cluster_set_name()[0]
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
