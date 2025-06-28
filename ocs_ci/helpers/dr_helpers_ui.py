@@ -691,6 +691,7 @@ def check_apps_running_on_selected_cluster(
         else:
             log.error(f"App {app} not found on cluster {cluster_name} on DR dashboard")
             return False
+    return True
 
 
 def verify_application_present_in_ui(acm_obj, workloads_to_check=[], timeout=60):
