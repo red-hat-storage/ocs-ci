@@ -52,7 +52,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
-from ocs_ci.utility.retry import retry
+from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
@@ -191,7 +191,7 @@ class HostedClients(HyperShiftBase):
 
             if not self.config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping ODF deployment"
+                    f"Hosted ODF image is not set for cluster '{cluster_name}', skipping ODF deployment"
                 )
                 continue
 
@@ -203,19 +203,8 @@ class HostedClients(HyperShiftBase):
         odf_installed = []
         log_step("Verify ODF client is installed on all hosted OCP clusters")
         for cluster_name in cluster_names:
-            if self.config_has_hosted_odf_image(cluster_name):
-                logger.info(
-                    f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
-                )
-                hosted_odf = HostedODF(cluster_name)
-                if not hosted_odf.odf_client_installed():
-                    hosted_odf.exec_oc_cmd(
-                        "delete catalogsource --all -n openshift-marketplace"
-                    )
-                    logger.info("wait 30 sec and create catalogsource again")
-                    time.sleep(30)
-                    hosted_odf.create_catalog_source()
-                odf_installed.append(hosted_odf.odf_client_installed())
+            hosted_odf = HostedODF(cluster_name)
+            odf_installed.append(hosted_odf.odf_client_installed())
 
         # stage 6 setup storage client on all requested hosted clusters
         log_step("Setup storage client on hosted OCP clusters")
@@ -662,6 +651,11 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("disable_default_sources", False)
         )
+        olm_catalog_src_placement = (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("olm_catalog_src_placement", "Management")
+        )
         return self.create_kubevirt_ocp_cluster(
             name=self.name,
             nodepool_replicas=nodepool_replicas,
@@ -670,6 +664,7 @@ class HypershiftHostedOCP(
             ocp_version=ocp_version,
             cp_availability_policy=cp_availability_policy,
             disable_default_sources=disable_default_sources,
+            olm_catalog_src_placement=olm_catalog_src_placement,
         )
 
     def deploy_dependencies(
@@ -931,6 +926,7 @@ class HostedODF(HypershiftHostedOCP):
             .get(self.name, {})
             .get("storage_quota", None)
         )
+        self.catalog_source_on_management_cluster = None
 
     @kubeconfig_exists_decorator
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
@@ -1383,12 +1379,12 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
             bool: True if the catalog source exists, False otherwise
         """
-        ocp = OCP(
+        ocp_obj = OCP(
             kind=constants.CATSRC,
             namespace=constants.MARKETPLACE_NAMESPACE,
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
-        return ocp.check_resource_existence(
+        return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
             resource_name="ocs-catalogsource",
             should_exist=True,
@@ -1402,6 +1398,14 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
             bool: True if the catalog source is created, False otherwise
         """
+        if self.catalog_source_on_management():
+            logger.info(
+                "CatalogSource placement is Management cluster and is not adjustable; "
+                "verify CatalogSource on hosted cluster exists"
+            )
+            self.catalog_source_on_management_cluster = True
+            return False
+
         if self.catalog_source_exists():
             logger.info("CatalogSource already exists")
             return True
@@ -1509,7 +1513,13 @@ class HostedODF(HypershiftHostedOCP):
         hosted_odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
-        if "latest" in hosted_odf_version:
+
+        if self.catalog_source_on_management_cluster:
+            subscription_data["spec"]["source"] = templating.load_yaml(
+                constants.SUBSCRIPTION_YAML
+            )["spec"]["source"]
+
+        if "latest-" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
         if "konflux" in hosted_odf_version and "-" in hosted_odf_version:
@@ -1813,6 +1823,25 @@ class HostedODF(HypershiftHostedOCP):
                     cluster_kubeconfig=self.cluster_kubeconfig,
                 )
         return False
+
+    @catch_exceptions((CommandFailed, TimeoutExpiredError))
+    def catalog_source_on_management(self):
+        """
+        Check if imageStream catalogs exists on Managment cluster.
+        In this case catalogSource on Guest cluster can not be overwritten.
+
+        Returns:
+            bool: True if catalogSource exists on Management cluster, False otherwise
+        """
+        image_stream_obj = OCP(
+            kind="ImageStream",
+            resource_name=constants.IMAGE_STREAM_CATALOGS,
+            namespace=f"clusters-{self.name}",
+        )
+        return image_stream_obj.check_resource_existence(
+            timeout=self.timeout_check_resources_exist_sec,
+            should_exist=True,
+        )
 
 
 def hypershift_cluster_factory(
