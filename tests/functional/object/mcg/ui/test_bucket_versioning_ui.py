@@ -154,7 +154,10 @@ class TestBucketVersioningUI:
         return file_path, folder_path
 
     def _navigate_to_folder_and_enable_versions(
-        self, bucket_versioning: BucketVersioning, buckets_tab: BucketsTab, folder_name: str
+        self,
+        bucket_versioning: BucketVersioning,
+        buckets_tab: BucketsTab,
+        folder_name: str,
     ) -> None:
         """
         Navigate to the test folder and enable version listing.
@@ -211,6 +214,71 @@ class TestBucketVersioningUI:
         logger.info(f"Successfully uploaded folder: {folder_name} with 1 file")
         return folder_name
 
+    def _get_version_id_for_latest(self, buckets_tab: BucketsTab) -> str:
+        """
+        Get the version ID of the object marked with "Latest" tag.
+
+        Args:
+            buckets_tab: BucketsTab instance for UI operations
+
+        Returns:
+            str: Version ID of the latest object
+
+        Raises:
+            TimeoutException: If elements don't load within timeout
+        """
+        # Wait for the version ID element to be present
+        buckets_tab.wait_for_element_to_be_present(
+            buckets_tab.bucket_tab["version_id_for_latest"],
+            timeout=self.VERSION_DETECTION_TIMEOUT,
+        )
+
+        # Get the version ID text from the cell
+        version_id_elements = buckets_tab.get_elements(buckets_tab.bucket_tab["version_id_for_latest"])
+        if not version_id_elements:
+            raise TimeoutException("No version ID element found for latest object")
+        version_id = version_id_elements[0].text.strip()
+        logger.info(f"Version ID for latest object: {version_id}")
+
+        return version_id
+
+    def _delete_latest_version(self, buckets_tab: BucketsTab) -> None:
+        """
+        Delete the version marked with "Latest" tag.
+
+        Args:
+            buckets_tab: BucketsTab instance for UI operations
+
+        Raises:
+            TimeoutException: If elements don't load within timeout
+        """
+        logger.info("Clicking on 3 dots menu for latest version")
+        buckets_tab.do_click(buckets_tab.bucket_tab["version_actions_menu_for_latest"])
+
+        # Wait for dropdown to appear
+        time.sleep(3)
+
+        logger.info("Clicking 'Delete this version' option")
+        buckets_tab.do_click(buckets_tab.bucket_tab["delete_this_version_option"])
+
+        # Wait for delete confirmation modal
+        buckets_tab.wait_for_element_to_be_present(buckets_tab.bucket_tab["delete_version_modal_title"], timeout=10)
+
+        logger.info("Typing 'delete' in confirmation input")
+        input_element = buckets_tab.get_elements(buckets_tab.bucket_tab["delete_version_input"])
+        input_element[0].clear()
+        input_element[0].send_keys("delete")
+
+        # Wait for the button to become enabled
+        time.sleep(2)
+
+        logger.info("Clicking Delete object button to confirm")
+        buckets_tab.do_click(buckets_tab.bucket_tab["delete_version_confirm_button"])
+
+        # Wait for the deletion to complete
+        time.sleep(3)
+        logger.info("Version deletion completed")
+
     def _validate_file_versions(self, buckets_tab: BucketsTab, file_name: str) -> None:
         """
         Validate that the expected number of file versions exist and "Latest" labels are present.
@@ -225,7 +293,8 @@ class TestBucketVersioningUI:
         """
         # Wait for versions to load and find the "Latest" label elements
         buckets_tab.wait_for_element_to_be_present(
-            buckets_tab.bucket_tab["version_latest_label"], timeout=self.VERSION_DETECTION_TIMEOUT
+            buckets_tab.bucket_tab["version_latest_label"],
+            timeout=self.VERSION_DETECTION_TIMEOUT,
         )
 
         # Count file name occurrences (most reliable method)
@@ -309,10 +378,26 @@ class TestBucketVersioningUI:
         logger.info("Step 4: Creating multiple file versions")
 
         # Create second version
-        self._create_file_version(file_path, "content-v2", bucket_versioning, buckets_tab, folder_path, folder_name, 2)
+        self._create_file_version(
+            file_path,
+            "content-v2",
+            bucket_versioning,
+            buckets_tab,
+            folder_path,
+            folder_name,
+            2,
+        )
 
         # Create third version
-        self._create_file_version(file_path, "content-v3", bucket_versioning, buckets_tab, folder_path, folder_name, 3)
+        self._create_file_version(
+            file_path,
+            "content-v3",
+            bucket_versioning,
+            buckets_tab,
+            folder_path,
+            folder_name,
+            3,
+        )
 
         # Step 5: Navigate to folder and show versioning
         logger.info("Step 5: Navigating to folder and showing versions")
@@ -334,3 +419,114 @@ class TestBucketVersioningUI:
         # Verify the test completed successfully
         assert folder_name, "Test setup validation failed: Failed to create and upload folder"
         logger.info("Bucket versioning test with label validation completed successfully")
+
+    def test_bucket_versioning_with_modification(self, setup_ui_class_factory):
+        """
+        Test bucket versioning with object modification and version management.
+
+        Test Steps:
+        1. Upload an object to bucket
+        2. Enable versioning for bucket (if not already enabled)
+        3. Modify the object locally
+        4. Re-upload the modified object
+        5. Toggle "List all versions" to show versions
+        6. Verify version ID mapping with "Latest" tag
+        7. Delete latest object and verify new one becomes latest
+
+        Args:
+            setup_ui_class_factory: Pytest fixture for UI setup
+        """
+        setup_ui_class_factory()
+
+        # Navigate to object storage
+        bucket_versioning = BucketVersioning()
+        bucket_versioning.nav_object_storage_page()
+
+        # Step 1: Create and upload initial object
+        logger.info("Step 1: Creating and uploading initial object")
+        file_path, folder_path = self._setup_test_file()
+
+        buckets_tab = BucketsTab()
+        folder_name = self._create_test_folder(buckets_tab, folder_path)
+
+        # Step 2: Enable versioning
+        logger.info("Step 2: Enabling versioning for bucket")
+        versioning_enabled = bucket_versioning.enable_versioning()
+        if versioning_enabled:
+            logger.info("Versioning enabled successfully")
+        else:
+            logger.info("Versioning was already enabled")
+
+        # Step 3: Modify the object locally
+        logger.info("Step 3: Modifying object locally")
+        self._modify_file_content(file_path, "modified-content-v2")
+
+        # Step 4: Re-upload the modified object
+        logger.info("Step 4: Re-uploading modified object")
+        self._navigate_to_bucket(bucket_versioning, buckets_tab)
+        self._upload_folder_to_bucket(buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME)
+
+        # Create one more version for testing
+        logger.info("Creating third version of the object")
+        self._create_file_version(
+            file_path,
+            "modified-content-v3",
+            bucket_versioning,
+            buckets_tab,
+            folder_path,
+            folder_name,
+            3,
+        )
+
+        # Step 5: Navigate to folder and toggle "List all versions"
+        logger.info("Step 5: Navigating to folder and showing versions")
+        self._navigate_to_folder_and_enable_versions(bucket_versioning, buckets_tab, folder_name)
+
+        # Step 6: Verify version ID mapping with "Latest" tag
+        logger.info("Step 6: Verifying version ID for latest object")
+
+        # First validate versions exist
+        file_name = os.path.basename(file_path)
+        self._validate_file_versions(buckets_tab, file_name)
+
+        # Get version ID for the latest object
+        latest_version_id = self._get_version_id_for_latest(buckets_tab)
+        assert latest_version_id, "Failed to get version ID for latest object"
+        logger.info(f"Successfully retrieved version ID for latest object: {latest_version_id}")
+
+        # Step 7: Delete latest object and verify new one becomes latest
+        logger.info("Step 7: Deleting latest version and verifying new latest")
+
+        # Store the current latest version ID before deletion
+        original_latest_version_id = latest_version_id
+        logger.info(f"Original latest version ID: {original_latest_version_id}")
+
+        # Delete the latest version
+        self._delete_latest_version(buckets_tab)
+
+        # Wait for UI to refresh after deletion
+        time.sleep(2)
+
+        # Get the new latest version ID
+        new_latest_version_id = self._get_version_id_for_latest(buckets_tab)
+        logger.info(f"New latest version ID after deletion: {new_latest_version_id}")
+
+        # Validate that a different version is now marked as latest
+        assert new_latest_version_id != original_latest_version_id, (
+            f"Latest version ID should have changed after deletion. "
+            f"Original: {original_latest_version_id}, New: {new_latest_version_id}"
+        )
+
+        # Validate that we still have the correct number of versions (one less than before)
+        expected_versions_after_deletion = self.EXPECTED_VERSIONS - 1
+
+        # Update the expected versions temporarily for validation
+        original_expected = self.EXPECTED_VERSIONS
+        self.EXPECTED_VERSIONS = expected_versions_after_deletion
+
+        try:
+            self._validate_file_versions(buckets_tab, file_name)
+            logger.info(f"Successfully validated {expected_versions_after_deletion} versions remain after deletion")
+        finally:
+            # Restore original expected versions
+            self.EXPECTED_VERSIONS = original_expected

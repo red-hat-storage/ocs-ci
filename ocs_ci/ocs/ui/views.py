@@ -2297,6 +2297,43 @@ bucket_tab = {
         "//*[contains(text(), '.txt')]",
         By.XPATH,
     ),
+    "version_id_cell": (
+        "//td[@data-label='Version ID']",
+        By.XPATH,
+    ),
+    "object_row_with_latest": (
+        "//tr[.//span[contains(@class, 'pf-v5-c-label__text') and text()='Latest']]",
+        By.XPATH,
+    ),
+    "version_id_for_latest": (
+        "//tr[.//span[contains(@class, 'pf-v5-c-label__text') and text()='Latest']]//td[@data-label='Version ID']",
+        By.XPATH,
+    ),
+    "version_actions_menu_for_latest": (
+        "//tr[.//span[contains(@class, 'pf-v5-c-label__text') and text()='Latest']]"
+        "//button[@aria-label='Kebab toggle']",
+        By.XPATH,
+    ),
+    "delete_this_version_option": (
+        "//*[contains(text(), 'Delete this version')]",
+        By.XPATH,
+    ),
+    "delete_version_modal_title": (
+        "//*[contains(text(), 'Delete version')]",
+        By.XPATH,
+    ),
+    "delete_version_input": (
+        "//input[contains(@placeholder, 'delete')]",
+        By.XPATH,
+    ),
+    "delete_version_confirm_button": (
+        "//button[contains(@class, 'pf-m-danger') and contains(text(), 'Delete object')]",
+        By.XPATH,
+    ),
+    "delete_version_cancel_button": (
+        "//button[@class='pf-v5-c-button pf-m-link' and text()='Cancel']",
+        By.XPATH,
+    ),
 }
 locators = {
     "4.19": {
