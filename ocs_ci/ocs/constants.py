@@ -576,6 +576,7 @@ HYPERCONVERGED_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
 )
 HYPERCONVERGED_CRD = "hyperconvergeds.hco.kubevirt.io"
+IMAGE_STREAM_CATALOGS = "catalogs"
 
 
 # CNV deployment constants

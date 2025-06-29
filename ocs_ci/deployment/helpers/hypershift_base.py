@@ -391,6 +391,7 @@ class HyperShiftBase:
         cp_availability_policy=None,
         disable_default_sources=None,
         auto_repair=True,
+        olm_catalog_src_placement="Management",
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -406,6 +407,8 @@ class HyperShiftBase:
             provided and argument is not used in the command the single replica mode cluster will be created
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            olm_catalog_src_placement (str): OLM catalog source placement, default Management, can be set to Guest.
+            With default, catsrc on Guest cluster will be mirrored from Management cluster.
         Returns:
             str: Name of the hosted cluster
         """
@@ -448,7 +451,7 @@ class HyperShiftBase:
             f"--pull-secret {pull_secret_path} "
             f"--image-content-sources {self.icsp_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
-            "--olm-catalog-placement Guest "
+            f"--olm-catalog-placement {olm_catalog_src_placement} "
         )
 
         if auto_repair:
