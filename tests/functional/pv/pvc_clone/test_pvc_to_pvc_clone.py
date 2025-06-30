@@ -81,8 +81,6 @@ class TestClone(ManageTest):
     def test_pvc_to_pvc_clone(
         self, interface_type, setup, teardown_factory, cluster_index
     ):
-    @tier1
-    def test_pvc_to_pvc_clone(self, interface_type, setup, teardown_factory):
         """
         Create a clone from an existing pvc,
         verify data is preserved in the cloning.
