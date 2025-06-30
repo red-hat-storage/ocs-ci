@@ -119,11 +119,12 @@ class TestMultipleApplicationFailoverAndRelocate:
                     failover_or_preferred_cluster=secondary_cluster_name,
                 )
         else:
-            failover(
-                failover_cluster=secondary_cluster_name,
-                namespace=f"{instance.workload_namespace}",
-                workload_type=workload_type,
-            )
+            for instance in primary_instances:
+                failover(
+                    failover_cluster=secondary_cluster_name,
+                    namespace=f"{instance.workload_namespace}",
+                    workload_type=workload_type,
+                )
 
         # Verify application are running in other managedcluster
         # And not in previous cluster
