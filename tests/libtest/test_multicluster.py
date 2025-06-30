@@ -22,6 +22,6 @@ def test_run_on_all_clients_marker_with_additional_parameters(
 
 
 @libtest
-@pytest.mark.parametrize(argnames=["cluster_index"], argvalues=[0, 1], indirect=True)
+@pytest.mark.parametrize("cluster_index", [1, 2], indirect=True)
 def test_cluster_index_fixture(cluster_index):
     logger.info(f"param: {cluster_index}")
