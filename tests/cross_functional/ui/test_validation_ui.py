@@ -5,6 +5,7 @@ from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework.testlib import (
     tier1,
+    tier2,
     skipif_ui_not_support,
     skipif_ocs_version,
     polarion_id,
@@ -31,24 +32,6 @@ class TestUserInterfaceValidation(object):
     Test User Interface Validation
 
     """
-
-    @ui
-    @runs_on_provider
-    @tier1
-    @polarion_id("OCS-4925")
-    @skipif_ui_not_support("validation")
-    def test_storage_cluster_validation_ui(self, setup_ui_class_factory):
-        """
-        Validate Storage Cluster status on UI
-
-        Args:
-            setup_ui_class: login function on conftest file
-
-        """
-        setup_ui_class_factory()
-
-        validation_ui_obj = ValidationUI()
-        validation_ui_obj.validate_storage_cluster_ui()
 
     @ui
     @runs_on_provider
@@ -148,7 +131,7 @@ class TestUserInterfaceValidation(object):
         )
 
     @ui
-    @tier1
+    @tier2
     @runs_on_provider
     def test_ocs_operator_is_not_present(self, setup_ui_class_factory):
         """

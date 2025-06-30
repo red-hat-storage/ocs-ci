@@ -254,6 +254,8 @@ INFRA_ENV = "InfraEnv"
 DEFALUT_DEVICE_CLASS = "ssd"
 VM = "vm"
 HOSTED_CLUSTERS = "hostedclusters"
+HOSTED_CLUSTERS_CRD_NAME = "hostedclusters.hypershift.openshift.io"
+HOSTED_CONTROL_PLANE_CRD_NAME = "hostedcontrolplanes.hypershift.openshift.io"
 OPERATOR_KIND = "Operator"
 DRIVER = "Driver"
 IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
@@ -274,6 +276,7 @@ NETWORK_FENCE_CLASS = "NetworkFenceClass"
 NETWORK_FENCE = "NetworkFence"
 STORAGE_AUTO_SCALER = "StorageAutoScaler"
 INTERNAL_STORAGE_CONSUMER_NAME = "internal"
+CEPH_DRIVER_CSI = "drivers.csi.ceph.io"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -1006,6 +1009,9 @@ PRIORITY_CLASS_YAML = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "priorityclass.yaml"
 OC_MIRROR_IMAGESET_CONFIG = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config.yaml"
 )
+OC_MIRROR_IMAGESET_CONFIG_V2 = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config-v2.yaml"
+)
 
 CSI_CEPHFS_ROX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "csi-cephfs-rox.yaml")
 
@@ -1671,6 +1677,7 @@ BAREMETAL_PLATFORMS = [
     IBM_POWER_PLATFORM,
 ]
 AWS_STS_PLATFORMS = [AWS_PLATFORM, ROSA_PLATFORM, ROSA_HCP_PLATFORM]
+NFS_OUTCLUSTER_TEST_PLATFORMS = [AWS_PLATFORM, IBMCLOUD_PLATFORM, HCI_BAREMETAL]
 
 IPI_DEPL_TYPE = "ipi"
 UPI_DEPL_TYPE = "upi"
@@ -2352,26 +2359,27 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.15"] = (
 )
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] = [
-    "cluster-logging",
-    "elasticsearch-operator",
-    # we might need to uncomment next line, if we would like to use it in
-    # disconnected deployment:
-    # "lvms-operator",
-    "mcg-operator",
     "ocs-operator",
-    "odf-csi-addons-operator",
-    "odf-multicluster-orchestrator",
     "odf-operator",
-    # "odf-prometheus-operator",
+    "mcg-operator",
+    "odf-csi-addons-operator",
+    "ocs-client-operator",
+    "odf-prometheus-operator",
+    "recipe",
+    "rook-ceph-operator",
+    "odr-cluster-operator",
+    "odr-hub-operator",
 ]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"] = (
-    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"]
-)
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.17"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] + [
+    "cephcsi-operator",
+]
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.18"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] + [
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"] + [
     "odf-dependencies",
 ]
 
@@ -2409,6 +2417,14 @@ BYTES_IN_MB = 1024**2
 BYTES_IN_GB = 1024**3
 BYTES_IN_TB = 1024**4
 
+# Expected pods
+NOOBAA_POD_NAMES = [
+    NOOBAA_OPERATOR_DEPLOYMENT,
+    NOOBAA_ENDPOINT_DEPLOYMENT,
+    NOOBAA_DB_STATEFULSET,
+    NOOBAA_CORE_STATEFULSET,
+]
+CEPH_PODS_NAMES = [ROOK_CEPH_OPERATOR]
 
 # LSO
 ROOT_DISK_NAME = "sda"
@@ -2586,7 +2602,7 @@ NETWORK_FENCE_CLASS_CRD = os.path.join(
 NETWORK_FENCE_CRD = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "network-fence-rbd.yaml")
 
 # MCG namespace constants
-MCG_NS_AWS_ENDPOINT = f"https://s3.{DEFAULT_AWS_REGION}.amazonaws.com"
+MCG_NS_AWS_ENDPOINT = "https://s3.{}.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
 MCG_NS_RESOURCE = "ns_resource"
 MCG_NSS = "ns-store"
@@ -2970,6 +2986,9 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
 SUBMARINER_DOWNSTREAM_BREW_ICSP = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_icsp.yaml"
 )
+SUBMARINER_DOWNSTREAM_BREW_IDMS = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_idms.yaml"
+)
 ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
@@ -3134,7 +3153,7 @@ UI_INPUT_RULES_OBJECT_BUCKET_CLAIM = {
     "rule1": UI_INPUT_RULES_GENERAL["rule4"],
     "rule2": UI_INPUT_RULES_GENERAL["rule1"],
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
-    "rule4": UI_INPUT_RULES_GENERAL["rule3"],
+    "rule4": "Cannot be used before within the same namespace",
 }
 
 UI_INPUT_RULES_NAMESPACE_STORE = {
@@ -3376,7 +3395,10 @@ NFS_DEPLOYMENT_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "deployment.yaml")
 NFS_SC_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "storageclass.yaml")
 NFS_SCC_NAME = "nfs-client-provisioner"
 NFS_SC_NAME = "nfs-client"
-
+NFS_CSI_PLUGIN_PROVISIONER_LABEL = "app=csi-nfsplugin-provisioner"
+NFS_CSI_PLUGIN_LABEL = "app=csi-nfsplugin"
+NFS_CSI_CTRLPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-ctrlplugin"
+NFS_CSI_NODEPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-nodeplugin"
 # The expected mds cache memory values
 MDS_CACHE_MEMORY = 3221225472
 LOWER_REQ_MDS_CACHE_MEMORY = 1073741824

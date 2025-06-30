@@ -117,7 +117,7 @@ class Submariner(object):
             old_ctx = config.cur_index
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                self.create_acm_brew_icsp()
+                self.create_acm_brew_idms()
             config.switch_ctx(old_ctx)
 
         global_net = get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
@@ -148,17 +148,17 @@ class Submariner(object):
 
         acm_obj.submariner_validation_ui()
 
-    def create_acm_brew_icsp(self):
+    def create_acm_brew_idms(self):
         """
         This is a prereq for downstream unreleased submariner
 
         """
-        icsp_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_ICSP)
-        icsp_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="acm_icsp", delete=False
+        idms_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_IDMS)
+        idms_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_idms", delete=False
         )
-        templating.dump_data_to_temp_yaml(icsp_data, icsp_data_yaml.name)
-        run_cmd(f"oc create -f {icsp_data_yaml.name}", timeout=300)
+        templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
+        run_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
         wait_for_machineconfigpool_status(node_type="all")
 
     def download_binary(self):

@@ -285,6 +285,14 @@ deployment_4_17 = {
     ),
 }
 
+deployment_4_19 = {
+    "click_odf_operator": (
+        '//div[@data-test="odf-operator-redhat-operators-openshift-marketplace"] | '
+        '//a[@data-test="odf-operator-redhat-operators-openshift-marketplace"]',
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
@@ -320,7 +328,9 @@ generic_locators = {
     ),
     "resource_link": (
         "//a[@data-test='resource-link-{}'] | "
-        "//td[@data-label='Name']//a[contains(text(),'{}')]",
+        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//td[@data-label='Name']//a[contains(text(),'{}')] | "
+        "//td[@data-label='name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
     "confirm_action": (
@@ -364,7 +374,11 @@ generic_locators = {
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
     "searchbar-select-name": ("//button[@id='NAME-link']", By.XPATH),
     "searchbar-select-label": ("//button[@id='LABEL-link']", By.XPATH),
-    "searchbar_input": ("//input[@data-test-id='item-filter']", By.XPATH),
+    "searchbar_input": (
+        "//input[@data-test-id='item-filter'] | "
+        "//input[@placeholder='Search by name...']",
+        By.XPATH,
+    ),
     "resource_from_list_by_name": (
         "//td[@id='name']//a[contains(text(), '{}')]",
         By.XPATH,
@@ -401,6 +415,13 @@ generic_locators = {
     "blockpool_name": ("//a[text()='{}']", By.XPATH),
     "openshift-operators": (
         "//a[@data-test-operator-row='ODF Multicluster Orchestrator']"
+    ),
+}
+
+generic_locators_4_19 = {
+    "resource_from_list_by_name": (
+        "//td[@data-label='name']//a[contains(text(), '{}')]",
+        By.XPATH,
     ),
 }
 
@@ -685,6 +706,13 @@ pvc_4_14 = {
 
 pvc_4_19 = {
     "pvc_create_button": ('a[data-test="item-create"]', By.CSS_SELECTOR),
+    "pvc_actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
+    "pvc_delete": (
+        'li[data-test-action="Delete PersistentVolumeClaim"]',
+        By.CSS_SELECTOR,
+    ),
+    "clone_pvc": ("li[data-test-action='Clone PVC']", By.CSS_SELECTOR),
+    "expand_pvc": ("li[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "expected-capacity": (
         "//dd[@data-test='pvc-requested-capacity']//div[text()='{}']",
         By.XPATH,
@@ -1250,7 +1278,7 @@ acm_configuration_4_18 = {
 acm_configuration_4_19 = {
     "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
     "install-submariner-btn": (
-        "//a[@id='install-submariner']",
+        "//a[@id='install-submariner'] | //button[@id='install-submariner']",
         By.XPATH,
     ),
     "nat-t-checkbox": ("//input[@id='natt-enable']", By.XPATH),
@@ -1671,7 +1699,8 @@ validation_4_9 = {
         By.XPATH,
     ),
     "ocs-storagecluster-storagesystem": (
-        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']"
+        "a[href='/odf/system/ns/openshift-storage/ocs.openshift.io~v1~storagecluster/ocs-storagecluster/overview']",
         By.CSS_SELECTOR,
     ),
     "ocs-external-storagecluster-storagesystem": (
@@ -1754,7 +1783,8 @@ validation_4_9 = {
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
     "storage-system-status-card-hyperlink": (
-        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')] | "
+        "//div[@class='odf-status-card__popup--margin']//a[contains(text(),'ocs-storagecluster')]",
         By.XPATH,
     ),
     "storage-system-external-status-card-hyperlink": (
@@ -1766,11 +1796,13 @@ validation_4_9 = {
         By.XPATH,
     ),
     "storagesystem-details-compress-state": (
-        "#compressionStatus",
+        "#compressionStatus, "
+        "span[data-test='ocs-storagecluster-cephblockpool-compression']",
         By.CSS_SELECTOR,
     ),
     "storagecluster-blockpool-details-compress-status": (
-        "[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
+        "[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value'], "
+        "div[data-test-id='compression-details-card'] div[class='pf-v5-c-description-list__text']",
         By.CSS_SELECTOR,
     ),
     "performance-card": (
@@ -1864,12 +1896,14 @@ validation_4_13 = {
     # locator presented only if the tab is active
     "odf-overview-tab-active": (
         "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
-        "//a[@data-test-id='horizontal-link-Overview']",
+        "//a[@data-test-id='horizontal-link-Overview'] | "
+        "//a[@data-test-id='horizontal-link-Overview' and @aria-selected='true']",
         By.XPATH,
     ),
     "status-storage-popup-content": (
         "//div[@class='pf-v5-c-popover pf-m-top']//*[contains(text(), 'Storage System')] | "
-        "//div[@class='pf-c-popover pf-m-top']//*[contains(text(), 'Storage System')]",
+        "//div[@class='pf-c-popover pf-m-top']//*[contains(text(), 'Storage System')] |"
+        "//div[@class='odf-status-card__popup--margin']//a[contains(text(),'ocs-storagecluster')]",
         By.XPATH,
     ),
     "namespace-store-tab-active": (
@@ -2252,7 +2286,7 @@ locators = {
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
-        "generic": generic_locators,
+        "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "deployment": {
             **deployment,
@@ -2264,6 +2298,7 @@ locators = {
             **deployment_4_15,
             **deployment_4_16,
             **deployment_4_17,
+            **deployment_4_19,
         },
         "obc": obc,
         "pvc": {

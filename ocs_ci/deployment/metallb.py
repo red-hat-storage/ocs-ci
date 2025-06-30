@@ -323,7 +323,7 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(metallb_inst_data, metallb_inst_file.name)
 
-        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(
+        retry(CommandFailed, tries=6, delay=30)(exec_cmd)(
             f"oc apply -f {metallb_inst_file.name}", timeout=240
         )
 
@@ -509,8 +509,8 @@ class MetalLBInstaller:
             f"Deploying MetalLB and dependant resources to namespace: '{self.namespace_lb}'"
         )
 
-        if self.apply_icsp():
-            logger.info("ICSP brew-registry applied successfully")
+        if self.apply_idms():
+            logger.info("IDMS brew-registry applied successfully")
         if self.create_metallb_namespace():
             logger.info(f"Namespace {self.namespace_lb} created successfully")
         if self.create_catalog_source():
@@ -677,15 +677,15 @@ class MetalLBInstaller:
                 break
         return True
 
-    def icsp_brew_registry_exists(self):
+    def idms_brew_registry_exists(self):
         """
-        Check if the ICSP Brew registry exists
+        Check if the IDMS Brew registry exists
 
         Returns:
-            bool: True if the ICSP Brew registry exists, False otherwise
+            bool: True if the IDMS Brew registry exists, False otherwise
         """
         return OCP(
-            kind="ImageContentSourcePolicy", resource_name="brew-registry"
+            kind="ImageDigestMirrorSet", resource_name="brew-registry"
         ).check_resource_existence(
             timeout=self.timeout_check_resources_existence, should_exist=True
         )
@@ -813,3 +813,20 @@ class MetalLBInstaller:
         metallb_version_post_upgrade = self.get_running_metallb_version()
         logger.info(f"metallb version post upgrade: {metallb_version_post_upgrade}")
         return self.upgrade_version in metallb_version_post_upgrade
+
+    def apply_idms(self):
+        """
+        Apply the IDMS to the cluster
+        """
+        if self.idms_brew_registry_exists():
+            logger.info("IDMS Brew registry already exists")
+            return
+        idms_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_IDMS)
+        idms_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_idms", delete=False
+        )
+        templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
+        exec_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
+        wait_for_machineconfigpool_status(node_type="all")
+        logger.info("IDMS applied successfully")
+        return self.idms_brew_registry_exists()

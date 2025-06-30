@@ -515,7 +515,9 @@ class MCG:
         if platform == constants.AWS_PLATFORM:
             params = {
                 "auth_method": "AWS_V4",
-                "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+                "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(
+                    constants.DEFAULT_AWS_REGION
+                ),
                 "endpoint_type": "AWS",
                 "identity": get_attr_chain(cld_mgr, "aws_client.access_key"),
                 "name": conn_name,

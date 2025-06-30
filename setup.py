@@ -83,7 +83,7 @@ setup(
         "pytest-repeat==0.9.3",
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
-        "protobuf==4.21.7",
+        "protobuf==4.25.8",
         "ping3==4.0.3",
         "psutil==5.9.0",
         "azure-identity==1.16.1",
@@ -106,6 +106,7 @@ setup(
         # new version of marshmallow 4.0.0 seems to be broken, failing with error:
         # TypeError: __init__() got an unexpected keyword argument 'default'
         "marshmallow==3.26.1",
+        "zope.event==5.0",
     ],
     entry_points={
         "console_scripts": [

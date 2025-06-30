@@ -7,6 +7,7 @@ from time import sleep
 from random import choice, choices, randint
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
+    tier2,
     tier4a,
     red_squad,
     mcg,
@@ -193,20 +194,23 @@ class TestCorsConfig:
                         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                     },
                 ],
+                marks=[tier1],
             ),
             pytest.param(
                 *[
                     {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
                 ],
+                marks=[tier1],
             ),
             pytest.param(
                 *[{"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
+                marks=[tier2],
             ),
             pytest.param(
                 *[
                     {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 ],
-                marks=[skipif_fips_enabled],
+                marks=[tier2, skipif_fips_enabled],
             ),
             pytest.param(
                 {
@@ -216,6 +220,7 @@ class TestCorsConfig:
                         "namespacestore_dict": {"aws": [(1, None)]},
                     },
                 },
+                marks=[tier1],
             ),
             pytest.param(
                 {
@@ -225,6 +230,7 @@ class TestCorsConfig:
                         "namespacestore_dict": {"azure": [(1, None)]},
                     },
                 },
+                marks=[tier2],
             ),
             pytest.param(
                 {
@@ -234,7 +240,7 @@ class TestCorsConfig:
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
                 },
-                marks=[on_prem_platform_required],
+                marks=[tier2, on_prem_platform_required],
             ),
             pytest.param(
                 {
@@ -244,6 +250,7 @@ class TestCorsConfig:
                         "namespacestore_dict": {"gcp": [(1, None)]},
                     },
                 },
+                marks=[tier2],
             ),
             pytest.param(
                 {
@@ -253,7 +260,7 @@ class TestCorsConfig:
                         "namespacestore_dict": {"ibmcos": [(1, None)]},
                     },
                 },
-                marks=[skipif_fips_enabled],
+                marks=[tier2, skipif_fips_enabled],
             ),
         ],
         ids=[
@@ -269,7 +276,6 @@ class TestCorsConfig:
             "OBC-IBM-NSS",
         ],
     )
-    @tier1
     def test_basic_cors_operations(
         self, mcg_obj_session, awscli_pod_session, bucket_factory, bucketclass_dict
     ):
@@ -418,7 +424,7 @@ class TestCorsConfig:
         )
         sample.wait_for_func_value(self.NEGATIVE_RESPONSE)
 
-    @tier1
+    @tier2
     def test_allowed_origin_cors_element(
         self, mcg_obj_session, awscli_pod_session, bucket_factory
     ):
@@ -528,7 +534,7 @@ class TestCorsConfig:
         )
         sample.wait_for_func_value(self.NEGATIVE_RESPONSE)
 
-    @tier1
+    @tier2
     def test_allowed_method_cors_element(
         self, mcg_obj_session, awscli_pod_session, bucket_factory
     ):
@@ -714,7 +720,7 @@ class TestCorsConfig:
         )
         sample.wait_for_func_value(self.POSITIVE_RESPONSE)
 
-    @tier1
+    @tier2
     def test_expose_header_cors_element(
         self, mcg_obj_session, awscli_pod_session, bucket_factory
     ):
@@ -935,7 +941,6 @@ class TestCorsConfig:
         ],
     )
     @pre_upgrade
-    @tier1
     def test_default_cors_pre_upgrade(
         self,
         request,

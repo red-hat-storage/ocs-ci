@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier2,
     tier3,
     skipif_ocp_version,
     skipif_managed_service,
@@ -50,7 +51,7 @@ class TestMetadataUnavailable(ManageTest):
         ],
     )
     @polarion_id("OCS-4669")
-    def test_metadata_feature_unavailable_for_previous_versions(
+    def deprecated_test_metadata_feature_unavailable_for_previous_versions(
         self, project_factory_class, sc_name, fs
     ):
         """
@@ -281,19 +282,19 @@ class TestMetadata(ManageTest):
             self.pod_obj,
         )
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
-                marks=pytest.mark.polarion_id("OCS-4676"),
+                marks=[tier1, pytest.mark.polarion_id("OCS-4676")],
             ),
             pytest.param(
                 "ocs-storagecluster-cephblockpool",
                 constants.DEFAULT_STORAGECLASS_RBD,
                 marks=[
+                    tier2,
                     pytest.mark.polarion_id("OCS-4679"),
                 ],
             ),
@@ -419,7 +420,7 @@ class TestMetadata(ManageTest):
             resource_name=clone_pvc_obj.name, timeout=300
         ), f"PVC {clone_pvc_obj.name} is not deleted"
 
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -515,7 +516,7 @@ class TestMetadata(ManageTest):
             resource_name=pvc_obj.name, timeout=300
         ), f"PVC {pvc_obj.name} is not deleted"
 
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -782,7 +783,6 @@ class TestMetadata(ManageTest):
             resource_name=pvc_obj_with_metadata_disabled.name, timeout=300
         ), f"PVC {pvc_obj_with_metadata_disabled.name} is not deleted"
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
         argvalues=[
@@ -793,6 +793,7 @@ class TestMetadata(ManageTest):
     )
     @polarion_id("OCS-4680")
     @polarion_id("OCS-4681")
+    @tier2
     def test_metadata_update_for_PV_Retain(self, fs, sc_name, project_factory_class):
         """
         This test is to validate metadata is updated after a PVC is deleted by setting ReclaimPloicy: Retain on PV
@@ -954,54 +955,3 @@ class TestMetadata(ManageTest):
         pvc_obj_in_dif_namespace.ocp.wait_for_delete(
             resource_name=pvc_obj_in_dif_namespace.name, timeout=600
         ), f"PVC {pvc_obj_in_dif_namespace.name} is not deleted"
-
-    @tier3
-    @pytest.mark.parametrize(
-        argnames=["flag_value"],
-        argvalues=[
-            pytest.param("12345678"),
-            pytest.param("feature3504"),
-            pytest.param("add-metadata"),
-        ],
-    )
-    @polarion_id("OCS-4682")
-    def test_negative_values_for_enable_metadata_flag(self, flag_value):
-        """
-        Validate negative scenarios by providing various un acceptable values for, CSI_ENABLE_METADATA flag.
-        1. numeric value for CSI_ENABLE_METADATA flag
-        2. alphanumeric value for CSI_ENABLE_METADATA flag
-        3. string values other than 'true/false' for CSI_ENABLE_METADATA flag
-
-        Steps:
-            1. Set CSI_ENABLE_METADATA flag value as numeric value
-            2. Set CSI_ENABLE_METADATA flag value as alphanumeric value
-            3. Set string values other than 'true/false' for CSI_ENABLE_METADATA flag
-        """
-        # Set numeric value for CSI_ENABLE_METADATA flag
-        params = '{"data":{"CSI_ENABLE_METADATA": ' + '"' + flag_value + '"' + "}}"
-        log.info(f"params ----- {params}")
-
-        # Enable CSI_ENABLE_OMAP_GENERATOR flag for rook-ceph-operator-config using patch command
-        assert self.config_map_obj.patch(
-            resource_name="rook-ceph-operator-config",
-            params=params,
-        ), "configmap/rook-ceph-operator-config not patched"
-
-        # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
-        assert self.pod_obj.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
-            dont_allow_other_resources=True,
-            timeout=60,
-        )
-
-        assert self.pod_obj.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
-            dont_allow_other_resources=True,
-            timeout=60,
-        )
-        res = metadata_utils.check_setmetadata_availability(self.pod_obj)
-        assert (
-            not res
-        ), "Error: The metadata is set, while it is expected to be unavailable "

@@ -140,7 +140,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6339"),
                 ],
@@ -154,7 +154,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6353"),
                 ],
             ),
@@ -167,7 +167,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6354"),
                 ],
             ),
@@ -180,7 +180,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6355"),
                 ],
             ),
@@ -193,7 +193,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-6356"),
                 ],
             ),
@@ -209,7 +209,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6338"),
                 ],
@@ -225,7 +225,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6351"),
                 ],
@@ -239,7 +239,7 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-5442"),
                     skipif_fips_enabled,
                 ],
@@ -369,7 +369,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         aws_target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
@@ -440,7 +440,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         aws_target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
@@ -470,7 +470,7 @@ class TestNamespace(MCGTest):
             amount=3,
         )
 
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-2258")
     @on_prem_platform_required
     def test_distribution_of_objects_in_ns_bucket_crd(
@@ -530,7 +530,7 @@ class TestNamespace(MCGTest):
         aws_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         self.write_files_to_pod_and_upload(
@@ -602,7 +602,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 
@@ -677,7 +677,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 
@@ -719,7 +719,7 @@ class TestNamespace(MCGTest):
         ):
             raise UnexpectedBehaviour("Cached object was not downloaded")
 
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
         argvalues=[
@@ -765,7 +765,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
@@ -1014,7 +1014,7 @@ class TestNamespace(MCGTest):
         aws_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 
@@ -1115,7 +1115,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         original_folder = test_directory_setup.origin_dir
@@ -1214,7 +1214,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 

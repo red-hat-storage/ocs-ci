@@ -68,14 +68,13 @@ class TestBucketNotifications(MCGTest):
         notif_manager.setup_kafka()
         return notif_manager
 
-    @tier1
     @pytest.mark.parametrize(
         argnames=["use_provided_pvc"],
         argvalues=[
-            pytest.param(False, marks=[polarion_id("OCS-6329")]),
+            pytest.param(False, marks=[tier1, polarion_id("OCS-6329")]),
             pytest.param(
                 True,
-                marks=[polarion_id("OCS-6330"), skipif_mcg_only],
+                marks=[tier2, polarion_id("OCS-6330"), skipif_mcg_only],
             ),
         ],
         ids=[
@@ -146,7 +145,9 @@ class TestBucketNotifications(MCGTest):
                 func=notif_manager.get_events,
                 topic=topic,
             ):
-                keys_in_notifs = set(event["s3"]["object"]["key"] for event in events)
+                keys_in_notifs = set(
+                    event["s3"]["object"]["key"] for event in events[1:]
+                )
                 delta = obj_keys_set.difference(keys_in_notifs)
                 if not delta:
                     logger.info("All expected events were received by Kafka")
@@ -502,7 +503,9 @@ class TestBucketNotifications(MCGTest):
                 func=notif_manager.get_events,
                 topic=topic,
             ):
-                keys_in_notifs = set(event["s3"]["object"]["key"] for event in events)
+                keys_in_notifs = set(
+                    event["s3"]["object"]["key"] for event in events[1:]
+                )
                 delta = all_objs.difference(keys_in_notifs)
                 if not delta:
                     logger.info("All expected events were received by Kafka")

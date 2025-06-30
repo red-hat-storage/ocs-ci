@@ -4,6 +4,7 @@ Module that contains all operations related to add metadata feature in a cluster
 """
 
 import logging
+import json
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.ocs import constants
@@ -13,155 +14,170 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
 )
+from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
 
 def check_setmetadata_availability(pod_obj):
     """
-    Check setmetadata parameter is available or not for cephfs and rbd plugin pods
+    Check if --setmetadata=true is present in CSI plugin pods' args.
 
     Args:
         pod_obj (obj): pod object
-
-    """
-    plugin_provisioner_pod_objs = pod.get_all_pods(
-        namespace=config.ENV_DATA["cluster_namespace"],
-        selector=["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"],
-    )
-    log.info(f"list of provisioner pods---- {plugin_provisioner_pod_objs}")
-    response = retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
-        pod.validate_pods_are_respinned_and_running_state
-    )(plugin_provisioner_pod_objs)
-    log.info(response)
-    get_args_provisioner_plugin_pods = []
-    for plugin_provisioner_pod in plugin_provisioner_pod_objs:
-        containers = pod_obj.exec_oc_cmd(
-            "get pod "
-            + plugin_provisioner_pod.name
-            + " --output jsonpath='{.spec.containers}'"
-        )
-        for entry in containers:
-            if "--setmetadata=true" in entry["args"]:
-                get_args_provisioner_plugin_pods.append(entry["args"])
-    if get_args_provisioner_plugin_pods:
-        return all(
-            ["--setmetadata=true" in args for args in get_args_provisioner_plugin_pods]
-        )
-    else:
-        return False
-
-
-def enable_metadata(
-    config_map_obj,
-    pod_obj,
-):
-    """
-    Enable CSI_ENABLE_METADATA
-
-    Args:
-        config_map_obj (obj): configmap object
-        pod_obj (obj): pod object
-
-    Steps:
-    1:- Enable CSI_ENABLE_METADATA flag via patch request
-    2:- Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner
-    pods are up and running
-    3:- Check 'setmatadata' is set for csi-cephfsplugin-provisioner
-    and csi-rbdplugin-provisioner pods
 
     Returns:
-        str: cluster name
-
+        bool: True if --setmetadata=true is set on all CSI plugin pods, else False.
     """
-    enable_metadata = '{"data":{"CSI_ENABLE_METADATA": "true"}}'
+    selectors = [get_provisioner_label(constants.CEPHFILESYSTEM)] + [
+        get_provisioner_label(constants.CEPHBLOCKPOOL)
+    ]
+    selectors = [
+        label.replace("app=", "") for label in selectors if isinstance(label, str)
+    ]
 
-    # Enable metadata feature for rook-ceph-operator-config using patch command
-    assert config_map_obj.patch(
-        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-        params=enable_metadata,
-    ), "configmap/rook-ceph-operator-config not patched"
+    @retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)
+    def get_and_validate_plugin_pods():
+        plugin_pods = pod.get_all_pods(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=selectors,
+        )
+        log.info(f"Provisioner pods: {plugin_pods}")
+        pod.validate_pods_are_respinned_and_running_state(plugin_pods)
+        return plugin_pods
 
-    # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
-    assert pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=get_provisioner_label(constants.CEPHFILESYSTEM),
-        dont_allow_other_resources=True,
-        timeout=60,
-    ), "Pods are not in running status"
+    # Get validated plugin pods
+    plugin_pods = get_and_validate_plugin_pods()
 
-    assert pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=get_provisioner_label(constants.CEPHBLOCKPOOL),
-        dont_allow_other_resources=True,
-        timeout=60,
-    ), "Pods are not in running status"
+    all_containers_have_flag = True
 
-    # Check 'setmatadata' is set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
-    res = check_setmetadata_availability(pod_obj)
-    assert res, "Error: The metadata not set for cephfs and rbd plugin provisioner pods"
+    for p in plugin_pods:
+        containers = pod_obj.exec_oc_cmd(
+            f"get pod {p.name} --output jsonpath='{{.spec.containers}}'"
+        )
+        found_flag = False
+        for container in containers:
+            args = container.get("args", [])
+            if "--setmetadata=true" in args:
+                found_flag = True
+                break
+        if not found_flag:
+            log.warning(
+                f"Pod {p.name} does not have '--setmetadata=true' in any container args."
+            )
+            all_containers_have_flag = False
 
-    cephfsplugin_provisioner_pods = pod.get_cephfsplugin_provisioner_pods()
+    return all_containers_have_flag
 
+
+def patch_metadata(enable=True):
+    """
+    Patch CSI drivers to enable or disable metadata collection.
+
+    Args:
+        enable (bool): Whether to enable or disable metadata.
+    """
+    patch_data = [{"op": "add", "path": "/spec/enableMetadata", "value": enable}]
+    patch_json = json.dumps(patch_data)
+
+    rbd_cmd = (
+        f"oc patch {constants.CEPH_DRIVER_CSI} {constants.RBD_PROVISIONER} --type json "
+        f"-p '{patch_json}' -n {config.ENV_DATA['cluster_namespace']}"
+    )
+    cephfs_cmd = (
+        f"oc patch {constants.CEPH_DRIVER_CSI} {constants.CEPHFS_PROVISIONER} --type json "
+        f"-p '{patch_json}' -n {config.ENV_DATA['cluster_namespace']}"
+    )
+
+    for cmd, name in [(rbd_cmd, "RBD"), (cephfs_cmd, "CephFS")]:
+        try:
+            run_cmd(cmd)
+        except CommandFailed as ex:
+            log.error(f"Failed to patch {name} provisioner: {ex}")
+            raise
+
+
+def enable_metadata(config_map_obj, pod_obj):
+    """
+    Enable CSI_ENABLE_METADATA through configmap or patch depending on OCS version.
+
+    Returns:
+        str: Cluster name if found, else None.
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
+    if ocs_version < version.VERSION_4_19:
+        assert config_map_obj.patch(
+            resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+            params='{"data":{"CSI_ENABLE_METADATA": "true"}}',
+        ), "Failed to patch rook-ceph-operator-config"
+
+        for selector in [
+            get_provisioner_label(constants.CEPHFILESYSTEM),
+            get_provisioner_label(constants.CEPHBLOCKPOOL),
+        ]:
+            assert pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=selector,
+                dont_allow_other_resources=True,
+                timeout=60,
+            ), f"Pods with selector {selector} are not running"
+
+    else:
+        patch_metadata(enable=True)
+
+    @retry(AssertionError, tries=3, delay=15, backoff=1)
+    def _retry_check_metadata_enabled(pod_obj):
+        assert check_setmetadata_availability(pod_obj), "Metadata not enabled"
+        return True
+
+    _retry_check_metadata_enabled(pod_obj)
+
+    cephfs_pods = pod.get_cephfsplugin_provisioner_pods(
+        cephfsplugin_provisioner_label=(get_provisioner_label(constants.CEPHFILESYSTEM))
+    )
     args = pod_obj.exec_oc_cmd(
-        "get pod "
-        + cephfsplugin_provisioner_pods[0].name
-        + " --output jsonpath='{.spec.containers[4].args}'"
+        f"get pod {cephfs_pods[0].name} --output jsonpath='{{.spec.containers[].args}}'"
     )
     for arg in args:
         if "--clustername" in arg:
-            log.info(f"Fetch the cluster name parameter {arg}")
-            # To fetch value of clustername parameter
-            return arg[14:]
+            log.info(f"Cluster name parameter: {arg}")
+            return arg.split("=", 1)[-1]
+    return None
 
 
-def disable_metadata(
-    config_map_obj,
-    pod_obj,
-):
+def disable_metadata(config_map_obj, pod_obj):
     """
-    Disable CSI_ENABLE_METADATA
-
-    Args:
-        config_map_obj (obj): configmap object
-        pod_obj (obj): pod object
-
-    Steps:
-    1:- Disable CSI_ENABLE_METADATA flag via patch request
-    2:- Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner
-    pods are up and running
-    3:- Check 'setmatadata' is not set for csi-cephfsplugin-provisioner
-    and csi-rbdplugin-provisioner pods
-
+    Disable CSI_ENABLE_METADATA via configmap or patch.
     """
-    disable_metadata = '{"data":{"CSI_ENABLE_METADATA": "false"}}'
+    ocs_version = version.get_semantic_ocs_version_from_config()
 
-    # Disable metadata feature for rook-ceph-operator-config using patch command
-    assert config_map_obj.patch(
-        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-        params=disable_metadata,
-    ), "configmap/rook-ceph-operator-config not patched"
+    if ocs_version < version.VERSION_4_19:
+        assert config_map_obj.patch(
+            resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+            params='{"data":{"CSI_ENABLE_METADATA": "false"}}',
+        ), "Failed to patch rook-ceph-operator-config"
 
-    # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
-    assert pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=get_provisioner_label(constants.CEPHFILESYSTEM),
-        dont_allow_other_resources=True,
-        timeout=60,
-    ), "Pods are not in running status"
+        for selector in [
+            get_provisioner_label(constants.CEPHFILESYSTEM),
+            get_provisioner_label(constants.CEPHBLOCKPOOL),
+        ]:
+            assert pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=selector,
+                dont_allow_other_resources=True,
+                timeout=60,
+            ), f"Pods with selector {selector} are not running"
+    else:
+        patch_metadata(enable=False)
 
-    assert pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=get_provisioner_label(constants.CEPHBLOCKPOOL),
-        dont_allow_other_resources=True,
-        timeout=60,
-    ), "Pods are not in running status"
+    @retry(AssertionError, tries=3, delay=15, backoff=1)
+    def _retry_check_metadata_disabled(pod_obj):
+        assert not check_setmetadata_availability(pod_obj), "Metadata still enabled"
+        return True
 
-    # Check 'setmatadata' is not set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
-    res = check_setmetadata_availability(pod_obj)
-    assert (
-        not res
-    ), "Error: The metadata is set, while it is expected to be unavailable "
+    _retry_check_metadata_disabled(pod_obj)
 
 
 def available_subvolumes(sc_name, toolbox_pod, fs):

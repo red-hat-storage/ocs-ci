@@ -33,7 +33,7 @@ class TestObjectIntegrity(ManageTest):
     @tier1
     @flaky
     @pytest.mark.polarion_id("OCS-2246")
-    def test_check_object_integrity(
+    def test_check_rgw_object_integrity(
         self, awscli_pod_session, rgw_bucket_factory, test_directory_setup
     ):
         """
@@ -65,7 +65,7 @@ class TestObjectIntegrity(ManageTest):
 
     @pytest.mark.polarion_id("OCS-2243")
     @tier2
-    def test_empty_file_integrity(
+    def test_rgw_empty_file_integrity(
         self, awscli_pod_session, rgw_bucket_factory, test_directory_setup
     ):
         """

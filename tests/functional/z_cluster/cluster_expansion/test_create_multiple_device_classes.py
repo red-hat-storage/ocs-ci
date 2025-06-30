@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import (
     ManageTest,
     ignore_leftovers,
-    tier1,
+    tier2,
     brown_squad,
     skipif_no_lso,
     skipif_bm,
@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 
 
 @brown_squad
-@tier1
 @ignore_leftovers
 @skipif_no_lso
 @skipif_bm
@@ -61,6 +60,7 @@ class TestMultipleDeviceClasses(ManageTest):
         log.info("Wait for the ceph health to be OK")
         ceph_health_check(tries=20)
 
+    @tier2
     def test_add_new_ssd_device_class(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):

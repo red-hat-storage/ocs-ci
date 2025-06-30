@@ -8,7 +8,7 @@ from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
-from ocs_ci.ocs import constants, ocp, resources
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
@@ -16,21 +16,21 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
+    tier2,
     tier4c,
     skipif_ocp_version,
     skipif_managed_service,
-    skipif_hci_provider_and_client,
+    skip_for_provider_if_ocs_version,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     polarion_id,
-    aws_platform_required,
+    nfs_outcluster_test_platform_required,
     skipif_external_mode,
 )
 
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
-
 from ocs_ci.utility.utils import run_cmd
 
 
@@ -44,9 +44,9 @@ ERRMSG = "Error in command"
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
-@skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skip_for_provider_if_ocs_version("<4.19")
 @polarion_id("OCS-4270")
 class TestDefaultNfsDisabled(ManageTest):
     """
@@ -79,7 +79,7 @@ class TestDefaultNfsDisabled(ManageTest):
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
-@skipif_hci_provider_and_client
+@skip_for_provider_if_ocs_version("<4.19")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 class TestNfsEnable(ManageTest):
@@ -126,24 +126,19 @@ class TestNfsEnable(ManageTest):
         log.info("-----Setup-----")
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.storage_cluster_obj = ocp.OCP(
-            kind="Storagecluster", namespace=self.namespace
+            kind=constants.STORAGECLUSTER, namespace=self.namespace
         )
-        self.config_map_obj = ocp.OCP(kind="Configmap", namespace=self.namespace)
-        self.pod_obj = ocp.OCP(kind="Pod", namespace=self.namespace)
-        self.service_obj = ocp.OCP(kind="Service", namespace=self.namespace)
+        self.sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
+        self.config_map_obj = ocp.OCP(
+            kind=constants.CONFIGMAP, namespace=self.namespace
+        )
+        self.pod_obj = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+        self.service_obj = ocp.OCP(kind=constants.SERVICE, namespace=self.namespace)
         self.pvc_obj = ocp.OCP(kind=constants.PVC, namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
         self.retain_nfs_sc_name = "ocs-storagecluster-ceph-nfs-retain"
-        self.retain_nfs_sc = resources.ocs.OCS(
-            kind=constants.STORAGECLASS, metadata={"name": "ocs-storagecluster-cephfs"}
-        )
-        self.retain_nfs_sc.reload()
-        self.retain_nfs_sc.data["reclaimPolicy"] = constants.RECLAIM_POLICY_RETAIN
-        self.retain_nfs_sc.data["metadata"]["name"] = self.retain_nfs_sc_name
-        self.retain_nfs_sc._name = self.retain_nfs_sc.data["metadata"]["name"]
-        self.retain_nfs_sc.create()
         platform = config.ENV_DATA.get("platform", "").lower()
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
@@ -168,7 +163,11 @@ class TestNfsEnable(ManageTest):
             self.namespace,
         )
 
-        if platform == constants.AWS_PLATFORM:
+        if (
+            platform == constants.AWS_PLATFORM
+            or platform == constants.IBMCLOUD_PLATFORM
+            or platform == constants.HCI_BAREMETAL
+        ):
             # Create loadbalancer service for nfs
             self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
                 self.storage_cluster_obj,
@@ -184,7 +183,11 @@ class TestNfsEnable(ManageTest):
             self.sc,
             nfs_ganesha_pod_name,
         )
-        if platform == constants.AWS_PLATFORM:
+        if (
+            platform == constants.AWS_PLATFORM
+            or platform == constants.IBMCLOUD_PLATFORM
+            or platform == constants.HCI_BAREMETAL
+        ):
             # Delete ocs nfs Service
             nfs_utils.delete_nfs_load_balancer_service(
                 self.storage_cluster_obj,
@@ -194,7 +197,14 @@ class TestNfsEnable(ManageTest):
         """
         Check if any nfs idle mount is available out of cluster
         and remove those.
+        Delete nfs retain storage class if left.
         """
+        if self.sc_obj.is_exist(resource_name=self.retain_nfs_sc_name):
+            # Delete the nfs retain StorageClass
+            self.sc_obj.delete(resource_name=self.retain_nfs_sc_name)
+            log.info(f"Wait until the SC, {self.retain_nfs_sc_name} is deleted.")
+            self.sc_obj.wait_for_delete(resource_name=self.retain_nfs_sc_name)
+
         if self.con:
             retcode, stdout, _ = self.con.exec_cmd(
                 "findmnt -t nfs4 " + self.test_folder
@@ -351,7 +361,7 @@ class TestNfsEnable(ManageTest):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
-    @aws_platform_required
+    @nfs_outcluster_test_platform_required
     @polarion_id("OCS-4273")
     def test_outcluster_nfs_export(
         self,
@@ -439,7 +449,6 @@ class TestNfsEnable(ManageTest):
             pod_obj, file_path
         ), f"File {file_name} doesn't exist"
         log.info(f"File {file_name} exists in {pod_obj.name}")
-
         # Create /var/lib/www/html/index.html file inside the pod
         command = (
             "bash -c "
@@ -451,7 +460,6 @@ class TestNfsEnable(ManageTest):
             command=command,
             out_yaml_format=False,
         )
-
         retcode, _, _ = self.con.exec_cmd("mkdir -p " + self.test_folder)
         assert retcode == 0
         export_nfs_external_cmd = (
@@ -475,7 +483,6 @@ class TestNfsEnable(ManageTest):
         stdout = stdout.rstrip()
         log.info(stdout)
         assert stdout == "hello world"
-
         command = f"chmod 666 {self.test_folder}/index.html"
         retcode, _, _ = self.con.exec_cmd(command)
         assert retcode == 0
@@ -527,8 +534,8 @@ class TestNfsEnable(ManageTest):
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-    @tier1
-    @aws_platform_required
+    @tier2
+    @nfs_outcluster_test_platform_required
     @polarion_id("OCS-4274")
     def test_multiple_nfs_based_PVs(
         self,
@@ -670,8 +677,8 @@ class TestNfsEnable(ManageTest):
             log.info("Check nfs pv is deleted")
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-    @tier1
-    @aws_platform_required
+    @tier2
+    @nfs_outcluster_test_platform_required
     @polarion_id("OCS-4293")
     def test_multiple_mounts_of_same_nfs_volume(
         self,
@@ -808,8 +815,8 @@ class TestNfsEnable(ManageTest):
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-    @tier1
-    @aws_platform_required
+    @tier2
+    @nfs_outcluster_test_platform_required
     @polarion_id("OCS-4312")
     def test_external_nfs_client_can_write_read_new_file(
         self,
@@ -1085,8 +1092,10 @@ class TestNfsEnable(ManageTest):
         log.info("IO started on all pods")
 
         # Respin nfsplugin pods while active I/O on in-cluster consumer
+        nfs_provisioner_selectors = nfs_utils.provisioner_selectors(nfs_plugins=True)
         nfsplugin_pod_objs = pod.get_all_pods(
-            namespace=config.ENV_DATA["cluster_namespace"], selector=["csi-nfsplugin"]
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=[nfs_provisioner_selectors[0]],
         )
         log.info(f"nfs plugin pods-----{nfsplugin_pod_objs}")
         pod.delete_pods(pod_objs=nfsplugin_pod_objs)
@@ -1094,7 +1103,7 @@ class TestNfsEnable(ManageTest):
         # Wait untill nfsplugin pods recovery
         self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector="app=csi-nfsplugin",
+            selector=nfs_provisioner_selectors[0],
             resource_count=len(nfsplugin_pod_objs),
             timeout=3600,
             sleep=5,
@@ -1176,13 +1185,12 @@ class TestNfsEnable(ManageTest):
             deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
             helpers.create_resource(**deployment_data)
             time.sleep(60)
-
             assert self.pod_obj.wait_for_resource(
                 resource_count=1,
                 condition=constants.STATUS_RUNNING,
                 selector="name=nfs-test-pod",
                 dont_allow_other_resources=True,
-                timeout=60,
+                timeout=120,
             )
             pod_objs = pod.get_all_pods(
                 namespace=self.namespace,
@@ -1338,9 +1346,13 @@ class TestNfsEnable(ManageTest):
         log.info("IO started on all pods")
 
         # Respin cephfsplugin provisioner pods while active I/O on in-cluster consumer
+        cephfs_provisioner_selectors = nfs_utils.provisioner_selectors(
+            cephfs_plugin=True
+        )
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
         cephfsplugin_provisioner_pod_objs = pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
-            selector=["csi-cephfsplugin-provisioner"],
+            selector=[cephfs_provisioner_selectors[0]],
         )
         log.info(
             f"cephfs plugin provisioner pods-----{cephfsplugin_provisioner_pod_objs}"
@@ -1350,7 +1362,7 @@ class TestNfsEnable(ManageTest):
         # Wait untill cephfsplugin provisioner pods recovery
         self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
+            selector=cephfs_provisioner_selectors[0],
             resource_count=len(cephfsplugin_provisioner_pod_objs),
             timeout=3600,
             sleep=5,
@@ -1392,7 +1404,7 @@ class TestNfsEnable(ManageTest):
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
-    @tier1
+    @tier2
     @polarion_id("OCS-6193")
     def test_nfs_pvc_subvolume_deletion(
         self,
@@ -1416,6 +1428,7 @@ class TestNfsEnable(ManageTest):
         # checking subvolume before retain nfs pvc creation
         from pathlib import Path
 
+        self.retain_nfs_sc = nfs_utils.create_nfs_sc_retain(self.retain_nfs_sc_name)
         if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
             helpers.retrieve_cli_binary(cli_type="odf")
         output = run_cmd(cmd="odf-cli subvolume ls")
@@ -1501,6 +1514,11 @@ class TestNfsEnable(ManageTest):
         output = run_cmd(cmd="odf-cli subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
+
+        # Delete ocs-storagecluster-ceph-nfs-retain storageclass
+        self.sc_obj.delete(resource_name=self.retain_nfs_sc_name)
+        log.info(f"Wait until the SC, {self.retain_nfs_sc_name} is deleted.")
+        self.sc_obj.wait_for_delete(resource_name=self.retain_nfs_sc_name)
 
     def parse_subvolume_ls_output(self, output):
         subvolumes = []

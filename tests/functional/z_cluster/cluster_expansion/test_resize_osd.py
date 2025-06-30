@@ -22,6 +22,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
     tier1,
+    tier2,
     tier4b,
     tier4c,
     tier4a,
@@ -313,10 +314,7 @@ class TestResizeOSD(ManageTest):
         resize_osd(self.new_storage_size)
         self.verification_steps_post_resize_osd()
 
-    @tier1
-    @tier4a
-    @tier4b
-    @tier4c
+    @tier2
     @black_squad
     @pytest.mark.order("last")
     @polarion_id("OCS-5800")

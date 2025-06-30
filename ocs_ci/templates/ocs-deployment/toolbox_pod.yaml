@@ -25,10 +25,7 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
           - name: ROOK_CEPH_USERNAME
-            valueFrom:
-              secretKeyRef:
-                name: rook-ceph-mon
-                key: ceph-username
+            value: client.admin
           - name: ROOK_CEPH_SECRET
             valueFrom:
               secretKeyRef:

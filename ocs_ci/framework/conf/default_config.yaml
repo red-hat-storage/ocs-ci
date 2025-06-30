@@ -147,7 +147,6 @@ REPORTING:
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
-  odf_live_must_gather_image_pre_4_13: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
   default_ocs_must_gather_latest_tag: 'latest-4.19'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False

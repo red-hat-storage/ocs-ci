@@ -193,10 +193,10 @@ class TestCrossScCloneSnapRestore(ManageTest):
     def test_cross_class_different_pool_clone_snap_restore(
         self,
         interface_type,
+        storageclass_factory,
         sc1_replica,
         sc_replica2,
         sc2_compression,
-        storageclass_factory,
         pvc_factory,
         pod_factory,
         pvc_clone_factory,

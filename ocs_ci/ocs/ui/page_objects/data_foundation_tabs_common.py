@@ -377,7 +377,7 @@ class CreateResourceForm(PageNavigator):
                 text,
             )
 
-        allowed_chars = string.ascii_lowercase + string.digits + "-."
+        allowed_chars = string.ascii_lowercase + string.digits + "-"
         allowed_chars = replace_consecutive_symbols(allowed_chars, "-")
         allowed_chars = replace_consecutive_symbols(allowed_chars, ".")
 

@@ -65,6 +65,7 @@ from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 from psutil._common import bytes2human
+from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
 
 log = logging.getLogger(__name__)
@@ -2019,7 +2020,7 @@ def email_reports(session):
     move_summary_to_top(soup)
     add_info_about_mg_skips(soup)
     add_time_report_to_email(session, soup)
-    part1 = MIMEText(soup, "html")
+    part1 = MIMEText(soup.decode(formatter="minimal"), "html")
     add_mem_stats(soup)
     msg.attach(part1)
     try:
@@ -5191,9 +5192,9 @@ def create_unreleased_oadp_catalog():
             mode="w+", prefix="brew-catalog", delete=False
         )
         dump_data_to_temp_yaml(brew_catalog_data, brew_catalog_data_yaml.name)
-        run_cmd(f"oc create -f {constants.BREW_ICSP}", timeout=300)
+        run_cmd(f"oc apply -f {constants.BREW_ICSP}", timeout=300)
         wait_for_machineconfigpool_status("all")
-        run_cmd(f"oc create -f {brew_catalog_data_yaml.name}", timeout=300)
+        run_cmd(f"oc apply -f {brew_catalog_data_yaml.name}", timeout=300)
         catalog_source = CatalogSource(
             resource_name=constants.OADP_CATALOG_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
@@ -5666,7 +5667,7 @@ def wait_custom_resource_defenition_available(crd_name, timeout=600):
     )
 
 
-def clean_up_pods_for_provider(node_type, max_retries=30, retry_delay_seconds=30):
+def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30):
     """
     Manually clean up pods if nodes get stuck in Ready,SchedulingDisabled during OCP upgrade.
     Checks machine-config-controller logs for eviction errors or completion messages.
@@ -5840,3 +5841,28 @@ def clean_up_pods_for_provider(node_type, max_retries=30, retry_delay_seconds=30
         f"Nodes may still be stuck in {constants.NODE_READY_SCHEDULING_DISABLED} state."
     )
     return False  # Failure
+
+
+def skip_for_provider_if_ocs_version(expressions):
+    """
+    This function evaluates the condition for test skip
+    for provider clusters based on expression
+
+    Args:
+        expressions (str OR list): condition for which we need to check,
+        eg: A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+    """
+    expr_list = [expressions] if isinstance(expressions, str) else expressions
+    if (
+        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+        or config.hci_provider_exist()
+        or config.hci_client_exist()
+    ):
+        return any(
+            version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
+            for expr in expr_list
+        )

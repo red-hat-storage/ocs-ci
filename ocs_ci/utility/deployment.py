@@ -116,66 +116,6 @@ def get_cluster_prefix(cluster_name, special_rules):
     return prefix
 
 
-def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
-    """
-    Get ICSP from catalog image (if exists) and apply it on the cluster (if
-    requested).
-
-    Args:
-        image (str): catalog image of ocs registry.
-        apply (bool): controls if the ICSP should be applied or not
-            (default: true)
-        insecure (bool): If True, it allows push and pull operations to registries to be made over HTTP
-
-    Returns:
-        str: path to the icsp.yaml file or empty string, if icsp not available
-            in the catalog image
-
-    """
-
-    icsp_file_location = "/icsp.yaml"
-    icsp_file_dest_dir = os.path.join(
-        config.ENV_DATA["cluster_path"], f"icsp-{config.RUN['run_id']}"
-    )
-    icsp_file_dest_location = os.path.join(icsp_file_dest_dir, "icsp.yaml")
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-    create_directory_path(icsp_file_dest_dir)
-    cmd = (
-        f"oc image extract --filter-by-os linux/amd64 --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {icsp_file_location}:{icsp_file_dest_dir}"
-    )
-    if insecure:
-        cmd = f"{cmd} --insecure"
-    exec_cmd(cmd)
-    if not os.path.exists(icsp_file_dest_location):
-        return ""
-
-    # make icsp name unique - append run_id
-    with open(icsp_file_dest_location) as f:
-        icsp_content = yaml.safe_load(f)
-    icsp_content["metadata"]["name"] += f"-{config.RUN['run_id']}"
-    with open(icsp_file_dest_location, "w") as f:
-        yaml.dump(icsp_content, f)
-
-    if apply and not config.DEPLOYMENT.get("disconnected"):
-        exec_cmd(f"oc apply -f {icsp_file_dest_location}")
-        managed_ibmcloud = (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
-        )
-        if not managed_ibmcloud:
-            num_nodes = (
-                config.ENV_DATA["worker_replicas"]
-                + config.ENV_DATA["master_replicas"]
-                + config.ENV_DATA.get("infra_replicas", 0)
-            )
-            timeout = 2800 if num_nodes > 6 else 1900
-            wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
-
-    return icsp_file_dest_location
-
-
 def get_ocp_release_image():
     """
     Get the url of ocp release image
@@ -257,3 +197,63 @@ def create_openshift_install_log_file(cluster_path, console_url):
             ]
         )
     logger.info("Created '.openshift_install.log' file")
+
+
+def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
+    """
+    Get IDMS from catalog image (if exists) and apply it on the cluster (if
+    requested).
+
+    Args:
+        image (str): catalog image of ocs registry.
+        apply (bool): controls if the IDMS should be applied or not
+            (default: true)
+        insecure (bool): If True, it allows push and pull operations to registries to be made over HTTP
+
+    Returns:
+        str: path to the idms.yaml file or empty string, if idms not available
+            in the catalog image
+
+    """
+
+    idms_file_location = "/idms.yaml"
+    idms_file_dest_dir = os.path.join(
+        config.ENV_DATA["cluster_path"], f"idms-{config.RUN['run_id']}"
+    )
+    idms_file_dest_location = os.path.join(idms_file_dest_dir, "idms.yaml")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    create_directory_path(idms_file_dest_dir)
+    cmd = (
+        f"oc image extract --filter-by-os linux/amd64 --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {idms_file_location}:{idms_file_dest_dir}"
+    )
+    if insecure:
+        cmd = f"{cmd} --insecure"
+    exec_cmd(cmd)
+    if not os.path.exists(idms_file_dest_location):
+        return ""
+
+    # make idms name unique - append run_id
+    with open(idms_file_dest_location) as f:
+        idms_content = yaml.safe_load(f)
+    idms_content["metadata"]["name"] += f"-{config.RUN['run_id']}"
+    with open(idms_file_dest_location, "w") as f:
+        yaml.dump(idms_content, f)
+
+    if apply and not config.DEPLOYMENT.get("disconnected"):
+        exec_cmd(f"oc apply -f {idms_file_dest_location}")
+        managed_ibmcloud = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if not managed_ibmcloud:
+            num_nodes = (
+                config.ENV_DATA["worker_replicas"]
+                + config.ENV_DATA["master_replicas"]
+                + config.ENV_DATA.get("infra_replicas", 0)
+            )
+            timeout = 2800 if num_nodes > 6 else 1900
+            wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
+
+    return idms_file_dest_location

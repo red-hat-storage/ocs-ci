@@ -136,7 +136,7 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
-    get_and_apply_icsp_from_catalog,
+    get_and_apply_idms_from_catalog,
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
@@ -822,7 +822,10 @@ class Deployment(object):
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
-        if config.ENV_DATA.get("platform") != constants.ROSA_HCP_PLATFORM:
+        if config.ENV_DATA["deployment_type"] not in (
+            constants.MANAGED_DEPL_TYPE,
+            constants.MANAGED_CP_DEPL_TYPE,
+        ):
             add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
             enable_huge_pages()
@@ -1194,7 +1197,8 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.OLM_YAML}")
         except CommandFailed as ex:
             if "AlreadyExists" in str(ex):
-                logger.info("OLM resources already exist")
+                logger.info("OLM resources already exist, calling apply to update!")
+                run_cmd(f"oc apply -f {constants.OLM_YAML}")
             else:
                 raise
 
@@ -1950,7 +1954,7 @@ class Deployment(object):
             ui_deployment = config.DEPLOYMENT.get("ui_deployment")
             if not ui_deployment:
                 logger.info("Creating namespace and operator group.")
-                run_cmd(f"oc create -f {constants.OLM_YAML}")
+                run_cmd(f"oc apply -f {constants.OLM_YAML}")
             if not live_deployment:
                 create_catalog_source()
             self.subscribe_ocs()
@@ -2685,7 +2689,7 @@ class Deployment(object):
             f.write(data)
 
         logger.info("Creating ImageContentSourcePolicy")
-        run_cmd(f"oc create -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
+        run_cmd(f"oc apply -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
         acm_version = config.ENV_DATA.get("acm_version")
@@ -2730,7 +2734,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_namespace_yaml_data, acm_hub_namespace_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_namespace_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_namespace_manifest.name}")
 
         logger.info("Creating OperationGroup for ACM deployment")
         package_manifest = PackageManifest(
@@ -2738,7 +2742,7 @@ class Deployment(object):
         )
 
         run_cmd(
-            f"oc create -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+            f"oc apply -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
 
         logger.info("Creating ACM HUB Subscription")
@@ -2946,11 +2950,11 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         catalog_source_data["spec"][
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
-    # apply icsp if present in the catalog image
+    # apply idms if present in the catalog image
     image = f"{image}:{image_tag if image_tag else 'latest'}"
     insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
 
-    get_and_apply_icsp_from_catalog(image=image, insecure=insecure_mode)
+    get_and_apply_idms_from_catalog(image=image, insecure=insecure_mode)
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False

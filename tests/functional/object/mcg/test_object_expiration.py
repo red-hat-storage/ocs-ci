@@ -371,7 +371,7 @@ class TestObjectExpiration(MCGTest):
             raise e
 
     @pytest.mark.polarion_id("OCS-5167")
-    @tier1
+    @tier2
     def test_disabled_object_expiration(
         self, mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
     ):
@@ -441,7 +441,7 @@ class TestObjectExpiration(MCGTest):
 
     @skipif_ocs_version("<4.10")
     @pytest.mark.polarion_id("OCS-3929")
-    @tier1
+    @tier2
     def test_object_expiration_in_minutes(self, mcg_obj, bucket_factory):
         """
         Test object is not deleted in minutes when object is set to expire in a day

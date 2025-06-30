@@ -313,16 +313,19 @@ class BucketNotificationsManager:
             resource_description="notif", resource_type="id"
         )
         notif_config = {
-            "TopicConfiguration": {
-                "Id": rand_id,
-                "Events": events,
-                "Topic": conn_config_path,
-            }
+            "TopicConfiguration": [
+                {
+                    "Id": rand_id,
+                    "Events": events,
+                    "TopicArn": conn_config_path,
+                }
+            ]
         }
         notif_config_json = json.dumps(notif_config).replace('"', '\\"')
         awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
-                f"put-bucket-notification --bucket {bucket} --notification-configuration '{notif_config_json}'",
+                f"put-bucket-notification-configuration --bucket {bucket} "
+                f"--notification-configuration '{notif_config_json}'",
                 mcg_obj=mcg_obj,
                 api=True,
             )

@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import config, tier1
+from ocs_ci.framework.testlib import config, tier2
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.helpers.helpers import create_pods
@@ -108,7 +108,7 @@ class PVKeyrotationTestBase:
         self.pv_keyrotation_obj = PVKeyrotation(self.sc_obj)
 
 
-@tier1
+@tier2
 @green_squad
 @pytest.mark.parametrize(
     argnames=argnames,
