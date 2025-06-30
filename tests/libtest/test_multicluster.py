@@ -1,6 +1,9 @@
 import pytest
+import logging
 
 from ocs_ci.framework.pytest_customization.marks import libtest, run_on_all_clients
+
+logger = logging.getLogger(name=__file__)
 
 
 @libtest
@@ -16,3 +19,9 @@ def test_run_on_all_clients_marker_with_additional_parameters(
     another_param, cluster_index
 ):
     pass
+
+
+@libtest
+@pytest.mark.parametrize(argnames=["cluster_index"], argvalues=[0, 1], indirect=True)
+def test_cluster_index_fixture(cluster_index):
+    logger.info(f"param: {cluster_index}")
