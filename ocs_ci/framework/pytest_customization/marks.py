@@ -421,9 +421,7 @@ try:
         argnames=["cluster_index"], argvalues=client_indexes, indirect=True
     )
 except ClusterNotFoundException:
-    run_on_all_clients = pytest.mark.parametrize(
-        argnames=["cluster_index"], argvalues=[""], indirect=True
-    )
+    pass
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
