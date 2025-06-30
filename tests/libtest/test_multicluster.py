@@ -11,7 +11,7 @@ def test_run_on_all_clients_marker(cluster_index):
 
 @libtest
 @run_on_all_clients
-@pytest.mark.parametrize(argnames=["another_param"], argvalues=[1])
+@pytest.mark.parametrize("another_param", [1, 2])
 def test_run_on_all_clients_marker_with_additional_parameters(
     another_param, cluster_index
 ):
