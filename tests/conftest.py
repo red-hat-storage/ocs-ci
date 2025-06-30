@@ -672,7 +672,11 @@ def cluster_index(request):
     """
     Fixture used as a placeholder for a parameter required by run_on_all_clients marker.
     """
-    return request.param
+    try:
+        parameter = request.param
+    except AttributeError:
+        parameter = None
+    return parameter
 
 
 @pytest.fixture(scope="class")
