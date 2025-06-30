@@ -389,6 +389,7 @@ class HyperShiftBase:
         root_volume_size: str = 40,
         ocp_version=None,
         cp_availability_policy=None,
+        infra_availability_policy=None,
         disable_default_sources=None,
         auto_repair=True,
     ):
@@ -402,12 +403,19 @@ class HyperShiftBase:
             cpu_cores (str): CPU cores of the cluster, minimum 6
             ocp_version (str): OCP version of the cluster
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
-            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable, if no value
-            provided and argument is not used in the command the single replica mode cluster will be created
+            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable; if SingleReplica
+                selected, cluster will be created with etcd kube-apiserver, kube-controller-manager,
+                openshift-oauth-apiserver, openshift-controller-manager, kube-scheduler with min available
+                quorum 1 in pdb.
+            infra_availability_policy (str): Infra availability policy, default HighlyAvailable, if SingleReplica
+                selected, cluster will be created with etcd ingress controller, monitoring, cloud controller with min
+                available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+
         Returns:
             str: Name of the hosted cluster
+
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
@@ -456,14 +464,28 @@ class HyperShiftBase:
 
         if (
             cp_availability_policy
-            and cp_availability_policy in constants.CONTROL_PLANE_AVAILABILITY_POLICIES
+            and cp_availability_policy in constants.AVAILABILITY_POLICIES
         ):
-            logger.error(
-                f"Control plane availability policy {cp_availability_policy} is not valid. "
-                f"Valid values are: {constants.CONTROL_PLANE_AVAILABILITY_POLICIES}"
-            )
             create_hcp_cluster_cmd += (
                 f" --control-plane-availability-policy {cp_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Control plane availability policy {cp_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
+            )
+
+        if (
+            infra_availability_policy
+            and infra_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            create_hcp_cluster_cmd += (
+                f" --infra-availability-policy {infra_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Infrastructure availability policy {infra_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
             )
 
         if disable_default_sources:
