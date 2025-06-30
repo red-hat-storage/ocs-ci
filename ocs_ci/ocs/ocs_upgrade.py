@@ -130,7 +130,7 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
     )
 
 
-@retry(ValueError, tries=10, delay=30, backoff=1)
+@retry(ValueError, tries=20, delay=30, backoff=1)
 def get_expected_noobaa_pod_count(upgrade_version):
     """
     Verify if all the images of OCS objects got upgraded
