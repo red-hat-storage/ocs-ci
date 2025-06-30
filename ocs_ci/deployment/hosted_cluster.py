@@ -458,7 +458,14 @@ class HypershiftHostedOCP(
             .get("nodepool_replicas", defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT)
         )
         cp_availability_policy = (
-            config.ENV_DATA["clusters"].get(self.name).get("cp_availability_policy")
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("cp_availability_policy", constants.AVAILABILITY_POLICY_HA)
+        )
+        infra_availability_policy = (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("infra_availability_policy", constants.AVAILABILITY_POLICY_HA)
         )
         disable_default_sources = (
             config.ENV_DATA["clusters"]
@@ -472,6 +479,7 @@ class HypershiftHostedOCP(
             memory=memory_per_hosted_cluster,
             ocp_version=ocp_version,
             cp_availability_policy=cp_availability_policy,
+            infra_availability_policy=infra_availability_policy,
             disable_default_sources=disable_default_sources,
         )
 

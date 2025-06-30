@@ -50,11 +50,37 @@ def get_hosted_cluster_names():
     return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip().split()
 
 
+def get_available_hosted_clusters_to_ocp_ver_dict():
+    """
+    Get available HyperShift hosted clusters with their versions
+
+    Returns:
+        dict: hosted clusters available with their versions. Example: {'cl-418-x': '4.18.7', 'cl-418-c': '4.19.0'}
+    """
+    logger.info("Getting HyperShift hosted clusters available")
+    cmd = (
+        "oc get hostedclusters -n clusters -o json | "
+        "jq -r '.items[] | "
+        'select(.metadata.annotations["hypershift.openshift.io/HasBeenAvailable"] == "true") | '
+        '"\\(.metadata.name)|\\(.status.version.history[0].version)"\''
+    )
+    out = exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+    if not out:
+        return {}
+    result = dict(line.split("|") for line in out.splitlines())
+    return result
+
+
 def kubeconfig_exists_decorator(func):
     """
     Decorator to check if the kubeconfig exists before executing the decorated method
-    :param func: func to decorate; should be used only for methods of class having 'cluster_kubeconfig' attribute !
-    :return: wrapper
+
+    Args:
+        func: Function to decorate. Should be used only for methods of a class having a 'cluster_kubeconfig' attribute.
+
+    Returns:
+        wrapper: The decorated function.
+
     """
 
     def wrapper(self, *args, **kwargs):
@@ -170,6 +196,19 @@ def get_hosted_cluster_type(cluster_name=None):
         kind=constants.HOSTED_CLUSTERS, namespace="clusters", resource_name=cluster_name
     )
     return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
+
+
+def get_current_nodepool_size(name):
+    """
+    Get existing nodepool of HyperShift hosted cluster
+    Args:
+        name (str): name of the cluster
+    Returns:
+         str: number of nodes in the nodepool
+    """
+    logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
+    cmd = f"oc get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $4}}'"
+    return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
 
 class HyperShiftBase:
@@ -350,7 +389,9 @@ class HyperShiftBase:
         root_volume_size: str = 40,
         ocp_version=None,
         cp_availability_policy=None,
+        infra_availability_policy=None,
         disable_default_sources=None,
+        auto_repair=True,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -362,11 +403,19 @@ class HyperShiftBase:
             cpu_cores (str): CPU cores of the cluster, minimum 6
             ocp_version (str): OCP version of the cluster
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
-            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable, if no value
-            provided and argument is not used in the command the single replica mode cluster will be created
+            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable; if SingleReplica
+                selected, cluster will be created with etcd kube-apiserver, kube-controller-manager,
+                openshift-oauth-apiserver, openshift-controller-manager, kube-scheduler with min available
+                quorum 1 in pdb.
+            infra_availability_policy (str): Infra availability policy, default HighlyAvailable, if SingleReplica
+                selected, cluster will be created with etcd ingress controller, monitoring, cloud controller with min
+                available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
+            auto_repair (bool): Enables machine autorepair with machine health checks, default True
+
         Returns:
             str: Name of the hosted cluster
+
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
@@ -407,19 +456,36 @@ class HyperShiftBase:
             f"--pull-secret {pull_secret_path} "
             f"--image-content-sources {self.icsp_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
-            "--olm-catalog-placement Guest"
+            "--olm-catalog-placement Guest "
         )
+
+        if auto_repair:
+            create_hcp_cluster_cmd += " --auto-repair"
 
         if (
             cp_availability_policy
-            and cp_availability_policy in constants.CONTROL_PLANE_AVAILABILITY_POLICIES
+            and cp_availability_policy in constants.AVAILABILITY_POLICIES
         ):
-            logger.error(
-                f"Control plane availability policy {cp_availability_policy} is not valid. "
-                f"Valid values are: {constants.CONTROL_PLANE_AVAILABILITY_POLICIES}"
-            )
             create_hcp_cluster_cmd += (
                 f" --control-plane-availability-policy {cp_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Control plane availability policy {cp_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
+            )
+
+        if (
+            infra_availability_policy
+            and infra_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            create_hcp_cluster_cmd += (
+                f" --infra-availability-policy {infra_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Infrastructure availability policy {infra_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
             )
 
         if disable_default_sources:
