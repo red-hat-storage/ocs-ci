@@ -434,8 +434,8 @@ class TestGracefulNodesShutdown(E2ETest):
             worker_instances = nodes.get_ec2_instances(nodes=worker_nodes)
 
         logger.info("Gracefully Shutting down worker & master nodes")
-        nodes.stop_nodes(nodes=worker_nodes, force=False)
-        nodes.stop_nodes(nodes=master_nodes, force=False)
+        nodes.stop_nodes(nodes=worker_nodes, force=False, timeout=1200)
+        nodes.stop_nodes(nodes=master_nodes, force=False, timeout=1200)
 
         logger.info("waiting for 5 min before starting nodes")
         time.sleep(300)
