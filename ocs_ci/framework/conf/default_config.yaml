@@ -354,7 +354,7 @@ PERF:
   # There is a Production ES for long term results saving
   production_es: true
   # The Production (long term results saving) ES information:  IP / Port
-  production_es_server: "10.0.78.167"
+  production_es_server: "10.0.146.27"
   production_es_port: 9200
   production_es_scheme: "http"
   # There is a Lab ES for development testing - combine with --dev-mode argument
