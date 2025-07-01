@@ -1,0 +1,4 @@
+DEPLOYMENT:
+  ceph_debug: true
+  ceph_debug_rgw: true
+  ceph_debug_mon: false
