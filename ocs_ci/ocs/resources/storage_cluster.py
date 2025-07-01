@@ -2007,7 +2007,7 @@ def get_all_storageclass():
     return storageclass
 
 
-def setup_ceph_debug():
+def setup_ceph_debug(mon_debug=True, rgw_debug=False):
     """
     Set Ceph to run in debug log level using a ConfigMap.
     This functionality is available starting OCS 4.7.
@@ -2023,9 +2023,15 @@ def setup_ceph_debug():
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
     else:
         stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
-    ceph_debug_log_configmap_data["data"]["config"] = (
-        stored_values + constants.CEPH_DEBUG_CONFIG_VALUES
-    )
+    ceph_debug_log_configmap_data["data"]["config"] = stored_values
+    if mon_debug:
+        ceph_debug_log_configmap_data["data"][
+            "config"
+        ] += constants.CEPH_MON_DEBUG_CONFIG_VALUES
+    if rgw_debug:
+        ceph_debug_log_configmap_data["data"][
+            "config"
+        ] += constants.CEPH_RGW_DEBUG_CONFIG_VALUES
 
     ceph_configmap_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="config_map", delete=False

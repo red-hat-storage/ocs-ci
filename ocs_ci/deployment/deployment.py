@@ -1671,7 +1671,9 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"]["storageClass"] = True
 
         if config.DEPLOYMENT.get("ceph_debug"):
-            setup_ceph_debug()
+            mon_debug = config.DEPLOYMENT.get("ceph_debug_mon")
+            rgw_debug = config.DEPLOYMENT.get("ceph_debug_rgw")
+            setup_ceph_debug(mon_debug=mon_debug, rgw_debug=rgw_debug)
             cluster_data["spec"]["managedResources"] = {
                 "cephConfig": {"reconcileStrategy": "ignore"}
             }

@@ -2800,12 +2800,18 @@ bluestore_prefer_deferred_size_hdd = 0
 """
 
 
-CEPH_DEBUG_CONFIG_VALUES = """
+CEPH_MON_DEBUG_CONFIG_VALUES = """
 [mon]
 debug_mon = 30
 debug_ms = 1
 debug_paxos = 20
 debug_crush = 20
+"""
+
+CEPH_RGW_DEBUG_CONFIG_VALUES = """
+[client.rgw.ocs.storagecluster.cephobjectstore.a]
+debug_rgw = 20
+debug_ms = 1
 """
 
 
