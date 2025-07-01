@@ -1,0 +1,12 @@
+# This will be used for debugging bug: DFBUGS-2413
+---
+DEPLOYMENT:
+  rook_log_level: "TRACE_INSECURE"
+  storage_cluster_override:
+    spec:
+      managedResources:
+        cephCluster:
+          cephConfig:
+            global:
+              debug_rgw: "20"
+              debug_ms: "1"
