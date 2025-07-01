@@ -313,7 +313,7 @@ class BucketNotificationsManager:
             resource_description="notif", resource_type="id"
         )
         notif_config = {
-            "TopicConfiguration": [
+            "TopicConfigurations": [
                 {
                     "Id": rand_id,
                     "Events": events,
