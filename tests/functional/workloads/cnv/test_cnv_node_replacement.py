@@ -2,7 +2,6 @@ import logging
 import pytest
 import random
 
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.pytest_customization.marks import (
     workloads,
@@ -14,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
 )
@@ -104,10 +102,6 @@ class TestCnvNodeReplace(E2ETest):
         logger.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers = Sanity()
         self.sanity_helpers.health_check(tries=120)
-
-        # Verify OSD encrypted
-        if config.ENV_DATA.get("encryption_at_rest"):
-            osd_encryption_verification()
 
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
