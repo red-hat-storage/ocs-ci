@@ -114,6 +114,7 @@ minor
 version.
   (for example: `registry.redhat.io/openshift4/ose-operator-registry:v4.9`)
   [doc](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.9/html/operators/administrator-tasks#olm-pruning-index-image_olm-managing-custom-catalogs)
+* `mce_channel` - Channel to use for MCE deployment. It is propagated to the MCE operator subscription.
 * `min_noobaa_endpoints` - Sets minimum noobaa endpoints (Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2861)
 * `host_network` - Enable host network in the storage cluster CR and prepare rules needed in AWS for host network during OCP deployment
 * `subscription_plan_approval` - 'Manual' or 'Automatic' subscription approval for OCS upgrade

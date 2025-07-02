@@ -127,10 +127,6 @@ DEPLOYMENT:
   rosa_cli_version: '1.2.51'
   # Multicluster engine
   deploy_mce: false
-  # ! Pay attention. stable-2.8 is not available until OCP 4.18 becomes available
-  mce_channel: "stable-2.8"
-  # catalogsource format of image with tag; latest unreleased, that is supported by OCP 4.18
-  mce_image: ""
   fusion_channel: v2.0
 
 
