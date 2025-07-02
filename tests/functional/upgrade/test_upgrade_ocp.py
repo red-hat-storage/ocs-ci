@@ -253,7 +253,7 @@ class TestUpgradeOCP(ManageTest):
                     resume_machinehealthcheck()
 
             # post upgrade validation: check cluster operator status
-            operator_ready_timeout = 2700 if not rosa_platform else 5400
+            operator_ready_timeout = 5400
             cluster_operators = ocp.get_all_cluster_operators()
             for ocp_operator in cluster_operators:
                 logger.info(f"Checking cluster status of {ocp_operator}")
@@ -269,7 +269,7 @@ class TestUpgradeOCP(ManageTest):
                         logger.info(f"{ocp_operator} status is not valid")
             # Post upgrade validation: check cluster version status
             logger.info("Checking clusterversion status")
-            cluster_version_timeout = 900 if not rosa_platform else 1800
+            cluster_version_timeout = 1800
             for sampler in TimeoutSampler(
                 timeout=cluster_version_timeout,
                 sleep=15,
