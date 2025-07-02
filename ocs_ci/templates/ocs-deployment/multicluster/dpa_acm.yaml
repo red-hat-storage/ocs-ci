@@ -10,15 +10,16 @@ spec:
       defaultPlugins:
       - openshift
       - aws
-    restic:
+    nodeAgent:
       enable: true
+      uploaderType: restic
   backupLocations:
     - name: default
       velero:
         provider: aws
         default: true
         objectStorage:
-          bucket: PLACE_HOLDER 
+          bucket: PLACE_HOLDER
           prefix: acm
         config:
           region: eu-central-1
