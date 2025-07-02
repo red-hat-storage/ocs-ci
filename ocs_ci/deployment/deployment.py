@@ -1670,11 +1670,12 @@ class Deployment(object):
                     )
                 cluster_data["spec"]["encryption"]["storageClass"] = True
 
+        managed_resources = cluster_data["spec"].setdefault("managedResources", {})
         if config.DEPLOYMENT.get("ceph_debug"):
             setup_ceph_debug()
-            cluster_data["spec"]["managedResources"] = {
-                "cephConfig": {"reconcileStrategy": "ignore"}
-            }
+            managed_resources.setdefault("cephConfig", {}).update(
+                {"reconcileStrategy": "ignore"}
+            )
         if config.ENV_DATA.get("is_multus_enabled"):
             public_net_name = config.ENV_DATA["multus_public_net_name"]
             public_net_namespace = config.ENV_DATA["multus_public_net_namespace"]
@@ -1862,6 +1863,12 @@ class Deployment(object):
                     upgrade_osd_requires_healthy_pgs
                 )
 
+        storage_cluster_override = config.DEPLOYMENT.get("storage_cluster_override", {})
+        if storage_cluster_override:
+            logger.info(
+                f"Override storage cluster data with: {storage_cluster_override}"
+            )
+            merge_dict(cluster_data, storage_cluster_override)
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
         )

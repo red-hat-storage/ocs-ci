@@ -176,6 +176,7 @@ version.
 * `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
 * `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
+* `storage_cluster_override` - Dictionary with data which will allow you to dynamically override data in storageCluster CR.
 
 #### REPORTING
 
