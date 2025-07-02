@@ -2270,7 +2270,7 @@ class Deployment(object):
 
         if (
             self.platform == constants.VSPHERE_PLATFORM
-            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_18
         ):
             # using try/except to not fail deployments since these values are good to have
             # for vsphere platform
