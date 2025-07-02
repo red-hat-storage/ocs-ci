@@ -29,7 +29,10 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
-from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
+from ocs_ci.deployment.helpers.odf_deployment_helpers import (
+    get_required_csvs,
+    set_ceph_config,
+)
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
 from ocs_ci.deployment.helpers.lso_helpers import (
@@ -2170,6 +2173,20 @@ class Deployment(object):
         # validate PDB creation of MON, MDS, OSD pods
         if not config.DEPLOYMENT["external_mode"]:
             validate_pdb_creation()
+
+        # Increase bluestore_slow_ops_warn_threshold and bluestore_slow_ops_warn_lifetime
+        # till https://issues.redhat.com/browse/DFBUGS-1913 is resolved
+        if self.platform == constants.VSPHERE_PLATFORM:
+            set_ceph_config(
+                entity="global",
+                config_name="bluestore_slow_ops_warn_threshold",
+                value="7",
+            )
+            set_ceph_config(
+                entity="global",
+                config_name="bluestore_slow_ops_warn_lifetime",
+                value="10",
+            )
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
