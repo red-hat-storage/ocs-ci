@@ -254,10 +254,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             )
             # Handle the case that ODF haven't created StorageCluster CRD yet
             retry(
-                (CommandFailed),
-                tries=60,
-                delay=10,
-                backoff=1,
+                CommandFailed,
+                tries=12,
+                delay=15,
             )(self.ocp_obj.exec_oc_cmd(f"apply -f {storage_cluster_path}"))
 
         # Creating toolbox pod
