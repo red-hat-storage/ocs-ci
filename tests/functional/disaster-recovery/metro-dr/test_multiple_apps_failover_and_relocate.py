@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import tier1, mdr
 from ocs_ci.framework import config
@@ -97,7 +98,7 @@ class TestMultipleApplicationFailoverAndRelocate:
             namespace=primary_instances[0].workload_namespace,
             workload_type=workload_type,
         )
-
+        time.sleep(120)
         # Fence the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
 
