@@ -179,11 +179,15 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
     if new_machine is not None:
         new_machine_name = new_machine[0].name
         log.info(f"Checking the state of new spinned machine {new_machine_name}")
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            timeout = 1200
+        else:
+            timeout = 900
         new_machine[0].ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=new_machine_name,
             column="PHASE",
-            timeout=900,
+            timeout=timeout,
             sleep=30,
         )
         log.info(f"{new_machine_name} is in {constants.STATUS_RUNNING} state")
