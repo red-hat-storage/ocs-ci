@@ -323,7 +323,7 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(metallb_inst_data, metallb_inst_file.name)
 
-        retry(CommandFailed, tries=9, delay=30)(exec_cmd)(
+        retry(CommandFailed, tries=12, delay=30)(exec_cmd)(
             f"oc apply -f {metallb_inst_file.name}", timeout=240
         )
 
