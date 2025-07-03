@@ -180,7 +180,15 @@ class TestCorsConfig:
         curl_output = exec_cmd(cmd=curl_command).stdout.decode()
         logger.info(curl_output)
         curl_output = curl_output.split()
-        resp_code = curl_output[curl_output.index("HTTP/1.1") + 1]
+        resp_index = curl_output.index("HTTP/1.1") + 1
+        # Discard first response code if script is using proxy info
+        if (
+            curl_output[resp_index + 1] == "Connection"
+            and curl_output[resp_index + 2] == "established"
+        ):
+            resp_code = curl_output[resp_index + 4]
+        else:
+            resp_code = curl_output[resp_index]
         return int(resp_code)
 
     @pytest.mark.parametrize(
