@@ -9,7 +9,6 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.version import if_version
@@ -512,7 +511,7 @@ def create_storage_consumer_on_default_cluster(
 
 
 @if_version(">4.18")
-@catch_exceptions((AssertionError, CommandFailed, TimeoutExpiredError))
+@catch_exceptions(Exception)
 def verify_storage_consumer_resources(
     consumer_name,
     distributed_storage_classes=None,
