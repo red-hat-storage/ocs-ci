@@ -1029,7 +1029,7 @@ class AMQ(object):
         if self.crd_objects:
             for adm_obj in self.crd_objects:
                 adm_obj.delete()
-        time.sleep(20)
+        time.sleep(30)
 
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
