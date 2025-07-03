@@ -2383,20 +2383,10 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "odf-dependencies",
 ]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.19"] = [
-    "cluster-logging",
-    # elasticsearch-operator seems to be removed from redhat-operator-index:v4.19
-    # "elasticsearch-operator",
-    # we might need to uncomment next line, if we would like to use it in
-    # disconnected deployment:
-    # "lvms-operator",
-    "mcg-operator",
-    "ocs-operator",
-    "odf-csi-addons-operator",
-    "odf-multicluster-orchestrator",
-    "odf-operator",
-    "odf-dependencies",
-    # "odf-prometheus-operator",
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.19"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.18"] + [
+    "odf-multicluster",
 ]
 
 # PSI-openstack constants
