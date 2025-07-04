@@ -32,7 +32,7 @@ class ACMUpgrade(object):
         # Hence we can't rely on ENV_DATA['acm_version'] for the pre-upgrade version
         # we need to dynamically find it
         self.version_before_upgrade = self.get_acm_version_before_upgrade()
-        self.upgrade_version = config.UPGRADE["upgrade_acm_version"]
+        self.upgrade_version = config.UPGRADE.get(["upgrade_acm_version"], "")
         # In case if we are using registry image
         self.acm_registry_image = config.UPGRADE.get("upgrade_acm_registry_image", "")
         self.zstream_upgrade = False

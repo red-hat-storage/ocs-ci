@@ -1462,30 +1462,41 @@ class HostedODF(HypershiftHostedOCP):
         )
 
     @kubeconfig_exists_decorator
-    def create_catalog_source(self):
+    def create_catalog_source(self, reapply=False, odf_version_tag=None):
         """
         Create catalog source for ODF
 
+        Args:
+            reapply (bool): If True, will reapply the catalog source even if it exists
+            odf_version_tag (str): Optional ODF version tag to use for the catalog source image.
+
         Returns:
             bool: True if the catalog source is created, False otherwise
+
         """
         if self.catalog_source_exists():
             logger.info("CatalogSource already exists")
-            return True
+            if not reapply:
+                return True
 
         catalog_source_data = templating.load_yaml(
             constants.PROVIDER_MODE_CATALOGSOURCE
         )
 
         if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
-            raise ValueError(
-                "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
-                "in the 'hosted_odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
-            )
+            if not reapply:
+                raise ValueError(
+                    "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
+                    "in the 'hosted_odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
+                )
 
-        odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
+        if odf_version_tag:
+            # If odf_version_tag is provided, use it instead of the one from config
+            odf_version = odf_version_tag
+        else:
+            odf_version = (
+                config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+            )
         odf_registry = (
             config.ENV_DATA.get("clusters")
             .get(self.name)
