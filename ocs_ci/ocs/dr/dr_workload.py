@@ -1209,7 +1209,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             config.switch_acm_ctx()
             self.create_drpc_for_apps_with_recipe()
         else:
-            self.create_drpc()
+            self.create_dprc()
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
