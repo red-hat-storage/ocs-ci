@@ -26,6 +26,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility import templating, kms as KMS, version
+from ocs_ci.utility.retry import retry
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 from ocs_ci.deployment.encryption import (
@@ -235,8 +236,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
                 )
-                self.ocp_obj.exec_oc_cmd(
-                    f"apply -f {constants.OCS_STORAGE_CLUSTER_YAML}"
+                retry(
+                    CommandFailed,
+                    tries=12,
+                    delay=15,
+                )(
+                    self.ocp_obj.exec_oc_cmd(
+                        f"apply -f {constants.OCS_STORAGE_CLUSTER_YAML}"
+                    )
                 )
             else:
                 storage_cluster_data = templating.load_yaml(
@@ -259,8 +266,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
-                self.ocp_obj.exec_oc_cmd(
-                    f"apply -f {constants.OCS_STORAGE_CLUSTER_UPDATED_YAML}"
+                retry(
+                    CommandFailed,
+                    tries=12,
+                    delay=15,
+                )(
+                    self.ocp_obj.exec_oc_cmd(
+                        f"apply -f {constants.OCS_STORAGE_CLUSTER_UPDATED_YAML}"
+                    )
                 )
 
         # Creating toolbox pod
