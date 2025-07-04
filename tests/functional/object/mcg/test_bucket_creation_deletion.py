@@ -4,6 +4,7 @@ import re
 import botocore
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
@@ -145,8 +146,9 @@ class TestBucketCreationAndDeletion(MCGTest):
         # verifying  bz2179271 for only one parameter
         if amount == 10 and interface == "OC":
             unexpected_log = 'malformed BucketHost "s3.openshift-storage.svc": malformed subdomain name "s3"'
-            rook_op_pod = get_operator_pods()
-            pod_log = get_pod_logs(pod_name=rook_op_pod[0].name)
+            with config.RunWithProviderConfigContextIfAvailable():
+                rook_op_pod = get_operator_pods()
+                pod_log = get_pod_logs(pod_name=rook_op_pod[0].name)
             assert not (
                 unexpected_log in pod_log
             ), f"Bucket notification errors found {unexpected_log}"
