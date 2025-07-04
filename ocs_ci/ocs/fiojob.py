@@ -50,25 +50,26 @@ def get_ceph_storage_stats(ceph_pool_name):
             int: value of MAX AVAIL value of given ceph pool (Bytes)
 
     """
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_df_dict = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-    ceph_pool = None
-    ceph_total_stored = 0
-    for pool in ceph_df_dict["pools"]:
-        ceph_total_stored += pool["stats"]["stored"]
-        if pool["name"] == ceph_pool_name:
-            ceph_pool = pool
-    if ceph_pool is None:
-        logger.error(
-            f"pool {ceph_pool_name} was not found "
-            f"in output of `ceph df`: {ceph_df_dict}"
-        )
-    # If the following assert fail, the problem is either:
-    #  - name of the pool has changed (when this happens before GA, it's
-    #    likely ocs-ci bug, after the release it's a product bug),
-    #  - pool is missing (likely a product bug)
-    # either way, the fixture can't continue ...
-    assert ceph_pool is not None, f"Pool: {ceph_pool_name} doesn't exist!"
+    with config.RunWithProviderConfigContextIfAvailable():
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_df_dict = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        ceph_pool = None
+        ceph_total_stored = 0
+        for pool in ceph_df_dict["pools"]:
+            ceph_total_stored += pool["stats"]["stored"]
+            if pool["name"] == ceph_pool_name:
+                ceph_pool = pool
+        if ceph_pool is None:
+            logger.error(
+                f"pool {ceph_pool_name} was not found "
+                f"in output of `ceph df`: {ceph_df_dict}"
+            )
+        # If the following assert fail, the problem is either:
+        #  - name of the pool has changed (when this happens before GA, it's
+        #    likely ocs-ci bug, after the release it's a product bug),
+        #  - pool is missing (likely a product bug)
+        # either way, the fixture can't continue ...
+        assert ceph_pool is not None, f"Pool: {ceph_pool_name} doesn't exist!"
     return ceph_total_stored, ceph_pool["stats"]["max_avail"]
 
 
@@ -89,7 +90,8 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
         int: pvc_size for storage utilization job (in GiB, rounded)
 
     """
-    ceph_total_stored, max_avail = get_ceph_storage_stats(ceph_pool_name)
+    with config.RunWithProviderConfigContextIfAvailable():
+        ceph_total_stored, max_avail = get_ceph_storage_stats(ceph_pool_name)
     # ... to compute PVC size (values in bytes)
     total = max_avail + ceph_total_stored  # Bytes
     max_avail_gi = max_avail / 2**30  # GiB
@@ -313,40 +315,44 @@ def get_pool_name(fixture_name):
     """
     Return ceph pool name based on fixture name suffix.
     """
-    if config.DEPLOYMENT["external_mode"]:
-        ceph_pool_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
-    elif fixture_name.endswith("rbd"):
-        if (
-            config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
-            and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
-        ):
-            cluster_id = run_cmd(
-                "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-            )
-            ceph_pool_name = f"cephblockpool-storageconsumer-{cluster_id}"
-        elif (
-            config.ENV_DATA["platform"].lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
-        ):
-            # Get pool name form storageclass
-            default_sc = default_storage_class(constants.CEPHBLOCKPOOL)
-            ceph_pool_name = default_sc.get()["parameters"]["pool"]
+    with config.RunWithProviderConfigContextIfAvailable():
+        if config.DEPLOYMENT["external_mode"]:
+            ceph_pool_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+        elif fixture_name.endswith("rbd"):
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+                and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+            ):
+                cluster_id = run_cmd(
+                    "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+                )
+                ceph_pool_name = f"cephblockpool-storageconsumer-{cluster_id}"
+            elif (
+                config.ENV_DATA["platform"].lower()
+                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                and config.ENV_DATA.get("cluster_type", "").lower()
+                == constants.HCI_CLIENT
+            ):
+                # Get pool name form storageclass
+                default_sc = default_storage_class(constants.CEPHBLOCKPOOL)
+                ceph_pool_name = default_sc.get()["parameters"]["pool"]
+            else:
+                ceph_pool_name = "ocs-storagecluster-cephblockpool"
+        elif fixture_name.endswith("cephfs"):
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                and config.ENV_DATA.get("cluster_type", "").lower()
+                == constants.HCI_CLIENT
+            ):
+                # Get pool name form storageclass
+                default_sc = default_storage_class(constants.CEPHFILESYSTEM)
+                ceph_pool_name = default_sc.get()["parameters"]["pool"]
+            else:
+                ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
         else:
-            ceph_pool_name = "ocs-storagecluster-cephblockpool"
-    elif fixture_name.endswith("cephfs"):
-        if (
-            config.ENV_DATA["platform"].lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
-        ):
-            # Get pool name form storageclass
-            default_sc = default_storage_class(constants.CEPHFILESYSTEM)
-            ceph_pool_name = default_sc.get()["parameters"]["pool"]
-        else:
-            ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
-    else:
-        raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
+            raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
     return ceph_pool_name
 
 
@@ -426,8 +432,9 @@ def workload_fio_storageutilization(
     if target_size is not None and target_percentage is not None:
         raise ValueError(val_err_msg + ", not both.")
 
-    storage_class_name = get_sc_name(fixture_name)
-    ceph_pool_name = get_pool_name(fixture_name)
+    with config.RunWithProviderConfigContextIfAvailable():
+        storage_class_name = get_sc_name(fixture_name)
+        ceph_pool_name = get_pool_name(fixture_name)
 
     # make sure we communicate what is going to happen
     logger.info(
