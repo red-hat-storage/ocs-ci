@@ -988,53 +988,54 @@ class AMQ(object):
 
         """
 
-        if self.consumer_pod:
-            self.consumer_pod.delete()
-        if self.producer_pod:
-            self.producer_pod.delete()
-        if self.kafka_user:
-            self.kafka_user.delete()
-        if self.kafka_topic:
-            self.kafka_topic.delete()
+        if self.amq_is_setup:
+            if self.consumer_pod:
+                self.consumer_pod.delete()
+            if self.producer_pod:
+                self.producer_pod.delete()
+            if self.kafka_user:
+                self.kafka_user.delete()
+            if self.kafka_topic:
+                self.kafka_topic.delete()
 
-        if self.benchmark:
-            # Delete the helm app
-            try:
-                purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
-                run(purge_cmd, shell=True, cwd=self.dir, check=True)
-            except (CommandFailed, CalledProcessError) as cf:
-                log.error("Failed to delete help app")
-                raise cf
-            # Delete the pods and namespace created
-            self.sa_tiller.delete()
-            self.crb_tiller.delete()
-            run_cmd(f"oc delete project {tiller_namespace}")
-            self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
+            if self.benchmark:
+                # Delete the helm app
+                try:
+                    purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
+                    run(purge_cmd, shell=True, cwd=self.dir, check=True)
+                except (CommandFailed, CalledProcessError) as cf:
+                    log.error("Failed to delete help app")
+                    raise cf
+                # Delete the pods and namespace created
+                self.sa_tiller.delete()
+                self.crb_tiller.delete()
+                run_cmd(f"oc delete project {tiller_namespace}")
+                self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
 
-        if self.kafka_connect:
-            self.kafka_connect.delete()
-        if self.kafka_bridge:
-            self.kafka_bridge.delete()
-        if self.kafka_persistent:
-            self.kafka_persistent.delete()
-            log.info("Waiting for 20 seconds to delete persistent")
-            time.sleep(20)
-            ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
-            if ocs_pvc_obj:
-                delete_pvcs(ocs_pvc_obj)
-            for pvc in ocs_pvc_obj:
-                log.info(pvc.name)
-                validate_pv_delete(pvc.backed_pv)
+            if self.kafka_connect:
+                self.kafka_connect.delete()
+            if self.kafka_bridge:
+                self.kafka_bridge.delete()
+            if self.kafka_persistent:
+                self.kafka_persistent.delete()
+                log.info("Waiting for 20 seconds to delete persistent")
+                time.sleep(20)
+                ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
+                if ocs_pvc_obj:
+                    delete_pvcs(ocs_pvc_obj)
+                for pvc in ocs_pvc_obj:
+                    log.info(pvc.name)
+                    validate_pv_delete(pvc.backed_pv)
 
-        if self.crd_objects:
-            for adm_obj in self.crd_objects:
-                adm_obj.delete()
-        time.sleep(20)
+            if self.crd_objects:
+                for adm_obj in self.crd_objects:
+                    adm_obj.delete()
+            time.sleep(30)
 
-        # Reset namespace to default
-        switch_to_default_rook_cluster_project()
-        run_cmd(f"oc delete project {kafka_namespace}")
-        self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+            # Reset namespace to default
+            switch_to_default_rook_cluster_project()
+            run_cmd(f"oc delete project {kafka_namespace}")
+            self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
 
     def check_amq_cluster_exists(self):
         """

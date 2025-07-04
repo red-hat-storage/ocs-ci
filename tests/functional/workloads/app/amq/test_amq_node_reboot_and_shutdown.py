@@ -70,6 +70,7 @@ class TestAMQNodeReboot(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.fixture()
+    @retry(CommandFailed, tries=60, delay=3, backoff=1)
     def amq_setup(self, amq_factory_fixture):
         """
         Creates amq cluster and run benchmarks
@@ -103,7 +104,7 @@ class TestAMQNodeReboot(E2ETest):
         nodes.restart_nodes(node, wait=False)
 
         # Wait some time after rebooting master
-        waiting_time = 40
+        waiting_time = 90
         log.info(f"Waiting {waiting_time} seconds...")
         time.sleep(waiting_time)
 
