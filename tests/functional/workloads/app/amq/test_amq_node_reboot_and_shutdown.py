@@ -104,7 +104,7 @@ class TestAMQNodeReboot(E2ETest):
         nodes.restart_nodes(node, wait=False)
 
         # Wait some time after rebooting master
-        waiting_time = 40
+        waiting_time = 90
         log.info(f"Waiting {waiting_time} seconds...")
         time.sleep(waiting_time)
 
