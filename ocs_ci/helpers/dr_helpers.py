@@ -2117,7 +2117,7 @@ def get_cluster_set_name():
         logger.info(f"Found the unique clusterset {cluster_set[0]}")
     else:
         raise UnexpectedDeploymentConfiguration(
-            "There are more then one clusterset added to multiple managedcluters"
+            "There are more then one clusterset added to the managed clusters"
         )
 
     return cluster_set

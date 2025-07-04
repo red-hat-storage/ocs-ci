@@ -628,13 +628,6 @@ metrics_for_external_mode_required = pytest.mark.skipif(
     reason="Metrics is not enabled for external mode OCS <4.6",
 )
 
-rdr_ui_skipif = pytest.mark.skipif(
-    not config.RUN.get("rdr_failover_via_ui")
-    or not config.RUN.get("rdr_relocate_via_ui"),
-    reason="RDR UI failover or relocate config needed",
-)
-rdr_ui = compose(rdr_ui_skipif, pytest.mark.rdr_ui)
-
 dr_hub_recovery = pytest.mark.skipif(
     config.nclusters != 4,
     reason="DR hub recovery requires 4th OCP cluster to be available for Passive hub",
