@@ -15,6 +15,7 @@ from math import floor
 from shutil import copyfile, rmtree
 from functools import partial
 from copy import deepcopy
+from subprocess import CalledProcessError
 
 import boto3
 from botocore.exceptions import ClientError
@@ -9136,10 +9137,15 @@ def benchmark_workload_storageutilization(request):
             use_kustomize_build (bool): True, if use kustomize build. False, otherwise.
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
 
+        Returns:
+            BenchmarkOperatorFIO: The Benchmark operator FIO object
+
         """
         nonlocal benchmark_obj
 
-        size = get_file_size(target_percentage)
+        size = retry(CommandFailed, tries=6, delay=20, backoff=1)(get_file_size)(
+            target_percentage
+        )
         benchmark_obj = BenchmarkOperatorFIO()
         benchmark_obj.setup_benchmark_fio(
             total_size=size,
@@ -9153,9 +9159,16 @@ def benchmark_workload_storageutilization(request):
         )
         benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 
+        return benchmark_obj
+
     def finalizer():
         if benchmark_obj is not None:
-            benchmark_obj.cleanup()
+            try:
+                benchmark_obj.cleanup()
+            except CalledProcessError as ex:
+                log.warning(
+                    f"Failed to delete the benchmark due to the exception: {str(ex)}"
+                )
 
     request.addfinalizer(finalizer)
     return factory

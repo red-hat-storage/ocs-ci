@@ -3395,3 +3395,5 @@ LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
 
 # Auto-scaling Yaml files
 AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
+# StorageAutoScaler Values
+PROMETHEUS_RECONCILE_TIMEOUT = 660
