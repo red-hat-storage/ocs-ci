@@ -1860,3 +1860,70 @@ def validate_noobaa_db_backup_recovery_locally_system(
         logger.info(f"No {search_string} errors are found in the noobaa pod logs")
 
     return factory
+
+
+@pytest.fixture(scope="session")
+def setup_stress_testing_buckets(bucket_factory_session, rgw_bucket_factory_session):
+    """
+    This session scoped fixture is for setting up the buckets for the stress testing
+    in MCG. This creates buckets of type AWS, AZURE, PV-POOL, RGW.
+
+    """
+
+    def factory():
+        """
+        Factory function for creating the buckets
+
+        Returns:
+            Dict: { underlying_storage_type : obc object for the bucket created}
+
+        """
+        # These are the bucket configs needed for
+        # creating buckets. They support buckets on
+        # AWS, AZURE, PV-POOL and RGW
+        bucket_configs = {
+            "aws": {
+                "interface": "CLI",
+                "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            },
+            "azure": {
+                "interface": "CLI",
+                "backingstore_dict": {"azure": [(1, None)]},
+            },
+            "pv-pool": {
+                "interface": "CLI",
+                "backingstore_dict": {
+                    "pv": [(1, 50, constants.DEFAULT_STORAGECLASS_RBD)]
+                },
+            },
+            "rgw": None,
+        }
+
+        # We loop through each bucket configs and
+        # create one bucket after another
+        bucket_objects = dict()
+        logger.info("Creating buckets for stress testing")
+        for type, bucketclass_dict in bucket_configs.items():
+            if type == "rgw":
+
+                # We only create RGW buckets if there is support for RGW
+                # in the cluster platform. RGW is only supported in on-prem
+                # platforms i.e, Vsphere, Baremetal etc.
+                if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+                    bucket = rgw_bucket_factory_session(interface="rgw-oc")[0]
+                else:
+                    logger.info(
+                        "Can't create RGW bucket as there is no support for RGW in non-onprem platforms"
+                    )
+                    continue
+            else:
+                bucket = bucket_factory_session(
+                    interface="CLI", bucketclass=bucketclass_dict
+                )[0]
+
+            logger.info(f"BUCKET CREATION: Created bucket {bucket.name} of type {type}")
+            bucket_objects[type] = bucket
+
+        return bucket_objects
+
+    return factory
