@@ -31,6 +31,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility import templating, kms as KMS, version
+from ocs_ci.utility.retry import retry
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 from ocs_ci.deployment.encryption import (
@@ -251,7 +252,12 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             templating.dump_data_to_temp_yaml(
                 storage_cluster_data, storage_cluster_path
             )
-            self.ocp_obj.exec_oc_cmd(f"apply -f {storage_cluster_path}")
+            # Handle the case that ODF haven't created StorageCluster CRD yet
+            retry(
+                CommandFailed,
+                tries=12,
+                delay=15,
+            )(self.ocp_obj.exec_oc_cmd(f"apply -f {storage_cluster_path}"))
 
         # Creating toolbox pod
         setup_ceph_toolbox()
