@@ -3,6 +3,7 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     polarion_id,
+    runs_on_provider,
     skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
     skipif_managed_service,
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 @tier2
 @polarion_id("OCS-1254")
 @skipif_managed_service
+@runs_on_provider
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock):
@@ -118,6 +120,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock)
 @mcg
 @blue_squad
 @tier4a
+@runs_on_provider
 @polarion_id("OCS-2498")
 @skipif_managed_service
 @skipif_disconnected_cluster
