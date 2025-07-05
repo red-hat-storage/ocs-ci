@@ -66,8 +66,8 @@ class TestMultipleApplicationFailoverAndRelocate:
         self,
         setup_acm_ui,
         nodes_multicluster,
-        dr_workloads_on_managed_clusters,
         workload_type,
+        dr_workloads_on_managed_clusters,
         node_restart_teardown,
     ):
         """
