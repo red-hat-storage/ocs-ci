@@ -158,6 +158,25 @@ def apply_cluster_roles_wa(cluster_names):
             logger.warning("rbac w/a already exist")
 
 
+def skip_if_not_hcp_provider(func):
+    """
+    Decorator to skip the function execution if deployment is not Hosted Control Plane provider
+
+    Returns:
+        function: wrapped function
+    """
+
+    def wrapper(*args, **kwargs):
+        if (
+            config.default_cluster_ctx.ENV_DATA["platform"].lower()
+            not in HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            return
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 class HostedClients(HyperShiftBase):
     """
     The class is intended to deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them.
@@ -1882,6 +1901,7 @@ class HostedODF(HypershiftHostedOCP):
         return False
 
 
+@skip_if_not_hcp_provider
 def hypershift_cluster_factory(
     cluster_names=None,
     ocp_version=None,
@@ -1906,9 +1926,10 @@ def hypershift_cluster_factory(
     """
 
     hosted_clients_obj = HostedClients()
-    logger.info(f"Factory duty is '{duty}'")
+    logger.info(f"hypershift_cluster_factory duty is '{duty}'")
 
-    if duty == "create_hosted_cluster_push_config":
+    # this section 1. is to gather and remove configurations and execute deployment due to the duty
+    if duty == constants.DUTY_CREATE_HOSTED_CLUSTER_PUSH_CONFIG:
         hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
         for cluster_name in cluster_names:
             # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
@@ -1936,16 +1957,22 @@ def hypershift_cluster_factory(
         deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
 
     elif duty in [
-        "use_existing_hosted_clusters_force_push_configs",
-        "use_existing_hosted_clusters_push_missing_configs",
+        constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_FORCE_PUSH_CONFIG,
+        constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
     ]:
         cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
+        if not cl_name_ver_dict:
+            logger.warning(
+                "No hosted clusters found. Please create hosted clusters first."
+            )
+            return
         deployed_clusters = list(cl_name_ver_dict.keys())
 
-        if "use_existing_hosted_clusters_force_push_configs" in duty:
+        if constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG in duty:
             existing_clusters = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
+            # remove clusters from config that are already deployed and exist in MultiClusterConfig
             clusters_to_remove = existing_clusters.intersection(deployed_clusters)
             if clusters_to_remove:
                 for cluster_name in clusters_to_remove:
@@ -1953,8 +1980,11 @@ def hypershift_cluster_factory(
                         f"Removing cluster config {cluster_name} from config file, as it is already deployed"
                     )
                     config.remove_cluster_by_name(cluster_name)
-
-        if duty == "use_existing_hosted_clusters_push_missing_configs":
+            # assign to deployed_clusters remaining clusters after removal
+            deployed_clusters = {
+                conf.ENV_DATA.get("cluster_name") for conf in config.clusters
+            }
+        if duty == constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG:
             clusters_in_config = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
@@ -1966,6 +1996,8 @@ def hypershift_cluster_factory(
         logger.warning("Factory function was called without deployment duty")
         deployed_clusters = []
 
+    # this section 2. is to push the config to the existing clusters to MultiClusterConfig due to the duty,
+    # including newly created clusters
     for cluster_name in deployed_clusters:
 
         if not nodepool_replicas:
@@ -2012,13 +2044,37 @@ def hypershift_cluster_factory(
                 ] = running_ocp_version
 
             cluster_path = create_cluster_dir(cluster_name)
-            kubeconf_path = (
+            logger.info("Cluster path: %s", cluster_path)
+            def_client_config_dict["ENV_DATA"]["cluster_path"] = cluster_path
+
+            kubeconf_paths = (
                 hosted_clients_obj.download_hosted_clusters_kubeconfig_files(
                     {cluster_name: cluster_path}
                 )
             )
+            if not len(kubeconf_paths):
+                from ocs_ci.framework.exceptions import ClusterKubeconfigNotFoundError
 
-            logger.info(f"Kubeconfig path: {kubeconf_path}")
+                ClusterKubeconfigNotFoundError(
+                    f"Failed to download kubeconfig for cluster {cluster_name}"
+                )
+            else:
+                kubeconf_path = [
+                    path for path in kubeconf_paths if cluster_name in path
+                ][0]
+            logger.debug(f"Kubeconfig path: {kubeconf_path}")
+
+            logger.debug(
+                "Setting default context to config. Every config should have same default context"
+            )
+            # sync our configurations with the one in MultiClusterConfig to have the same default context index
+            # we set provider's index to every client config
+
+            default_index = config.get_provider_index()
+            def_client_config_dict["ENV_DATA"].setdefault(
+                "default_cluster_context_index", default_index
+            )
+
             def_client_config_dict.setdefault("RUN", {}).update(
                 {"kubeconfig": kubeconf_path}
             )
