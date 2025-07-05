@@ -423,6 +423,9 @@ class VdbenchWorkload:
         Capture and log pod logs for debugging purposes.
         """
         try:
+            log.info(
+                f"Capturing logs for Vdbench pods in namespace: {self.namespace} and deployment: {self.deployment_name}"
+            )
             cmd = (
                 f"oc get pods -n {self.namespace} -l app={self.deployment_name} -o name"
             )
@@ -440,6 +443,43 @@ class VdbenchWorkload:
 
         except Exception as e:
             log.warning(f"Failed to capture pod logs: {e}")
+
+    def get_all_deployment_pod_logs(self):
+        """
+        Get logs from all pods belonging to the Vdbench workload deployment.
+
+        Returns:
+            str: Combined log output from all related pods
+        """
+        logs_output = []
+        try:
+            log.info(f"Fetching logs for pods in deployment: {self.deployment_name}")
+            cmd = (
+                f"oc get pods -n {self.namespace} -l app={self.deployment_name} -o name"
+            )
+            pod_names = run_cmd(cmd).strip().split("\n")
+
+            for pod in pod_names:
+                if pod:
+                    pod_name = pod.replace("pod/", "")
+                    log.info(f"Fetching logs from pod: {pod_name}")
+                    try:
+                        pod_logs = run_cmd(f"oc logs {pod_name} -n {self.namespace}")
+                        logs_output.append(f"=== Logs for {pod_name} ===\n{pod_logs}\n")
+                    except Exception as e:
+                        error_msg = f"Failed to get logs from {pod_name}: {e}"
+                        logs_output.append(error_msg)
+                        log.warning(error_msg)
+        except Exception as e:
+            error_msg = f"Error fetching pod logs: {e}"
+            log.error(error_msg)
+            logs_output.append(error_msg)
+
+        log.info(
+            f"Collected logs from {len(logs_output)} pods in deployment: {self.deployment_name}"
+        )
+        log.info("Combined logs output:\n" + "\n".join(logs_output))
+        return "\n".join(logs_output)
 
     def scale_up_pods(self, desired_count):
         """

@@ -3,6 +3,7 @@ import yaml
 import tempfile
 
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -515,3 +516,107 @@ def auto_add_openflags_if_raw_device(config):
         if sd.get("lun", "").startswith("/dev/") and "openflags" not in sd:
             sd["openflags"] = "o_direct"
     return config
+
+
+def create_vdbench_performance_scenario(
+    vdbench_workload_factory,
+    pvc_factory,
+    vdbench_performance_config,
+    storage_class=None,
+    pvc_size="20Gi",
+    auto_start=True,
+):
+    """
+    Helper function to create a performance testing scenario.
+    """
+    log.info("Creating Vdbench performance scenario")
+    config = vdbench_performance_config()
+
+    log.info(
+        f"Creating PVC with size={pvc_size}, storage_class={storage_class}, access_mode=RWO, volume_mode=Filesystem"
+    )
+    pvc = pvc_factory(
+        size=pvc_size,
+        storageclass=storage_class,
+        access_mode=constants.ACCESS_MODE_RWO,
+        volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+    )
+
+    log.info("Creating Vdbench workload for performance testing")
+    workload = vdbench_workload_factory(
+        pvc=pvc, vdbench_config=config, auto_start=auto_start
+    )
+
+    log.info("Vdbench performance scenario setup complete")
+    return pvc, workload
+
+
+def create_vdbench_block_scenario(
+    vdbench_workload_factory,
+    pvc_factory,
+    vdbench_block_config,
+    storage_class=None,
+    pvc_size="10Gi",
+    auto_start=True,
+):
+    """
+    Helper function to create a block device testing scenario.
+    """
+    log.info("Creating Vdbench block device scenario")
+    config = vdbench_block_config()
+
+    log.info(
+        f"Creating Block-mode PVC with size={pvc_size}, storage_class={storage_class}, access_mode=RWO"
+    )
+    pvc = pvc_factory(
+        size=pvc_size,
+        storageclass=storage_class,
+        access_mode=constants.ACCESS_MODE_RWO,
+        volume_mode=constants.VOLUME_MODE_BLOCK,
+    )
+
+    log.info("Creating Vdbench workload for block device testing")
+    workload = vdbench_workload_factory(
+        pvc=pvc, vdbench_config=config, auto_start=auto_start
+    )
+
+    log.info("Vdbench block scenario setup complete")
+    return pvc, workload
+
+
+def create_vdbench_rwx_scenario(
+    vdbench_workload_factory,
+    pvc_factory,
+    vdbench_rwx_shared_config,
+    storage_class=None,
+    pvc_size="15Gi",
+    replica_count=3,
+    auto_start=True,
+):
+    """
+    Helper function to create a ReadWriteMany shared volume scenario.
+    """
+    log.info("Creating Vdbench RWX shared volume scenario")
+    config = vdbench_rwx_shared_config()
+
+    log.info(
+        f"Creating RWX PVC with size={pvc_size}, storage_class={storage_class}, access_mode=RWX"
+    )
+    pvc = pvc_factory(
+        size=pvc_size,
+        storageclass=storage_class,
+        access_mode=constants.ACCESS_MODE_RWX,
+        volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+    )
+
+    log.info("Creating Vdbench workload for RWX shared testing")
+    workload = vdbench_workload_factory(
+        pvc=pvc, vdbench_config=config, auto_start=auto_start
+    )
+
+    if auto_start and replica_count > 1:
+        log.info(f"Scaling workload to {replica_count} replicas for RWX scenario")
+        workload.scale_up_pods(replica_count)
+
+    log.info("Vdbench RWX scenario setup complete")
+    return pvc, workload

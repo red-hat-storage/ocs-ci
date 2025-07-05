@@ -1,7 +1,6 @@
 import pytest
 import os
 import logging
-import fauxfactory
 from ocs_ci.ocs import constants
 from ocs_ci.resiliency.resiliency_helper import ResiliencyConfig
 from ocs_ci.resiliency.resiliency_workload import workload_object
@@ -376,7 +375,7 @@ def vdbench_filesystem_config():
                 {
                     "id": 1,
                     "fsd": True,
-                    "anchor": f"{anchor}/{fauxfactory.gen_alpha(8).lower()}",
+                    "anchor": anchor,
                     "depth": depth,
                     "width": width,
                     "files": files,
@@ -406,55 +405,71 @@ def vdbench_filesystem_config():
     return _factory
 
 
-def create_vdbench_test_scenario(
-    vdbench_workload_factory,
-    pvc_factory,
-    config,
-    pvc_size="5Gi",
-    storage_class=None,
-    access_mode="ReadWriteOnce",
-    volume_mode=None,
-):
+@pytest.fixture
+def vdbench_mixed_workload_config():
     """
-    Helper function to create a complete Vdbench test scenario
-    for either filesystem or block volume.
-
-    Args:
-        vdbench_workload_factory: Vdbench workload factory fixture
-        pvc_factory: PVC factory fixture
-        config (dict): Vdbench configuration
-        pvc_size (str): Size of PVC to create
-        storage_class (str): Storage class for PVC
-        access_mode (str): PVC access mode
-        volume_mode (str): PVC volume mode ("Filesystem" or "Block"). Auto-detects if not provided.
+    Factory for mixed read/write workload patterns.
 
     Returns:
-        tuple: (pvc, workload) - Created PVC and Vdbench workload
+        function: A factory for creating mixed I/O patterns
     """
 
-    # Detect volume mode from config if not provided
-    if volume_mode is None:
-        is_block = False
-        for sd in config.get("storage_definitions", []):
-            if sd.get("lun") or not sd.get("fsd", False):
-                is_block = True
-                break
-        volume_mode = "Block" if is_block else "Filesystem"
+    def _factory(
+        patterns=None,
+        lun="/vdbench-data/mixed",
+        size="5g",
+        threads=2,
+        elapsed=300,
+        interval=10,
+    ):
+        if patterns is None:
+            patterns = [
+                {
+                    "name": "sequential_read",
+                    "rdpct": 100,
+                    "seekpct": 0,
+                    "xfersize": "1m",
+                },
+                {"name": "random_read", "rdpct": 100, "seekpct": 100, "xfersize": "4k"},
+                {"name": "mixed_rw", "rdpct": 70, "seekpct": 100, "xfersize": "64k"},
+                {
+                    "name": "sequential_write",
+                    "rdpct": 0,
+                    "seekpct": 0,
+                    "xfersize": "1m",
+                },
+            ]
 
-    # Create PVC
-    pvc = pvc_factory(
-        size=pvc_size,
-        storageclass=storage_class,
-        access_mode=access_mode,
-        volume_mode=volume_mode,
-    )
+        workloads = []
+        runs = []
 
-    # Create workload
-    workload = vdbench_workload_factory(
-        pvc=pvc,
-        vdbench_config=config,
-        pvc_access_mode=access_mode,
-        pvc_volume_mode=volume_mode,
-    )
+        for i, pattern in enumerate(patterns, 1):
+            workloads.append(
+                {
+                    "id": i,
+                    "sd_id": 1,
+                    "rdpct": pattern["rdpct"],
+                    "seekpct": pattern["seekpct"],
+                    "xfersize": pattern["xfersize"],
+                }
+            )
 
-    return pvc, workload
+            runs.append(
+                {
+                    "id": i,
+                    "wd_id": i,
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": "max",
+                }
+            )
+
+        return {
+            "storage_definitions": [
+                {"id": 1, "lun": lun, "size": size, "threads": threads}
+            ],
+            "workload_definitions": workloads,
+            "run_definitions": runs,
+        }
+
+    return _factory

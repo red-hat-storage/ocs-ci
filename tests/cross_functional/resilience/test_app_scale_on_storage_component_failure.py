@@ -40,50 +40,69 @@ class TestAppScaleOnStorageComponentFailure:
         vdbench_filesystem_config,
     ):
         """
-        Create a VDBENCH workload and scale it on certain frequency.
+        Create VDBENCH workloads and initiate scaling on eligible ones.
 
         Returns:
             tuple: (List of workload objects, scaling thread)
         """
         project = project_factory()
-        size = 10
-        interfaces = [constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL]
-
+        size = 20
         workloads = []
-        for interface in interfaces:
-            if interface == constants.CEPHFILESYSTEM:
-                access_modes = [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO]
-                vdbench_config_file = create_temp_config_file(
+
+        interface_configs = {
+            constants.CEPHFILESYSTEM: {
+                "access_modes": [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO],
+                "config_file": lambda: create_temp_config_file(
                     vdbench_filesystem_config(
                         rdpct=0,
+                        size="10m",
+                        depth=4,
+                        width=5,
+                        files=10,
+                        threads=10,
+                        elapsed=0,
+                        interval=1,
                         anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
                     )
-                )
-            else:
-                vdbench_config_file = create_temp_config_file(vdbench_block_config())
-                access_modes = [
+                ),
+            },
+            constants.CEPHBLOCKPOOL: {
+                "access_modes": [
                     f"{constants.ACCESS_MODE_RWO}-Block",
                     f"{constants.ACCESS_MODE_RWX}-Block",
-                ]
+                ],
+                "config_file": lambda: create_temp_config_file(
+                    vdbench_block_config(threads=10, size="10g", elapsed=0, interval=1)
+                ),
+            },
+        }
 
+        for interface, config in interface_configs.items():
             pvcs = multi_pvc_factory(
                 interface=interface,
                 project=project,
-                access_modes=access_modes,
+                access_modes=config["access_modes"],
                 size=size,
-                num_of_pvc=2,
+                num_of_pvc=4,
             )
+            config_file = config["config_file"]()
 
             for pvc in pvcs:
                 workload = resiliency_workload(
-                    "VDBENCH", pvc, vdbench_config_file=vdbench_config_file
+                    "VDBENCH", pvc, vdbench_config_file=config_file
                 )
                 workload.start_workload()
                 workloads.append(workload)
 
-        # Start scaling in background using the helper
+        scale_workloads = [
+            wl
+            for wl in workloads
+            if wl.pvc.get_pvc_access_mode
+            not in {constants.ACCESS_MODE_RWO, f"{constants.ACCESS_MODE_RWO}-Block"}
+        ]
+
         scaling_thread = self.scaling_helper.start_background_scaling(
-            workloads, delay=30
+            scale_workloads, delay=30
         )
 
         return workloads, scaling_thread
@@ -96,10 +115,8 @@ class TestAppScaleOnStorageComponentFailure:
 
         for workload in workloads:
             try:
-                # Stop workload before capturing logs
+                result = workload.workload_impl.get_all_deployment_pod_logs()
                 workload.stop_workload()
-
-                result = workload.workload_impl._capture_pod_logs()
 
                 if result is None:
                     validation_errors.append(
