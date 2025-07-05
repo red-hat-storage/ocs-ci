@@ -263,15 +263,34 @@ class BusyBox(DRWorkload):
 
             if self.is_placement:
                 # load placement.yaml
+                clusterset_name = (
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                )
                 placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
                 placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
                 self.sub_placement_name = placement_yaml_data["metadata"]["name"]
                 templating.dump_data_to_temp_yaml(
                     placement_yaml_data, self.placement_yaml_file
                 )
-
+                managed_clusterset_binding_yaml_data = templating.load_yaml(
+                    self.managed_clusterset_binding_file
+                )
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "name"
+                ] = clusterset_name
+                managed_clusterset_binding_yaml_data["spec"][
+                    "clusterSet"
+                ] = clusterset_name
+                templating.dump_data_to_temp_yaml(
+                    managed_clusterset_binding_yaml_data,
+                    self.managed_clusterset_binding_file,
+                )
                 if placement_yaml_data["kind"] == "Placement":
                     drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
                     drpc_yaml_data["metadata"][

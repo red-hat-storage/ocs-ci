@@ -7026,6 +7026,7 @@ def dr_workloads_on_managed_clusters(request):
     def teardown():
         failed_to_delete = []
         managed_cluster_instances = [
+            primary_cluster_instances,
             secondary_cluster_instances,
         ]
         for cluster_instances in managed_cluster_instances:
