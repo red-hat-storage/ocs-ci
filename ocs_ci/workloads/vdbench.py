@@ -274,8 +274,6 @@ class VdbenchWorkload:
                     )
                     if "size" in sd:
                         line += f",size={sd['size']}"
-                    if "format" in sd:
-                        line += f",format={sd['format']}"
                 else:
                     # Block device definition
                     line = f"sd=sd{id_},lun={sd['lun']}"

@@ -1,6 +1,7 @@
 import pytest
 import os
 import logging
+import fauxfactory
 from ocs_ci.ocs import constants
 from ocs_ci.resiliency.resiliency_helper import ResiliencyConfig
 from ocs_ci.resiliency.resiliency_workload import workload_object
@@ -369,19 +370,17 @@ def vdbench_filesystem_config():
         elapsed=120,
         interval=5,
         iorate="max",
-        file_format="yes",
     ):
         return {
             "storage_definitions": [
                 {
                     "id": 1,
                     "fsd": True,
-                    "anchor": anchor,
+                    "anchor": f"{anchor}/{fauxfactory.gen_alpha(8).lower()}",
                     "depth": depth,
                     "width": width,
                     "files": files,
                     "size": size,
-                    "format": file_format,
                 }
             ],
             "workload_definitions": [
