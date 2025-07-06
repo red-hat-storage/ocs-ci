@@ -100,12 +100,13 @@ def workload_storageutilization_cephfs(
     return measured_op
 
 
-@pytest.fixture
-def skip_resize_pre_conditions(request) -> bool:
+@pytest.fixture(autouse=True)
+def skip_resize_pre_conditions(request):
     """
-    Fixture that returns True if the test is marked with @pytest.mark.skip_resize_pre_conditions.
+    Autouse fixture that marks the test node with a flag if the
+    'skip_resize_pre_conditions' marker is present.
 
-    Returns:
-        bool: True if the marker is present, False otherwise.
     """
-    return request.node.get_closest_marker("skip_resize_pre_conditions") is not None
+    request.node.skip_resize = (
+        request.node.get_closest_marker("skip_resize_pre_conditions") is not None
+    )

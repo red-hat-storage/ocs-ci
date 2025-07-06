@@ -55,10 +55,10 @@ from ocs_ci.utility.utils import (
     sum_of_two_storage_sizes,
 )
 from ocs_ci.ocs.cluster import (
-    wait_for_percent_used_capacity_reached,
     CephCluster,
     get_percent_used_capacity,
 )
+from ocs_ci.helpers.ceph_helpers import wait_for_percent_used_capacity_reached
 from ocs_ci.ocs.node import select_osd_node
 
 logger = logging.getLogger(__name__)
@@ -120,10 +120,7 @@ class TestStorageAutoscaler(ManageTest):
         logger.info(
             f"The new expected storage size for the storage cluster is {self.new_storage_size}"
         )
-        skip_resize_pre_conditions = request.node.get_closest_marker(
-            "skip_resize_pre_conditions"
-        )
-        if skip_resize_pre_conditions:
+        if getattr(request.node, "skip_resize", False):
             logger.info("Skip the resize osd pre conditions")
         else:
             logger.info("Check the resize osd pre conditions")
@@ -162,6 +159,7 @@ class TestStorageAutoscaler(ManageTest):
             target_percentage (int): The target percentage of cluster storage usage to reach.
             bs (str): the Block size that need to used for the prefill.
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
+
         """
         logger.info(
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
@@ -246,6 +244,24 @@ class TestStorageAutoscaler(ManageTest):
             self.run_io_on_pods(self.pods_for_run_io, size="2G", runtime=runtime)
 
     def verify_post_resize_osd_steps(self):
+        """
+        Perform and validate post-OSD-resize checks on the Ceph cluster.
+
+        This method verifies the correctness and health of the cluster after an OSD resize
+        operation has taken place. It includes:
+
+        - Validation of old and new OSD PVCs, PVs, and pods after resize.
+        - Optional data integrity verification using md5sum checks if
+        'self.create_resources_for_integrity' is True.
+        - Optional verification of OSD-level encryption if encryption at rest is enabled.
+        - Final cluster health check to ensure Ceph is fully operational post-resize.
+
+        Raises:
+            StorageSizeNotReflectedException: If the current storage size, PVCs, PVs, and ceph capacity
+                are not in the expected size.
+            AssertionError: If the md5sum to the ceph health checks failed.
+
+        """
         ceph_verification_steps_post_resize_osd(
             self.old_osd_pods,
             self.old_osd_pvcs,
@@ -296,6 +312,7 @@ class TestStorageAutoscaler(ManageTest):
             create_additional_resources (bool): If True, creates PVCs and pods post-scaling
                 and runs I/O to verify continued cluster functionality. Defaults to True.
             cleanup_cluster (bool): Whether to call self.cleanup_cluster() as part of verification
+
         """
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -348,6 +365,7 @@ class TestStorageAutoscaler(ManageTest):
 
         Raises:
             AssertionError: If any of the current cluster values differ from the initial values.
+
         """
         current_storage_size = get_storage_size()
         current_osd_count = get_osd_count()

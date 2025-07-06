@@ -196,6 +196,11 @@ def safe_teardown_delete_all_autoscalers(namespace=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
+    autoscaler_names = get_all_storage_autoscaler_names(namespace)
+    if not autoscaler_names:
+        logger.info("All the autoscaler objects have been deleted — skipping wait.")
+        return
+
     cleanup_cluster_time = config.RUN.get("cleanup_cluster_time")
     if not cleanup_cluster_time:
         logger.info("No last cleanup cluster time recorded — skipping wait.")
