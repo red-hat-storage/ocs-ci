@@ -322,7 +322,7 @@ def fetch_rados_namespaces(namespace=None):
         namespace(str): cluster namespace
 
     Returns:
-        bool: True if the radosnamespace exists, False otherwise
+        list: list of rados namespaces
     """
     logger.info("Fetch radosnamespaces exist")
     if not namespace:
@@ -332,6 +332,29 @@ def fetch_rados_namespaces(namespace=None):
     sample = result["items"]
     rados_ns_list = [item.get("metadata").get("name") for item in sample]
     return rados_ns_list
+
+
+def fetch_cephfilesystem_subvolume_groups(namespace=None):
+    """
+    Fetch the list of CephFilesystemSubvolumeGroups in the specified namespace.
+
+    Args:
+        namespace (str): The namespace to search for CephFilesystemSubvolumeGroups.
+                         If None, defaults to the cluster namespace from config.
+
+    Returns:
+        list: A list of names of CephFilesystemSubvolumeGroups.
+
+    """
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    subvolume_group = ocp.OCP(
+        kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
+        namespace=namespace,
+    )
+    result = subvolume_group.get()
+    sample = result["items"]
+    return [item.get("metadata").get("name") for item in sample]
 
 
 def check_phase_of_rados_namespace(

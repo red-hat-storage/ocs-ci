@@ -45,6 +45,8 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.storageconsumer import (
     create_storage_consumer_on_default_cluster,
+    check_consumers_rns,
+    check_consumers_svg,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
@@ -156,6 +158,20 @@ def apply_cluster_roles_wa(cluster_names):
             )
         except CommandFailed:
             logger.warning("rbac w/a already exist")
+
+
+@if_version(">4.18")
+def verify_backing_ceph_storage_for_clients():
+    """
+    Verify that backing Ceph storage classes exist on the Provider cluster
+
+    Returns:
+        bool: T
+    """
+    logger.info("Verify every client has isolated Ceph logical structure")
+
+    all_checks = [check_consumers_svg(), check_consumers_rns()]
+    return all(all_checks)
 
 
 class HostedClients(HyperShiftBase):
@@ -344,6 +360,10 @@ class HostedClients(HyperShiftBase):
         assert all(
             hosted_odf_storage_verified
         ), "Storage is not available on all hosted ODF clusters"
+        assert (
+            verify_backing_ceph_storage_for_clients()
+        ), "Backing Ceph storage verification failed for one or more clients"
+
         return hosted_odf_clusters_installed
 
     def verify_client_cluster_storage(self, cluster_name):

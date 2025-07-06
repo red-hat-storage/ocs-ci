@@ -1256,6 +1256,22 @@ def get_cephfs_name():
     return result[0]["name"]
 
 
+def get_cephfs_subvolumegroup_names():
+    """
+    Get all CephFS subvolume groups present in the cluster.
+
+    Returns:
+        list: Names of all CephFS subvolume groups
+
+    """
+    cephfs_name = config.ENV_DATA.get("cephfs_name") or get_cephfs_name()
+    ct_pod = pod.get_ceph_tools_pod()
+    subvolume_groups = ct_pod.exec_ceph_cmd(
+        ceph_cmd=f"ceph fs subvolumegroup ls {cephfs_name}", format=None
+    )
+    return [sg["name"] for sg in subvolume_groups]
+
+
 @retry(exceptions.CommandFailed, tries=5, delay=10, backoff=1)
 def pull_images(image_name):
     """
