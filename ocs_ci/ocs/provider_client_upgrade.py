@@ -4,6 +4,8 @@ All provider client operator upgrades implemented here
 """
 
 import logging
+
+from ocs_ci.deployment.hosted_cluster import HostedODF
 from ocs_ci.ocs.dr_upgrade import DRUpgrade
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocs_upgrade
@@ -135,6 +137,44 @@ class OperatorUpgrade(ProviderUpgrade):
         except Exception as e:
             log.error(f"Failed to upgrade lso operator: {e}")
 
+    def bump_ocs_version_on_clients(self, cluster_names=None):
+        """
+        Bump the OCS version to the latest version available in the registry
+
+        Args:
+            cluster_names (list): List of cluster names to upgrade. If None, all clusters will be upgraded.
+
+        """
+        log.info(
+            "Bumping OCS version to the latest available in the registry of client clusters"
+        )
+
+        if not cluster_names:
+            cluster_names = list(config.ENV_DATA.get("clusters").keys())
+
+        for cluster_name in cluster_names:
+            log.info(
+                f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
+            )
+            try:
+                hosted_odf = HostedODF(cluster_name)
+                if not hosted_odf.odf_client_installed():
+                    log.info(
+                        f"ODF client operator not installed on HCP cluster '{cluster_name}', skipping this client"
+                    )
+                    continue
+                hosted_odf.create_catalog_source(
+                    reapply=True,
+                    odf_version_tag=f"latest-stable-{self.upgrade_version}",
+                )
+            except Exception as e:
+                # we don't want to abort the upgrade process if one client upgrade fails because:
+                # It will be easier to address issue manually with one client
+                # It allows to run negative tests, when one client fails to upgrade
+                log.error(
+                    f"Failed to bump ODF client operator version on hosted OCP cluster '{cluster_name}': {e}"
+                )
+
 
 class ProviderClusterOperatorUpgrade(ProviderUpgrade):
     """
@@ -149,6 +189,8 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
         try:
             log.info("Starting the operator upgrade process...")
             operator_upgrade = OperatorUpgrade()
+            # Bump OCS version on clients. This function will not fail upgrade if bump of any client fails
+            operator_upgrade.bump_ocs_version_on_clients()
             ocs_upgrade.run_ocs_upgrade()
             operator_upgrade.run_operators_upgrade()
             log.info("Operator upgrade completed successfully.")
