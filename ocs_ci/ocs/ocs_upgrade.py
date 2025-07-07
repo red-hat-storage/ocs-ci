@@ -142,17 +142,12 @@ def get_expected_noobaa_pod_count(upgrade_version):
         int: number of expected noobaa pods
 
     """
-    default_noobaa_pods = 4
-    if (
-        config.ENV_DATA.get("mcg_only_deployment")
-        and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
-        and config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
-    ):
-        default_noobaa_pods = 5 if upgrade_version >= parse_version("4.19") else 4
-
-    if upgrade_version >= parse_version("4.19"):
-        log.info("Increased default noobaa pod count by 1 due to cnpg pod")
-        default_noobaa_pods += 1
+    expected_noobaa_pods = [
+        "noobaa-core-0",
+        "noobaa-operator",
+        "noobaa-db-pg-cluster-1",
+        "noobaa-db-pg-cluster-2",
+    ]
 
     endpoint_count = 0
     noobaa_pod_obj = get_noobaa_pods()
@@ -160,9 +155,18 @@ def get_expected_noobaa_pod_count(upgrade_version):
     logger.info(f"Current noobaa pods under validation: {noobaa_pod_names}")
     for pod in noobaa_pod_obj:
         if "pv-backingstore" in pod.name:
-            default_noobaa_pods += 1
+            expected_noobaa_pods.append(pod.name)
+        if upgrade_version >= parse_version("4.19"):
+            if "noobaa-default-backing-store" in pod.name:
+                logger.info(
+                    "In some cases like MCG only or HCI we are counting noobaa-default-backing-store"
+                )
+                expected_noobaa_pods.append(pod.name)
+            if "cnpg-controller-manager" in pod.name:
+                expected_noobaa_pods.append(pod.name)
         if "noobaa-endpoint" in pod.name:
             endpoint_count += 1
+            expected_noobaa_pods.append(pod.name)
 
     noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
     resource = noobaa.get()["items"][0]
@@ -177,7 +181,11 @@ def get_expected_noobaa_pod_count(upgrade_version):
             f"Endpoint pod count {endpoint_count} not in allowed range [{min_endpoints}, {max_endpoints}]"
         )
 
-    return default_noobaa_pods + endpoint_count
+    if len(noobaa_pod_obj) != len(expected_noobaa_pods):
+        raise ValueError(
+            f"Expected noobaa pods: {expected_noobaa_pods} do not match actual noobaa pods: {noobaa_pod_names}"
+        )
+    return len(noobaa_pod_obj)
 
 
 @retry(Exception, tries=3, delay=60, backoff=1)
