@@ -98,7 +98,6 @@ class PerfDash(object):
         """
         log.info("Creating DB connector and connect to it")
         try:
-            log.info(f"sellll{self.creds}")
             self.cnx = mysql.connector.connect(**self.creds)
             self.cursor = self.cnx.cursor()
         except Exception as err:
