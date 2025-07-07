@@ -10082,7 +10082,6 @@ def vm_snapshot_restore_fixture(request):
         """
         from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
         from ocp_resources.virtual_machine_restore import VirtualMachineRestore
-        from ocs_ci.utility.utils import create_unique_resource_name
 
         snapshot_name = f"snapshot-{vm.name}"
         vm_snapshot = VirtualMachineSnapshot(
