@@ -130,7 +130,14 @@ class ExternalCluster(object):
 
         # remove user 'rgw-admin-ops-user' if it exists since user creation is handled by
         # external python script with necessary caps
-        self.remove_rgw_user()
+        if config.MULTICLUSTER.get(
+            "multicluster_mode"
+        ) == constants.MDR_MODE and not config.MULTICLUSTER.get("primary_cluster"):
+            logger.info(
+                "Skipping removal of rgw-admin-ops-user user for non primary cluster in MDR setup"
+            )
+        else:
+            self.remove_rgw_user()
 
         if config.EXTERNAL_MODE.get("run_as_user"):
             ceph_user = config.EXTERNAL_MODE["run_as_user"]
