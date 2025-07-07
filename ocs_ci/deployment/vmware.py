@@ -1633,7 +1633,8 @@ class VSPHEREIPI(VSPHEREBASE):
             config.ENV_DATA["vsphere_password"],
         )
         try:
-            all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+            infra_id = get_infra_id(self.cluster_path)
+            all_vms = vsphere.get_vms_by_string(infra_id)
             vsphere.stop_vms(all_vms)
         except Exception as e:
             logger.error(
