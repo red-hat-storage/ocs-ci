@@ -4,8 +4,6 @@ import functools
 from ocs_ci.framework import config
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 
-# from ocs_ci.ocs.constants import
-
 logger = logging.getLogger(__name__)
 
 
@@ -182,6 +180,12 @@ def enable_high_recovery(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        # Import here to avoid circular loop
+        from ocs_ci.deployment.helpers.odf_deployment_helpers import (
+            set_ceph_mclock_high_client_recovery_profile,
+            set_ceph_mclock_balanced_profile,
+        )
+
         odf_cli_runner = safe_exec()(odf_cli_setup_helper)()
         if not odf_cli_runner:
             logger.warning(
@@ -199,11 +203,18 @@ def enable_high_recovery(func):
         logger.info("Setting recovery profile to 'high_recovery_ops'")
         safe_exec()(odf_cli_runner.run_set_recovery_profile_high)()
 
+        logger.info("Setting mclock recovery profile to 'high_recovery_ops'")
+        safe_exec()(set_ceph_mclock_high_client_recovery_profile)()
+
         try:
             return func(*args, **kwargs)
         finally:
             logger.info(f"Switch to the original recovery profile '{original_profile}'")
             safe_exec()(odf_cli_runner.run_set_recovery_profile)(original_profile)
+            logger.info(
+                "Setting mclock recovery profile to the default 'balanced' profile"
+            )
+            safe_exec()(set_ceph_mclock_balanced_profile)()
 
     return wrapper
 

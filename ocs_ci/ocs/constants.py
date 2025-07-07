@@ -3402,3 +3402,8 @@ PROMETHEUS_RECONCILE_TIMEOUT = 660
 LOW_RECOVERY_OPS = "low_recovery_ops"
 BALANCED = "balanced"
 HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# mclock_recovery_profiles
+MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
+MCLOCK_BALANCED = "balanced"
+MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
