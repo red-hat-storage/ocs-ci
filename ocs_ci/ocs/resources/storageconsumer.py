@@ -11,7 +11,7 @@ from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.managedservice import get_consumer_names
-from ocs_ci.ocs.rados_utils import fetch_rados_namespaces
+from ocs_ci.ocs.rados_utils import fetch_rados_namespaces, fetch_pool_names
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.version import if_version
@@ -815,6 +815,7 @@ def get_ready_consumers():
 
     Returns:
         list: List of names of storage consumers that are in READY state.
+
     """
     if config.ENV_DATA.get("cluster_type") == "provider":
         cluster_index = config.get_provider_index()
@@ -847,6 +848,7 @@ def check_consumer_rns(consumer_name, pool_list, rns_list):
 
     Returns:
        bool: True if RNS found for each consumer over all pools (excluding exception list), False otherwise.
+
     """
     log.info(f"Verifying Rados namespaces for consumer {consumer_name}")
     excluded_pools = {"builtin-mgr", "ocs-storagecluster-cephnfs-builtin-pool"}
@@ -887,21 +889,12 @@ def check_consumers_rns():
     else:
         cluster_index = config.default_cluster_index
 
-    consumer_names = get_ready_consumers()
-
     with config.RunWithConfigContext(cluster_index):
         log.info(
             f"Running RNS verification for consumers on cluster {config.cluster_ctx.ENV_DATA['cluster_name']}"
         )
-        pool_obj = (
-            ocp.OCP(
-                kind=constants.CEPHBLOCKPOOL,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )
-            .get()
-            .get("items")
-        )
-        pool_names = [pool["metadata"]["name"] for pool in pool_obj]
+        consumer_names = get_ready_consumers()
+        pool_names = fetch_pool_names()
         rados_namespaces = fetch_rados_namespaces(config.ENV_DATA["cluster_namespace"])
 
         for consumer_name in consumer_names:
@@ -960,15 +953,13 @@ def check_consumers_svg():
     else:
         cluster_index = config.default_cluster_index
 
-    consumer_names = get_ready_consumers()
-
     with config.RunWithConfigContext(cluster_index):
         svg_names = get_cephfs_subvolumegroup_names()
         filesystems = ocp.OCP(
             kind=constants.CEPHFILESYSTEM,
             namespace=config.ENV_DATA["cluster_namespace"],
         ).get()
-
+        consumer_names = get_ready_consumers()
         volume_names = [fs["metadata"]["name"] for fs in filesystems.get("items", [])]
 
         for consumer_name in consumer_names:
