@@ -1380,6 +1380,7 @@ class TestS3BucketPolicy(MCGTest):
             "IBMCOS-OC",
         ],
     )
+    @tier1
     def test_public_access_block_anonymous(
         self, mcg_obj, bucket_factory, awscli_pod_session, bucketclass_dict
     ):
