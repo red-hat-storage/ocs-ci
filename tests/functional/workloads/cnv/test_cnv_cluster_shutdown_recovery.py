@@ -33,7 +33,13 @@ class TestVmShutdownStart(E2ETest):
         argnames=["force"],
         argvalues=[
             pytest.param(True, marks=pytest.mark.polarion_id("OCS-6304")),
-            pytest.param(False, marks=pytest.mark.polarion_id("OCS-6316")),
+            pytest.param(
+                False,
+                marks=[
+                    pytest.mark.polarion_id("OCS-6316"),
+                    pytest.mark.jira("OCPBUGS-58027", run=False),
+                ],
+            ),
         ],
     )
     def test_vm_abrupt_graceful_shutdown_cluster(
