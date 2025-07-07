@@ -1392,8 +1392,10 @@ class TestS3BucketPolicy(MCGTest):
         2. Verify that anonymous user cannot list the bucket content
         3. Put "allow all" policy to the bucket
         4. Verify that anonymous user can list the bucket content
-        5. Put Public Access Block to the bucket
+        5. Put Public Access Block with Block/Restrict=True to the bucket
         6. Verify that anonymous user cannot list the bucket content again.
+        7. Put Public Access Block with Block/Restrict=False to the bucket
+        8. Verify that anonymous user can list the bucket content again.
         Args:
             mcg_obj (obj): An object representing the current state of the MCG in the cluster
             awscli_pod_session (pod): A pod running the AWSCLI tools
@@ -1476,6 +1478,35 @@ class TestS3BucketPolicy(MCGTest):
 
         TestS3BucketPolicy.check_ls_command(
             mcg_obj, awscli_pod_session, bucket_name, file_name, False
+        )
+
+        # Put public access block configuration
+        public_access_block_configuration = {
+            "BlockPublicPolicy": False,
+            "RestrictPublicBuckets": False,
+        }
+        logger.info(
+            f"Putting public access block configuration {public_access_block_configuration} "
+            f"on bucket: {bucket_name}"
+        )
+        put_public_access_block(mcg_obj, bucket_name, public_access_block_configuration)
+
+        # Hardcoded sleep is needed because we lack a confirmation mechanism
+        # we could wait for - even the get_public_access_block result has been observed to be
+        # unreliable in confirming whether the public access block is actually taking effect
+        logger.info(
+            f"Waiting for {timeout} seconds for the public access block to take effect"
+        )
+        time.sleep(timeout)
+
+        public_access_block_configuration_defined = (mcg_obj, bucket_name)
+        logger.info(
+            f"Public access block configuration on bucket {bucket_name} is: "
+            f"{public_access_block_configuration_defined}"
+        )
+
+        TestS3BucketPolicy.check_ls_command(
+            mcg_obj, awscli_pod_session, bucket_name, file_name, True
         )
 
 
