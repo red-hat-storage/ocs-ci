@@ -1474,38 +1474,16 @@ def node_replacement_verification_steps_ceph_side(
     if not pod.check_pods_after_node_replacement():
         return False
 
-    node_names_from_ceph_osd_status = get_node_names_from_osd_status()
-    osd_node_names = get_osd_running_nodes()
-    log.info(f"osd node names: {osd_node_names}")
-
-    if new_osd_node_name:
-        log.info(f"New osd node name is: {new_osd_node_name}")
-        log.info(f"Node names from ceph osd status: {node_names_from_ceph_osd_status}")
-        if new_osd_node_name not in node_names_from_ceph_osd_status:
-            log.warning("new osd node name not found in 'ceph osd status' output")
-            return False
-        if new_osd_node_name not in osd_node_names:
-            log.warning("the new osd hostname not found in osd node names")
-            return False
-    else:
-        log.info(
-            "New osd node name is not provided. Continue with the other verification steps..."
-        )
-
-    if (
-        old_node_name in node_names_from_ceph_osd_status
-        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
-    ):
-        log.warning("old node name found in 'ceph osd status' output")
+    sample = TimeoutSampler(
+        timeout=240,
+        sleep=20,
+        func=verify_nodes_in_ceph_osd_status,
+        old_node_name=old_node_name,
+        new_osd_node_name=new_osd_node_name,
+    )
+    if not sample.wait_for_func_status(result=True):
+        log.warning("Verify the node names in the Ceph OSD status failed")
         return False
-
-    if (
-        old_node_name in node_names_from_ceph_osd_status
-        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
-    ):
-        log.warning("the old hostname found in osd node names")
-        return False
-
     from ocs_ci.ocs.cluster import check_ceph_osd_tree_after_node_replacement
 
     if not check_ceph_osd_tree_after_node_replacement():
@@ -3375,3 +3353,52 @@ def apply_node_affinity_for_noobaa_pod():
     else:
         log.error("'noobaa-standalone' placement is missing or empty.")
         return False
+
+
+def verify_nodes_in_ceph_osd_status(old_node_name, new_osd_node_name):
+    """
+    Verify the node names in the Ceph OSD status.
+
+    This function checks that the old node no longer appears in the OSD status output,
+    and the new node does appear.
+
+    Args:
+        old_node_name (str): The name of the old node that has been removed.
+        new_osd_node_name (str): The name of the new node expected to appear in OSD nodes.
+
+    Returns:
+        bool: True if the verification passes; False otherwise.
+    """
+    node_names_from_ceph_osd_status = get_node_names_from_osd_status()
+    osd_node_names = get_osd_running_nodes()
+    log.info(f"OSD node names: {osd_node_names}")
+
+    if new_osd_node_name:
+        log.info(
+            f"New OSD node name is: {new_osd_node_name}. "
+            f"Node names from 'ceph osd status': {node_names_from_ceph_osd_status}"
+        )
+        if new_osd_node_name not in node_names_from_ceph_osd_status:
+            log.warning("New OSD node name not found in 'ceph osd status' output")
+            return False
+        if new_osd_node_name not in osd_node_names:
+            log.warning("New OSD node name not found in OSD running node names")
+            return False
+    else:
+        log.info("New OSD node name not provided. Skipping related checks.")
+
+    if (
+        old_node_name in node_names_from_ceph_osd_status
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
+        log.warning("Old node name found in 'ceph osd status' output")
+        return False
+
+    if (
+        old_node_name in osd_node_names
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
+        log.warning("Old node name found in OSD running node names")
+        return False
+
+    return True
