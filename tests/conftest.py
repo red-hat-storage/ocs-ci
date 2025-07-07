@@ -7580,7 +7580,9 @@ def operator_pods():
 
 
 @pytest.fixture()
-def multi_cnv_workload(request, storageclass_factory, cnv_workload):
+def multi_cnv_workload(
+    request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
+):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
     The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
@@ -7619,9 +7621,6 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
         if encrypted:
             # Setup csi-kms-connection-details configmap
             log.info("Setting up csi-kms-connection-details configmap")
-            pv_encryption_kms_setup_factory = request.getfixturevalue(
-                "pv_encryption_kms_setup_factory"
-            )
             kms = pv_encryption_kms_setup_factory(kv_version="v2")
             log.info("csi-kms-connection-details setup successful")
 
