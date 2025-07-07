@@ -1,9 +1,7 @@
 import logging
-import tempfile
 import time
 
 import pytest
-import boto3
 import botocore.exceptions as boto3exception
 import json
 import uuid
@@ -1470,7 +1468,9 @@ class TestS3BucketPolicy(MCGTest):
         )
         time.sleep(timeout)
 
-        public_access_block_configuration_defined = (mcg_obj, bucket_name)
+        public_access_block_configuration_defined = get_public_access_block(
+            mcg_obj, bucket_name
+        )
         logger.info(
             f"Public access block configuration on bucket {bucket_name} is: "
             f"{public_access_block_configuration_defined}"
@@ -1499,7 +1499,9 @@ class TestS3BucketPolicy(MCGTest):
         )
         time.sleep(timeout)
 
-        public_access_block_configuration_defined = (mcg_obj, bucket_name)
+        public_access_block_configuration_defined = get_public_access_block(
+            mcg_obj, bucket_name
+        )
         logger.info(
             f"Public access block configuration on bucket {bucket_name} is: "
             f"{public_access_block_configuration_defined}"
