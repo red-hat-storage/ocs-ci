@@ -1,7 +1,6 @@
 import logging
 import time
 
-
 from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
@@ -15,7 +14,6 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -153,25 +151,42 @@ class DeploymentUI(PageNavigator):
                 locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
             )
             if self.check_element_text("404"):
-                logger.info("Refresh storage cluster page")
-                self.refresh_page()
-        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
-        time.sleep(60)
+                raise ValueError("Page crashed at the time of Storage System creation")
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
-        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
-        time.sleep(30)
         if self.check_element_text("An error"):
-            logger.info("Refresh storage system page if error occurred")
-            self.refresh_page()
-            time.sleep(30)
+            raise ValueError("Page crashed at the time of Storage System creation")
         if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
         elif config.DEPLOYMENT.get("local_storage"):
             self.install_lso_cluster()
         else:
             self.install_internal_cluster()
+
+    def install_storage_cluster_419_and_above(self):
+        """
+        Install StorageCluster/StorageSystem for ODF 4.19 and above from Data Foundation dashboard under Storage.
+        This is needed as StorageSystem CR and button is removed from Installed Operators page
+        as part of Convergence changes.
+
+        """
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_19:
+            self.nav_odf_default_page()
+            logger.info("Click on 'Storage Systems tab' under the dashboard")
+            self.do_click(
+                locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
+            )
+            logger.info("Click on 'Create StorageSystem' button")
+            self.do_click(
+                locator=self.dep_loc["storage_system_btn"], enable_screenshot=True
+            )
+
+        else:
+            msg = "This flow of Storage System creation should only be used for ODF 4.19 and above"
+            logger.error(msg)
+            raise RuntimeError(msg)
 
     def install_mcg_only_cluster(self):
         """
@@ -424,8 +439,14 @@ class DeploymentUI(PageNavigator):
         """
         Configure OSD Size
         """
+
+        ocs_version = version.get_semantic_ocs_version_from_config()
         device_size = str(config.ENV_DATA.get("device_size"))
-        osd_size = device_size if device_size in osd_sizes else "512"
+        osd_size = (
+            device_size
+            if device_size in osd_sizes
+            else "512" if ocs_version <= "4.18" else "0.5 TiB"
+        )
         logger.info(f"Configure OSD Capacity {osd_size}")
         if self.ocp_version_semantic >= version.VERSION_4_11:
             self.do_click(self.dep_loc["osd_size_dropdown"], enable_screenshot=True)
