@@ -1299,24 +1299,38 @@ class TestS3BucketPolicy(MCGTest):
         ), f"Some bucket_policies are not created : {missing_policies}"
 
     @staticmethod
-    def check_ls_command(
-        mcg_obj, awscli_pod_session, bucket_name, file_name, allow_anonymous
+    def check_commands(
+        mcg_obj, awscli_pod_session, bucket_name, file_name, allow_ls_anonymous
     ):
         """
-        Check that 'ls' command on the bucket works as expected.
-        The expected behavior is:
+        Check that 'ls' and 'cp' commands on the bucket work as expected.
+        The expected behavior of 'ls' is:
             1. Success and finding 'file_name' file with non-anonymous access
             2. Success with anonymous access when 'allow_anonymous' is True
             3. Failure with "Access Denied" on anonymous access when 'allow_anonymous' is False
+        The expected behavior of 'cp' is:
+            1. Success with non-anonymous access
+            2. Failure with "Access Denied" on anonymous access
         Args:
             bucket_name (str): Name of the bucket on which ls should be run
             file_name (str): File to be looked for
-            allow_anonymous (bool): Defines whether 'ls' with anonymous access is allowed
+            allow_ls_anonymous (bool): Defines whether 'ls' with anonymous access is allowed
         Raises:
             UnexpectedBehaviour if the ls is not working as expected
         """
+
+        ls_command = f"ls s3://{bucket_name}/"
+        cp_command = (
+            f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}"
+        )
+
+        awscli_pod_session.exec_cmd_on_pod(
+            command=craft_s3_command(cp_command, mcg_obj=mcg_obj),
+            out_yaml_format=False,
+        )
+
         ls_output = awscli_pod_session.exec_cmd_on_pod(
-            command=craft_s3_command(f"ls s3://{bucket_name}/", mcg_obj=mcg_obj),
+            command=craft_s3_command(ls_command, mcg_obj=mcg_obj),
             out_yaml_format=False,
         )
         if file_name not in ls_output:
@@ -1324,10 +1338,10 @@ class TestS3BucketPolicy(MCGTest):
                 f"ls command doesn't show {file_name} as expected"
             )
 
-        if allow_anonymous:
+        if allow_ls_anonymous:
             awscli_pod_session.exec_cmd_on_pod(
                 command=craft_s3_command(
-                    f"ls s3://{bucket_name}/ --no-sign-request", mcg_obj=mcg_obj
+                    f"{ls_command} --no-sign-request", mcg_obj=mcg_obj
                 ),
                 out_yaml_format=False,
             )
@@ -1335,7 +1349,7 @@ class TestS3BucketPolicy(MCGTest):
             try:
                 awscli_pod_session.exec_cmd_on_pod(
                     command=craft_s3_command(
-                        f"ls s3://{bucket_name}/ --no-sign-request", mcg_obj=mcg_obj
+                        f"{ls_command} --no-sign-request", mcg_obj=mcg_obj
                     ),
                     out_yaml_format=False,
                 )
@@ -1350,11 +1364,31 @@ class TestS3BucketPolicy(MCGTest):
                 else:
                     raise
 
+        # check copy with anonymous user, should always fail
+        try:
+            awscli_pod_session.exec_cmd_on_pod(
+                command=craft_s3_command(
+                    f"{cp_command} --no-sign-request", mcg_obj=mcg_obj
+                ),
+                out_yaml_format=False,
+            )
+            raise UnexpectedBehaviour(
+                "cp command with anonymous user (--no-sign-request) should not be allowed"
+            )
+        except CommandFailed as ex:
+            if "Access Denied" in str(ex):
+                logger.info(
+                    "cp command with anonymous user (--no-sign-request) is not allowed, continue the test"
+                )
+            else:
+                raise
+
     @pytest.mark.parametrize(
-        argnames="bucketclass_dict",
+        argnames=["test_bucket_name", "bucketclass_dict"],
         argvalues=[
+            pytest.param(*["first.bucket", {}]),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}},
+                *["", {"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}}]
             ),
             pytest.param(
                 {
@@ -1373,6 +1407,7 @@ class TestS3BucketPolicy(MCGTest):
             ),
         ],
         ids=[
+            "FIRST-BUCKET",
             "RGW-OC",
             "AWS-OC",
             "AZURE-OC",
@@ -1382,27 +1417,38 @@ class TestS3BucketPolicy(MCGTest):
     )
     @tier1
     def test_public_access_block_anonymous(
-        self, mcg_obj, bucket_factory, awscli_pod_session, bucketclass_dict
+        self,
+        mcg_obj,
+        bucket_factory,
+        awscli_pod_session,
+        test_bucket_name,
+        bucketclass_dict,
     ):
         """
         This test verified that anonymous user cannot access the bucket after public access block settings were applied
         Scenario:
-        1. Create a bucket and write file
-        2. Verify that anonymous user cannot list the bucket content
+        1. Create a bucket (or use predefined bucket) and write file
+        2. Verify that anonymous user cannot list the bucket content and cannot copy to the bucket
         3. Put "allow all" policy to the bucket
-        4. Verify that anonymous user can list the bucket content
+        4. Verify that anonymous user can list the bucket content but still cannot copy to the bucket
         5. Put Public Access Block with Block/Restrict=True to the bucket
-        6. Verify that anonymous user cannot list the bucket content again.
+        6. Verify that anonymous user cannot list the bucket content again and still cannot copy to the bucket
         7. Put Public Access Block with Block/Restrict=False to the bucket
         8. Verify that anonymous user can list the bucket content again.
         Args:
             mcg_obj (obj): An object representing the current state of the MCG in the cluster
             awscli_pod_session (pod): A pod running the AWSCLI tools
             bucket_factory: Calling this fixture creates a new bucket(s)
+            test_bucket_name(str) If is not empty, use the bucket by this name in the test. If empty -- create bucket
+            bucketclass_dict(dict) Parameters for bucket creation, used only if test_bucket_name is empty
 
         """
-        # bucket_name = bucket_factory(amount=1, interface="OC")[0].name
-        bucket_name = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
+
+        bucket_name = (
+            bucket_factory(1, bucketclass=bucketclass_dict)[0].name
+            if not test_bucket_name
+            else test_bucket_name
+        )
 
         # Copy a file to the bucket
         standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
@@ -1411,15 +1457,7 @@ class TestS3BucketPolicy(MCGTest):
         file_name = standard_test_obj_list[0]
         logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
 
-        awscli_pod_session.exec_cmd_on_pod(
-            command=craft_s3_command(
-                f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}",
-                mcg_obj=mcg_obj,
-            ),
-            out_yaml_format=False,
-        )
-
-        TestS3BucketPolicy.check_ls_command(
+        TestS3BucketPolicy.check_commands(
             mcg_obj, awscli_pod_session, bucket_name, file_name, False
         )
 
@@ -1446,7 +1484,7 @@ class TestS3BucketPolicy(MCGTest):
             f"Got bucket policy: {get_policy['Policy']} on bucket {bucket_name}"
         )
 
-        TestS3BucketPolicy.check_ls_command(
+        TestS3BucketPolicy.check_commands(
             mcg_obj, awscli_pod_session, bucket_name, file_name, True
         )
 
@@ -1477,7 +1515,7 @@ class TestS3BucketPolicy(MCGTest):
             f"{public_access_block_configuration_defined}"
         )
 
-        TestS3BucketPolicy.check_ls_command(
+        TestS3BucketPolicy.check_commands(
             mcg_obj, awscli_pod_session, bucket_name, file_name, False
         )
 
@@ -1508,7 +1546,7 @@ class TestS3BucketPolicy(MCGTest):
             f"{public_access_block_configuration_defined}"
         )
 
-        TestS3BucketPolicy.check_ls_command(
+        TestS3BucketPolicy.check_commands(
             mcg_obj, awscli_pod_session, bucket_name, file_name, True
         )
 
