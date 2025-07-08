@@ -2814,13 +2814,13 @@ class Deployment(object):
         logger.info("Creating Konflux Catalogsource for MCE ")
 
         mce_konflux_catsrc_yaml_data = templating.load_yaml(
-            constants.ACM_CATALOGSOURCE_YAML
+            constants.MCE_CATALOGSOURCE_YAML
         )
         mce_konflux_catsrc_yaml_data["spec"][
             "image"
         ] = f"quay.io:443/acm-d/mce-dev-catalog:latest-{config.ENV_DATA.get('mce_version')}"
         mce_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="acm_konflux_catsrc_yaml_data_manifest", delete=False
+            mode="w+", prefix="mce_konflux_catsrc_yaml_data_manifest", delete=False
         )
         templating.dump_data_to_temp_yaml(
             mce_konflux_catsrc_yaml_data, mce_konflux_catsrc_yaml_data_manifest.name
