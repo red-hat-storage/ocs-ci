@@ -2,8 +2,5 @@
 #Perform Failover/Relocate via ACM UI (Combination of ODF>=4.13 and ACM>=2.7 is supported, please look at the code)
 
 RUN:
-  dr_action_via_ui: true
-  rdr_failover_via_ui: true
-  rdr_relocate_via_ui: true
   mdr_failover_via_ui: true
   mdr_relocate_via_ui: true

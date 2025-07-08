@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     rdr,
     turquoise_squad,
     polarion_id,
-    rdr_ui,
 )
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.ocs import constants
@@ -90,7 +89,6 @@ def scale_up_deployment(request):
 @rdr
 @tier1
 @turquoise_squad
-@rdr_ui
 class TestRDRWarningAndAlerting:
     """
     Test class for RDR Warning and Alerting
