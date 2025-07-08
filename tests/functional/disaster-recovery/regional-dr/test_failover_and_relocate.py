@@ -39,56 +39,56 @@ class TestFailoverAndRelocate:
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4430"),
-            id="primary_up-rbd",
+            id="primary_up-rbd-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4427"),
-            id="primary_down-rbd",
+            id="primary_down-rbd-cli",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4730"),
-            id="primary_up-cephfs",
+            id="primary_up-cephfs-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4727"),
-            id="primary_down-cephfs",
+            id="primary_down-cephfs-cli",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHBLOCKPOOL,
             True,  # via_ui = True
             marks=pytest.mark.polarion_id("OCS-6861"),
-            id="primary_up-rbd",
+            id="primary_up-rbd-ui",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             True,  # via_ui = True
             marks=pytest.mark.polarion_id("OCS-4743"),
-            id="primary_down-rbd",
+            id="primary_down-rbd-ui",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
             True,  # via_ui = True
             marks=pytest.mark.polarion_id("OCS-6860"),
-            id="primary_up-cephfs",
+            id="primary_up-cephfs-ui",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             True,  # via_ui = True
             marks=pytest.mark.polarion_id("OCS-6859"),
-            id="primary_down-cephfs",
+            id="primary_down-cephfs-ui",
         ),
     ]
 

@@ -63,7 +63,7 @@ class TestFailover:
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4729"),
-            id="primary_up-cephfs-cli",
+            id="primary_down-cephfs-cli",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
@@ -84,7 +84,7 @@ class TestFailover:
             constants.CEPHFILESYSTEM,
             True,  # via_ui = True
             marks=pytest.mark.polarion_id("OCS-6848"),
-            id="primary_down-cephfs-ui",
+            id="primary_up-cephfs-ui",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
