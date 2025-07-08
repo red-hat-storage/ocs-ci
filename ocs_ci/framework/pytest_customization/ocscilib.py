@@ -558,11 +558,12 @@ def process_cluster_cli_params(config):
         ClusterNameLengthError: If a cluster name is too short or too long
     """
     suffix = ocsci_config.cur_index + 1 if ocsci_config.multicluster else ""
-    if (
-        ocsci_config.multicluster
-        and ocsci_config.ENV_DATA["cluster_type"] == "provider"
-    ):
-        suffix = ""
+    # TODO: remove commented code
+    # if (
+    #     ocsci_config.multicluster
+    #     and ocsci_config.ENV_DATA["cluster_type"] == "provider"
+    # ):
+    #     suffix = ""
     cluster_path = get_cli_param(config, f"cluster_path{suffix}")
 
     if not cluster_path and ocsci_config.multicluster:
