@@ -1364,7 +1364,7 @@ class TestS3BucketPolicy(MCGTest):
                 else:
                     raise
 
-        # check copy with anonymous user, should always fail
+        # check copy with anonymous user, it should always fail
         try:
             awscli_pod_session.exec_cmd_on_pod(
                 command=craft_s3_command(
