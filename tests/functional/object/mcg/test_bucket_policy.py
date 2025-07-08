@@ -1391,19 +1391,34 @@ class TestS3BucketPolicy(MCGTest):
                 *["", {"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}}]
             ),
             pytest.param(
-                {
-                    "interface": "OC",
-                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                },
+                *[
+                    "",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                ]
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                *["", {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}}]
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
+                *["", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}]
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                *["", {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}}]
+            ),
+            pytest.param(
+                *[
+                    "",
+                    {
+                        "interface": "OC",
+                        "namespace_policy_dict": {
+                            "type": "Single",
+                            "namespacestore_dict": {"rgw": [(1, None)]},
+                        },
+                    },
+                ]
             ),
         ],
         ids=[
@@ -1413,6 +1428,7 @@ class TestS3BucketPolicy(MCGTest):
             "AZURE-OC",
             "GCP-OC",
             "IBMCOS-OC",
+            "RGW-NAMESPACE-STORE",
         ],
     )
     @tier1
