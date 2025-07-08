@@ -24,6 +24,7 @@ from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework import config as ocsci_config, Config, config
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS, FUSION_CONF_DIR
 from ocs_ci.ocs.exceptions import (
@@ -34,6 +35,11 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.rados_utils import (
+    fetch_pool_names,
+    fetch_rados_namespaces,
+    fetch_filesystem_names,
+)
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
@@ -45,6 +51,11 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.storageconsumer import (
     create_storage_consumer_on_default_cluster,
+    check_consumers_rns,
+    check_consumers_svg,
+    check_consumer_rns,
+    get_ready_consumers,
+    check_consumer_svg,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
@@ -156,6 +167,19 @@ def apply_cluster_roles_wa(cluster_names):
             )
         except CommandFailed:
             logger.warning("rbac w/a already exist")
+
+
+@if_version(">4.18")
+def verify_backing_ceph_storage_for_clients():
+    """
+    Verify that backing Ceph storage classes exist on the Provider cluster
+
+    Returns:
+        bool: True if all checks passed, False otherwise
+    """
+
+    all_checks = [check_consumers_svg(), check_consumers_rns()]
+    return all(all_checks)
 
 
 class HostedClients(HyperShiftBase):
@@ -332,6 +356,44 @@ class HostedClients(HyperShiftBase):
             if self.storage_installation_requested(name)
         )
 
+        log_step("verify backing Ceph storage for newly deployed clients")
+
+        consumer_names = get_ready_consumers()
+        # we want to validate only consumers that are in ready status, that are newly deployed
+        # and storage installation for them was requested from ENV_DATA.clusters.<cluster_name>.setup_storage_client
+        consumers_to_validate = [
+            consumer_name
+            for consumer_name in consumer_names
+            if any(
+                [
+                    cluster_name
+                    for cluster_name in cluster_names
+                    if (
+                        (cluster_name in consumer_name)
+                        and self.storage_installation_requested(cluster_name)
+                    )
+                ]
+            )
+        ]
+
+        logger.info(
+            f"Consumers to validate: {consumers_to_validate} "
+            f"from all consumers: {consumer_names}"
+        )
+        pool_names = fetch_pool_names()
+        rados_namespaces = fetch_rados_namespaces()
+        svg_names = get_cephfs_subvolumegroup_names()
+        filesystems = fetch_filesystem_names()
+        rns_for_consumer_verified = []
+        svg_for_consumer_verified = []
+        for consumer in consumers_to_validate:
+            consumer_rns_verified = check_consumer_rns(
+                consumer, pool_names, rados_namespaces
+            )
+            consumer_svg_verified = check_consumer_svg(consumer, filesystems, svg_names)
+            rns_for_consumer_verified.append(consumer_rns_verified)
+            svg_for_consumer_verified.append(consumer_svg_verified)
+
         assert (
             hosted_ocp_verification_passed
         ), "Some of the hosted OCP clusters are not ready"
@@ -344,6 +406,13 @@ class HostedClients(HyperShiftBase):
         assert all(
             hosted_odf_storage_verified
         ), "Storage is not available on all hosted ODF clusters"
+        assert all(
+            rns_for_consumer_verified
+        ), "RNS for consumers of deployed clusters failed verification"
+        assert all(
+            svg_for_consumer_verified
+        ), "SVG for consumers of deployed clusters failed verification"
+
         return hosted_odf_clusters_installed
 
     def verify_client_cluster_storage(self, cluster_name):

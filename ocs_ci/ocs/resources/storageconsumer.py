@@ -8,7 +8,10 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
+from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.managedservice import get_consumer_names
+from ocs_ci.ocs.rados_utils import fetch_rados_namespaces, fetch_pool_names
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.version import if_version
@@ -177,6 +180,18 @@ class StorageConsumer:
         """
         with config.RunWithConfigContext(self.consumer_context):
             return self.ocp.get(resource_name=self.name).get("status").get("client")
+
+    @if_version(">4.18")
+    def get_state(self):
+        """
+        Get state from storageconsumer resource.
+
+        Returns:
+            string: state of the storage consumer
+
+        """
+        with config.RunWithConfigContext(self.consumer_context):
+            return self.ocp.get(resource_name=self.name).get("status").get("state")
 
     def get_storage_quota_in_gib(self):
         """
@@ -792,3 +807,173 @@ def verify_storage_consumer_resources(
     assert all(
         ceph_data_on_consumer_match.values()
     ), "StorageConsumer config map data does not match expected values."
+
+
+def get_ready_consumers():
+    """
+    Get the names of all storage consumers that are in READY state.
+
+    Returns:
+        list: List of names of storage consumers that are in READY state.
+
+    """
+    if config.ENV_DATA.get("cluster_type") == "provider":
+        cluster_index = config.get_provider_index()
+    else:
+        cluster_index = config.default_cluster_index
+
+    consumer_names = get_consumer_names()
+
+    for consumer_name in consumer_names:
+        sc = StorageConsumer(
+            consumer_name,
+            config.ENV_DATA["cluster_namespace"],
+            cluster_index,
+        )
+        if sc.get_state() != constants.STATUS_READY:
+            log.warning(f"StorageConsumer {consumer_name} is not in READY state")
+            consumer_names.remove(consumer_name)
+    return consumer_names
+
+
+def check_consumer_rns(consumer_name, pool_list, rns_list):
+    """
+    Verify that the Rados namespaces on the consumer match the expected ones.
+    Each pool must have one RNS for each Storage Consumer.
+
+    Args:
+       consumer_name (str): Name of the storage consumer
+       pool_list (list): List of pool names
+       rns_list (list): List of Rados namespaces
+
+    Returns:
+       bool: True if RNS found for each consumer over all pools (excluding exception list), False otherwise.
+
+    """
+    log.info(f"Verifying Rados namespaces for consumer {consumer_name}")
+    excluded_pools = {"builtin-mgr", "ocs-storagecluster-cephnfs-builtin-pool"}
+    consumer_rns_valid = {}
+
+    for pool in pool_list:
+        if pool in excluded_pools:
+            continue
+        expected_rns_name = (
+            f"{pool}-builtin-implicit"
+            if consumer_name == "internal"
+            else f"{pool}-{consumer_name}"
+        )
+
+        if expected_rns_name in rns_list:
+            consumer_rns_valid[f"{consumer_name}/{pool}"] = True
+        else:
+            log.warning(f"No RNS found for pool {pool} and consumer {consumer_name}")
+            consumer_rns_valid[f"{consumer_name}/{pool}"] = False
+
+    log.info(f"Consumer RNS: {consumer_rns_valid}")
+    return all(consumer_rns_valid.values())
+
+
+@if_version(">4.18")
+def check_consumers_rns():
+    """
+    Verify that the Rados namespaces on the consumer match the expected ones.
+    Function is for all clusters that host ceph and are post-convergence.
+
+    Returns:
+        bool: True if RNS found for each consumer over all pools, False otherwise.
+
+    """
+    # we can not use 'current' cluster index, because it is more likely not a provider cluster than a 'default'
+    if config.ENV_DATA.get("cluster_type") == "provider":
+        cluster_index = config.get_provider_index()
+    else:
+        cluster_index = config.default_cluster_index
+
+    with config.RunWithConfigContext(cluster_index):
+        log.info(
+            f"Running RNS verification for consumers on cluster {config.cluster_ctx.ENV_DATA['cluster_name']}"
+        )
+        consumer_names = get_ready_consumers()
+        pool_names = fetch_pool_names()
+        rados_namespaces = fetch_rados_namespaces(config.ENV_DATA["cluster_namespace"])
+
+        for consumer_name in consumer_names:
+            log.info(f"Verifying Rados namespaces for consumer {consumer_name}")
+            if not check_consumer_rns(consumer_name, pool_names, rados_namespaces):
+                return False
+        log.info("All Rados namespaces verified successfully.")
+        return True
+
+
+def check_consumer_svg(consumer_name, volume_list, svg_list):
+    """
+    Verify that the subvolumegroup on the consumer matches the expected one.
+
+    Args:
+        consumer_name (str): Name of the storage consumer
+        volume_list (list): List of volume names
+        svg_list (list): List of subvolumegroup names
+
+    Returns:
+        bool: True if subvolumegroup found for each consumer, False otherwise.
+
+    """
+    log.info(f"Verifying subvolumegroup for consumer {consumer_name}")
+    consumer_svg_valid = {}
+    for volume in volume_list:
+        expected_svg_name = consumer_name if consumer_name != "internal" else "csi"
+
+        if expected_svg_name in svg_list:
+            consumer_svg_valid[f"{consumer_name}/{volume}"] = True
+        else:
+            log.warning(
+                f"No subvolumegroup found for volume {volume} and consumer {consumer_name}"
+            )
+            consumer_svg_valid[f"{consumer_name}/{volume}"] = False
+
+    log.info(f"Consumer subvolumegroup: {consumer_svg_valid}")
+    return all(consumer_svg_valid.values())
+
+
+@if_version(">4.18")
+def check_consumers_svg():
+    """
+    Verify that the subvolumegroup on the consumer matches the expected one.
+    Function is for all clusters that host ceph and are post-convergence.
+    Although only one volume/filesystem is currently supported, this function is designed to check
+    all volumes have svg dedicated for consumer.
+
+    Returns:
+        bool: True if subvolumegroup found for each consumer, False otherwise.
+
+    """
+    # we can not use 'current' cluster index, because it is more likely not a provider cluster than a 'default'
+    if config.ENV_DATA.get("cluster_type") == "provider":
+        cluster_index = config.get_provider_index()
+    else:
+        cluster_index = config.default_cluster_index
+
+    with config.RunWithConfigContext(cluster_index):
+        svg_names = get_cephfs_subvolumegroup_names()
+        filesystems = ocp.OCP(
+            kind=constants.CEPHFILESYSTEM,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).get()
+        consumer_names = get_ready_consumers()
+        volume_names = [fs["metadata"]["name"] for fs in filesystems.get("items", [])]
+
+        for consumer_name in consumer_names:
+            log.info(f"Verifying subvolumegroup for consumer {consumer_name}")
+
+            if not check_consumer_svg(consumer_name, volume_names, svg_names):
+                log.error(
+                    f"Subvolumegroup verification failed for consumer {consumer_name}."
+                )
+                return False
+            else:
+                log.info(
+                    f"Subvolumegroup verified successfully for consumer {consumer_name}"
+                )
+
+        log.info("All subvolumegroup verified successfully.")
+        return True
