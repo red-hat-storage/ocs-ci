@@ -9,11 +9,12 @@ pytest which proccess config and passes all params to pytest.
 
 import logging
 import os
+import shutil
+
 import pandas as pd
 import pytest
 from junitparser import JUnitXml
 import ocs_ci.utility.memory
-from ocs_ci.deployment.helpers.hypershift_base import create_cluster_dir
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.logger_factory import set_log_record_factory
 from ocs_ci.framework.exceptions import (
@@ -545,6 +546,23 @@ def get_cli_param(config, name_of_param, default=None):
     return cli_param
 
 
+def set_cli_param(config, name_of_param, value):
+    """
+    This is helper function which set cli parameter in RUN section in
+    cli_params
+
+    Args:
+        config (pytest.config): Pytest config object
+        name_of_param (str): cli parameter name
+        value (any): value of parameter
+
+    Returns:
+        None
+    """
+    ocsci_config.RUN["cli_params"][name_of_param] = value
+    setattr(config.option, name_of_param, value)
+
+
 def process_cluster_cli_params(config):
     """
     Process cluster related cli parameters
@@ -558,20 +576,39 @@ def process_cluster_cli_params(config):
         ClusterNameLengthError: If a cluster name is too short or too long
     """
     suffix = ocsci_config.cur_index + 1 if ocsci_config.multicluster else ""
-    # TODO: remove commented code
-    # if (
-    #     ocsci_config.multicluster
-    #     and ocsci_config.ENV_DATA["cluster_type"] == "provider"
-    # ):
-    #     suffix = ""
     cluster_path = get_cli_param(config, f"cluster_path{suffix}")
 
+    # # # # # # # # # # # This block is an overwrite logic for dynamic configuration adjustments  # # # # # # # # # # #
     if not cluster_path and ocsci_config.multicluster:
-        if ocsci_config.ENV_DATA["cluster_type"] in ["consumer", "hci_client"]:
-            cluster_name = ocsci_config.ENV_DATA["cluster_name"]
-            cluster_path = ocsci_config.ENV_DATA["cluster_path"] or create_cluster_dir(
-                cluster_name
+
+        # Problem:
+        # In case of setting up multiple configuration files provided to run-ci, script expects path to have suffix + 1
+        # When running run-ci with single configuration, suffix is empty, but pytest script sets config.multicluster
+        # in time when loading marks.py module, if platform is 'hci_baremetal'
+        # When script dynamically adds configuration, makes ocsci_config.multicluster and adds suffix + 1 to config_path
+        # This leads to ClusterPathNotProvidedError
+        #
+        # Solution:
+        # to make script reach path in both scenarios we will copy content of cluster_path that does not have suffix to
+        # cluster_path that has suffix "1" or higher
+        if suffix:
+            if not os.path.exists(ocsci_config.ENV_DATA["cluster_path"]):
+                raise ClusterPathNotProvidedError(
+                    "Cluster path is not provided and cluster_path does not exist"
+                )
+            parent_path = os.path.dirname(ocsci_config.ENV_DATA["cluster_path"])
+            if suffix > 1:
+                # historically cluster_path for client clusters is set to
+                # '/ocs-ci/cluster_path/clusters/<cl-419-a>/openshift-cluster-dir', so we want to create path like
+                # '/ocs-ci/cluster_path/clusters/cluster_path2 for auth directory of a client cluster
+                parent_path = os.path.dirname(parent_path)
+            cluster_path = os.path.join(parent_path, f"cluster_path{suffix}")
+            # we do not want to move files from original folder and preserve original cluster folder because
+            # we don't want to bind cluster to some incremental number, because cluster may dynamically change
+            shutil.copytree(
+                ocsci_config.ENV_DATA["cluster_path"], cluster_path, dirs_exist_ok=True
             )
+            set_cli_param(config, f"cluster_path{suffix}", cluster_path)
 
     if not cluster_path:
         raise ClusterPathNotProvidedError()
@@ -634,10 +671,23 @@ def process_cluster_cli_params(config):
     OCP.set_kubeconfig(os.path.join(cluster_path, kubeconfig_location))
     cluster_name = get_cli_param(config, f"cluster_name{suffix}")
 
-    if not cluster_name:
-        cluster_name = ocsci_config.ENV_DATA.get("cluster_name")
-        if not cluster_name:
-            raise ClusterNameNotProvidedError()
+    # # # # # # # # # # # This block is an overwrite logic for dynamic configuration adjustments  # # # # # # # # # # #
+    if not cluster_name and ocsci_config.multicluster:
+        if ocsci_config.ENV_DATA["cluster_type"] == "provider":
+            # If cluster_name is not provided, and we are in multicluster mode
+            # we will create cluster_name with suffix
+            provider_name = get_cli_param(config, "cluster_name")
+            set_cli_param(config, f"cluster_name{suffix}", provider_name)
+            cluster_name = get_cli_param(config, f"cluster_name{suffix}")
+        elif ocsci_config.ENV_DATA["cluster_type"] in [
+            "consumer",
+            "hci_client",
+        ]:
+            # If cluster_name is not provided, and we are in multicluster mode
+            # we'll assign existing name to config.'cluster_name{suffix}' to have matching provided and dynamic config's
+            cluster_name = ocsci_config.ENV_DATA.get("cluster_name")
+            set_cli_param(config, f"cluster_name{suffix}", cluster_name)
+            cluster_name = get_cli_param(config, f"cluster_name{suffix}")
 
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
         config, "teardown", default=False

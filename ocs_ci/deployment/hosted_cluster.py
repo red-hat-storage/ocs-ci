@@ -2063,7 +2063,7 @@ def hypershift_cluster_factory(
             return
         deployed_clusters = list(cl_name_ver_dict.keys())
 
-        if constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG in duty:
+        if constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_FORCE_PUSH_CONFIG in duty:
             existing_clusters = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
