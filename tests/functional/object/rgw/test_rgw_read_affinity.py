@@ -49,7 +49,7 @@ class TestRGWReadAffinityMode:
             sample = TimeoutSampler(
                 timeout=60,
                 sleep=10,
-                func=self.get_read_affinity_from_ceph,
+                func=self.get_rgw_read_affinity_from_ceph,
             )
             sample.wait_for_func_value(DEFAULT_READ_AFFINITY)
 
@@ -100,7 +100,7 @@ class TestRGWReadAffinityMode:
         sample = TimeoutSampler(
             timeout=60,
             sleep=10,
-            func=self.get_read_affinity_from_ceph,
+            func=self.get_rgw_read_affinity_from_ceph,
         )
         sample.wait_for_func_value(DEFAULT_READ_AFFINITY)
 
@@ -130,6 +130,6 @@ class TestRGWReadAffinityMode:
             sample = TimeoutSampler(
                 timeout=60,
                 sleep=10,
-                func=self.get_read_affinity_from_ceph,
+                func=self.get_rgw_read_affinity_from_ceph,
             )
             sample.wait_for_func_value(val)
