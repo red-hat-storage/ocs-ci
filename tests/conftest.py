@@ -599,11 +599,12 @@ def pytest_fixture_setup(fixturedef, request):
                     ocsci_config.switch_ctx(mark.args[0])
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
-            if mark.name == "parametrize":
-                if request.node.callspec.params.get("cluster_index"):
-                    context = request.node.callspec.params.get("cluster_index")
-                    log.info(f"Switching the fixture context to index: {context}")
-                    ocsci_config.switch_ctx(context)
+            if hasattr(request.node, "callspec"):
+                if mark.name == "parametrize":
+                    if request.node.callspec.params.get("cluster_index"):
+                        context = request.node.callspec.params.get("cluster_index")
+                        log.info(f"Switching the fixture context to index: {context}")
+                        ocsci_config.switch_ctx(context)
 
 
 def pytest_fixture_post_finalizer(fixturedef, request):
@@ -613,9 +614,10 @@ def pytest_fixture_post_finalizer(fixturedef, request):
     """
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
-            if mark.name == "parametrize":
-                if request.node.callspec.params.get("cluster_index"):
-                    ocsci_config.reset_ctx()
+            if hasattr(request.node, "callspec"):
+                if mark.name == "parametrize":
+                    if request.node.callspec.params.get("cluster_index"):
+                        ocsci_config.reset_ctx()
 
 
 @pytest.fixture()
