@@ -1,7 +1,7 @@
 apiVersion: config.openshift.io/v1
 kind: ImageDigestMirrorSet
 metadata:
-  name: acm_idms
+  name: acm-idms
 spec:
   imageDigestMirrors:
     - mirrors:
