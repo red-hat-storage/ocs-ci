@@ -1564,7 +1564,11 @@ def get_provision_time(interface, pvc_name, status="start"):
     logs = logs.split("\n")
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
+        if (version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16):
+            stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
+        else:
+            stat = [i for i in logs if re.search(f'Started.*PVC="[^"]*/{re.escape(pvc_name)}"', i)]
+
         mon_day = " ".join(stat[0].split(" ")[0:2])
         stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
@@ -1572,7 +1576,10 @@ def get_provision_time(interface, pvc_name, status="start"):
         all_stats = []
         for i in range(0, len(pvc_name)):
             name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
+            if (version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16):
+                stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
+            else:
+                stat = [i for i in logs if re.search(f'Succeeded.*{re.escape(name)}', i.lower())]
             mon_day = " ".join(stat[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"
             all_stats.append(stat)
