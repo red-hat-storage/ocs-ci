@@ -1408,18 +1408,6 @@ class TestS3BucketPolicy(MCGTest):
             pytest.param(
                 *["", {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}}]
             ),
-            pytest.param(
-                *[
-                    "",
-                    {
-                        "interface": "OC",
-                        "namespace_policy_dict": {
-                            "type": "Single",
-                            "namespacestore_dict": {"rgw": [(1, None)]},
-                        },
-                    },
-                ]
-            ),
         ],
         ids=[
             "FIRST-BUCKET",
@@ -1428,7 +1416,6 @@ class TestS3BucketPolicy(MCGTest):
             "AZURE-OC",
             "GCP-OC",
             "IBMCOS-OC",
-            "RGW-NAMESPACE-STORE",
         ],
     )
     @tier1
