@@ -27,7 +27,7 @@ class PageNavigator(BaseUI):
             self.storage_class = "localblock_sc"
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             if self.ocs_version_semantic >= version.VERSION_4_13:
-                self.storage_class = "thin-csi"
+                self.storage_class = "thin-csi_sc"
             else:
                 self.storage_class = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
