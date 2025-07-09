@@ -39,8 +39,8 @@ from ocs_ci.ocs.constants import (
     AZURE_KV_PROVIDER_NAME,
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
-    DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
     NFS_OUTCLUSTER_TEST_PLATFORMS,
+    DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3

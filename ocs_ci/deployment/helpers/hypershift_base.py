@@ -746,19 +746,21 @@ class HyperShiftBase:
             if sample == "Completed":
                 return True
 
-    def download_hosted_cluster_kubeconfig(self, name: str, hosted_cluster_path: str):
+    def download_hosted_cluster_kubeconfig(
+        self, name: str, hosted_cluster_path: str, from_hcp: bool = True
+    ):
         """
         Download HyperShift hosted cluster kubeconfig
 
         Args:
             name (str): name of the cluster
             hosted_cluster_path (str): path to create auth_path folder and download kubeconfig there
+            from_hcp (bool): if True, use hcp binary to download kubeconfig, otherwise use ocp secret
 
         Returns:
             str: path to the downloaded kubeconfig, None if failed
 
         """
-
         path_abs = os.path.expanduser(hosted_cluster_path)
         auth_path = os.path.join(path_abs, "auth")
         os.makedirs(auth_path, exist_ok=True)
@@ -779,15 +781,18 @@ class HyperShiftBase:
         )
 
         try:
-            resp = exec_cmd(
-                f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}",
-                shell=True,
-            )
-            if resp.returncode != 0:
-                logger.error(
-                    f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{resp.stderr.decode('utf-8')}"
-                )
-                return
+            with config.RunWithProviderConfigContextIfAvailable():
+                if from_hcp:
+                    exec_cmd(
+                        f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}",
+                        shell=True,
+                    )
+                else:
+                    # kubeconfig will be stored with name 'kubeconfig'
+                    OCP().exec_oc_cmd(
+                        f"extract secret/admin-kubeconfig -n clusters-{name} "
+                        f"--to {os.path.dirname(kubeconfig_path)} --confirm"
+                    )
         except Exception as e:
             logger.error(
                 f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}"
