@@ -42,7 +42,9 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
 
         self.do_click(self.bucket_tab["properties_tab"])
 
-    def set_versioning_state(self, enabled: bool, bucket_name: Optional[str] = None) -> bool:
+    def set_versioning_state(
+        self, enabled: bool, bucket_name: Optional[str] = None
+    ) -> bool:
         """
         Set versioning state to enabled or disabled (following base_ui pattern).
 
@@ -81,9 +83,15 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
         """
         try:
             if confirm:
-                self.do_click(self.bucket_tab["versioning_enable_confirm_button"], timeout=self.DIALOG_TIMEOUT)
+                self.do_click(
+                    self.bucket_tab["versioning_enable_confirm_button"],
+                    timeout=self.DIALOG_TIMEOUT,
+                )
             else:
-                self.do_click(self.bucket_tab["versioning_cancel_confirm_button"], timeout=self.DIALOG_TIMEOUT)
+                self.do_click(
+                    self.bucket_tab["versioning_cancel_confirm_button"],
+                    timeout=self.DIALOG_TIMEOUT,
+                )
         except NoSuchElementException:
             logger.error("Could not find versioning confirmation dialog")
             raise
@@ -114,7 +122,9 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
         """
         try:
             # Method 1: Check if the checkbox input is checked (most reliable)
-            checkbox_elements = self.get_elements(self.bucket_tab["versioning_checkbox_input"])
+            checkbox_elements = self.get_elements(
+                self.bucket_tab["versioning_checkbox_input"]
+            )
             if checkbox_elements:
                 return checkbox_elements[0].is_selected()
 
@@ -126,7 +136,9 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
                 return checkbox_checked_attr == "true"
 
             # Method 3: Final fallback - check status text
-            versioning_status = self.get_element_text(self.bucket_tab["versioning_status"])
+            versioning_status = self.get_element_text(
+                self.bucket_tab["versioning_status"]
+            )
             return versioning_status.lower() != "disabled"
         except NoSuchElementException:
             logger.error("Could not find versioning status element")

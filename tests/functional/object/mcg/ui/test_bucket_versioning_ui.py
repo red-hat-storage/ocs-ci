@@ -35,7 +35,9 @@ class TestBucketVersioningUI:
     INITIAL_UPLOAD_WAIT_TIME = 2
     VERSION_DETECTION_TIMEOUT = 10
 
-    def _upload_folder_to_bucket(self, buckets_tab: BucketsTab, folder_path: str, wait_time: int = None) -> None:
+    def _upload_folder_to_bucket(
+        self, buckets_tab: BucketsTab, folder_path: str, wait_time: int = None
+    ) -> None:
         """
         Upload a folder to the bucket.
 
@@ -68,7 +70,9 @@ class TestBucketVersioningUI:
         with open(file_path, "w") as f:
             f.write(content)
 
-    def _navigate_to_bucket(self, bucket_versioning: BucketVersioning, buckets_tab: BucketsTab) -> None:
+    def _navigate_to_bucket(
+        self, bucket_versioning: BucketVersioning, buckets_tab: BucketsTab
+    ) -> None:
         """
         Navigate to object storage and select the first bucket.
 
@@ -107,10 +111,16 @@ class TestBucketVersioningUI:
         if version_number > 1:  # Only navigate back for versions after the first
             self._navigate_to_bucket(bucket_versioning, buckets_tab)
 
-        self._upload_folder_to_bucket(buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME)
-        logger.info(f"Successfully uploaded folder: {folder_name} - version {version_number} created")
+        self._upload_folder_to_bucket(
+            buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME
+        )
+        logger.info(
+            f"Successfully uploaded folder: {folder_name} - version {version_number} created"
+        )
 
-    def _get_actual_filename(self, buckets_tab: BucketsTab, original_filename: str) -> str:
+    def _get_actual_filename(
+        self, buckets_tab: BucketsTab, original_filename: str
+    ) -> str:
         """
         Get the actual filename displayed in UI, handling cases where files are renamed during upload.
 
@@ -130,7 +140,9 @@ class TestBucketVersioningUI:
         if "\n" in actual_file_name:  # Handle "filename\nLatest" case
             actual_file_name = actual_file_name.split("\n")[0].strip()
 
-        logger.info(f"Actual file name in UI: '{actual_file_name}' (original was '{original_filename}')")
+        logger.info(
+            f"Actual file name in UI: '{actual_file_name}' (original was '{original_filename}')"
+        )
         return actual_file_name
 
     def _setup_test_file(self) -> tuple[str, str]:
@@ -186,7 +198,9 @@ class TestBucketVersioningUI:
         # Wait for versions to load after toggle
         time.sleep(self.VERSIONS_LOAD_WAIT_TIME)
 
-        logger.info(f"Successfully navigated to folder '{folder_name}' and enabled version listing")
+        logger.info(
+            f"Successfully navigated to folder '{folder_name}' and enabled version listing"
+        )
 
     def _create_test_folder(self, buckets_tab: BucketsTab, folder_path: str) -> str:
         """
@@ -205,7 +219,9 @@ class TestBucketVersioningUI:
         buckets_tab.do_click(buckets_tab.bucket_tab["first_bucket"])
         folder_name = f"test-folder-{uuid.uuid4()}"
         buckets_tab.do_click(buckets_tab.bucket_tab["create_folder_button"])
-        buckets_tab.do_send_keys(buckets_tab.bucket_tab["folder_name_input"], folder_name)
+        buckets_tab.do_send_keys(
+            buckets_tab.bucket_tab["folder_name_input"], folder_name
+        )
         buckets_tab.do_click(buckets_tab.bucket_tab["submit_button_folder"])
 
         # Upload our 1-file folder
@@ -234,7 +250,9 @@ class TestBucketVersioningUI:
         )
 
         # Get the version ID text from the cell
-        version_id_elements = buckets_tab.get_elements(buckets_tab.bucket_tab["version_id_for_latest"])
+        version_id_elements = buckets_tab.get_elements(
+            buckets_tab.bucket_tab["version_id_for_latest"]
+        )
         if not version_id_elements:
             raise TimeoutException("No version ID element found for latest object")
         version_id = version_id_elements[0].text.strip()
@@ -262,10 +280,14 @@ class TestBucketVersioningUI:
         buckets_tab.do_click(buckets_tab.bucket_tab["delete_this_version_option"])
 
         # Wait for delete confirmation modal
-        buckets_tab.wait_for_element_to_be_present(buckets_tab.bucket_tab["delete_version_modal_title"], timeout=10)
+        buckets_tab.wait_for_element_to_be_present(
+            buckets_tab.bucket_tab["delete_version_modal_title"], timeout=10
+        )
 
         logger.info("Typing 'delete' in confirmation input")
-        input_element = buckets_tab.get_elements(buckets_tab.bucket_tab["delete_version_input"])
+        input_element = buckets_tab.get_elements(
+            buckets_tab.bucket_tab["delete_version_input"]
+        )
         input_element[0].clear()
         input_element[0].send_keys("delete")
 
@@ -322,17 +344,25 @@ class TestBucketVersioningUI:
             )
 
         # Find all label elements
-        latest_labels = buckets_tab.get_elements(buckets_tab.bucket_tab["version_latest_label"])
+        latest_labels = buckets_tab.get_elements(
+            buckets_tab.bucket_tab["version_latest_label"]
+        )
 
         # Verify at least one "Latest" label exists
         if not latest_labels:
-            raise AssertionError("Latest label validation failed: No 'Latest' label found on any file version")
+            raise AssertionError(
+                "Latest label validation failed: No 'Latest' label found on any file version"
+            )
 
         # Check that the label text is "Latest"
-        latest_label_texts = [label.text for label in latest_labels if label.text == "Latest"]
+        latest_label_texts = [
+            label.text for label in latest_labels if label.text == "Latest"
+        ]
 
         if not latest_label_texts:
-            raise AssertionError("Latest label validation failed: Found label elements but none contain 'Latest' text")
+            raise AssertionError(
+                "Latest label validation failed: Found label elements but none contain 'Latest' text"
+            )
 
         logger.info(f"Successfully found {len(latest_label_texts)} 'Latest' label(s)")
 
@@ -401,7 +431,9 @@ class TestBucketVersioningUI:
 
         # Step 5: Navigate to folder and show versioning
         logger.info("Step 5: Navigating to folder and showing versions")
-        self._navigate_to_folder_and_enable_versions(bucket_versioning, buckets_tab, folder_name)
+        self._navigate_to_folder_and_enable_versions(
+            bucket_versioning, buckets_tab, folder_name
+        )
 
         # Step 6: Validate "Latest" label appears on newest version
         logger.info("Step 6: Validating 'Latest' label on newest version")
@@ -417,8 +449,12 @@ class TestBucketVersioningUI:
             raise
 
         # Verify the test completed successfully
-        assert folder_name, "Test setup validation failed: Failed to create and upload folder"
-        logger.info("Bucket versioning test with label validation completed successfully")
+        assert (
+            folder_name
+        ), "Test setup validation failed: Failed to create and upload folder"
+        logger.info(
+            "Bucket versioning test with label validation completed successfully"
+        )
 
     def test_bucket_versioning_with_modification(self, setup_ui_class_factory):
         """
@@ -464,7 +500,9 @@ class TestBucketVersioningUI:
         # Step 4: Re-upload the modified object
         logger.info("Step 4: Re-uploading modified object")
         self._navigate_to_bucket(bucket_versioning, buckets_tab)
-        self._upload_folder_to_bucket(buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME)
+        self._upload_folder_to_bucket(
+            buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME
+        )
 
         # Create one more version for testing
         logger.info("Creating third version of the object")
@@ -480,7 +518,9 @@ class TestBucketVersioningUI:
 
         # Step 5: Navigate to folder and toggle "List all versions"
         logger.info("Step 5: Navigating to folder and showing versions")
-        self._navigate_to_folder_and_enable_versions(bucket_versioning, buckets_tab, folder_name)
+        self._navigate_to_folder_and_enable_versions(
+            bucket_versioning, buckets_tab, folder_name
+        )
 
         # Step 6: Verify version ID mapping with "Latest" tag
         logger.info("Step 6: Verifying version ID for latest object")
@@ -492,7 +532,9 @@ class TestBucketVersioningUI:
         # Get version ID for the latest object
         latest_version_id = self._get_version_id_for_latest(buckets_tab)
         assert latest_version_id, "Failed to get version ID for latest object"
-        logger.info(f"Successfully retrieved version ID for latest object: {latest_version_id}")
+        logger.info(
+            f"Successfully retrieved version ID for latest object: {latest_version_id}"
+        )
 
         # Step 7: Delete latest object and verify new one becomes latest
         logger.info("Step 7: Deleting latest version and verifying new latest")
@@ -526,7 +568,9 @@ class TestBucketVersioningUI:
 
         try:
             self._validate_file_versions(buckets_tab, file_name)
-            logger.info(f"Successfully validated {expected_versions_after_deletion} versions remain after deletion")
+            logger.info(
+                f"Successfully validated {expected_versions_after_deletion} versions remain after deletion"
+            )
         finally:
             # Restore original expected versions
             self.EXPECTED_VERSIONS = original_expected
