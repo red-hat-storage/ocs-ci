@@ -69,10 +69,13 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
-from ocs_ci.utility.version import get_running_odf_version
 from ocs_ci.utility.ssl_certs import (
     create_ocs_ca_bundle,
     get_root_ca_cert,
+)
+from ocs_ci.utility.version import (
+    get_running_odf_version,
+    get_running_odf_client_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -2091,8 +2094,8 @@ def hypershift_cluster_factory(
         logger.warning("Factory function was called without deployment duty")
         deployed_clusters = []
 
-    # this section 2. is to push the config to the existing clusters to MultiClusterConfig due to the duty,
-    # including newly created clusters
+    # this section 2. is to push the config of the existing clusters to MultiClusterConfig due to the duty,
+    # including newly created clusters, in case we can detect nodes of guest cluster and ODF version
     for cluster_name in deployed_clusters:
 
         if not nodepool_replicas:
@@ -2124,7 +2127,20 @@ def hypershift_cluster_factory(
             def_client_config_dict.get("ENV_DATA").update(
                 {"cluster_name": cluster_name}
             )
-            running_odf_version = get_running_odf_version()
+            try:
+                running_odf_version = get_running_odf_version()
+            except IndexError:
+                logger.warning(
+                    "No existing ODF operator and its version found for the cluster, trying Client operator"
+                )
+                try:
+                    running_odf_version = get_running_odf_client_version()
+                except IndexError:
+                    logger.warning(
+                        "No existing ODF client operator and its version found for the cluster, ODF is not installed"
+                    )
+                    continue
+
             if running_odf_version:
                 env_data = def_client_config_dict.setdefault("ENV_DATA", {})
                 env_data["ocs_version"] = running_odf_version
