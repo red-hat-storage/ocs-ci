@@ -122,55 +122,7 @@ class DeploymentUI(PageNavigator):
         Install StorageCluster/StorageSystem
 
         """
-        if self.operator_name == ODF_OPERATOR:
-            self.navigate_installed_operators_page()
-            self.choose_expanded_mode(
-                mode=True, locator=self.dep_loc["drop_down_projects"]
-            )
-            self.do_click(self.dep_loc["choose_all_projects"], enable_screenshot=True)
-        else:
-            self.search_operator_installed_operators_page(operator=self.operator_name)
 
-        logger.info(f"Click on {self.operator_name} on 'Installed Operators' page")
-        if self.operator_name == ODF_OPERATOR:
-            logger.info("Click on Create StorageSystem")
-            self.do_click(
-                locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
-            )
-            time.sleep(5)
-            self.do_click(
-                locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
-            )
-        elif self.operator_name == OCS_OPERATOR:
-            logger.info("Click on Create StorageCluster")
-            self.do_click(
-                locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
-            )
-            time.sleep(5)
-            self.do_click(
-                locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
-            )
-            if self.check_element_text("404"):
-                raise ValueError("Page crashed at the time of Storage System creation")
-        self.do_click(
-            locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
-        )
-        if self.check_element_text("An error"):
-            raise ValueError("Page crashed at the time of Storage System creation")
-        if config.ENV_DATA.get("mcg_only_deployment", False):
-            self.install_mcg_only_cluster()
-        elif config.DEPLOYMENT.get("local_storage"):
-            self.install_lso_cluster()
-        else:
-            self.install_internal_cluster()
-
-    def install_storage_cluster_419_and_above(self):
-        """
-        Install StorageCluster/StorageSystem for ODF 4.19 and above from Data Foundation dashboard under Storage.
-        This is needed as StorageSystem CR and button is removed from Installed Operators page
-        as part of Convergence changes.
-
-        """
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_19:
             self.nav_odf_default_page()
@@ -182,11 +134,57 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["storage_system_btn"], enable_screenshot=True
             )
-
         else:
-            msg = "This flow of Storage System creation should only be used for ODF 4.19 and above"
-            logger.error(msg)
-            raise RuntimeError(msg)
+            if self.operator_name == ODF_OPERATOR:
+                self.navigate_installed_operators_page()
+                self.choose_expanded_mode(
+                    mode=True, locator=self.dep_loc["drop_down_projects"]
+                )
+                self.do_click(
+                    self.dep_loc["choose_all_projects"], enable_screenshot=True
+                )
+            else:
+                self.search_operator_installed_operators_page(
+                    operator=self.operator_name
+                )
+
+            logger.info(f"Click on {self.operator_name} on 'Installed Operators' page")
+            if self.operator_name == ODF_OPERATOR:
+                logger.info("Click on Create StorageSystem")
+                self.do_click(
+                    locator=self.dep_loc["odf_operator_installed"],
+                    enable_screenshot=True,
+                )
+                time.sleep(5)
+                self.do_click(
+                    locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
+                )
+            elif self.operator_name == OCS_OPERATOR:
+                logger.info("Click on Create StorageCluster")
+                self.do_click(
+                    locator=self.dep_loc["ocs_operator_installed"],
+                    enable_screenshot=True,
+                )
+                time.sleep(5)
+                self.do_click(
+                    locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
+                )
+                if self.check_element_text("404"):
+                    raise ValueError(
+                        "Page crashed at the time of Storage System creation"
+                    )
+                self.do_click(
+                    locator=self.dep_loc["create_storage_cluster"],
+                    enable_screenshot=True,
+                )
+        if self.check_element_text("404") or self.check_element_text("An error"):
+            raise ValueError("Page crashed at the time of Storage System creation")
+        if config.ENV_DATA.get("mcg_only_deployment", False):
+            self.install_mcg_only_cluster()
+        elif config.DEPLOYMENT.get("local_storage"):
+            self.install_lso_cluster()
+        else:
+            self.install_internal_cluster()
 
     def install_mcg_only_cluster(self):
         """
@@ -313,7 +311,7 @@ class DeploymentUI(PageNavigator):
         Install Internal Cluster
 
         """
-        logger.info("Click Internal")
+        logger.info("Deployment type is 'Full Deployment' as default selection")
         if self.operator_name == ODF_OPERATOR:
             self.do_click(
                 locator=self.dep_loc["internal_mode_odf"], enable_screenshot=True
@@ -321,7 +319,7 @@ class DeploymentUI(PageNavigator):
         else:
             self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
 
-        logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
+        logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
         self.do_click(
             locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
         )
