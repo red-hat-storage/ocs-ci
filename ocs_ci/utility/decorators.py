@@ -164,15 +164,19 @@ def safe_exec(exception_type=Exception):
 
 def enable_high_recovery(func):
     """
-    Decorator to temporarily switch the Ceph recovery profile to 'high_recovery_ops'
-    during the execution of the wrapped function, and revert it back afterward.
+    Decorator to temporarily boost Ceph recovery performance during the execution
+    of the wrapped function by applying both Ceph and mClock high-recovery profiles.
 
-    This is useful when performing operations like OSD replacement or data rebalancing
-    that benefit from faster Ceph recovery performance.
+    This is useful for operations such as OSD replacement or data rebalancing
+    where faster recovery is desired at the cost of reduced client I/O bandwidth.
 
-    If the ODF CLI runner or current profile cannot be determined, the function executes without change.
+    Behavior:
+    - Sets the Ceph recovery profile to 'high_recovery_ops'
+    - Sets the mClock profile to 'high_client_ops'
+    - Restores both profiles to their original or default state after function execution
 
-    The switch is always reverted, even if the function raises an exception.
+    If the ODF CLI runner is not available or the current profile cannot be determined,
+    the wrapped function is executed without making any changes.
 
     Returns:
         The result of the wrapped function.
