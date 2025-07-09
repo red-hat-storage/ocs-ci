@@ -75,7 +75,9 @@ class TestAMQNodeReboot(E2ETest):
         Creates amq cluster and run benchmarks
         """
         sc_name = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-        self.amq, self.threads = amq_factory_fixture(sc_name=sc_name.name)
+        self.amq, self.threads = retry(CommandFailed, tries=60, delay=3, backoff=1)(
+            amq_factory_fixture
+        )(sc_name=sc_name.name)
 
     @pytest.mark.parametrize(
         argnames=["node_type"],
@@ -103,7 +105,7 @@ class TestAMQNodeReboot(E2ETest):
         nodes.restart_nodes(node, wait=False)
 
         # Wait some time after rebooting master
-        waiting_time = 40
+        waiting_time = 90
         log.info(f"Waiting {waiting_time} seconds...")
         time.sleep(waiting_time)
 
