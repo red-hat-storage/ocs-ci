@@ -2534,34 +2534,6 @@ class Deployment(object):
             if version.compare_versions(
                 f"{config.ENV_DATA.get('acm_version')} >= 2.14"
             ):
-                if config.multicluster:
-
-                    def apply_idms_and_wait(cluster):
-                        index = cluster.MULTICLUSTER["multicluster_index"]
-                        cluster_name = cluster.MULTICLUSTER.get(
-                            "name", f"Cluster-{index}"
-                        )
-                        with config.RunWithConfigContext(index):
-                            config.switch_ctx(index)
-                            logger.info(
-                                f"[{cluster_name}] Creating ImageDigestMirrorSet for ACM Deployment"
-                            )
-                            run_cmd(f"oc create -f {constants.ACM_BREW_IDMS_YAML}")
-
-                        with config.RunWithConfigContext(index):
-                            logger.info(
-                                f"[{cluster_name}] Waiting for MachineConfigPool to be updated"
-                            )
-                            wait_for_machineconfigpool_status(node_type="all")
-
-                    for cluster in config.clusters:
-                        try:
-                            apply_idms_and_wait(cluster)
-                        except Exception as e:
-                            logger.error(
-                                f"Error applying IDMS or waiting for MCP on cluster index "
-                                f"{cluster.MULTICLUSTER['multicluster_index']}: {e}"
-                            )
                 self.deploy_acm_hub_unreleased_konflux()
                 self.deploy_multicluster_hub()
             else:
@@ -2862,7 +2834,9 @@ class Deployment(object):
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
         mce_operator_catsrc.wait_for_state("READY")
-
+        logger.info("Creating ImageDigestMirrorSet for ACM Deployment")
+        run_cmd(f"oc create -f {constants.ACM_BREW_IDMS_YAML}")
+        wait_for_machineconfigpool_status(node_type="all")
         channel = config.ENV_DATA.get("acm_hub_channel")
         logger.info("Creating ACM HUB namespace")
         acm_hub_namespace_yaml_data = templating.load_yaml(constants.NAMESPACE_TEMPLATE)
