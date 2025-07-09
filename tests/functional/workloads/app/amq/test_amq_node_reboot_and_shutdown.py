@@ -70,13 +70,14 @@ class TestAMQNodeReboot(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.fixture()
-    @retry(CommandFailed, tries=60, delay=3, backoff=1)
     def amq_setup(self, amq_factory_fixture):
         """
         Creates amq cluster and run benchmarks
         """
         sc_name = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-        self.amq, self.threads = amq_factory_fixture(sc_name=sc_name.name)
+        self.amq, self.threads = retry(CommandFailed, tries=60, delay=3, backoff=1)(
+            amq_factory_fixture
+        )(sc_name=sc_name.name)
 
     @pytest.mark.parametrize(
         argnames=["node_type"],
