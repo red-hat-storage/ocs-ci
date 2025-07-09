@@ -2154,8 +2154,10 @@ def hypershift_cluster_factory(
                     "installer_version"
                 ] = running_ocp_version
 
+            print("Cluster version: %s", running_ocp_version)
+            print("Cluster name: %s", cluster_name)
             cluster_path = create_cluster_dir(cluster_name)
-            logger.info("Cluster path: %s", cluster_path)
+            print("Cluster path: %s", cluster_path)
             def_client_config_dict["ENV_DATA"]["cluster_path"] = cluster_path
 
             kubeconf_paths = (
@@ -2173,9 +2175,9 @@ def hypershift_cluster_factory(
                 kubeconf_path = [
                     path for path in kubeconf_paths if cluster_name in path
                 ][0]
-            logger.debug(f"Kubeconfig path: {kubeconf_path}")
+            print(f"Kubeconfig path: {kubeconf_path}")
 
-            logger.debug(
+            print(
                 "Setting default context to config. Every config should have same default context"
             )
             # sync our configurations with the one in MultiClusterConfig to have the same default context index
@@ -2192,7 +2194,7 @@ def hypershift_cluster_factory(
             cluster_config = Config()
             cluster_config.update(def_client_config_dict)
 
-            logger.info(
+            print(
                 "Inserting new hosted cluster config to Multicluster Config "
                 f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
             )
