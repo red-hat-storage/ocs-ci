@@ -437,6 +437,24 @@ def get_running_odf_version():
     return odf_full_version
 
 
+def get_running_odf_client_version():
+    """
+    Get current running ODF Client version
+
+    Returns:
+        string: ODF Client version
+    """
+    from ocs_ci.ocs.resources import csv
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+    odf_client_csv = csv.get_csvs_start_with_prefix(
+        defaults.ODF_CLIENT_OPERATOR, namespace=namespace
+    )
+    odf_client_full_version = odf_client_csv[0]["metadata"]["labels"]["full_version"]
+    log.info(f"ODF Client full version is {odf_client_full_version}")
+    return odf_client_full_version
+
+
 def get_semantic_running_odf_version():
     """
     Get current running ODF semantic version
