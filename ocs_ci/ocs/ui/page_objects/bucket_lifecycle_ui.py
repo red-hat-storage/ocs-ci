@@ -148,8 +148,8 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             rule_name (str): Name for the rule
             scope (str): 'whole_bucket' or 'targeted'
             rules (dict): Dictionary mapping rule types to their parameters
-                         e.g., {"expiration": {"days": 30},
-                                "transition": {"days": 7, "storage_class": "GLACIER"}}
+                e.g., {"expiration": {"days": 30},
+                       "transition": {"days": 7, "storage_class": "GLACIER"}}
             **kwargs: Additional parameters (prefix, tags, min_size, max_size) for targeted rules
         """
         if rules is None and "actions" in kwargs:
