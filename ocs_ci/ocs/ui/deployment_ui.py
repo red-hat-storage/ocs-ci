@@ -440,10 +440,11 @@ class DeploymentUI(PageNavigator):
 
         ocs_version = version.get_semantic_ocs_version_from_config()
         device_size = str(config.ENV_DATA.get("device_size"))
+
         osd_size = (
             device_size
             if device_size in osd_sizes
-            else "512" if ocs_version <= "4.18" else "0.5 TiB"
+            else "512" if ocs_version <= version.VERSION_4_18 else "0.5 TiB"
         )
         logger.info(f"Configure OSD Capacity {osd_size}")
         if self.ocp_version_semantic >= version.VERSION_4_11:
