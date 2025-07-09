@@ -1362,7 +1362,7 @@ class Deployment(object):
 
         # create custom storage class for StorageCluster CR if necessary
         if self.custom_storage_class_path is not None:
-            self.storage_class_name = storage_class.create_custom_storageclass(
+            self.storage_class = storage_class.create_custom_storageclass(
                 self.custom_storage_class_path
             )
 
