@@ -54,7 +54,7 @@ from ocs_ci.ocs.resources.storageconsumer import (
     check_consumers_rns,
     check_consumers_svg,
     check_consumer_rns,
-    get_ready_consumers,
+    get_ready_consumers_names,
     check_consumer_svg,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -358,7 +358,7 @@ class HostedClients(HyperShiftBase):
 
         log_step("verify backing Ceph storage for newly deployed clients")
 
-        consumer_names = get_ready_consumers()
+        consumer_names = get_ready_consumers_names()
         # we want to validate only consumers that are in ready status, that are newly deployed
         # and storage installation for them was requested from ENV_DATA.clusters.<cluster_name>.setup_storage_client
         consumers_to_validate = [
