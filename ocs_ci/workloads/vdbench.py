@@ -5,7 +5,7 @@ import fauxfactory
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.utility.templating import Templating
 from jinja2 import Environment, FileSystemLoader
 
@@ -698,7 +698,7 @@ class VdbenchWorkload:
                 f"Successfully cleaned up Vdbench workload: {self.deployment_name}"
             )
 
-        except Exception as e:
+        except (CommandFailed, TimeoutExpiredError) as e:
             log.error(f"Error during Vdbench workload cleanup: {e}")
 
     def get_workload_status(self):

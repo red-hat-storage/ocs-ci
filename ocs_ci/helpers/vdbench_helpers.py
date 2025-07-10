@@ -1,9 +1,14 @@
 import logging
 import yaml
 import tempfile
+import time
 
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -52,22 +57,30 @@ def validate_vdbench_config(config_dict):
 
     for section in required_sections:
         if section not in config_dict:
-            raise ValueError(f"Missing required section: {section}")
+            raise ValueError(
+                f"vdbench configuration validation failed. Missing required section: {section}"
+            )
 
     # Validate storage definitions
     for sd in config_dict["storage_definitions"]:
         if "id" not in sd or "lun" not in sd:
-            raise ValueError("Storage definition missing required fields: id, lun")
+            raise ValueError(
+                "vdbench configuration validation failed. Storage definition missing required fields: id, lun"
+            )
 
     # Validate workload definitions
     for wd in config_dict["workload_definitions"]:
         if "id" not in wd or "sd_id" not in wd:
-            raise ValueError("Workload definition missing required fields: id, sd_id")
+            raise ValueError(
+                "vdbench configuration validation failed. Workload definition missing required fields: id, sd_id"
+            )
 
     # Validate run definitions
     for rd in config_dict["run_definitions"]:
         if "id" not in rd or "wd_id" not in rd:
-            raise ValueError("Run definition missing required fields: id, wd_id")
+            raise ValueError(
+                "vdbench configuration validation failed. Run definition missing required fields: id, wd_id"
+            )
 
     log.info("Vdbench configuration is valid")
     return True
@@ -189,7 +202,7 @@ def get_vdbench_pods(namespace, deployment_name):
         result = run_cmd(cmd)
         pods = [pod.replace("pod/", "") for pod in result.strip().split("\n") if pod]
         return pods
-    except Exception as e:
+    except CommandFailed as e:
         log.error(f"Failed to get Vdbench pods: {e}")
         return []
 
@@ -214,7 +227,7 @@ def get_vdbench_logs(namespace, deployment_name, container="vdbench-container"):
             cmd = f"oc logs -n {namespace} {pod} -c {container}"
             logs = run_cmd(cmd)
             logs_dict[pod] = logs
-        except Exception as e:
+        except CommandFailed as e:
             log.warning(f"Failed to get logs from pod {pod}: {e}")
             logs_dict[pod] = f"Error getting logs: {e}"
 
@@ -262,8 +275,8 @@ def parse_vdbench_output(logs):
 
         return metrics if metrics else None
 
-    except Exception as e:
-        log.error(f"Failed to parse Vdbench output: {e}")
+    except AttributeError as e:
+        log.error(f"Invalid input type for logs. Expected string. Error: {e}")
         return None
 
 
@@ -279,8 +292,6 @@ def monitor_vdbench_workload(workload, interval=30, duration=300):
     Returns:
         list: List of metric snapshots
     """
-    import time
-
     metrics_history = []
     start_time = time.time()
 
@@ -296,17 +307,27 @@ def monitor_vdbench_workload(workload, interval=30, duration=300):
 
             # Parse metrics from each pod
             for pod_name, logs in logs_dict.items():
-                pod_metrics = parse_vdbench_output(logs)
-                if pod_metrics:
-                    snapshot["metrics"][pod_name] = pod_metrics
+                try:
+                    pod_metrics = parse_vdbench_output(logs)
+                    if pod_metrics:
+                        snapshot["metrics"][pod_name] = pod_metrics
+                except (ValueError, KeyError, TypeError) as parse_error:
+                    log.warning(
+                        f"Failed to parse metrics for pod {pod_name}: {parse_error}"
+                    )
 
             metrics_history.append(snapshot)
-
             log.info(f"Collected metrics snapshot {len(metrics_history)}")
             time.sleep(interval)
 
+        except (AttributeError, RuntimeError) as workload_error:
+            log.error(f"Workload error during monitoring: {workload_error}")
+            break
+        except (OSError, TimeoutError) as system_error:
+            log.error(f"System/log access error: {system_error}")
+            break
         except Exception as e:
-            log.error(f"Error during monitoring: {e}")
+            log.exception(f"Unexpected error during monitoring: {e}")
             break
 
     return metrics_history
@@ -376,8 +397,10 @@ def create_vdbench_performance_report(metrics_history, output_file=None):
             with open(output_file, "w") as f:
                 yaml.dump(report, f, default_flow_style=False)
             log.info(f"Performance report saved to: {output_file}")
-        except Exception as e:
-            log.error(f"Failed to save report: {e}")
+        except (IOError, OSError) as file_error:
+            log.error(f"File I/O error while saving report: {file_error}")
+        except yaml.YAMLError as yaml_error:
+            log.error(f"YAML serialization error: {yaml_error}")
 
     return report
 
@@ -396,7 +419,7 @@ def cleanup_vdbench_resources(namespace, deployment_name):
         try:
             run_cmd(f"oc delete {resource} -n {namespace} --ignore-not-found=true")
             log.info(f"Deleted {resource}")
-        except Exception as e:
+        except CommandFailed as e:
             log.warning(f"Failed to delete {resource}: {e}")
 
 
@@ -421,7 +444,7 @@ def wait_for_vdbench_pods_ready(namespace, deployment_name, timeout=300):
             if sample:
                 return True
         return False
-    except Exception as e:
+    except TimeoutExpiredError as e:
         log.error(f"Error waiting for pods: {e}")
         return False
 
@@ -448,39 +471,54 @@ def _check_pods_ready(namespace, deployment_name):
             all(status == "True" for status in ready_statuses)
             and len(ready_statuses) > 0
         )
-    except Exception:
+    except CommandFailed as e:
+        log.error(f"Failed to check pod readiness: {e}")
         return False
 
 
 def validate_vdbench_workload_health(workload, timeout=300):
     """
     Validate that a Vdbench workload is healthy and running.
+
     Args:
         workload: VdbenchWorkload instance to validate
         timeout: Timeout for validation in seconds
+
     Returns:
-        bool: True if workload is healthy
-    Raises:
-        AssertionError: If workload is not healthy
+        bool: True if workload is healthy, False otherwise
     """
-    status = workload.get_workload_status()
+    try:
+        status = workload.get_workload_status()
 
-    assert status["is_running"], f"Workload {workload.deployment_name} is not running"
-    assert not status["is_paused"], f"Workload {workload.deployment_name} is paused"
-    assert (
-        status["current_replicas"] > 0
-    ), f"Workload {workload.deployment_name} has no replicas"
+        if not status["is_running"]:
+            log.warning(f"Workload {workload.deployment_name} is not running")
+            return False
 
-    # Check pod phases
-    if "pod_phases" in status:
-        running_pods = [phase for phase in status["pod_phases"] if phase == "Running"]
-        assert len(running_pods) == status["current_replicas"], (
-            f"Not all pods are running. Expected: {status['current_replicas']}, "
-            f"Running: {len(running_pods)}"
-        )
+        if status["is_paused"]:
+            log.warning(f"Workload {workload.deployment_name} is paused")
+            return False
 
-    log.info(f"Vdbench workload {workload.deployment_name} is healthy")
-    return True
+        if status["current_replicas"] <= 0:
+            log.warning(f"Workload {workload.deployment_name} has no replicas")
+            return False
+
+        if "pod_phases" in status:
+            running_pods = [
+                phase for phase in status["pod_phases"] if phase == "Running"
+            ]
+            if len(running_pods) != status["current_replicas"]:
+                log.warning(
+                    f"Not all pods are running. Expected: {status['current_replicas']}, "
+                    f"Running: {len(running_pods)}"
+                )
+                return False
+
+        log.info(f"Vdbench workload {workload.deployment_name} is healthy")
+        return True
+
+    except Exception as e:
+        log.error(f"Error while validating Vdbench workload: {e}")
+        return False
 
 
 def create_temp_config_file(vdbench_config):
@@ -528,6 +566,16 @@ def create_vdbench_performance_scenario(
 ):
     """
     Helper function to create a performance testing scenario.
+
+    Args:
+        storage_class (str): StorageClass name to use for the PVC. Defaults to None.
+        pvc_size (str): Size of the PVC to create. Defaults to "20Gi".
+        auto_start (bool): Whether to start the workload automatically. Defaults to True.
+
+    Returns:
+        tuple: A tuple containing:
+            - pvc: The created PersistentVolumeClaim object.
+            - workload: The created Vdbench workload object.
     """
     log.info("Creating Vdbench performance scenario")
     config = vdbench_performance_config()
@@ -561,6 +609,16 @@ def create_vdbench_block_scenario(
 ):
     """
     Helper function to create a block device testing scenario.
+
+    Args:
+        storage_class (str): StorageClass name to use for the PVC. Defaults to None.
+        pvc_size (str): Size of the PVC to create. Defaults to "10Gi".
+        auto_start (bool): Whether to automatically start the workload. Defaults to True.
+
+    Returns:
+        tuple: A tuple containing:
+            - pvc: The created PersistentVolumeClaim object.
+            - workload: The created Vdbench workload object.
     """
     log.info("Creating Vdbench block device scenario")
     config = vdbench_block_config()
@@ -595,6 +653,17 @@ def create_vdbench_rwx_scenario(
 ):
     """
     Helper function to create a ReadWriteMany shared volume scenario.
+
+    Args:
+        storage_class (str): StorageClass name for the PVC. Defaults to None.
+        pvc_size (str): Size of the PVC to create. Defaults to "15Gi".
+        replica_count (int): Number of workload replicas to scale to. Defaults to 3.
+        auto_start (bool): Whether to automatically start the workload. Defaults to True.
+
+    Returns:
+        tuple: A tuple containing:
+            - pvc: The created PersistentVolumeClaim object.
+            - workload: The created Vdbench workload object.
     """
     log.info("Creating Vdbench RWX shared volume scenario")
     config = vdbench_rwx_shared_config()

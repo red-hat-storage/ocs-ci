@@ -12,6 +12,7 @@ from ocs_ci.resiliency.resiliency_helper import Resiliency, WorkloadScalingHelpe
 from ocs_ci.helpers.vdbench_helpers import (
     create_temp_config_file,
 )
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -175,7 +176,7 @@ class TestAppScaleOnStorageComponentFailure:
             pytest.param(
                 "STORAGECLUSTER_COMPONENT_FAILURES",
                 "CEPHFS_POD_FAILURES",
-                marks=polarion_id("OCS-6851"),  # Fixed duplicate polarion_id
+                marks=polarion_id("OCS-6851"),
             ),
         ],
     )
@@ -249,20 +250,14 @@ class TestAppScaleOnStorageComponentFailure:
                     log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
 
             # Ensure we wait for scaling thread even if test fails
-            if scaling_thread:
-                try:
-                    self.scaling_helper.wait_for_scaling_completion(
-                        scaling_thread, timeout=60
-                    )
-                except Exception as scaling_e:
-                    log.warning(f"Failed to wait for scaling completion: {scaling_e}")
+            self.scaling_helper.wait_for_scaling_completion(scaling_thread, timeout=60)
 
             # Cleanup any remaining workloads
             for workload in workloads:
                 try:
                     if hasattr(workload, "cleanup"):
                         workload.cleanup()
-                except Exception as workload_e:
+                except (CommandFailed, TimeoutExpiredError) as workload_e:
                     log.warning(f"Failed to cleanup workload: {workload_e}")
 
         log.info(

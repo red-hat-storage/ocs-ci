@@ -39,7 +39,12 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.resources.pod import delete_pod_by_phase
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+    CancelledError,
+    TimeoutError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -435,6 +440,9 @@ class WorkloadScalingHelper:
 
         Args:
             workload: The workload object to scale
+
+        Returns:
+            bool: True if the workload was scaled, False otherwise
         """
         current_replicas = workload.workload_impl.current_replicas
         deployment_name = workload.workload_impl.deployment_name
@@ -449,11 +457,12 @@ class WorkloadScalingHelper:
                     f"Already at max replicas ({self.max_replicas}). "
                     f"Skipping scale up for {deployment_name}"
                 )
-                return
+                return False
 
             desired_count = random.randint(current_replicas + 1, self.max_replicas)
             log.info(f"Scaling up {deployment_name} to {desired_count} replicas")
             workload.scale_up_pods(desired_count)
+            return True
 
         else:  # action == "down"
             if current_replicas <= self.min_replicas:
@@ -461,11 +470,12 @@ class WorkloadScalingHelper:
                     f"Already at min replicas ({self.min_replicas}). "
                     f"Skipping scale down for {deployment_name}"
                 )
-                return
+                return False
 
             desired_count = random.randint(self.min_replicas, current_replicas - 1)
             log.info(f"Scaling down {deployment_name} to {desired_count} replicas")
             workload.scale_down_pods(desired_count)
+            return True
 
     def wait_for_scaling_completion(self, scaling_thread, timeout=120):
         """
@@ -518,14 +528,13 @@ class WorkloadScalingHelper:
         log.info(f"Starting synchronous scaling of {len(workloads)} workloads")
 
         for workload in workloads:
-            try:
-                self.scale_single_workload(workload)
+            if self.scale_single_workload(workload):
                 log.info(
                     f"Successfully scaled workload {workload.workload_impl.deployment_name}"
                 )
-            except Exception as e:
-                log.error(
-                    f"Failed to scale workload {workload.workload_impl.deployment_name}: {e}"
+            else:
+                log.info(
+                    f"Workload {workload.workload_impl.deployment_name} already at limits, skipping"
                 )
 
     def scale_workloads_parallel(self, workloads, max_workers=None):
@@ -558,9 +567,21 @@ class WorkloadScalingHelper:
                     log.info(
                         f"Successfully scaled workload {workload.workload_impl.deployment_name}"
                     )
-                except Exception as e:
+                except CancelledError:
+                    log.warning(
+                        f"Scaling task was cancelled for workload {workload.workload_impl.deployment_name}"
+                    )
+                except TimeoutError:
                     log.error(
-                        f"Failed to scale workload {workload.workload_impl.deployment_name}: {e}"
+                        f"Scaling task timed out for workload {workload.workload_impl.deployment_name}"
+                    )
+                except (ValueError, RuntimeError) as e:
+                    log.error(
+                        f"Error while scaling workload {workload.workload_impl.deployment_name}: {e}"
+                    )
+                except Exception as e:
+                    log.exception(
+                        f"Unexpected error while scaling workload {workload.workload_impl.deployment_name}: {e}"
                     )
 
     def cleanup(self, timeout=60):
