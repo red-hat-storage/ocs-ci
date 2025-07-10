@@ -449,6 +449,9 @@ class DeploymentUI(PageNavigator):
         logger.info(f"Configure OSD Capacity {osd_size}")
         if self.ocp_version_semantic >= version.VERSION_4_11:
             self.do_click(self.dep_loc["osd_size_dropdown"], enable_screenshot=True)
+            logger.info(
+                "Requested capacity dropdown expanded for selecting OSD capacity "
+            )
         else:
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["osd_size_dropdown"]

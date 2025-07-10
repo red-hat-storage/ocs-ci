@@ -296,6 +296,7 @@ deployment_4_19 = {
         '//a[@data-test="odf-operator-redhat-operators-openshift-marketplace"]',
         By.XPATH,
     ),
+    "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
