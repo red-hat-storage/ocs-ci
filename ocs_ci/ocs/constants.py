@@ -3469,6 +3469,7 @@ LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
 # Auto-scaling Yaml files
 AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
 
+
 TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 
 # Workload YAML files (around line 200-250)
@@ -3508,3 +3509,9 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# ODF Grafana repo
+ODF_GRAFANA_REPO = "https://github.com/redhat-performance/odf-grafana"
+ODF_GRAFANA_PATH = "/tmp/odf-grafana"
+GRAFANA_NAMESPACE = "perfscale"
+
