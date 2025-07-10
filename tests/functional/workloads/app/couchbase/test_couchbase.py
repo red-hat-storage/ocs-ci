@@ -38,6 +38,3 @@ class TestCouchBaseWorkload(E2ETest):
         couchbase.create_cb_cluster(replicas=3)
         couchbase.create_data_buckets()
         couchbase.run_workload(replicas=3)
-        couchbase.export_pfoutput_to_googlesheet(
-            sheet_name="E2E Workloads", sheet_index=2
-        )
