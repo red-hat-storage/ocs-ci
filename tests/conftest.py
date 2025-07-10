@@ -28,7 +28,7 @@ from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import (
     hypershift_cluster_factory,
     get_autodistributed_storage_classes,
-    skip_if_not_hcp_provider
+    skip_if_not_hcp_provider,
 )
 from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
