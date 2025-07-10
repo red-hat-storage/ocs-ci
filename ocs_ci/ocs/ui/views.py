@@ -286,11 +286,17 @@ deployment_4_17 = {
 }
 
 deployment_4_19 = {
+    "create_storage_cluster": (
+        "(//a[@data-test-id='horizontal-link-Storage Systems'])",
+        By.XPATH,
+    ),
+    "storage_system_btn": ("yaml-create", By.ID),
     "click_odf_operator": (
         '//div[@data-test="odf-operator-redhat-operators-openshift-marketplace"] | '
         '//a[@data-test="odf-operator-redhat-operators-openshift-marketplace"]',
         By.XPATH,
     ),
+    "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {

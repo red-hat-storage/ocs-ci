@@ -1,7 +1,6 @@
 import logging
 import time
 
-
 from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
@@ -15,7 +14,6 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -124,48 +122,63 @@ class DeploymentUI(PageNavigator):
         Install StorageCluster/StorageSystem
 
         """
-        if self.operator_name == ODF_OPERATOR:
-            self.navigate_installed_operators_page()
-            self.choose_expanded_mode(
-                mode=True, locator=self.dep_loc["drop_down_projects"]
-            )
-            self.do_click(self.dep_loc["choose_all_projects"], enable_screenshot=True)
-        else:
-            self.search_operator_installed_operators_page(operator=self.operator_name)
 
-        logger.info(f"Click on {self.operator_name} on 'Installed Operators' page")
-        if self.operator_name == ODF_OPERATOR:
-            logger.info("Click on Create StorageSystem")
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_19:
+            self.nav_odf_default_page()
+            logger.info("Click on 'Storage Systems tab' under the dashboard")
             self.do_click(
-                locator=self.dep_loc["odf_operator_installed"], enable_screenshot=True
+                locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
             )
-            time.sleep(5)
+            logger.info("Click on 'Create StorageSystem' button")
             self.do_click(
-                locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
+                locator=self.dep_loc["storage_system_btn"], enable_screenshot=True
             )
-        elif self.operator_name == OCS_OPERATOR:
-            logger.info("Click on Create StorageCluster")
-            self.do_click(
-                locator=self.dep_loc["ocs_operator_installed"], enable_screenshot=True
-            )
-            time.sleep(5)
-            self.do_click(
-                locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
-            )
-            if self.check_element_text("404"):
-                logger.info("Refresh storage cluster page")
-                self.refresh_page()
-        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
-        time.sleep(60)
-        self.do_click(
-            locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
-        )
-        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
-        time.sleep(30)
-        if self.check_element_text("An error"):
-            logger.info("Refresh storage system page if error occurred")
-            self.refresh_page()
-            time.sleep(30)
+        else:
+            if self.operator_name == ODF_OPERATOR:
+                self.navigate_installed_operators_page()
+                self.choose_expanded_mode(
+                    mode=True, locator=self.dep_loc["drop_down_projects"]
+                )
+                self.do_click(
+                    self.dep_loc["choose_all_projects"], enable_screenshot=True
+                )
+            else:
+                self.search_operator_installed_operators_page(
+                    operator=self.operator_name
+                )
+
+            logger.info(f"Click on {self.operator_name} on 'Installed Operators' page")
+            if self.operator_name == ODF_OPERATOR:
+                logger.info("Click on Create StorageSystem")
+                self.do_click(
+                    locator=self.dep_loc["odf_operator_installed"],
+                    enable_screenshot=True,
+                )
+                time.sleep(5)
+                self.do_click(
+                    locator=self.dep_loc["storage_system_tab"], enable_screenshot=True
+                )
+            elif self.operator_name == OCS_OPERATOR:
+                logger.info("Click on Create StorageCluster")
+                self.do_click(
+                    locator=self.dep_loc["ocs_operator_installed"],
+                    enable_screenshot=True,
+                )
+                time.sleep(5)
+                self.do_click(
+                    locator=self.dep_loc["storage_cluster_tab"], enable_screenshot=True
+                )
+                if self.check_element_text("404"):
+                    raise ValueError(
+                        "Page crashed at the time of Storage System creation"
+                    )
+                self.do_click(
+                    locator=self.dep_loc["create_storage_cluster"],
+                    enable_screenshot=True,
+                )
+        if self.check_element_text("404") or self.check_element_text("An error"):
+            raise ValueError("Page crashed at the time of Storage System creation")
         if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
         elif config.DEPLOYMENT.get("local_storage"):
@@ -298,7 +311,7 @@ class DeploymentUI(PageNavigator):
         Install Internal Cluster
 
         """
-        logger.info("Click Internal")
+        logger.info("Deployment type is 'Full Deployment' as default selection")
         if self.operator_name == ODF_OPERATOR:
             self.do_click(
                 locator=self.dep_loc["internal_mode_odf"], enable_screenshot=True
@@ -306,7 +319,7 @@ class DeploymentUI(PageNavigator):
         else:
             self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
 
-        logger.info("Configure Storage Class (thin on vmware, gp2 on aws)")
+        logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
         self.do_click(
             locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
         )
@@ -424,11 +437,21 @@ class DeploymentUI(PageNavigator):
         """
         Configure OSD Size
         """
+
+        ocs_version = version.get_semantic_ocs_version_from_config()
         device_size = str(config.ENV_DATA.get("device_size"))
-        osd_size = device_size if device_size in osd_sizes else "512"
+
+        osd_size = (
+            device_size
+            if device_size in osd_sizes
+            else "512" if ocs_version <= version.VERSION_4_18 else "0.5 TiB"
+        )
         logger.info(f"Configure OSD Capacity {osd_size}")
         if self.ocp_version_semantic >= version.VERSION_4_11:
             self.do_click(self.dep_loc["osd_size_dropdown"], enable_screenshot=True)
+            logger.info(
+                "Requested capacity dropdown expanded for selecting OSD capacity "
+            )
         else:
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["osd_size_dropdown"]
