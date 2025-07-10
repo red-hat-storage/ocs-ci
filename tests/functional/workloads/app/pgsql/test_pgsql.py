@@ -61,4 +61,4 @@ class TestPgSQLWorkload(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pg_out = pgsql.validate_pgbench_run(pgbench_pods)
+        pgsql.validate_pgbench_run(pgbench_pods)
