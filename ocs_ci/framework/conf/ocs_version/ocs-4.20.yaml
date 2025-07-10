@@ -5,6 +5,7 @@ DEPLOYMENT:
   default_latest_tag: 'latest-4.20'
   ocs_csv_channel: "stable-4.20"
   default_ocp_version: '4.20'
+  konflux_build: true
 ENV_DATA:
   ocs_version: '4.20'
 REPORTING:

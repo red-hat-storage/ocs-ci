@@ -1,0 +1,9 @@
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: stage-registry-idms
+spec:
+  imageDigestMirrors:
+  - mirrors:
+    - registry.stage.redhat.io
+    source: registry.redhat.io

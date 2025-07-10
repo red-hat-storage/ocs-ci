@@ -1,0 +1,13 @@
+# This is ITMS used for deployment from stage catalog image generated from konflux
+---
+apiVersion: config.openshift.io/v1
+kind: ImageTagMirrorSet
+metadata:
+  name: redhat-operators-stage
+spec:
+  imageTagMirrors:
+  - source: registry.redhat.io/redhat/redhat-operator-index
+    mirrors:
+    - quay.io/rhceph-dev/konflux-stage
+  mirrorSourcePolicy:
+    AllowContactingSource 0
