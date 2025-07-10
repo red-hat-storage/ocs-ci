@@ -141,14 +141,9 @@ class TestCephDefaultValuesCheck(ManageTest):
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Stored values are {stored_values}")
-        # After all other filtering, normalize empty lines by replacing all empty lines with a fixed count
-        num_empty_lines = 0  # Replace with 0 to remove all empty lines or any other number to keep a fixed count
-        config_data = [line for line in config_data if line != ""] + [
-            ""
-        ] * num_empty_lines
-        stored_values = [line for line in stored_values if line != ""] + [
-            ""
-        ] * num_empty_lines
+        # After all other filtering, remove all empty lines
+        config_data = [line for line in config_data if line != ""]
+        stored_values = [line for line in stored_values if line != ""]
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
