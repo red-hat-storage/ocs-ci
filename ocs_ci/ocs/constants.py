@@ -3395,3 +3395,8 @@ LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
 
 # Auto-scaling Yaml files
 AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
+
+# ODF Grafana repo
+ODF_GRAFANA_REPO = "https://github.com/redhat-performance/odf-grafana"
+ODF_GRAFANA_PATH = "/tmp/odf-grafana"
+GRAFANA_NAMESPACE = "perfscale"

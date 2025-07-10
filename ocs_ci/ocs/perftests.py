@@ -9,6 +9,7 @@ import yaml
 
 import requests
 import json
+import subprocess
 
 from elasticsearch import Elasticsearch, exceptions as esexp
 
@@ -35,6 +36,13 @@ from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.utility import templating
 from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
 from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_running_cluster_id,
+    ocsci_log_path,
+    clone_repo,
+)
 
 log = logging.getLogger(__name__)
 
@@ -1071,3 +1079,37 @@ class PASTest(BaseTest):
         except Exception:
             log.warning("The POD failed to delete")
             pass
+
+    def deploy_odf_grafana(self):
+        env = os.environ.copy()
+        kubeconfig_path = config.RUN.get("kubeconfig")
+        full_kubeconfig_path = os.path.abspath(kubeconfig_path)
+        env["KUBECONFIG"] = full_kubeconfig_path
+        clone_repo(
+            constants.ODF_GRAFANA_REPO, constants.ODF_GRAFANA_PATH, branch="main"
+        )
+        self.kubeconfig_path = config.RUN.get("kubeconfig")
+        self.kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        full_path = os.path.abspath(self.kubeconfig_path)
+        pods = get_pod_name_by_pattern(
+            pattern="grafana",
+            namespace=constants.GRAFANA_NAMESPACE,
+        )
+        if len(pods) == 0:
+            log.info("No grafana pods found")
+            cmd = f"KUBECONFIG={full_path} ansible-playbook {os.path.join(constants.ODF_GRAFANA_PATH, 'deploy-grafana.yml')}"
+            try:
+                subprocess.run(
+                    "ansible-playbook /tmp/odf-grafana/deploy-grafana.yml",
+                    shell=True,
+                    env=env,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
+            except subprocess.TimeoutExpired as e:
+                log.info(f"Command timed out, {e.output.strip()}")
+        else:
+            log.info(f"grafana is running")
