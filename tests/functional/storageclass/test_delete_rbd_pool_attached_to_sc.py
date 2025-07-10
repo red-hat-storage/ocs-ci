@@ -140,6 +140,7 @@ class TestDeleteRbdPool(ManageTest):
         storageclass_factory_class,
         pvc_factory,
         pod_factory,
+        distribute_storage_classes_to_all_consumers_factory,
     ):
         """
         1. Create storageclass with the pool.
@@ -158,6 +159,11 @@ class TestDeleteRbdPool(ManageTest):
             storageclass_factory_class,
             volume_binding_mode,
         )
+
+        distr_res = distribute_storage_classes_to_all_consumers_factory()
+        assert (
+            isinstance(distr_res, bool) and distr_res
+        ), "After distribution storage classes in clients inventories and on provider are not matching"
 
         logger.info(f"cephblockpool name is {cbp_name}. Deleting it now with CLI")
         try:
@@ -178,6 +184,11 @@ class TestDeleteRbdPool(ManageTest):
                 f"cephblockpool '{cbp_name}' state is not ready after deletion. "
                 "cephblockpool deletion should fail if referenced by storageclass"
             )
+
+        distr_res = distribute_storage_classes_to_all_consumers_factory()
+        assert (
+            isinstance(distr_res, bool) and distr_res
+        ), "After distribution storage classes in clients inventories and on provider are not matching"
 
     @tier3
     @skipif_external_mode
