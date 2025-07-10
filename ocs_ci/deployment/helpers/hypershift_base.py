@@ -50,19 +50,10 @@ def get_hosted_cluster_names():
     """
 
     logger.info("Getting HyperShift hosted cluster names")
-    cmd = "get --namespace clusters hostedclusters -o custom-columns=NAME:.metadata.name --no-headers"
-
-    with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=cmd,
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-        if not out:
-            return []
-    return out.strip().split()
+    hosted_clusters_obj = OCP(
+        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+    ).get()
+    return [cluster.get("metadata").get("name") for cluster in hosted_clusters_obj]
 
 
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
@@ -307,13 +298,13 @@ def worker_nodes_deployed(name: str):
     return get_current_nodepool_size(name) == get_desired_nodepool_size(name)
 
 
-def wait_for_worker_nodes_to_be_ready(name: str, timeout=2400):
+def wait_for_worker_nodes_to_be_ready(name: str, timeout: int = 2400):
     """
     Wait for worker nodes to be ready for HyperShift hosted cluster
 
     Args:
         name (str): name of the cluster
-        timeout: timeout in seconds
+        timeout (int): timeout in seconds
 
     Returns:
         bool: True if worker nodes are ready, False otherwise
