@@ -142,6 +142,7 @@ anywhere else.
 * `in_transit_encryption` - Enable in-transit encryption.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
+* `konflux_build` - Set to True if build is made by Konflux build system.
 
 #### REPORTING
 

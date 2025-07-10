@@ -11,7 +11,7 @@ from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
     Deployment,
-    get_and_apply_icsp_from_catalog,
+    get_and_apply_idms_from_catalog,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -516,7 +516,20 @@ class OCSUpgrade(object):
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
-
+        stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
+        konflux_build = config.DEPLOYMENT.get("konflux_build")
+        if konflux_build and stage_testing:
+            logger.info("Creating stage TagMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+            logger.info("Creating stage ImageDigestMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            logger.info("Sleeping 60 seconds after applying tag mirror set.")
+            time.sleep(60)
+            logger.info("Waiting max 30 mins for master MCP to get updated")
+            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/master")
+            logger.info("Waiting max 30 mins for worker MCP to get updated")
+            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/worker")
+            return
         if not self.upgrade_in_current_source:
             disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
             if not ocs_catalog.is_exist():
@@ -546,7 +559,7 @@ class OCSUpgrade(object):
                 ocs_catalog.apply(cs_yaml.name)
                 if not config.DEPLOYMENT.get("disconnected"):
                     # on Disconnected cluster, ICSP from the ocs-registry image is not needed/valid
-                    get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
+                    get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
 
 
 def run_ocs_upgrade(
