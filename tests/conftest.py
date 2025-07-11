@@ -9119,6 +9119,8 @@ def benchmark_workload_storageutilization(request):
         benchmark_name=None,
         use_kustomize_build=True,
         is_completed=True,
+        numjobs=1,
+        iodepth=16,
     ):
         """
         Setup of benchmark fio
@@ -9133,6 +9135,8 @@ def benchmark_workload_storageutilization(request):
             benchmark_name (str): Optional. Name for the Benchmark resource.
             use_kustomize_build (bool): True, if use kustomize build. False, otherwise.
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
+            numjobs (int): Number of threads per job
+            iodepth (int): I/O queue depth
 
         Returns:
             BenchmarkOperatorFIO: The Benchmark operator FIO object
@@ -9153,6 +9157,8 @@ def benchmark_workload_storageutilization(request):
             timeout_completed=timeout_completed,
             benchmark_name=benchmark_name,
             use_kustomize_build=use_kustomize_build,
+            numjobs=numjobs,
+            iodepth=iodepth,
         )
         benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 

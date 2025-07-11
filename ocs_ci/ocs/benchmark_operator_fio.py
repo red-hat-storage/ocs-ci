@@ -44,6 +44,8 @@ class BenchmarkOperatorFIO(object):
         timeout_completed=2400,
         benchmark_name=None,
         use_kustomize_build=False,
+        numjobs=1,
+        iodepth=16,
     ):
         """
         Setup of benchmark fio
@@ -57,6 +59,8 @@ class BenchmarkOperatorFIO(object):
             timeout_completed (int): timeout client pod move to completed state
             benchmark_name (str): Optional. Name for the Benchmark resource.
             use_kustomize_build (bool): True, if use kustomize build. False, otherwise.
+            numjobs (int): Number of threads per job
+            iodepth (int): I/O queue depth
 
         """
         old_pods = get_all_pods(namespace=BMO_NS)
@@ -73,6 +77,8 @@ class BenchmarkOperatorFIO(object):
         self.crd_data["spec"]["workload"]["args"]["read_runtime"] = read_runtime
         self.crd_data["spec"]["workload"]["args"]["bs"] = bs
         self.crd_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+        self.crd_data["spec"]["workload"]["args"]["numjobs"] = [numjobs]
+        self.crd_data["spec"]["workload"]["args"]["iodepth"] = iodepth
         if benchmark_name:
             self.crd_data["metadata"]["name"] = benchmark_name
         self.calc_number_servers_file_size()
