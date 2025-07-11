@@ -41,7 +41,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
-from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
@@ -181,7 +181,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
 )
-from ocs_ci.helpers import helpers, dr_helpers, dr_helpers_ui
+from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
     create_unique_resource_name,
@@ -7055,7 +7055,7 @@ def dr_workload(request):
 
 
 @pytest.fixture(scope="class")
-def dr_workloads_on_managed_clusters(request, setup_acm_ui):
+def dr_workloads_on_managed_clusters(request):
     """
     Deploying subscription apps on both primary and secondary managed clusters
     """
@@ -7122,16 +7122,21 @@ def dr_workloads_on_managed_clusters(request, setup_acm_ui):
         return primary_cluster_instances, secondary_cluster_instances
 
     def teardown():
-        acm_obj = AcmAddClusters()
+        failed_to_delete = []
         managed_cluster_instances = [
             primary_cluster_instances,
             secondary_cluster_instances,
         ]
-        app_list = []
         for cluster_instances in managed_cluster_instances:
             for apps in cluster_instances:
-                app_list.append(apps.app_name)
-        dr_helpers_ui.delete_application_ui(acm_obj, workloads_to_delete=app_list)
+                try:
+                    apps.delete_workload()
+                except ResourceNotDeleted:
+                    failed_to_delete.append(apps.workload_namespace)
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
+            )
 
     request.addfinalizer(teardown)
     return factory

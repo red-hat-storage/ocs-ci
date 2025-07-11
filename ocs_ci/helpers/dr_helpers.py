@@ -252,7 +252,10 @@ def failover(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
 
-    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER)
+    drpc_obj.wait_for_phase(
+        constants.STATUS_FAILEDOVER,
+        timeout=360,
+    )
     config.switch_ctx(restore_index)
 
 
