@@ -68,6 +68,7 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.9")
 @skipif_vsphere_ipi
 @skipif_external_mode
+@skipif_aws_creds_are_missing
 @skipif_mcg_only
 class TestMCGReplicationWithDisruptions(E2ETest):
     """
