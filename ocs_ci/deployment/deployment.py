@@ -2348,6 +2348,20 @@ class Deployment(object):
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+        if self.platform in [constants.BAREMETAL_PLATFORM, constants.VSPHERE_PLATFORM]:
+            logger.info("Checking cephobjectstore user exist for bug: DFBUGS-2929")
+            cephobjectstoreuser = ocp.OCP(
+                kind="cephobjectstoreuser",
+                namespace=self.namespace,
+            )
+            cephobjectstoreusers = cephobjectstoreuser.get()["items"]
+            for objectstoreuser in cephobjectstoreusers:
+                name = objectstoreuser["metadata"]["name"]
+                phase = objectstoreuser["status"].get("phase")
+                logger.info(f"ObjectStoreUser user: {name} is in phase: {phase}")
+                assert (
+                    phase != "ReconcileFailed"
+                ), f"ObjectStoreUser {name} is in phase: {phase}"
 
     def deploy_lvmo(self):
         """
