@@ -1305,7 +1305,7 @@ def put_public_access_block(s3_obj, bucketname, public_access_block):
 
 def get_public_access_block(s3_obj, bucketname):
     """
-    Gets bucket policy from a bucket
+    Gets public access block configuration from a bucket
 
     Args:
         s3_obj (obj): MCG or OBC object

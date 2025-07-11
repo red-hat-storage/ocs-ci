@@ -1300,7 +1300,12 @@ class TestS3BucketPolicy(MCGTest):
 
     @staticmethod
     def check_commands(
-        mcg_obj, awscli_pod_session, bucket_name, file_name, allow_ls_anonymous
+        mcg_obj,
+        awscli_pod_session,
+        bucket_name,
+        path_on_bucket,
+        file_name,
+        allow_ls_anonymous,
     ):
         """
         Check that 'ls' and 'cp' commands on the bucket work as expected.
@@ -1312,6 +1317,10 @@ class TestS3BucketPolicy(MCGTest):
             1. Success with non-anonymous access
             2. Failure with "Access Denied" on anonymous access
         Args:
+            mcg_obj (obj): An object representing the current state of the MCG in the cluster
+            awscli_pod_session (pod): A pod running the AWSCLI tools
+            path_on_bucket (str) Target path on the bucket, to which the file is copied. If empty, the files
+                    is copied to the bucket root.
             bucket_name (str): Name of the bucket on which ls should be run
             file_name (str): File to be looked for
             allow_ls_anonymous (bool): Defines whether 'ls' with anonymous access is allowed
@@ -1319,10 +1328,8 @@ class TestS3BucketPolicy(MCGTest):
             UnexpectedBehaviour if the ls is not working as expected
         """
 
-        ls_command = f"ls s3://{bucket_name}/"
-        cp_command = (
-            f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}"
-        )
+        ls_command = f"ls s3://{bucket_name}/{path_on_bucket}"
+        cp_command = f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{path_on_bucket}{file_name}"
 
         awscli_pod_session.exec_cmd_on_pod(
             command=craft_s3_command(cp_command, mcg_obj=mcg_obj),
@@ -1418,7 +1425,7 @@ class TestS3BucketPolicy(MCGTest):
             "IBMCOS-OC",
         ],
     )
-    @tier1
+    @tier2
     def test_public_access_block_anonymous(
         self,
         mcg_obj,
@@ -1461,7 +1468,16 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
 
         TestS3BucketPolicy.check_commands(
-            mcg_obj, awscli_pod_session, bucket_name, file_name, False
+            mcg_obj, awscli_pod_session, bucket_name, "", file_name, False
+        )
+
+        TestS3BucketPolicy.check_commands(
+            mcg_obj,
+            awscli_pod_session,
+            bucket_name,
+            "dir1/dir2/dir3/",
+            file_name,
+            False,
         )
 
         bucket_policy_generated = gen_bucket_policy(
@@ -1488,7 +1504,11 @@ class TestS3BucketPolicy(MCGTest):
         )
 
         TestS3BucketPolicy.check_commands(
-            mcg_obj, awscli_pod_session, bucket_name, file_name, True
+            mcg_obj, awscli_pod_session, bucket_name, "", file_name, True
+        )
+
+        TestS3BucketPolicy.check_commands(
+            mcg_obj, awscli_pod_session, bucket_name, "dir1/dir2/dir3/", file_name, True
         )
 
         # Put public access block configuration
@@ -1519,7 +1539,15 @@ class TestS3BucketPolicy(MCGTest):
         )
 
         TestS3BucketPolicy.check_commands(
-            mcg_obj, awscli_pod_session, bucket_name, file_name, False
+            mcg_obj, awscli_pod_session, bucket_name, "", file_name, False
+        )
+        TestS3BucketPolicy.check_commands(
+            mcg_obj,
+            awscli_pod_session,
+            bucket_name,
+            "dir1/dir2/dir3/",
+            file_name,
+            False,
         )
 
         # Put public access block configuration
@@ -1550,7 +1578,10 @@ class TestS3BucketPolicy(MCGTest):
         )
 
         TestS3BucketPolicy.check_commands(
-            mcg_obj, awscli_pod_session, bucket_name, file_name, True
+            mcg_obj, awscli_pod_session, bucket_name, "", file_name, True
+        )
+        TestS3BucketPolicy.check_commands(
+            mcg_obj, awscli_pod_session, bucket_name, "dir1/dir2/dir3/", file_name, True
         )
 
 
