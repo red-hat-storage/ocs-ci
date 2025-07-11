@@ -88,7 +88,7 @@ class ClusterLoad:
         else:
             self.pvc_size = 10
         self.sleep_time = 45
-        self.target_pods_number = None
+        self.target_pods_number = 0
         if project_factory:
             project_name = f"{defaults.BG_LOAD_NAMESPACE}-{uuid4().hex[:5]}"
             self.project = project_factory(project_name=project_name)
