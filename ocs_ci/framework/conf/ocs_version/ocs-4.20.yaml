@@ -8,7 +8,7 @@ DEPLOYMENT:
 ENV_DATA:
   ocs_version: '4.20'
 REPORTING:
-  default_ocs_must_gather_latest_tag: 'latest-4.20'
-  default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  default_ocs_must_gather_latest_tag: 'v4.20'
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/odf4-odf-must-gather-rhel9"
 UPGRADE:
   default_latest_stable_upgrade_tag: 'latest-stable-upgrade-4.20'
