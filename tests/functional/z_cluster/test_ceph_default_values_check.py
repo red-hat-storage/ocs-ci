@@ -129,12 +129,21 @@ class TestCephDefaultValuesCheck(ManageTest):
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
         elif ocs_version == version.VERSION_4_14 or ocs_version == version.VERSION_4_15:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_414.split("\n")
-        elif ocs_version >= version.VERSION_4_16:
+        elif ocs_version in [
+            version.VERSION_4_16,
+            version.VERSION_4_17,
+            version.VERSION_4_18,
+        ]:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_416.split("\n")
+        elif ocs_version == version.VERSION_4_19:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_419.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Stored values are {stored_values}")
+        # After all other filtering, remove all empty lines
+        config_data = [line for line in config_data if line != ""]
+        stored_values = [line for line in stored_values if line != ""]
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
