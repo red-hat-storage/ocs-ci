@@ -2980,6 +2980,13 @@ SUBMARINER_DOWNSTREAM_BREW_IDMS = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_idms.yaml"
 )
 ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
+ACM_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "acm_catalogsource.yaml"
+)
+MCE_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "mce_catalogsource.yaml"
+)
+ACM_BREW_IDMS_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_idms.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"

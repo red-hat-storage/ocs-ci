@@ -12,5 +12,6 @@ ENV_DATA:
   vm_template: "rhcos-9.6.20250523-0-vmware.x86_64"
   acm_hub_channel: "release-2.14"
   acm_version: "2.14"
+  mce_version: "2.9"
   submariner_version: "0.21.0"
   oadp_version: "1.5"
