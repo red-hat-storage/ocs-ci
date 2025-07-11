@@ -8,6 +8,7 @@ from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
+    run_on_all_clients,
 )
 from ocs_ci.framework.testlib import (
     tier1,
@@ -159,7 +160,10 @@ class TestRawBlockPV(ManageTest):
             get_fio_rw_iops(pod)
         return pods, pvcs, pvs
 
-    def test_raw_block_pv(self, storageclass, namespace, teardown_factory):
+    @run_on_all_clients
+    def test_raw_block_pv(
+        self, storageclass, namespace, teardown_factory, cluster_index
+    ):
         """
         Base function for creation of namespace, storageclass, pvcs and pods
         """
