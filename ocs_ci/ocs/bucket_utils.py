@@ -203,7 +203,6 @@ def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
 
     else:
         base_command = f"s3cmd {no_ssl}"
-
     return f"{base_command}{cmd}"
 
 
@@ -577,21 +576,17 @@ def download_objects_using_s3cmd(
     else:
         retrieve_cmd = f"get {src} {target}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
-    elif signed_request_creds:
-        secrets = [
-            signed_request_creds.get("access_key_id"),
-            signed_request_creds.get("access_key"),
-            signed_request_creds.get("endpoint"),
-        ]
-    else:
-        secrets = None
+        signed_request_creds = {
+            "access_key_id": s3_obj.access_key_id,
+            "access_key": s3_obj.access_key,
+            "endpoint": s3_obj.s3_external_endpoint,
+            "region": s3_obj.region,
+        }
     podobj.exec_cmd_on_pod(
         command=craft_s3cmd_command(
-            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+            retrieve_cmd, signed_request_creds=signed_request_creds
         ),
         out_yaml_format=False,
-        secrets=secrets,
         **kwargs,
     ), "Failed to download objects"
 
