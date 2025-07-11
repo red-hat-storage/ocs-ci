@@ -1272,7 +1272,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # removing mon and osd pods and also removing PVC's to avoid stale CNS volumes
         try:
-            scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
+            scale_down_pods_and_remove_pvcs(self.storage_class)
         except Exception as err:
             logger.warning(
                 f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
