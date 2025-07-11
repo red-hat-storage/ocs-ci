@@ -15,7 +15,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    tier2,
     system_test,
     skipif_vsphere_ipi,
     magenta_squad,
@@ -100,13 +99,13 @@ class TestMCGReplicationWithDisruptions(E2ETest):
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
                 },
-                marks=[tier2, pytest.mark.polarion_id("OCS-3906")],
             ),
         ],
         ids=[
             "AZUREtoAWS-NS-CLI",
         ],
     )
+    @polarion_id("OCS-3906")
     def test_replication_with_disruptions(
         self,
         awscli_pod_session,
