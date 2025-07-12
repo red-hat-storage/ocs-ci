@@ -1035,8 +1035,11 @@ FUSION_CATALOG_SOURCE_YAML = os.path.join(
 
 OCS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ocs-secret.yaml")
 
-STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "stageImageContentSourcePolicy.yaml"
+STAGE_IMAGE_DIGEST_MIRROR_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage_image_digest_mirror_set.yaml"
+)
+STAGE_TAG_MIRROR_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage_image_tag_mirror_set.yaml"
 )
 
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")

@@ -177,6 +177,7 @@ version.
 * `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
 * `storage_cluster_override` - Dictionary with data which will allow you to dynamically override data in storageCluster CR.
+* `konflux_build` - Set to True if build is made by Konflux build system.
 
 #### REPORTING
 

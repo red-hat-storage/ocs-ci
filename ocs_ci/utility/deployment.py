@@ -215,7 +215,11 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
             in the catalog image
 
     """
-
+    stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
+    konflux_build = config.DEPLOYMENT.get("konflux_build")
+    if stage_testing and konflux_build:
+        logger.info("Skipping applying IDMS rules from image for konflux stage testing")
+        return ""
     idms_file_location = "/idms.yaml"
     idms_file_dest_dir = os.path.join(
         config.ENV_DATA["cluster_path"], f"idms-{config.RUN['run_id']}"
