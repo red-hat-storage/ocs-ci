@@ -113,11 +113,6 @@ def bucket_class_factory(
         else:
             interface = "OC"
 
-        if "timeout" in bucket_class_dict:
-            timeout = bucket_class_dict["timeout"]
-        else:
-            timeout = 600
-
         namespace_policy = {}
         backingstores = None
         namespacestores = None
@@ -128,7 +123,13 @@ def bucket_class_factory(
                 nss_dict = bucket_class_dict["namespace_policy_dict"][
                     "namespacestore_dict"
                 ]
-                namespacestores = namespace_store_factory(interface, nss_dict)
+                if "timeout" in bucket_class_dict:
+                    timeout = bucket_class_dict["timeout"]
+                else:
+                    timeout = 180
+                namespacestores = namespace_store_factory(
+                    interface, nss_dict, timeout=timeout
+                )
                 namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
                     "type"
                 ]
@@ -165,6 +166,11 @@ def bucket_class_factory(
                     namespace_policy["write_resource"] = namespacestores[0].name
 
         elif "backingstore_dict" in bucket_class_dict:
+            if "timeout" in bucket_class_dict:
+                timeout = bucket_class_dict["timeout"]
+            else:
+                timeout = 600
+
             backingstores = [
                 backingstore
                 for backingstore in backingstore_factory(

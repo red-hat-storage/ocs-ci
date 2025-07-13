@@ -423,7 +423,7 @@ def namespace_store_factory(
         "oc": oc_create_namespacestore,
     }
 
-    def _create_nss(method, nss_dict):
+    def _create_nss(method, nss_dict, timeout=180):
         """
         Tracks creation and cleanup of all the namespace stores that were created in the current scope
 
@@ -433,7 +433,7 @@ def namespace_store_factory(
             as value.
             Namespace store dictionary examples - 'CloudName': [(amount, region), (amount, region)]
             i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
-
+            timeout (int): Time for NSS to become healthy in seconds
         Returns:
             list: A list of the NamespaceStore objects created by the factory in the current scope
 
@@ -468,7 +468,9 @@ def namespace_store_factory(
                     )
                     created_nss.append(nss_obj)
                     current_call_created_nss.append(nss_obj)
-                    nss_obj.verify_health()
+
+                    nss_obj.verify_health(timeout=timeout)
+
         return current_call_created_nss
 
     def nss_cleanup():
