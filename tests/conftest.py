@@ -7537,12 +7537,14 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
 
     instances = []
 
-    def factory(pvc_vm=1, custom_sc=False):
+    def factory(pvc_vm=1, custom_sc=False, dr_protect=True):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
             custom_sc (bool): False by default, will create and use custom Pool and Storage Class
                             when set to True for CNV workload
+            dr_protect (bool): True by default where workload will be DR protected via CLI,
+                                else test case should handle it (maybe with UI)
 
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
@@ -7587,7 +7589,7 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(dr_protect=dr_protect)
 
         return instances
 
