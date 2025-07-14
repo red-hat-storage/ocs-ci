@@ -2789,6 +2789,36 @@ osd_memory_target_cgroup_limit_ratio = 0.8
 bluestore_prefer_deferred_size_hdd = 0
 """
 
+ROOK_CEPH_CONFIG_VALUES_419 = r"""
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+mon_warn_on_pool_no_redundancy = false
+
+bluestore_prefer_deferred_size_hdd = 0
+bluestore_slow_ops_warn_lifetime = 0
+
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+
+[client.rbd-mirror.a]
+debug_ms = 1
+debug_rbd = 15
+debug_rbd_mirror = 30
+log_file = /var/log/ceph/\$cluster-\$name.log
+
+[client.rbd-mirror-peer]
+debug_ms = 1
+debug_rbd = 15
+debug_rbd_mirror = 30
+log_file = /var/log/ceph/\$cluster-\$name.log
+
+"""
+
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
