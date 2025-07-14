@@ -4,6 +4,7 @@ from ocs_ci.ocs.cluster import (
     get_ceph_config_property,
     change_pool_target_size_ratio,
     get_autoscale_status_property,
+    get_total_num_of_pgs,
 )
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
@@ -33,6 +34,7 @@ class TestCephPg(ManageTest):
         """
         mon_target_pg = get_ceph_config_property("mon", "mon_target_pg_per_osd")
         mode = config.ENV_DATA.get("performance_profile")
+        pgs_total = get_total_num_of_pgs()
         if mode == "lean":
             assert (
                 int(mon_target_pg) == 100
@@ -45,6 +47,7 @@ class TestCephPg(ManageTest):
             assert (
                 int(mon_target_pg) == 400
             ), f"Mon_target_pg_per_osd is {mon_target_pg}. It should be 400 for Performance profile"
+            assert pgs_total > 250, f"Total pgs: {pgs_total}. Should be more than 250"
 
     @skipif_ocs_version("<4.19")
     @tier1

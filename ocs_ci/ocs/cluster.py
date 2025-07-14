@@ -1485,6 +1485,14 @@ def get_total_num_of_pgs():
     """
     Get the total number of pgs in all pools
     """
+    ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
+    pools_df = parse_ceph_df_pools(ceph_df_output)
+    pools_dict = ceph_details_df_to_dict(pools_df)
+    total_pgs = 0
+    for pool in pools_dict:
+        total_pgs += int(pools_dict[pool][["PGS"]])
+    logger.info(f"Total number of pgs: {total_pgs}")
+    return total_pgs
 
 
 def get_ceph_pool_property(pool_name, prop):
