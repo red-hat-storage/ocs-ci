@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     brown_squad,
     ManageTest,
     tier1,
+    skipif_ocs_version,
     skipif_hci_client,
 )
 from ocs_ci.framework.logger_helper import log_step
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
+@skipif_ocs_version("<4.19")
 @skipif_hci_client
 class TestStorageSystem(ManageTest):
     """
@@ -34,8 +36,13 @@ class TestStorageSystem(ManageTest):
         storage_system = ocp.OCP(
             kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        storage_system_data = storage_system.get()
-        assert not storage_system_data.get("items")
+        try:
+            storage_system.get()
+        except Exception as e:
+            assert 'the server doesn\'t have a resource type "StorageSystem"' in str(e)
+        else:
+            assert False, "Expected error was not raised"
+
         log_step(
             "Verify that Storage Cluster owner reference doesn't contain storage system"
         )
