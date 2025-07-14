@@ -7405,10 +7405,12 @@ def discovered_apps_dr_workload_cnv(request):
 
     instances = []
 
-    def factory(pvc_vm=1):
+    def factory(pvc_vm=1, dr_protect=True):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+            dr_protect (bool): True by default where workload will be DR protected via CLI,
+                                else test case should handle it (maybe with UI)
 
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
@@ -7449,7 +7451,7 @@ def discovered_apps_dr_workload_cnv(request):
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(dr_protect=dr_protect)
 
         return instances
 
