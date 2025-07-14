@@ -1647,8 +1647,12 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             "discovered_apps_pod_selector_value"
         )
 
-    def deploy_workload(self):
+    def deploy_workload(self, dr_protect=True):
         """
+
+        Args:
+            dr_protect (bool): True by default where workload will be DR protected via CLI,
+                                else test case should handle it (maybe with UI)
 
         Deployment specific to CNV workload for Discovered/Imperative Apps
 
@@ -1663,8 +1667,9 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
         config.switch_acm_ctx()
-        self.create_placement()
-        self.create_drpc()
+        if dr_protect:
+            self.create_placement()
+            self.create_drpc()
         self.verify_workload_deployment()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
