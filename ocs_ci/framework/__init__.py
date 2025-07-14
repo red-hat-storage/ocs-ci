@@ -303,7 +303,11 @@ class MultiClusterConfig:
         """
         consumer_indexes_list = []
         for i, cluster in enumerate(self.clusters):
-            if cluster.ENV_DATA["cluster_type"] in ["consumer", "hci_client", "Client"]:
+            if cluster.ENV_DATA.get("cluster_type", "").lower() in [
+                "consumer",
+                "hci_client",
+                "client",
+            ]:
                 consumer_indexes_list.append(i)
 
         if not consumer_indexes_list:
