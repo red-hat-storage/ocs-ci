@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     libtest,
     brown_squad,
+    runs_on_provider,
 )
 from ocs_ci.framework import config
 from ocs_ci.helpers.osd_resize import CephCluster
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 @brown_squad
 @libtest
 @ignore_leftovers
+@runs_on_provider
 class TestWaitForCephRebalance(ManageTest):
     """
     Test Wait for Ceph rebalance without having the IO in the background
@@ -45,6 +47,7 @@ class TestWaitForCephRebalance(ManageTest):
 @brown_squad
 @libtest
 @ignore_leftovers
+@runs_on_provider
 class TestWaitForCephRebalanceWithIO(ManageTest):
     """
     Test wait for Ceph rebalance when we run IO in the background
@@ -60,6 +63,37 @@ class TestWaitForCephRebalanceWithIO(ManageTest):
     def teardown(self, request):
         def finalizer():
             config.RUN["io_in_bg"] = self.original_io_in_bg
+
+        request.addfinalizer(finalizer)
+
+    def test_wait_for_ceph_rebalance_with_io(self):
+        ceph_cluster_obj = CephCluster()
+        assert ceph_cluster_obj.wait_for_rebalance(
+            timeout=180
+        ), "Data re-balance failed to complete"
+
+
+@brown_squad
+@libtest
+@ignore_leftovers
+@runs_on_provider
+class TestWaitForCephRebalanceWithoutRebalanceFlag(ManageTest):
+    """
+    Test Ceph rebalance wait behavior when the high recovery profile is disabled
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        # Simulate the run when the high recovery profile is disabled
+        self.original_flag = config.RUN.get(
+            "enable_high_recovery_during_rebalance", False
+        )
+        config.RUN["enable_high_recovery_during_rebalance"] = False
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            config.RUN["enable_high_recovery_during_rebalance"] = self.original_flag
 
         request.addfinalizer(finalizer)
 

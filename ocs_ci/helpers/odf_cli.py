@@ -170,6 +170,18 @@ class ODFCliRunner:
         )
 
     def get_recovery_profile(self):
+        """
+        Retrieve the current recovery profile using the ODF CLI.
+
+        Returns:
+            str: The name of the current recovery profile (e.g., 'low_recovery_ops',
+            'balanced', 'high_recovery_ops').
+
+        Notes:
+            If the CLI returns no output, the method logs a warning and returns the
+            default profile 'balanced' as a fallback.
+
+        """
         output = self.run_get_recovery_profile()
         str_output = output.stdout.decode().strip()
         if not str_output:
@@ -180,15 +192,38 @@ class ODFCliRunner:
         return str_output.split()[-1]
 
     def run_set_recovery_profile(self, profile_name):
+        """
+        Set the recovery profile using the ODF CLI.
+
+        Args:
+            profile_name (str): The name of the recovery profile to apply
+                (e.g., 'low_recovery_ops', 'balanced', 'high_recovery_ops').
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
         self.run_command(f" set recovery-profile {profile_name}")
 
     def run_set_recovery_profile_low(self):
+        """
+        Set the recovery profile to 'low_recovery_ops'.
+
+        """
         return self.run_set_recovery_profile(LOW_RECOVERY_OPS)
 
     def run_set_recovery_profile_balanced(self):
+        """
+        Set the recovery profile to 'balanced'.
+
+        """
         return self.run_set_recovery_profile(BALANCED)
 
     def run_set_recovery_profile_high(self):
+        """
+        Set the recovery profile to 'high_recovery_ops'.
+
+        """
         return self.run_set_recovery_profile(HIGH_RECOVERY_OPS)
 
 
@@ -198,7 +233,12 @@ def odf_cli_setup_helper():
     Downloads the ODF CLI binary if it does not exist.
 
     Returns:
-        ODFCliRunner: The initialized runner, or None if initialization failed.
+        ODFCliRunner: The initialized runner.
+
+    Raises:
+        NotSupportedException: If ODF CLI is not supported on the current version or deployment.
+        RuntimeError: If CLI binary download or ODFCliRunner initialization fails.
+
     """
     odf_cli_retriever = ODFCLIRetriever()
 
@@ -207,8 +247,7 @@ def odf_cli_setup_helper():
         log.warning("ODF CLI binary not found. Attempting to download...")
         odf_cli_retriever.retrieve_odf_cli_binary()
         if not odf_cli_retriever.check_odf_cli_binary():
-            log.warning("Failed to download ODF CLI binary")
-            return None
+            raise RuntimeError("Failed to download ODF CLI binary")
 
     # Check and initialize ODFCliRunner
     odf_cli_runner = ODFCliRunner()
@@ -216,8 +255,7 @@ def odf_cli_setup_helper():
         log.warning("ODFCliRunner not initialized. Attempting to initialize again...")
         odf_cli_runner = ODFCliRunner()
         if not odf_cli_runner:
-            log.warning("Failed to initialize ODFCliRunner after retry")
-            return None
+            raise RuntimeError("Failed to initialize ODFCliRunner after retry")
 
     log.info("ODF CLI binary downloaded and ODFCliRunner initialized successfully")
     return odf_cli_runner

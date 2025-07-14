@@ -378,6 +378,13 @@ def pytest_addoption(parser):
         default=False,
         help=("Skips the RPM and go version collection for every pod for session"),
     )
+    parser.addoption(
+        "--enable-high-recovery-during-rebalance",
+        dest="enable_high_recovery_during_rebalance",
+        choices=["true", "false"],
+        default="true",
+        help="Enable high recovery profile during Ceph rebalance",
+    )
 
 
 def pytest_configure(config):
@@ -747,6 +754,12 @@ def process_cluster_cli_params(config):
         config, "skip_rpm_go_version_collection"
     )
     ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
+    enable_high_recovery_during_rebalance = get_cli_param(
+        config, "enable_high_recovery_during_rebalance"
+    )
+    ocsci_config.RUN["enable_high_recovery_during_rebalance"] = (
+        enable_high_recovery_during_rebalance
+    )
 
 
 def pytest_collection_modifyitems(session, config, items):

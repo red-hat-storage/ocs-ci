@@ -3,6 +3,7 @@ import functools
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+from ocs_ci.utility.retry import catch_exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -106,62 +107,6 @@ def switch_to_provider_for_function(func):
     return inner
 
 
-def safe_exec(exception_type=Exception):
-    """
-    A decorator factory that wraps a function in a try-except block to catch and suppress
-    specified exceptions, logging the full traceback.
-
-    This is useful for non-critical operations where failure should not interrupt
-    the main flow of the program.
-
-    Args:
-        exception_type (Exception or tuple of Exceptions): The type(s) of exceptions to catch.
-            Defaults to the base Exception class.
-
-    Returns:
-        A decorator that wraps a function, returning None if an exception is caught.
-
-    Examples::
-
-        @safe_exec()
-        def risky_division(x, y):
-            return x / y
-
-        risky_division(1, 0)
-        # WARNING - Exception in risky_division: division by zero
-        # None
-
-        @safe_exec(KeyError)
-        def get_item(d, key):
-            return d[key]
-
-        get_item({'a': 1}, 'b')
-        # WARNING - Exception in get_item: 'b'
-        # None
-
-        # Manual usage without decorator syntax:
-        def get_item(d, key):
-            return d[key]
-
-        safe_exec(KeyError)(get_item)({'a': 1}, 'b')
-        # WARNING - Exception in get_item: 'b'
-        # None
-    """
-
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except exception_type as ex:
-                func_name = getattr(func, "__name__", "unknown")
-                logger.exception(f"Exception in {func_name}: {ex}")
-                return None
-
-        return wrapper
-
-    return decorator
-
-
 def enable_high_recovery(func):
     """
     Decorator to temporarily boost Ceph recovery performance during the execution
@@ -190,14 +135,16 @@ def enable_high_recovery(func):
             set_ceph_mclock_balanced_profile,
         )
 
-        odf_cli_runner = safe_exec()(odf_cli_setup_helper)()
+        odf_cli_runner = catch_exceptions(Exception)(odf_cli_setup_helper)()
         if not odf_cli_runner:
             logger.warning(
                 "ODF CLI runner not available, proceeding without profile switch"
             )
             return func(*args, **kwargs)
 
-        original_profile = safe_exec()(odf_cli_runner.get_recovery_profile)()
+        original_profile = catch_exceptions(Exception)(
+            odf_cli_runner.get_recovery_profile
+        )()
         if not original_profile:
             logger.warning(
                 "Failed to get current recovery profile, proceeding without profile switch"
@@ -205,38 +152,43 @@ def enable_high_recovery(func):
             return func(*args, **kwargs)
 
         logger.info("Setting recovery profile to 'high_recovery_ops'")
-        safe_exec()(odf_cli_runner.run_set_recovery_profile_high)()
+        catch_exceptions(Exception)(odf_cli_runner.run_set_recovery_profile_high)()
 
         logger.info("Setting mclock recovery profile to 'high_recovery_ops'")
-        safe_exec()(set_ceph_mclock_high_client_recovery_profile)()
+        catch_exceptions(Exception)(set_ceph_mclock_high_client_recovery_profile)()
 
         try:
             return func(*args, **kwargs)
         finally:
             logger.info(f"Switch to the original recovery profile '{original_profile}'")
-            safe_exec()(odf_cli_runner.run_set_recovery_profile)(original_profile)
+            catch_exceptions(Exception)(odf_cli_runner.run_set_recovery_profile)(
+                original_profile
+            )
             logger.info(
                 "Setting mclock recovery profile to the default 'balanced' profile"
             )
-            safe_exec()(set_ceph_mclock_balanced_profile)()
+            catch_exceptions(Exception)(set_ceph_mclock_balanced_profile)()
 
     return wrapper
 
 
-def enable_high_recovery_if_io_flag(func):
+def enable_high_recovery_during_rebalance_flag(func):
     """
-    Decorator that applies 'enable_high_recovery' only if the 'io_in_bg' flag
-    is set to True in the test configuration. Otherwise, the function is run as-is.
+    Decorator that applies 'enable_high_recovery' only if the
+    'enable_high_recovery_during_rebalance' flag is set to True
+    in the test configuration. Otherwise, the function runs as-is.
 
     Returns:
         The result of the wrapped function.
+
     """
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if not config.RUN.get("io_in_bg"):
+        if not config.RUN.get("enable_high_recovery_during_rebalance"):
             logger.info(
-                "The 'io_in_bg' param is not set. Proceeding with the original function..."
+                "The 'enable_high_recovery_during_rebalance' flag is not set. "
+                "Proceeding with the original function..."
             )
             return func(*args, **kwargs)
 

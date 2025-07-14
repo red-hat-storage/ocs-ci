@@ -125,6 +125,9 @@ def set_ceph_mclock_high_client_recovery_profile(osd_ids=None):
     """
     Apply the 'high_client_ops' mClock profile to specified OSDs (or all OSDs if not provided).
 
+    Args:
+        osd_ids (list): List of OSD IDs. If None, the profile is applied to all OSDs.
+
     Raises:
         CommandFailed: If enabling override or setting the profile fails.
 
@@ -136,6 +139,9 @@ def set_ceph_mclock_balanced_profile(osd_ids=None):
     """
     Apply the 'balanced' mClock profile to specified OSDs (or all OSDs if not provided).
 
+    Args:
+        osd_ids (list): List of OSD IDs. If None, the profile is applied to all OSDs.
+
     Raises:
         CommandFailed: If enabling override or setting the profile fails.
 
@@ -146,6 +152,9 @@ def set_ceph_mclock_balanced_profile(osd_ids=None):
 def set_ceph_mclock_high_recovery_profile(osd_ids=None):
     """
     Apply the 'high_recovery_ops' mClock profile to specified OSDs (or all OSDs if not provided).
+
+    Args:
+        osd_ids (list): List of OSD IDs. If None, the profile is applied to all OSDs.
 
     Raises:
         CommandFailed: If enabling override or setting the profile fails.
