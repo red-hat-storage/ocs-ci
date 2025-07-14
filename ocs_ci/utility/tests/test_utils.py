@@ -59,9 +59,7 @@ def test_run_cmd_simple_positive(caplog):
     assert caplog.records[1].levelname == "DEBUG"
     assert caplog.records[1].message == "Command stdout: hello"
     assert caplog.records[2].levelname == "DEBUG"
-    assert caplog.records[2].message == "Command stderr is empty"
-    assert caplog.records[3].levelname == "DEBUG"
-    assert caplog.records[3].message == "Command return code: 0"
+    assert caplog.records[2].message == "Command return code: 0"
 
 
 def test_run_cmd_simple_positive_with_secrets(caplog):
@@ -90,14 +88,12 @@ def test_run_cmd_simple_negative(caplog):
     # check that run_cmd logged the run as expected
     assert caplog.records[0].levelname == "INFO"
     assert caplog.records[0].message == f"Executing command: {cmd}"
-    assert caplog.records[1].levelname == "DEBUG"
-    assert caplog.records[1].message == "Command stdout is empty"
-    assert caplog.records[2].levelname == "WARNING"
-    assert caplog.records[2].message.startswith("Command stderr: ls:")
-    assert "No such file or directory" in caplog.records[2].message
-    assert caplog.records[3].levelname == "DEBUG"
+    assert caplog.records[1].levelname == "ERROR"
+    assert caplog.records[1].message.startswith("Command stderr: ls:")
+    assert "No such file or directory" in caplog.records[1].message
+    assert caplog.records[2].levelname == "DEBUG"
     return_code = 1 if platform == "darwin" else 2
-    assert caplog.records[3].message == f"Command return code: {return_code}"
+    assert caplog.records[2].message == f"Command return code: {return_code}"
 
 
 def test_run_cmd_simple_negative_with_secrets(caplog):
@@ -129,14 +125,12 @@ def test_run_cmd_simple_negative_ignoreerror(caplog):
     # check that run_cmd logged the run as expected
     assert caplog.records[0].levelname == "INFO"
     assert caplog.records[0].message == f"Executing command: {cmd}"
-    assert caplog.records[1].levelname == "DEBUG"
-    assert caplog.records[1].message == "Command stdout is empty"
-    assert caplog.records[2].levelname == "WARNING"
-    assert caplog.records[2].message.startswith("Command stderr: ls:")
-    assert "No such file or directory" in caplog.records[2].message
-    assert caplog.records[3].levelname == "DEBUG"
+    assert caplog.records[1].levelname == "ERROR"
+    assert caplog.records[1].message.startswith("Command stderr: ls:")
+    assert "No such file or directory" in caplog.records[1].message
+    assert caplog.records[2].levelname == "DEBUG"
     return_code = 1 if platform == "darwin" else 2
-    assert caplog.records[3].message == f"Command return code: {return_code}"
+    assert caplog.records[2].message == f"Command return code: {return_code}"
 
 
 class A:
