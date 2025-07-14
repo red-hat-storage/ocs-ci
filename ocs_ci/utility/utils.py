@@ -500,6 +500,9 @@ def run_cmd(
         output_file=output_file,
         **kwargs,
     )
+    log.warning(
+        "You are using the deprecated form of exec_cmd. Please use exec_cmd instead."
+    )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
@@ -608,6 +611,8 @@ def exec_cmd(
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
+    log_stdout=True,
+    log_stderr_level=logging.DEBUG,
     **kwargs,
 ):
     """
@@ -632,6 +637,8 @@ def exec_cmd(
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
         output_file (str): path where to write output of stderr from command - apply only when silent mode is True
+        log_stdout (bool): If True will log stdout, default true
+        log_stderr_level (int): Log level for stderr on successful commands, default DEBUG
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -704,22 +711,19 @@ def exec_cmd(
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
-    if len(completed_process.stdout) > 0:
+    if log_stdout and len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
-    else:
-        log.debug("Command stdout is empty")
 
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
         if not silent:
-            log.warning(f"Command stderr: {masked_stderr}")
+            # Use ERROR level for failed commands, configurable level for successful ones
+            level = logging.ERROR if completed_process.returncode else log_stderr_level
+            log.log(level, f"Command stderr: {masked_stderr}")
         else:
             if output_file:
                 with open(output_file, "a") as out_fd:
                     out_fd.write(masked_stderr)
-    else:
-        if not silent:
-            log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
         masked_stderr = bin_xml_escape(filter_out_emojis(masked_stderr))
