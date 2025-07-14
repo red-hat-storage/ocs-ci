@@ -1045,29 +1045,29 @@ def check_storage_classes_on_clients(ready_consumer_names: list[str]):
             == set(get_autodistributed_storage_classes()),
         )
         if not sample.wait_for_func_status(result=True):
-            result = False
+            res = False
             log.error(
                 "The storage classes on the provider do not match the "
                 f"expected storage classes on {config.ENV_DATA['cluster_name']}."
             )
         else:
-            result = True
+            res = True
             log.info(
                 "The storage classes on the provider match the "
                 f"expected storage classes on {config.ENV_DATA['cluster_name']}."
             )
-        return result
+        return res
 
     with ThreadPoolExecutor() as executor:
         futures = []
         for multicluster_config_index in config.get_consumer_indexes_list():
             log.info(
-                f"Checking multicluster config index '{multicluster_config_index}', if Consumer is Ready"
+                f"Checking multicluster config index '{multicluster_config_index}', if Consumer is Ready. "
+                "Skip verifying distribution of consumer which is intentionally or not NotReady"
             )
-            if (
-                config.get_cluster_name_by_index(multicluster_config_index)
-                in ready_consumer_names
-            ):
+            cluster_name = config.get_cluster_name_by_index(multicluster_config_index)
+            # consumer names are built like '<consumer_name>-<cluster_name>'
+            if any([rcn for rcn in ready_consumer_names if rcn.endswith(cluster_name)]):
                 log.info(
                     "Submitting task to verify storage classes with "
                     f"client {config.get_cluster_name_by_index(multicluster_config_index)}"
