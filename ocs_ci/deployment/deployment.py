@@ -2798,7 +2798,7 @@ class Deployment(object):
         )
         acm_konflux_catsrc_yaml_data["spec"][
             "image"
-        ] = f"quay.io:443/acm-d/acm-dev-catalog:latest-{config.ENV_DATA.get('acm_version')}"
+        ] = f"{constants.ACM_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('acm_version')}"
         acm_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_konflux_catsrc_yaml_data_manifest", delete=False
         )
@@ -2820,7 +2820,7 @@ class Deployment(object):
         )
         mce_konflux_catsrc_yaml_data["spec"][
             "image"
-        ] = f"quay.io:443/acm-d/mce-dev-catalog:latest-{config.ENV_DATA.get('mce_version')}"
+        ] = f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
         mce_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="mce_konflux_catsrc_yaml_data_manifest", delete=False
         )
