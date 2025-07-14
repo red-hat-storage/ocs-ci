@@ -25,7 +25,10 @@ from collections import namedtuple
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+from ocs_ci.deployment.hosted_cluster import (
+    hypershift_cluster_factory,
+    get_autodistributed_storage_classes,
+)
 from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
@@ -131,7 +134,12 @@ from ocs_ci.ocs.resources.pvc import (
     get_all_pvc_objs,
     get_pvc_objs,
 )
-from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
+from ocs_ci.ocs.version import (
+    get_ocs_version,
+    get_ocp_version_dict,
+    report_ocs_version,
+    if_version,
+)
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
@@ -10135,3 +10143,64 @@ def vm_snapshot_restore_fixture(request):
 
     request.addfinalizer(teardown)
     return factory
+
+
+@if_version(">4.18")
+@pytest.fixture()
+def distribute_storage_classes_to_all_consumers_factory():
+    """
+    Factory to distribute storage classes to all Storage Consumers in the cluster.
+    Returns:
+        function: A callable function to execute the distribution logic.
+    """
+
+    def factory():
+        return distribute_storage_classes_to_all_consumers()
+
+    return factory
+
+
+@if_version(">4.18")
+def distribute_storage_classes_to_all_consumers():
+    """
+    This fixture patches all Storage Consumers, except the internal one, with the list of Storage Classes if
+    provisioner is csi.rbd or csi.cephfs.
+    Function validates Storage Class is available on Client cluster and return combined result for all consumers.
+    This function can be called at the end too, to sync up list of Storage Classes after Storage Classes were removed.
+
+    Returns:
+        bool: True if all Storage Classes are distributed successfully to all consumers, False otherwise.
+
+    """
+
+    # to avoid overloading this module with imports, we import only when this fixture is called
+    from ocs_ci.ocs.resources.storageconsumer import (
+        get_ready_storage_consumers,
+        check_storage_classes_on_clients,
+    )
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        if not ocsci_config.multicluster:
+            log.info(
+                "Skipping distribution of storage classes to consumers as multicluster is not enabled in ocsci_config."
+            )
+            return
+
+        consumers = get_ready_storage_consumers()
+        consumers = [
+            consumer
+            for consumer in consumers
+            if consumer.name != constants.INTERNAL_STORAGE_CONSUMER_NAME
+        ]
+        ready_consumer_names = [consumer.name for consumer in consumers]
+
+        if not ready_consumer_names:
+            log.warning("No ready storage consumers found")
+            return
+
+        storage_class_names = get_autodistributed_storage_classes()
+        for consumer in consumers:
+            log.info(f"Distributing storage classes to consumer {consumer.name}")
+            consumer.set_storage_classes(storage_class_names)
+
+    return check_storage_classes_on_clients(ready_consumer_names)
