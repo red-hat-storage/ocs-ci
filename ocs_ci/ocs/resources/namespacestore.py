@@ -35,12 +35,13 @@ class NamespaceStore:
         self.secret_name = secret_name
         self.mcg_obj = mcg_obj
 
-    def delete(self, retry=True):
+    def delete(self, retry=True, timeout=120):
         """
         Deletes the current namespacestore by using OC/CLI commands
 
         Args:
             retry (bool): Whether to retry the deletion if it fails
+            timeout(int): Time for deletion timeout in seconds
 
         """
         log.info(f"Cleaning up namespacestore {self.name}")
@@ -90,7 +91,7 @@ class NamespaceStore:
         }
         if retry:
             sample = TimeoutSampler(
-                timeout=120,
+                timeout=timeout,
                 sleep=20,
                 func=cmdMap[self.method],
             )
@@ -417,13 +418,16 @@ def namespace_store_factory(
 
     """
     created_nss = []
+    nss_deletion_timeout_param = 1
 
     cmdMap = {
         "cli": cli_create_namespacestore,
         "oc": oc_create_namespacestore,
     }
 
-    def _create_nss(method, nss_dict, timeout=180):
+    def _create_nss(
+        method, nss_dict, nss_creation_timeout=180, nss_deletion_timeout=120
+    ):
         """
         Tracks creation and cleanup of all the namespace stores that were created in the current scope
 
@@ -433,12 +437,15 @@ def namespace_store_factory(
             as value.
             Namespace store dictionary examples - 'CloudName': [(amount, region), (amount, region)]
             i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
-            timeout (int): Time for NSS to become healthy in seconds
+            nss_creation_timeout (int): Time for NSS to become healthy in seconds
+            nss_deletion_timeout (int): Time for NSS to be deleted in seconds
         Returns:
             list: A list of the NamespaceStore objects created by the factory in the current scope
 
         """
         current_call_created_nss = []
+        nonlocal nss_deletion_timeout_param
+        nss_deletion_timeout_param = nss_deletion_timeout
         for platform, nss_lst in nss_dict.items():
             for nss_tup in nss_lst:
                 for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
@@ -469,14 +476,14 @@ def namespace_store_factory(
                     created_nss.append(nss_obj)
                     current_call_created_nss.append(nss_obj)
 
-                    nss_obj.verify_health(timeout=timeout)
+                    nss_obj.verify_health(timeout=nss_creation_timeout)
 
         return current_call_created_nss
 
-    def nss_cleanup():
+    def nss_cleanup(timeout):
         for nss in created_nss:
-            nss.delete()
+            nss.delete(timeout=timeout)
 
-    request.addfinalizer(nss_cleanup)
+    request.addfinalizer(nss_cleanup(nss_deletion_timeout_param))
 
     return _create_nss
