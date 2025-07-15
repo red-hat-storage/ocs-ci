@@ -2238,6 +2238,8 @@ MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
 MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
+ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
+MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -3010,6 +3012,13 @@ SUBMARINER_DOWNSTREAM_BREW_IDMS = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_idms.yaml"
 )
 ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
+ACM_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "acm_catalogsource.yaml"
+)
+MCE_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "mce_catalogsource.yaml"
+)
+ACM_BREW_IDMS_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_idms.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
