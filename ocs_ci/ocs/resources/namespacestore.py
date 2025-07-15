@@ -418,7 +418,7 @@ def namespace_store_factory(
 
     """
     created_nss = []
-    nss_deletion_timeout_param = 1
+    nss_deletion_timeout_param = 120
 
     cmdMap = {
         "cli": cli_create_namespacestore,
@@ -480,10 +480,10 @@ def namespace_store_factory(
 
         return current_call_created_nss
 
-    def nss_cleanup(timeout):
+    def nss_cleanup():
         for nss in created_nss:
-            nss.delete(timeout=timeout)
+            nss.delete(timeout=nss_deletion_timeout_param)
 
-    request.addfinalizer(nss_cleanup(nss_deletion_timeout_param))
+    request.addfinalizer(nss_cleanup)
 
     return _create_nss
