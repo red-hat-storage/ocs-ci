@@ -185,7 +185,7 @@ def enable_high_recovery_during_rebalance_flag(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if not config.RUN.get("enable_high_recovery_during_rebalance"):
+        if not config.ENV_DATA.get("enable_high_recovery_during_rebalance"):
             logger.info(
                 "The 'enable_high_recovery_during_rebalance' flag is not set. "
                 "Proceeding with the original function..."

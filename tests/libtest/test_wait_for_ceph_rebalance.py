@@ -77,7 +77,7 @@ class TestWaitForCephRebalanceWithIO(ManageTest):
 @libtest
 @ignore_leftovers
 @runs_on_provider
-class TestWaitForCephRebalanceWithoutRebalanceFlag(ManageTest):
+class TestWaitForCephRebalanceHighRecoveryDisabled(ManageTest):
     """
     Test Ceph rebalance wait behavior when the high recovery profile is disabled
     """
@@ -85,19 +85,21 @@ class TestWaitForCephRebalanceWithoutRebalanceFlag(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(self):
         # Simulate the run when the high recovery profile is disabled
-        self.original_flag = config.RUN.get(
+        self.original_flag = config.ENV_DATA.get(
             "enable_high_recovery_during_rebalance", False
         )
-        config.RUN["enable_high_recovery_during_rebalance"] = False
+        config.ENV_DATA["enable_high_recovery_during_rebalance"] = False
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
-            config.RUN["enable_high_recovery_during_rebalance"] = self.original_flag
+            config.ENV_DATA["enable_high_recovery_during_rebalance"] = (
+                self.original_flag
+            )
 
         request.addfinalizer(finalizer)
 
-    def test_wait_for_ceph_rebalance_with_io(self):
+    def test_wait_for_ceph_rebalance_high_recovery_disabled(self):
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=180
