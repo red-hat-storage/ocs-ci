@@ -1647,10 +1647,12 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             "discovered_apps_pod_selector_value"
         )
 
-    def deploy_workload(self, dr_protect=True):
+    def deploy_workload(self, shared=False, dr_protect=True):
         """
 
         Args:
+            shared (bool): False by default, another workload in an existing namespace
+                            will share the DRPC and DR protect it using Shared Protection type via UI
             dr_protect (bool): True by default where workload will be DR protected via CLI,
                                 else test case should handle it (maybe with UI)
 
@@ -1660,7 +1662,13 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self._deploy_prereqs()
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            self.create_namespace()
+            if not shared:
+                self.create_namespace()
+            else:
+                # Shared=False means namespace exists, so skip creation
+                log.info(
+                    f"Namespace in use: {self.workload_namespace} for Shared Protection type"
+                )
         self.manage_dr_vm_secrets()
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
@@ -1670,7 +1678,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         if dr_protect:
             self.create_placement()
             self.create_drpc()
-        self.verify_workload_deployment()
+            self.verify_workload_deployment()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
         )

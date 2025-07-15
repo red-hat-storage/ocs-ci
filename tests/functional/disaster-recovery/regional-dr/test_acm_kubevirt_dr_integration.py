@@ -15,11 +15,9 @@ from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
-    verify_drpolicy_ui,
     assign_drpolicy_for_discovered_vms_via_ui,
 )
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +34,7 @@ class TestACMKubevirtDRIntergration:
     """
 
     @pytest.mark.polarion_id("OCS-xxxx")
+    # TODO: Add Polarion ID when available
     def test_acm_kubevirt_dr_intergration_ui(
         self, discovered_apps_dr_workload_cnv, setup_acm_ui
     ):
@@ -48,7 +47,18 @@ class TestACMKubevirtDRIntergration:
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
-        cnv_workloads = discovered_apps_dr_workload_cnv(pvc_vm=2, dr_protect=False)
+        logger.info("Deploy 1st CNV workload")
+        cnv_workloads1 = discovered_apps_dr_workload_cnv(
+            pvc_vm=1, dr_protect=False, shared=False
+        )
+
+        # Second workload (uses same namespace as first)
+        logger.info("Deploy 2nd CNV workload in the existing namespace")
+        cnv_workloads2 = discovered_apps_dr_workload_cnv(
+            pvc_vm=1, dr_protect=False, shared=True
+        )
+
+        cnv_workloads = cnv_workloads1 + cnv_workloads2
 
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
@@ -59,20 +69,41 @@ class TestACMKubevirtDRIntergration:
         )
 
         acm_obj = AcmAddClusters()
-        page_nav = ValidationUI()
+
+        logger.info("Navigate to Virtual machines page on the ACM console")
+        assert cnv_workloads, "No discovered VM found"
+        config.switch_acm_ctx()
+        assign_drpolicy_for_discovered_vms_via_ui(
+            acm_obj, vms=[cnv_workloads[0].vm_name]
+        )
+        assign_drpolicy_for_discovered_vms_via_ui(
+            acm_obj, vms=[cnv_workloads[1].vm_name], standalone=False
+        )
+
+        cnv_workloads[0].discovered_apps_placement_name = (
+            f"{assign_drpolicy_for_discovered_vms_via_ui}-drpc"
+        )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
+        logger.info("Placement name is ")
 
-        page_nav.refresh_web_console()
-        verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            pvc_count=2,
+            pod_count=2,
+            namespace=cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+        )
+        dr_helpers.wait_for_cnv_workload(
+            vm_name=self.vm_name,
+            namespace=self.workload_namespace,
+            phase=constants.STATUS_RUNNING,
+        )
 
-        logger.info("Navigate to Virtual machines page on the ACM console")
-        assert cnv_workloads, "No discovered VM found"
-        assert assign_drpolicy_for_discovered_vms_via_ui(vms=[cnv_workloads[0].vm_name])
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         # Download and extract the virtctl binary to bin_dir. Skips if already present.
         CNVInstaller().download_and_extract_virtctl_binary()
@@ -110,28 +141,31 @@ class TestACMKubevirtDRIntergration:
             old_primary=primary_cluster_name_before_failover,
         )
         logger.info("Doing Cleanup Operations")
-        dr_helpers.do_discovered_apps_cleanup(
-            drpc_name=cnv_workloads[0].discovered_apps_placement_name,
-            old_primary=primary_cluster_name_before_failover,
-            workload_namespace=cnv_workloads[0].workload_namespace,
-            workload_dir=cnv_workloads[0].workload_dir,
-            vrg_name=cnv_workloads[0].discovered_apps_placement_name,
-        )
+        for cnv_wl in cnv_workloads:
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=cnv_wl.discovered_apps_placement_name,
+                old_primary=primary_cluster_name_before_failover,
+                workload_namespace=cnv_workloads[0].workload_namespace,
+                workload_dir=cnv_wl.workload_dir,
+                vrg_name=cnv_wl.discovered_apps_placement_name,
+                shared=True,
+            )
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count,
-            cnv_workloads[0].workload_pod_count,
+            cnv_workloads[0].workload_pvc_count * 2,
+            cnv_workloads[0].workload_pod_count * 2,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=cnv_workloads[0].discovered_apps_placement_name,
         )
-        dr_helpers.wait_for_cnv_workload(
-            vm_name=cnv_workloads[0].vm_name,
-            namespace=cnv_workloads[0].workload_namespace,
-            phase=constants.STATUS_RUNNING,
-        )
+        for cnv_wl in cnv_workloads:
+            dr_helpers.wait_for_cnv_workload(
+                vm_name=cnv_wl.vm_name,
+                namespace=cnv_workloads[0].workload_namespace,
+                phase=constants.STATUS_RUNNING,
+            )
 
         # Validating data integrity (file1) after failing-over VMs to secondary managed cluster
         validate_data_integrity_vm(

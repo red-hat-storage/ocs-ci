@@ -16,7 +16,6 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
-from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
     wait_for_element_to_be_visible,
@@ -790,7 +789,7 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         return False
 
 
-def assign_drpolicy_for_discovered_vms_via_ui(vms: List[str], standalone=True):
+def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalone=True):
     """
     This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
     of the ACM console.
@@ -798,6 +797,7 @@ def assign_drpolicy_for_discovered_vms_via_ui(vms: List[str], standalone=True):
     existing DRPC for another VM workload, and you want to club it together)
 
     Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
         vms (list): Specify the names of VMs for DR protection in the form of a list
         standalone (bool): True by default, will switch to Shared Protection type when False
     Returns:
@@ -807,7 +807,6 @@ def assign_drpolicy_for_discovered_vms_via_ui(vms: List[str], standalone=True):
     if not vms or any(not vm.strip() for vm in vms):
         raise ValueError("Parameter 'vms' is required and must be a non-empty list")
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    acm_obj = AcmPageNavigator()
     acm_obj.navigate_clusters_page(vms=True)
     for vm in vms:
         log.info("Select name as filter")
@@ -828,8 +827,8 @@ def assign_drpolicy_for_discovered_vms_via_ui(vms: List[str], standalone=True):
         log.info("Click on Enroll virtual machine")
         acm_obj.do_click(acm_loc["enroll-vm"], enable_screenshot=True)
         log.info("Send Protection name")
-        vm_name = create_unique_resource_name("test", "vm")
-        acm_obj.do_send_keys(acm_loc["protection-name"], text=vm_name)
+        protection_name = create_unique_resource_name("test", "vm")
+        acm_obj.do_send_keys(acm_loc["protection-name"], text=protection_name)
         if not standalone:
             log.info("Protecting VM with Shared Protection type")
             acm_obj.do_click(acm_loc["select-shared"], enable_screenshot=True)
@@ -859,4 +858,4 @@ def assign_drpolicy_for_discovered_vms_via_ui(vms: List[str], standalone=True):
         assert conf_msg == "New policy assigned to application"
         log.info("Close page")
         acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
-        return True
+        return protection_name
