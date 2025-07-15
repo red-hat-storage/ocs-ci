@@ -66,6 +66,10 @@ class FusionDeployment:
             fusion_catalog_source_data = templating.load_yaml(
                 constants.FUSION_CATALOG_SOURCE_YAML
             )
+            if config.DEPLOYMENT.get("fusion_image"):
+                fusion_catalog_source_data["spec"]["image"] = config.DEPLOYMENT[
+                    "fusion_image"
+                ]
         fusion_catalog_source_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fusion_catalog_source_manifest", delete=False
         )
