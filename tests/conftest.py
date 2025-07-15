@@ -7405,13 +7405,13 @@ def discovered_apps_dr_workload_cnv(request):
 
     instances = []
 
-    def factory(pvc_vm=1, dr_protect=True):
+    def factory(pvc_vm=1, dr_protect=True, shared=False):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
             dr_protect (bool): True by default where workload will be DR protected via CLI,
                                 else test case should handle it (maybe with UI)
-
+            shared (bool): # TODO
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -7420,9 +7420,15 @@ def discovered_apps_dr_workload_cnv(request):
 
         """
         total_pvc_count = 0
-        workload_key = "dr_cnv_discovered_apps"
+        workload_key = (
+            "dr_cnv_discovered_apps_shared" if shared else "dr_cnv_discovered_apps"
+        )
         for index in range(pvc_vm):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_details = copy.deepcopy(ocsci_config.ENV_DATA[workload_key][index])
+            if shared and instances:
+                workload_details["workload_namespace"] = (
+                    instances[0].workload_namespace,
+                )
             workload = CnvWorkloadDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -7451,7 +7457,7 @@ def discovered_apps_dr_workload_cnv(request):
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload(dr_protect=dr_protect)
+            workload.deploy_workload(dr_protect=dr_protect, shared=shared)
 
         return instances
 
