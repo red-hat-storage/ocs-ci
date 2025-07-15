@@ -319,11 +319,43 @@ class OCP(object):
         """
         if not cluster_config:
             cluster_config = config
-        resource_name = resource_name if resource_name else self.resource_name
-        selector = selector if selector else self.selector
-        field_selector = field_selector if field_selector else self.field_selector
-        if selector or field_selector:
+        # Resolve parameters with explicit precedence: resource_name > selectors
+        final_resource_name = resource_name if resource_name else self.resource_name
+        final_selector = selector if selector is not None else self.selector
+        final_field_selector = (
+            field_selector if field_selector is not None else self.field_selector
+        )
+
+        # Apply precedence: if resource_name is specified, ignore selectors
+        if final_resource_name:
+            # Specific resource requested - use name, ignore selectors
+            resource_name = final_resource_name
+            selector = None
+            field_selector = None
+        else:
+            # No specific resource - use selectors
             resource_name = ""
+            selector = final_selector
+            field_selector = final_field_selector
+
+        # Validate high-volume resources without selectors to prevent massive output
+        if (
+            self.kind in constants.HIGH_VOLUME_RESOURCES
+            and not resource_name
+            and not selector
+            and not field_selector
+            and out_yaml_format
+        ):
+            log.warning(
+                f"Querying {self.kind} resources without selector can produce massive output. "
+                f"Consider using selector parameter or pass selector='ALL' to explicitly "
+                f"request all resources. Command: oc get {self.kind}"
+                f"{' -n ' + self.namespace if self.namespace else ''} -o yaml"
+            )
+
+        # Handle explicit selector="ALL" bypass option
+        if selector == "ALL":
+            selector = None  # Convert "ALL" to no selector for actual command
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
             command += " -A"

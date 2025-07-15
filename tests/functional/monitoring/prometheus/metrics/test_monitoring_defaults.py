@@ -102,7 +102,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
     )
     # if there is no "items" in the reply, OCS is very broken
-    ocs_pods = ocp_pod.get()["items"]
+    ocs_pods = ocp_pod.get(selector="ALL")["items"]
     for pod_item in ocs_pods:
         # just making the assumptions explicit
         assert pod_item["kind"] == constants.POD
