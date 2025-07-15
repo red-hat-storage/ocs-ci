@@ -1917,7 +1917,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name
+    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, shared=False
 ):
     """
     Function to clean up Resources
@@ -1928,6 +1928,8 @@ def do_discovered_apps_cleanup(
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
         vrg_name (str): Name of VRG
+        shared (bool): False by default, needed when Shared protection type is used for DR protection
+                    to clean both VM resources under the same namespace for full clean-up
 
     """
     restore_index = config.cur_index
@@ -1946,6 +1948,11 @@ def do_discovered_apps_cleanup(
     run_cmd(
         f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
     )
+    if shared:
+        workload_path_1 = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
+        run_cmd(
+            f"oc delete -k {workload_path_1} -n {workload_namespace} --wait=false --force "
+        )
     wait_for_all_resources_deletion(
         namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
     )
