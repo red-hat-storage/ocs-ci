@@ -590,6 +590,7 @@ def check_vrg_existence(namespace, vrg_name=""):
         vrg_name (str): Name of VRG
 
     """
+    vrg_list = []
     try:
 
         vrg_list = (
@@ -601,13 +602,16 @@ def check_vrg_existence(namespace, vrg_name=""):
             .get()
             .get("items")
         )
-    except CommandFailed as e:
+    except Exception as e:
         if (
             f'Error from server (NotFound): volumereplicationgroups.ramendr.openshift.io "{vrg_name}" not found'
             in str(e)
         ):
             logger.info(f"VRG {vrg_name} not found in namespace {namespace}.")
-            vrg_list = []
+        else:
+            logger.warning(
+                f"Exception raised when fetching Volume Replication Group: {e}"
+            )
 
     if len(vrg_list) > 0:
         return True
