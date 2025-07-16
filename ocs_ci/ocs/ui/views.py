@@ -1360,6 +1360,8 @@ acm_configuration_4_19 = {
     "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
     "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
+    "dr-status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "popover_text": ("//div[@data-test-id='popover-header']", By.XPATH),
 }
 
 acm_configuration_4_20 = {

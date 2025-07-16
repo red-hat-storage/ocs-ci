@@ -14,7 +14,11 @@ from selenium.common.exceptions import (
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
+from ocs_ci.ocs.exceptions import (
+    ResourceWrongStatusException,
+    TimeoutException,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
     wait_for_element_to_be_visible,
@@ -787,7 +791,6 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         log.error("Applications not present to delete from UI")
         return False
 
-
 def assign_drpolicy_for_discovered_vms_via_ui(
     acm_obj, vms: List[str], standalone=True, protection_name=None, namespace=None
 ):
@@ -891,3 +894,77 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         log.info("Close page")
         acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
         return True
+def check_dr_status(acm_obj, workloads=None, expected_status=None):
+    """
+    Function to validate the specified application's dr health status on UI
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workloads(list): List of applications to validate dr health status
+        expected_status(str): expected status from UI
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    log.info("Navigating to the Applications page")
+    acm_obj.take_screenshot()
+    acm_obj.navigate_applications_page()
+
+    for workload in workloads:
+        log.info(f"Click on search bar for the workload {workload}")
+        acm_obj.do_click(acm_loc["search-bar"])
+        log.info("Clear existing text from search bar if any")
+        acm_obj.do_clear(acm_loc["search-bar"])
+        log.info("Enter the workload name to be searched")
+        acm_obj.do_send_keys(acm_loc["search-bar"], text=workload)
+        acm_obj.take_screenshot()
+
+        log.info("Verifying DR status on UI...")
+        wait_for_text_result = acm_obj.wait_until_expected_text_is_found(
+            acm_loc["dr-status"], expected_status, timeout=10
+        )
+
+        if not wait_for_text_result:
+            log.info(f"DR Healthy status is not as expected as {expected_status}")
+            current_status = acm_obj.get_element_text(acm_loc["dr-status"])
+            log.info(f"Current status is {current_status}")
+            acm_obj.take_screenshot()
+            raise ResourceWrongStatusException
+
+        log.info(
+            f"DR health status is in expected state --> '{expected_status}' "
+            f" for the application {workload}"
+        )
+
+        expected_status_popover_messages = {
+            "healthy": "All volumes are synced",
+            "warning": "Volumes are syncing slower than usual",
+            "critical": "Volumes are not syncing",
+        }
+
+        log.info("Clicking on the dr status button...")
+        dr_status_button = acm_obj.find_an_element_by_xpath(
+            "//button[@data-test-id='dr-status-button']"
+        )
+        acm_obj.driver.execute_script("arguments[0].click();", dr_status_button)
+
+        log.info("Waiting 10 secs for the popover to load...")
+        time.sleep(10)
+
+        log.info("Validating the message in popover...")
+        current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
+
+        if expected_status_popover_messages[expected_status] != current_pop_over_text:
+            log.info(
+                f"current popover message is {current_pop_over_text} "
+                f"but the expected is {expected_status_popover_messages[expected_status]}"
+            )
+            acm_obj.take_screenshot()
+            raise UnexpectedBehaviour
+
+        log.info("Popover message validation is successful")
+        log.info(
+            f"Expected pop over message "
+            f"'{expected_status_popover_messages[expected_status]}' found"
+            f"for the workload {workload}"
+        )
+
