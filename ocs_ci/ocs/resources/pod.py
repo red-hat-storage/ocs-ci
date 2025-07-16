@@ -2191,13 +2191,15 @@ def download_file_from_pod(
     run_cmd(cmd, cluster_config=cluster_config)
 
 
-def wait_for_storage_pods(timeout=200):
+def wait_for_storage_pods(timeout=200, skip_job_pods=False):
     """
     Check all OCS pods status, they should be in Running or Completed state
 
     Args:
         timeout (int): Number of seconds to wait for pods to get into correct
             state
+        skip_job_pods (bool): If True, skip pods owned by Job controllers
+            (useful for tests that expect ephemeral job pods to be cleaned up)
 
     """
     all_pod_obj = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
@@ -2217,6 +2219,20 @@ def wait_for_storage_pods(timeout=200):
         )
         and "storageclient" not in pod.name
     ]
+
+    # Filter out job pods if requested
+    if skip_job_pods:
+
+        def is_job_owned(pod_obj):
+            """Check if pod is owned by Job controller"""
+            try:
+                pod_data = pod_obj.get()
+                owner_refs = pod_data.get("metadata", {}).get("ownerReferences", [])
+                return any(ref.get("kind") == "Job" for ref in owner_refs)
+            except Exception:
+                return False
+
+        all_pod_obj = [pod for pod in all_pod_obj if not is_job_owned(pod)]
 
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
