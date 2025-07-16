@@ -1,8 +1,8 @@
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.odf_cli import ODFCliRunner
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.deployment import get_osd_deployments, get_mon_deployments
 
@@ -35,6 +35,7 @@ class RookCephPlugin(object):
         self.alternate_image = alternate_image
         self.cmd = f"rook-ceph -n {namespace} --operator-namespace {operator_namespace}"
         self.deployment_in_maintenance = dict()
+        self.odf_cli_runner = ODFCliRunner()
 
         if not self.check_krew_installed():
             try:
@@ -102,7 +103,7 @@ class RookCephPlugin(object):
         exec_cmd(cmd=self.rookceph_install_cmd)
         return True
 
-    def maintenance_start(self, deployment_name, alternate_image=None, timeout=800):
+    def maintenance_start(self, deployment_name, alternate_image=None):
         """
         This starts the maintenance mode for the deployment
 
@@ -121,19 +122,18 @@ class RookCephPlugin(object):
             raise Exception(
                 f"[Error] Deployment {deployment_name} seems to be already in maintenance mode!"
             )
-
-        command = self.cmd
-        command += f" maintenance start {deployment_name}"
         if alternate_image:
             self.alternate_image = alternate_image
-            command += f" --alternate-image {self.alternate_image}"
-        OCP().exec_oc_cmd(command=command, timeout=timeout, out_yaml_format=False)
+
+        self.odf_cli_runner.run_maintenance_start(
+            deployment_name=deployment_name, alternate_image=alternate_image
+        )
         logger.info(f"{deployment_name} is successfully in mainetenance mode now!")
 
         self.deployment_in_maintenance[deployment_name] = True
         return True
 
-    def maintenance_stop(self, deployment_name, alternate_image=None, timeout=800):
+    def maintenance_stop(self, deployment_name, alternate_image=None):
         """
         This stops the maintenance mode for the deployment
 
@@ -148,13 +148,12 @@ class RookCephPlugin(object):
             raise Exception("[Error] Deployment not in maintenance mode")
 
         # TODO: Make sure deployment is either mon or osd
-
-        command = self.cmd
-        command += f" maintenance stop {deployment_name}"
         if alternate_image:
             self.alternate_image = alternate_image
-            command += f" --alternate-image {self.alternate_image}"
-        OCP().exec_oc_cmd(command=command, timeout=timeout, out_yaml_format=False)
+
+        self.odf_cli_runner.run_maintenance_stop(
+            deployment_name=deployment_name, alternate_image=alternate_image
+        )
         logger.info(
             f"{deployment_name} is successfully removed from mainetenance mode now!"
         )
