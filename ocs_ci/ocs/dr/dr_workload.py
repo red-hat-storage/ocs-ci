@@ -1247,18 +1247,23 @@ class BusyboxDiscoveredApps(DRWorkload):
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
         config.switch_acm_ctx()
-        if recipe:
+        if not self.discovered_apps_multi_ns:
             self.create_placement()
+
+        if recipe:
             log.info("Creating workload with recipe")
+
+            # Switch back to primary, then to each non-ACM to apply recipe
             config.switch_to_cluster_by_name(self.preferred_primary_cluster)
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_recipe_with_checkhooks()
+
             config.switch_acm_ctx()
             self.create_drpc_for_apps_with_recipe()
             self.verify_workload_deployment()
-        if not self.discovered_apps_multi_ns and not recipe:
-            self.create_placement()
+
+        elif not self.discovered_apps_multi_ns:
             self.create_drpc()
             self.verify_workload_deployment()
 
