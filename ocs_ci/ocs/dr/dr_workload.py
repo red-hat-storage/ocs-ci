@@ -1253,7 +1253,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         if recipe:
             log.info("Creating workload with recipe")
 
-            # Switch back to primary, then to each non-ACM to apply recipe
+            # Switch back to primary, then to each managed cluster to apply recipe
             config.switch_to_cluster_by_name(self.preferred_primary_cluster)
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])

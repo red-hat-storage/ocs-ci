@@ -1,8 +1,7 @@
 import logging
-from time import sleep
-
 import pytest
 
+from time import sleep
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
