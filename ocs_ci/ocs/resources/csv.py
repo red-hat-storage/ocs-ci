@@ -45,7 +45,7 @@ def get_csvs_start_with_prefix(csv_prefix, namespace):
 
     csvs = CSV(namespace=namespace)
     csv_list = csvs.get()["items"]
-    return [csv for csv in csv_list if csv_prefix in csv["metadata"]["name"]]
+    return [csv for csv in csv_list if csv["metadata"]["name"].startswith(csv_prefix)]
 
 
 def get_csv_name_start_with_prefix(csv_prefix, namespace):
