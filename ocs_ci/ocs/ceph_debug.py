@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.odf_cli import ODFCliRunner
+from ocs_ci.helpers.odf_cli import ODFCliRunner, ODFCLIRetriever
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.deployment import get_osd_deployments, get_mon_deployments
@@ -35,6 +35,9 @@ class RookCephPlugin(object):
         self.alternate_image = alternate_image
         self.cmd = f"rook-ceph -n {namespace} --operator-namespace {operator_namespace}"
         self.deployment_in_maintenance = dict()
+        # Use ODF CLI method
+        odf_cli_retriever = ODFCLIRetriever()
+        odf_cli_retriever.retrieve_odf_cli_binary()
         self.odf_cli_runner = ODFCliRunner()
 
         if not self.check_krew_installed():
