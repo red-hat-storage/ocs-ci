@@ -123,7 +123,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             "Validating that the Ceph values, configured by ceph-config-override "
             "confiMap, match the ones stored in ocs-ci"
         )
-        ocs_version = version.get_semantic_ocs_version_from_config()
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
 
         if ocs_version == version.VERSION_4_12 or ocs_version == version.VERSION_4_13:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
