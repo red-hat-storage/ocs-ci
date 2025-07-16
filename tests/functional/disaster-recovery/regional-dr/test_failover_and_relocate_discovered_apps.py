@@ -227,7 +227,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
             mix_workload=True if pvc_interface == "Mix" else False,
-            mix_workload_data=mix_workload_data if pvc_interface != "Mix" else rdr_workload.mix_workload_data,
+            mix_workload_data=(
+                mix_workload_data
+                if pvc_interface != "Mix"
+                else rdr_workload.mix_workload_data
+            ),
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM or "Mix":
