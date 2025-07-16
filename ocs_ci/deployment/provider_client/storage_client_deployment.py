@@ -257,7 +257,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 CommandFailed,
                 tries=12,
                 delay=15,
-            )(self.ocp_obj.exec_oc_cmd(f"apply -f {storage_cluster_path}"))
+            )(
+                self.ocp_obj.exec_oc_cmd
+            )(f"apply -f {storage_cluster_path}")
 
         # Creating toolbox pod
         setup_ceph_toolbox()
