@@ -565,6 +565,10 @@ pvc = {
         'button[data-test="storageclass-dropdown"]',
         By.CSS_SELECTOR,
     ),
+    "pvc_create_with_form": (
+        'button[id="0-link"]',
+        By.CSS_SELECTOR,
+    ),
     # works for ODF 4.14 and 4.15; OCP 4.14 and 4.15
     "storage_class_name": ('//a[@id="{}-link"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
