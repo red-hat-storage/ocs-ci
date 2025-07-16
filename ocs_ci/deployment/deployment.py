@@ -713,11 +713,12 @@ class Deployment(object):
 
             HostedClients().do_deploy()
 
-    def deploy_cluster(self, log_cli_level="DEBUG"):
+    def deploy_cluster(self, storageclass_factory_class, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
 
         Args:
+            storageclass_factory_class: storageclass factory fixture
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.do_deploy_ocp(log_cli_level)
@@ -784,7 +785,7 @@ class Deployment(object):
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_oadp()
-        self.do_deploy_ocs()
+        self.do_deploy_ocs(storageclass_factory_class)
         self.do_deploy_rdr()
         self.do_deploy_odf_provider_mode()
         self.do_deploy_mce()
