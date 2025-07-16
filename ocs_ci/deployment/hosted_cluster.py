@@ -2174,7 +2174,7 @@ def hypershift_cluster_factory(
                         ClusterKubeconfigNotFoundError,
                     )
 
-                    ClusterKubeconfigNotFoundError(
+                    raise ClusterKubeconfigNotFoundError(
                         f"Failed to download kubeconfig for cluster {cluster_name}"
                     )
                 else:
