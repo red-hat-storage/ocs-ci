@@ -1288,6 +1288,8 @@ acm_configuration_4_19 = {
         By.XPATH,
     ),
     "nat-t-checkbox": ("//input[@id='natt-enable']", By.XPATH),
+    "dr-status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "popover_text": ("//div[@data-test-id='popover-header']", By.XPATH),
 }
 
 add_capacity = {
