@@ -6,12 +6,14 @@ from ocs_ci.ocs.cluster import (
     get_autoscale_status_property,
     get_total_num_of_pgs,
 )
+from ocs_ci.helpers.ceph_helpers import update_mon_target_pg
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     acceptance,
     skipif_ocs_version,
     tier1,
+    tier2,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -135,12 +137,24 @@ class TestCephPg(ManageTest):
         the default target size ratio of 0.49
         """
 
-    assert (
-        get_autoscale_status_property(".mgr", "target_ratio") == 0
-    ), "Target ratio of .mgr metadata pool should be 0.0"
-    assert (
-        get_autoscale_status_property(
-            "ocs-storagecluster-cephfilesystem-metadata", "target_ratio"
-        )
-        == 0
-    ), "Target ratio of ocs-storagecluster-cephfilesystem-metadata should be 0.0"
+        assert (
+            get_autoscale_status_property(".mgr", "target_ratio") == 0
+        ), "Target ratio of .mgr metadata pool should be 0.0"
+        assert (
+            get_autoscale_status_property(
+                "ocs-storagecluster-cephfilesystem-metadata", "target_ratio"
+            )
+            == 0
+        ), "Target ratio of ocs-storagecluster-cephfilesystem-metadata should be 0.0"
+
+    @skipif_ocs_version("<4.19")
+    @tier2
+    def test_update_mon_target_pg(self):
+        """
+        Test verifies that mon_target_pg_per_osd can be changed
+        by patching the storagecluster
+        and that invalid values are not accepted
+        """
+        assert update_mon_target_pg(400)
+        assert update_mon_target_pg(100)
+        assert not update_mon_target_pg("1OO")
