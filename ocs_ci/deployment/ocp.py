@@ -44,9 +44,13 @@ def download_pull_secret():
 
 
 class OCPDeployment:
-    def __init__(self):
+    def __init__(self, **kwargs):
         """
         Constructor for OCPDeployment class
+
+        Args:
+            **kwargs: keyword arguments;
+            skip_download_installer for skipping download OCP installer regardless of the configuration
         """
         self.pull_secret = {}
         self.metadata = {}
@@ -66,7 +70,9 @@ class OCPDeployment:
             and not ibmcloud_managed_deployment
             and not ai_deployment
         ):
-            self.installer = self.download_installer()
+            skip_download_installer = kwargs.get("skip_download_installer", False)
+            if not skip_download_installer:
+                self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.cluster_name = config.ENV_DATA["cluster_name"]
         if (
