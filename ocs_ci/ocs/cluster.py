@@ -20,6 +20,7 @@ import math
 
 from datetime import datetime
 from semantic_version import Version
+from ocs_ci.utility.decorators import enable_high_recovery_during_rebalance_flag
 
 from ocs_ci.ocs.utils import thread_init_class
 
@@ -824,6 +825,7 @@ class CephCluster(object):
                 and states["count"] == total_pg_count
             )
 
+    @enable_high_recovery_during_rebalance_flag
     def wait_for_rebalance(self, timeout=600, repeat=3):
         """
         Wait for re-balance to complete
