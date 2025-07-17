@@ -700,7 +700,6 @@ class Deployment(object):
 
         Args:
             log_cli_level (str): log level for installer (default: DEBUG)
-
         """
         self.do_deploy_ocp(log_cli_level)
 
