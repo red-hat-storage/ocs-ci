@@ -6,8 +6,13 @@ ODF deployment.
 import logging
 
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_osd_pod_id
 from ocs_ci.utility import version
+from ocs_ci.ocs.constants import (
+    MCLOCK_HIGH_CLIENT_OPS,
+    MCLOCK_BALANCED,
+    MCLOCK_HIGH_RECOVERY_OPS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,3 +79,85 @@ def is_storage_system_needed():
     else:
         logger.debug("Storage system is needed")
     return storage_system_needed
+
+
+def set_ceph_mclock_config_profile(profile_name, osd_ids=None):
+    """
+    Set the Ceph mClock profile for the specified OSDs.
+
+    If no OSDs are specified, the profile is applied to all OSDs in the cluster.
+
+    Args:
+        profile_name (str): The mClock profile to set ('balanced', 'high_client_ops', 'high_recovery_ops').
+        osd_ids (list): List of OSD IDs. If None, the profile is applied to all OSDs.
+
+    Raises:
+        ValueError: If the given profile name is invalid.
+        CommandFailed: If enabling override or setting the profile fails.
+
+    """
+    valid_profiles = {MCLOCK_HIGH_CLIENT_OPS, MCLOCK_BALANCED, MCLOCK_HIGH_RECOVERY_OPS}
+    if profile_name not in valid_profiles:
+        raise ValueError(
+            f"Invalid mClock profile: {profile_name}. Must be one of {valid_profiles}"
+        )
+
+    if not osd_ids:
+        osd_pods = get_osd_pods()
+        osd_ids = [get_osd_pod_id(p) for p in osd_pods]
+
+    toolbox = get_ceph_tools_pod()
+
+    logger.info("Enabling mClock override recovery settings")
+    toolbox.exec_ceph_cmd(
+        "ceph config set osd osd_mclock_override_recovery_settings true"
+    )
+
+    logger.info(f"Setting mClock profile '{profile_name}' for OSDs: {osd_ids}")
+    for osd_id in osd_ids:
+        set_profile_cmd = (
+            f"ceph config set osd.{osd_id} osd_mclock_profile {profile_name}"
+        )
+        toolbox.exec_ceph_cmd(set_profile_cmd)
+
+
+def set_ceph_mclock_high_client_recovery_profile(osd_ids=None):
+    """
+    Apply the 'high_client_ops' mClock profile to specified OSDs (or all OSDs if not provided).
+
+    Args:
+        osd_ids (list): List of OSD IDs. If None, the profile is applied to all OSDs.
+
+    Raises:
+        CommandFailed: If enabling override or setting the profile fails.
+
+    """
+    set_ceph_mclock_config_profile(MCLOCK_HIGH_CLIENT_OPS, osd_ids)
+
+
+def set_ceph_mclock_balanced_profile(osd_ids=None):
+    """
+    Apply the 'balanced' mClock profile to specified OSDs (or all OSDs if not provided).
+
+    Args:
+        osd_ids (list): List of OSD IDs. If None, the profile is applied to all OSDs.
+
+    Raises:
+        CommandFailed: If enabling override or setting the profile fails.
+
+    """
+    set_ceph_mclock_config_profile(MCLOCK_BALANCED, osd_ids)
+
+
+def set_ceph_mclock_high_recovery_profile(osd_ids=None):
+    """
+    Apply the 'high_recovery_ops' mClock profile to specified OSDs (or all OSDs if not provided).
+
+    Args:
+        osd_ids (list): List of OSD IDs. If None, the profile is applied to all OSDs.
+
+    Raises:
+        CommandFailed: If enabling override or setting the profile fails.
+
+    """
+    set_ceph_mclock_config_profile(MCLOCK_HIGH_RECOVERY_OPS, osd_ids)

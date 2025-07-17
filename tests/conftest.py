@@ -25,7 +25,10 @@ from collections import namedtuple
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+from ocs_ci.deployment.hosted_cluster import (
+    hypershift_cluster_factory,
+    get_autodistributed_storage_classes,
+)
 from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
@@ -41,7 +44,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
-from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
@@ -131,7 +134,12 @@ from ocs_ci.ocs.resources.pvc import (
     get_all_pvc_objs,
     get_pvc_objs,
 )
-from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
+from ocs_ci.ocs.version import (
+    get_ocs_version,
+    get_ocp_version_dict,
+    report_ocs_version,
+    if_version,
+)
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
@@ -181,7 +189,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
 )
-from ocs_ci.helpers import helpers, dr_helpers, dr_helpers_ui
+from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
     create_unique_resource_name,
@@ -7055,7 +7063,7 @@ def dr_workload(request):
 
 
 @pytest.fixture(scope="class")
-def dr_workloads_on_managed_clusters(request, setup_acm_ui):
+def dr_workloads_on_managed_clusters(request):
     """
     Deploying subscription apps on both primary and secondary managed clusters
     """
@@ -7122,16 +7130,21 @@ def dr_workloads_on_managed_clusters(request, setup_acm_ui):
         return primary_cluster_instances, secondary_cluster_instances
 
     def teardown():
-        acm_obj = AcmAddClusters()
+        failed_to_delete = []
         managed_cluster_instances = [
             primary_cluster_instances,
             secondary_cluster_instances,
         ]
-        app_list = []
         for cluster_instances in managed_cluster_instances:
             for apps in cluster_instances:
-                app_list.append(apps.app_name)
-        dr_helpers_ui.delete_application_ui(acm_obj, workloads_to_delete=app_list)
+                try:
+                    apps.delete_workload()
+                except ResourceNotDeleted:
+                    failed_to_delete.append(apps.workload_namespace)
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
+            )
 
     request.addfinalizer(teardown)
     return factory
@@ -7289,9 +7302,9 @@ def discovered_apps_dr_workload(request):
                 if multi_ns:
                     multi_ns_list.append(workload.workload_namespace)
 
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload(recipe=False)
+                instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(recipe=False)
 
         if multi_ns:
             if pvc_interface == constants.CEPHBLOCKPOOL:
@@ -9114,6 +9127,8 @@ def benchmark_workload_storageutilization(request):
         benchmark_name=None,
         use_kustomize_build=True,
         is_completed=True,
+        numjobs=1,
+        iodepth=16,
     ):
         """
         Setup of benchmark fio
@@ -9128,6 +9143,8 @@ def benchmark_workload_storageutilization(request):
             benchmark_name (str): Optional. Name for the Benchmark resource.
             use_kustomize_build (bool): True, if use kustomize build. False, otherwise.
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
+            numjobs (int): Number of threads per job
+            iodepth (int): I/O queue depth
 
         Returns:
             BenchmarkOperatorFIO: The Benchmark operator FIO object
@@ -9148,6 +9165,8 @@ def benchmark_workload_storageutilization(request):
             timeout_completed=timeout_completed,
             benchmark_name=benchmark_name,
             use_kustomize_build=use_kustomize_build,
+            numjobs=numjobs,
+            iodepth=iodepth,
         )
         benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 
@@ -10124,3 +10143,64 @@ def vm_snapshot_restore_fixture(request):
 
     request.addfinalizer(teardown)
     return factory
+
+
+@if_version(">4.18")
+@pytest.fixture()
+def distribute_storage_classes_to_all_consumers_factory():
+    """
+    Factory to distribute storage classes to all Storage Consumers in the cluster.
+    Returns:
+        function: A callable function to execute the distribution logic.
+    """
+
+    def factory():
+        return distribute_storage_classes_to_all_consumers()
+
+    return factory
+
+
+@if_version(">4.18")
+def distribute_storage_classes_to_all_consumers():
+    """
+    This fixture patches all Storage Consumers, except the internal one, with the list of Storage Classes if
+    provisioner is csi.rbd or csi.cephfs.
+    Function validates Storage Class is available on Client cluster and return combined result for all consumers.
+    This function can be called at the end too, to sync up list of Storage Classes after Storage Classes were removed.
+
+    Returns:
+        bool: True if all Storage Classes are distributed successfully to all consumers, False otherwise.
+
+    """
+
+    # to avoid overloading this module with imports, we import only when this fixture is called
+    from ocs_ci.ocs.resources.storageconsumer import (
+        get_ready_storage_consumers,
+        check_storage_classes_on_clients,
+    )
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        if not ocsci_config.multicluster:
+            log.info(
+                "Skipping distribution of storage classes to consumers as multicluster is not enabled in ocsci_config."
+            )
+            return
+
+        consumers = get_ready_storage_consumers()
+        consumers = [
+            consumer
+            for consumer in consumers
+            if consumer.name != constants.INTERNAL_STORAGE_CONSUMER_NAME
+        ]
+        ready_consumer_names = [consumer.name for consumer in consumers]
+
+        if not ready_consumer_names:
+            log.warning("No ready storage consumers found")
+            return
+
+        storage_class_names = get_autodistributed_storage_classes()
+        for consumer in consumers:
+            log.info(f"Distributing storage classes to consumer {consumer.name}")
+            consumer.set_storage_classes(storage_class_names)
+
+    return check_storage_classes_on_clients(ready_consumer_names)

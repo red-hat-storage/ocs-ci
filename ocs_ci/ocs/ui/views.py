@@ -286,11 +286,17 @@ deployment_4_17 = {
 }
 
 deployment_4_19 = {
+    "create_storage_cluster": (
+        "(//a[@data-test-id='horizontal-link-Storage Systems'])",
+        By.XPATH,
+    ),
+    "storage_system_btn": ("yaml-create", By.ID),
     "click_odf_operator": (
         '//div[@data-test="odf-operator-redhat-operators-openshift-marketplace"] | '
         '//a[@data-test="odf-operator-redhat-operators-openshift-marketplace"]',
         By.XPATH,
     ),
+    "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
 }
 
 generic_locators = {
@@ -1055,26 +1061,30 @@ acm_configuration_4_12 = {
     # works for OCP 4.12 to 4.15
     "all-clusters_dropdown": (
         "//a[normalize-space()='All Clusters'] | "
-        "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
+        "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text'"
+        " or @class='pf-v6-c-menu-toggle__text') "
         "and normalize-space()='All Clusters']/..",
         By.XPATH,
     ),
     # works for OCP 4.12 to 4.15
     "all-clusters_dropdown_item": (
-        "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
+        "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text'"
+        " or @class='pf-v6-c-menu__item-text') "
         "and text()='All Clusters']/..",
         By.XPATH,
     ),
     # works for OCP 4.12 to 4.15
     "local-cluster_dropdown": (
         "//h2[text()='local-cluster'] | "
-        "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
+        "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text'"
+        " or @class='pf-v6-c-menu-toggle__text') "
         "and text()='local-cluster']/..",
         By.XPATH,
     ),
     # works for OCP 4.12 to 4.15
     "local-cluster_dropdown_item": (
-        "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
+        "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text'"
+        " or @class='pf-v6-c-menu__item-text') "
         "and text()='local-cluster']/..",
         By.XPATH,
     ),

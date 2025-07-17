@@ -836,6 +836,7 @@ def expose_ocp_version(version):
         return version
 
 
+@retry(CommandFailed, tries=2, delay=5, backoff=2)
 def get_openshift_installer(
     version=None,
     bin_dir=None,

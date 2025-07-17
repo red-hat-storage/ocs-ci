@@ -249,19 +249,9 @@ class BusyBox(DRWorkload):
                     resource_type="namespace", resource_description="busybox-workloads"
                 )
             )
+            self.workload_namespace = workload_ns_yaml_data["metadata"]["name"]
             templating.dump_data_to_temp_yaml(
                 workload_ns_yaml_data, self.namespace_yaml_file
-            )
-
-            # load placementrule
-            placementrule_yaml_data = templating.load_yaml(self.placementrule_yaml_file)
-            placementrule_yaml_data["metadata"]["name"] = (
-                helpers.create_unique_resource_name(
-                    resource_type="placementrule", resource_description="busybox"
-                )
-            )
-            templating.dump_data_to_temp_yaml(
-                placementrule_yaml_data, self.placementrule_yaml_file
             )
 
             # load drpc.yaml
@@ -269,12 +259,68 @@ class BusyBox(DRWorkload):
             drpc_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
                 resource_type="drpc", resource_description="busybox"
             )
-            drpc_yaml_data["spec"]["placementRef"]["name"] = placementrule_yaml_data[
-                "metadata"
-            ]["name"]
             drpc_yaml_data["spec"]["preferredCluster"] = cluster
             drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
             templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
+
+            if self.is_placement:
+                # load placement.yaml
+                clusterset_name = (
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                )
+                placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
+                placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
+                    "labelSelector"
+                ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
+                self.sub_placement_name = placement_yaml_data["metadata"]["name"]
+                templating.dump_data_to_temp_yaml(
+                    placement_yaml_data, self.placement_yaml_file
+                )
+                managed_clusterset_binding_yaml_data = templating.load_yaml(
+                    self.managed_clusterset_binding_file
+                )
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "name"
+                ] = clusterset_name
+                managed_clusterset_binding_yaml_data["spec"][
+                    "clusterSet"
+                ] = clusterset_name
+                templating.dump_data_to_temp_yaml(
+                    managed_clusterset_binding_yaml_data,
+                    self.managed_clusterset_binding_file,
+                )
+                if placement_yaml_data["kind"] == "Placement":
+                    drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
+                    drpc_yaml_data["metadata"][
+                        "name"
+                    ] = f"{self.sub_placement_name}-drpc"
+                    drpc_yaml_data["spec"][
+                        "preferredCluster"
+                    ] = self.preferred_primary_cluster
+                    drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+                    drpc_yaml_data["spec"]["placementRef"][
+                        "name"
+                    ] = self.sub_placement_name
+
+                    drpc_yaml_data["metadata"]["namespace"] = self.workload_namespace
+                    drpc_yaml_data["spec"]["placementRef"][
+                        "namespace"
+                    ] = self.workload_namespace
+                    drpc_yaml_data["spec"]["pvcSelector"][
+                        "matchLabels"
+                    ] = self.workload_pvc_selector
+                    del drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"]
+                    del drpc_yaml_data["spec"]["kubeObjectProtection"]
+                    self.drpc_data_yaml = tempfile.NamedTemporaryFile(
+                        mode="w+", prefix="drpc", delete=False
+                    )
+                    templating.dump_data_to_temp_yaml(
+                        drpc_yaml_data, self.drpc_data_yaml.name
+                    )
 
             # load channel.yaml
             channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
@@ -306,7 +352,7 @@ class BusyBox(DRWorkload):
                 + channel_yaml_data["metadata"]["name"]
             )
             subscription_yaml_data["spec"]["placement"]["placementRef"]["name"] = (
-                placementrule_yaml_data["metadata"]["name"]
+                placement_yaml_data["metadata"]["name"]
             )
             templating.dump_data_to_temp_yaml(
                 subscription_yaml_data, self.subscription_yaml_file
@@ -349,7 +395,9 @@ class BusyBox(DRWorkload):
             run_cmd(
                 f"oc create -k {self.workload_subscription_dir}/{self.workload_name}"
             )
-
+            if self.is_placement:
+                self.add_annotation_to_placement()
+                run_cmd(f"oc create -f {self.drpc_data_yaml.name}")
             self.verify_workload_deployment(cluster)
 
     def _deploy_prereqs(self):
@@ -1199,18 +1247,25 @@ class BusyboxDiscoveredApps(DRWorkload):
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
         config.switch_acm_ctx()
-        self.create_placement()
+        if not self.discovered_apps_multi_ns:
+            self.create_placement()
+
         if recipe:
             log.info("Creating workload with recipe")
+
+            # Switch back to primary, then to each managed cluster to apply recipe
             config.switch_to_cluster_by_name(self.preferred_primary_cluster)
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_recipe_with_checkhooks()
+
             config.switch_acm_ctx()
             self.create_drpc_for_apps_with_recipe()
-        else:
+            self.verify_workload_deployment()
+
+        elif not self.discovered_apps_multi_ns:
             self.create_drpc()
-        self.verify_workload_deployment()
+            self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
         """

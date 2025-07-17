@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     green_squad,
     skipif_ibm_cloud_managed,
+    runs_on_provider,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
@@ -87,6 +88,7 @@ def preconditions_rbd_pool_created_associated_to_sc(
 
 
 @green_squad
+@runs_on_provider
 @ignore_resource_not_found_error_label
 class TestDeleteRbdPool(ManageTest):
     @skipif_external_mode
@@ -140,6 +142,7 @@ class TestDeleteRbdPool(ManageTest):
         storageclass_factory_class,
         pvc_factory,
         pod_factory,
+        distribute_storage_classes_to_all_consumers_factory,
     ):
         """
         1. Create storageclass with the pool.
@@ -159,6 +162,13 @@ class TestDeleteRbdPool(ManageTest):
             volume_binding_mode,
         )
 
+        distr_res = distribute_storage_classes_to_all_consumers_factory()
+        if isinstance(distr_res, bool):
+            assert distr_res, (
+                "After distribution storage classes in clients inventories and on provider are not "
+                "matching"
+            )
+
         logger.info(f"cephblockpool name is {cbp_name}. Deleting it now with CLI")
         try:
             OCP().exec_oc_cmd(
@@ -177,6 +187,13 @@ class TestDeleteRbdPool(ManageTest):
             pytest.fail(
                 f"cephblockpool '{cbp_name}' state is not ready after deletion. "
                 "cephblockpool deletion should fail if referenced by storageclass"
+            )
+
+        distr_res = distribute_storage_classes_to_all_consumers_factory()
+        if isinstance(distr_res, bool):
+            assert distr_res, (
+                "After distribution storage classes in clients inventories and on provider are not "
+                "matching"
             )
 
     @tier3

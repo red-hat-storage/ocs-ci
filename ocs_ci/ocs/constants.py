@@ -1035,8 +1035,11 @@ FUSION_CATALOG_SOURCE_YAML = os.path.join(
 
 OCS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ocs-secret.yaml")
 
-STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "stageImageContentSourcePolicy.yaml"
+STAGE_IMAGE_DIGEST_MIRROR_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage_image_digest_mirror_set.yaml"
+)
+STAGE_TAG_MIRROR_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage_image_tag_mirror_set.yaml"
 )
 
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
@@ -2238,6 +2241,8 @@ MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
 MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
+ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
+MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -2789,6 +2794,36 @@ osd_memory_target_cgroup_limit_ratio = 0.8
 bluestore_prefer_deferred_size_hdd = 0
 """
 
+ROOK_CEPH_CONFIG_VALUES_419 = r"""
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+mon_warn_on_pool_no_redundancy = false
+
+bluestore_prefer_deferred_size_hdd = 0
+bluestore_slow_ops_warn_lifetime = 0
+
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+
+[client.rbd-mirror.a]
+debug_ms = 1
+debug_rbd = 15
+debug_rbd_mirror = 30
+log_file = /var/log/ceph/\$cluster-\$name.log
+
+[client.rbd-mirror-peer]
+debug_ms = 1
+debug_rbd = 15
+debug_rbd_mirror = 30
+log_file = /var/log/ceph/\$cluster-\$name.log
+
+"""
+
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
@@ -2980,6 +3015,13 @@ SUBMARINER_DOWNSTREAM_BREW_IDMS = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_idms.yaml"
 )
 ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
+ACM_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "acm_catalogsource.yaml"
+)
+MCE_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "mce_catalogsource.yaml"
+)
+ACM_BREW_IDMS_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_idms.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
@@ -3425,3 +3467,13 @@ VDBENCH_WORKLOAD_COMPLETION_TIMEOUT = 3600
 VDBENCH_SCALING_TIMEOUT = 180
 # StorageAutoScaler Values
 PROMETHEUS_RECONCILE_TIMEOUT = 660
+
+# ODF recovery profiles
+LOW_RECOVERY_OPS = "low_recovery_ops"
+BALANCED = "balanced"
+HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# mclock_recovery_profiles
+MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
+MCLOCK_BALANCED = "balanced"
+MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"

@@ -1272,7 +1272,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # removing mon and osd pods and also removing PVC's to avoid stale CNS volumes
         try:
-            scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
+            scale_down_pods_and_remove_pvcs(self.storage_class)
         except Exception as err:
             logger.warning(
                 f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
@@ -1633,7 +1633,8 @@ class VSPHEREIPI(VSPHEREBASE):
             config.ENV_DATA["vsphere_password"],
         )
         try:
-            all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+            infra_id = get_infra_id(self.cluster_path)
+            all_vms = vsphere.get_vms_by_string(infra_id)
             vsphere.stop_vms(all_vms)
         except Exception as e:
             logger.error(

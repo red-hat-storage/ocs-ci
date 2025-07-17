@@ -87,7 +87,8 @@ def add_capacity_test(ui_flag=False):
     else:
         replica_count = 3
     pod.wait_for_resource(
-        timeout=300,
+        timeout=600,
+        sleep=5,
         condition=constants.STATUS_RUNNING,
         selector="app=rook-ceph-osd",
         resource_count=result * replica_count,

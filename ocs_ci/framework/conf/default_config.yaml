@@ -293,6 +293,8 @@ ENV_DATA:
   # Label nodes with specific labels, used for example fot ODF deployment on ROSA HCP
   node_labels: ""
 
+  # Enabling the ceph high recovery performance during the rebalance
+  enable_high_recovery_during_rebalance: true
   # Assisted Installer related settings
 
 # This section is related to upgrade

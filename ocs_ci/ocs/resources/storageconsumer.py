@@ -2,11 +2,13 @@
 A module for all StorageConsumer functionalities and abstractions.
 """
 
+import concurrent
 import json
 import logging
 import tempfile
+from concurrent.futures.thread import ThreadPoolExecutor
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, config_safe_thread_pool_task
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
 from ocs_ci.ocs import constants, ocp
@@ -18,7 +20,7 @@ from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -293,17 +295,27 @@ class StorageConsumer:
             self.ocp.patch(resource_name=self.name, params=patch_param)
 
     @if_version(">4.18")
-    def set_storage_classes(self, storage_class):
+    def set_storage_classes(self, storage_classes):
         """
-        Add storage class to storageconsumer resource and apply patch.
+        Add one or multiple storage classes to the storageconsumer resource and apply patch.
 
         Args:
-            storage_class (string): storage class
+            storage_classes (str or list): A single storage class as a string or a list of storage classes.
 
         """
+        if isinstance(storage_classes, str):
+            storage_classes = [storage_classes]
+
+        if not isinstance(storage_classes, list):
+            raise ValueError("storage_classes must be a string or a list of strings")
+
+        storage_classes_list = [{"name": sc} for sc in storage_classes]
+        storage_classes_json = json.dumps(storage_classes_list)
         with config.RunWithConfigContext(self.consumer_context):
-            patch_param = f'{{"spec": {{"storageClasses": ["{storage_class}"]}}}}'
-            self.ocp.patch(resource_name=self.name, params=patch_param)
+            patch_param = f'{{"spec": {{"storageClasses": {storage_classes_json}}}}}'
+            self.ocp.patch(
+                resource_name=self.name, params=patch_param, format_type="merge"
+            )
 
     @if_version(">4.18")
     def remove_custom_storage_class(self, storage_class):
@@ -809,12 +821,12 @@ def verify_storage_consumer_resources(
     ), "StorageConsumer config map data does not match expected values."
 
 
-def get_ready_consumers():
+def get_ready_storage_consumers():
     """
-    Get the names of all storage consumers that are in READY state.
+    Get a list of StorageConsumer objects that are in READY state.
 
     Returns:
-        list: List of names of storage consumers that are in READY state.
+        list[StorageConsumer]: List of StorageConsumer objects in READY state.
 
     """
     if config.ENV_DATA.get("cluster_type") == "provider":
@@ -823,6 +835,7 @@ def get_ready_consumers():
         cluster_index = config.default_cluster_index
 
     consumer_names = get_consumer_names()
+    ready_consumers = []
 
     for consumer_name in consumer_names:
         sc = StorageConsumer(
@@ -830,10 +843,23 @@ def get_ready_consumers():
             config.ENV_DATA["cluster_namespace"],
             cluster_index,
         )
-        if sc.get_state() != constants.STATUS_READY:
+        if sc.get_state() == constants.STATUS_READY:
+            ready_consumers.append(sc)
+        else:
             log.warning(f"StorageConsumer {consumer_name} is not in READY state")
-            consumer_names.remove(consumer_name)
-    return consumer_names
+
+    return ready_consumers
+
+
+def get_ready_consumers_names():
+    """
+    Get the names of all storage consumers that are in READY state.
+
+    Returns:
+        list: List of names of storage consumers in READY state.
+    """
+    ready_consumers = get_ready_storage_consumers()
+    return [consumer.name for consumer in ready_consumers]
 
 
 def check_consumer_rns(consumer_name, pool_list, rns_list):
@@ -893,7 +919,7 @@ def check_consumers_rns():
         log.info(
             f"Running RNS verification for consumers on cluster {config.cluster_ctx.ENV_DATA['cluster_name']}"
         )
-        consumer_names = get_ready_consumers()
+        consumer_names = get_ready_consumers_names()
         pool_names = fetch_pool_names()
         rados_namespaces = fetch_rados_namespaces(config.ENV_DATA["cluster_namespace"])
 
@@ -959,7 +985,7 @@ def check_consumers_svg():
             kind=constants.CEPHFILESYSTEM,
             namespace=config.ENV_DATA["cluster_namespace"],
         ).get()
-        consumer_names = get_ready_consumers()
+        consumer_names = get_ready_consumers_names()
         volume_names = [fs["metadata"]["name"] for fs in filesystems.get("items", [])]
 
         for consumer_name in consumer_names:
@@ -977,3 +1003,91 @@ def check_consumers_svg():
 
         log.info("All subvolumegroup verified successfully.")
         return True
+
+
+def check_storage_classes_on_clients(ready_consumer_names: list[str]):
+    """
+    Verify that the storage classes are distributed and available in the inventory of a hosted cluster.
+
+    Returns:
+        bool: True if the storage classes are distributed and available, False otherwise.
+
+    """
+    log.info(
+        "Verify Storage Classes are distributed and available in inventory of a hosted cluster"
+    )
+    from ocs_ci.deployment.hosted_cluster import get_autodistributed_storage_classes
+
+    with config.RunWithProviderConfigContextIfAvailable():
+
+        storage_classes_on_provider = get_autodistributed_storage_classes()
+        if not storage_classes_on_provider:
+            log.error(
+                "No storage classes found on the provider. Likely misconfiguration or ODF is not set up."
+            )
+            return False
+
+    def wait_storage_classes_equal(given_classes):
+        """
+        This function will fetch StorageClasses with current multicluster config
+
+        Args:
+            given_classes (list): List of expected storage classes to match against the provider's storage classes.
+
+        Returns:
+            bool: True if the storage classes match, False otherwise.
+
+        """
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=lambda: set(given_classes)
+            == set(get_autodistributed_storage_classes()),
+        )
+        if not sample.wait_for_func_status(result=True):
+            res = False
+            log.error(
+                "The storage classes on the provider do not match the "
+                f"expected storage classes on {config.ENV_DATA['cluster_name']}."
+            )
+        else:
+            res = True
+            log.info(
+                "The storage classes on the provider match the "
+                f"expected storage classes on {config.ENV_DATA['cluster_name']}."
+            )
+        return res
+
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        for multicluster_config_index in config.get_consumer_indexes_list():
+            log.info(
+                f"Checking multicluster config index '{multicluster_config_index}', if Consumer is Ready. "
+                "Skip verifying distribution of consumer which is intentionally or not NotReady"
+            )
+            cluster_name = config.get_cluster_name_by_index(multicluster_config_index)
+            # consumer names are built like '<consumer_name>-<cluster_name>'
+            if any([rcn for rcn in ready_consumer_names if rcn.endswith(cluster_name)]):
+                log.info(
+                    "Submitting task to verify storage classes with "
+                    f"client {config.get_cluster_name_by_index(multicluster_config_index)}"
+                )
+                futures.append(
+                    executor.submit(
+                        config_safe_thread_pool_task,
+                        multicluster_config_index,
+                        wait_storage_classes_equal,
+                        storage_classes_on_provider,
+                    )
+                )
+        results = []
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                result = future.result()
+                log.info(f"Future result: {result}")
+                results.append(result)
+            except Exception as e:
+                log.error(f"Error in future execution: {e}")
+
+        log.info(f"Results of storage classes verification across consumers: {results}")
+        return all(results)

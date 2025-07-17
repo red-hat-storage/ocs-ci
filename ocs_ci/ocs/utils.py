@@ -1992,7 +1992,15 @@ def collect_pod_container_rpm_package(dir_name):
         )
         if any(pod in pod_obj.name for pod in ignore_pods):
             continue
-        pod_object = pod_obj.get()
+        try:
+            pod_object = pod_obj.get()
+        except CommandFailed as ex:
+            if "not found" in str(ex):
+                log.warning(
+                    f"Pod {pod_obj.name} not found during RPM collection, skipping"
+                )
+                continue
+            raise
         pod_containers = pod_object.get("spec").get("containers")
         ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
         pod_status = ocp_pod_obj.get_resource_status(pod_obj.name)

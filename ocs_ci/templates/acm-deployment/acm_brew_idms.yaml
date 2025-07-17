@@ -1,0 +1,35 @@
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: acm-idms
+spec:
+  imageDigestMirrors:
+    - mirrors:
+        - 'quay.io:443/acm-d'
+        - brew.registry.redhat.io/rh-osbs/rhacm2
+      source: registry.redhat.io/rhacm2
+    - mirrors:
+        - 'quay.io:443/acm-d'
+        - brew.registry.redhat.io/rh-osbs/multicluster-engine
+      source: registry.redhat.io/multicluster-engine
+    - mirrors:
+        - brew.registry.redhat.io/rh-osbs
+      source: registry-proxy.engineering.redhat.com/rh-osbs
+    - mirrors:
+        - brew.registry.redhat.io/rh-osbs/rhacm2
+      source: registry.stage.redhat.io/rhacm2
+    - mirrors:
+        - brew.registry.redhat.io/rh-osbs/multicluster-engine
+      source: registry.stage.redhat.io/multicluster-engine
+    - mirrors:
+        - brew.registry.redhat.io/rh-osbs/oadp
+      source: registry.stage.redhat.io/oadp
+    - mirrors:
+        - brew.registry.redhat.io/rh-osbs/oadp
+      source: registry.redhat.io/oadp
+    - mirrors:
+        - registry.redhat.io/rhel9/postgresql-13
+      source: 'quay.io:443/acm-d/postgresql-13'
+    - mirrors:
+        - 'quay.io:443/acm-d'
+      source: registry.redhat.io/openshift4

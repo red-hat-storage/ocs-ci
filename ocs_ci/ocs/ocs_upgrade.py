@@ -7,6 +7,7 @@ import time
 
 from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.helpers import verify_nb_db_psql_version
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
@@ -630,7 +631,20 @@ class OCSUpgrade(object):
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
-
+        stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
+        konflux_build = config.DEPLOYMENT.get("konflux_build")
+        if konflux_build and stage_testing:
+            log_step("Creating stage TagMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+            log_step("Creating stage ImageDigestMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            log_step("Sleeping 60 seconds after applying tag mirror set.")
+            time.sleep(60)
+            log_step("Waiting max 30 mins for master MCP to get updated")
+            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/master")
+            log_step("Waiting max 30 mins for worker MCP to get updated")
+            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/worker")
+            return
         if not self.upgrade_in_current_source:
             disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
             if not ocs_catalog.is_exist():

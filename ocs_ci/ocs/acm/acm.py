@@ -177,38 +177,7 @@ class AcmAddClusters(AcmPageNavigator):
         ][0]
         # submariner catalogsource creation
         if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            submariner_downstream_unreleased = templating.load_yaml(
-                constants.SUBMARINER_DOWNSTREAM_UNRELEASED
-            )
-            # Update catalog source
-            submariner_full_url = "".join(
-                [
-                    constants.SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL,
-                    config.ENV_DATA["submariner_version"],
-                ]
-            )
-
-            version_tag = config.ENV_DATA.get("submariner_unreleased_image", None)
-            if version_tag is None:
-                resp = requests.get(submariner_full_url, verify=False)
-                raw_msg = resp.json()["raw_messages"]
-                version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-                    f"v{get_ocp_version()}"
-                ].split(":")[1]
-            submariner_downstream_unreleased["spec"]["image"] = ":".join(
-                [constants.BREW_REPO, version_tag]
-            )
-            submariner_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="submariner_downstream_unreleased", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                submariner_downstream_unreleased, submariner_data_yaml.name
-            )
-            old_ctx = config.cur_index
-            for cluster in get_non_acm_cluster_config():
-                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
-            config.switch_ctx(old_ctx)
+            self.create_submariner_downstream_unreleased_catalogsource()
 
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
         cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
@@ -400,6 +369,8 @@ class AcmAddClusters(AcmPageNavigator):
             globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
 
         """
+        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+            self.create_submariner_downstream_unreleased_catalogsource()
         submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
         all_documents = []
         log.info("Creating ManagedClusterSet")
@@ -443,6 +414,23 @@ class AcmAddClusters(AcmPageNavigator):
             submariner_config_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
                 "cluster_name"
             ]
+            if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+                submariner_unreleased_channel = (
+                    config.ENV_DATA.get("submariner_unreleased_channel")
+                    if config.ENV_DATA.get("submariner_unreleased_channel")
+                    else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
+                )
+                channel_name = "stable-" + submariner_unreleased_channel
+                subscription_config = {
+                    "source": "submariner-catalogsource",
+                    "sourceNamespace": "openshift-marketplace",
+                    "channel": channel_name,
+                    "startingCSV": None,
+                    "installPlanApproval": "automatic",
+                }
+                submariner_config_yaml["spec"][
+                    "subscriptionConfig"
+                ] = subscription_config
 
             all_documents.append(submariner_addon_yaml)
             all_documents.append(submariner_config_yaml)
@@ -464,6 +452,44 @@ class AcmAddClusters(AcmPageNavigator):
         old_ctx = config.cur_index
         config.switch_acm_ctx()
         run_cmd(cmd=f"oc create -f {submariner_data_file.name}")
+
+    def create_submariner_downstream_unreleased_catalogsource(self):
+        """
+        Create Catalogsource for installing Downstream Unreleased Submariner
+
+        """
+        submariner_downstream_unreleased = templating.load_yaml(
+            constants.SUBMARINER_DOWNSTREAM_UNRELEASED
+        )
+        # Update catalog source
+        submariner_full_url = "".join(
+            [
+                constants.SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL,
+                config.ENV_DATA["submariner_version"],
+            ]
+        )
+
+        version_tag = config.ENV_DATA.get("submariner_unreleased_image", None)
+        if version_tag is None:
+            resp = requests.get(submariner_full_url, verify=False)
+            raw_msg = resp.json()["raw_messages"]
+            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
+                f"v{get_ocp_version()}"
+            ].split(":")[1]
+        submariner_downstream_unreleased["spec"]["image"] = ":".join(
+            [constants.BREW_REPO, version_tag]
+        )
+        submariner_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="submariner_downstream_unreleased", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            submariner_downstream_unreleased, submariner_data_yaml.name
+        )
+        old_ctx = config.cur_index
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
+        config.switch_ctx(old_ctx)
 
 
 def copy_kubeconfig(file=None, return_str=False):

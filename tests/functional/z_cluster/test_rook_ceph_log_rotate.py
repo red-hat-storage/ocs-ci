@@ -108,11 +108,25 @@ class TestRookCephLogRotate(ManageTest):
                 f"pod_type:{pod_type} cnt_logs_before_fill_log:"
                 f"{self.podtype_id[pod_type][3]} cnt_logs_after_fill_log:{cnt_logs}"
             )
-            pod_obj.exec_cmd_on_pod(
-                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=560",
-                out_yaml_format=False,
-                container_name="log-collector",
+            # Write additional data in chunks if verification failed
+            log.info(
+                f"Writing additional 560MB data to {expected_string}.log in chunks"
             )
+            chunk_size = 50  # 50MB chunks
+            total_size = 560
+
+            for offset in range(0, total_size, chunk_size):
+                current_chunk = min(chunk_size, total_size - offset)
+                log_file = f"/var/log/ceph/{expected_string}.log"
+                cmd = (
+                    f"dd if=/dev/urandom of={log_file} bs=1M "
+                    f"count={current_chunk} seek={offset} conv=notrunc"
+                )
+                pod_obj.exec_cmd_on_pod(
+                    command=cmd,
+                    out_yaml_format=False,
+                    container_name="log-collector",
+                )
             return False
         return True
 
@@ -200,12 +214,39 @@ class TestRookCephLogRotate(ManageTest):
                 if pod_type == "rgw"
                 else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
             )
-            log.info("Copy data to /var/log/ceph/<ceph>.log file")
-            pod_obj.exec_cmd_on_pod(
-                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=530",
-                out_yaml_format=False,
-                container_name="log-collector",
+
+            # Check disk space before writing
+            log.info(f"Checking disk space for {pod_type} pod")
+            df_output = pod_obj.exec_cmd_on_pod(
+                command="df -h /var/log/ceph", container_name="log-collector"
             )
+            log.info(f"Disk space before write for {pod_type}: {df_output}")
+
+            # Write data in chunks to avoid memory issues
+            log.info(f"Writing 530MB data to {expected_string}.log in chunks")
+            chunk_size = 50  # 50MB chunks
+            total_size = 530
+
+            for offset in range(0, total_size, chunk_size):
+                current_chunk = min(chunk_size, total_size - offset)
+                chunk_num = offset // chunk_size + 1
+                total_chunks = (total_size + chunk_size - 1) // chunk_size
+                log.info(
+                    f"Writing chunk {chunk_num}/{total_chunks}: "
+                    f"{current_chunk}MB at offset {offset}MB"
+                )
+
+                # Use conv=notrunc to not truncate the file, seek to append at the right position
+                log_file = f"/var/log/ceph/{expected_string}.log"
+                cmd = (
+                    f"dd if=/dev/urandom of={log_file} bs=1M "
+                    f"count={current_chunk} seek={offset} conv=notrunc"
+                )
+                pod_obj.exec_cmd_on_pod(
+                    command=cmd,
+                    out_yaml_format=False,
+                    container_name="log-collector",
+                )
 
         for pod_type in self.podtype_id:
             sample = TimeoutSampler(

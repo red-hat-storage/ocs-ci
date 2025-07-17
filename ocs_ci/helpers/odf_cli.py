@@ -8,7 +8,12 @@ from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
-from ocs_ci.ocs.constants import ODF_CLI_DEV_IMAGE
+from ocs_ci.ocs.constants import (
+    ODF_CLI_DEV_IMAGE,
+    LOW_RECOVERY_OPS,
+    BALANCED,
+    HIGH_RECOVERY_OPS,
+)
 
 
 log = getLogger(__name__)
@@ -163,3 +168,94 @@ class ODFCliRunner:
         return self.run_command(
             f" set ceph log-level {service} {subsystem} {log_level}"
         )
+
+    def get_recovery_profile(self):
+        """
+        Retrieve the current recovery profile using the ODF CLI.
+
+        Returns:
+            str: The name of the current recovery profile (e.g., 'low_recovery_ops',
+            'balanced', 'high_recovery_ops').
+
+        Notes:
+            If the CLI returns no output, the method logs a warning and returns the
+            default profile 'balanced' as a fallback.
+
+        """
+        output = self.run_get_recovery_profile()
+        str_output = output.stdout.decode().strip()
+        if not str_output:
+            log.warning(
+                f"ODF CLI returned no recovery profile; Fall back to the default value {BALANCED}"
+            )
+            return BALANCED
+        return str_output.split()[-1]
+
+    def run_set_recovery_profile(self, profile_name):
+        """
+        Set the recovery profile using the ODF CLI.
+
+        Args:
+            profile_name (str): The name of the recovery profile to apply
+                (e.g., 'low_recovery_ops', 'balanced', 'high_recovery_ops').
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
+        self.run_command(f" set recovery-profile {profile_name}")
+
+    def run_set_recovery_profile_low(self):
+        """
+        Set the recovery profile to 'low_recovery_ops'.
+
+        """
+        return self.run_set_recovery_profile(LOW_RECOVERY_OPS)
+
+    def run_set_recovery_profile_balanced(self):
+        """
+        Set the recovery profile to 'balanced'.
+
+        """
+        return self.run_set_recovery_profile(BALANCED)
+
+    def run_set_recovery_profile_high(self):
+        """
+        Set the recovery profile to 'high_recovery_ops'.
+
+        """
+        return self.run_set_recovery_profile(HIGH_RECOVERY_OPS)
+
+
+def odf_cli_setup_helper():
+    """
+    Initializes and returns an instance of ODFCliRunner.
+    Downloads the ODF CLI binary if it does not exist.
+
+    Returns:
+        ODFCliRunner: The initialized runner.
+
+    Raises:
+        NotSupportedException: If ODF CLI is not supported on the current version or deployment.
+        RuntimeError: If CLI binary download or ODFCliRunner initialization fails.
+
+    """
+    odf_cli_retriever = ODFCLIRetriever()
+
+    # Check and download ODF CLI binary if needed
+    if not odf_cli_retriever.check_odf_cli_binary():
+        log.warning("ODF CLI binary not found. Attempting to download...")
+        odf_cli_retriever.retrieve_odf_cli_binary()
+        if not odf_cli_retriever.check_odf_cli_binary():
+            raise RuntimeError("Failed to download ODF CLI binary")
+
+    # Check and initialize ODFCliRunner
+    odf_cli_runner = ODFCliRunner()
+    if not odf_cli_runner:
+        log.warning("ODFCliRunner not initialized. Attempting to initialize again...")
+        odf_cli_runner = ODFCliRunner()
+        if not odf_cli_runner:
+            raise RuntimeError("Failed to initialize ODFCliRunner after retry")
+
+    log.info("ODF CLI binary downloaded and ODFCliRunner initialized successfully")
+    return odf_cli_runner

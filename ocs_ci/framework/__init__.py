@@ -303,7 +303,11 @@ class MultiClusterConfig:
         """
         consumer_indexes_list = []
         for i, cluster in enumerate(self.clusters):
-            if cluster.ENV_DATA["cluster_type"] in ["consumer", "hci_client"]:
+            if cluster.ENV_DATA.get("cluster_type", "").lower() in [
+                "consumer",
+                "hci_client",
+                "client",
+            ]:
                 consumer_indexes_list.append(i)
 
         if not consumer_indexes_list:
@@ -374,6 +378,24 @@ class MultiClusterConfig:
 
         """
         return self.ENV_DATA.get("cluster_name")
+
+    def get_cluster_name_by_index(self, index):
+        """
+        Get the cluster name by the cluster index
+
+        Args:
+            index (int): The cluster index
+
+        Returns:
+            str: The cluster name
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find the cluster
+
+        """
+        if index < 0 or index >= self.nclusters:
+            raise ClusterNotFoundException(f"Cluster with index {index} not found")
+        return self.clusters[index].ENV_DATA.get("cluster_name", "")
 
     def is_provider_exist(self):
         """
