@@ -31,19 +31,25 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     @pytest.mark.parametrize(
         argnames=["custom_sc"],
         argvalues=[
-            pytest.param(
-                *[False],
-                marks=pytest.mark.polarion_id("OCS-6266"),
-            ),
+            # pytest.param(
+            #     *[False],
+            #     marks=pytest.mark.polarion_id("OCS-6266"),
+            #     id="default_sc",
+            # ),
             pytest.param(
                 *[True],
                 marks=pytest.mark.polarion_id("OCS-XXXX"),
+                id="custom_sc",
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
     )
     def test_cnv_failover_and_relocate_discovered_apps(
-        self, discovered_apps_dr_workload_cnv, nodes_multicluster, custom_sc
+        self,
+        discovered_apps_dr_workload_cnv,
+        nodes_multicluster,
+        cnv_custom_storage_class,
+        custom_sc,
     ):
         """
         Tests to verify cnv application failover and Relocate with Discovered Apps

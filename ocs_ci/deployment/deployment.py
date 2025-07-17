@@ -354,7 +354,7 @@ class Deployment(object):
                         f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
                     )
 
-    def do_deploy_ocs(self, storageclass_factory_class):
+    def do_deploy_ocs(self):
         """
         Deploy OCS/ODF and run verification as well
 
@@ -433,24 +433,6 @@ class Deployment(object):
                             ocs_install_verification(
                                 timeout=2000, ocs_registry_image=ocs_registry_image
                             )
-                            ocs_version = version.get_semantic_ocs_version_from_config()
-                            if ocs_version >= version.VERSION_4_19:
-                                rdr_custom_sc = storageclass_factory_class(
-                                    sc_name="rbd-cnv-custom-sc-r2",
-                                    replica=2,
-                                    new_rbd_pool=True,
-                                    pool_name="rdr-test-storage-pool-2way",
-                                    mapOptions="krbd:rxbounce",
-                                )
-                                assert rdr_custom_sc.name == "rbd-cnv-custom-sc-r2", (
-                                    "Custom RBD Storage Class creation using Custom Pool of Replica-2 for "
-                                    "Discovered apps failed"
-                                )
-                                logger.info(
-                                    f"Custom RBD Storage Class creation using Custom Pool of Replica-2 for "
-                                    f"Discovered apps succeeded, SC name is {rdr_custom_sc.name}"
-                                )
-
                     config.reset_ctx()
                 if config.REPORTING["collect_logs_on_success_run"]:
                     collect_ocs_logs("deployment", ocp=False, status_failure=False)
@@ -785,7 +767,7 @@ class Deployment(object):
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_oadp()
-        self.do_deploy_ocs(storageclass_factory_class)
+        self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_odf_provider_mode()
         self.do_deploy_mce()
