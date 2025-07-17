@@ -67,7 +67,7 @@ def retry(
             logger.debug(
                 f"Executing {f.__name__}. Tries: {mtries}. Delay: {mdelay}. Backoff: {backoff}"
             )
-            exception_summary = []
+            exception_summary = set()
             while mtries > 1:
                 try:
                     if func is not None:
@@ -84,7 +84,7 @@ def retry(
                                 f"Text: {text_in_exception} not found in exception: {e}"
                             )
                             raise
-                    exception_summary.append(e)
+                    exception_summary.add(repr(e))
                     time.sleep(mdelay)
                     mtries -= 1
                     mdelay = min(
@@ -92,7 +92,8 @@ def retry(
                     )  # Cap the delay to max_delay
                     if func is not None:
                         func()
-            logger.debug(f"Retry exception summary: {exception_summary}")
+            if exception_summary:
+                logger.debug(f"Retry exception summary: {exception_summary}")
             return f(*args, **kwargs)
 
         return f_retry
