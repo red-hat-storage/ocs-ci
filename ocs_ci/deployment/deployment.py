@@ -51,7 +51,6 @@ from ocs_ci.helpers.dr_helpers import (
     create_service_exporter,
     validate_storage_cluster_peer_state,
     verify_volsync,
-    check_mirroring_status_for_custom_pool,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -695,13 +694,13 @@ class Deployment(object):
 
             HostedClients().do_deploy()
 
-    def deploy_cluster(self, storageclass_factory_class, log_cli_level="DEBUG"):
+    def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
 
         Args:
-            storageclass_factory_class: storageclass factory fixture
             log_cli_level (str): log level for installer (default: DEBUG)
+
         """
         self.do_deploy_ocp(log_cli_level)
 
@@ -4062,9 +4061,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
             verify_volsync()
-            assert check_mirroring_status_for_custom_pool(
-                pool_name="rdr-test-storage-pool-2way"
-            )
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:

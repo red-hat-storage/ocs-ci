@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import tier1
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad, rdr
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
+from ocs_ci.helpers.dr_helpers import check_mirroring_status_for_custom_pool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
@@ -105,6 +106,12 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
+        if custom_sc:
+            assert check_mirroring_status_for_custom_pool(
+                pool_name="rdr-test-storage-pool-2way"
+            ), "Mirroring status check for custom SC failed"
+            logger.info("Mirroring status check for custom SC passed")
+
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
@@ -185,6 +192,12 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             vrg_name=cnv_workloads[0].discovered_apps_placement_name,
         )
 
+        if custom_sc:
+            assert check_mirroring_status_for_custom_pool(
+                pool_name="rdr-test-storage-pool-2way"
+            ), "Mirroring status check for custom SC failed"
+            logger.info("Mirroring status check for custom SC passed")
+
         # Doing Relocate in below code
         primary_cluster_name_after_failover = (
             dr_helpers.get_current_primary_cluster_name(
@@ -251,3 +264,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 username=cnv_wl.vm_username,
                 verify=True,
             )
+
+        if custom_sc:
+            assert check_mirroring_status_for_custom_pool(
+                pool_name="rdr-test-storage-pool-2way"
+            ), "Mirroring status check for custom SC failed"
+            logger.info("Mirroring status check for custom SC passed")
