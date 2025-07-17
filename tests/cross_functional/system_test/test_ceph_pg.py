@@ -155,6 +155,8 @@ class TestCephPg(ManageTest):
         by patching the storagecluster
         and that invalid values are not accepted
         """
+        original_value = get_ceph_config_property("mon", "mon_target_pg_per_osd")
         assert update_mon_target_pg(400)
         assert update_mon_target_pg(100)
         assert not update_mon_target_pg("1OO")
+        update_mon_target_pg(original_value)
