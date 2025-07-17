@@ -366,6 +366,13 @@ class TestStorageAutoscaler(ManageTest):
             timeout=120,
         )
 
+        if cleanup_cluster:
+            logger.info(
+                "Clean up the cluster before creating additional resources "
+                "and check the cluster health"
+            )
+            self.cleanup_cluster()
+
         if create_additional_resources:
             logger.info(
                 "Creating additional PVCs/pods and running I/O to validate post-scale health..."
@@ -378,8 +385,6 @@ class TestStorageAutoscaler(ManageTest):
 
         logger.info("Final cluster health check after SmartScaling validation...")
         self.sanity_helpers.health_check()
-        if cleanup_cluster:
-            self.cleanup_cluster()
 
     def verify_storage_not_change(self):
         """
@@ -449,7 +454,7 @@ class TestStorageAutoscaler(ManageTest):
             constants.NOT_STARTED, resource_name=auto_scaler.name, timeout=60
         )
 
-        self.fill_up_cluster(scaling_threshold + 15, is_completed=False)
+        self.fill_up_cluster(scaling_threshold + 12, is_completed=False)
         wait_for_percent_used_capacity_reached(scaling_threshold)
 
         self.verify_autoscaler_post_threshold_steps(auto_scaler_name=auto_scaler.name)
@@ -477,7 +482,7 @@ class TestStorageAutoscaler(ManageTest):
             constants.NOT_STARTED, resource_name=auto_scaler.name, timeout=60
         )
 
-        self.fill_up_cluster(scaling_threshold + 15, is_completed=False)
+        self.fill_up_cluster(scaling_threshold + 12, is_completed=False)
         wait_for_percent_used_capacity_reached(scaling_threshold - 8)
 
         logger.info("Deleting the ocs-operator pod before scaling trigger...")
