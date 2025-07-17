@@ -43,6 +43,11 @@ def check_subctl_cli():
 
 @pytest.fixture()
 def cnv_custom_storage_class(storageclass_factory):
+    """
+    Uses storage class fixture to create a custom pool with replica-2 and custom storage class
+    to be used by CNV discovered applications
+
+    """
     existing_sc_list = get_all_storageclass()
     cnv_custom_sc_name = "rbd-cnv-custom-sc-r2"
     if cnv_custom_sc_name in existing_sc_list:
