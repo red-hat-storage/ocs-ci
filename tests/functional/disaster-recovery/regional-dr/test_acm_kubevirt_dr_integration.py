@@ -60,6 +60,13 @@ class TestACMKubevirtDRIntergration:
 
         cnv_workloads = cnv_workloads1 + cnv_workloads2
 
+        cnv_workloads[0].discovered_apps_placement_name = (
+            f"{assign_drpolicy_for_discovered_vms_via_ui}-drpc"
+        )
+        logger.info(
+            f'Placement name is "{assign_drpolicy_for_discovered_vms_via_ui}-drpc"'
+        )
+
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
                 cnv_workloads[0].workload_namespace,
@@ -80,23 +87,19 @@ class TestACMKubevirtDRIntergration:
             acm_obj, vms=[cnv_workloads[1].vm_name], standalone=False
         )
 
-        cnv_workloads[0].discovered_apps_placement_name = (
-            f"{assign_drpolicy_for_discovered_vms_via_ui}-drpc"
-        )
-
         scheduling_interval = dr_helpers.get_scheduling_interval(
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
-        logger.info("Placement name is ")
 
-        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         dr_helpers.wait_for_all_resources_creation(
-            pvc_count=2,
-            pod_count=2,
-            namespace=cnv_workloads[0].workload_namespace,
+            cnv_workloads[0].workload_pvc_count * 2,
+            cnv_workloads[0].workload_pod_count * 2,
+            cnv_workloads[0].workload_namespace,
             discovered_apps=True,
+            vrg_name=cnv_workloads[0].discovered_apps_placement_name,
         )
         dr_helpers.wait_for_cnv_workload(
             vm_name=self.vm_name,

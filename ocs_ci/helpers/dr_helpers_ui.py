@@ -801,7 +801,8 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
         vms (list): Specify the names of VMs for DR protection in the form of a list
         standalone (bool): True by default, will switch to Shared Protection type when False
     Returns:
-        bool: True if DR Policy assignment is successful
+        protection_name (str): Protection name used to DR protect the workload using which
+                                DRPC and Placement would be created
 
     """
     if not vms or any(not vm.strip() for vm in vms):
