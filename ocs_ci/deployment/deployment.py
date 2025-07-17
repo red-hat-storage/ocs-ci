@@ -2371,7 +2371,7 @@ class Deployment(object):
             cephobjectstoreusers = cephobjectstoreuser.get()["items"]
             for objectstoreuser in cephobjectstoreusers:
                 name = objectstoreuser["metadata"]["name"]
-                phase = objectstoreuser["status"].get("phase")
+                phase = objectstoreuser.get("status", {}).get("phase")
                 logger.info(f"ObjectStoreUser user: {name} is in phase: {phase}")
                 assert (
                     phase != "ReconcileFailed"
