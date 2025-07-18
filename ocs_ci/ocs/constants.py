@@ -510,6 +510,7 @@ CONSOLE_CONFIG = "console.v1.operator.openshift.io/cluster"
 
 # Default pools
 DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
+DEFAULT_CEPHFS_POOL = "ocs-storagecluster-cephfilesystem-data0"
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
@@ -2256,6 +2257,7 @@ ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
+PG_NUM_FINAL = "pg_num_final"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -2931,6 +2933,16 @@ PATCH_SPECIFIC_SOURCES_CMD = (
     "oc patch operatorhub.config.openshift.io/cluster -p="
     '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
     "}}]}}}}' --type=merge"
+)
+CHANGE_DEFAULT_CEPHBLOCKPOOL_TARGET_RATIO = (
+    "oc patch storagecluster ocs-storagecluster -n openshift-storage --type merge -p "
+    '\' {{ "spec": {{ "managedResources": {{ "cephBlockPools": {{ "poolSpec": {{ '
+    '"replicated": {{ "size": 3, "targetSizeRatio": {new_ratio} }} }} }} }} }} }}\''
+)
+CHANGE_DEFAULT_CEPHFS_POOL_TARGET_RATIO = (
+    "oc patch storagecluster ocs-storagecluster -n openshift-storage --type merge -p "
+    '\' {{ "spec": {{ "managedResources": {{ "cephFilesystems": {{ "dataPoolSpec": {{ '
+    '"replicated": {{ "size": 3, "targetSizeRatio": {new_ratio} }} }} }} }} }} }}\''
 )
 
 # Submariner constants

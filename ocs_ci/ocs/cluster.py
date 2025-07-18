@@ -1530,6 +1530,32 @@ def get_ceph_config_property(entity, prop):
         return None
 
 
+def get_autoscale_status_property(pool_name, prop):
+    """
+    Get the value of the pool's property from 'ceph osd pool autoscale-status'
+
+    Args:
+        pool_name (str): name of the pool
+        prop (str): the property
+
+    Returns:
+        (str) Value of the property or None there is no such pool
+    """
+    ceph_cmd = "ceph osd pool autoscale-status -f json"
+    ct_pod = pod.get_ceph_tools_pod()
+    try:
+        out = ct_pod.exec_ceph_cmd(ceph_cmd)
+        pools = json.loads(out)[0]
+        for pool in pools:
+            if pool["pool_name"] == pool_name:
+                return pool[prop]
+        logger.info(f"Pool {pool_name} not found")
+        return None
+    except CommandFailed as err:
+        logger.info(f"there was an error with the command: {err}")
+        return None
+
+
 def check_pool_compression_replica_ceph_level(pool_name, compression, replica):
     """
     Validate compression and replica values in ceph level
@@ -3936,6 +3962,28 @@ def adjust_active_mds_count_storagecluster(target_count):
         raise ActiveMdsValueNotMatch(
             f"Failed to change the active count to {target_count} within timeout."
         )
+
+
+def change_pool_target_size_ratio(pool_name, new_ratio):
+    """
+    Change target size ratio of the pool to the new value
+
+    Args:
+        pool_name (str): name of the pool
+        new_ratio (int): the new value of target size ratio
+    """
+    if pool_name == constants.DEFAULT_CEPHBLOCKPOOL:
+        patch_command = constants.CHANGE_DEFAULT_CEPHBLOCKPOOL_TARGET_RATIO.format(
+            new_ratio=new_ratio
+        )
+    elif pool_name == constants.DEFAULT_CEPHFS_POOL:
+        patch_command = constants.CHANGE_DEFAULT_CEPHFS_POOL_TARGET_RATIO.format(
+            new_ratio=new_ratio
+        )
+    try:
+        run_cmd(patch_command)
+    except CommandFailed as err:
+        logger.info(f"there was an error with the command {err}")
 
 
 def get_active_mds_pod_objs():
