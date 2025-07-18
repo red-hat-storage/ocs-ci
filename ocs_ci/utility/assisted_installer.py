@@ -297,6 +297,19 @@ class AssistedInstallerAPI(OpenShiftAPI):
         """
         return self.post_request("clusters", data)
 
+    def update_install_config(self, cluster_id, data):
+        """
+        Override values in the install config.
+
+        Args:
+            cluster_id (str): cluster ID
+            data (str): Install config overrides.
+
+        """
+        return self.patch_request(
+            f"clusters/{cluster_id}/install-config", data=data, json=False
+        )
+
     def install_cluster(self, cluster_id):
         """
         Launch installation of the OCP cluster.
