@@ -13,7 +13,7 @@ ENV_DATA:
     - '1'
   worker_replicas: 3
   master_replicas: 3
-  master_instance_type: 'Standard_D8s_v3'
+  master_instance_type: 'Standard_D8s_v5'
   worker_instance_type: 'Standard_D16s_v3'
 REPORTING:
   polarion:
