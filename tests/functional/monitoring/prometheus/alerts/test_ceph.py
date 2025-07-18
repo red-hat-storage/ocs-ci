@@ -133,6 +133,7 @@ def deprecated_test_ceph_health(
     )
 
 
+@runs_on_provider
 class TestCephOSDSlowOps(object):
     @pytest.fixture(scope="function")
     def setup(self, request, pod_factory, multi_pvc_factory):
