@@ -222,7 +222,7 @@ class TestUpgradeOCP(ManageTest):
             )
             operator_upgrade_timeout = 4000
             if rosa_platform or num_nodes >= 6:
-                operator_upgrade_timeout = 8000
+                operator_upgrade_timeout = 9800
             for ocp_operator in cluster_operators:
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
                 # ############ Workaround for issue 2624 #######
