@@ -339,7 +339,10 @@ def relocate(
 
 
 def check_mirroring_status_ok(
-    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+    replaying_images=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
+    get_count=False,
 ):
     """
     Check if mirroring status has health OK and expected number of replaying images
@@ -406,9 +409,14 @@ def check_mirroring_status_ok(
         # This does not apply for clusters with ODF 4.12 and above.
         # See https://bugzilla.redhat.com/show_bug.cgi?id=2132359
         if ocs_version >= version.VERSION_4_12:
-            expected_value = [replaying_images]
+            expected_value = [
+                replaying_images + config.ENV_DATA.get("replaying_count", 0)
+            ]
         else:
-            expected_value = range(replaying_images, replaying_images + 3)
+            expected_value = range(
+                replaying_images,
+                replaying_images + 3 + config.ENV_DATA.get("replaying_count", 0),
+            )
 
         current_value = mirroring_status.get("states").get("replaying")
 
@@ -424,7 +432,8 @@ def check_mirroring_status_ok(
                 return True
             else:
                 return False
-
+    if get_count:
+        return mirroring_status.get("states").get("replaying")
     return True
 
 
