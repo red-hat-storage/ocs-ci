@@ -676,6 +676,18 @@ def auto_load_auth_config():
         pass  # If auth file doesn't exist we just ignore.
 
 
+@pytest.fixture
+def cluster_index(request):
+    """
+    Fixture used as a placeholder for a parameter required by run_on_all_clients marker.
+    """
+    try:
+        parameter = request.param
+    except AttributeError:
+        parameter = None
+    return parameter
+
+
 @pytest.fixture(scope="class")
 def secret_factory_class(request):
     return secret_factory_fixture(request)

@@ -4,7 +4,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+    run_on_all_clients,
+)
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -177,9 +181,10 @@ class TestPvcExpand(ManageTest):
 
     @provider_mode
     @acceptance
+    @run_on_all_clients
     @tier1
     @pytest.mark.polarion_id("OCS-2219")
-    def test_pvc_expansion(self):
+    def test_pvc_expansion(self, cluster_index):
         """
         Verify PVC expand feature
 

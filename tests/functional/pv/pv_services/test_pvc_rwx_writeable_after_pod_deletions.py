@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
+    run_on_all_clients,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants, node
@@ -25,7 +26,10 @@ class TestRWXMountPoint(ManageTest):
 
     @pytest.mark.polarion_id("OCS-965")
     @tier1
-    def test_pvc_rwx_writeable_after_pod_deletions(self, pvc_factory, teardown_factory):
+    @run_on_all_clients
+    def test_pvc_rwx_writeable_after_pod_deletions(
+        self, pvc_factory, teardown_factory, cluster_index
+    ):
         """
         Test assign nodeName to a pod using RWX pvc
 
