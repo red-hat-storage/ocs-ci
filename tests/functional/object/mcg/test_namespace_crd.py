@@ -182,6 +182,7 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier2,
                     pytest.mark.polarion_id("OCS-6355"),
+                    skipif_fips_enabled,
                 ],
             ),
             pytest.param(
