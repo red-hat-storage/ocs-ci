@@ -2021,7 +2021,8 @@ class Deployment(object):
             label_pod_security_admission(
                 namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
             )
-            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
+            if is_storage_system_needed():
+                exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
         else:
             cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
