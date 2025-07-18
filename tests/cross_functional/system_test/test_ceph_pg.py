@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier2,
 )
+from ocs_ci.ocs.resources.pod import restart_pods_having_label
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
@@ -159,4 +160,18 @@ class TestCephPg(ManageTest):
         assert update_mon_target_pg(400)
         assert update_mon_target_pg(100)
         assert not update_mon_target_pg("1OO")
+        update_mon_target_pg(original_value)
+
+    @skipif_ocs_version("<4.19")
+    @tier2
+    def test_update_mon_target_pg_with_mon_restart(self):
+        """
+        Test that after increasing mon_target_pg_per_osd
+        and restarting mon pod the number of pgs is increased
+        """
+        original_value = get_ceph_config_property("mon", "mon_target_pg_per_osd")
+        assert update_mon_target_pg(400)
+        restart_pods_having_label(label=constants.MON_APP_LABEL)
+        pgs_total = get_total_num_of_pgs()
+        assert pgs_total > 250, f"Total pgs: {pgs_total}. Should be more than 250"
         update_mon_target_pg(original_value)
