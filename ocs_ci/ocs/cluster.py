@@ -395,7 +395,7 @@ class CephCluster(object):
                 " and noobaa-default-bucket-class status"
             )
 
-    def wait_for_noobaa_health_ok(self, tries=60, delay=5):
+    def wait_for_noobaa_health_ok(self, tries=120, delay=5):
         """
         Wait for Noobaa health to be OK
         """
