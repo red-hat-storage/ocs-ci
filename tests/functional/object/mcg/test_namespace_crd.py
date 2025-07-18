@@ -104,6 +104,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"aws": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[tier1, pytest.mark.polarion_id("OCS-2256")],
             ),
@@ -114,6 +115,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"azure": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[tier1, pytest.mark.polarion_id("OCS-2409")],
             ),
@@ -124,6 +126,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier1,
@@ -138,6 +141,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -152,6 +156,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"aws": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -165,6 +170,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"azure": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -178,6 +184,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"ibmcos": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -192,6 +199,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"gcp": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -208,6 +216,7 @@ class TestNamespace(MCGTest):
                             "rgw": [(1, None)],
                         },
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -224,6 +233,7 @@ class TestNamespace(MCGTest):
                             "rgw": [(2, None)],
                         },
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -238,6 +248,7 @@ class TestNamespace(MCGTest):
                         "type": "Single",
                         "namespacestore_dict": {"ibmcos": [(1, None)]},
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
@@ -255,6 +266,7 @@ class TestNamespace(MCGTest):
                             "azure": [(1, None)],
                         },
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[tier2, pytest.mark.polarion_id("OCS-2416")],
             ),
@@ -267,6 +279,7 @@ class TestNamespace(MCGTest):
                             "aws": [(2, DEFAULT_REGION)],
                         },
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[tier2, pytest.mark.polarion_id("OCS-2418")],
             ),
@@ -279,6 +292,7 @@ class TestNamespace(MCGTest):
                             "azure": [(2, None)],
                         },
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[tier2, pytest.mark.polarion_id("OCS-2419")],
             ),
@@ -291,6 +305,7 @@ class TestNamespace(MCGTest):
                             "rgw": [(2, None)],
                         },
                     },
+                    "nss_creation_deletion_timeout": 240,
                 },
                 marks=[
                     tier2,
