@@ -30,12 +30,18 @@ from ocs_ci.ocs.cluster import (
     CephHealthMonitor,
     MulticlusterCephHealthMonitor,
 )
-from ocs_ci.ocs.utils import is_acm_cluster, get_non_acm_cluster_config
+from ocs_ci.ocs.utils import (
+    get_primary_cluster_config,
+    is_acm_cluster,
+    get_non_acm_cluster_config,
+)
 from ocs_ci.utility.ocp_upgrade import (
     pause_machinehealthcheck,
     resume_machinehealthcheck,
 )
-from ocs_ci.utility.multicluster import MDRClusterUpgradeParametrize
+from ocs_ci.utility.multicluster import (
+    get_multicluster_upgrade_parametrizer,
+)
 from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
@@ -59,7 +65,7 @@ def config_index(request):
 @ignore_leftovers
 @ocp_upgrade
 @purple_squad
-@multicluster_roles(["mdr-all-ocp"])
+@multicluster_roles(["mdr-all-ocp", "rdr-all-ocp"])
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health
@@ -111,16 +117,20 @@ class TestUpgradeOCP(ManageTest):
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
         if (
             config.multicluster
-            and config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
+            and config.MULTICLUSTER["multicluster_mode"] in ["metro-dr", "regional-dr"]
             and is_acm_cluster(config)
         ):
-            # Find the ODF cluster in current zone
-            mdr_upgrade = MDRClusterUpgradeParametrize()
-            mdr_upgrade.config_init()
+            # Find the ODF cluster in current zone in case of MDR
+            # In the case of RDR we will stick to the primary cluster
+            dr_upgrde_parametrizer = get_multicluster_upgrade_parametrizer()
+            dr_upgrde_parametrizer.config_init()
             local_zone_odf = None
-            for cluster in get_non_acm_cluster_config():
-                if config.ENV_DATA["zone"] == cluster.ENV_DATA["zone"]:
-                    local_zone_odf = cluster
+            if dr_upgrde_parametrizer.dr_type == "mdr":
+                for cluster in get_non_acm_cluster_config():
+                    if config.ENV_DATA["zone"] == cluster.ENV_DATA["zone"]:
+                        local_zone_odf = cluster
+            elif dr_upgrde_parametrizer.dr_type == "rdr":
+                local_zone_odf = get_primary_cluster_config()
             ceph_cluster = CephClusterMultiCluster(local_zone_odf)
             health_monitor = MulticlusterCephHealthMonitor
         else:
