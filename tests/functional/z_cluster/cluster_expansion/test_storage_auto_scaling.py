@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
     brown_squad,
+    tier4b,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -41,6 +42,8 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     calculate_md5sum_of_pod_files,
     verify_md5sum_on_pod_files,
+    get_ocs_operator_pod,
+    delete_pods,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
 from ocs_ci.ocs.resources.storage_cluster import (
@@ -151,21 +154,47 @@ class TestStorageAutoscaler(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def fill_up_cluster(self, target_percentage, bs="4096KiB", is_completed=True):
+    def fill_up_cluster(
+        self, target_percentage, bs="4096KiB", is_completed=True, fast_fill_up=True
+    ):
         """
-        Fill up the cluster to {target_percentage}% of it's storage capacity
+        Fill up the cluster to a target percentage of total storage capacity using FIO-based load.
+
+        This method invokes the benchmark operator to prefill the cluster up to a specified
+        usage level. If `fast_fill_up` is enabled, more aggressive FIO settings are applied
+        to increase fill speed, and the `target_percentage` is reduced slightly to compensate
+        for potential overshoot.
 
         Args:
-            target_percentage (int): The target percentage of cluster storage usage to reach.
-            bs (str): the Block size that need to used for the prefill.
-            is_completed (bool): if True, verify the benchmark operator moved to completed state.
-
+            target_percentage (int): Desired percentage of used cluster storage to reach.
+            bs (str): Block size used for the workload. Default is "4096KiB".
+            is_completed (bool): Whether to wait until the benchmark workload completes.
+            fast_fill_up (bool): If True, use aggressive parameters (higher iodepth, numjobs)
+                                 for faster cluster fill-up. The target percentage is adjusted.
         """
         logger.info(
-            f"Fill up the cluster to {target_percentage}% of it's storage capacity"
+            f"Fill up the cluster to {target_percentage}% of it's storage capacity "
+            f"(fast_fill_up={fast_fill_up})"
         )
+
+        numjobs = None
+        iodepth = None
+
+        if fast_fill_up:
+            numjobs = 4
+            iodepth = 64
+            # Reduce the target to compensate for likely overshoot
+            target_percentage = int(target_percentage - target_percentage / 3)
+            logger.info(
+                f"Target percentage adjusted to {target_percentage}% due to fast_fill_up mode"
+            )
+
         self.benchmark_obj = self.benchmark_workload_storageutilization(
-            target_percentage, bs=bs, is_completed=is_completed
+            target_percentage,
+            bs=bs,
+            is_completed=is_completed,
+            numjobs=numjobs,
+            iodepth=iodepth,
         )
 
     def cleanup_cluster(self):
@@ -337,6 +366,13 @@ class TestStorageAutoscaler(ManageTest):
             timeout=120,
         )
 
+        if cleanup_cluster:
+            logger.info(
+                "Clean up the cluster before creating additional resources "
+                "and check the cluster health"
+            )
+            self.cleanup_cluster()
+
         if create_additional_resources:
             logger.info(
                 "Creating additional PVCs/pods and running I/O to validate post-scale health..."
@@ -349,8 +385,6 @@ class TestStorageAutoscaler(ManageTest):
 
         logger.info("Final cluster health check after SmartScaling validation...")
         self.sanity_helpers.health_check()
-        if cleanup_cluster:
-            self.cleanup_cluster()
 
     def verify_storage_not_change(self):
         """
@@ -400,8 +434,8 @@ class TestStorageAutoscaler(ManageTest):
             )
 
     @tier1
-    @polarion_id("OCS-5506")
-    def test_auto_scaling_cli(self, benchmark_workload_storageutilization):
+    @polarion_id("OCS-6875")
+    def test_auto_scaling_cli(self):
         """
         Test the auto-scaling functionality using the CLI
 
@@ -420,8 +454,48 @@ class TestStorageAutoscaler(ManageTest):
             constants.NOT_STARTED, resource_name=auto_scaler.name, timeout=60
         )
 
-        self.fill_up_cluster(scaling_threshold + 15, is_completed=False)
+        self.fill_up_cluster(scaling_threshold + 12, is_completed=False)
         wait_for_percent_used_capacity_reached(scaling_threshold)
+
+        self.verify_autoscaler_post_threshold_steps(auto_scaler_name=auto_scaler.name)
+
+    @tier4b
+    @polarion_id("OCS-6876")
+    def test_auto_scaling_with_ocs_operator_delete(self):
+        """
+        Validate that the StorageAutoScaler functions correctly when the OCS operator pod
+        is deleted during and after the autoscaler trigger point is reached.
+
+        Steps:
+        - Create a StorageAutoScaler CR with a safe scaling threshold.
+        - Fill the cluster to `threshold + 15%` but pause at `threshold - 8%`.
+        - Delete the OCS operator pod to simulate a failure before the trigger point.
+        - Continue filling until the scaling threshold is triggered.
+        - Delete the OCS operator pod again just after the trigger point.
+        - Verify that autoscaling proceeds correctly despite disruptions.
+
+        """
+        self.prepare_data_before_auto_scaling()
+        scaling_threshold = generate_default_scaling_threshold()
+        auto_scaler = create_auto_scaler(scaling_threshold=scaling_threshold)
+        wait_for_auto_scaler_status(
+            constants.NOT_STARTED, resource_name=auto_scaler.name, timeout=60
+        )
+
+        self.fill_up_cluster(scaling_threshold + 12, is_completed=False)
+        wait_for_percent_used_capacity_reached(scaling_threshold - 8)
+
+        logger.info("Deleting the ocs-operator pod before scaling trigger...")
+        ocs_operator_pod = get_ocs_operator_pod()
+        delete_pods([ocs_operator_pod])
+
+        wait_for_percent_used_capacity_reached(scaling_threshold)
+
+        logger.info(
+            "Deleting the ocs-operator pod again after scaling threshold reached..."
+        )
+        ocs_operator_pod = get_ocs_operator_pod()
+        delete_pods([ocs_operator_pod])
 
         self.verify_autoscaler_post_threshold_steps(auto_scaler_name=auto_scaler.name)
 
@@ -480,6 +554,7 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscaler):
 
     @pytest.mark.skip_resize_pre_conditions
     @tier2
+    @polarion_id("OCS-6877")
     def test_create_autoscaler_and_delete_before_threshold(self):
         """
         Test that the autoscaler is not triggered if it is deleted
@@ -509,6 +584,7 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscaler):
 
     @tier2
     @pytest.mark.skip_resize_pre_conditions
+    @polarion_id("OCS-6878")
     def test_create_autoscaler_and_shutdown_osd_node(
         self, nodes, node_restart_teardown
     ):
@@ -537,6 +613,7 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscaler):
 
     @tier2
     @pytest.mark.skip_resize_pre_conditions
+    @polarion_id("OCS-6879")
     def test_storage_capacity_limit_reached(self, nodes):
         """
         Test that the autoscaler does not trigger if the cluster's configured
