@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from time import sleep
@@ -16,8 +18,12 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
     assign_drpolicy_for_discovered_vms_via_ui,
+    verify_drpolicy_ui,
 )
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
+from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +42,7 @@ class TestACMKubevirtDRIntergration:
     @pytest.mark.polarion_id("OCS-xxxx")
     # TODO: Add Polarion ID when available
     def test_acm_kubevirt_dr_intergration_ui(
-        self, discovered_apps_dr_workload_cnv, setup_acm_ui
+        self, discovered_apps_dr_workload_cnv, nodes_multicluster, setup_acm_ui
     ):
         """
         DR operation on discovered VMs using Standalone and Shared Protection type
@@ -60,21 +66,6 @@ class TestACMKubevirtDRIntergration:
 
         cnv_workloads = cnv_workloads1 + cnv_workloads2
 
-        cnv_workloads[0].discovered_apps_placement_name = (
-            f"{assign_drpolicy_for_discovered_vms_via_ui}-drpc"
-        )
-        logger.info(
-            f'Placement name is "{assign_drpolicy_for_discovered_vms_via_ui}-drpc"'
-        )
-
-        primary_cluster_name_before_failover = (
-            dr_helpers.get_current_primary_cluster_name(
-                cnv_workloads[0].workload_namespace,
-                discovered_apps=True,
-                resource_name=cnv_workloads[0].discovered_apps_placement_name,
-            )
-        )
-
         acm_obj = AcmAddClusters()
 
         logger.info("Navigate to Virtual machines page on the ACM console")
@@ -87,10 +78,27 @@ class TestACMKubevirtDRIntergration:
             acm_obj, vms=[cnv_workloads[1].vm_name], standalone=False
         )
 
+        cnv_workloads[0].discovered_apps_placement_name = (
+            f"{assign_drpolicy_for_discovered_vms_via_ui}-drpc"
+        )
+        logger.info(
+            f'Placement name is "{assign_drpolicy_for_discovered_vms_via_ui}-drpc"'
+        )
+
         scheduling_interval = dr_helpers.get_scheduling_interval(
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             resource_name=cnv_workloads[0].discovered_apps_placement_name,
+        )
+
+        verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
+
+        primary_cluster_name_before_failover = (
+            dr_helpers.get_current_primary_cluster_name(
+                cnv_workloads[0].workload_namespace,
+                discovered_apps=True,
+                resource_name=cnv_workloads[0].discovered_apps_placement_name,
+            )
         )
 
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
@@ -102,8 +110,8 @@ class TestACMKubevirtDRIntergration:
             vrg_name=cnv_workloads[0].discovered_apps_placement_name,
         )
         dr_helpers.wait_for_cnv_workload(
-            vm_name=self.vm_name,
-            namespace=self.workload_namespace,
+            vm_name=cnv_workloads[0].vm_name,
+            namespace=cnv_workloads[0].workload_namespace,
             phase=constants.STATUS_RUNNING,
         )
 
@@ -136,6 +144,20 @@ class TestACMKubevirtDRIntergration:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
+        # Shutdown primary managed cluster nodes
+        active_primary_index = config.cur_index
+        active_primary_cluster_node_objs = get_node_objs()
+        logger.info("Shutting down all the nodes of the primary managed cluster")
+        nodes_multicluster[active_primary_index].stop_nodes(
+            active_primary_cluster_node_objs
+        )
+        logger.info(
+            f"All nodes of the primary managed cluster {primary_cluster_name_before_failover} are powered off, "
+            "waiting for cluster to be unreachable.."
+        )
+        time.sleep(300)
+
+        logger.info("FailingOver the workloads.....")
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
             namespace=cnv_workloads[0].workload_namespace,
@@ -143,16 +165,6 @@ class TestACMKubevirtDRIntergration:
             workload_placement_name=cnv_workloads[0].discovered_apps_placement_name,
             old_primary=primary_cluster_name_before_failover,
         )
-        logger.info("Doing Cleanup Operations")
-        for cnv_wl in cnv_workloads:
-            dr_helpers.do_discovered_apps_cleanup(
-                drpc_name=cnv_wl.discovered_apps_placement_name,
-                old_primary=primary_cluster_name_before_failover,
-                workload_namespace=cnv_workloads[0].workload_namespace,
-                workload_dir=cnv_wl.workload_dir,
-                vrg_name=cnv_wl.discovered_apps_placement_name,
-                shared=True,
-            )
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -191,7 +203,26 @@ class TestACMKubevirtDRIntergration:
                 f"Checksum of files written after Failover: {vm_filepaths[1]} on VM {cnv_wl.workload_name}: {md5sum}"
             )
 
-        # Doing Relocate
+        logger.info("Recover the down managed cluster")
+        nodes_multicluster[active_primary_index].start_nodes(
+            active_primary_cluster_node_objs
+        )
+        wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
+        wait_for_pods_to_be_running(timeout=420, sleep=15)
+        assert ceph_health_check(tries=10, delay=30)
+
+        logger.info("Doing Cleanup Operations after successful failover")
+        for cnv_wl in cnv_workloads:
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=cnv_wl.discovered_apps_placement_name,
+                old_primary=primary_cluster_name_before_failover,
+                workload_namespace=cnv_workloads[0].workload_namespace,
+                workload_dir=cnv_wl.workload_dir,
+                vrg_name=cnv_wl.discovered_apps_placement_name,
+                shared=True,
+            )
+
+        # Doing Relocate in below code
         primary_cluster_name_after_failover = (
             dr_helpers.get_current_primary_cluster_name(
                 cnv_workloads[0].workload_namespace,
@@ -211,11 +242,12 @@ class TestACMKubevirtDRIntergration:
             discovered_apps=True,
             resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
-        logger.info("Running Relocate Steps")
+
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
+        logger.info("Relocating the workloads.....")
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
             namespace=cnv_workloads[0].workload_namespace,
@@ -224,11 +256,13 @@ class TestACMKubevirtDRIntergration:
             old_primary=primary_cluster_name_after_failover,
             workload_instance=cnv_workloads[0],
         )
+        # Clean-up is handled as part of the Relocate function
+
         # Verify resources creation on primary managed cluster
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count,
-            cnv_workloads[0].workload_pod_count,
+            cnv_workloads[0].workload_pvc_count * 2,
+            cnv_workloads[0].workload_pod_count * 2,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=cnv_workloads[0].discovered_apps_placement_name,
