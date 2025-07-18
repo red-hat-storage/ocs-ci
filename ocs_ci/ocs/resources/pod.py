@@ -3556,20 +3556,26 @@ def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
 
 def pod_resource_utilization_raw_output_from_adm_top(
     namespace=config.ENV_DATA["cluster_namespace"],
+    selector=None,
 ):
     """
     Gets the pod's memory utilization using adm top command.
 
     Args:
         namespace (str) : The pod's namespace where the adm top command has to be run
+        selector (str): selector to filter the pods. Ex: for noobaa, selector='app=noobaa'
 
     Returns:
         str : Raw output of adm top pods command
 
     """
     obj = ocp.OCP()
+    command = f"adm top pods -n {namespace}"
+    if selector:
+        command += f" --selector={selector}"
+
     resource_utilization_all_pods = obj.exec_oc_cmd(
-        command=f"adm top pods -n {namespace}", out_yaml_format=False
+        command=command, out_yaml_format=False
     )
     logger.info("Command RAW output of adm top pods")
     logger.info(f"{resource_utilization_all_pods}")

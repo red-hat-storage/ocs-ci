@@ -197,9 +197,10 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
     modify_deployment_replica_count,
-    modify_statefulset_replica_count,
     create_resource,
     create_network_fence_class,
+    wait_for_resource_state,
+    storagecluster_independent_check,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -3022,6 +3023,110 @@ def javasdk_pod_fixture(request, scope_name):
     request.addfinalizer(_javas3_pod_cleanup)
 
     return javas3_pod_obj
+
+
+@pytest.fixture(scope="session")
+def nb_stress_cli_pods(request):
+    """
+    A session scoped fixture to create stress cli pod
+
+    """
+    return nb_stress_cli_pod_fixture(request, scope_name="session")
+
+
+def nb_stress_cli_pod_fixture(request, scope_name):
+    """
+    Creates AWS cli pod with object data specific to stress testing
+
+    Args:
+        request: request object
+        scope_name: scope of the calling fixture used for giving a
+        descriptive name to the pod and configmap
+
+    Returns:
+        Pod(): Pod object representing stress cli pod
+
+    """
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_data = templating.load_yaml(constants.STRESS_CLI_SERVICE_CA_YAML)
+    resource_type = scope_name or "caconfigmap"
+    service_ca_configmap_name = create_unique_resource_name(
+        constants.STRESSCLI_SERVICE_CA_CM_NAME, resource_type
+    )
+    service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    service_ca_data["metadata"]["namespace"] = namespace
+    s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
+    service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
+
+    log.info("Trying to create the Stress CLI service CA")
+    service_ca_configmap = create_resource(**service_ca_data)
+    OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
+        resource_name=service_ca_configmap.name, column="DATA", condition="1"
+    )
+
+    log.info("Creating the Stress CLI StatefulSet")
+    stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
+    stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
+        "name"
+    ] = service_ca_configmap_name
+    stress_cli_sts_dict["metadata"]["namespace"] = namespace
+    update_container_with_mirrored_image(stress_cli_sts_dict)
+    update_container_with_proxy_env(stress_cli_sts_dict)
+    stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
+
+    log.info("Verifying the AWS CLI StatefulSet is running")
+    assert stress_cli_sts_obj, "Failed to create S3CLI STS"
+
+    wait_for_pods_by_label_count(
+        constants.STRESS_CLI_APP_LABEL, expected_count=2, namespace=namespace
+    )
+    stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
+        lambda: [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                constants.STRESS_CLI_APP_LABEL, namespace
+            )
+        ]
+    )()
+    for pod_obj in stress_cli_pod_objs:
+        wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
+
+        pod_obj.exec_cmd_on_pod(
+            f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+        )
+
+        if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
+            "rgw_secure"
+        ):
+            log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
+            pod_obj.exec_cmd_on_pod(
+                f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+            )
+
+    def cleanup():
+        """
+        Clean up the Stress CLI resources
+
+        """
+
+        log.info("Deleting the Stress CLI STS")
+        stress_cli_sts_obj.delete()
+
+        log.info("Deleting the Stress CLI configmap")
+        service_ca_configmap.delete()
+
+    request.addfinalizer(cleanup)
+    return stress_cli_pod_objs
+
+
+@pytest.fixture()
+def stress_test_directory_setup(request, nb_stress_cli_pods):
+    """
+    Setup test directories on noobaa stress CLI pod
+
+    """
+    return test_directory_setup_fixture(request, nb_stress_cli_pods[1])
 
 
 @pytest.fixture()
@@ -8836,7 +8941,7 @@ def scale_noobaa_resources_session(request):
     Session scoped fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 @pytest.fixture()
@@ -8845,7 +8950,7 @@ def scale_noobaa_resources_fixture(request):
     Fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 def scale_noobaa_resources(request):
@@ -8866,12 +8971,12 @@ def scale_noobaa_resources(request):
             f'{{"endpoints": {{"minCount": {min_ep_count},"maxCount": {max_ep_count}}}}}}}}}'
         )
         scale_noobaa_resources_param = (
-            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": "{memory}}}}}}}}}}}'
+            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}}}}}}}}'
         )
         storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
         log.info("Scaled noobaa endpoint counts")
@@ -9197,6 +9302,10 @@ def benchmark_workload_storageutilization(request):
 
 @pytest.fixture()
 def scale_noobaa_db_pod_pv_size(request):
+    return scale_noobaa_db_pv(request)
+
+
+def scale_noobaa_db_pv(request):
     """
     This fixtue helps to scale the noobaa db pv size.
     follows KCS: https://access.redhat.com/solutions/6976547
@@ -9214,9 +9323,9 @@ def scale_noobaa_db_pod_pv_size(request):
         constants.OCS_OPERATOR_LABEL,
         constants.OPERATOR_LABEL,
         constants.NOOBAA_OPERATOR_POD_LABEL,
-        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
     ]
-    nb_pvc = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_47_AND_ABOVE)[0]
+    nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
 
     def factory(pv_size="50"):
         """
@@ -9230,18 +9339,9 @@ def scale_noobaa_db_pod_pv_size(request):
             modify_deployment_replica_count(deployment_name=operator, replica_count=0)
         log.info(f"Scaled down operators: {operators}")
 
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=0
-        )
-        log.info("Scaled down noobaa db sts")
-
-        nb_pvc.resize_pvc(new_size=pv_size)
-        log.info(f"{nb_pvc.name} is resized to {pv_size}")
-
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
-        )
-        log.info("Scaled up noobaa db sts")
+        for nb_pvc in nb_pvcs:
+            nb_pvc.resize_pvc(new_size=pv_size)
+            log.info(f"{nb_pvc.name} is resized to {pv_size}")
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=1)
@@ -9262,11 +9362,6 @@ def scale_noobaa_db_pod_pv_size(request):
 
     def finalizer():
         pods = []
-
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
-        )
-        log.info("Scaled up noobaa db sts")
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=1)
@@ -10214,3 +10309,9 @@ def distribute_storage_classes_to_all_consumers():
             consumer.set_storage_classes(storage_class_names)
 
     return check_storage_classes_on_clients(ready_consumer_names)
+
+
+@pytest.fixture(scope="session")
+def disable_debug_logs():
+    log.info("Disabling debug logs for the current session")
+    logging.disable(logging.DEBUG)
