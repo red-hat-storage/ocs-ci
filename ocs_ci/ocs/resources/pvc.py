@@ -178,7 +178,7 @@ class PVC(OCS):
         """
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeHandle"]
 
-    def resize_pvc(self, new_size, verify=False):
+    def resize_pvc(self, new_size, verify=False, timeout=240):
         """
         Modify the capacity of PVC
 
@@ -186,6 +186,7 @@ class PVC(OCS):
             new_size (int): New size of PVC in Gi
             verify (bool): True to verify the change is reflected on PVC,
                 False otherwise
+            timeout: Time to wait for the verification. To be used with verify=True
 
         Returns:
             bool: True if operation succeeded, False otherwise
@@ -199,7 +200,7 @@ class PVC(OCS):
         ), f"Patch command to modify size of PVC {self.name} has failed."
 
         if verify:
-            for pvc_data in TimeoutSampler(240, 2, self.get):
+            for pvc_data in TimeoutSampler(timeout, 2, self.get):
                 capacity = pvc_data.get("status").get("capacity").get("storage")
                 if capacity == f"{new_size}Gi":
                     break
