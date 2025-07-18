@@ -123,14 +123,15 @@ def bucket_class_factory(
                 nss_dict = bucket_class_dict["namespace_policy_dict"][
                     "namespacestore_dict"
                 ]
-                if "nss_creation_timeout" in bucket_class_dict:
-                    nss_creation_timeout = bucket_class_dict["nss_creation_timeout"]
+                if "nss_creation_deletion_timeout" in bucket_class_dict:
+                    nss_creation_timeout = bucket_class_dict[
+                        "nss_creation_deletion_timeout"
+                    ]
+                    nss_deletion_timeout = bucket_class_dict[
+                        "nss_creation_deletion_timeout"
+                    ]
                 else:
                     nss_creation_timeout = 180
-
-                if "nss_deletion_timeout" in bucket_class_dict:
-                    nss_deletion_timeout = bucket_class_dict["nss_deletion_timeout"]
-                else:
                     nss_deletion_timeout = 120
 
                 namespacestores = namespace_store_factory(
