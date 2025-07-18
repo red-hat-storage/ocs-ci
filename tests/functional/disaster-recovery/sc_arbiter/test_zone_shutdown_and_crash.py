@@ -189,7 +189,7 @@ class TestZoneShutdownsAndCrashes:
         vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
         vm_obj.run_ssh_cmd(
-            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt"
+            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt && sync"
         )
         md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
         log.debug(
@@ -429,7 +429,7 @@ class TestZoneShutdownsAndCrashes:
         vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
         vm_obj.run_ssh_cmd(
-            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt"
+            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt && sync"
         )
         md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
         log.info(
