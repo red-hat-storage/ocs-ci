@@ -400,35 +400,22 @@ class WorkloadScalingHelper:
 
         def scale_workloads():
             """Scale workloads after delay."""
-            try:
-                log.info(f"Waiting {delay} seconds before starting scaling operations")
-                time.sleep(delay)
+            log.info(f"Waiting {delay} seconds before starting scaling operations")
+            time.sleep(delay)
 
-                # Use ThreadPoolExecutor for parallel scaling of multiple workloads
-                with ThreadPoolExecutor(max_workers=len(workloads)) as executor:
-                    # Submit all scaling tasks
-                    scaling_futures = {
-                        executor.submit(self.scale_single_workload, workload): workload
-                        for workload in workloads
-                    }
+            with ThreadPoolExecutor(max_workers=len(workloads)) as executor:
+                scaling_futures = {
+                    executor.submit(self.scale_single_workload, workload): workload
+                    for workload in workloads
+                }
 
-                    # Wait for all scaling operations to complete
-                    for future in as_completed(scaling_futures):
-                        workload = scaling_futures[future]
-                        try:
-                            future.result()  # This will raise exception if scaling failed
-                            log.info(
-                                f"Successfully scaled workload {workload.workload_impl.deployment_name}"
-                            )
-                        except Exception as e:
-                            log.error(
-                                f"Failed to scale workload {workload.workload_impl.deployment_name}: {e}"
-                            )
+                for future in as_completed(scaling_futures):
+                    workload = scaling_futures[future]
+                    future.result()
+                    log.info(
+                        f"Successfully scaled workload {workload.workload_impl.deployment_name}"
+                    )
 
-            except Exception as e:
-                log.error(f"Error in background scaling thread: {e}")
-
-        # Create and start the scaling thread
         scaling_thread = threading.Thread(target=scale_workloads, daemon=True)
         scaling_thread.start()
         self._scaling_threads.append(scaling_thread)

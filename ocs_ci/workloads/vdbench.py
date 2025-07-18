@@ -5,7 +5,11 @@ import fauxfactory
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    CommandFailed,
+    UnexpectedBehaviour,
+)
 from ocs_ci.utility.templating import Templating
 from jinja2 import Environment, FileSystemLoader
 
@@ -108,13 +112,11 @@ class VdbenchWorkload:
             log.info(f"Loaded Vdbench configuration from {self.vdbench_config_file}")
             return config
         except FileNotFoundError:
-            log.error(
+            raise UnexpectedBehaviour(
                 f"Vdbench configuration file not found: {self.vdbench_config_file}"
             )
-            raise
         except yaml.YAMLError as e:
-            log.error(f"Invalid YAML in configuration file: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Invalid YAML in configuration file: {e}")
 
     def _render_templates(self):
         """
@@ -186,8 +188,7 @@ class VdbenchWorkload:
             log.info("Successfully rendered Vdbench templates")
 
         except Exception as e:
-            log.error(f"Failed to render Vdbench templates: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Failed to render Vdbench templates: {e}")
 
     def _create_deployment_template(self, data):
         """
@@ -208,8 +209,7 @@ class VdbenchWorkload:
         try:
             deployment_yaml = deployment_template.render(data)
         except Exception as e:
-            log.error(f"Failed to render deployment template: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Failed to render deployment template: {e}")
 
         return deployment_yaml
 
@@ -232,8 +232,7 @@ class VdbenchWorkload:
         try:
             configmap_yaml = configmap_template.render(data)
         except Exception as e:
-            log.error(f"Failed to render ConfigMap template: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Failed to render ConfigMap template: {e}")
         return configmap_yaml
 
     def _indent_text(self, text, spaces):
@@ -366,9 +365,8 @@ class VdbenchWorkload:
             log.info(f"Vdbench workload started successfully: {self.deployment_name}")
 
         except Exception as e:
-            log.error(f"Failed to start Vdbench workload: {e}")
             self._capture_pod_logs()
-            raise
+            raise UnexpectedBehaviour(f"Failed to start Vdbench workload: {e}")
 
     def _wait_for_pods_ready(self, timeout=600):
         """
@@ -515,8 +513,7 @@ class VdbenchWorkload:
             )
 
         except Exception as e:
-            log.error(f"Failed to scale up Vdbench workload: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Failed to scale up Vdbench workload: {e}")
 
     def scale_down_pods(self, desired_count):
         """
@@ -558,8 +555,7 @@ class VdbenchWorkload:
             )
 
         except Exception as e:
-            log.error(f"Failed to scale down Vdbench workload: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Failed to scale down Vdbench workload: {e}")
 
     def pause_workload(self):
         """
@@ -591,8 +587,7 @@ class VdbenchWorkload:
             log.info(f"Successfully paused Vdbench workload: {self.deployment_name}")
 
         except Exception as e:
-            log.error(f"Failed to pause Vdbench workload: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Failed to pause Vdbench workload: {e}")
 
     def resume_workload(self):
         """
@@ -625,8 +620,7 @@ class VdbenchWorkload:
             log.info(f"Successfully resumed Vdbench workload: {self.deployment_name}")
 
         except Exception as e:
-            log.error(f"Failed to resume Vdbench workload: {e}")
-            raise
+            raise UnexpectedBehaviour(f"Failed to resume Vdbench workload: {e}")
 
     def stop_workload(self):
         """
@@ -653,9 +647,8 @@ class VdbenchWorkload:
 
             log.info(f"Successfully stopped Vdbench workload: {self.deployment_name}")
 
-        except Exception as e:
-            log.error(f"Failed to stop Vdbench workload: {e}")
-            raise
+        except CommandFailed as e:
+            raise UnexpectedBehaviour(f"Failed to stop Vdbench workload: {e}")
 
     def cleanup_workload(self):
         """

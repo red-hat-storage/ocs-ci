@@ -12,7 +12,11 @@ from ocs_ci.resiliency.resiliency_helper import Resiliency, WorkloadScalingHelpe
 from ocs_ci.helpers.vdbench_helpers import (
     create_temp_config_file,
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    CommandFailed,
+    UnexpectedBehaviour,
+)
 
 log = logging.getLogger(__name__)
 
@@ -133,7 +137,7 @@ class TestAppScaleOnStorageComponentFailure:
                 # Clean up individual workload
                 workload.cleanup_workload()
 
-            except Exception as e:
+            except UnexpectedBehaviour as e:
                 validation_errors.append(
                     f"Failed to get results for workload {workload.workload_impl.deployment_name}: {e}"
                 )
@@ -238,7 +242,7 @@ class TestAppScaleOnStorageComponentFailure:
             # Validate workloads after both scaling and failure injection
             self._validate_and_cleanup_workloads(workloads)
 
-        except Exception as e:
+        except UnexpectedBehaviour as e:
             log.error(f"Test execution failed: {e}")
             raise
         finally:
@@ -246,7 +250,7 @@ class TestAppScaleOnStorageComponentFailure:
             if resiliency_runner:
                 try:
                     resiliency_runner.cleanup()
-                except Exception as cleanup_e:
+                except UnexpectedBehaviour as cleanup_e:
                     log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
 
             # Ensure we wait for scaling thread even if test fails
