@@ -280,6 +280,7 @@ class TestConsumptionTrendUI(ManageTest):
         average = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
         days_avg_tpl = validation_ui_obj.calculate_est_days_and_average_manually()
+
         first_validation = est_days == days_avg_tpl[0]
         # rel_tol 0.1 means upto 10% tolerance, which means that difference between  manual and UI est days is up to 10%
         second_validation = math.isclose(est_days, days_avg_tpl[0], rel_tol=0.1)
