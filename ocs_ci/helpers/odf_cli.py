@@ -67,7 +67,7 @@ class ODFCLIRetriever:
         if build_no:
             return f"{ODF_CLI_DEV_IMAGE}:{build_no}"
         else:
-            return f"{ODF_CLI_DEV_IMAGE}:latest-{self.semantic_version}"
+            return f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}"
 
     def _extract_cli_binary(self, image):
         pull_secret_path = download_pull_secret()
