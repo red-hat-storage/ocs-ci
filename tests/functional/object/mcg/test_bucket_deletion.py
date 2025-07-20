@@ -173,7 +173,7 @@ class TestBucketDeletion(MCGTest):
                 cli_del = mcg_obj.exec_mcg_cmd(f"obc delete {name}")
                 assert cli_del, "Unexpected cli delete non-exist OBC succeed"
             except CommandFailed as err:
-                assert "Could not delete OBC" in str(
+                assert "Could not delete. OBC" in str(
                     err
                 ), "Couldn't verify delete non-exist OBC with cli"
         logger.info(f"Delete non-exist OBC {name} failed as expected")
