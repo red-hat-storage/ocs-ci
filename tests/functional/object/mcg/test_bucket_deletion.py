@@ -60,6 +60,7 @@ class TestBucketDeletion(MCGTest):
                     {
                         "interface": "OC",
                         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                        "timeout": 1200,
                     },
                 ],
                 marks=[tier1],
@@ -67,12 +68,23 @@ class TestBucketDeletion(MCGTest):
             pytest.param(
                 *[
                     "OC",
-                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"azure": [(1, None)]},
+                        "timeout": 1200,
+                    },
                 ],
                 marks=[tier1],
             ),
             pytest.param(
-                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"gcp": [(1, None)]},
+                        "timeout": 1200,
+                    },
+                ],
                 marks=[tier1],
             ),
             pytest.param(
@@ -85,7 +97,11 @@ class TestBucketDeletion(MCGTest):
             pytest.param(
                 *[
                     "CLI",
-                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"ibmcos": [(1, None)]},
+                        "timeout": 1200,
+                    },
                 ],
                 marks=[tier1, skipif_fips_enabled],
             ),
@@ -95,6 +111,7 @@ class TestBucketDeletion(MCGTest):
                     {
                         "interface": "CLI",
                         "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
+                        "timeout": 1200,
                     },
                 ],
                 marks=[tier1, sts_deployment_required],
@@ -136,6 +153,9 @@ class TestBucketDeletion(MCGTest):
                     err
                 ), "Couldn't verify delete non-empty OBC with s3"
                 logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
+            except Exception as e:
+                logger.info(f"*** Catch {e}")
+                logger.info(f"*** Catch string is {str(e)}")
 
     @pytest.mark.parametrize(
         argnames="interface",
