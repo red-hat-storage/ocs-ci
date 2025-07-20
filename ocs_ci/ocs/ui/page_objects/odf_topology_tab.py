@@ -1060,6 +1060,12 @@ class OdfTopologyNodesView(TopologyTab):
                 ].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
                     # based on https://bugzilla.redhat.com/show_bug.cgi?id=2263826 parsing excluded
                     continue
+                elif (
+                    detail_name == "details_sidebar_node_rack"
+                    and config.ENV_DATA["platform"].lower() in ON_PREM_PLATFORMS
+                ):
+                    # based on https://bugzilla.redhat.com/show_bug.cgi?id=2263826 parsing excluded
+                    continue
                 else:
                     details_dict[
                         detail_name.split("details_sidebar_node_", 1)[-1].strip()

@@ -1902,7 +1902,7 @@ validation_4_12 = {
 }
 
 validation_4_13 = {
-    "topology_tab": ("//a[normalize-space()='Topology']", By.XPATH),
+    "topology_tab": ("//span[normalize-space()='Topology']", By.XPATH),
     # locator presented only if the tab is active
     "odf-overview-tab-active": (
         "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
@@ -2068,7 +2068,7 @@ topology = {
     "details_sidebar_tab": ("//span[normalize-space()='Details']", By.XPATH),
     # use this locator to determine Node or Deployment details are open
     "details_sidebar_entity_header": (
-        "//h2[@class='odf-section-heading']//span",
+        "//h2[@class='odf-section-heading']//span | //h2[class=contains(@class, 'odf-section-heading')]//span",
         By.XPATH,
     ),
     "details_sidebar_node_name": (
@@ -2126,7 +2126,8 @@ topology = {
     ),
     # details_sidebar_node_addresses has multiple lines of text, every text should be taken with self.get_element_text()
     "details_sidebar_node_addresses": (
-        "(//dt[normalize-space()='Node addresses']/following::dd)[1]/ul/li",
+        "(//dt[normalize-space()='Node addresses']/following::dd)[1]/ul/li | "
+        "(//dt[normalize-space()='Node addresses']/following::dd)[1]/div/ul/li",
         By.XPATH,
     ),
     "details_sidebar_node_created": (
