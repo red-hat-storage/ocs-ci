@@ -10,7 +10,6 @@ from ocs_ci.ocs.constants import (
     ON_PREM_PLATFORMS,
     CLOUD_PLATFORMS,
     ZONE_LABEL,
-    RACK_LABEL,
 )
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.ocs.resources.pod import Pod
@@ -127,7 +126,7 @@ def get_node_details_cli(node_name) -> dict:
     )
     node_details["kernel_version"] = node_status.get("nodeInfo").get("kernelVersion")
     node_details["instance_type"] = node_metadata.get("labels").get(
-        "node.kubernetes.io/instance-type"
+        "node.kubernetes.io/instance-type", ""
     )
     node_details["OS_image"] = node_status.get("nodeInfo").get("osImage")
     node_details["architecture"] = node_status.get("nodeInfo").get("architecture")
@@ -153,7 +152,8 @@ def get_node_details_cli(node_name) -> dict:
     node_details["external_id"] = "-"
     node_details["created"] = get_creation_ts_with_offset(node_metadata)
     if config.ENV_DATA["platform"].lower() in ON_PREM_PLATFORMS:
-        node_details["rack"] = node_metadata.get("labels").get(RACK_LABEL)
+        # based on https://bugzilla.redhat.com/show_bug.cgi?id=2263826 parsing excluded
+        pass
     elif config.ENV_DATA["platform"].lower() in CLOUD_PLATFORMS:
         node_details["zone"] = node_metadata.get("labels").get(ZONE_LABEL)
 
