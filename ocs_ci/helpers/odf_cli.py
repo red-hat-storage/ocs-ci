@@ -349,11 +349,36 @@ def odf_cli_setup_helper():
 
 
 def run_maintenance_start(self, deployment_name, alternate_image=None):
+    """
+    This starts the maintenance mode for the deployment
+
+    Args:
+        deployment_name (str): Name of the deployment that you want
+        it to be in maintenance mode i.e, either Mon or OSD deployments
+        alternate_image (str): Alternate image that you want to pass
+
+    Raises:
+        CommandFailed: If the CLI command fails.
+
+    """
     return self.run_command(
         f" maintenance start {deployment_name} --alternate-image {alternate_image}"
     )
 
+
 def run_maintenance_stop(self, deployment_name, alternate_image=None):
+    """
+    This stops the maintenance mode for the deployment
+
+    Args:
+        deployment_name (str): Name of the deployment that you want
+        it to be in maintenance mode i.e, either Mon or OSD deployments
+        alternate_image (str): Alternate image that you want to pass
+
+    Raises:
+        CommandFailed: If the CLI command fails.
+
+    """
     return self.run_command(
         f" maintenance stop {deployment_name} --alternate-image {alternate_image}"
     )
