@@ -42,7 +42,11 @@ from ocs_ci.ocs.resources.csv import (
     get_csvs_start_with_prefix,
 )
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.pod import get_noobaa_pods, verify_pods_upgraded
+from ocs_ci.ocs.resources.pod import (
+    get_noobaa_pods,
+    verify_pods_upgraded,
+    wait_for_pods_deletion,
+)
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -787,6 +791,24 @@ def run_ocs_upgrade(
             time.sleep(120)
         else:
             ui_upgrade_supported = False
+            if original_ocs_version == "4.19" and upgrade_version == "4.20":
+                # Bring down the ocs-client-operator-controller-manager, delete the subscriptions webhook and
+                # odf-operator
+                # https://issues.redhat.com/browse/DFBUGS-3572
+                log.info(
+                    "Scale down ocs-client-operator-controller-manager and delete the "
+                    "subscriptions webhook due to DFBUGS-3572"
+                )
+                scale_down_ocs_client_op_cmd = (
+                    f"oc scale deployment --replicas=0 "
+                    f"ocs-client-operator-controller-manager -n {namespace}"
+                )
+                exec_cmd(scale_down_ocs_client_op_cmd)
+                # wait till pod is deleted inorder to avoid reconciling webhook
+                wait_for_pods_deletion(constants.OCS_CLIENT_OPERATOR_LABEL)
+                delete_sub_webhook_cmd = "oc delete validatingwebhookconfiguration subscription.ocs.openshift.io"
+                exec_cmd(delete_sub_webhook_cmd)
+
             if config.UPGRADE.get("ui_upgrade"):
                 if (
                     version.get_semantic_ocp_version_from_config()
