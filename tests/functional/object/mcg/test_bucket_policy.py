@@ -30,7 +30,7 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
     get_bucket_policy,
-    put_public_access_block,
+    put_public_access_block_config,
     get_public_access_block,
     s3_put_object,
     delete_bucket_policy,
@@ -1310,7 +1310,7 @@ class TestS3BucketPolicy(MCGTest):
         """
         Check that 'ls' and 'cp' commands on the bucket work as expected.
         The expected behavior of 'ls' is:
-            1. Success and finding 'file_name' file with non-anonymous access
+            1. Success in finding 'file_name' file with non-anonymous access
             2. Success with anonymous access when 'allow_anonymous' is True
             3. Failure with "Access Denied" on anonymous access when 'allow_anonymous' is False
         The expected behavior of 'cp' is:
@@ -1336,40 +1336,29 @@ class TestS3BucketPolicy(MCGTest):
             out_yaml_format=False,
         )
 
-        ls_output = awscli_pod_session.exec_cmd_on_pod(
-            command=craft_s3_command(ls_command, mcg_obj=mcg_obj),
+        awscli_pod_session.exec_cmd_on_pod(
+            command=craft_s3_command(f"{ls_command}{file_name}", mcg_obj=mcg_obj),
             out_yaml_format=False,
         )
-        if file_name not in ls_output:
-            raise UnexpectedBehaviour(
-                f"ls command doesn't show {file_name} as expected"
-            )
 
-        if allow_ls_anonymous:
+        try:
             awscli_pod_session.exec_cmd_on_pod(
                 command=craft_s3_command(
                     f"{ls_command} --no-sign-request", mcg_obj=mcg_obj
                 ),
                 out_yaml_format=False,
             )
-        else:
-            try:
-                awscli_pod_session.exec_cmd_on_pod(
-                    command=craft_s3_command(
-                        f"{ls_command} --no-sign-request", mcg_obj=mcg_obj
-                    ),
-                    out_yaml_format=False,
-                )
+            if not allow_ls_anonymous:
                 raise UnexpectedBehaviour(
                     "ls command with anonymous user (--no-sign-request) should not be allowed"
                 )
-            except CommandFailed as ex:
-                if "Access Denied" in str(ex):
-                    logger.info(
-                        "ls command with anonymous user (--no-sign-request) is not allowed, continue the test"
-                    )
-                else:
-                    raise
+        except CommandFailed as ex:
+            if not allow_ls_anonymous and "Access Denied" in str(ex):
+                logger.info(
+                    "ls command with anonymous user (--no-sign-request) is not allowed, continue the test"
+                )
+            else:
+                raise
 
         # check copy with anonymous user, it should always fail
         try:
@@ -1520,7 +1509,9 @@ class TestS3BucketPolicy(MCGTest):
             f"Putting public access block configuration {public_access_block_configuration} "
             f"on bucket: {bucket_name}"
         )
-        put_public_access_block(mcg_obj, bucket_name, public_access_block_configuration)
+        put_public_access_block_config(
+            mcg_obj, bucket_name, public_access_block_configuration
+        )
 
         # Hardcoded sleep is needed because we lack a confirmation mechanism
         # we could wait for - even the get_public_access_block result has been observed to be
@@ -1559,7 +1550,9 @@ class TestS3BucketPolicy(MCGTest):
             f"Putting public access block configuration {public_access_block_configuration} "
             f"on bucket: {bucket_name}"
         )
-        put_public_access_block(mcg_obj, bucket_name, public_access_block_configuration)
+        put_public_access_block_config(
+            mcg_obj, bucket_name, public_access_block_configuration
+        )
 
         # Hardcoded sleep is needed because we lack a confirmation mechanism
         # we could wait for - even the get_public_access_block result has been observed to be

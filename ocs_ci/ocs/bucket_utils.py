@@ -1285,7 +1285,7 @@ def put_bucket_policy(s3_obj, bucketname, policy):
     return s3_obj.s3_client.put_bucket_policy(Bucket=bucketname, Policy=policy)
 
 
-def put_public_access_block(s3_obj, bucketname, public_access_block):
+def put_public_access_block_config(s3_obj, bucketname, public_access_block):
     """
     Adds public access block configuration to a bucket
 
