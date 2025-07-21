@@ -892,7 +892,7 @@ class HostedODF(HypershiftHostedOCP):
             logger.info("Storage client already exists")
             return True
 
-        @retry((CommandFailed, TimeoutError), tries=3, delay=30, backoff=1)
+        @retry((CommandFailed, TimeoutError), tries=6, delay=30, backoff=1)
         def _apply_storage_client_cr():
             """
             Internal function to apply storage client CR
