@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
@@ -60,13 +61,14 @@ class TestBucketPolicyUI:
 
         This test follows the workflow:
         1. Navigate to Object Storage
-        2. Click on first bucket
-        3. Go to Permissions tab
-        4. Click "Start from scratch" to activate policy editor
-        5. Generate policy JSON programmatically
-        6. Set the policy JSON in the code editor
-        7. Apply the policy
-        8. Confirm in modal
+        2. Create OBC bucket if needed for account-specific policies
+        3. Click on appropriate bucket
+        4. Go to Permissions tab
+        5. Click "Start from scratch" to activate policy editor
+        6. Generate policy JSON programmatically
+        7. Set the policy JSON in the code editor
+        8. Apply the policy
+        9. Confirm in modal
 
         Args:
             policy_config (dict): Configuration containing policy name, method, and parameters
@@ -84,14 +86,66 @@ class TestBucketPolicyUI:
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page()
 
-        buckets = bucket_ui.get_buckets_list()
-        if not buckets:
-            pytest.skip("No buckets available for testing")
+        # Check if this policy requires account ID (OBC bucket)
+        account_dependent_policies = [
+            "AllowAccessToSpecificAccount",
+            "AllowReadWriteAccessToFolder",
+        ]
+
+        target_bucket_name = None
+
+        if policy_name in account_dependent_policies:
+            # Get current bucket list to identify new bucket after creation
+            initial_buckets = set(bucket_ui.get_buckets_list())
+
+            # Create OBC bucket for account-dependent policies
+            bucket_ui.create_bucket_ui(method="obc")
+
+            # Navigate back to buckets page and wait for new bucket to appear
+            bucket_ui.navigate_buckets_page()
+            bucket_ui.page_has_loaded(sleep_time=2)
+
+            # Wait for new OBC bucket to appear (up to 30 seconds)
+            target_bucket_name = None
+            for attempt in range(6):  # 6 attempts * 5 seconds = 30 seconds max wait
+                current_buckets = set(bucket_ui.get_buckets_list())
+                new_buckets = current_buckets - initial_buckets
+
+                # Look for newly created bucket with OBC pattern
+                obc_buckets = [
+                    b for b in new_buckets if b.startswith("test-bucket-obc-")
+                ]
+
+                if obc_buckets:
+                    target_bucket_name = obc_buckets[0]  # Use first OBC bucket found
+                    break
+
+                if attempt < 5:  # Don't sleep on last attempt
+                    time.sleep(5)
+
+            if not target_bucket_name:
+                # Fallback: try to find any bucket with OBC pattern in the current list
+                all_buckets = bucket_ui.get_buckets_list()
+                obc_buckets = [
+                    b for b in all_buckets if b.startswith("test-bucket-obc-")
+                ]
+
+                if obc_buckets:
+                    target_bucket_name = obc_buckets[0]
+                else:
+                    pytest.skip("No OBC bucket found for account-dependent policy test")
+        else:
+            # For policies that don't require account ID, use any existing bucket
+            buckets = bucket_ui.get_buckets_list()
+            if not buckets:
+                pytest.skip("No buckets available for testing")
+
+            target_bucket_name = buckets[0]
 
         bucket_permissions_ui = BucketsTabPermissions()
 
         policy_method = getattr(bucket_permissions_ui, method_name)
-        policy_method(bucket_name=None, **params)
+        policy_method(bucket_name=target_bucket_name, **params)
 
         logger.info(f"Successfully completed {policy_name} bucket policy test")
 
