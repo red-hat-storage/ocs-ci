@@ -1,6 +1,8 @@
 import logging
 import random
 
+import pytest
+
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,6 +14,7 @@ from ocs_ci.helpers.mcg_stress_helper import (
     download_objs_from_bucket,
     delete_objects_in_batches,
     run_background_cluster_checks,
+    induce_noobaa_failures,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,6 +25,10 @@ class TestNoobaaUnderStress:
 
     base_setup_buckets = list()
 
+    @pytest.mark.parametrize(
+        argnames=["with_failure", "delay"],
+        argvalues=[pytest.param(True, 300), pytest.param(False, 300)],
+    )
     def test_noobaa_under_stress(
         self,
         setup_stress_testing_buckets,
@@ -30,10 +37,13 @@ class TestNoobaaUnderStress:
         rgw_obj_session,
         stress_test_directory_setup,
         bucket_factory,
+        nodes,
         scale_noobaa_resources_session,
         scale_noobaa_db_pod_pv_size,
         threading_lock,
         disable_debug_logs,
+        with_failure,
+        delay,
     ):
         """
         Stress Noobaa by performing bulk s3 operations. This consists mainly 3 stages
@@ -173,6 +183,11 @@ class TestNoobaaUnderStress:
                 )
                 if len(buckets) != 0:
                     buckets.remove(bucket)
+
+                # Induce the noobaa specific failure if the test
+                # is with failure
+                if with_failure:
+                    induce_noobaa_failures(nodes, delay)
 
                 # Wait until all the object operations are done
                 logger.info(
