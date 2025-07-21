@@ -312,7 +312,7 @@ class ODFCliRunner:
         log.info(f"output type: {type(output)}")
         log.info(f"*Command output*: {output}")
         return output
-
+    
 
 def odf_cli_setup_helper():
     """
@@ -346,39 +346,3 @@ def odf_cli_setup_helper():
 
     log.info("ODF CLI binary downloaded and ODFCliRunner initialized successfully")
     return odf_cli_runner
-
-
-def run_maintenance_start(self, deployment_name, alternate_image=None):
-    """
-    This starts the maintenance mode for the deployment
-
-    Args:
-        deployment_name (str): Name of the deployment that you want
-        it to be in maintenance mode i.e, either Mon or OSD deployments
-        alternate_image (str): Alternate image that you want to pass
-
-    Raises:
-        CommandFailed: If the CLI command fails.
-
-    """
-    return self.run_command(
-        f" maintenance start {deployment_name} --alternate-image {alternate_image}"
-    )
-
-
-def run_maintenance_stop(self, deployment_name, alternate_image=None):
-    """
-    This stops the maintenance mode for the deployment
-
-    Args:
-        deployment_name (str): Name of the deployment that you want
-        it to be in maintenance mode i.e, either Mon or OSD deployments
-        alternate_image (str): Alternate image that you want to pass
-
-    Raises:
-        CommandFailed: If the CLI command fails.
-
-    """
-    return self.run_command(
-        f" maintenance stop {deployment_name} --alternate-image {alternate_image}"
-    )
