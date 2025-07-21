@@ -117,7 +117,7 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
-    get_and_apply_icsp_from_catalog,
+    get_and_apply_idms_from_catalog,
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
@@ -1076,10 +1076,24 @@ class Deployment(object):
             log_step("Create STS role and attach AmazonS3FullAccess Policy")
             role_data = create_and_attach_sts_role()
             self.sts_role_arn = role_data["Role"]["Arn"]
-
-        if not live_deployment:
+        stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
+        konflux_build = config.DEPLOYMENT.get("konflux_build")
+        upgrade = config.UPGRADE.get("upgrade", False)
+        if not live_deployment and not (stage_testing and konflux_build):
             log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
+        if konflux_build and stage_testing:
+            log_step("Creating stage ImageDigestMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            if not upgrade:
+                log_step("Creating stage TagMirrorSet")
+                exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+                log_step("Sleeping 60 seconds after applying tag mirror set.")
+            time.sleep(60)
+            log_step("Waiting max 30 mins for master MCP to get updated")
+            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/master")
+            log_step("Waiting max 30 mins for worker MCP to get updated")
+            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/worker")
 
         if local_storage:
             log_step("Deploy and setup Local Storage Operator")
@@ -2642,8 +2656,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
     if config.DEPLOYMENT.get("stage_rh_osbs"):
-        image = config.DEPLOYMENT.get("stage_index_image", constants.OSBS_BOUNDLE_IMAGE)
         ocp_version = version.get_semantic_ocp_version_from_config()
+        image = config.DEPLOYMENT.get("stage_index_image", constants.OSBS_BOUNDLE_IMAGE)
         osbs_image_tag = config.DEPLOYMENT.get(
             "stage_index_image_tag", f"v{ocp_version}"
         )
@@ -2654,7 +2668,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
             "}}}'"
         )
-        run_cmd(f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
+        run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
         wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)
@@ -2691,7 +2705,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     image = f"{image}:{image_tag if image_tag else 'latest'}"
     insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
 
-    get_and_apply_icsp_from_catalog(image=image, insecure=insecure_mode)
+    get_and_apply_idms_from_catalog(image=image, insecure=insecure_mode)
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
