@@ -144,7 +144,7 @@ def assign_get_values(
     env_status_dict[key] = items_filtered
 
 
-def get_environment_status(env_dict, exclude_labels=None, exclude_job_owned_pods=False):
+def get_environment_status(env_dict, exclude_labels=None, exclude_job_owned_pods=True):
     """
     Get the environment status per kind in KINDS and save it in a dictionary
 
@@ -165,7 +165,7 @@ def get_environment_status(env_dict, exclude_labels=None, exclude_job_owned_pods
             )
 
 
-def get_status_before_execution(exclude_labels=None, exclude_job_owned_pods=False):
+def get_status_before_execution(exclude_labels=None, exclude_job_owned_pods=True):
     """
     Set the environment status and assign it into ENV_STATUS_PRE dictionary
 
@@ -216,7 +216,7 @@ def get_status_before_execution(exclude_labels=None, exclude_job_owned_pods=Fals
     )
 
 
-def get_status_after_execution(exclude_labels=None, exclude_job_owned_pods=False):
+def get_status_after_execution(exclude_labels=None, exclude_job_owned_pods=True):
     """
     Set the environment status and assign it into ENV_STATUS_PRE dictionary.
     In addition compare the dict before the execution and after using DeepDiff
