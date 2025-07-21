@@ -12,6 +12,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
+
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
@@ -120,7 +121,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             return ObjectStorage(), name_generator
         return ObjectStorage()
 
-    def create_folder_in_bucket(self, bucket_name: str = None, folder_name: str = None) -> str:
+    def create_folder_in_bucket(
+        self, bucket_name: str = None, folder_name: str = None
+    ) -> str:
         """
         Creates folder in specified bucket and uploads a file to it.
 
@@ -160,7 +163,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         try:
             # Find the hidden file input
-            file_input = self.driver.find_element(By.XPATH, "//input[@type='file'][@webkitdirectory]")
+            file_input = self.driver.find_element(
+                By.XPATH, "//input[@type='file'][@webkitdirectory]"
+            )
             logger.info("Found directory input")
 
             logger.info(f"Files in folder: {os.listdir(folder_path)}")
@@ -181,7 +186,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 file_input,
             )
             logger.info("Modified file input for direct interaction")
-            attrs = self.driver.execute_script("return arguments[0].attributes;", file_input)
+            attrs = self.driver.execute_script(
+                "return arguments[0].attributes;", file_input
+            )
             logger.info(f"File input attributes after: {attrs}")
 
             logger.info(f"Sending folder path: {folder_path}")
@@ -211,7 +218,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         logger.info(f"Found {len(bucket_names)} buckets")
         return bucket_names
 
-    def create_multiple_buckets_ui(self, s3_buckets: int = 0, obc_buckets: int = 0) -> list:
+    def create_multiple_buckets_ui(
+        self, s3_buckets: int = 0, obc_buckets: int = 0
+    ) -> list:
         """
         Creates multiple S3 and OBC buckets.
 
@@ -283,8 +292,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             bool: True if pagination controls are found, False otherwise
         """
         try:
-            element_found = len(self.get_elements(self.bucket_tab["pagination_next_button"])) > 0
-            logger.info(f"Pagination controls {'found' if element_found else 'not found'}")
+            element_found = (
+                len(self.get_elements(self.bucket_tab["pagination_next_button"])) > 0
+            )
+            logger.info(
+                f"Pagination controls {'found' if element_found else 'not found'}"
+            )
             return element_found
         except Exception as e:
             logger.error(f"Error checking pagination controls: {str(e)}")
@@ -299,7 +312,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         """
         try:
             current_page_buckets = self.get_buckets_list()
-            logger.info(f"Current page has {len(current_page_buckets)} buckets before navigation")
+            logger.info(
+                f"Current page has {len(current_page_buckets)} buckets before navigation"
+            )
 
             logger.info("Clicking next page button to move to next page")
             self.do_click(self.bucket_tab["pagination_next_button"])
@@ -307,12 +322,16 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             self.page_has_loaded(sleep_time=2)
 
             new_page_buckets = self.get_buckets_list()
-            logger.info(f"New page has {len(new_page_buckets)} buckets after navigation")
+            logger.info(
+                f"New page has {len(new_page_buckets)} buckets after navigation"
+            )
 
             current_page_set = set(current_page_buckets)
             new_page_set = set(new_page_buckets)
             if current_page_set == new_page_set:
-                logger.warning("Navigation appears to have occurred, but bucket lists are identical")
+                logger.warning(
+                    "Navigation appears to have occurred, but bucket lists are identical"
+                )
             else:
                 logger.info(
                     f"Successfully navigated to next page: found {len(new_page_set - current_page_set)} new buckets"
@@ -336,7 +355,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         """
         try:
             current_page_buckets = self.get_buckets_list()
-            logger.info(f"Current page has {len(current_page_buckets)} buckets before navigation")
+            logger.info(
+                f"Current page has {len(current_page_buckets)} buckets before navigation"
+            )
 
             logger.info("Clicking previous page button to move to previous page")
             self.do_click(self.bucket_tab["pagination_prev_button"])
@@ -344,15 +365,21 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             self.page_has_loaded(sleep_time=2)
 
             new_page_buckets = self.get_buckets_list()
-            logger.info(f"New page has {len(new_page_buckets)} buckets after navigation")
+            logger.info(
+                f"New page has {len(new_page_buckets)} buckets after navigation"
+            )
 
             current_page_set = set(current_page_buckets)
             new_page_set = set(new_page_buckets)
             if current_page_set == new_page_set:
-                logger.warning("Navigation appears to have occurred, but bucket lists are identical")
+                logger.warning(
+                    "Navigation appears to have occurred, but bucket lists are identical"
+                )
             else:
                 diff_count = len(new_page_set - current_page_set)
-                logger.info(f"Successfully navigated to previous page: found {diff_count} different buckets")
+                logger.info(
+                    f"Successfully navigated to previous page: found {diff_count} different buckets"
+                )
 
             return True
         except (
@@ -382,34 +409,48 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         if delete_via == "three_dots":
             try:
                 logger.info("Clicking action button")
-                self.do_click(self.bucket_tab["bucket_action_button"], enable_screenshot=True)
+                self.do_click(
+                    self.bucket_tab["bucket_action_button"], enable_screenshot=True
+                )
                 time.sleep(1)
 
                 logger.info("Selecting delete option from dropdown")
-                self.do_click(self.bucket_tab["bucket_delete_option"], enable_screenshot=True)
+                self.do_click(
+                    self.bucket_tab["bucket_delete_option"], enable_screenshot=True
+                )
                 time.sleep(1)
 
-                logger.info(f"Attempting to enter bucket name for confirmation: {resource_name}")
+                logger.info(
+                    f"Attempting to enter bucket name for confirmation: {resource_name}"
+                )
 
                 time.sleep(1.5)
 
                 try:
-                    dialog = self.driver.find_element(By.CSS_SELECTOR, ".pf-v5-c-modal-box")
+                    dialog = self.driver.find_element(
+                        By.CSS_SELECTOR, ".pf-v5-c-modal-box"
+                    )
                     dialog.click()
                     time.sleep(0.5)
 
                     input_field = dialog.find_element(By.CSS_SELECTOR, "input")
                     input_field.clear()
                     input_field.send_keys(resource_name)
-                    logger.info("Successfully entered bucket name in confirmation dialog")
+                    logger.info(
+                        "Successfully entered bucket name in confirmation dialog"
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to enter bucket name: {str(e)}")
                     self.take_screenshot()
                     self.copy_dom()
 
                 logger.info("Clicking confirm button")
-                self.do_click(self.bucket_tab["bucket_confirm_button"], enable_screenshot=True)
-                logger.info(f"Successfully initiated deletion of bucket: {resource_name}")
+                self.do_click(
+                    self.bucket_tab["bucket_confirm_button"], enable_screenshot=True
+                )
+                logger.info(
+                    f"Successfully initiated deletion of bucket: {resource_name}"
+                )
                 time.sleep(5)
 
             except Exception as e:
@@ -422,7 +463,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     try:
                         self.delete_resource(delete_via, resource_name)
                     except Exception as fallback_e:
-                        logger.error(f"Fallback deletion also failed: {str(fallback_e)}")
+                        logger.error(
+                            f"Fallback deletion also failed: {str(fallback_e)}"
+                        )
                         if not expect_fail:
                             raise
         else:
@@ -469,7 +512,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     for cookie in cookies:
                         session.cookies.set(cookie["name"], cookie["value"])
 
-                    popup_str = "The corresponding ObjectBucketClaim must be deleted first."
+                    popup_str = (
+                        "The corresponding ObjectBucketClaim must be deleted first."
+                    )
                     logger.info(f"Send req to {URL}. Get PopUp with {popup_str}")
 
                     resp = session.get(url=URL, verify=False)

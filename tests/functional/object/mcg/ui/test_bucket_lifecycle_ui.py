@@ -41,7 +41,9 @@ class TestBucketLifecycleUI:
         lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
 
         self.created_buckets.append(bucket_name)
-        logger.info(f"Stored bucket name for later use. Total buckets: {len(self.created_buckets)}")
+        logger.info(
+            f"Stored bucket name for later use. Total buckets: {len(self.created_buckets)}"
+        )
 
         return lifecycle_ui, bucket_name
 
@@ -50,13 +52,17 @@ class TestBucketLifecycleUI:
         if "expiration" in rules_dict:
             assert "Expiration" in our_rule, "Expected Expiration in backend rule"
             assert our_rule["Expiration"]["Days"] == rules_dict["expiration"]["days"], (
-                f"Expected expiration days {rules_dict['expiration']['days']}, " f"got {our_rule['Expiration']['Days']}"
+                f"Expected expiration days {rules_dict['expiration']['days']}, "
+                f"got {our_rule['Expiration']['Days']}"
             )
 
         if "noncurrent_version" in rules_dict:
-            assert "NoncurrentVersionExpiration" in our_rule, "Expected NoncurrentVersionExpiration in backend rule"
             assert (
-                our_rule["NoncurrentVersionExpiration"]["NoncurrentDays"] == rules_dict["noncurrent_version"]["days"]
+                "NoncurrentVersionExpiration" in our_rule
+            ), "Expected NoncurrentVersionExpiration in backend rule"
+            assert (
+                our_rule["NoncurrentVersionExpiration"]["NoncurrentDays"]
+                == rules_dict["noncurrent_version"]["days"]
             ), (
                 f"Expected noncurrent days {rules_dict['noncurrent_version']['days']}, "
                 f"got {our_rule['NoncurrentVersionExpiration']['NoncurrentDays']}"
@@ -71,7 +77,9 @@ class TestBucketLifecycleUI:
                 )
 
         if "expired_delete_markers" in rules_dict:
-            assert "Expiration" in our_rule, "Expected Expiration section in backend rule for expired delete markers"
+            assert (
+                "Expiration" in our_rule
+            ), "Expected Expiration section in backend rule for expired delete markers"
             assert (
                 "ExpiredObjectDeleteMarker" in our_rule["Expiration"]
             ), "Expected ExpiredObjectDeleteMarker in Expiration section"
@@ -91,7 +99,9 @@ class TestBucketLifecycleUI:
                 f"got {our_rule['AbortIncompleteMultipartUpload']['DaysAfterInitiation']}"
             )
 
-        assert our_rule["Status"] == "Enabled", f"Expected rule to be enabled, got {our_rule['Status']}"
+        assert (
+            our_rule["Status"] == "Enabled"
+        ), f"Expected rule to be enabled, got {our_rule['Status']}"
 
     @ui
     @tier1
@@ -99,7 +109,10 @@ class TestBucketLifecycleUI:
         "rules_dict,description",
         [
             ({"expiration": {"days": 30}}, "single_expiration"),
-            ({"noncurrent_version": {"days": 7, "preserve_versions": 2}}, "single_noncurrent"),
+            (
+                {"noncurrent_version": {"days": 7, "preserve_versions": 2}},
+                "single_noncurrent",
+            ),
             ({"expired_delete_markers": {}}, "single_expired_markers"),
             ({"incomplete_multipart": {"days": 5}}, "single_multipart"),
         ],
@@ -134,9 +147,13 @@ class TestBucketLifecycleUI:
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
         assert rule_name in rules, f"Rule {rule_name} not found in rules list"
-        logger.info(f"Successfully created lifecycle rule '{rule_name}' with combination: {description}")
+        logger.info(
+            f"Successfully created lifecycle rule '{rule_name}' with combination: {description}"
+        )
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(bucket_name, mcg_obj)
+        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+            bucket_name, mcg_obj
+        )
         assert backend_policy, "Failed to retrieve lifecycle policy from backend"
 
         backend_rules = backend_policy.get("Rules", [])
@@ -153,7 +170,11 @@ class TestBucketLifecycleUI:
         "rules_dict,description,target_prefix",
         [
             ({"expiration": {"days": 30}}, "targeted_expiration", "logs"),
-            ({"noncurrent_version": {"days": 7, "preserve_versions": 2}}, "targeted_noncurrent", "temp"),
+            (
+                {"noncurrent_version": {"days": 7, "preserve_versions": 2}},
+                "targeted_noncurrent",
+                "temp",
+            ),
             ({"expired_delete_markers": {}}, "targeted_expired_markers", "data"),
             ({"incomplete_multipart": {"days": 5}}, "targeted_multipart", "backups"),
         ],
@@ -197,7 +218,9 @@ class TestBucketLifecycleUI:
             f"Rule combination: {description}"
         )
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(bucket_name, mcg_obj)
+        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+            bucket_name, mcg_obj
+        )
         assert backend_policy, "Failed to retrieve lifecycle policy from backend"
 
         backend_rules = backend_policy.get("Rules", [])
@@ -205,7 +228,9 @@ class TestBucketLifecycleUI:
         assert our_rule, f"Rule {rule_name} not found in backend policy"
 
         # Verify the rule has the correct prefix filter
-        assert "Filter" in our_rule, "Expected Filter in backend rule for targeted policy"
+        assert (
+            "Filter" in our_rule
+        ), "Expected Filter in backend rule for targeted policy"
         assert "Prefix" in our_rule["Filter"], "Expected Prefix in Filter section"
         assert (
             our_rule["Filter"]["Prefix"] == target_prefix
@@ -213,7 +238,9 @@ class TestBucketLifecycleUI:
 
         self._validate_backend_rule(our_rule, rules_dict)
 
-        logger.info(f"Backend validation successful for targeted rule '{rule_name}' with prefix '{target_prefix}'")
+        logger.info(
+            f"Backend validation successful for targeted rule '{rule_name}' with prefix '{target_prefix}'"
+        )
 
     @ui
     @tier1
@@ -239,27 +266,41 @@ class TestBucketLifecycleUI:
         initial_rule_name = create_unique_resource_name("rule", "to-edit")
         initial_days = 30
         lifecycle_ui.create_lifecycle_rule(
-            rule_name=initial_rule_name, scope="whole_bucket", rules={"expiration": {"days": initial_days}}
+            rule_name=initial_rule_name,
+            scope="whole_bucket",
+            rules={"expiration": {"days": initial_days}},
         )
 
         lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
         time.sleep(2)
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
-        assert initial_rule_name in rules, f"Failed to create initial rule {initial_rule_name}"
-        logger.info(f"Initial rule created successfully: {initial_rule_name} with {initial_days} days")
+        assert (
+            initial_rule_name in rules
+        ), f"Failed to create initial rule {initial_rule_name}"
+        logger.info(
+            f"Initial rule created successfully: {initial_rule_name} with {initial_days} days"
+        )
 
         new_days = 60
-        lifecycle_ui.edit_lifecycle_rule(rule_name=initial_rule_name, new_rules={"expiration": {"days": new_days}})
+        lifecycle_ui.edit_lifecycle_rule(
+            rule_name=initial_rule_name, new_rules={"expiration": {"days": new_days}}
+        )
 
         updated_rules = lifecycle_ui.get_lifecycle_rules_list()
-        assert initial_rule_name in updated_rules, f"Rule {initial_rule_name} not found after edit"
+        assert (
+            initial_rule_name in updated_rules
+        ), f"Rule {initial_rule_name} not found after edit"
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(bucket_name, mcg_obj)
+        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+            bucket_name, mcg_obj
+        )
         assert backend_policy, "Failed to retrieve lifecycle policy from backend"
 
         backend_rules = backend_policy.get("Rules", [])
-        our_rule = next((r for r in backend_rules if r["ID"] == initial_rule_name), None)
+        our_rule = next(
+            (r for r in backend_rules if r["ID"] == initial_rule_name), None
+        )
         assert our_rule, f"Rule {initial_rule_name} not found in backend policy"
 
         assert "Expiration" in our_rule, "Expected Expiration in backend rule"
@@ -267,7 +308,9 @@ class TestBucketLifecycleUI:
             our_rule["Expiration"]["Days"] == new_days
         ), f"Expected expiration days {new_days}, got {our_rule['Expiration']['Days']}"
 
-        logger.info(f"Successfully edited lifecycle rule: {initial_rule_name} from {initial_days} to {new_days} days")
+        logger.info(
+            f"Successfully edited lifecycle rule: {initial_rule_name} from {initial_days} to {new_days} days"
+        )
 
     @ui
     @tier1
@@ -304,7 +347,9 @@ class TestBucketLifecycleUI:
             logger.info("No existing rules found, creating a rule to delete")
             rule_to_delete = create_unique_resource_name("rule", "to-delete")
             lifecycle_ui.create_lifecycle_rule(
-                rule_name=rule_to_delete, scope="whole_bucket", rules={"expiration": {"days": 30}}
+                rule_name=rule_to_delete,
+                scope="whole_bucket",
+                rules={"expiration": {"days": 30}},
             )
 
             lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
@@ -323,12 +368,16 @@ class TestBucketLifecycleUI:
         time.sleep(3)  # Wait for UI to update
 
         updated_rules = lifecycle_ui.get_lifecycle_rules_list()
-        assert rule_to_delete not in updated_rules, f"Rule {rule_to_delete} still appears in UI after deletion"
+        assert (
+            rule_to_delete not in updated_rules
+        ), f"Rule {rule_to_delete} still appears in UI after deletion"
         assert (
             len(updated_rules) == initial_rule_count - 1
         ), f"Expected {initial_rule_count - 1} rules after deletion, but found {len(updated_rules)}"
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(bucket_name, mcg_obj)
+        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+            bucket_name, mcg_obj
+        )
         if backend_policy and backend_policy.get("Rules"):
             backend_rule_ids = [rule["ID"] for rule in backend_policy["Rules"]]
             assert (

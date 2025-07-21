@@ -65,7 +65,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
     A class for bucket lifecycle policy UI operations
     """
 
-    def verify_lifecycle_policy_in_backend(self, bucket_name, mcg_obj, expected_policy=None):
+    def verify_lifecycle_policy_in_backend(
+        self, bucket_name, mcg_obj, expected_policy=None
+    ):
         """
         Verify lifecycle policy exists in backend S3 API
 
@@ -78,17 +80,23 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             dict: The lifecycle configuration from backend
         """
         try:
-            response = mcg_obj.s3_client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
+            response = mcg_obj.s3_client.get_bucket_lifecycle_configuration(
+                Bucket=bucket_name
+            )
             logger.info(f"Retrieved lifecycle configuration: {response}")
 
             if expected_policy:
                 expected_dict = expected_policy.as_dict()
                 response.pop("ResponseMetadata", None)
-                assert response == expected_dict, f"Policy mismatch. Expected: {expected_dict}, Got: {response}"
+                assert (
+                    response == expected_dict
+                ), f"Policy mismatch. Expected: {expected_dict}, Got: {response}"
 
             return response
         except SSLError as ssl_e:
-            logger.warning(f"SSL error occurred, trying with SSL verification disabled: {ssl_e}")
+            logger.warning(
+                f"SSL error occurred, trying with SSL verification disabled: {ssl_e}"
+            )
             try:
                 # Create a new S3 client with SSL verification disabled for testing
                 s3_client_no_ssl = boto3.client(
@@ -98,21 +106,31 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     aws_access_key_id=mcg_obj.access_key_id,
                     aws_secret_access_key=mcg_obj.access_key,
                 )
-                response = s3_client_no_ssl.get_bucket_lifecycle_configuration(Bucket=bucket_name)
-                logger.info(f"Retrieved lifecycle configuration with SSL disabled: {response}")
+                response = s3_client_no_ssl.get_bucket_lifecycle_configuration(
+                    Bucket=bucket_name
+                )
+                logger.info(
+                    f"Retrieved lifecycle configuration with SSL disabled: {response}"
+                )
 
                 if expected_policy:
                     expected_dict = expected_policy.as_dict()
                     response.pop("ResponseMetadata", None)
-                    assert response == expected_dict, f"Policy mismatch. Expected: {expected_dict}, Got: {response}"
+                    assert (
+                        response == expected_dict
+                    ), f"Policy mismatch. Expected: {expected_dict}, Got: {response}"
 
                 return response
             except (ClientError, BotoCoreError, NoCredentialsError) as retry_e:
-                logger.error(f"Failed to get lifecycle configuration even with SSL disabled: {retry_e}")
+                logger.error(
+                    f"Failed to get lifecycle configuration even with SSL disabled: {retry_e}"
+                )
                 return None
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchLifecycleConfiguration":
-                logger.info(f"No lifecycle configuration found for bucket {bucket_name}")
+                logger.info(
+                    f"No lifecycle configuration found for bucket {bucket_name}"
+                )
                 return {"Rules": []}
             else:
                 logger.error(f"Failed to get lifecycle configuration: {e}")
@@ -140,7 +158,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         logger.info("Navigated to lifecycle rules page")
 
-    def create_lifecycle_rule(self, rule_name: str, scope: str = "whole_bucket", rules: dict = None, **kwargs):
+    def create_lifecycle_rule(
+        self, rule_name: str, scope: str = "whole_bucket", rules: dict = None, **kwargs
+    ):
         """
         Create a new lifecycle rule using the interface-based approach
 
@@ -179,14 +199,18 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 logger.info(f"Setting minimum object size: {min_size}")
                 self.do_click(self.bucket_tab["min_object_size_checkbox"])
                 self.do_clear(self.bucket_tab["min_object_size_input"])
-                self.do_send_keys(self.bucket_tab["min_object_size_input"], str(min_size))
+                self.do_send_keys(
+                    self.bucket_tab["min_object_size_input"], str(min_size)
+                )
 
             max_size = kwargs.get("max_size")
             if max_size is not None:
                 logger.info(f"Setting maximum object size: {max_size}")
                 self.do_click(self.bucket_tab["max_object_size_checkbox"])
                 self.do_clear(self.bucket_tab["max_object_size_input"])
-                self.do_send_keys(self.bucket_tab["max_object_size_input"], str(max_size))
+                self.do_send_keys(
+                    self.bucket_tab["max_object_size_input"], str(max_size)
+                )
 
         for rule_type, params in rules.items():
             if rule_type in LIFECYCLE_RULE_REGISTRY:
@@ -226,7 +250,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         try:
             from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-            kebab_locator = format_locator(self.bucket_tab["rule_kebab_menu"], rule_name)
+            kebab_locator = format_locator(
+                self.bucket_tab["rule_kebab_menu"], rule_name
+            )
             self.do_click(kebab_locator)
 
             self.do_click(self.bucket_tab["delete_rule_option"])
@@ -252,7 +278,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         try:
             from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-            kebab_locator = format_locator(self.bucket_tab["rule_kebab_menu"], rule_name)
+            kebab_locator = format_locator(
+                self.bucket_tab["rule_kebab_menu"], rule_name
+            )
             self.do_click(kebab_locator)
 
             self.do_click(self.bucket_tab["edit_rule_option"])
@@ -263,7 +291,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     rule_instance = rule_class(self)
 
                     if rule_instance.validate_params(params):
-                        logger.info(f"Applying updated {rule_type} rule with params: {params}")
+                        logger.info(
+                            f"Applying updated {rule_type} rule with params: {params}"
+                        )
                         rule_instance.apply(params, edit_mode=True)
                     else:
                         logger.error(f"Invalid parameters for {rule_type}: {params}")
@@ -309,7 +339,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 for alt_locator in alternative_locators:
                     rule_elements = self.get_elements((alt_locator, By.XPATH))
                     if rule_elements:
-                        logger.info(f"Found rules using alternative locator: {alt_locator}")
+                        logger.info(
+                            f"Found rules using alternative locator: {alt_locator}"
+                        )
                         break
 
             rule_names = []
@@ -318,7 +350,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     name_element = None
 
                     try:
-                        name_element = rule.find_element(By.XPATH, ".//td[@data-label='Name']")
+                        name_element = rule.find_element(
+                            By.XPATH, ".//td[@data-label='Name']"
+                        )
                     except NoSuchElementException:
                         pass
 
@@ -340,7 +374,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     if name_element and name_element.text.strip():
                         rule_names.append(name_element.text.strip())
                     else:
-                        logger.warning(f"Could not extract rule name from row: {rule.get_attribute('outerHTML')[:200]}")
+                        logger.warning(
+                            f"Could not extract rule name from row: {rule.get_attribute('outerHTML')[:200]}"
+                        )
 
                 except Exception as row_error:
                     logger.warning(f"Error processing rule row: {row_error}")
@@ -371,7 +407,9 @@ class IncompleteMultipartRuleUI(LifecycleRuleInterface):
 
         days = params.get("days", 7)
         self.ui.do_clear(self.ui.bucket_tab["incomplete_multipart_days_input"])
-        self.ui.do_send_keys(self.ui.bucket_tab["incomplete_multipart_days_input"], str(days))
+        self.ui.do_send_keys(
+            self.ui.bucket_tab["incomplete_multipart_days_input"], str(days)
+        )
 
     def validate_params(self, params: dict) -> bool:
         """Validate parameters for incomplete multipart rule"""
@@ -426,7 +464,9 @@ class NoncurrentVersionRuleUI(LifecycleRuleInterface):
         if "preserve_versions" in params:
             preserve_versions = params["preserve_versions"]
             self.ui.do_clear(self.ui.bucket_tab["noncurrent_versions_input"])
-            self.ui.do_send_keys(self.ui.bucket_tab["noncurrent_versions_input"], str(preserve_versions))
+            self.ui.do_send_keys(
+                self.ui.bucket_tab["noncurrent_versions_input"], str(preserve_versions)
+            )
 
     def validate_params(self, params: dict) -> bool:
         """Validate parameters for noncurrent version rule"""

@@ -4,6 +4,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import get_ocp_version
 
+
 logger = logging.getLogger(__name__)
 
 osd_sizes = ("512", "2048", "4096")
