@@ -119,7 +119,6 @@ class TestCnvDeviceReplace(E2ETest):
 
         logger.info("Starting vms")
         vm_for_stop.start()
-        vm_for_clone.start()
         vm_for_snap.unpause()
 
         for vm_obj in all_vms:
