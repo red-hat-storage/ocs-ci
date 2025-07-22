@@ -44,7 +44,7 @@ def check_subctl_cli():
 
 
 @pytest.fixture()
-def cnv_custom_storage_class(storageclass_factory):
+def cnv_custom_storage_class(request, storageclass_factory):
     """
     Uses storage class factory fixture to create a custom RBD storage class which uses a custom block pool
     with replica-2 to be used by CNV discovered applications
@@ -53,6 +53,13 @@ def cnv_custom_storage_class(storageclass_factory):
         all_clusters_success (bool): True if custom SC is found or created on both the managed clusters, False otherwise
 
     """
+    custom_sc = getattr(request, "param", False)
+
+    if not custom_sc:
+        log.info("Skipping custom SC creation as request.param is not set.")
+        yield True
+        return
+
     pool_name = "rdr-test-storage-pool-2way"
     replica_count = 2
     pool_instances = []

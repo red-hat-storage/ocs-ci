@@ -44,9 +44,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
+        indirect=["custom_sc"],
     )
     def test_cnv_failover_and_relocate_discovered_apps(
         self,
+        request,
         cnv_custom_storage_class,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
@@ -64,8 +66,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         """
 
         if custom_sc:
+            result = request.getfixturevalue("cnv_custom_storage_class")
             assert (
-                cnv_custom_storage_class
+                result
             ), "Custom storage class creation failed on one or more clusters"
 
         md5sum_original = []
