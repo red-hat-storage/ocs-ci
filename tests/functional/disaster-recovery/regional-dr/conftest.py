@@ -56,7 +56,7 @@ def cnv_custom_storage_class(request, storageclass_factory):
     custom_sc = getattr(request, "param", False)
 
     if not custom_sc:
-        log.info("Skipping custom SC creation as request.param is not set.")
+        log.info("Skipping custom SC creation as request.param is not set")
         yield True
         return
 
@@ -107,9 +107,7 @@ def cnv_custom_storage_class(request, storageclass_factory):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 pool.delete(force=True)
                 pool.ocp.wait_for_delete(pool.name)
-                log.info(f"Deleted pool {pool.name} in cluster {cluster.name}")
+                log.info(f"Deleted pool {pool.name}")
             except Exception as e:
-                log.warning(
-                    f"Failed to delete pool {pool.name} in cluster {cluster.name}: {e}"
-                )
+                log.warning(f"Failed to delete pool {pool.name}: {e}")
         config.reset_ctx()
