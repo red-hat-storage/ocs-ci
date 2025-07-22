@@ -12,7 +12,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     red_squad,
     runs_on_provider,
-    skip_inconsistent,
     mcg,
     fips_required,
     ignore_leftovers,
@@ -430,7 +429,7 @@ class TestPvPool:
         )
 
     @tier2
-    @skip_inconsistent
+    @pytest.mark.skip(reason="Skip due to issue #12717")
     @pytest.mark.parametrize(
         argnames=["pv_in_bs", "block_size", "block_count", "file_count"],
         argvalues=[
