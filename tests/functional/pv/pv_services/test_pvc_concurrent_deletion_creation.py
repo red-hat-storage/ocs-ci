@@ -9,7 +9,11 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import delete_pvcs
-from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+    run_on_all_clients,
+)
 from ocs_ci.framework.testlib import tier2, ManageTest
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -61,8 +65,9 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             wait_each=False,
         )
 
+    @run_on_all_clients
     def test_multiple_pvc_concurrent_creation_deletion(
-        self, interface, multi_pvc_factory
+        self, interface, multi_pvc_factory, cluster_index
     ):
         """
         To exercise resource creation and deletion

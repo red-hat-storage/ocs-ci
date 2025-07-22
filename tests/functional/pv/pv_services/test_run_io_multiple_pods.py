@@ -2,7 +2,11 @@ import pytest
 
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+    run_on_all_clients,
+)
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 
@@ -48,7 +52,8 @@ class TestIOMultiplePods(ManageTest):
 
         return pod_objs
 
-    def test_run_io_multiple_pods(self, pods):
+    @run_on_all_clients
+    def test_run_io_multiple_pods(self, pods, cluster_index):
         """
         Run IO on multiple pods in parallel
         """
