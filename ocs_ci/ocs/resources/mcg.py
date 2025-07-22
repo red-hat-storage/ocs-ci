@@ -938,7 +938,7 @@ class MCG:
                 f"The BackingStore did not reach the desired state "
                 f"{desired_state} within the time limit."
             )
-            assert False
+            raise
 
     def exec_mcg_cmd(
         self, cmd, namespace=None, use_yes=False, ignore_error=False, **kwargs
