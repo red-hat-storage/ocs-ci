@@ -27,20 +27,32 @@ To install previous GA versions, use the appropriate GA config file present in [
 deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf ocs_ci/framework/conf/fusion_version/fusion-2.8.yaml
 ```
 
+To specify the location of the generated junit report, use the `--report` argument:
+```
+deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --report path/to/report.xml
+```
+
 ## Fusion Data Foundation
 
 We also support the deployment of Fusion Data Foundation as an alternative to ODF when Fusion is installed. Similar to Fusion there is an entry-point created for FDF deployments, `deploy-fdf`. You can see more info about this entry-point with `deploy-fdf --help`.
 
 You can deploy FDF with the following command:
 
-`deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH`
+`deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf CLUSTER_CONF`
 
-Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci` to deploy OCP.
+Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci` to deploy OCP. In addition, `--conf` is a repeatable argument similar to `--ocsci-conf`. Generally just pass the same files you did to `run-ci` to deploy OCP. We need certain info about the cluster (such as platform) in order to configure storage properly.
 
 By default this will deploy the latest supported GA version of FDF.
 
 For pre-release versions of FDF, you can use the same command with an additional config for the version you wish to install.
 
 ```
-deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf ocs_ci/framework/conf/fdf_version/fdf-4.18.yaml
+deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf CLUSTER_CONF --conf ocs_ci/framework/conf/fdf_version/fdf-4.18.yaml
+```
+
+Note for pre-release deployments: you will need to add a section to your `pull-secret` which contains your credentials to the registry where pre-release images are stored. Please reach out to the ecosystem team for more information.
+
+To specify the location of the generated junit report, use the `--report` argument:
+```
+deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf CLUSTER_CONF --report path/to/report.xml
 ```
