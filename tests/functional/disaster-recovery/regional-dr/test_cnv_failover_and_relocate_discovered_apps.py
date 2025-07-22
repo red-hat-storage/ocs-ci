@@ -44,7 +44,6 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
-        indirect=["custom_sc"],
     )
     def test_cnv_failover_and_relocate_discovered_apps(
         self,
