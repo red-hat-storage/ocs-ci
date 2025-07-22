@@ -32,13 +32,13 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     @pytest.mark.parametrize(
         argnames=["custom_sc"],
         argvalues=[
-            # pytest.param(
-            #     *[False],
-            #     marks=pytest.mark.polarion_id("OCS-6266"),
-            #     id="default_sc",
-            # ),
             pytest.param(
-                *[True],
+                *[False],
+                marks=pytest.mark.polarion_id("OCS-6266"),
+                id="default_sc",
+            ),
+            pytest.param(
+                True,
                 marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_sc",
             ),
@@ -47,9 +47,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     )
     def test_cnv_failover_and_relocate_discovered_apps(
         self,
+        cnv_custom_storage_class,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
-        cnv_custom_storage_class,
         custom_sc,
     ):
         """
@@ -63,6 +63,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
         """
 
+        if custom_sc:
+            assert (
+                cnv_custom_storage_class
+            ), "Custom storage class creation failed on one or more clusters"
+
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
@@ -75,6 +80,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 discovered_apps=True,
                 resource_name=cnv_workloads[0].discovered_apps_placement_name,
             )
+        )
+        logger.info(
+            f"Primary cluster name before failover is {primary_cluster_name_before_failover}"
         )
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         # Download and extract the virtctl binary to bin_dir. Skips if already present.
