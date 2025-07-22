@@ -31,6 +31,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     turquoise_squad,
     stretchcluster_required,
+    jira,
 )
 
 log = logging.getLogger(__name__)
@@ -366,6 +367,7 @@ class TestZoneShutdownsAndCrashes:
         ), "Data is corrupted for RBD workloads"
         log.info("No data corruption is seen in RBD workloads")
 
+    @jira("DFBUGS-3636")
     @pytest.mark.parametrize(
         argnames="iteration, delay",
         argvalues=[
