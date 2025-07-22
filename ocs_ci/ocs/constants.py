@@ -2238,6 +2238,8 @@ RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
 CLI_TOOL_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
+# New constant for unified CLI usage (same as CLI_TOOL_LOCAL_PATH but more explicit)
+ODF_CLI_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"

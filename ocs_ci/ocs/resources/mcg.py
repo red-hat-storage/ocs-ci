@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
     mask_secrets,
+    get_noobaa_cli_config,
 )
 from ocs_ci.helpers.helpers import retrieve_cli_binary, flatten_multilevel_dict
 from ocs_ci.helpers.helpers import (
@@ -94,16 +95,22 @@ class MCG:
                 resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
             )
 
+            # Determine which CLI to use based on version
+            self.cli_path, self.command_prefix = get_noobaa_cli_config()
+            ocs_version = version.get_semantic_ocs_version_from_config()
+
             if (
-                not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-                or self.get_mcg_cli_version().minor
-                != version.get_semantic_ocs_version_from_config().minor
+                not os.path.isfile(self.cli_path)
+                or self.get_mcg_cli_version().minor != ocs_version.minor
             ):
                 logger.info(
-                    "The expected MCG CLI binary could not be found,"
+                    "The expected NooBaa CLI binary could not be found,"
                     " downloading the expected version"
                 )
-                retrieve_cli_binary(cli_type="mcg")
+                if ocs_version >= version.VERSION_4_20:
+                    retrieve_cli_binary(cli_type="odf")
+                else:
+                    retrieve_cli_binary(cli_type="mcg")
 
             """
             The certificate will be copied on each mcg_obj instantiation since
@@ -944,7 +951,10 @@ class MCG:
         self, cmd, namespace=None, use_yes=False, ignore_error=False, **kwargs
     ):
         """
-        Executes an MCG CLI command through the noobaa-operator pod's CLI binary
+        Executes a NooBaa CLI command through the appropriate CLI binary
+
+        For OCS >= 4.20: Uses odf-cli noobaa <command>
+        For OCS < 4.20: Uses mcg-cli <command>
 
         Args:
             cmd (str): The command to run
@@ -961,20 +971,28 @@ class MCG:
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
 
+        # Build the full command using stored CLI configuration
+        if self.command_prefix:
+            # For odf-cli: odf-cli noobaa <command>
+            full_cmd = f"{self.cli_path} {self.command_prefix} {cmd} {namespace}"
+        else:
+            # For mcg-cli: mcg-cli <command>
+            full_cmd = f"{self.cli_path} {cmd} {namespace}"
+
         # Mask sensitive data
         if self.data_to_mask:
             kwargs.setdefault("secrets", []).extend(self.data_to_mask)
 
         if use_yes:
             result = exec_cmd(
-                [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                [f"yes | {full_cmd}"],
                 ignore_error=ignore_error,
                 shell=True,
                 **kwargs,
             )
         else:
             result = exec_cmd(
-                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                full_cmd,
                 ignore_error=ignore_error,
                 **kwargs,
             )
@@ -1062,30 +1080,45 @@ class MCG:
 
     def get_mcg_cli_version(self):
         """
-        Get the MCG CLI version by parsing the output of the `mcg-cli version` command.
+        Get the NooBaa CLI version by parsing the output of the version command.
 
         Example output of the mcg-cli version command:
-
             INFO[0000] CLI version: 5.12.0
             INFO[0000] noobaa-image: noobaa/noobaa-core:master-20220913
             INFO[0000] operator-image: noobaa/noobaa-operator:5.12.0
+
+        Example output of the odf-cli noobaa version command:
+            CLI version: 5.20.0
+            noobaa-image: noobaa/noobaa-core:master-20240101
+            operator-image: noobaa/noobaa-operator:5.20.0
 
         Returns:
             semantic_version.base.Version: Object of semantic version.
 
         """
 
-        # mcg-cli sends the output to stderr in this case
-        cmd_output = self.exec_mcg_cmd("version").stderr
+        # Execute version command using appropriate CLI
+        cmd_result = self.exec_mcg_cmd("version")
+
+        # Try stderr first (mcg-cli sends output to stderr)
+        # Then try stdout (odf-cli might send to stdout)
+        cmd_output = (
+            cmd_result.stderr if cmd_result.stderr.strip() else cmd_result.stdout
+        )
 
         # \s* captures any number of spaces
         # \S+ captures any number of non-space characters
         regular_expression = r"CLI version:\s*(\S+)"
 
         # group(1) is the first capturing group, which is the version string
-        mcg_cli_version_str = re.search(
-            regular_expression, cmd_output, re.IGNORECASE
-        ).group(1)
+        match = re.search(regular_expression, cmd_output, re.IGNORECASE)
+
+        if not match:
+            logger.warning(f"Could not parse CLI version from output: {cmd_output}")
+            # Fallback to current OCS version if parsing fails
+            return version.get_semantic_ocs_version_from_config()
+
+        mcg_cli_version_str = match.group(1)
 
         return version.get_semantic_version(mcg_cli_version_str, only_major_minor=True)
 
