@@ -60,7 +60,6 @@ class TestBucketDeletion(MCGTest):
                     {
                         "interface": "OC",
                         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                        "timeout": 1200,
                     },
                 ],
                 marks=[tier1],
@@ -71,7 +70,6 @@ class TestBucketDeletion(MCGTest):
                     {
                         "interface": "OC",
                         "backingstore_dict": {"azure": [(1, None)]},
-                        "timeout": 1200,
                     },
                 ],
                 marks=[tier1],
@@ -82,7 +80,6 @@ class TestBucketDeletion(MCGTest):
                     {
                         "interface": "OC",
                         "backingstore_dict": {"gcp": [(1, None)]},
-                        "timeout": 1200,
                     },
                 ],
                 marks=[tier1],
@@ -93,7 +90,6 @@ class TestBucketDeletion(MCGTest):
                     {
                         "interface": "OC",
                         "backingstore_dict": {"ibmcos": [(1, None)]},
-                        "timeout": 1200,
                     },
                 ],
                 marks=[tier1, skipif_fips_enabled],
@@ -104,7 +100,6 @@ class TestBucketDeletion(MCGTest):
                     {
                         "interface": "CLI",
                         "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
-                        "timeout": 1200,
                     },
                 ],
                 marks=[tier1, sts_deployment_required],
