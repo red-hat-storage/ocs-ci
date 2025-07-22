@@ -1285,6 +1285,39 @@ def put_bucket_policy(s3_obj, bucketname, policy):
     return s3_obj.s3_client.put_bucket_policy(Bucket=bucketname, Policy=policy)
 
 
+def put_public_access_block_config(s3_obj, bucketname, public_access_block):
+    """
+    Adds public access block configuration to a bucket
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        public_access_block (dict): Desired public access block configuration
+
+    Returns:
+        dict : Bucket public access block response
+
+    """
+    return s3_obj.s3_client.put_public_access_block(
+        Bucket=bucketname, PublicAccessBlockConfiguration=public_access_block
+    )
+
+
+def get_public_access_block(s3_obj, bucketname):
+    """
+    Gets public access block configuration from a bucket
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : Get Bucket public access block response
+
+    """
+    return s3_obj.s3_client.get_public_access_block(Bucket=bucketname)
+
+
 def get_bucket_policy(s3_obj, bucketname):
     """
     Gets bucket policy from a bucket
