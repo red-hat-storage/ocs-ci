@@ -292,7 +292,7 @@ class TestVmSnapshotClone(E2ETest):
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
 
-    def process_vm(
+    def process_vm_with_snapshot_clone(
         self,
         vm_obj,
         file_paths,
@@ -310,8 +310,6 @@ class TestVmSnapshotClone(E2ETest):
             vm_clone_fixture (fixture): Pytest fixture used to clone the VM.
             vm_snapshot_restore_fixture (fixture): Pytest fixture used to create and restore VM snapshots.
 
-        Returns:
-            None
         """
 
         try:
@@ -337,7 +335,7 @@ class TestVmSnapshotClone(E2ETest):
             log.error(f"[{vm_obj.name}] Error during VM processing: {e}", exc_info=True)
             raise
 
-    def process_all_vms_in_parallel(
+    def run_parallel_vm_clone_restore(
         self,
         vm_list,
         file_paths,
@@ -355,8 +353,6 @@ class TestVmSnapshotClone(E2ETest):
             vm_clone_fixture (fixture): Pytest fixture used to clone the VM.
             vm_snapshot_restore_fixture (fixture): Pytest fixture used to create and restore VM snapshots.
 
-        Returns:
-            None
         """
 
         MAX_WORKERS = 10
@@ -365,7 +361,7 @@ class TestVmSnapshotClone(E2ETest):
                 executor.submit(
                     config_safe_thread_pool_task,
                     config.default_cluster_index,
-                    self.process_vm,
+                    self.process_vm_with_snapshot_clone,
                     vm_obj,
                     file_paths,
                     admin_client,
@@ -404,9 +400,8 @@ class TestVmSnapshotClone(E2ETest):
         3. Create snapshot of cloned VM
         4. Vertify snapshot of cloned VM created successfully.
         5. Check data conisistency on the Restored VM
-        6. Delete the clone and restored VM by following the documented procedure from CNV official docs
-        7. Repeat the above procedure for all the VMs in the system
-        8. Delete all the clones and restored VM created as part of this test
+        6. Repeat the above procedure for all the VMs in the system
+        7. Delete all the clones and restored VM created as part of this test
         """
 
         proj_obj = project_factory()
@@ -417,7 +412,7 @@ class TestVmSnapshotClone(E2ETest):
 
         vm_list = vm_objs_def + vm_objs_aggr
 
-        self.process_all_vms_in_parallel(
+        self.run_parallel_vm_clone_restore(
             vm_list,
             file_paths,
             admin_client,
