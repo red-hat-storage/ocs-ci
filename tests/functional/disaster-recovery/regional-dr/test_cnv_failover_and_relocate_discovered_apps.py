@@ -52,6 +52,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         custom_sc,
         discovered_apps_dr_workload_cnv,
         # nodes_multicluster,
+        # node_restart_teardown
     ):
         """
         Tests to verify cnv application failover and Relocate with Discovered Apps
