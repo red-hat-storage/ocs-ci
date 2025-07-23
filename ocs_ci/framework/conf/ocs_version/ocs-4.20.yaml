@@ -1,8 +1,8 @@
 ---
 DEPLOYMENT:
   # TODO: Change to lastest-stable-4.20 once we have stable build
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.20"
-  default_latest_tag: 'latest-4.20'
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-stable-4.20"
+  default_latest_tag: 'latest-stable-4.20'
   ocs_csv_channel: "stable-4.20"
   default_ocp_version: '4.20'
   konflux_build: true
