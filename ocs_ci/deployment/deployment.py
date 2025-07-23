@@ -940,10 +940,13 @@ class Deployment(object):
                 logger.info("Sleeping 60 seconds after applying tag mirror set.")
             time.sleep(60)
             logger.info("Waiting max 30 mins for master MCP to get updated")
-            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/master")
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
+            )
             logger.info("Waiting max 30 mins for worker MCP to get updated")
-            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/worker")
-
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
+            )
         if config.DEPLOYMENT.get("local_storage"):
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
