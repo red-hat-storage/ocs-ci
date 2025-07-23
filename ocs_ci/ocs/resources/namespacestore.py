@@ -90,7 +90,7 @@ class NamespaceStore:
         }
         if retry:
             sample = TimeoutSampler(
-                timeout=120,
+                timeout=240,
                 sleep=20,
                 func=cmdMap[self.method],
             )
@@ -156,7 +156,7 @@ class NamespaceStore:
             == constants.STATUS_READY
         )
 
-    def verify_health(self, timeout=180, interval=5):
+    def verify_health(self, timeout=240, interval=5):
         """
         Health verification function that tries to verify
         a namespacestores's health until a given time limit is reached
