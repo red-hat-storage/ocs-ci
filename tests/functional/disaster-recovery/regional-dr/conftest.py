@@ -57,6 +57,23 @@ def cnv_custom_storage_class(request, storageclass_factory):
     pool_name = "rdr-test-storage-pool-2way"
     replica_count = 2
     pool_instances = []
+    sc_name = "rbd-cnv-custom-sc-r2"
+    all_clusters_success = True
+    sc_obj = None
+
+    def pool_finalizer():
+        for cluster, pool in pool_instances:
+            try:
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                pool.delete(force=True)
+                pool.ocp.wait_for_delete(pool.name)
+                log.info(f"Deleted pool {pool.name}")
+            except Exception as e:
+                log.warning(f"Failed to delete pool {pool.name}: {e}")
+        config.reset_ctx()
+        log.info("Custom Pool deleted successfully")
+
+    request.addfinalizer(pool_finalizer)
 
     try:
         # Create pools in all clusters
@@ -69,16 +86,11 @@ def cnv_custom_storage_class(request, storageclass_factory):
             )
             pool_instances.append((cluster, pool))
 
-        sc_name = "rbd-cnv-custom-sc-r2"
-        all_clusters_success = True
-
         # Create or verify SC in all clusters
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             existing_sc_list = get_all_storageclass()
-
             if sc_name in existing_sc_list:
                 log.info(f"Storage class {sc_name} already exists")
+                pass
             else:
                 try:
                     sc_obj = storageclass_factory(
@@ -95,13 +107,10 @@ def cnv_custom_storage_class(request, storageclass_factory):
         config.reset_ctx()
         yield all_clusters_success
 
-    finally:
-        for cluster, pool in pool_instances:
-            try:
-                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                pool.delete(force=True)
-                pool.ocp.wait_for_delete(pool.name)
-                log.info(f"Deleted pool {pool.name}")
-            except Exception as e:
-                log.warning(f"Failed to delete pool {pool.name}: {e}")
-        config.reset_ctx()
+    except Exception as e:
+        log.error(f"Error during setup of cnv_custom_storage_class fixture: {e}")
+        all_clusters_success = False
+        yield all_clusters_success
+
+
+
