@@ -167,7 +167,7 @@ class TestMonAndOSDFailures:
         if modify_deployment_replica_count(osd_dep, 0):
             time.sleep(600)
 
-        # Verify vm statuses when mon pod is down
+        # Verify vm statuses when osd pod is down
         self.verify_vm_status()
 
         # scale the deployment back to 1
