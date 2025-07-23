@@ -4,6 +4,7 @@ import time
 import uuid
 
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
 
 from ocs_ci.ocs.ui.page_objects.bucket_versioning import BucketVersioning
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
@@ -27,13 +28,13 @@ class TestBucketVersioningUI:
     Test class for bucket versioning functionality via UI.
     """
 
-    # Test configuration constants
     EXPECTED_VERSIONS = 3
     UPLOAD_WAIT_TIME = 5
     NAVIGATION_WAIT_TIME = 2
     VERSIONS_LOAD_WAIT_TIME = 3
     INITIAL_UPLOAD_WAIT_TIME = 2
     VERSION_DETECTION_TIMEOUT = 10
+    created_buckets = []
 
     def _upload_folder_to_bucket(
         self, buckets_tab: BucketsTab, folder_path: str, wait_time: int = None
@@ -71,17 +72,25 @@ class TestBucketVersioningUI:
             f.write(content)
 
     def _navigate_to_bucket(
-        self, bucket_versioning: BucketVersioning, buckets_tab: BucketsTab
+        self,
+        bucket_versioning: BucketVersioning,
+        buckets_tab: BucketsTab,
+        bucket_name: str,
     ) -> None:
         """
-        Navigate to object storage and select the first bucket.
+        Navigate to object storage and select the specific test bucket by name.
 
         Args:
             bucket_versioning: BucketVersioning instance for navigation
             buckets_tab: BucketsTab instance for UI operations
+            bucket_name: Name of the bucket to navigate to
         """
         bucket_versioning.nav_object_storage_page()
-        buckets_tab.do_click(buckets_tab.bucket_tab["first_bucket"])
+        logger.info(f"Navigating to bucket: {bucket_name}")
+        logger.info(f"Looking for bucket link with text: {bucket_name}")
+        bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
+        buckets_tab.do_click((bucket_link_locator, By.XPATH))
+        logger.info(f"Successfully navigated into bucket: {bucket_name}")
 
     def _create_file_version(
         self,
@@ -92,6 +101,7 @@ class TestBucketVersioningUI:
         folder_path: str,
         folder_name: str,
         version_number: int,
+        bucket_name: str,
     ) -> None:
         """
         Create a new version of a file by modifying content and uploading.
@@ -104,12 +114,13 @@ class TestBucketVersioningUI:
             folder_path: Path to the folder containing the file
             folder_name: Name of the folder for logging
             version_number: Version number for logging
+            bucket_name: Name of the bucket to work with
         """
         logger.info(f"Modifying file content for version {version_number}: {file_path}")
         self._modify_file_content(file_path, version_content)
 
-        if version_number > 1:  # Only navigate back for versions after the first
-            self._navigate_to_bucket(bucket_versioning, buckets_tab)
+        if version_number > 1:
+            self._navigate_to_bucket(bucket_versioning, buckets_tab, bucket_name)
 
         self._upload_folder_to_bucket(
             buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME
@@ -117,33 +128,6 @@ class TestBucketVersioningUI:
         logger.info(
             f"Successfully uploaded folder: {folder_name} - version {version_number} created"
         )
-
-    def _get_actual_filename(
-        self, buckets_tab: BucketsTab, original_filename: str
-    ) -> str:
-        """
-        Get the actual filename displayed in UI, handling cases where files are renamed during upload.
-
-        Args:
-            buckets_tab: BucketsTab instance for UI operations
-            original_filename: Original filename before upload
-
-        Returns:
-            str: Actual filename displayed in the UI
-        """
-        txt_elements = buckets_tab.get_elements(buckets_tab.bucket_tab["txt_files"])
-
-        if not txt_elements or not txt_elements[0].text:
-            return original_filename
-
-        actual_file_name = txt_elements[0].text.strip()
-        if "\n" in actual_file_name:  # Handle "filename\nLatest" case
-            actual_file_name = actual_file_name.split("\n")[0].strip()
-
-        logger.info(
-            f"Actual file name in UI: '{actual_file_name}' (original was '{original_filename}')"
-        )
-        return actual_file_name
 
     def _setup_test_file(self) -> tuple[str, str]:
         """
@@ -157,7 +141,6 @@ class TestBucketVersioningUI:
         files = list(file_generator)
         file_path = files[0]  # Get the first (and only) file path
 
-        # Set initial content for first version
         logger.info(f"Setting initial content for first version: {file_path}")
         with open(file_path, "w") as f:
             f.write("content-v1")
@@ -170,6 +153,7 @@ class TestBucketVersioningUI:
         bucket_versioning: BucketVersioning,
         buckets_tab: BucketsTab,
         folder_name: str,
+        bucket_name: str,
     ) -> None:
         """
         Navigate to the test folder and enable version listing.
@@ -178,45 +162,40 @@ class TestBucketVersioningUI:
             bucket_versioning: BucketVersioning instance for navigation
             buckets_tab: BucketsTab instance for UI operations
             folder_name: Name of the folder to navigate to
+            bucket_name: Name of the bucket to work with
         """
         logger.info("Navigating to folder and showing versions")
+        self._navigate_to_bucket(bucket_versioning, buckets_tab, bucket_name)
 
-        # Navigate to bucket and then into the specific folder we created
-        self._navigate_to_bucket(bucket_versioning, buckets_tab)
-
-        # Click on the folder name to navigate into it
         logger.info(f"Clicking on folder link to navigate into folder: {folder_name}")
         buckets_tab.do_click(buckets_tab.bucket_tab["first_folder_link"])
 
-        # Wait for navigation
         time.sleep(self.NAVIGATION_WAIT_TIME)
-
-        # Toggle "List all versions" to show file versions
         logger.info("Clicking 'List all versions' toggle")
         buckets_tab.do_click(buckets_tab.bucket_tab["list_all_versions_toggle"])
 
-        # Wait for versions to load after toggle
         time.sleep(self.VERSIONS_LOAD_WAIT_TIME)
-
         logger.info(
             f"Successfully navigated to folder '{folder_name}' and enabled version listing"
         )
 
-    def _create_test_folder(self, buckets_tab: BucketsTab, folder_path: str) -> str:
+    def _create_bucket_and_upload_folder(self, folder_path: str) -> str:
         """
-        Create a test folder in the bucket and upload the initial file.
+        Create a new bucket and upload the initial file folder.
 
         Args:
-            buckets_tab: BucketsTab instance for UI operations
             folder_path: Path to the local folder to upload
 
         Returns:
             str: Name of the created folder
         """
-        logger.info("Uploading folder to bucket with 1 file")
-
-        # Navigate to first bucket and create a folder name
-        buckets_tab.do_click(buckets_tab.bucket_tab["first_bucket"])
+        logger.info("Creating new bucket and uploading folder with 1 file")
+        bucket_ui = BucketsTab()
+        _, bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
+        self.created_buckets.append(bucket_name)
+        logger.info(f"Created new bucket: {bucket_name}")
+        logger.info(f"Current test will work with bucket: {bucket_name}")
+        buckets_tab = bucket_ui
         folder_name = f"test-folder-{uuid.uuid4()}"
         buckets_tab.do_click(buckets_tab.bucket_tab["create_folder_button"])
         buckets_tab.do_send_keys(
@@ -224,10 +203,11 @@ class TestBucketVersioningUI:
         )
         buckets_tab.do_click(buckets_tab.bucket_tab["submit_button_folder"])
 
-        # Upload our 1-file folder
         self._upload_folder_to_bucket(buckets_tab, folder_path)
 
-        logger.info(f"Successfully uploaded folder: {folder_name} with 1 file")
+        logger.info(
+            f"Successfully uploaded folder: {folder_name} to bucket: {bucket_name}"
+        )
         return folder_name
 
     def _get_version_id_for_latest(self, buckets_tab: BucketsTab) -> str:
@@ -243,13 +223,11 @@ class TestBucketVersioningUI:
         Raises:
             TimeoutException: If elements don't load within timeout
         """
-        # Wait for the version ID element to be present
         buckets_tab.wait_for_element_to_be_present(
             buckets_tab.bucket_tab["version_id_for_latest"],
             timeout=self.VERSION_DETECTION_TIMEOUT,
         )
 
-        # Get the version ID text from the cell
         version_id_elements = buckets_tab.get_elements(
             buckets_tab.bucket_tab["version_id_for_latest"]
         )
@@ -273,13 +251,11 @@ class TestBucketVersioningUI:
         logger.info("Clicking on 3 dots menu for latest version")
         buckets_tab.do_click(buckets_tab.bucket_tab["version_actions_menu_for_latest"])
 
-        # Wait for dropdown to appear
         time.sleep(3)
 
         logger.info("Clicking 'Delete this version' option")
         buckets_tab.do_click(buckets_tab.bucket_tab["delete_this_version_option"])
 
-        # Wait for delete confirmation modal
         buckets_tab.wait_for_element_to_be_present(
             buckets_tab.bucket_tab["delete_version_modal_title"], timeout=10
         )
@@ -291,70 +267,65 @@ class TestBucketVersioningUI:
         input_element[0].clear()
         input_element[0].send_keys("delete")
 
-        # Wait for the button to become enabled
         time.sleep(2)
 
         logger.info("Clicking Delete object button to confirm")
         buckets_tab.do_click(buckets_tab.bucket_tab["delete_version_confirm_button"])
 
-        # Wait for the deletion to complete
         time.sleep(3)
         logger.info("Version deletion completed")
 
-    def _validate_file_versions(self, buckets_tab: BucketsTab, file_name: str) -> None:
+    def _validate_file_versions(self, buckets_tab: BucketsTab) -> None:
         """
         Validate that the expected number of file versions exist and "Latest" labels are present.
 
         Args:
             buckets_tab: BucketsTab instance for UI operations
-            file_name: Original filename to validate versions for
 
         Raises:
             AssertionError: If version count or Latest labels don't match expectations
             TimeoutException: If elements don't load within timeout
         """
-        # Wait for versions to load and find the "Latest" label elements
         buckets_tab.wait_for_element_to_be_present(
             buckets_tab.bucket_tab["version_latest_label"],
             timeout=self.VERSION_DETECTION_TIMEOUT,
         )
 
-        # Count file name occurrences (most reliable method)
         expected_versions = self.EXPECTED_VERSIONS
 
-        # Get the actual filename displayed in UI (handles file renaming during upload)
-        file_name_to_search = self._get_actual_filename(buckets_tab, file_name)
+        logger.info("Waiting for version checkboxes to be present")
+        try:
+            buckets_tab.wait_for_element_to_be_present(
+                buckets_tab.bucket_tab["version_row_checkboxes"],
+                timeout=10,
+            )
+        except TimeoutException:
+            logger.warning("Timeout waiting for version checkboxes, continuing anyway")
 
-        file_name_locator = (
-            buckets_tab.bucket_tab["file_name_text"][0].format(file_name_to_search),
-            buckets_tab.bucket_tab["file_name_text"][1],
+        version_checkboxes = buckets_tab.get_elements(
+            buckets_tab.bucket_tab["version_row_checkboxes"]
         )
-        element_list = buckets_tab.get_elements(file_name_locator)
-        actual_versions_by_name = len(element_list) == expected_versions
+        actual_version_count = len(version_checkboxes)
+
         logger.info(
-            f"File name '{file_name_to_search}' appears expected {expected_versions} times: "
-            f"{actual_versions_by_name} (found {len(element_list)} occurrences)"
+            f"Version count by checkboxes: Expected {expected_versions}, Found {actual_version_count}"
         )
 
-        # Validate version count
-        if not actual_versions_by_name:
+        if actual_version_count != expected_versions:
             raise AssertionError(
-                f"Version count validation failed: Expected {expected_versions} versions of file '{file_name}', "
-                f"but found {len(element_list)} occurrences"
+                f"Version count validation failed: Expected {expected_versions} versions, "
+                f"but found {actual_version_count} checkboxes"
             )
 
-        # Find all label elements
         latest_labels = buckets_tab.get_elements(
             buckets_tab.bucket_tab["version_latest_label"]
         )
 
-        # Verify at least one "Latest" label exists
         if not latest_labels:
             raise AssertionError(
                 "Latest label validation failed: No 'Latest' label found on any file version"
             )
 
-        # Check that the label text is "Latest"
         latest_label_texts = [
             label.text for label in latest_labels if label.text == "Latest"
         ]
@@ -391,14 +362,19 @@ class TestBucketVersioningUI:
         logger.info("Step 1: Creating local folder with 1 file")
         file_path, folder_path = self._setup_test_file()
 
-        # Step 2: Upload the folder to bucket (using BucketsTab for this operation)
-        logger.info("Step 2: Uploading folder to bucket with 1 file")
-        buckets_tab = BucketsTab()
-        folder_name = self._create_test_folder(buckets_tab, folder_path)
+        # Step 2: Create new bucket and upload folder
+        logger.info("Step 2: Creating new bucket and uploading folder with 1 file")
+        folder_name = self._create_bucket_and_upload_folder(folder_path)
+        current_bucket_name = self.created_buckets[-1]  # Get the bucket we just created
+        logger.info(
+            f"Test test_enable_bucket_versioning working with bucket: {current_bucket_name}"
+        )
 
         # Step 3: Enable versioning
         logger.info("Step 3: Enabling versioning for bucket")
-        versioning_enabled = bucket_versioning.enable_versioning()
+        versioning_enabled = bucket_versioning.enable_versioning(
+            bucket_name=current_bucket_name
+        )
         if versioning_enabled:
             logger.info("Versioning enabled successfully")
         else:
@@ -407,7 +383,8 @@ class TestBucketVersioningUI:
         # Step 4: Upload the same folder multiple times to create versions
         logger.info("Step 4: Creating multiple file versions")
 
-        # Create second version
+        buckets_tab = BucketsTab()
+
         self._create_file_version(
             file_path,
             "content-v2",
@@ -416,9 +393,9 @@ class TestBucketVersioningUI:
             folder_path,
             folder_name,
             2,
+            current_bucket_name,
         )
 
-        # Create third version
         self._create_file_version(
             file_path,
             "content-v3",
@@ -427,28 +404,24 @@ class TestBucketVersioningUI:
             folder_path,
             folder_name,
             3,
+            current_bucket_name,
         )
 
         # Step 5: Navigate to folder and show versioning
         logger.info("Step 5: Navigating to folder and showing versions")
         self._navigate_to_folder_and_enable_versions(
-            bucket_versioning, buckets_tab, folder_name
+            bucket_versioning, buckets_tab, folder_name, current_bucket_name
         )
 
         # Step 6: Validate "Latest" label appears on newest version
         logger.info("Step 6: Validating 'Latest' label on newest version")
 
-        # Extract the actual file name for counting versions
-        file_name = os.path.basename(file_path)
-        logger.info(f"Using file name for version counting: {file_name}")
-
         try:
-            self._validate_file_versions(buckets_tab, file_name)
+            self._validate_file_versions(buckets_tab)
         except (TimeoutException, AssertionError) as e:
             logger.debug(f"Failed to validate 'Latest' label: {e}")
             raise
 
-        # Verify the test completed successfully
         assert (
             folder_name
         ), "Test setup validation failed: Failed to create and upload folder"
@@ -482,12 +455,17 @@ class TestBucketVersioningUI:
         logger.info("Step 1: Creating and uploading initial object")
         file_path, folder_path = self._setup_test_file()
 
-        buckets_tab = BucketsTab()
-        folder_name = self._create_test_folder(buckets_tab, folder_path)
+        folder_name = self._create_bucket_and_upload_folder(folder_path)
+        current_bucket_name = self.created_buckets[-1]  # Get the bucket we just created
+        logger.info(
+            f"Test test_bucket_versioning_with_modification working with bucket: {current_bucket_name}"
+        )
 
         # Step 2: Enable versioning
         logger.info("Step 2: Enabling versioning for bucket")
-        versioning_enabled = bucket_versioning.enable_versioning()
+        versioning_enabled = bucket_versioning.enable_versioning(
+            bucket_name=current_bucket_name
+        )
         if versioning_enabled:
             logger.info("Versioning enabled successfully")
         else:
@@ -499,12 +477,12 @@ class TestBucketVersioningUI:
 
         # Step 4: Re-upload the modified object
         logger.info("Step 4: Re-uploading modified object")
-        self._navigate_to_bucket(bucket_versioning, buckets_tab)
+        buckets_tab = BucketsTab()
+        self._navigate_to_bucket(bucket_versioning, buckets_tab, current_bucket_name)
         self._upload_folder_to_bucket(
             buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME
         )
 
-        # Create one more version for testing
         logger.info("Creating third version of the object")
         self._create_file_version(
             file_path,
@@ -514,22 +492,20 @@ class TestBucketVersioningUI:
             folder_path,
             folder_name,
             3,
+            current_bucket_name,
         )
 
         # Step 5: Navigate to folder and toggle "List all versions"
         logger.info("Step 5: Navigating to folder and showing versions")
         self._navigate_to_folder_and_enable_versions(
-            bucket_versioning, buckets_tab, folder_name
+            bucket_versioning, buckets_tab, folder_name, current_bucket_name
         )
 
         # Step 6: Verify version ID mapping with "Latest" tag
         logger.info("Step 6: Verifying version ID for latest object")
 
-        # First validate versions exist
-        file_name = os.path.basename(file_path)
-        self._validate_file_versions(buckets_tab, file_name)
+        self._validate_file_versions(buckets_tab)
 
-        # Get version ID for the latest object
         latest_version_id = self._get_version_id_for_latest(buckets_tab)
         assert latest_version_id, "Failed to get version ID for latest object"
         logger.info(
@@ -539,38 +515,30 @@ class TestBucketVersioningUI:
         # Step 7: Delete latest object and verify new one becomes latest
         logger.info("Step 7: Deleting latest version and verifying new latest")
 
-        # Store the current latest version ID before deletion
         original_latest_version_id = latest_version_id
         logger.info(f"Original latest version ID: {original_latest_version_id}")
 
-        # Delete the latest version
         self._delete_latest_version(buckets_tab)
 
-        # Wait for UI to refresh after deletion
         time.sleep(2)
 
-        # Get the new latest version ID
         new_latest_version_id = self._get_version_id_for_latest(buckets_tab)
         logger.info(f"New latest version ID after deletion: {new_latest_version_id}")
 
-        # Validate that a different version is now marked as latest
         assert new_latest_version_id != original_latest_version_id, (
             f"Latest version ID should have changed after deletion. "
             f"Original: {original_latest_version_id}, New: {new_latest_version_id}"
         )
 
-        # Validate that we still have the correct number of versions (one less than before)
         expected_versions_after_deletion = self.EXPECTED_VERSIONS - 1
 
-        # Update the expected versions temporarily for validation
         original_expected = self.EXPECTED_VERSIONS
         self.EXPECTED_VERSIONS = expected_versions_after_deletion
 
         try:
-            self._validate_file_versions(buckets_tab, file_name)
+            self._validate_file_versions(buckets_tab)
             logger.info(
                 f"Successfully validated {expected_versions_after_deletion} versions remain after deletion"
             )
         finally:
-            # Restore original expected versions
             self.EXPECTED_VERSIONS = original_expected

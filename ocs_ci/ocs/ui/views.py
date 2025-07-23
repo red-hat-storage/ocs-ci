@@ -2375,6 +2375,10 @@ bucket_tab = {
         "//button[@class='pf-v5-c-button pf-m-link' and text()='Cancel']",
         By.XPATH,
     ),
+    "version_row_checkboxes": (
+        "//input[@type='checkbox' and @aria-label[starts-with(., 'Select row')] and not(@name='check-all')]",
+        By.XPATH,
+    ),
 }
 locators = {
     "4.19": {
