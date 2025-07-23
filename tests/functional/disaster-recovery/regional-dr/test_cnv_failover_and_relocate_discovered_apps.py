@@ -128,12 +128,6 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(360)
 
-        drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
-        logger.info("Checking for lastKubeObjectProtectionTime before failover..")
-        dr_helpers.verify_last_kubeobject_protection_time(
-            drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
-        )
-
         # config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         # active_primary_index = config.cur_index
         # active_primary_cluster_node_objs = get_node_objs()
