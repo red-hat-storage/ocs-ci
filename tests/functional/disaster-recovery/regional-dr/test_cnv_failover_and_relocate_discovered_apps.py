@@ -14,6 +14,7 @@ from ocs_ci.helpers.dr_helpers import check_mirroring_status_for_custom_pool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -50,7 +51,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         request,
         custom_sc,
         discovered_apps_dr_workload_cnv,
-        nodes_multicluster,
+        # nodes_multicluster,
     ):
         """
         Tests to verify cnv application failover and Relocate with Discovered Apps
@@ -124,7 +125,13 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(60)
+        sleep(360)
+
+        drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
+        logger.info("Checking for lastKubeObjectProtectionTime before failover..")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
+        )
 
         # config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         # active_primary_index = config.cur_index
