@@ -124,7 +124,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(60)
 
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         active_primary_index = config.cur_index
@@ -231,7 +231,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         logger.info("Running Relocate Steps")
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(60)
 
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
