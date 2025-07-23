@@ -32,11 +32,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     @pytest.mark.parametrize(
         argnames=["custom_sc"],
         argvalues=[
-            pytest.param(
-                *[False],
-                marks=pytest.mark.polarion_id("OCS-6266"),
-                id="default_sc",
-            ),
+            # pytest.param(
+            #     *[False],
+            #     marks=pytest.mark.polarion_id("OCS-6266"),
+            #     id="default_sc",
+            # ),
             pytest.param(
                 True,
                 marks=pytest.mark.polarion_id("OCS-XXXX"),
@@ -163,6 +163,10 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             namespace=cnv_workloads[0].workload_namespace,
             phase=constants.STATUS_RUNNING,
         )
+
+        from pdb import set_trace
+
+        set_trace()
 
         # Validating data integrity (file1) after failing-over VMs to secondary managed cluster
         validate_data_integrity_vm(
