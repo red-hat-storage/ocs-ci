@@ -20,7 +20,10 @@ from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.resources.pv import get_pv_status
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    update_container_with_mirrored_image,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +67,9 @@ class WorkloadUi(metaclass=SingletonMeta):
 
         with open(app_path) as file_stream:
             self.depl_cr = yaml.safe_load(file_stream)
+
+        # for disconnected deployments, mirror the used image and update deployment cr
+        update_container_with_mirrored_image(self.depl_cr)
 
     def deploy_app(
         self,
