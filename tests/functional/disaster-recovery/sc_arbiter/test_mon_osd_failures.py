@@ -113,11 +113,6 @@ def setup_logwriter_workloads(
 
 @pytest.fixture(scope="class")
 def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
-    volume_interface = [
-        constants.VM_VOLUME_PVC,
-        constants.VM_VOLUME_DV,
-        constants.VM_VOLUME_DVT,
-    ]
 
     logger.info("Setting up CNV workload and creating some data")
     vm_obj = cnv_workload_class(
