@@ -179,7 +179,7 @@ def bucket_class_factory(
                     )
                 ]
             except TimeoutExpiredError:
-                log.info("Backingstore was not created. Cloud provider is slow")
+                log.info("Backingstore was not created after 600 secs")
                 raise
         else:
             backingstores = [
