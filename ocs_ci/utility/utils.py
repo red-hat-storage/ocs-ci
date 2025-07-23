@@ -2462,7 +2462,16 @@ def get_testrun_name():
     )
     ocp_version_string = f"OCP{ocp_version}" if ocp_version else ""
     ocs_version = config.ENV_DATA.get("ocs_version")
-    ocs_version_string = f"OCS{ocs_version}" if ocs_version else ""
+    fusion_version = config.ENV_DATA.get("fusion_version")
+    fdf_version = config.ENV_DATA.get("fdf_version")
+    if fdf_version:
+        product_version = f"FDF{fdf_version}"
+    elif fusion_version:
+        product_version = f"Fusion{fusion_version}"
+    elif ocs_version:
+        product_version = f"OCS{ocs_version}"
+    else:
+        product_version = ""
     worker_os = "RHEL" if config.ENV_DATA.get("rhel_workers") else "RHCOS"
     build_user = None
     baremetal_config = None
@@ -2502,9 +2511,7 @@ def get_testrun_name():
             f"{config.ENV_DATA.get('worker_replicas')}W "
             f"{markers} {post_upgrade}".rstrip()
         )
-    testrun_name = (
-        f"{ocs_version_string} {us_ds} {ocp_version_string} " f"{testrun_name}"
-    )
+    testrun_name = f"{product_version} {us_ds} {ocp_version_string} " f"{testrun_name}"
     if build_user:
         testrun_name = f"{build_user} {testrun_name}"
     # replace invalid character(s) by '-'
