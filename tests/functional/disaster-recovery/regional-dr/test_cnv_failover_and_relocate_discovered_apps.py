@@ -68,6 +68,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             assert (
                 result
             ), "Custom storage class creation failed on one or more clusters"
+            time.sleep(120)
 
         md5sum_original = []
         md5sum_failover = []
