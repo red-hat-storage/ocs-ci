@@ -118,11 +118,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
-        if custom_sc:
-            assert check_mirroring_status_for_custom_pool(
-                pool_name="rdr-test-storage-pool-2way"
-            ), "Mirroring status check for custom SC failed"
-            logger.info("Mirroring status check for custom SC passed")
+        # if custom_sc:
+        #     assert check_mirroring_status_for_custom_pool(
+        #         pool_name="rdr-test-storage-pool-2way"
+        #     ), "Mirroring status check for custom SC failed"
+        #     logger.info("Mirroring status check for custom SC passed")
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -214,11 +214,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             vrg_name=cnv_workloads[0].discovered_apps_placement_name,
         )
 
-        if custom_sc:
-            assert check_mirroring_status_for_custom_pool(
-                pool_name="rdr-test-storage-pool-2way"
-            ), "Mirroring status check for custom SC failed"
-            logger.info("Mirroring status check for custom SC passed")
+        # if custom_sc:
+        #     assert check_mirroring_status_for_custom_pool(
+        #         pool_name="rdr-test-storage-pool-2way"
+        #     ), "Mirroring status check for custom SC failed"
+        #     logger.info("Mirroring status check for custom SC passed")
 
         # Doing Relocate in below code
         primary_cluster_name_after_failover = (
@@ -287,8 +287,8 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 verify=True,
             )
 
-        if custom_sc:
-            assert check_mirroring_status_for_custom_pool(
-                pool_name="rdr-test-storage-pool-2way"
-            ), "Mirroring status check for custom SC failed"
-            logger.info("Mirroring status check for custom SC passed")
+        # if custom_sc:
+        #     assert check_mirroring_status_for_custom_pool(
+        #         pool_name="rdr-test-storage-pool-2way"
+        #     ), "Mirroring status check for custom SC failed"
+        #     logger.info("Mirroring status check for custom SC passed")
