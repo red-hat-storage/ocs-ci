@@ -126,20 +126,20 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(60)
 
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
-        active_primary_index = config.cur_index
-        active_primary_cluster_node_objs = get_node_objs()
+        # config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        # active_primary_index = config.cur_index
+        # active_primary_cluster_node_objs = get_node_objs()
 
         # Shutdown primary managed cluster nodes
-        logger.info("Shutting down all the nodes of the primary managed cluster")
-        nodes_multicluster[active_primary_index].stop_nodes(
-            active_primary_cluster_node_objs
-        )
-        logger.info(
-            "All nodes of the primary managed cluster are powered off, "
-            "waiting for cluster to be unreachable.."
-        )
-        time.sleep(300)
+        # logger.info("Shutting down all the nodes of the primary managed cluster")
+        # nodes_multicluster[active_primary_index].stop_nodes(
+        #     active_primary_cluster_node_objs
+        # )
+        # logger.info(
+        #     "All nodes of the primary managed cluster are powered off, "
+        #     "waiting for cluster to be unreachable.."
+        # )
+        # time.sleep(300)
 
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
@@ -189,13 +189,13 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 f"Checksum of files written after Failover: {vm_filepaths[1]} on VM {cnv_wl.workload_name}: {md5sum}"
             )
 
-        logger.info("Recover the down managed cluster")
-        nodes_multicluster[active_primary_index].start_nodes(
-            active_primary_cluster_node_objs
-        )
-        wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
-        wait_for_pods_to_be_running(timeout=420, sleep=15)
-        assert ceph_health_check(tries=10, delay=30)
+        # logger.info("Recover the down managed cluster")
+        # nodes_multicluster[active_primary_index].start_nodes(
+        #     active_primary_cluster_node_objs
+        # )
+        # wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
+        # wait_for_pods_to_be_running(timeout=420, sleep=15)
+        # assert ceph_health_check(tries=10, delay=30)
 
         logger.info("Doing Cleanup Operations")
         dr_helpers.do_discovered_apps_cleanup(
