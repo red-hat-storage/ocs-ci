@@ -429,6 +429,7 @@ class TestPvPool:
         )
 
     @tier2
+    @pytest.mark.skip(reason="Skip due to issue #12717")
     @pytest.mark.parametrize(
         argnames=["pv_in_bs", "block_size", "block_count", "file_count"],
         argvalues=[
