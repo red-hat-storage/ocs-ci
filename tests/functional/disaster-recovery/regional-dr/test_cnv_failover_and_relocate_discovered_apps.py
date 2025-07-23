@@ -48,10 +48,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     def test_cnv_failover_and_relocate_discovered_apps(
         self,
         request,
-        cnv_custom_storage_class,
+        custom_sc,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
-        custom_sc,
     ):
         """
         Tests to verify cnv application failover and Relocate with Discovered Apps
