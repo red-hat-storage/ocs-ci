@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     tier1,
@@ -18,9 +17,9 @@ from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 log = logging.getLogger(__name__)
 
 CEPH_OBJECT_STORE = OCP(
-    kind="CephObjectStore", namespace=config.ENV_DATA["cluster_namespace"]
+    kind="CephObjectStore", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
 )
-OCP_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+OCP_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 DEFAULT_READ_AFFINITY = "localize"
 
 
@@ -82,7 +81,9 @@ class TestRGWReadAffinityMode:
             step #4: Change current mode to "balanced" and validate it along with RGW pod status
             step #5: Change current mode to "default" and validate it along with RGW pod status
         """
-        rgw_pod_count = len(get_rgw_pods())
+        rgw_pod_count = len(
+            get_rgw_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        )
         # 1. Validate readAffinity mode is set to "localize" for RGW
         current_read_affinity = CEPH_OBJECT_STORE.data["items"][0]["spec"]["gateway"][
             "readAffinity"
