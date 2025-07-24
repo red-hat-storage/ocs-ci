@@ -54,7 +54,7 @@ class TestCnvDeviceReplace(E2ETest):
         admin_client,
     ):
         """
-        This test performs the behaviour of VMs and data integrity after Node or Device of cluster
+        Tests VM behavior and data integrity after device replacement in a cluster.
 
         1. Keep IO operations going on in the VMs. Make sure some snapshot and clones of the VMs present
         2. Keep vms in different states(power on, paused, stoped).
@@ -76,8 +76,9 @@ class TestCnvDeviceReplace(E2ETest):
         file_paths = ["/source_file.txt", "/new_file.txt"]
         source_csums = {}
         for vm_obj in all_vms:
-            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-            source_csums[vm_obj.name] = source_csum
+            source_csums[vm_obj.name] = run_dd_io(
+                vm_obj=vm_obj, file_path=file_paths[0], verify=True
+            )
 
         # Choose VMs randomaly
         vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
@@ -85,15 +86,17 @@ class TestCnvDeviceReplace(E2ETest):
         # Create Clone of VM
         logger.info(f"Cloning VM {vm_for_clone.name}...")
         cloned_vm = vm_clone_fixture(vm_for_clone, admin_client)
-        csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
-        source_csums[cloned_vm.name] = csum
+        source_csums[cloned_vm.name] = cal_md5sum_vm(
+            vm_obj=cloned_vm, file_path=file_paths[0]
+        )
         all_vms.append(cloned_vm)
 
         # Create a snapshot
         logger.info(f"Snapshot and restore VM {vm_for_snap.name}...")
         restored_vm = vm_snapshot_restore_fixture(vm_for_snap, admin_client)
-        csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
-        source_csums[vm_for_snap.name] = csum
+        source_csums[vm_for_snap.name] = cal_md5sum_vm(
+            vm_obj=restored_vm, file_path=file_paths[0]
+        )
 
         # Keep vms in different states (power on, paused, stoped)
         vm_for_stop.stop()
@@ -109,12 +112,12 @@ class TestCnvDeviceReplace(E2ETest):
         # Check VMs status
         assert (
             vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
-        ), "VM did not stop with preserved state after device replacement."
+        ), "Stopped VM state not preserved."
         logger.info("After device replacement, stopped VM preserved state.")
 
         assert (
             vm_for_snap.printableStatus() == constants.VM_PAUSED
-        ), "VM did not pause with preserved state after device replacement."
+        ), "Paused VM state not preserved."
         logger.info("After device replacement, paused VM preserved state.")
 
         logger.info("Starting vms")
