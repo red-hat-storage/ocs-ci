@@ -161,7 +161,7 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
         if not changed:
             return False
 
-        if self.is_versioning_enabled():
+        if self.is_versioning_enabled(bucket_name):
             return True
         else:
             logger.error("Failed to enable versioning - UI state did not change")
