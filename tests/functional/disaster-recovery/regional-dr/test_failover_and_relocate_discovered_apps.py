@@ -234,7 +234,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             ),
         )
 
-        if pvc_interface == constants.CEPHFILESYSTEM or "Mix":
+        if pvc_interface == (constants.CEPHFILESYSTEM or "Mix"):
             config.switch_to_cluster_by_name(secondary_cluster_name)
             dr_helpers.wait_for_replication_destinations_deletion(
                 rdr_workload.workload_namespace
@@ -245,7 +245,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 (
                     rdr_workload.workload_pvc_count
                     if not pvc_interface == "Mix"
-                    else rdr_workload.mix_workload_data["cephfs"]
+                    else rdr_workload.mix_workload_data
                 ),
                 rdr_workload.workload_namespace,
             )
@@ -318,7 +318,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 (
                     rdr_workload.workload_pvc_count
                     if not pvc_interface == "Mix"
-                    else rdr_workload.mix_workload_data["cephfs"]
+                    else rdr_workload.mix_workload_data
                 ),
                 rdr_workload.workload_namespace,
             )
