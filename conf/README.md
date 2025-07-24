@@ -155,6 +155,7 @@ anywhere else.
 * `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
 * `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
 * `ipv6` - ipv6 single stack deployment of OCP and ODF.
+* `konflux_build` - Set to True if build is made by Konflux build system.
 
 #### REPORTING
 
