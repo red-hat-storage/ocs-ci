@@ -751,6 +751,7 @@ RBD_NODEPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
 CEPHFS_CTRLPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
 RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
+ROOK_OPERATOR_PODS = "app.kubernetes.io/created-by=rook-ceph-operator"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -2296,6 +2297,23 @@ ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
+# GOSBench workload templates
+GOSBENCH_SERVER_DEPLOYMENT_YAML = os.path.join(
+    TEMPLATE_DIR, "workloads", "gosbench", "server-deployment.yaml.j2"
+)
+GOSBENCH_SERVER_SERVICE_YAML = os.path.join(
+    TEMPLATE_DIR, "workloads", "gosbench", "server-service.yaml.j2"
+)
+GOSBENCH_WORKER_DEPLOYMENT_YAML = os.path.join(
+    TEMPLATE_DIR, "workloads", "gosbench", "worker-deployment.yaml.j2"
+)
+GOSBENCH_CONFIGMAP_YAML = os.path.join(
+    TEMPLATE_DIR, "workloads", "gosbench", "configmap.yaml.j2"
+)
+GOSBENCH_SECRET_YAML = os.path.join(
+    TEMPLATE_DIR, "workloads", "gosbench", "secret.yaml.j2"
+)
+
 # Storage classes provisioners
 OCS_PROVISIONERS = [
     "openshift-storage.rbd.csi.ceph.com",
@@ -3594,5 +3612,22 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# chaos Tests constants
+KRKN_REPO_URL = "https://github.com/redhat-chaos/krkn.git"
+KRKN_VERSION = "v4.0.8"
+KRKN_DIR = os.path.join(DATA_DIR, "krkn")
+KRKN_CHAOS_DIR = os.path.join(TOP_DIR, "ocs_ci", "krkn_chaos")
+KRKN_SCENARIO_TEMPLATE_DIR = os.path.join(KRKN_CHAOS_DIR, "template")
+KRKN_GLOBAL_CONFIG_TEMPLATE = os.path.join(
+    KRKN_SCENARIO_TEMPLATE_DIR, "krkn_global_config.yaml.j2"
+)
+KRKN_CHAOS_SCENARIO_LIST = os.path.join(
+    KRKN_CHAOS_DIR, "config", "chaos_scenarios.yaml"
+)
+KRKN_CHAOS_SCENARIO_DIR = os.path.join(DATA_DIR, "krkn_scenarios")
+KRKN_OUTPUT_DIR = os.path.join(DATA_DIR, "krkn_output")
+KRKN_RUN_CMD = os.path.join(KRKN_DIR, "run_kraken.py")
+KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
 
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"

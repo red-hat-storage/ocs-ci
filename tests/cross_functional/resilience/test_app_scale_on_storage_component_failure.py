@@ -59,15 +59,29 @@ class TestAppScaleOnStorageComponentFailure:
                 "access_modes": [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO],
                 "config_file": lambda: create_temp_config_file(
                     vdbench_filesystem_config(
-                        rdpct=0,
                         size="10m",
                         depth=4,
                         width=5,
                         files=10,
-                        threads=10,
+                        default_threads=10,
                         elapsed=1200,
-                        interval=30,
+                        interval=60,
+                        default_rdpct=0,  # All writes
+                        precreate_then_run=True,
+                        precreate_elapsed=120,  # precreate duration (must be >= 2*interval)
+                        precreate_interval=60,  # precreate reporting interval - match main interval
+                        precreate_iorate="max",  # Ensure valid fwdrate for filesystem precreate
                         anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
+                        patterns=[
+                            {
+                                "name": "random_write",
+                                "fileio": "random",
+                                "rdpct": 0,
+                                "xfersize": "4k",
+                                "threads": 10,
+                                "skew": 0,
+                            }
+                        ],
                     )
                 ),
             },
@@ -78,7 +92,19 @@ class TestAppScaleOnStorageComponentFailure:
                 ],
                 "config_file": lambda: create_temp_config_file(
                     vdbench_block_config(
-                        threads=10, size="10g", elapsed=1200, interval=30
+                        threads=10,
+                        size="10g",
+                        elapsed=1200,
+                        interval=60,
+                        patterns=[
+                            {
+                                "name": "random_write",
+                                "rdpct": 0,  # 0% reads → all writes
+                                "seekpct": 100,  # random
+                                "xfersize": "4k",  # 4k block size
+                                "skew": 0,
+                            }
+                        ],
                     )
                 ),
             },

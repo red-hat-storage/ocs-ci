@@ -1,0 +1,130 @@
+chaos_scenarios:
+  - hog_scenarios:
+      - cpu-hog:
+          description: "Injects high CPU load on target pods"
+          jinja_template: kube/cpu-hog.yml
+          scenario_yaml_file: "cpu-hog.yml"
+      - memory-hog:
+          description: "Consumes excessive memory in target containers"
+          jinja_template: kube/memory-hog.yml
+          scenario_yaml_file: "memory-hog.yml"
+      - io-hog:
+          description: "Generates heavy disk I/O to simulate latency"
+          jinja_template: kube/io-hog.yml
+          scenario_yaml_file: "io-hog.yml"
+
+  # - application_outages_scenarios:
+  #     - app-outage:
+  #         jinja_template: scenarios/openshift/app_outage.yaml
+  #         description: "Simulates complete application unavailability"
+
+  - container_scenarios:
+      - container-kill:
+          jinja_template: scenarios/openshift/container_kill.yml.j2
+          description: "Kills specific containers in targeted pods"
+      - container-pause:
+          jinja_template: scenarios/openshift/container_pause.yml.j2
+          description: "Pauses containers temporarily to simulate hang scenarios"
+
+  - pod_network_scenarios:
+      - network-chaos-ingress:
+          jinja_template: scenarios/openshift/network_chaos_ingress.yml.j2
+          description: "Disrupts ingress network traffic to simulate outages"
+      - pod-egress-shaping:
+          jinja_template: scenarios/openshift/pod_egress_shaping.yml.j2
+          description: "Applies egress traffic shaping (latency, loss, bandwidth) to pods"
+      - pod-ingress-shaping:
+          jinja_template: scenarios/openshift/pod_ingress_shaping.yml.j2
+          description: "Applies ingress traffic shaping (latency, loss, bandwidth) to pods"
+      # - pod-network-outage:
+      #     jinja_template: scenarios/openshift/pod_network_outage.yml
+      #     description: "Introduces latency or packet loss at pod level"
+
+  - pod_disruption_scenarios:
+      - regex-openshift-pod-kill:
+          jinja_template: scenarios/openshift/regex_openshift_pod_kill.yml.j2
+          description: "Kills random pods in openshift-storage namespace using regex patterns"
+
+  # - pod_disruption_scenarios:
+  #     - etcd:
+  #         jinja_template: scenarios/openshift/etcd.yml
+  #         description: "Deletes etcd pods to test recovery behavior"
+  #     - regex-openshift-pod-kill:
+  #         jinja_template: scenarios/openshift/regex_openshift_pod_kill.yml
+  #         description: "Kills pods matching a regex pattern in OpenShift"
+  #     - prom-kill:
+  #         jinja_template: scenarios/openshift/prom_kill.yml
+  #         description: "Kills the Prometheus pod to test monitoring resiliency"
+  #     - openshift-apiserver:
+  #         jinja_template: scenarios/openshift/openshift-apiserver.yml
+  #         description: "Restarts the OpenShift API server"
+  #     - openshift-kube-apiserver:
+  #         jinja_template: scenarios/openshift/openshift-kube-apiserver.yml
+  #         description: "Disrupts the Kubernetes API server in OpenShift"
+
+  # - node_scenarios:
+  #     - aws-node-scenarios:
+  #         jinja_template: scenarios/openshift/aws_node_scenarios.yml
+  #         description: "Stops or reboots EC2 instances in AWS"
+  #     - vmware-node-scenarios:
+  #         jinja_template: scenarios/openshift/vmware_node_scenarios.yml
+  #         description: "Performs chaos actions on VMware-based nodes"
+  #     - ibmcloud-node-scenarios:
+  #         jinja_template: scenarios/openshift/ibmcloud_node_scenarios.yml
+  #         description: "Simulates node failures on IBM Cloud clusters"
+
+  # - time_scenarios:
+  #     - time-scenarios-example:
+  #         jinja_template: scenarios/openshift/time_scenarios_example.yml
+  #         description: "Manipulates system time to test time drift effects"
+
+  # - cluster_shut_down_scenarios:
+  #     - cluster-shut-down-scenario:
+  #         jinja_template: scenarios/openshift/cluster_shut_down_scenario.yml
+  #         description: "Gracefully shuts down the entire cluster for resiliency testing"
+
+  # - service_disruption_scenarios:
+  #     - regex-namespace:
+  #         jinja_template: scenarios/openshift/regex_namespace.yaml
+  #         description: "Disrupts services based on namespace regex"
+  #     - ingress-namespace:
+  #         jinja_template: scenarios/openshift/ingress_namespace.yaml
+  #         description: "Targets ingress-related services for disruption"
+
+  # - zone_outages_scenarios:
+  #     - zone-outage:
+  #         jinja_template: scenarios/openshift/zone_outage.yaml
+  #         description: "Simulates zone-level failure in cloud environments"
+
+  # - pvc_scenarios:
+  #     - pvc-scenario:
+  #         jinja_template: scenarios/openshift/pvc_scenario.yaml
+  #         description: "Applies stress or failure conditions to PVCs"
+
+  - network_chaos_scenarios:
+      - network-chaos:
+          jinja_template: scenarios/openshift/network_chaos.yml.j2
+          description: "General network chaos simulation at cluster level"
+
+  # - service_hijacking_scenarios:
+  #     - service-hijacking:
+  #         jinja_template: scenarios/kube/service_hijacking.yaml
+  #         description: "Intercepts service traffic to simulate hijacking"
+
+  # - syn_flood_scenarios:
+  #     - syn-flood:
+  #         jinja_template: scenarios/kube/syn_flood.yaml
+  #         description: "Launches SYN flood attack against services"
+
+  # - network_chaos_ng_scenarios:
+  #     - pod-network-filter:
+  #         jinja_template: scenarios/kube/pod-network-filter.yml
+  #         description: "Advanced eBPF-based pod network filtering"
+  #     - node-network-filter:
+  #         jinja_template: scenarios/kube/node-network-filter.yml
+  #         description: "Applies network filters at node level using eBPF"
+
+  # - kubevirt_vm_outage:
+  #     - kubevirt-vm-outage:
+  #         jinja_template: scenarios/kubevirt/kubevirt-vm-outage.yaml
+  #         description: "Simulates unavailability of KubeVirt-based VMs"
