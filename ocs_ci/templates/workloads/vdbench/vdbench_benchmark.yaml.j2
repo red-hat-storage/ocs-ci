@@ -1,0 +1,29 @@
+apiVersion: ripsaw.cloudbulldozer.io/v1alpha1
+kind: Benchmark
+metadata:
+  name: {{ benchmark_name | default("vdbench-benchmark") }}
+  namespace: {{ namespace | default("benchmark-operator") }}
+spec:
+  test_user: {{ test_user | default("vdbench-user") }}
+  clustername: {{ clustername | default("ocs-cluster") }}
+  {% if elasticsearch %}
+  elasticsearch:
+    server: {{ elasticsearch.server }}
+    port: {{ elasticsearch.port | default(9200) }}
+    scheme: {{ elasticsearch.scheme | default("http") }}
+  {% endif %}
+  es_index: {{ es_index | default("ripsaw-vdbench") }}
+  metadata_collection: {{ metadata_collection | default(true) }}
+  index_data: {{ index_data | default(true) }}
+  workload:
+    name: vdbench
+    args:
+      image: {{ image }}
+      storageclass: {{ storageclass }}
+      storagesize: {{ storagesize }}
+      {% if vdbench_config %}
+      vdbench_config: |
+{{ vdbench_config | indent(8, first=False) }}
+      {% endif %}
+      job_timeout: {{ job_timeout | default(3600) }}
+      run_timeout: {{ run_timeout | default(1800) }}

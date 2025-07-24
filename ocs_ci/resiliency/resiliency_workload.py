@@ -15,6 +15,7 @@ import fauxfactory
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.workloads.vdbench import VdbenchWorkload as VdbenchWorkloadImpl
 
 log = logging.getLogger(__name__)
 
@@ -277,23 +278,60 @@ class VdbenchWorkload(Workload):
         image (str): Container image to use.
     """
 
-    def __init__(self, namespace="default", image="vdbench-image:latest"):
-        super().__init__(namespace, image)
+    def __init__(self, pvc, vdbench_config_file, namespace=None, image=None):
+        super().__init__(namespace=namespace or pvc.namespace, image=image)
+        self.pvc = pvc
+        self.vdbench_config_file = vdbench_config_file
+
+        self.workload_impl = VdbenchWorkloadImpl(
+            pvc=pvc,
+            vdbench_config_file=vdbench_config_file,
+            namespace=namespace,
+            image=image,
+        )
+
+        log.info(
+            f"Initialized Vdbench workload for resiliency testing: {self.workload_impl.deployment_name}"
+        )
 
     def start_workload(self):
-        log.info(f"Starting Vdbench workload in namespace: {self.namespace}.")
+        """Start the Vdbench workload."""
+        log.info(f"Starting Vdbench workload in namespace: {self.namespace}")
+        self.workload_impl.start_workload()
 
     def scale_up_pods(self, desired_count):
-        log.info(f"Scaling up Vdbench pods to {desired_count}.")
+        """Scale up Vdbench pods to desired count."""
+        log.info(f"Scaling up Vdbench pods to {desired_count}")
+        self.workload_impl.scale_up_pods(desired_count)
 
     def scale_down_pods(self, desired_count):
-        log.info(f"Scaling down Vdbench pods to {desired_count}.")
+        """Scale down Vdbench pods to desired count."""
+        log.info(f"Scaling down Vdbench pods to {desired_count}")
+        self.workload_impl.scale_down_pods(desired_count)
 
     def stop_workload(self):
-        log.info("Stopping Vdbench workload.")
+        """Stop the Vdbench workload."""
+        log.info("Stopping Vdbench workload")
+        self.workload_impl.stop_workload()
 
     def cleanup_workload(self):
-        log.info("Cleaning up Vdbench workload.")
+        """Cleanup Vdbench workload resources."""
+        log.info("Cleaning up Vdbench workload")
+        self.workload_impl.cleanup_workload()
+
+    def pause_workload(self):
+        """Pause the Vdbench workload."""
+        log.info("Pausing Vdbench workload")
+        self.workload_impl.pause_workload()
+
+    def resume_workload(self):
+        """Resume the Vdbench workload."""
+        log.info("Resuming Vdbench workload")
+        self.workload_impl.resume_workload()
+
+    def get_workload_status(self):
+        """Get workload status."""
+        return self.workload_impl.get_workload_status()
 
 
 def workload_object(workload_type, namespace):
@@ -312,6 +350,7 @@ def workload_object(workload_type, namespace):
     """
     mapping = {
         "FIO": FioWorkload,
+        "VDBENCH": VdbenchWorkload,
     }
 
     if workload_type.upper() not in mapping:

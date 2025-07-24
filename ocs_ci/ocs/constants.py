@@ -3450,6 +3450,34 @@ LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
 
 # Auto-scaling Yaml files
 AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
+
+TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
+
+# Workload YAML files (around line 200-250)
+VDBENCH_DEPLOYMENT_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "deployment.yaml")
+VDBENCH_CONFIGMAP_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "configmap.yaml")
+VDBENCH_BENCHMARK_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "vdbench_benchmark.yaml")
+
+# Container images (around line 800-900)
+VDBENCH_DEFAULT_IMAGE = "quay.io/pakamble/vdbench:latest"
+
+# Workload types (around line 950-1000)
+VDBENCH_WORKLOAD_TYPE = "vdbench"
+VDBENCH_CONTAINER_NAME = "vdbench-container"
+VDBENCH_CONFIG_MOUNT_PATH = "/config"
+VDBENCH_DATA_MOUNT_PATH = "/vdbench-data"
+VDBENCH_BLOCK_DEVICE_PATH = "/dev/vdbench-device"
+
+# Default resource limits
+VDBENCH_DEFAULT_MEMORY_REQUEST = "1Gi"
+VDBENCH_DEFAULT_MEMORY_LIMIT = "2Gi"
+VDBENCH_DEFAULT_CPU_REQUEST = "500m"
+VDBENCH_DEFAULT_CPU_LIMIT = "1000m"
+
+# Timeout values
+VDBENCH_POD_READY_TIMEOUT = 300
+VDBENCH_WORKLOAD_COMPLETION_TIMEOUT = 3600
+VDBENCH_SCALING_TIMEOUT = 180
 # StorageAutoScaler Values
 PROMETHEUS_RECONCILE_TIMEOUT = 660
 
