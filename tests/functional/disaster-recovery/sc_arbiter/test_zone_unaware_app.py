@@ -16,7 +16,11 @@ from ocs_ci.helpers.helpers import (
     get_rbd_daemonset_csi_addons_node_object,
     unfence_node,
 )
-from ocs_ci.helpers.stretchcluster_helper import check_for_logwriter_workload_pods
+from ocs_ci.helpers.stretchcluster_helper import (
+    check_for_logwriter_workload_pods,
+    verify_data_corruption,
+    verify_data_loss,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
@@ -27,10 +31,8 @@ from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     Pod,
-    wait_for_pods_to_be_in_statuses,
     logger,
 )
-from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.utility.retry import retry
 
@@ -251,47 +253,12 @@ class TestZoneUnawareApps:
         log.info("All logwriter workload pods are running!")
 
         # check for any data loss through logwriter logs
-        assert sc_obj.check_for_data_loss(
-            constants.LOGWRITER_CEPHFS_LABEL
-        ), "[CephFS] Data is lost"
-        log.info("[CephFS] No data loss is seen")
-        assert sc_obj.check_for_data_loss(
-            constants.LOGWRITER_RBD_LABEL
-        ), "[RBD] Data is lost"
-        log.info("[RBD] No data loss is seen")
+        verify_data_loss(sc_obj)
 
         # check for data corruption through logreader logs
         sc_obj.cephfs_logreader_job.delete()
+        log.info(sc_obj.cephfs_logreader_pods)
         for pod in sc_obj.cephfs_logreader_pods:
             pod.wait_for_pod_delete(timeout=120)
         log.info("All old CephFS logreader pods are deleted")
-        pvc = get_pvc_objs(
-            pvc_names=[
-                sc_obj.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
-                    "volumes"
-                ][0]["persistentVolumeClaim"]["claimName"]
-            ],
-            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-        )[0]
-        logreader_workload_factory(
-            pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
-        )
-        sc_obj.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
-
-        wait_for_pods_to_be_in_statuses(
-            expected_statuses=constants.STATUS_COMPLETED,
-            pod_names=[pod.name for pod in sc_obj.cephfs_logreader_pods],
-            timeout=900,
-            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-        )
-        log.info("[CephFS] Logreader job pods have reached 'Completed' state!")
-
-        assert sc_obj.check_for_data_corruption(
-            label=constants.LOGREADER_CEPHFS_LABEL
-        ), "Data is corrupted for cephFS workloads"
-        log.info("No data corruption is seen in CephFS workloads")
-
-        assert sc_obj.check_for_data_corruption(
-            label=constants.LOGWRITER_RBD_LABEL
-        ), "Data is corrupted for RBD workloads"
-        log.info("No data corruption is seen in RBD workloads")
+        verify_data_corruption(sc_obj, logreader_workload_factory)
