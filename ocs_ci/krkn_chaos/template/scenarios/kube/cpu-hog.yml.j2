@@ -1,0 +1,21 @@
+duration: {{ duration | default(60) }}
+workers: {{ workers | default("''") }}  # Leave it empty for node CPU auto-detection
+hog-type: {{ hog_type | default("cpu") }}
+image: {{ image | default("quay.io/krkn-chaos/krkn-hog") }}
+namespace: {{ namespace | default("default") }}
+cpu-load-percentage: {{ cpu_load_percentage | default(90) }}
+cpu-method: {{ cpu_method | default("all") }}
+{% if node_name %}
+node-name: "{{ node_name }}"  # Uncomment to target a specific node by name
+{% endif %}
+{% if node_selector %}
+node-selector:
+{% for key, value in node_selector.items() %}
+  {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+number-of-nodes: {{ number_of_nodes | default(1) }}
+taints:
+{% for taint in taints | default([]) %}
+  - "{{ taint }}"
+{% endfor %}

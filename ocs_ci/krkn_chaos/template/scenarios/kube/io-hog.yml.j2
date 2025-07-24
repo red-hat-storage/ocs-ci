@@ -1,0 +1,26 @@
+duration: {{ duration | default(30) }}
+workers: {{ workers | default("''") }}  # Leave it empty for node auto-detection
+hog-type: {{ hog_type | default("io") }}
+image: {{ image | default("quay.io/krkn-chaos/krkn-hog") }}
+namespace: {{ namespace | default("default") }}
+io-block-size: {{ io_block_size | default("1m") }}
+io-write-bytes: {{ io_write_bytes | default("1g") }}
+io-target-pod-folder: {{ io_target_pod_folder | default("/hog-data") }}
+{% if node_name %}
+node-name: "{{ node_name }}"  # Uncomment to target a specific node by name
+{% endif %}
+io-target-pod-volume:
+  name: {{ io_target_pod_volume.name }}
+  hostPath:
+    path: {{ io_target_pod_volume.hostPath.path }}
+{% if node_selector %}
+node-selector:
+{% for key, value in node_selector.items() %}
+  {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+number-of-nodes: {{ number_of_nodes | default("''") }}
+taints:
+{% for taint in taints | default([]) %}
+  - "{{ taint }}"
+{% endfor %}
