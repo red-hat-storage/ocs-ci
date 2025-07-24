@@ -86,6 +86,7 @@ def retry(
                         else:
                             raise
                     exception_summary.add(repr(e))
+                    logger.info(f"Retrying in {mdelay} seconds...")
                     time.sleep(mdelay)
                     mtries -= 1
                     mdelay = min(
