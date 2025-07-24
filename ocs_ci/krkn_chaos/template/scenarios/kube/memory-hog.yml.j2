@@ -1,0 +1,25 @@
+duration: {{ duration | default(60) }}
+workers: '{{ workers | default("") }}' # leave it empty '' node cpu auto-detection
+hog-type: {{ hog_type | default("memory") }}
+image: {{ image | default("quay.io/krkn-chaos/krkn-hog") }}
+namespace: {{ namespace | default("default") }}
+memory-vm-bytes: {{ memory_vm_bytes | default("90%") }}
+{%- if node_name %}
+# node-name: "{{ node_name }}" # Uncomment to target a specific node by name
+{%- else %}
+# node-name: "worker-0" # Uncomment to target a specific node by name
+{%- endif %}
+{%- if node_selector %}
+{%- if node_selector is mapping %}
+node-selector: "{% for key, value in node_selector.items() %}{{ key }}={{ value }}{% endfor %}"
+{%- else %}
+node-selector: "{{ node_selector }}"
+{%- endif %}
+{%- else %}
+node-selector: "node-role.kubernetes.io/worker="
+{%- endif %}
+number-of-nodes: '{{ number_of_nodes | default("") }}'
+{% if taints and taints|length > 0 %}taints:
+{%- for taint in taints %}
+  - "{{ taint }}"
+{%- endfor %}{% else %}taints: [] #example ["node-role.kubernetes.io/master:NoSchedule"]{% endif %}
