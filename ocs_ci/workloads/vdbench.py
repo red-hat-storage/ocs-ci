@@ -294,6 +294,8 @@ class VdbenchWorkload:
                     )
                     if "size" in sd:
                         line += f",size={sd['size']}"
+                    if "open_flags" in sd:
+                        line += f",openflags={sd['open_flags']}"
                 else:
                     # Block device definition
                     line = f"sd=sd{id_},lun={sd['lun']}"
@@ -303,6 +305,12 @@ class VdbenchWorkload:
                         line += f",threads={sd['threads']}"
                     if "openflags" in sd:
                         line += f",openflags={sd['openflags']}"
+                    if "open_flags" in sd:
+                        line += f",openflags={sd['open_flags']}"
+                    if "align" in sd and sd["align"]:  # Only include if not empty
+                        line += f",align={sd['align']}"
+                    if "offset" in sd and sd["offset"]:  # Only include if not empty
+                        line += f",offset={sd['offset']}"
                 vdbench_lines.append(line)
             vdbench_lines.append("")
 
@@ -310,28 +318,60 @@ class VdbenchWorkload:
         if "workload_definitions" in config:
             for wd in config["workload_definitions"]:
                 id_ = wd["id"]
+
+                # Handle both sd_id (block) and fsd_id (filesystem) references
+                storage_ref_id = None
+                if "sd_id" in wd:
+                    storage_ref_id = wd["sd_id"]
+                elif "fsd_id" in wd:
+                    storage_ref_id = wd["fsd_id"]
+                else:
+                    raise KeyError(
+                        "Workload definition must contain either 'sd_id' or 'fsd_id'"
+                    )
+
+                # Determine if this references a filesystem storage definition
                 is_fsd = any(
-                    s.get("fsd", False) and s["id"] == wd["sd_id"]
+                    s.get("fsd", False) and s["id"] == storage_ref_id
                     for s in config["storage_definitions"]
                 )
                 prefix = "fwd" if is_fsd else "wd"
                 storage = "fsd" if is_fsd else "sd"
 
-                line = f"{prefix}={prefix}{id_},{storage}={storage}{wd['sd_id']}"
+                line = f"{prefix}={id_},{storage}={storage}{storage_ref_id}"
 
                 # For file workloads
                 if is_fsd:
-                    # If rdpct is provided, fileio must be random
-                    if "rdpct" in wd:
+                    # Handle fileio parameter - if rdpct is provided and fileio is not specified, default to random
+                    fileio_value = None
+                    if "fileio" in wd:
+                        fileio_value = wd["fileio"]
+                        line += f",fileio={fileio_value}"
+                    elif "rdpct" in wd:
+                        fileio_value = "random"
                         line += ",fileio=random"
-                        line += f",rdpct={wd['rdpct']}"
-                    # Append allowed keys for fwd
-                    for key in ["xfersize", "openflags", "threads"]:
+
+                    # Handle filesystem workload parameters - exclude rdpct for sequential fileio
+                    for key in ["rdpct", "xfersize", "threads", "skew"]:
                         if key in wd:
+                            # Skip rdpct if fileio is sequential (they are mutually exclusive)
+                            if key == "rdpct" and fileio_value == "sequential":
+                                continue
                             line += f",{key}={wd[key]}"
+
+                    # Handle openflags if present
+                    if "openflags" in wd:
+                        line += f",openflags={wd['openflags']}"
                 else:
                     # For block workloads, allow all fields
-                    for key in ["rdpct", "seekpct", "xfersize", "openflags", "threads"]:
+                    for key in [
+                        "rdpct",
+                        "seekpct",
+                        "xfersize",
+                        "openflags",
+                        "threads",
+                        "skew",
+                    ]:
                         if key in wd:
                             line += f",{key}={wd[key]}"
 
@@ -342,18 +382,34 @@ class VdbenchWorkload:
         if "run_definitions" in config:
             for rd in config["run_definitions"]:
                 id_ = rd["id"]
-                wd_id = rd["wd_id"]
-                is_fwd = any(f"fwd=fwd{wd_id}" in line for line in vdbench_lines)
+
+                # Handle both wd_id (block) and fwd_id (filesystem) references
+                workload_ref_id = None
+                if "wd_id" in rd:
+                    workload_ref_id = rd["wd_id"]
+                    is_fwd = False
+                elif "fwd_id" in rd:
+                    workload_ref_id = rd["fwd_id"]
+                    is_fwd = True
+                else:
+                    raise KeyError(
+                        "Run definition must contain either 'wd_id' or 'fwd_id'"
+                    )
+
                 prefix = "fwd" if is_fwd else "wd"
                 rate_key = "fwdrate" if is_fwd else "iorate"
 
-                line = f"rd=rd{id_},{prefix}={prefix}{wd_id}"
+                line = f"rd=rd{id_},{prefix}={workload_ref_id}"
 
                 for key in ["elapsed", "interval"]:
                     if key in rd:
                         line += f",{key}={rd[key]}"
                 if "iorate" in rd:
                     line += f",{rate_key}={rd['iorate']}"
+
+                # Handle additional filesystem-specific parameters
+                if "format" in rd:
+                    line += f",format={rd['format']}"
 
                 vdbench_lines.append(line)
 
