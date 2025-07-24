@@ -72,44 +72,39 @@ class TestCnvDeviceReplace(E2ETest):
         """
 
         all_vms = self.vm_objs_def + self.vm_objs_aggr
-
         file_paths = ["/source_file.txt", "/new_file.txt"]
-        source_csums = {}
-        for vm_obj in all_vms:
-            source_csums[vm_obj.name] = run_dd_io(
-                vm_obj=vm_obj, file_path=file_paths[0], verify=True
-            )
+        # Initialize checksums
+        source_csums = {
+            vm.name: run_dd_io(vm, file_paths[0], verify=True) for vm in all_vms
+        }
 
-        # Choose VMs randomaly
+        # Randomly select VMs for operations
         vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
 
-        # Create Clone of VM
-        logger.info(f"Cloning VM {vm_for_clone.name}...")
-        cloned_vm = vm_clone_fixture(vm_for_clone, admin_client)
-        source_csums[cloned_vm.name] = cal_md5sum_vm(
-            vm_obj=cloned_vm, file_path=file_paths[0]
-        )
-        all_vms.append(cloned_vm)
+        # Create clone and snapshot, update checksums
+        for vm in [vm_for_clone, vm_for_snap]:
+            vm_obj = (
+                vm_clone_fixture(vm, admin_client)
+                if vm == vm_for_clone
+                else vm_snapshot_restore_fixture(vm, admin_client)
+            )
 
-        # Create a snapshot
-        logger.info(f"Snapshot and restore VM {vm_for_snap.name}...")
-        restored_vm = vm_snapshot_restore_fixture(vm_for_snap, admin_client)
-        source_csums[vm_for_snap.name] = cal_md5sum_vm(
-            vm_obj=restored_vm, file_path=file_paths[0]
-        )
+            # Use cal_md5sum_vm here
+            source_csums[vm_obj.name] = cal_md5sum_vm(vm_obj, file_paths[0])
+            all_vms.append(vm_obj)
 
         # Keep vms in different states (power on, paused, stoped)
         vm_for_stop.stop()
         vm_for_snap.pause()
 
-        logger.info("Start Replacing the device")
+        # Perform device replacement
         osd_operations.osd_device_replacement(nodes)
 
         logger.info("Verify osd encryption")
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
-        # Check VMs status
+        # Check VMs status post-replacement
         assert (
             vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
         ), "Stopped VM state not preserved."
@@ -124,14 +119,11 @@ class TestCnvDeviceReplace(E2ETest):
         vm_for_stop.start()
         vm_for_snap.unpause()
 
+        # Combined IO operations and data integrity check
         for vm_obj in all_vms:
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
-
-        # Perform post device replacement data integrity check
-        for vm_obj in all_vms:
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
-            assert source_csums[vm_obj.name] == new_csum, (
-                f"ERROR: Failed data integrity before replacing device and after replacing the device "
-                f"for VM '{vm_obj.name}'."
-            )
+            assert (
+                source_csums[vm_obj.name] == new_csum
+            ), f"Data integrity failed for VM '{vm_obj.name}'."
             vm_obj.stop()
