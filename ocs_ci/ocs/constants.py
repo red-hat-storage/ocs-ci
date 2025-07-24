@@ -3490,3 +3490,8 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# chaos Tests constants
+KRKN_REPO_URL = "https://github.com/redhat-chaos/krkn.git"
+KRKN_DIR = os.path.join(DATA_DIR, "krkn")
+KRKN_GLOBAL_CONFIG = os.path.join(KRKN_DIR, "config.yaml.template")
