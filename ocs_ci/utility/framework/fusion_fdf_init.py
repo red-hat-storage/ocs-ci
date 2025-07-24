@@ -171,7 +171,6 @@ class Initializer(object):
         )
 
         # ReportPortal properties
-        props["rp_launch_name"] = reporting.get_rp_launch_name()
         props["rp_launch_description"] = reporting.get_rp_launch_description()
         props["rp_launch_url"] = config.REPORTING.get("rp_launch_url")
         attributes = reporting.get_rp_launch_attributes()
@@ -339,6 +338,9 @@ def add_post_deployment_props(test_suite: TestSuite):
         value = config.DEPLOYMENT.get(key)
         if value:
             test_suite.add_property(key, value)
+
+    # ReportPortal
+    test_suite.add_property("rp_launch_name", reporting.get_rp_launch_name())
 
 
 class TestCaseWithProps(TestCase):
