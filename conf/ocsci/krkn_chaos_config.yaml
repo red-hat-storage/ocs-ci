@@ -1,0 +1,81 @@
+# This file contains the parameters required for Krkn chaos testing
+# Configure which workload type to use during chaos testing
+
+ENV_DATA:
+  krkn_config:
+    # Workload types to use for chaos testing (can be a single workload or list of workloads)
+    # Supported values:
+    #   - VDBENCH: Traditional VDBENCH workloads on CephFS and RBD
+    #   - CNV_WORKLOAD: CNV-based virtual machine workloads with FIO inside VMs
+    #   - GOSBENCH: S3 performance testing workload against NooBaa/RGW
+    #   - FIO: FIO-based workloads (future support)
+    #
+    # Examples:
+    #   Single workload:
+    #     workloads: VDBENCH
+    #   Multiple workloads:
+    #     workloads:
+    #       - VDBENCH
+    #       - GOSBENCH
+    #   All workloads:
+    #     workloads:
+    #       - VDBENCH
+    #       - CNV_WORKLOAD
+    #       - GOSBENCH
+    workloads:
+      - VDBENCH
+      - GOSBENCH
+
+    # Enable/disable workload execution during chaos testing (default: true)
+    # When set to false, chaos scenarios will run without any workloads
+    # This is useful for:
+    #   - Pure chaos testing without workload overhead
+    #   - Faster test execution
+    #   - Testing cluster resilience without application load
+    #   - Debugging chaos scenarios in isolation
+    # NOTE: Hog scenarios work best WITH workloads to create realistic stress conditions
+    run_workload: true
+
+    # Enable/disable post-chaos data verification (default: true)
+    # When enabled, runs verification after chaos scenarios complete
+    # to detect data corruption. Verification behavior per workload:
+    #   - VDBENCH: Runs VDBENCH forx=verify to check data integrity
+    #   - GOSBENCH: Skips verification (not applicable for S3 benchmarks)
+    #   - CNV_WORKLOAD: Skips verification (not applicable)
+    #   - FIO: Verification method TBD
+    enable_verification: true
+
+    # Additional workload-specific configuration can be added here
+    # VDBENCH configuration
+    # vdbench_config:
+    #   threads: 10
+    #   size: "10g"
+    #   elapsed: 600
+    #   verification_threads: 5
+    #   verification_timeout: 600
+
+    # CNV workload configuration
+    # cnv_config:
+    #   vm_count: 4
+    #   encrypted: false
+
+    # GOSBENCH configuration
+    gosbench_config:
+      worker_replicas: 1              # Single worker for longer duration
+      benchmark_duration: 2700        # 45 minutes total (900s per stage)
+      object_size: "4MiB"             # Larger objects for more realistic load
+      object_count: 100000            # Many more objects (400GB total)
+      concurrency: 2                  # Very low concurrency for extended runtime
+      # Note: GOSBENCH uses separate server and worker images
+      server_image: "quay.io/mulbc/goroom-server:latest"
+      worker_image: "quay.io/mulbc/goroom-worker:latest"
+      server_resources:
+        memory_request: "256Mi"
+        memory_limit: "512Mi"
+        cpu_request: "100m"
+        cpu_limit: "500m"
+      worker_resources:
+        memory_request: "128Mi"
+        memory_limit: "256Mi"
+        cpu_request: "50m"
+        cpu_limit: "200m"
