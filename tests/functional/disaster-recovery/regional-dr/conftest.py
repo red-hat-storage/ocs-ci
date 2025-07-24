@@ -30,7 +30,7 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)
 def check_subctl_cli():
     # Check whether subctl cli is present
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
@@ -69,9 +69,8 @@ def cnv_custom_storage_class(request, storageclass_factory):
                 pool.ocp.wait_for_delete(pool.name)
                 log.info(f"Deleted pool {pool.name}")
             except Exception as e:
-                log.warning(f"Failed to delete pool {pool.name}: {e}")
+                log.error(f"Failed to delete pool {pool.name}: {e}")
         config.reset_ctx()
-        log.info("Custom Pool deleted successfully")
 
     request.addfinalizer(pool_finalizer)
 
@@ -86,7 +85,7 @@ def cnv_custom_storage_class(request, storageclass_factory):
             )
             pool_instances.append((cluster, pool))
 
-        # Create or verify SC in all clusters
+            # Create or verify SC in all clusters
             existing_sc_list = get_all_storageclass()
             if sc_name in existing_sc_list:
                 log.info(f"Storage class {sc_name} already exists")
@@ -111,6 +110,3 @@ def cnv_custom_storage_class(request, storageclass_factory):
         log.error(f"Error during setup of cnv_custom_storage_class fixture: {e}")
         all_clusters_success = False
         yield all_clusters_success
-
-
-
