@@ -145,6 +145,7 @@ anywhere else.
   useful for enforcing force deploy steps only.
 * `sts_enabled` - Enable STS deployment functionality.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
+* `konflux_build` - Set to True if build is made by Konflux build system.
 
 #### REPORTING
 
