@@ -114,7 +114,7 @@ class TestMonAndOSDFailures:
         self.verify_vm_status()
 
         # scale the deployment back to 1
-        logging.info(f"Scaling up mons {','.join(self.mons)}")
+        logger.info(f"Scaling up mons {','.join(self.mons)}")
         for mon in self.mons:
             modify_deployment_replica_count(mon, 1)
 
@@ -142,7 +142,7 @@ class TestMonAndOSDFailures:
         self.verify_vm_status()
 
         # scale the deployment back to 1
-        logging.info(f"Scaling up mons {','.join(self.mons)}")
+        logger.info(f"Scaling up mons {','.join(self.mons)}")
         for mon in self.mons:
             modify_deployment_replica_count(mon, 1)
 
