@@ -66,18 +66,30 @@ class TestBucketDeletion(MCGTest):
             pytest.param(
                 *[
                     "OC",
-                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"azure": [(1, None)]},
+                    },
                 ],
                 marks=[tier1],
             ),
             pytest.param(
-                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
+                *[
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"gcp": [(1, None)]},
+                    },
+                ],
                 marks=[tier1],
             ),
             pytest.param(
                 *[
                     "CLI",
-                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"ibmcos": [(1, None)]},
+                    },
                 ],
                 marks=[tier1, skipif_fips_enabled],
             ),
@@ -127,6 +139,9 @@ class TestBucketDeletion(MCGTest):
                     err
                 ), "Couldn't verify delete non-empty OBC with s3"
                 logger.info(f"Delete non-empty OBC {bucketname} failed as expected")
+            except Exception as e:
+                logger.info(f"*** Catch {e}")
+                logger.info(f"*** Catch string is {str(e)}")
 
     @pytest.mark.parametrize(
         argnames="interface",
@@ -164,7 +179,7 @@ class TestBucketDeletion(MCGTest):
                 cli_del = mcg_obj.exec_mcg_cmd(f"obc delete {name}")
                 assert cli_del, "Unexpected cli delete non-exist OBC succeed"
             except CommandFailed as err:
-                assert "Could not delete OBC" in str(
+                assert "Could not delete. OBC" in str(
                     err
                 ), "Couldn't verify delete non-exist OBC with cli"
         logger.info(f"Delete non-exist OBC {name} failed as expected")
