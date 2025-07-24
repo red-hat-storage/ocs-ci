@@ -53,7 +53,7 @@ def get_mcg_obj(bucket):
         return MCG()
 
 
-@retry(CommandFailed, tries=3, delay=60, backoff=1)
+@retry(CommandFailed, tries=5, delay=10, backoff=1)
 def sync_object_directory_with_retry(
     pod_obj,
     src,
@@ -499,7 +499,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
         "\n"
     )
 
-    @retry(NoobaaHealthException, tries=10, delay=60)
+    @retry(NoobaaHealthException, tries=20, delay=10)
     def check_noobaa_health():
 
         while True:
@@ -518,9 +518,9 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
 
             time.sleep(300)
 
-    @retry(CephHealthException, tries=10, delay=60)
+    @retry((CommandFailed, CephHealthException), tries=20, delay=10)
     def check_ceph_health():
-
+        ceph_cluster = CephCluster()
         while True:
 
             if ceph_cluster.get_ceph_health() == constants.CEPH_HEALTH_ERROR:
@@ -538,7 +538,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
 
             time.sleep(300)
 
-    @retry(CommandFailed, tries=10, delay=60)
+    @retry(CommandFailed, tries=20, delay=10)
     def check_noobaa_db_size():
 
         while True:
@@ -571,6 +571,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
                 break
             time.sleep(600)
 
+    @retry(Exception, tries=10, delay=10)
     def check_prometheus_alerts():
 
         while True:
@@ -605,6 +606,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
                 break
             time.sleep(300)
 
+    @retry(CommandFailed, tries=10, delay=10)
     def check_noobaa_pod_resource_utilization():
 
         while True:

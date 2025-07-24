@@ -16,6 +16,9 @@ from ocs_ci.helpers.mcg_stress_helper import (
     run_background_cluster_checks,
     induce_noobaa_failures,
 )
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.retry import retry
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,10 @@ class TestNoobaaUnderStress:
 
     @pytest.mark.parametrize(
         argnames=["with_failure", "delay"],
-        argvalues=[pytest.param(True, 300), pytest.param(False, 300)],
+        argvalues=[
+            pytest.param(True, 1800),
+            pytest.param(False, 300),
+        ],
     )
     def test_noobaa_under_stress(
         self,
@@ -46,13 +52,14 @@ class TestNoobaaUnderStress:
         delay,
     ):
         """
-        Stress Noobaa by performing bulk s3 operations. This consists mainly 3 stages
+        Stress Noobaa by performing bulk s3 operations under both disruptive and non-disruptive
+        situations. This consists mainly 3 stages
         mentioned below
             1. Base setup: Here we create the buckets of all possible types and then
             load them with million objects in deep directory
             2. S3 bulk operations: Here we perform various s3 operations such as list,
             download, delete, metadata intense op etc concurrently on each of the bucket
-            respectively.
+            respectively. We also induce noobaa specific failure if the test is disruptive.
             3. At the end delete objects from all the bucket in batches
 
         """
@@ -76,6 +83,13 @@ class TestNoobaaUnderStress:
             event=bg_event,
             threading_lock=threading_lock,
         )
+
+        # In-case of disruptive testing,we need to make sure we attempt
+        # some re-tries
+        if with_failure:
+            tries = 8
+        else:
+            tries = 1
 
         try:
             # Fetch buckets created for stress testing
@@ -126,7 +140,9 @@ class TestNoobaaUnderStress:
                 bucket = random.choice(buckets)
                 futures_obj.append(
                     executor.submit(
-                        run_noobaa_metadata_intense_ops,
+                        retry(Exception, tries=tries, delay=10)(
+                            run_noobaa_metadata_intense_ops
+                        ),
                         mcg_obj_session,
                         nb_stress_cli_pod_2,
                         bucket_factory,
@@ -143,7 +159,9 @@ class TestNoobaaUnderStress:
                 bucket = random.choice(buckets)
                 futures_obj.append(
                     executor.submit(
-                        delete_objs_from_bucket,
+                        retry(CommandFailed, tries=tries, delay=10)(
+                            delete_objs_from_bucket
+                        ),
                         nb_stress_cli_pod_2,
                         bucket,
                         prev_iteration=current_iteration - 1,
@@ -158,7 +176,7 @@ class TestNoobaaUnderStress:
                 bucket = random.choice(buckets)
                 futures_obj.append(
                     executor.submit(
-                        list_objs_from_bucket,
+                        retry(Exception, tries=tries, delay=10)(list_objs_from_bucket),
                         bucket,
                         prev_iteration=current_iteration - 1,
                         event=event,
@@ -172,7 +190,9 @@ class TestNoobaaUnderStress:
                     bucket = random.choice(buckets)
                 futures_obj.append(
                     executor.submit(
-                        download_objs_from_bucket,
+                        retry(CommandFailed, tries=tries, delay=10)(
+                            download_objs_from_bucket
+                        ),
                         nb_stress_cli_pod_2,
                         bucket,
                         stress_test_directory_setup.result_dir,
