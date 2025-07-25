@@ -645,9 +645,13 @@ class OCSUpgrade(object):
             log_step("Sleeping 60 seconds after applying tag mirror set.")
             time.sleep(60)
             log_step("Waiting max 30 mins for master MCP to get updated")
-            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/master")
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
+            )
             log_step("Waiting max 30 mins for worker MCP to get updated")
-            exec_cmd("oc wait --for=condition=Updated --timeout=30m mcp/worker")
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
+            )
             return
         if not self.upgrade_in_current_source:
             disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
