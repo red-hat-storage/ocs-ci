@@ -117,6 +117,7 @@ def get_rp_launch_description():
     return description
 
 
+@config.run_for_all_clusters
 def update_live_must_gather_image():
     """
     Update live must gather image in the config.
