@@ -87,7 +87,7 @@ class TestNetSplit:
         nodes,
         zones,
         duration,
-        init_sanity,
+        node_restart_teardown,
         reset_conn_score,
         cnv_workload,
         setup_cnv,
@@ -177,6 +177,10 @@ class TestNetSplit:
         retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(
             vm_obj, md5sum_before
         )
+
+        # stop the VM
+        vm_obj.stop()
+        logger.info("Stoped the VM successfully")
 
         # get all the running logwriter pods
         sc_obj.get_logwriter_reader_pods(

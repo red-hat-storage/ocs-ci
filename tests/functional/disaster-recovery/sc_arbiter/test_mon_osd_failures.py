@@ -136,6 +136,10 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
             vm_obj, md5sum_before
         )
 
+        # stop the VM
+        vm_obj.stop()
+        logger.info("Stoped the VM successfully")
+
     request.addfinalizer(finalizer)
 
 

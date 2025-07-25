@@ -84,7 +84,7 @@ class TestZoneUnawareApps:
     )
     def test_zone_shutdowns(
         self,
-        init_sanity,
+        node_restart_teardown,
         remove_taint_unfence_teardown,
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,

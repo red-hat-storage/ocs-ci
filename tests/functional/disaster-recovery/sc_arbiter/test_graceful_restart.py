@@ -1,42 +1,47 @@
 import logging
-import random
 import time
-
-from datetime import datetime, timezone
 
 from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
-    tier2,
+    tier1,
     polarion_id,
     turquoise_squad,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     check_for_logwriter_workload_pods,
+    verify_vm_workload,
     verify_data_loss,
     verify_data_corruption,
-    verify_vm_workload,
+)
+from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+from ocs_ci.ocs.node import (
+    gracefully_reboot_nodes,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import drain_nodes, schedule_nodes
-from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
+)
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+)
+from ocs_ci.utility.retry import retry
 
 
 log = logging.getLogger(__name__)
 
 
-@tier2
+@tier1
 @turquoise_squad
 @stretchcluster_required
-class TestNodeDrain:
+class TestGracefulRestart:
 
-    zones = constants.DATA_ZONE_LABELS
-
-    @polarion_id("OCS-5056")
-    def test_zone_node_drain(
+    @polarion_id("OCS-5048")
+    def test_graceful_restart(
         self,
-        reset_conn_score,
+        node_restart_teardown,
         node_drain_teardown,
+        reset_conn_score,
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
@@ -45,13 +50,12 @@ class TestNodeDrain:
         setup_cnv,
     ):
         """
-        Drain the nodes of a data zone while the logwriter and cnv workloads
-        are running in background
+        Test cluster node graceful restart while the logwriter and VM workloads are Running
 
         Steps:
         - Deploy the ceph-fs & rbd workloads
         - Deploy VM workload with some data
-        - Drain the nodes of randomly selected data zone
+        - Gracefully reboot the nodes
         - Verify VM workload data integrity
         - Verify ceph-fs & rbd workloads data integrity
 
@@ -59,7 +63,7 @@ class TestNodeDrain:
 
         sc_obj = StretchCluster()
 
-        # Run the logwriter cephFs and RBD workloads
+        # Run the logwriter cephFs workloads
         log.info("Running logwriter cephFS and RBD workloads")
         (
             sc_obj.cephfs_logwriter_dep,
@@ -80,32 +84,23 @@ class TestNodeDrain:
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
         log.info("All logwriter workload pods are running successfully")
 
-        # randomly select a zone to drain the nodes from
-        zone = random.choice(self.zones)
-        nodes_to_drain = sc_obj.get_nodes_in_zone(zone)
+        gracefully_reboot_nodes()
+        log.info("Gracefully restarted all the cluster nodes")
 
-        # drain nodes in the selected zone
-        start_time = datetime.now(timezone.utc)
-        drain_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
-        time.sleep(300)
-        schedule_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
-        end_time = datetime.now(timezone.utc)
+        log.info("a moment to breathe!")
+        time.sleep(60)
 
-        # verify the io after all the nodes are scheduled
-        sc_obj.get_logwriter_reader_pods(
-            label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
+        # wait for all storage pods to be running or completed
+        retry(CommandFailed, tries=5, delay=10)(wait_for_pods_to_be_running)(
+            timeout=600
         )
-        sc_obj.get_logwriter_reader_pods(
-            label=constants.LOGREADER_CEPHFS_LABEL, exp_num_replicas=0
-        )
-        sc_obj.get_logwriter_reader_pods(
-            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
-        )
-
-        sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
         # check vm data written before the failure for integrity
-        verify_vm_workload(vm_obj, md5sum_before)
+        log.info("Waiting for VM SSH connectivity!")
+        retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
+        retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(
+            vm_obj, md5sum_before
+        )
 
         # stop the VM
         vm_obj.stop()
@@ -113,11 +108,9 @@ class TestNodeDrain:
 
         # check for any data loss
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
-
-        # check for any data loss through logwriter logs
         verify_data_loss(sc_obj)
 
-        # check for data corruption through logreader logs
+        # check for data corruption
         sc_obj.cephfs_logreader_job.delete()
         log.info(sc_obj.cephfs_logreader_pods)
         for pod in sc_obj.cephfs_logreader_pods:

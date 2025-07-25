@@ -150,6 +150,10 @@ class TestAddCapacityStretchCluster:
         # check vm data written after the failure for integrity
         verify_vm_workload(vm_obj, md5sum_before)
 
+        # stop the VM
+        vm_obj.stop()
+        logger.info("Stoped the VM successfully")
+
         sc_obj.cephfs_logreader_job.delete()
         logger.info(sc_obj.cephfs_logreader_pods)
         for pod in sc_obj.cephfs_logreader_pods:
