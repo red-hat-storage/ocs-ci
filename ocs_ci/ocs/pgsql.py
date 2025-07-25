@@ -162,7 +162,6 @@ class Postgresql(BenchmarkOperator):
             # Confirm that expected pgbench pods are spinned
             log.info("Searching the pgbench pods by its name pattern")
             timeout = timeout if timeout else 300
-            log.info("Inside fix")
             for pgbench_pods in TimeoutSampler(
                 timeout,
                 replicas,

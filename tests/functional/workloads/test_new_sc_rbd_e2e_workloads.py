@@ -67,7 +67,7 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
             replicas=1,
             clients=1,
             transactions=100,
-            timeout=300,
+            timeout=100,
             sc_name=sc_obj.name,
             iterations=1,
         )
