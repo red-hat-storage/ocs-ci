@@ -3088,18 +3088,7 @@ def get_ocs_olm_operator_tags(limit=100):
     all_tags = []
     page = 1
     while True:
-        log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
-        resp = requests.get(
-            constants.OPERATOR_CS_QUAY_API_QUERY.format(
-                tag_limit=limit,
-                image=image,
-                page=page,
-            ),
-            headers=headers,
-        )
-        if not resp.ok:
-            raise requests.RequestException(resp.json())
-        tags = resp.json()["tags"]
+        tags = query_quay_for_operator_tags(image, headers, limit, page)
         if len(tags) == 0:
             log.info("No more tags to retrieve")
             break
@@ -3107,6 +3096,41 @@ def get_ocs_olm_operator_tags(limit=100):
         all_tags.extend(tags)
         page += 1
     return all_tags
+
+
+@retry(requests.RequestException, 10, 30, 1)
+def query_quay_for_operator_tags(
+    image: str, headers: dict, limit: int, page: int
+) -> list:
+    """
+    Query quay tags for the specified image.
+
+    Args:
+        image (str): Image to query tags for
+        headers (dict): Request headers
+        limit (int): Maximum number of tags to query
+        page (int): Which page of results to return
+
+    Raises:
+        requests.RequestException: If we do not receive an ok response from quay after several retries.
+
+    Returns:
+        list: list of tags queried from quay
+
+    """
+    log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+    resp = requests.get(
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(
+            tag_limit=limit,
+            image=image,
+            page=page,
+        ),
+        headers=headers,
+    )
+    if not resp.ok:
+        raise requests.RequestException(resp.json())
+    tags = resp.json()["tags"]
+    return tags
 
 
 def check_if_executable_in_path(exec_name):
