@@ -70,8 +70,6 @@ class TestACMKubevirtDRIntergration:
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
         protection_name=cnv_workloads[0].workload_namespace
-        from pdb import set_trace
-        set_trace()
         logger.info(f"Protection name is {protection_name}")
         assert assign_drpolicy_for_discovered_vms_via_ui(
             acm_obj, vms=[cnv_workloads[0].vm_name], protection_name=protection_name, namespace=cnv_workloads[0].workload_namespace
