@@ -1,7 +1,7 @@
-import logging
 import pytest
 import time
 import random
+import logging
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
@@ -18,6 +18,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.helpers.performance_lib import run_oc_command
+
 
 logger = logging.getLogger(__name__)
 
