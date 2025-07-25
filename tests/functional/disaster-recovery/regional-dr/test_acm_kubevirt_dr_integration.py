@@ -54,17 +54,15 @@ class TestACMKubevirtDRIntergration:
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
         logger.info("Deploy 1st CNV workload")
-        cnv_workloads1 = discovered_apps_dr_workload_cnv(
+        cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1, dr_protect=False, shared=False
         )
 
         # Second workload (uses same namespace as first)
         logger.info("Deploy 2nd CNV workload in the existing namespace")
-        cnv_workloads2 = discovered_apps_dr_workload_cnv(
+        cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1, dr_protect=False, shared=True
         )
-
-        cnv_workloads = cnv_workloads1 + cnv_workloads2
 
         acm_obj = AcmAddClusters()
 
@@ -76,10 +74,10 @@ class TestACMKubevirtDRIntergration:
         set_trace()
         logger.info(f"Protection name is {protection_name}")
         assert assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj, vms=[cnv_workloads[0].vm_name], protection_name=protection_name
+            acm_obj, vms=[cnv_workloads[0].vm_name], protection_name=protection_name, namespace=cnv_workloads[0].workload_namespace
         )
         assert assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj, vms=[cnv_workloads[1].vm_name], standalone=False,
+            acm_obj, vms=[cnv_workloads[1].vm_name], standalone=False, namespace=cnv_workloads[0].workload_namespace
         )
 
         resource_name= cnv_workloads[0].discovered_apps_placement_name+"-drpc"
@@ -143,7 +141,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(360)
 
         # Shutdown primary managed cluster nodes
         # active_primary_index = config.cur_index
@@ -215,7 +213,7 @@ class TestACMKubevirtDRIntergration:
         logger.info("Doing Cleanup Operations after successful failover")
         for cnv_wl in cnv_workloads:
             dr_helpers.do_discovered_apps_cleanup(
-                drpc_name=cnv_wl.discovered_apps_placement_name,
+                drpc_name=resource_name,
                 old_primary=primary_cluster_name_before_failover,
                 workload_namespace=cnv_workloads[0].workload_namespace,
                 workload_dir=cnv_wl.workload_dir,
@@ -246,7 +244,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(360)
 
         logger.info("Relocating the workloads.....")
         dr_helpers.relocate(

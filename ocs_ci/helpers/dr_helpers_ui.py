@@ -789,7 +789,7 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         return False
 
 
-def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalone=True, protection_name=None):
+def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalone=True, protection_name=None, namespace=None):
     """
     This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
     of the ACM console.
@@ -821,6 +821,12 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
         acm_obj.do_click(acm_loc["filter-with-name"], enable_screenshot=True)
         log.info("Select the name of the VM and apply filter")
         acm_obj.do_click(format_locator(acm_loc["vm_name"], vm))
+        log.info("Select namespace as filter")
+        acm_obj.do_click(acm_loc["filter-vms-2"], enable_screenshot=True)
+        acm_obj.do_click(acm_loc["filter-with-namespace"], enable_screenshot=True)
+        log.info("Select the name of the namespace where VM is running")
+        acm_obj.do_click(format_locator(acm_loc["vm-namespace"], namespace))
+        log.info("Click on forward arrow to apply filter")
         acm_obj.do_click(acm_loc["click-forward-arrow"], enable_screenshot=True)
         log.info("Check the status of the VM")
         vm_status = acm_obj.get_element_text(acm_loc["vm-status"])
