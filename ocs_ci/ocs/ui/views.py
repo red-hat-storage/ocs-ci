@@ -1303,6 +1303,12 @@ acm_configuration_4_19 = {
         "(//span[@class='pf-v5-c-menu__item-text'][normalize-space()='name'])[1]",
         By.XPATH,
     ),
+    "filter-vms-2": ("input[aria-label='Search input']", By.CSS_SELECTOR),
+    "filter-with-namespace": (
+        "//span[contains(text(),'namespace')]",
+        By.XPATH,
+    ),
+    "vm-namespace":("//span[contains(text(),'{}')]", By.XPATH),
     "vm_name": ("//span[contains(text(),'{}')]", By.XPATH),
     "click-forward-arrow": (
         "//button[@id='run-search-button']//*[name()='svg']",
