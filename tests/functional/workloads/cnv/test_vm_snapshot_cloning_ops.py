@@ -311,24 +311,21 @@ class TestVmSnapshotClone(E2ETest):
             vm_snapshot_restore_fixture (fixture): Pytest fixture used to create and restore VM snapshots.
 
         """
-
         try:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-            log.info(f"[{vm_obj.name}] Source checksum: {source_csum}")
+            log.info(f"{vm_obj.name} Source checksum: {source_csum}")
 
-            log.info(f"[{vm_obj.name}] Creating clone of VM")
+            log.info(f"Creating clone of VM [{vm_obj.name}]")
             cloned_vm = vm_clone_fixture(vm_obj, admin_client)
             run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
 
-            log.info(f"[{vm_obj.name}] Creating snapshot of cloned VM")
+            log.info(f"Creating snapshot of cloned VM [{cloned_vm.name}]")
             restored_vm = vm_snapshot_restore_fixture(cloned_vm, admin_client)
             restore_csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
-
             assert source_csum == restore_csum, (
                 f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
                 f"and restored {restored_vm.name} cloned from '{vm_obj.name}'"
             )
-
             run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
             log.info(f"[{vm_obj.name}] VM processing completed successfully.")
         except Exception as e:
@@ -409,9 +406,7 @@ class TestVmSnapshotClone(E2ETest):
         vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
-
         vm_list = vm_objs_def + vm_objs_aggr
-
         self.run_parallel_vm_clone_restore(
             vm_list,
             file_paths,
