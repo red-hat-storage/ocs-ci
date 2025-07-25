@@ -20,7 +20,11 @@ from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.resources.pv import get_pv_status
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    update_container_with_mirrored_image,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +45,14 @@ class SingletonMeta(type):
 class WorkloadUi(metaclass=SingletonMeta):
     """Class to handle workload UI related operations"""
 
-    with open(constants.BUSYBOX_TEMPLATE) as file_stream:
-        busy_box_depl = yaml.safe_load(file_stream)
-
     deployment_list = list()
+
+    def __init__(self):
+        with open(constants.BUSYBOX_TEMPLATE) as file_stream:
+            self.busy_box_depl = yaml.safe_load(file_stream)
+
+        # for disconnected deployments, mirror the used image and update deployment cr
+        update_container_with_mirrored_image(self.busy_box_depl)
 
     def get_busybox_depl_name(self):
         """
