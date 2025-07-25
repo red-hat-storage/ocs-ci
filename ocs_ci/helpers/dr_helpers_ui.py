@@ -789,7 +789,7 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         return False
 
 
-def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalone=True):
+def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalone=True, protection_name=None):
     """
     This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
     of the ACM console.
@@ -810,6 +810,12 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     acm_obj.navigate_clusters_page(vms=True)
     for vm in vms:
+        existing_filter= acm_obj.check_element_presence(acm_loc["remove-existing-filter"][::-1])
+        if existing_filter:
+            acm_obj.do_click(acm_loc["remove-existing-filter"])
+            log.info("Existing filter removed")
+        else:
+            log.info("No filter exists")
         log.info("Select name as filter")
         acm_obj.do_click(acm_loc["filter-vms"], enable_screenshot=True)
         acm_obj.do_click(acm_loc["filter-with-name"], enable_screenshot=True)
@@ -827,12 +833,18 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
         acm_obj.do_click(acm_loc["manage-dr"], enable_screenshot=True)
         log.info("Click on Enroll virtual machine")
         acm_obj.do_click(acm_loc["enroll-vm"], enable_screenshot=True)
-        log.info("Send Protection name")
-        protection_name = create_unique_resource_name("test", "vm")
-        acm_obj.do_send_keys(acm_loc["protection-name"], text=protection_name)
-        if not standalone:
+        if standalone:
+            log.info("Send Protection name")
+            acm_obj.do_click(acm_loc["name-input-btn"])
+            acm_obj.do_send_keys(acm_loc["name-input-btn"], text=protection_name)
+        else:
             log.info("Protecting VM with Shared Protection type")
             acm_obj.do_click(acm_loc["select-shared"], enable_screenshot=True)
+            radio_buttons = acm_obj.get_elements(acm_loc["select-drpc"])
+            # Assert that exactly one element is found
+            assert len(radio_buttons) == 1, \
+                f"Expected 1 radio button but found {len(radio_buttons)}"
+            log.info("Expected 1 radio button found, select existing DRPC")
             acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
         log.info("Click next")
         acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
@@ -854,9 +866,12 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
         ), f"Expected {'Standalone' if standalone else 'Shared'}, but got '{protection_type}'"
         log.info("Assign DRPolicy")
         acm_obj.do_click(acm_loc["assign"], enable_screenshot=True)
+        time.sleep(2)
         log.info("Policy confirmation")
         conf_msg = acm_obj.get_element_text(acm_loc["conf-msg"])
-        assert conf_msg == "New policy assigned to application"
+        log.info(f"Confirmation message is {conf_msg}")
+        expected_conf_msg = conf_msg.split('\n', 1)[1].strip()
+        assert expected_conf_msg == "New policy assigned to application"
         log.info("Close page")
         acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
-        return protection_name
+        return True

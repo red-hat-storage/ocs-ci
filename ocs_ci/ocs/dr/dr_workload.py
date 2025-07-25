@@ -1523,7 +1523,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {drpc_name or self.discovered_apps_placement_name} "
+                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {drpc_name or self.discovered_apps_placement_name}-drpc "
                 f"{ignore_not_found_param}"
             )
             log.info("Deleting Placement")
@@ -1669,7 +1669,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 log.info(
                     f"Namespace in use: {self.workload_namespace} for Shared Protection type"
                 )
-        self.manage_dr_vm_secrets()
+        self.manage_dr_vm_secrets(shared=shared)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
@@ -1702,7 +1702,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         run_cmd(f"oc create namespace {self.workload_namespace}")
 
-    def manage_dr_vm_secrets(self):
+    def manage_dr_vm_secrets(self, shared=False):
         """
         Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
 
@@ -1711,11 +1711,12 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
 
             # Create namespace if it doesn't exist
-            try:
-                create_project(project_name=self.workload_namespace)
-            except CommandFailed as ex:
-                if "(AlreadyExists)" in str(ex):
-                    log.warning("The namespace already exists!")
+            if not shared:
+                try:
+                    create_project(project_name=self.workload_namespace)
+                except CommandFailed as ex:
+                    if "(AlreadyExists)" in str(ex):
+                        log.warning("The namespace already exists!")
 
             # Create or recreate the secret for ssh access
             try:

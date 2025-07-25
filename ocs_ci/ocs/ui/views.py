@@ -1286,6 +1286,7 @@ acm_configuration_4_18 = {
 }
 
 acm_configuration_4_19 = {
+    "replication-policy": ("//td[@data-label='replicationPolicy']", By.XPATH),
     "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
     "install-submariner-btn": (
         "//a[@id='install-submariner'] | //button[@id='install-submariner']",
@@ -1296,6 +1297,7 @@ acm_configuration_4_19 = {
         "//a[@data-test='nav' and normalize-space()='Virtual machines']",
         By.XPATH,
     ),
+    "remove-existing-filter": ("button[aria-label='Clear button for chips and input']", By.CSS_SELECTOR),
     "filter-vms": ("input[placeholder='Filter VirtualMachines']", By.CSS_SELECTOR),
     "filter-with-name": (
         "(//span[@class='pf-v5-c-menu__item-text'][normalize-space()='name'])[1]",
@@ -1310,6 +1312,7 @@ acm_configuration_4_19 = {
     "vm-kebab-menu": ("button[aria-label='Actions']", By.CSS_SELECTOR),
     "manage-dr": ("//span[contains(text(),'Manage disaster recovery')]", By.XPATH),
     "enroll-vm": ("button[aria-label='Empty Page']", By.CSS_SELECTOR),
+    "name-input-btn":("#name-input", By.CSS_SELECTOR),
     "vm-page-next-btn": ("button[type='submit']", By.CSS_SELECTOR),
     "dr-policy": ("#pf-select-toggle-id-0", By.CSS_SELECTOR),
     "select-policy": ("(//span[@class='pf-v5-c-select__menu-item-main'])[1]", By.XPATH),
