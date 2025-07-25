@@ -829,10 +829,10 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
         log.info("Click on forward arrow to apply filter")
         acm_obj.do_click(acm_loc["click-forward-arrow"], enable_screenshot=True)
         log.info("Check the status of the VM")
-        vm_status = acm_obj.get_element_text(acm_loc["vm-status"])
-        assert (
-            vm_status == "Running"
-        ), f"Expected VM status is 'Running', but got '{vm_status}'"
+        vm_current_status = acm_obj.get_element_text(acm_loc["vm-status"])
+        if vm_current_status != "Running":
+            wait_for_status=acm_obj.wait_until_expected_text_is_found(acm_loc["vm-status"], expected_text="Running", timeout=300)
+            assert wait_for_status, f"Expected VM status is 'Running', but got '{vm_current_status}'"
         log.info("Click on the kebab menu option")
         acm_obj.do_click(acm_loc["vm-kebab-menu"], enable_screenshot=True)
         log.info("Click on Manage disaster recovery")
