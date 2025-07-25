@@ -393,7 +393,7 @@ def verify_data_corruption(sc_obj, logreader_workload_factory):
 
 def verify_vm_workload(vm_obj, md5sum_before):
     """
-    Validate vm workload data and operation post recovery
+    Validate vm workload data, new data creation and data copy-back
 
     Args:
         vm_obj (VirtualMachine): VirtualMachine object
@@ -416,7 +416,3 @@ def verify_vm_workload(vm_obj, md5sum_before):
     # check if the data can be copied back to local machine
     vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/test/file_1.txt")
     logger.info("VM data is successfully copied back to local machine")
-
-    # stop the VM
-    vm_obj.stop()
-    logger.info("Stoped the VM successfully")
