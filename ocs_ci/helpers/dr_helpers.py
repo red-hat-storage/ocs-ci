@@ -270,6 +270,7 @@ def relocate(
     old_primary=None,
     workload_instance=None,
     multi_ns=False,
+    workload_instances_shared=None
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -327,7 +328,7 @@ def relocate(
             old_primary=old_primary, workload_instance=workload_instance
         )
     else:
-        if discovered_apps and workload_instance:
+        if (discovered_apps and workload_instance) and not workload_instances_shared:
             logger.info("Doing Cleanup Operations")
             do_discovered_apps_cleanup(
                 drpc_name=workload_placement_name,
@@ -336,6 +337,20 @@ def relocate(
                 workload_dir=workload_instance.workload_dir,
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
+        elif discovered_apps and workload_instance and workload_instances_shared:
+            logger.info("Doing Cleanup Operations for relocate of Shared VMs")
+            last_index = workload_instances_shared[-1]
+            for cnv_wl in workload_instances_shared:
+                shared = True if cnv_wl is last_index else None
+                do_discovered_apps_cleanup(
+                    drpc_name=workload_placement_name,
+                    old_primary=old_primary,
+                    workload_namespace=workload_instances_shared[0].workload_namespace,
+                    workload_dir=cnv_wl.workload_dir,
+                    vrg_name=workload_instances_shared[0].discovered_apps_placement_name,
+                    shared=shared
+                )
+
     config.switch_ctx(restore_index)
 
 
@@ -1928,8 +1943,8 @@ def do_discovered_apps_cleanup(
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
         vrg_name (str): Name of VRG
-        shared (bool): False by default, needed when Shared protection type is used for DR protection
-                    to clean both VM resources under the same namespace for full clean-up
+        # shared (bool): False by default, needed when Shared protection type is used for DR protection
+        #             to clean both VM resources under the same namespace for full clean-up
 
     """
     restore_index = config.cur_index
@@ -1948,17 +1963,13 @@ def do_discovered_apps_cleanup(
     run_cmd(
         f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
     )
-    if shared:
-        workload_path_1 = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
-        run_cmd(
-            f"oc delete -k {workload_path_1} -n {workload_namespace} --wait=false --force "
+    if not shared:
+        wait_for_all_resources_deletion(
+            namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
         )
-    wait_for_all_resources_deletion(
-        namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
-    )
-    config.switch_acm_ctx()
-    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
-    config.switch_ctx(restore_index)
+        config.switch_acm_ctx()
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+        config.switch_ctx(restore_index)
 
 
 def do_discovered_apps_cleanup_multi_ns(

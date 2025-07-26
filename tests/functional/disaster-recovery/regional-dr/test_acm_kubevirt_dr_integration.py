@@ -63,6 +63,9 @@ class TestACMKubevirtDRIntergration:
         cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1, dr_protect=False, shared=True
         )
+        logger.info(f"CNV workloads instance is {cnv_workloads}")
+        from pdb import set_trace
+        set_trace()
 
         acm_obj = AcmAddClusters()
 
@@ -209,14 +212,16 @@ class TestACMKubevirtDRIntergration:
         # assert ceph_health_check(tries=10, delay=30)
 
         logger.info("Doing Cleanup Operations after successful failover")
+        last_index = cnv_workloads[-1]
         for cnv_wl in cnv_workloads:
+            shared=True if cnv_wl is last_index else None
             dr_helpers.do_discovered_apps_cleanup(
                 drpc_name=resource_name,
                 old_primary=primary_cluster_name_before_failover,
                 workload_namespace=cnv_workloads[0].workload_namespace,
                 workload_dir=cnv_wl.workload_dir,
                 vrg_name=resource_name,
-                shared=True,
+                shared=shared
             )
 
         # Doing Relocate in below code
@@ -252,6 +257,7 @@ class TestACMKubevirtDRIntergration:
             discovered_apps=True,
             old_primary=primary_cluster_name_after_failover,
             workload_instance=cnv_workloads[0],
+            workload_instances_shared=cnv_workloads
         )
         # Clean-up is handled as part of the Relocate function
 
