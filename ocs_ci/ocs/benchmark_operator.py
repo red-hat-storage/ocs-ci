@@ -193,7 +193,7 @@ class BenchmarkOperator(object):
         switch_to_default_rook_cluster_project()
 
         log.info("Delete the benchmark-operator project")
-        run("make undeploy", shell=True, check=True, cwd=self.dir)
+        run("make undeploy", shell=True, check=True, cwd=self.dir, env=self._env)
         # Wait until the benchmark-operator project deleted
         self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=180)
 
