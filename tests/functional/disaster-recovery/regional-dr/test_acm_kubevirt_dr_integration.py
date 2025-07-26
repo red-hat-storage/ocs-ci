@@ -64,8 +64,6 @@ class TestACMKubevirtDRIntergration:
             pvc_vm=1, dr_protect=False, shared=True
         )
         logger.info(f"CNV workloads instance is {cnv_workloads}")
-        from pdb import set_trace
-        set_trace()
 
         acm_obj = AcmAddClusters()
 
