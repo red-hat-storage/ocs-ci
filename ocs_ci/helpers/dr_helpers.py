@@ -352,7 +352,7 @@ def relocate(
                     vrg_name=workload_instances_shared[
                         0
                     ].discovered_apps_placement_name,
-                    # shared=False
+                    always=False
                 )
 
     config.switch_ctx(restore_index)
@@ -1321,8 +1321,8 @@ def verify_last_group_sync_time(
         datetime.utcnow().strftime(time_format), time_format
     )
     time_since_last_sync = (
-        current_time - last_group_sync_time_formatted
-    ).total_seconds() / 60
+                               current_time - last_group_sync_time_formatted
+                           ).total_seconds() / 60
     logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
     assert (
         time_since_last_sync < 3 * scheduling_interval
@@ -1936,7 +1936,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, shared=False
+    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, always=True
 ):
     """
     Function to clean up Resources
@@ -1967,7 +1967,7 @@ def do_discovered_apps_cleanup(
     run_cmd(
         f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
     )
-    if not shared:
+    if always:
         wait_for_all_resources_deletion(
             namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
         )
@@ -2142,8 +2142,8 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
         datetime.utcnow().strftime(time_format), time_format
     )
     time_since_last_sync = (
-        current_time - last_kubeobject_protection_time_formatted
-    ).total_seconds() / 60
+                               current_time - last_kubeobject_protection_time_formatted
+                           ).total_seconds() / 60
     logger.info(
         f"Time in minutes since the last Kube Object sync {time_since_last_sync}"
     )
