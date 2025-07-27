@@ -17,7 +17,7 @@ DEPLOYMENT:
   custom_arbiter_condition: null
 ENV_DATA:
   platform: 'baremetal'
-  deployment_type: 'ipi'
+  deployment_type: 'upi'
   worker_replicas: 0
   master_replicas: 3  # Total of 3: 2 control plane + 1 arbiter
   mon_type: 'hostpath'
