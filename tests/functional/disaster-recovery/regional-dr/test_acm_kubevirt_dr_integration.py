@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
+from ocs_ci.helpers.dr_helpers import wait_for_all_resources_deletion
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -22,6 +23,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
 )
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -70,17 +72,25 @@ class TestACMKubevirtDRIntergration:
         logger.info("Navigate to Virtual machines page on the ACM console")
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
-        protection_name=cnv_workloads[0].workload_namespace
+        protection_name = cnv_workloads[0].workload_namespace
         logger.info(f"Protection name is {protection_name}")
         assert assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj, vms=[cnv_workloads[0].vm_name], protection_name=protection_name, namespace=cnv_workloads[0].workload_namespace
+            acm_obj,
+            vms=[cnv_workloads[0].vm_name],
+            protection_name=protection_name,
+            namespace=cnv_workloads[0].workload_namespace,
         )
         assert assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj, vms=[cnv_workloads[1].vm_name], standalone=False, namespace=cnv_workloads[0].workload_namespace
+            acm_obj,
+            vms=[cnv_workloads[1].vm_name],
+            standalone=False,
+            namespace=cnv_workloads[0].workload_namespace,
         )
 
-        resource_name= cnv_workloads[0].discovered_apps_placement_name+"-drpc"
-        logger.info(f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"')
+        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
+        logger.info(
+            f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
+        )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             cnv_workloads[0].workload_namespace,
@@ -97,7 +107,9 @@ class TestACMKubevirtDRIntergration:
                 resource_name=resource_name,
             )
         )
-        logger.info(f"Primary cluster name before failover is {primary_cluster_name_before_failover}")
+        logger.info(
+            f"Primary cluster name before failover is {primary_cluster_name_before_failover}"
+        )
 
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         dr_helpers.wait_for_all_resources_creation(
@@ -212,15 +224,27 @@ class TestACMKubevirtDRIntergration:
         logger.info("Doing Cleanup Operations after successful failover")
         last_index = cnv_workloads[-1]
         for cnv_wl in cnv_workloads:
-            shared=True if cnv_wl is last_index else None
+            # shared=True if cnv_wl is last_index else None
             dr_helpers.do_discovered_apps_cleanup(
                 drpc_name=resource_name,
                 old_primary=primary_cluster_name_before_failover,
                 workload_namespace=cnv_workloads[0].workload_namespace,
                 workload_dir=cnv_wl.workload_dir,
                 vrg_name=resource_name,
-                shared=shared
+                shared=False,
             )
+
+        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        wait_for_all_resources_deletion(
+            namespace=cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            vrg_name=resource_name,
+        )
+        config.switch_acm_ctx()
+        drpc_obj = DRPC(
+            namespace=constants.DR_OPS_NAMESAPCE, resource_name=resource_name
+        )
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         # Doing Relocate in below code
         primary_cluster_name_after_failover = (
@@ -255,9 +279,20 @@ class TestACMKubevirtDRIntergration:
             discovered_apps=True,
             old_primary=primary_cluster_name_after_failover,
             workload_instance=cnv_workloads[0],
-            workload_instances_shared=cnv_workloads
+            workload_instances_shared=cnv_workloads,
         )
-        # Clean-up is handled as part of the Relocate function
+        # Clean-up is handled as part of the Relocate function and checks are done below
+        config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
+        wait_for_all_resources_deletion(
+            namespace=cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            vrg_name=resource_name,
+        )
+        config.switch_acm_ctx()
+        drpc_obj = DRPC(
+            namespace=constants.DR_OPS_NAMESAPCE, resource_name=resource_name
+        )
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         # Verify resources creation on primary managed cluster
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
