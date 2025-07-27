@@ -7,14 +7,6 @@ DEPLOYMENT:
   local_storage: true
   arbiter_deployment: true
   arbiter_autodetect: false
-  # Specify which node will be the arbiter (should be configured in server details)
-  arbiter_node_name: "master-arbiter"
-  # Arbiter detection strategy: "third_master", "zone_based", or "custom"
-  arbiter_detection_strategy: "third_master"
-  # Zone for arbiter (used with zone_based strategy)
-  arbiter_zone: null
-  # Custom condition for arbiter detection (used with custom strategy)
-  custom_arbiter_condition: null
 ENV_DATA:
   platform: 'baremetal'
   deployment_type: 'upi'
@@ -24,16 +16,3 @@ ENV_DATA:
   osd_type: 'nvme'
   # Arbiter-specific configuration
   arbiter_enabled: true
-  # Network configuration for arbiter topology
-  cluster_network_cidr: '10.128.0.0/14'
-  service_network_cidr: '172.30.0.0/16'
-  network_type: 'OVNKubernetes'
-  # Provisioning network configuration
-  provisioning_network: 'Disabled'
-  # API version for install-config
-  api_version: 'v1'
-  # Base domain
-  base_domain: 'qe.rh-ocs.com'
-REPORTING:
-  polarion:
-    deployment_id: 'OCS-ARBITER-BM-001'
