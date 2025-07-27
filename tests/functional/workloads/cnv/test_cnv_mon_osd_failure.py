@@ -80,7 +80,7 @@ class TestMonAndOSDFailures:
         for vm in vm_samples:
             vm.verify_vm(verify_ssh=True)
 
-    @polarion_id("")
+    @polarion_id("OCS-6609")
     def test_single_mon_failures(self):
         """
         Test single mon failure with cephFS/RBD workloads running in the background
@@ -105,7 +105,7 @@ class TestMonAndOSDFailures:
         for mon in self.mons:
             modify_deployment_replica_count(mon, 1)
 
-    @polarion_id("")
+    @polarion_id("OCS-6609")
     def test_both_mon_failure(self):
         """
         Test both data zone mon failure with cnv workloads running in the background
@@ -130,7 +130,7 @@ class TestMonAndOSDFailures:
         for mon in self.mons:
             modify_deployment_replica_count(mon, 1)
 
-    @polarion_id("")
+    @polarion_id("OCS-6608")
     def test_single_osd_failure(self):
         """
         Test single osd failure with cephFS/RBD workloads running in the background
