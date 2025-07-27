@@ -328,7 +328,7 @@ def relocate(
             old_primary=old_primary, workload_instance=workload_instance
         )
     else:
-        if discovered_apps and workload_instance and workload_instances_shared is False:
+        if discovered_apps and workload_instance and not workload_instances_shared:
             logger.info("Doing Cleanup Operations")
             do_discovered_apps_cleanup(
                 drpc_name=workload_placement_name,
@@ -338,7 +338,7 @@ def relocate(
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
         elif (
-            discovered_apps and workload_instance and workload_instances_shared is True
+            discovered_apps and workload_instance and workload_instances_shared
         ):
             logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
             last_index = workload_instances_shared[-1]
