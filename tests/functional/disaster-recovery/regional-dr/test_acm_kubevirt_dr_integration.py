@@ -231,7 +231,7 @@ class TestACMKubevirtDRIntergration:
                 workload_namespace=cnv_workloads[0].workload_namespace,
                 workload_dir=cnv_wl.workload_dir,
                 vrg_name=resource_name,
-                shared=False,
+                always=False,
             )
 
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
