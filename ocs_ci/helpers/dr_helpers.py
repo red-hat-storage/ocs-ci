@@ -469,7 +469,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
     return True
 
 
-@retry(ValueError)
+@retry(ValueError, tries=10)
 def check_mirroring_status_for_custom_pool(
     pool_name, namespace="openshift-storage", min_replaying=1
 ):
@@ -522,7 +522,9 @@ def check_mirroring_status_for_custom_pool(
                 logger.info(f"{custom_pool_name} - {key}: {val}")
                 if val != "OK":
                     logger.error(f"{key} is not OK: {val}")
-                    return False
+                    raise ValueError(
+                        f"Health check for {key} is not OK: {val} for pool {custom_pool_name}"
+                    )
 
             img = summary.get("image_states", {}).get("replaying", 0)
             state = summary.get("states", {}).get("replaying", 0)
@@ -534,12 +536,15 @@ def check_mirroring_status_for_custom_pool(
                 logger.error(
                     f"Replaying count too low: image_states={img}, states={state}"
                 )
-                return False
+                raise ValueError(
+                    f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
+                )
 
             return True
 
         raise ValueError(f"Custom Pool {custom_pool_name} not found in {namespace}")
     config.switch_ctx(restore_index)
+    return False
 
 
 def get_pv_count(namespace):

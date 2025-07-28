@@ -927,11 +927,13 @@ def ceph_pool_factory_session(request, replica=3, compression=None):
 
 
 @pytest.fixture(scope="function")
-def ceph_pool_factory(request, replica=3, compression=None):
-    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
+def ceph_pool_factory(request, replica=3, compression=None, pool_name=None):
+    return ceph_pool_factory_fixture(
+        request, replica=replica, compression=compression, pool_name=pool_name
+    )
 
 
-def ceph_pool_factory_fixture(request, replica=3, compression=None):
+def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=None):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -945,7 +947,7 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
     ):
         if interface == constants.CEPHBLOCKPOOL:
             ceph_pool_obj = helpers.create_ceph_block_pool(
-                replica=replica, compression=compression
+                replica=replica, compression=compression, pool_name=pool_name
             )
         elif interface == constants.CEPHFILESYSTEM:
             cfs = ocp.OCP(
@@ -1132,6 +1134,7 @@ def storageclass_factory_fixture(
                         replica=ocsci_config.ENV_DATA.get("replica") or replica,
                         compression=ocsci_config.ENV_DATA.get("compression")
                         or compression,
+                        pool_name=pool_name,
                     )
                     interface_name = pool_obj.name
                 else:
