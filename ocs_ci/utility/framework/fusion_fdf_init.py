@@ -117,17 +117,18 @@ class Initializer(object):
         """
         Initialize the logging config.
         """
-        log_dir = os.path.expanduser(config.RUN.get("log_dir"))
+        base_log_dir = os.path.expanduser(config.RUN.get("log_dir"))
         log_level = config.RUN.get("log_level", "INFO")
-        log_name = f"{self.log_basename}_{self.run_id}"
+        sub_log_dir_name = f"{self.log_basename}-{self.run_id}"
+        sub_log_dir = os.path.join(base_log_dir, sub_log_dir_name)
         log_formatter = logging.Formatter(constants.LOG_FORMAT)
         root_logger = logging.getLogger()
         root_logger.setLevel(log_level)
 
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        if not os.path.exists(sub_log_dir):
+            os.makedirs(sub_log_dir)
 
-        log_file = os.path.join(log_dir, f"{log_name}.log")
+        log_file = os.path.join(sub_log_dir, "logs")
 
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(log_formatter)
