@@ -89,7 +89,7 @@ class TestCnvNodeReplace(E2ETest):
         csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
         source_csums[vm_for_snap.name] = csum
 
-        # Keep vms in different states (power on, paused, stoped)
+        # Keep vms in different states(paused, stoped)
         vm_for_stop.stop()
         vm_for_snap.pause()
 
@@ -130,7 +130,6 @@ class TestCnvNodeReplace(E2ETest):
 
         logger.info("Starting vms")
         vm_for_stop.start()
-        vm_for_clone.start()
         vm_for_snap.unpause()
 
         # Perform post node replacement data integrity check
