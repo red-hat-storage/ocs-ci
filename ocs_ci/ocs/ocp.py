@@ -2,6 +2,7 @@
 General OCP object
 """
 
+import inspect
 import logging
 import os
 import re
@@ -21,7 +22,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
 )
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
-from ocs_ci.utility.retry import retry
+from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
@@ -751,6 +752,140 @@ class OCP(object):
         status = self.exec_oc_cmd(command, out_yaml_format=False)
         return status
 
+    def wait_for_resource_oc_wait(
+        self,
+        condition,
+        resource_name="",
+        column="STATUS",
+        selector=None,
+        timeout=60,
+        ignore_timeout=False,
+    ):
+        """
+        This method is an alternative way to wait for a resource to reach a desired condition. Can not be used in more
+        complex scenarios like waiting for multiple resources or when the condition is not a column value.
+        With most common resources STATUS column is translated from phase, with rest "oc wait --for=condition" command
+        is not implemented by k8s or not supported in ocs-ci, see implementation of self._process_oc_wait_cmd
+
+        Args:
+            condition (str): The desired state the resource that is sampled from 'oc get <kind> <resource_name>' command
+            resource_name (str): The name of the resource to wait for (e.g.my-pv1)
+            column (str): The name of the column to compare w/ (STATUS with most common resources means '.state.phase')
+            selector (str): The resource selector to search with. If selector is used, all resources with that selector
+                must match the condition.
+                Example: 'app=rook-ceph-mds'
+            timeout (int): Time in seconds to wait
+            ignore_timeout (bool): If True, will not raise TimeoutExpiredError
+
+        Returns:
+            bool: True in case resource reached desired condition, False otherwise
+        """
+
+        if not self._process_oc_wait_cmd(column, condition):
+            # when we call wait_for_resource_oc_wait directly we expect that method can handle given parameters
+            raise NotImplementedError(
+                f"{inspect.currentframe().f_code.co_name}: Condition '{condition}' "
+                f"is not supported for resource kind '{self.kind}'"
+            )
+
+        selector = selector or self.selector
+        command = f"wait {self.kind} {resource_name} --for=jsonpath='{{.status.phase}}'={condition}"
+
+        # if selector is used, all resources of kind self.kind with that selector must match the condition, e.g.
+        # if 2 pods are matching, one is in Running state and the other is in ContainerCreating state, method
+        # will produce TimeoutExpiredError
+        if selector:
+            command += f" --selector={selector}"
+
+        if timeout:
+            command += f" --timeout={timeout}s"
+
+        try:
+            res = self.exec_oc_cmd(command)
+        except CommandFailed as ex:
+            res = ex.args[0] if ex.args else str(ex)
+
+        if res:
+            if "timed out" in res:
+                log.error("Timeout expired")
+                output = self.describe(resource_name, selector=selector)
+                log.warning(
+                    f"{inspect.currentframe().f_code.co_name}: Description of the resource(s) "
+                    f"we were waiting for:\n{output}"
+                )
+                if ignore_timeout:
+                    return False
+                else:
+                    raise TimeoutExpiredError(
+                        f"{inspect.currentframe().f_code.co_name}: Timed out waiting for resource {resource_name} "
+                        f"to reach condition {condition} at column {column}"
+                    )
+            elif "condition met" in res:
+                log.info(
+                    f"{inspect.currentframe().f_code.co_name}: Resource {resource_name} reached condition {condition}"
+                )
+                return True
+            else:
+                raise CommandFailed(
+                    f"{inspect.currentframe().f_code.co_name}: Unexpected output from 'oc wait' command: {res}. "
+                )
+        else:
+            log.error(
+                f"{inspect.currentframe().f_code.co_name}:Failed to get resource {resource_name} at column {column} "
+                f"to reach condition {condition}"
+            )
+            return False
+
+    @catch_exceptions(Exception)
+    def _process_oc_wait_cmd(self, column, condition):
+
+        if not column == "STATUS":
+            return False
+
+        valid_conditions = {
+            constants.POD.lower(): [
+                constants.STATUS_PENDING,
+                constants.STATUS_PROGRESSING,
+                constants.STATUS_AVAILABLE,
+                constants.STATUS_FAILED,
+                constants.STATUS_RUNNING,
+            ],
+            constants.PVC.lower(): [
+                constants.STATUS_BOUND,
+                constants.STATUS_PENDING,
+                constants.STATUS_FAILED,
+            ],
+            constants.PV.lower(): [
+                constants.STATUS_BOUND,
+                constants.STATUS_AVAILABLE,
+                constants.STATUS_FAILED,
+                constants.STATUS_RELEASED,
+            ],
+            constants.CLUSTER_SERVICE_VERSION.lower(): [
+                constants.STATUS_PENDING,
+                constants.STATUS_FAILED,
+                constants.SUCCEEDED,
+                constants.STATUS_REPLACING,
+            ],
+            constants.NAMESPACE.lower(): [
+                constants.STATUS_ACTIVE,
+                constants.STATUS_TERMINATING,
+            ],
+        }
+
+        if (
+            self.kind.lower() in valid_conditions
+            and column == "STATUS"
+            and condition in valid_conditions[self.kind.lower()]
+        ):
+            return True
+        else:
+            print(
+                f"{inspect.currentframe().f_code.co_name}: Condition '{condition}' is not supported for resource kind "
+                f"'{self.kind}' at column '{column}'"
+            )
+            return False
+
     def wait_for_resource(
         self,
         condition,
@@ -803,6 +938,22 @@ class OCP(object):
                 f" from error condition '{error_condition}'"
                 " which describes unexpected error state."
             )
+
+        # if dont_allow_other_resources or resource_count or error_condition are used, don't try build command with
+        # oc wait, but use the old way with oc get and TimeoutSampler
+        if not (dont_allow_other_resources or resource_count or error_condition):
+            if not self._process_oc_wait_cmd(column, condition):
+                # continue with legacy approach
+                pass
+            else:
+                return self.wait_for_resource_oc_wait(
+                    condition=condition,
+                    resource_name=resource_name,
+                    column=column,
+                    selector=selector,
+                    timeout=timeout,
+                )
+
         log.info(
             (
                 f"Waiting for a resource(s) of kind {self._kind}"
