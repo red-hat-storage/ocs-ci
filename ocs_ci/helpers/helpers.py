@@ -4742,7 +4742,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     live_deployment = config.DEPLOYMENT["live_deployment"]
     if live_deployment and semantic_version >= version.VERSION_4_13:
         if semantic_version >= version.VERSION_4_15:
-            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}.0"
+            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
         else:
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
