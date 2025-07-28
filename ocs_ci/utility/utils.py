@@ -2466,8 +2466,10 @@ def get_testrun_name():
     fdf_version = config.ENV_DATA.get("fdf_version")
     if fdf_version:
         product_version = f"FDF{fdf_version}"
+        us_ds = ""
     elif fusion_version:
         product_version = f"Fusion{fusion_version}"
+        us_ds = ""
     elif ocs_version:
         product_version = f"OCS{ocs_version}"
     else:
@@ -2511,7 +2513,15 @@ def get_testrun_name():
             f"{config.ENV_DATA.get('worker_replicas')}W "
             f"{markers} {post_upgrade}".rstrip()
         )
-    testrun_name = f"{product_version} {us_ds} {ocp_version_string} " f"{testrun_name}"
+    version_prefix = ""
+    if product_version:
+        version_prefix += f"{product_version} "
+    if us_ds:
+        version_prefix += f"{us_ds} "
+    if ocp_version:
+        version_prefix += f"{ocp_version_string} "
+    version_prefix = version_prefix.rstrip()
+    testrun_name = f"{version_prefix} {testrun_name}"
     if build_user:
         testrun_name = f"{build_user} {testrun_name}"
     # replace invalid character(s) by '-'
