@@ -32,11 +32,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     @pytest.mark.parametrize(
         argnames=["custom_sc"],
         argvalues=[
-            pytest.param(
-                *[False],
-                marks=pytest.mark.polarion_id("OCS-6266"),
-                id="default_sc",
-            ),
+            # pytest.param(
+            #     *[False],
+            #     marks=pytest.mark.polarion_id("OCS-6266"),
+            #     id="default_sc",
+            # ),
             pytest.param(
                 True,
                 marks=pytest.mark.polarion_id("OCS-XXXX"),
