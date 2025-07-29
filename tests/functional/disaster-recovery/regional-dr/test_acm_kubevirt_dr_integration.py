@@ -214,6 +214,7 @@ class TestACMKubevirtDRIntergration:
             )
 
         # logger.info("Recover the down managed cluster")
+        # config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         # nodes_multicluster[active_primary_index].start_nodes(
         #     active_primary_cluster_node_objs
         # )
