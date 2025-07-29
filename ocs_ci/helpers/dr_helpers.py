@@ -352,7 +352,8 @@ def relocate(
                     vrg_name=workload_instances_shared[
                         0
                     ].discovered_apps_placement_name,
-                    always=False
+                    always=False,
+                    ignore=True
                 )
 
     config.switch_ctx(restore_index)
@@ -1936,7 +1937,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, always=True
+    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, always=True, ignore=False
 ):
     """
     Function to clean up Resources
@@ -1964,9 +1965,14 @@ def do_discovered_apps_cleanup(
     )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
-    run_cmd(
-        f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
-    )
+    if ignore:
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
+        )
+    else:
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        )
     if always:
         wait_for_all_resources_deletion(
             namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name

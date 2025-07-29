@@ -44,7 +44,7 @@ class TestACMKubevirtDRIntergration:
     @pytest.mark.polarion_id("OCS-xxxx")
     # TODO: Add Polarion ID when available
     def test_acm_kubevirt_dr_intergration_ui(
-        self, setup_acm_ui, discovered_apps_dr_workload_cnv, nodes_multicluster
+        self, setup_acm_ui, discovered_apps_dr_workload_cnv, nodes_multicluster, node_restart_teardown
     ):
         """
         DR operation on discovered VMs using Standalone and Shared Protection type
