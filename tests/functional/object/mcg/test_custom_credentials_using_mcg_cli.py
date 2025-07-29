@@ -10,14 +10,35 @@ from ocs_ci.framework.testlib import (
     mcg,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import retrieve_cli_binary
 from ocs_ci.utility.utils import run_cmd, get_random_str
 from ocs_ci.helpers.helpers import get_s3_credentials_from_secret
 from pathlib import Path
+from ocs_ci.utility import version as version_module
+from ocs_ci.utility.utils import get_noobaa_cli_config
+
 
 logger = logging.getLogger(__name__)
-mcg_cli = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+# Use version-appropriate CLI path and command prefix
+mcg_cli, mcg_command_prefix = get_noobaa_cli_config()
+
+
+def build_mcg_command(command_args):
+    """
+    Build NooBaa CLI command with appropriate prefix based on version.
+
+    Args:
+        command_args (str): Command arguments to append after CLI and prefix
+
+    Returns:
+        str: Complete CLI command string
+    """
+    if mcg_command_prefix:
+        # For odf-cli: odf-cli noobaa <command>
+        return f"{mcg_cli} {mcg_command_prefix} {command_args}"
+    else:
+        # For mcg-cli: mcg-cli <command>
+        return f"{mcg_cli} {command_args}"
 
 
 @red_squad
@@ -28,13 +49,13 @@ class TestCustomCredsUsingMcgCli(MCGTest):
         Update noobaa account with custom credential values
         """
         namespace = config.ENV_DATA["cluster_namespace"]
-        output = run_cmd(
-            cmd=f"{mcg_cli} account credentials {account_name} "
-            + f"--access-key={access_key} "
-            + f"--secret-key={secret_key} "
-            + f"-n {namespace}",
-            ignore_error=True,
-        )
+
+        # Build command based on CLI version
+        cmd = build_mcg_command(f"account credentials {account_name}")
+
+        cmd += f" --access-key={access_key} --secret-key={secret_key} -n {namespace}"
+
+        output = run_cmd(cmd=cmd, ignore_error=True)
         logger.info(output)
 
     @skipif_ocs_version("<4.17")
@@ -48,9 +69,17 @@ class TestCustomCredsUsingMcgCli(MCGTest):
         5. Validate custom credentials against against length and valid characters
         """
         if not Path(mcg_cli).exists():
-            retrieve_cli_binary(cli_type="mcg")
+            # Download appropriate CLI binary based on version
+            ocs_version = version_module.get_semantic_ocs_version_from_config()
+            if ocs_version >= version_module.VERSION_4_20:
+                retrieve_cli_binary(cli_type="odf")
+            else:
+                retrieve_cli_binary(cli_type="mcg")
 
-        output = run_cmd(cmd=f"{mcg_cli} version")
+        # Build version command based on CLI version
+        version_cmd = build_mcg_command("version")
+
+        output = run_cmd(cmd=version_cmd)
         logger.info(output)
         account_name = get_random_str(5)
         original_acc_credentials = mcg_account_factory(name=account_name)

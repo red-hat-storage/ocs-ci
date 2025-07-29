@@ -67,7 +67,6 @@ from ocs_ci.utility.retry import retry
 from psutil._common import bytes2human
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
-
 log = logging.getLogger(__name__)
 
 # variables
@@ -5891,3 +5890,23 @@ def skip_for_provider_if_ocs_version(expressions):
             version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
             for expr in expr_list
         )
+
+
+def get_noobaa_cli_config():
+    """
+    Get the appropriate NooBaa CLI path and command prefix based on OCS version.
+
+    For OCS version >= 4.20: Returns odf-cli path with 'noobaa' prefix
+    For OCS version < 4.20: Returns mcg-cli path with empty prefix
+
+    Returns:
+        tuple: (cli_path, command_prefix) where cli_path is the path to CLI binary
+               and command_prefix is the prefix to use with the command
+    """
+
+    ocs_version = version_module.get_semantic_ocs_version_from_config()
+
+    if ocs_version >= version_module.VERSION_4_20:
+        return constants.ODF_CLI_LOCAL_PATH, "noobaa"
+    else:
+        return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, ""
