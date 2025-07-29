@@ -471,7 +471,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
 
 @retry(ValueError, tries=10)
 def check_mirroring_status_for_custom_pool(
-    pool_name, namespace="openshift-storage", min_replaying=1
+    pool_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, min_replaying=1
 ):
     """
     Check the health and mirroring status of a custom CephBlockPoolRadosNamespace resource.

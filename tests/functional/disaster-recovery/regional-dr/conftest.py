@@ -29,7 +29,7 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=False)
+@pytest.fixture(autouse=True)
 def check_subctl_cli():
     # Check whether subctl cli is present
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
@@ -54,8 +54,8 @@ def cnv_custom_storage_class(request, storageclass_factory):
 
     def factory():
 
-        pool_name = "rdr-test-storage-pool-2way"
-        sc_name = "rbd-cnv-custom-sc-r2"
+        pool_name = constants.RDR_CUSTOM_RBD_POOL
+        sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])

@@ -1,5 +1,4 @@
 import logging
-import time
 import pytest
 
 from time import sleep
@@ -112,7 +111,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         )
         if custom_sc:
             assert check_mirroring_status_for_custom_pool(
-                pool_name="rdr-test-storage-pool-2way"
+                pool_name=constants.RDR_CUSTOM_RBD_POOL
             ), "Mirroring status check for custom SC failed"
             logger.info("Mirroring status check for custom SC passed")
 
@@ -133,7 +132,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             "All nodes of the primary managed cluster are powered off, "
             "waiting for cluster to be unreachable.."
         )
-        time.sleep(300)
+        sleep(300)
 
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
@@ -199,7 +198,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
         if custom_sc:
             assert check_mirroring_status_for_custom_pool(
-                pool_name="rdr-test-storage-pool-2way"
+                pool_name=constants.RDR_CUSTOM_RBD_POOL
             ), "Mirroring status check for custom SC failed"
             logger.info("Mirroring status check for custom SC passed")
 
@@ -272,6 +271,6 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
         if custom_sc:
             assert check_mirroring_status_for_custom_pool(
-                pool_name="rdr-test-storage-pool-2way"
+                pool_name=constants.RDR_CUSTOM_RBD_POOL
             ), "Mirroring status check for custom SC failed"
             logger.info("Mirroring status check for custom SC passed")
