@@ -943,7 +943,10 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=No
     instances = []
 
     def factory(
-        interface=constants.CEPHBLOCKPOOL, replica=replica, compression=compression
+        interface=constants.CEPHBLOCKPOOL,
+        replica=replica,
+        compression=compression,
+        pool_name=pool_name,
     ):
         if interface == constants.CEPHBLOCKPOOL:
             ceph_pool_obj = helpers.create_ceph_block_pool(
