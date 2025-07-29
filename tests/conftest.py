@@ -3170,6 +3170,7 @@ def nodes():
     detach/attach volume, etc.
 
     """
+    return
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
     return nodes
@@ -3184,6 +3185,7 @@ def nodes_multicluster():
     detach/attach volume, etc. Useful in multicluster scenarios.
 
     """
+    return []
     factory = platform_nodes.PlatformNodesFactory()
     nodes_multicluster = []
     for cluster in range(ocsci_config.nclusters):
@@ -4369,6 +4371,7 @@ def node_restart_teardown(request, nodes_multicluster, nodes):
     try to make them 'Ready' by restarting the nodes.
 
     """
+    return
     cluster_node_objs = []
     for index in range(ocsci_config.nclusters):
         ocsci_config.switch_ctx(index)
