@@ -7529,7 +7529,7 @@ def discovered_apps_dr_workload(request):
 
 
 @pytest.fixture()
-def discovered_apps_dr_workload_cnv(request):
+def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
     """
     Deploys CNV Discovered App based workload for DR setup
 
@@ -7541,7 +7541,8 @@ def discovered_apps_dr_workload_cnv(request):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
-            custom_sc (bool): False by default, will use custom Pool and Storage Class when set to True for CNV workload
+            custom_sc (bool): False by default, will create and use custom Pool and Storage Class
+                            when set to True for CNV workload
 
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
@@ -7553,6 +7554,8 @@ def discovered_apps_dr_workload_cnv(request):
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
         if custom_sc:
+            log.info("Calling fixture to create Custom Pool/SC..")
+            cnv_custom_storage_class()
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]

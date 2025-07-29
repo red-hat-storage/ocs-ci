@@ -29,7 +29,7 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)
 def check_subctl_cli():
     # Check whether subctl cli is present
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
@@ -45,48 +45,43 @@ def check_subctl_cli():
 @pytest.fixture()
 def cnv_custom_storage_class(request, storageclass_factory):
     """
-    Uses storage class factory fixture to create a custom RBD storage class which and a custom block pool
+    Uses storage class factory fixture to create a custom RBD storage class and a custom block pool
     with replica-2 to be used by CNV discovered applications
 
-    Returns:
-        all_clusters_success (bool): True if custom SC is found or created on both the managed clusters, False otherwise
+    Raises Exception if the custom SC creation fails on any of the managed clusters
 
     """
 
-    pool_name = "rdr-test-storage-pool-2way"
-    sc_name = "rbd-cnv-custom-sc-r2"
-    all_clusters_success_list = []
+    def factory():
 
-    for cluster in get_non_acm_cluster_config():
-        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-        # Create or verify existing SC in all clusters
-        existing_sc_list = get_all_storageclass()
-        current_cluster_sc_success = True
-        sc_obj = None
-        if sc_name in existing_sc_list:
-            log.info(f"Storage class {sc_name} already exists")
-        else:
-            try:
-                sc_obj = storageclass_factory(
-                    sc_name=sc_name,
-                    replica=2,
-                    new_rbd_pool=True,
-                    pool_name=pool_name,
-                    mapOptions="krbd:rxbounce",
-                )
-                if sc_obj is None or sc_obj.name != sc_name:
-                    log.error(
-                        f"Failed to create SC '{sc_name}' or name mismatch: "
-                        f"Created '{sc_obj.name if sc_obj else 'None'}'"
+        pool_name = "rdr-test-storage-pool-2way"
+        sc_name = "rbd-cnv-custom-sc-r2"
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            # Create or verify existing SC in all clusters
+            existing_sc_list = get_all_storageclass()
+            if sc_name in existing_sc_list:
+                log.info(f"Storage class {sc_name} already exists")
+            else:
+                try:
+                    sc_obj = storageclass_factory(
+                        sc_name=sc_name,
+                        replica=2,
+                        new_rbd_pool=True,
+                        pool_name=pool_name,
+                        mapOptions="krbd:rxbounce",
                     )
-                    current_cluster_sc_success = False
-                else:
-                    log.info(f"Successfully created custom RBD SC: {sc_name}")
-            except Exception as e:
-                log.error(f"Error creating SC '{sc_name}': {e}")
-                current_cluster_sc_success = False
+                    if sc_obj is None or sc_obj.name != sc_name:
+                        log.error(
+                            f"Failed to create SC '{sc_name}' or name mismatch: "
+                            f"Created '{sc_obj.name if sc_obj else 'None'}'"
+                        )
+                    else:
+                        log.info(f"Successfully created custom RBD SC: {sc_name}")
+                except Exception as e:
+                    log.error(f"Error creating SC '{sc_name}': {e}")
+                    raise
+        config.reset_ctx()
 
-        all_clusters_success_list.append(current_cluster_sc_success)
-    config.reset_ctx()
-    overall_all_clusters_success = all(all_clusters_success_list)
-    yield overall_all_clusters_success
+    return factory

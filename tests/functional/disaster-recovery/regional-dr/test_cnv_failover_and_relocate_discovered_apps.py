@@ -32,11 +32,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     @pytest.mark.parametrize(
         argnames=["custom_sc"],
         argvalues=[
-            # pytest.param(
-            #     *[False],
-            #     marks=pytest.mark.polarion_id("OCS-6266"),
-            #     id="default_sc",
-            # ),
+            pytest.param(
+                *[False],
+                marks=pytest.mark.polarion_id("OCS-6266"),
+                id="default_sc",
+            ),
             pytest.param(
                 True,
                 marks=pytest.mark.polarion_id("OCS-XXXX"),
@@ -47,8 +47,8 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     )
     def test_cnv_failover_and_relocate_discovered_apps(
         self,
-        request,
         custom_sc,
+        cnv_custom_storage_class,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
         node_restart_teardown,
@@ -63,13 +63,6 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         Test is parametrized to run with Custom RBD Storage Class and Pool of Replica-2.
 
         """
-
-        if custom_sc:
-            result = request.getfixturevalue("cnv_custom_storage_class")
-            assert (
-                result
-            ), "Custom storage class creation failed on one or more clusters"
-            time.sleep(120)
 
         md5sum_original = []
         md5sum_failover = []
