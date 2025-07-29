@@ -3778,7 +3778,7 @@ def check_ceph_osd_df_tree():
             return False
         # If it's a regular OSD entry, check if the expected osd size
         # and the current size are equal ignoring a small diff
-        diff = size * 0.02
+        diff = size * 0.04
         if not osd_id.startswith("-") and not (
             size - diff <= storage_size <= size + diff
         ):

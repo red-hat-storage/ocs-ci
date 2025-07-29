@@ -6251,7 +6251,7 @@ def create_auto_scaler(
     namespace=None,
     sc_name=None,
     device_class=None,
-    capacity_limit="4Ti",
+    capacity_limit="8Ti",
     scaling_threshold=70,
     max_osd_size="8Ti",
     timeout=1800,
