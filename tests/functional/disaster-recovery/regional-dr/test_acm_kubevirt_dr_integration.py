@@ -59,13 +59,13 @@ class TestACMKubevirtDRIntergration:
 
         logger.info("Deploy 1st CNV workload")
         cnv_workloads = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared=False
+            pvc_vm=1, dr_protect=False, shared_drpc_protection=False
         )
 
         # Second workload (uses same namespace as first)
         logger.info("Deploy 2nd CNV workload in the existing namespace")
         cnv_workloads = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared=True
+            pvc_vm=1, dr_protect=False, shared_drpc_protection=True
         )
         logger.info(f"CNV workloads instance is {cnv_workloads}")
 
@@ -226,7 +226,6 @@ class TestACMKubevirtDRIntergration:
 
         logger.info("Doing Cleanup Operations after successful failover")
         for cnv_wl in cnv_workloads:
-            # shared=True if cnv_wl is last_index else None
             dr_helpers.do_discovered_apps_cleanup(
                 drpc_name=resource_name,
                 old_primary=primary_cluster_name_before_failover,
