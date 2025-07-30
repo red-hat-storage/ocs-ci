@@ -3,7 +3,7 @@ import time
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
+    tier2,
     black_squad,
     ui,
 )
@@ -104,7 +104,7 @@ class TestBucketLifecycleUI:
         ), f"Expected rule to be enabled, got {our_rule['Status']}"
 
     @ui
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         "rules_dict,description",
         [
@@ -165,7 +165,7 @@ class TestBucketLifecycleUI:
         logger.info(f"Backend validation successful for rule '{rule_name}'")
 
     @ui
-    @tier1
+    @tier2
     @pytest.mark.parametrize(
         "rules_dict,description,target_prefix",
         [
@@ -243,7 +243,7 @@ class TestBucketLifecycleUI:
         )
 
     @ui
-    @tier1
+    @tier2
     def test_edit_lifecycle_rule(self, setup_ui_class_factory, mcg_obj):
         """
         Test editing existing lifecycle rule
@@ -313,7 +313,7 @@ class TestBucketLifecycleUI:
         )
 
     @ui
-    @tier1
+    @tier2
     @pytest.mark.jira("DFBUGS-2265")
     def test_delete_lifecycle_rule(self, setup_ui_class_factory, mcg_obj):
         """

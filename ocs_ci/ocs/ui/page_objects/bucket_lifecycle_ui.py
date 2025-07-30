@@ -5,7 +5,11 @@ from abc import ABC, abstractmethod
 import boto3
 from botocore.exceptions import SSLError, ClientError, BotoCoreError, NoCredentialsError
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+    WebDriverException,
+)
 
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
@@ -261,8 +265,11 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
             logger.info(f"Successfully deleted lifecycle rule: {rule_name}")
 
-        except Exception as e:
+        except (NoSuchElementException, TimeoutException, WebDriverException) as e:
             logger.error(f"Failed to delete lifecycle rule {rule_name}: {e}")
+            raise
+        except ImportError as e:
+            logger.error(f"Failed to import format_locator: {e}")
             raise
 
     def edit_lifecycle_rule(self, rule_name, new_rules):
@@ -312,8 +319,14 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
             logger.info(f"Successfully edited lifecycle rule: {rule_name}")
 
-        except Exception as e:
+        except (NoSuchElementException, TimeoutException, WebDriverException) as e:
             logger.error(f"Failed to edit lifecycle rule {rule_name}: {e}")
+            raise
+        except ImportError as e:
+            logger.error(f"Failed to import format_locator: {e}")
+            raise
+        except ValueError as e:
+            logger.error(f"Invalid rule parameters: {e}")
             raise
 
     def get_lifecycle_rules_list(self):
@@ -378,13 +391,13 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                             f"Could not extract rule name from row: {rule.get_attribute('outerHTML')[:200]}"
                         )
 
-                except Exception as row_error:
+                except (NoSuchElementException, AttributeError) as row_error:
                     logger.warning(f"Error processing rule row: {row_error}")
 
             logger.info(f"Found {len(rule_names)} lifecycle rules: {rule_names}")
             return rule_names
 
-        except Exception as e:
+        except (NoSuchElementException, TimeoutException, WebDriverException) as e:
             logger.error(f"Failed to get lifecycle rules list: {e}")
             return []
 
