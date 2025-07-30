@@ -352,8 +352,8 @@ def relocate(
                     vrg_name=workload_instances_shared[
                         0
                     ].discovered_apps_placement_name,
-                    always=False,
-                    ignore=True
+                    skip_resource_deletion_verification=False,
+
                 )
 
     config.switch_ctx(restore_index)
@@ -1937,7 +1937,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, always=True, ignore=False
+    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, skip_resource_deletion_verification=False, ignore_resource_not_found=False
 ):
     """
     Function to clean up Resources
@@ -1965,7 +1965,9 @@ def do_discovered_apps_cleanup(
     )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
-    if ignore:
+    if ignore_resource_not_found is True:
+
+        # --ignore-not-found is needed to avoid https://issues.redhat.com/browse/DFBUGS-3706
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
         )
@@ -1973,13 +1975,13 @@ def do_discovered_apps_cleanup(
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
         )
-    if always:
+    if not skip_resource_deletion_verification:
         wait_for_all_resources_deletion(
             namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
         )
         config.switch_acm_ctx()
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
-        config.switch_ctx(restore_index)
+    config.switch_ctx(restore_index)
 
 
 def do_discovered_apps_cleanup_multi_ns(
