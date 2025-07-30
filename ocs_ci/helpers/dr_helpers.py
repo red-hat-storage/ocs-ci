@@ -285,7 +285,7 @@ def relocate(
         old_primary (str): Name of cluster where workload were running
         workload_instance (object): Discovered App instance to get namespace and dir location
         multi_ns (bool): Multi Namespace
-
+        workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
 
     """
     restore_index = config.cur_index
@@ -340,7 +340,6 @@ def relocate(
         elif discovered_apps and workload_instance and workload_instances_shared:
             logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
             for cnv_wl in workload_instances_shared:
-                # shared = True if cnv_wl is last_index else None
                 do_discovered_apps_cleanup(
                     drpc_name=workload_placement_name,
                     old_primary=old_primary,
@@ -1950,8 +1949,12 @@ def do_discovered_apps_cleanup(
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
         vrg_name (str): Name of VRG
-        # shared (bool): False by default, needed when Shared protection type is used for DR protection
-        #             to clean both VM resources under the same namespace for full clean-up
+        skip_resource_deletion_verification (bool): False by default, resource verification is handled separately
+                                                    in the test when Shared protection type is used for DR protection
+                                                    via ACM UI
+
+        ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
+                                        DR protected via ACM UI is deleted, refer DFBUGS-3706
 
     """
     restore_index = config.cur_index

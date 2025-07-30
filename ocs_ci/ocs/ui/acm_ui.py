@@ -76,7 +76,7 @@ class AcmPageNavigator(BaseUI):
         Args:
             timeout (int): Timeout for which an element presence should be checked
             vms (bool): False by default, if True, navigation happens on the Virtual machines page under Infrastructure
-                        instead of Clusters page on the ACM console, useful with ACM 2.14 and higher
+                        instead of Clusters page on the ACM console, useful with ACM 2.14 and higher use cases
 
         """
         self.page_has_loaded(retries=12, sleep_time=5)

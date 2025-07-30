@@ -801,9 +801,11 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         acm_obj (AcmAddClusters): ACM Page Navigator Class
         vms (list): Specify the names of VMs for DR protection in the form of a list
         standalone (bool): True by default, will switch to Shared Protection type when False
-    Returns:
         protection_name (str): Protection name used to DR protect the workload using which
                                 DRPC and Placement would be created
+        namespace (str): None by default, namespace of the workload
+     Returns:
+         True if function executes successfully
 
     """
     if not vms or any(not vm.strip() for vm in vms):

@@ -7546,8 +7546,9 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
             custom_sc (bool): False by default, will create and use custom Pool and Storage Class
                             when set to True for CNV workload
             dr_protect (bool): True by default where workload will be DR protected via CLI,
-                                else test case should handle it (maybe with UI)
-            shared_drpc_protection (bool): # TODO
+                            else test case should handle it (via UI)
+            shared_drpc_protection (bool): False by default, True will use Shared Protection type to DR Protect
+                                        a workload using the existing DRPC in the same namespace
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -7561,7 +7562,6 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
             if shared_drpc_protection
             else "dr_cnv_discovered_apps"
         )
-        workload_key = "dr_cnv_discovered_apps"
         if custom_sc:
             log.info("Calling fixture to create Custom Pool/SC..")
             cnv_custom_storage_class()
@@ -7600,7 +7600,7 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload(
-                dr_protect=dr_protect, shared=shared_drpc_protection
+                dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
             )
 
         return instances
