@@ -1,7 +1,6 @@
 import logging
 import time
 
-import pytest
 
 from time import sleep
 
@@ -36,18 +35,23 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.19")
 class TestACMKubevirtDRIntergration:
     """
-    Test ACM Kubevirt DR Integration by DR Protecting Discovered VMs via UI as Standalone and Shared Protection type
-    and perform DR operation on them- RHSTOR-6413
+    Test ACM Kubevirt DR Integration by DR Protecting Discovered VMs via VMs page of ACM UI as Standalone
+    and Shared Protection type and perform DR operation on them- RHSTOR-6413
 
     """
 
-    @pytest.mark.polarion_id("OCS-xxxx")
+    # @pytest.mark.polarion_id("OCS-xxxx")
     # TODO: Add Polarion ID when available
-    def test_acm_kubevirt_dr_intergration_ui(
-        self, setup_acm_ui, discovered_apps_dr_workload_cnv, nodes_multicluster, node_restart_teardown
+    def test_acm_kubevirt_using_shared_protection(
+        self,
+        setup_acm_ui,
+        discovered_apps_dr_workload_cnv,
+        nodes_multicluster,
+        node_restart_teardown,
     ):
         """
-        DR operation on discovered VMs using Standalone and Shared Protection type
+        DR operation on discovered VMs using Shared Protection type, both VMs are tied to a single DRPC where DRPolicy
+        is applied via UI
 
         """
 
@@ -155,17 +159,17 @@ class TestACMKubevirtDRIntergration:
         sleep(360)
 
         # Shutdown primary managed cluster nodes
-        # active_primary_index = config.cur_index
-        # active_primary_cluster_node_objs = get_node_objs()
-        # logger.info("Shutting down all the nodes of the primary managed cluster")
-        # nodes_multicluster[active_primary_index].stop_nodes(
-        #     active_primary_cluster_node_objs
-        # )
-        # logger.info(
-        #     f"All nodes of the primary managed cluster {primary_cluster_name_before_failover} are powered off, "
-        #     "waiting for cluster to be unreachable.."
-        # )
-        # time.sleep(300)
+        active_primary_index = config.cur_index
+        active_primary_cluster_node_objs = get_node_objs()
+        logger.info("Shutting down all the nodes of the primary managed cluster")
+        nodes_multicluster[active_primary_index].stop_nodes(
+            active_primary_cluster_node_objs
+        )
+        logger.info(
+            f"All nodes of the primary managed cluster {primary_cluster_name_before_failover} are powered off, "
+            "waiting for cluster to be unreachable.."
+        )
+        time.sleep(300)
 
         logger.info("FailingOver the workloads.....")
         dr_helpers.failover(
@@ -213,17 +217,16 @@ class TestACMKubevirtDRIntergration:
                 f"Checksum of files written after Failover: {vm_filepaths[1]} on VM {cnv_wl.workload_name}: {md5sum}"
             )
 
-        # logger.info("Recover the down managed cluster")
-        # config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
-        # nodes_multicluster[active_primary_index].start_nodes(
-        #     active_primary_cluster_node_objs
-        # )
-        # wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
-        # wait_for_pods_to_be_running(timeout=420, sleep=15)
-        # assert ceph_health_check(tries=10, delay=30)
+        logger.info("Recover the down managed cluster")
+        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        nodes_multicluster[active_primary_index].start_nodes(
+            active_primary_cluster_node_objs
+        )
+        wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
+        wait_for_pods_to_be_running(timeout=420, sleep=15)
+        assert ceph_health_check(tries=10, delay=30)
 
         logger.info("Doing Cleanup Operations after successful failover")
-        last_index = cnv_workloads[-1]
         for cnv_wl in cnv_workloads:
             # shared=True if cnv_wl is last_index else None
             dr_helpers.do_discovered_apps_cleanup(

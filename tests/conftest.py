@@ -7537,7 +7537,9 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
 
     instances = []
 
-    def factory(pvc_vm=1, custom_sc=False, dr_protect=True, shared_drpc_protection=False):
+    def factory(
+        pvc_vm=1, custom_sc=False, dr_protect=True, shared_drpc_protection=False
+    ):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
@@ -7555,7 +7557,9 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         """
         total_pvc_count = 0
         workload_key = (
-            "dr_cnv_discovered_apps_shared" if shared_drpc_protection else "dr_cnv_discovered_apps"
+            "dr_cnv_discovered_apps_shared"
+            if shared_drpc_protection
+            else "dr_cnv_discovered_apps"
         )
         workload_key = "dr_cnv_discovered_apps"
         if custom_sc:
@@ -7595,7 +7599,9 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload(dr_protect=dr_protect, shared=shared_drpc_protection)
+            workload.deploy_workload(
+                dr_protect=dr_protect, shared=shared_drpc_protection
+            )
 
         return instances
 

@@ -337,11 +337,8 @@ def relocate(
                 workload_dir=workload_instance.workload_dir,
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
-        elif (
-            discovered_apps and workload_instance and workload_instances_shared
-        ):
+        elif discovered_apps and workload_instance and workload_instances_shared:
             logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
-            last_index = workload_instances_shared[-1]
             for cnv_wl in workload_instances_shared:
                 # shared = True if cnv_wl is last_index else None
                 do_discovered_apps_cleanup(
@@ -353,7 +350,6 @@ def relocate(
                         0
                     ].discovered_apps_placement_name,
                     skip_resource_deletion_verification=False,
-
                 )
 
     config.switch_ctx(restore_index)
@@ -1322,8 +1318,8 @@ def verify_last_group_sync_time(
         datetime.utcnow().strftime(time_format), time_format
     )
     time_since_last_sync = (
-                               current_time - last_group_sync_time_formatted
-                           ).total_seconds() / 60
+        current_time - last_group_sync_time_formatted
+    ).total_seconds() / 60
     logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
     assert (
         time_since_last_sync < 3 * scheduling_interval
@@ -1937,7 +1933,13 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name, skip_resource_deletion_verification=False, ignore_resource_not_found=False
+    drpc_name,
+    old_primary,
+    workload_namespace,
+    workload_dir,
+    vrg_name,
+    skip_resource_deletion_verification=False,
+    ignore_resource_not_found=False,
 ):
     """
     Function to clean up Resources
@@ -2150,8 +2152,8 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
         datetime.utcnow().strftime(time_format), time_format
     )
     time_since_last_sync = (
-                               current_time - last_kubeobject_protection_time_formatted
-                           ).total_seconds() / 60
+        current_time - last_kubeobject_protection_time_formatted
+    ).total_seconds() / 60
     logger.info(
         f"Time in minutes since the last Kube Object sync {time_since_last_sync}"
     )
