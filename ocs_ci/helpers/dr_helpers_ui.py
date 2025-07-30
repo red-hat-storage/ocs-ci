@@ -13,7 +13,6 @@ from selenium.common.exceptions import (
 )
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
 from ocs_ci.ocs.ui.base_ui import (
@@ -789,7 +788,9 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         return False
 
 
-def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalone=True, protection_name=None, namespace=None):
+def assign_drpolicy_for_discovered_vms_via_ui(
+    acm_obj, vms: List[str], standalone=True, protection_name=None, namespace=None
+):
     """
     This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
     of the ACM console.
@@ -810,7 +811,9 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     acm_obj.navigate_clusters_page(vms=True)
     for vm in vms:
-        existing_filter= acm_obj.check_element_presence(acm_loc["remove-existing-filter"][::-1])
+        existing_filter = acm_obj.check_element_presence(
+            acm_loc["remove-existing-filter"][::-1]
+        )
         if existing_filter:
             acm_obj.do_click(acm_loc["remove-existing-filter"])
             log.info("Existing filter removed")
@@ -831,8 +834,12 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
         log.info("Check the status of the VM")
         vm_current_status = acm_obj.get_element_text(acm_loc["vm-status"])
         if vm_current_status != "Running":
-            wait_for_status=acm_obj.wait_until_expected_text_is_found(acm_loc["vm-status"], expected_text="Running", timeout=300)
-            assert wait_for_status, f"Expected VM status is 'Running', but got '{vm_current_status}'"
+            wait_for_status = acm_obj.wait_until_expected_text_is_found(
+                acm_loc["vm-status"], expected_text="Running", timeout=300
+            )
+            assert (
+                wait_for_status
+            ), f"Expected VM status is 'Running', but got '{vm_current_status}'"
         log.info("Click on the kebab menu option")
         acm_obj.do_click(acm_loc["vm-kebab-menu"], enable_screenshot=True)
         log.info("Click on Manage disaster recovery")
@@ -848,8 +855,9 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
             acm_obj.do_click(acm_loc["select-shared"], enable_screenshot=True)
             radio_buttons = acm_obj.get_elements(acm_loc["select-drpc"])
             # Assert that exactly one element is found
-            assert len(radio_buttons) == 1, \
-                f"Expected 1 radio button but found {len(radio_buttons)}"
+            assert (
+                len(radio_buttons) == 1
+            ), f"Expected 1 radio button but found {len(radio_buttons)}"
             log.info("Expected 1 radio button found, select existing DRPC")
             acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
         log.info("Click next")
@@ -876,7 +884,7 @@ def assign_drpolicy_for_discovered_vms_via_ui(acm_obj, vms: List[str], standalon
         log.info("Policy confirmation")
         conf_msg = acm_obj.get_element_text(acm_loc["conf-msg"])
         log.info(f"Confirmation message is {conf_msg}")
-        expected_conf_msg = conf_msg.split('\n', 1)[1].strip()
+        expected_conf_msg = conf_msg.split("\n", 1)[1].strip()
         assert expected_conf_msg == "New policy assigned to application"
         log.info("Close page")
         acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
