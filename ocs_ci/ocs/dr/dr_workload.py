@@ -1524,7 +1524,6 @@ class BusyboxDiscoveredApps(DRWorkload):
             config.switch_acm_ctx()
             run_cmd(
                 f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {drpc_name or self.discovered_apps_placement_name}"
-                f"-drpc"
                 f"{ignore_not_found_param}"
             )
             log.info("Deleting Placement")
@@ -1648,14 +1647,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             "discovered_apps_pod_selector_value"
         )
 
-    def deploy_workload(self, shared=False, dr_protect=True):
+    def deploy_workload(self, shared_drpc_protection=False, dr_protect=True):
         """
 
         Args:
-            shared (bool): False by default, another workload in an existing namespace
+            shared_drpc_protection (bool): False by default, another workload in an existing namespace
                             will share the DRPC and DR protect it using Shared Protection type via UI
             dr_protect (bool): True by default where workload will be DR protected via CLI,
-                                else test case should handle it (maybe with UI)
+                                else test case should handle it (via UI)
 
         Deployment specific to CNV workload for Discovered/Imperative Apps
 
@@ -1663,14 +1662,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self._deploy_prereqs()
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            if not shared:
+            if not shared_drpc_protection:
                 self.create_namespace()
             else:
                 # Shared=False means namespace exists, so skip creation
                 log.info(
                     f"Namespace in use: {self.workload_namespace} for Shared Protection type"
                 )
-        self.manage_dr_vm_secrets(shared=shared)
+        self.manage_dr_vm_secrets(shared=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
@@ -1706,6 +1705,10 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
     def manage_dr_vm_secrets(self, shared=False):
         """
         Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
+
+        Args:
+            shared (bool): False by default, True when Shared Protection type is used to DR Protect a workload
+                        in an existing namespace
 
         """
         for cluster in get_non_acm_cluster_config():
@@ -1870,6 +1873,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
             )
         except CommandFailed:
+            # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
+            # hence deletion fails
             run_cmd(
                 f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-drpc"
             )
