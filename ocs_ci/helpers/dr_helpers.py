@@ -348,7 +348,7 @@ def relocate(
                     vrg_name=workload_instances_shared[
                         0
                     ].discovered_apps_placement_name,
-                    skip_resource_deletion_verification=False,
+                    skip_resource_deletion_verification=True,
                 )
 
     config.switch_ctx(restore_index)
@@ -1949,9 +1949,9 @@ def do_discovered_apps_cleanup(
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
         vrg_name (str): Name of VRG
-        skip_resource_deletion_verification (bool): False by default, resource verification is handled separately
-                                                    in the test when Shared protection type is used for DR protection
-                                                    via ACM UI
+        skip_resource_deletion_verification (bool): False by default and runs always, else resource verification is
+                                                    handled separately in the test when Shared protection type is used
+                                                    for DR protection via ACM UI
 
         ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
                                         DR protected via ACM UI is deleted, refer DFBUGS-3706
@@ -1970,9 +1970,10 @@ def do_discovered_apps_cleanup(
     )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
-    if ignore_resource_not_found is True:
+    if not ignore_resource_not_found:
 
         # --ignore-not-found is needed to avoid https://issues.redhat.com/browse/DFBUGS-3706
+        logger.info("Using '--ignore-not-found' during workload deletion")
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
         )
@@ -1980,7 +1981,7 @@ def do_discovered_apps_cleanup(
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
         )
-    if not skip_resource_deletion_verification:
+    if skip_resource_deletion_verification:
         wait_for_all_resources_deletion(
             namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
         )

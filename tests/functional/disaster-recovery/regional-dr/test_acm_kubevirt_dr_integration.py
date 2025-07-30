@@ -1,6 +1,4 @@
 import logging
-import time
-
 
 from time import sleep
 
@@ -156,7 +154,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(360)
+        sleep(wait_time * 60)
 
         # Shutdown primary managed cluster nodes
         active_primary_index = config.cur_index
@@ -169,7 +167,7 @@ class TestACMKubevirtDRIntergration:
             f"All nodes of the primary managed cluster {primary_cluster_name_before_failover} are powered off, "
             "waiting for cluster to be unreachable.."
         )
-        time.sleep(300)
+        sleep(300)
 
         logger.info("FailingOver the workloads.....")
         dr_helpers.failover(
@@ -273,7 +271,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(360)
+        sleep(wait_time * 60)
 
         logger.info("Relocating the workloads.....")
         dr_helpers.relocate(
@@ -285,7 +283,7 @@ class TestACMKubevirtDRIntergration:
             workload_instance=cnv_workloads[0],
             workload_instances_shared=cnv_workloads,
         )
-        # Clean-up is handled as part of the Relocate function and checks are done below
+        # Cleanup is handled as part of the Relocate function and checks are done below
         config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
         wait_for_all_resources_deletion(
             namespace=cnv_workloads[0].workload_namespace,
