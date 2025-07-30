@@ -7725,9 +7725,7 @@ def operator_pods():
 
 
 @pytest.fixture()
-def multi_cnv_workload(
-    request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-):
+def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
     The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
@@ -7766,6 +7764,9 @@ def multi_cnv_workload(
         if encrypted:
             # Setup csi-kms-connection-details configmap
             log.info("Setting up csi-kms-connection-details configmap")
+            pv_encryption_kms_setup_factory = request.getfixturevalue(
+                "pv_encryption_kms_setup_factory"
+            )
             kms = pv_encryption_kms_setup_factory(kv_version="v2")
             log.info("csi-kms-connection-details setup successful")
 
@@ -10153,9 +10154,10 @@ def vm_clone_fixture(request):
         from ocs_ci.ocs.cnv import virtual_machine
         from ocp_resources.virtual_machine_clone import VirtualMachineClone
 
+        name = create_unique_resource_name("api", "clone")
         target_name = f"clone-{vm.name}"
         with VirtualMachineClone(
-            name="clone-vm-test",
+            name=name,
             namespace=vm.namespace,
             source_name=vm.name,
             target_name=target_name,
@@ -10234,6 +10236,7 @@ def vm_snapshot_restore_fixture(request):
         """
         from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
         from ocp_resources.virtual_machine_restore import VirtualMachineRestore
+        from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 
         snapshot_name = f"snapshot-{vm.name}"
         vm_snapshot = VirtualMachineSnapshot(
@@ -10246,6 +10249,22 @@ def vm_snapshot_restore_fixture(request):
         vm_snapshot.create()
         vm_snapshot.wait_snapshot_done()
         snapshots.append(vm_snapshot)
+
+        volumes = (
+            vm.get()
+            .get("spec", {})
+            .get("template", {})
+            .get("spec", {})
+            .get("volumes", [])
+        )
+        original_pvcs = [
+            (
+                volumes[0].get("dataVolume", {}).get("name")
+                if volumes[0].get("dataVolume")
+                else volumes[0].get("persistentVolumeClaim", {}).get("claimName")
+            )
+        ]
+
         vm.stop()
         restore_snapshot_name = create_unique_resource_name(snapshot_name, "restore")
         with VirtualMachineRestore(
@@ -10260,6 +10279,16 @@ def vm_snapshot_restore_fixture(request):
 
         vm.start()
         vm.wait_for_ssh_connectivity(timeout=1200)
+
+        log.info("Delete original PVCs")
+        for pvc_name in original_pvcs:
+            pvc = PersistentVolumeClaim(
+                client=admin_client,
+                name=pvc_name,
+                namespace=vm.namespace,
+            )
+        if pvc.exists:
+            pvc.delete(wait=True)
         return vm
 
     def teardown():
