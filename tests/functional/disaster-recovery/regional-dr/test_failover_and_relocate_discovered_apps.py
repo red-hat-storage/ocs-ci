@@ -38,6 +38,13 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 id="primary_up-rbd-recipe",
             ),
             pytest.param(
+                True,
+                constants.CEPHBLOCKPOOL,
+                0,
+                1,
+                id="primary_down-rbd-recipe",
+            ),
+            pytest.param(
                 False,
                 constants.CEPHBLOCKPOOL,
                 1,
@@ -50,13 +57,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 0,
                 id="primary_down-rbd-kubeobject",
-            ),
-            pytest.param(
-                True,
-                constants.CEPHBLOCKPOOL,
-                0,
-                1,
-                id="primary_down-rbd-recipe",
             ),
             pytest.param(
                 False,
@@ -75,12 +75,20 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 id="primary_down-cephfs-kubeobject",
             ),
             pytest.param(
+                False,
+                constants.CEPHFILESYSTEM,
+                0,
+                1,
+                marks=[skipif_ocs_version("<4.19")],
+                id="primary_up-cephfs-recipe",
+            ),
+            pytest.param(
                 True,
                 constants.CEPHFILESYSTEM,
                 0,
                 1,
                 marks=[skipif_ocs_version("<4.19")],
-                id="primary_down-cephfs-kubeobject",
+                id="primary_down-cephfs-recipe",
             ),
         ],
     )
