@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pv import get_all_pvs
@@ -466,6 +467,84 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
 
     config.switch_ctx(restore_index)
     return True
+
+
+@retry(ValueError, tries=10)
+def check_mirroring_status_for_custom_pool(
+    pool_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, min_replaying=1
+):
+    """
+    Check the health and mirroring status of a custom CephBlockPoolRadosNamespace resource.
+    Refer For OCSQE-2294 or RHSTOR-5129 in ODF 4.19 for details
+
+    This function verifies that:
+    - At least two such resources exist in the given namespace
+    - The specified pool has all health fields set to 'OK'
+    - The replaying count in both 'image_states' and 'states' meets the minimum threshold
+
+    Args:
+        pool_name (str): Base name of the Ceph block pool (without '-builtin-implicit' suffix) whose
+        mirroring status has to be validated.
+        namespace (str): Namespace to look for the resource. Default is 'openshift-storage'.
+        min_replaying (int): Minimum expected value for replaying count. Default is 1.
+
+    Returns:
+        bool: True if all checks pass, otherwise False.
+
+    Raises:
+        ValueError: If custom Pool is missing, insufficient Pool count, or summary is not found.
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info("Checking count of CephBlockPoolRadosNamespace resource")
+        custom_pool_name = f"{pool_name}-builtin-implicit"
+        ocp = OCP(kind="CephBlockPoolRadosNamespace", namespace=namespace)
+        items = ocp.get().get("items", [])
+
+        if len(items) < 2:
+            raise ValueError(
+                f"Expected at least 2 resources, found {len(items)} in {namespace}"
+            )
+
+        for obj in items:
+            if obj.get("metadata", {}).get("name") != custom_pool_name:
+                continue
+            logger.info("Validate if mirroring status summary is present or not")
+            summary = obj.get("status", {}).get("mirroringStatus", {}).get("summary")
+            if not summary:
+                raise ValueError(f"No summary found for {custom_pool_name}")
+            logger.info("Validate health")
+            for key in ("health", "daemon_health", "group_health", "image_health"):
+                val = summary.get(key)
+                logger.info(f"{custom_pool_name} - {key}: {val}")
+                if val != "OK":
+                    logger.error(f"{key} is not OK: {val}")
+                    raise ValueError(
+                        f"Health check for {key} is not OK: {val} for pool {custom_pool_name}"
+                    )
+
+            img = summary.get("image_states", {}).get("replaying", 0)
+            state = summary.get("states", {}).get("replaying", 0)
+            logger.info(
+                f"{custom_pool_name} - replaying counts: image_states={img}, states={state}"
+            )
+
+            if img < min_replaying or state < min_replaying:
+                logger.error(
+                    f"Replaying count too low: image_states={img}, states={state}"
+                )
+                raise ValueError(
+                    f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
+                )
+
+            return True
+
+        raise ValueError(f"Custom Pool {custom_pool_name} not found in {namespace}")
+    config.switch_ctx(restore_index)
+    return False
 
 
 def get_pv_count(namespace):

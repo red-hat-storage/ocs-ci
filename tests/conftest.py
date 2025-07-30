@@ -225,7 +225,6 @@ from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_exp
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
 
-
 log = logging.getLogger(__name__)
 
 
@@ -928,11 +927,13 @@ def ceph_pool_factory_session(request, replica=3, compression=None):
 
 
 @pytest.fixture(scope="function")
-def ceph_pool_factory(request, replica=3, compression=None):
-    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
+def ceph_pool_factory(request, replica=3, compression=None, pool_name=None):
+    return ceph_pool_factory_fixture(
+        request, replica=replica, compression=compression, pool_name=pool_name
+    )
 
 
-def ceph_pool_factory_fixture(request, replica=3, compression=None):
+def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=None):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -942,11 +943,14 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
     instances = []
 
     def factory(
-        interface=constants.CEPHBLOCKPOOL, replica=replica, compression=compression
+        interface=constants.CEPHBLOCKPOOL,
+        replica=replica,
+        compression=compression,
+        pool_name=pool_name,
     ):
         if interface == constants.CEPHBLOCKPOOL:
             ceph_pool_obj = helpers.create_ceph_block_pool(
-                replica=replica, compression=compression
+                replica=replica, compression=compression, pool_name=pool_name
             )
         elif interface == constants.CEPHFILESYSTEM:
             cfs = ocp.OCP(
@@ -1133,6 +1137,7 @@ def storageclass_factory_fixture(
                         replica=ocsci_config.ENV_DATA.get("replica") or replica,
                         compression=ocsci_config.ENV_DATA.get("compression")
                         or compression,
+                        pool_name=pool_name,
                     )
                     interface_name = pool_obj.name
                 else:
@@ -7524,7 +7529,7 @@ def discovered_apps_dr_workload(request):
 
 
 @pytest.fixture()
-def discovered_apps_dr_workload_cnv(request):
+def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
     """
     Deploys CNV Discovered App based workload for DR setup
 
@@ -7532,10 +7537,12 @@ def discovered_apps_dr_workload_cnv(request):
 
     instances = []
 
-    def factory(pvc_vm=1):
+    def factory(pvc_vm=1, custom_sc=False):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+            custom_sc (bool): False by default, will create and use custom Pool and Storage Class
+                            when set to True for CNV workload
 
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
@@ -7546,6 +7553,10 @@ def discovered_apps_dr_workload_cnv(request):
         """
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
+        if custom_sc:
+            log.info("Calling fixture to create Custom Pool/SC..")
+            cnv_custom_storage_class()
+            workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = CnvWorkloadDiscoveredApps(
