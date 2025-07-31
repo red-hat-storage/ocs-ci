@@ -198,7 +198,6 @@ class TestVmShutdownStart(E2ETest):
         else:
             # Verify that VMs status post start
             vm_for_stop.start()
-            vm_for_snap.unpause()
             for vm in all_vms:
                 assert (
                     vm.printableStatus() == constants.VM_RUNNING
