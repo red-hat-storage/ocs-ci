@@ -30,7 +30,7 @@ class TestMonAndOSDFailures:
 
     @pytest.fixture(scope="class")
     def setup_cnv_workload(
-        self, request, project_factory_class, multi_cnv_workload, setup_cnv
+        self, request, project_factory_class, multi_cnv_workload_class, setup_cnv
     ):
         """
         Set up CNV workload and create initial data.
@@ -44,7 +44,7 @@ class TestMonAndOSDFailures:
             self.vm_objs_aggr,
             _,
             _,
-        ) = multi_cnv_workload(namespace=self.proj_obj.namespace)
+        ) = multi_cnv_workload_class(namespace=self.proj_obj.namespace)
         self.all_vms = self.vm_objs_def + self.vm_objs_aggr
         source_csums = {
             vm_obj.name: run_dd_io(vm_obj, file_path=file_paths[0], verify=True)
