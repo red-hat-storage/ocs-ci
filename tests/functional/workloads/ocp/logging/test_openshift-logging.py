@@ -39,6 +39,9 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
+@pytest.mark.skip(
+    reason="Skipped due to ocs-ci issue https://github.com/red-hat-storage/ocs-ci/issues/11604"
+)
 @magenta_squad
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers

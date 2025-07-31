@@ -375,6 +375,7 @@ def install_logging():
 
     # Gets OCP version to align logging version to OCP version
     ocp_version = version.get_semantic_ocp_version_from_config()
+
     logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
