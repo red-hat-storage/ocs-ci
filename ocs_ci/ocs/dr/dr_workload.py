@@ -1669,7 +1669,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 log.info(
                     f"Namespace in use: {self.workload_namespace} for Shared Protection type"
                 )
-        self.manage_dr_vm_secrets(shared=shared_drpc_protection)
+        self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
@@ -1702,20 +1702,20 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         run_cmd(f"oc create namespace {self.workload_namespace}")
 
-    def manage_dr_vm_secrets(self, shared=False):
+    def manage_dr_vm_secrets(self, shared_drpc_protection=False):
         """
         Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
 
         Args:
-            shared (bool): False by default, True when Shared Protection type is used to DR Protect a workload
-                        in an existing namespace
+            shared_drpc_protection (bool): False by default, True when Shared Protection type is used to DR Protect
+            a workload in an existing namespace
 
         """
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
 
             # Create namespace if it doesn't exist
-            if not shared:
+            if not shared_drpc_protection:
                 try:
                     create_project(project_name=self.workload_namespace)
                 except CommandFailed as ex:
@@ -1865,6 +1865,13 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
     ):
         """
         Delete Discovered Apps
+
+        Args:
+            shared_drpc_protection (bool): False by default, another workload in an existing namespace
+                            will share the DRPC and DR protect it using Shared Protection type via UI
+            skip_resource_deletion_verification (bool): False by default, resource verification is
+                                                    handled based upon Standalone or Shared protection type is used
+                                                    for DR protection (via ACM UI)
 
         """
 
