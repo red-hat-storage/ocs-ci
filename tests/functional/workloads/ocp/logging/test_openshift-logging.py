@@ -41,8 +41,8 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
-@skipif_ocs_version(">=4.19")
-@skipif_ocp_version(">=4.19")
+@skipif_ocs_version(">=4.17")
+@skipif_ocp_version(">=4.17")
 @magenta_squad
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
