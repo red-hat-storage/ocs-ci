@@ -7724,6 +7724,15 @@ def operator_pods():
     return operator_pods
 
 
+@pytest.fixture(scope="class")
+def multi_cnv_workload_class(request):
+    """
+    Class scoped fixture to deploy multiple CNV workload
+
+    """
+    return multi_cnv_workload(request)
+
+
 @pytest.fixture()
 def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
