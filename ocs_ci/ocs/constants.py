@@ -137,6 +137,9 @@ STATUS_POWERON = "ON"
 STATUS_POWEROFF = "OFF"
 STATUS_STOPPED = "stopped"
 STATUS_STOPPING = "stopping"
+STATUS_REPLACING = "Replacing"
+STATUS_SUCCEED = "Succeeded"
+STATUS_ACTIVE = "Active"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -151,7 +154,7 @@ HEALTHY_PV_BS = ["OPTIMAL", "LOW_CAPACITY"]
 # Storage-Auto-Scaler statuses
 NOT_STARTED = "NotStarted"
 IN_PROGRES = "InProgress"
-SUCCEEDED = "Succeeded"
+SUCCEEDED = STATUS_SUCCEED
 
 # check health
 CEPH_HEALTH_WARN = "HEALTH_WARN"
