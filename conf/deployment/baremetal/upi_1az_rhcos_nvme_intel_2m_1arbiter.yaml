@@ -2,17 +2,29 @@
 # Configuration for baremetal UPI deployment with 2 control plane nodes and 1 arbiter node
 # Following Red Hat OCP 4.19 documentation for local arbiter node topology
 # Reference: https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html-single/installing_on_bare_metal/index#ipi-install-config-local-arbiter-node_ipi-install-installation-workflow
+---
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
+  local_storage_storagedeviceset_count: 3
+  ocs_operator_nodes_to_label: 1
   arbiter_deployment: true
   arbiter_autodetect: false
+  network_split_setup: true
+  arbiter_node_name: "arbiter"
+  arbiter_detection_strategy: "third_master"
+  arbiter_zone: null
+  custom_arbiter_condition: null
 ENV_DATA:
   platform: 'baremetal'
   deployment_type: 'upi'
   worker_replicas: 0
-  master_replicas: 3  # Total of 3: 2 control plane + 1 arbiter
+  master_replicas: 3
   mon_type: 'hostpath'
   osd_type: 'nvme'
-  # Arbiter-specific configuration
-  arbiter_enabled: true
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  extra_disks: 2
+  fio_storageutilization_min_mbps: 10.0
