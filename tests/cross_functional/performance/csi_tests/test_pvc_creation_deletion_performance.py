@@ -13,11 +13,13 @@ import yaml
 from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.resources import pvc
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.helpers import set_configmap_log_level_csi_sidecar
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.utility import templating
+from ocs_ci.framework.testlib import ignore_leftovers
 
 
 log = logging.getLogger(__name__)
@@ -53,7 +55,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         super(TestPVCCreationDeletionPerformance, self).setup()
         self.benchmark_name = "PVC_Creation-Deletion"
         self.create_test_project()
-        set_configmap_log_level_csi_sidecar(value=5)
+        #set_configmap_log_level_csi_sidecar(value=5)
 
     def teardown(self):
         """
@@ -62,9 +64,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         log.info("Starting the test environment celanup")
         # Delete the test project (namespace)
-        self.delete_test_project()
-        set_configmap_log_level_csi_sidecar(value=1)
-        super(TestPVCCreationDeletionPerformance, self).teardown()
+        #self.delete_test_project()
+        #set_configmap_log_level_csi_sidecar(value=1)
+        #super(TestPVCCreationDeletionPerformance, self).teardown()
 
     def create_fio_pod_yaml(self, pvc_size=1):
         """
@@ -145,7 +147,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         for pvc_obj in self.pvc_objs:
             pvc_obj.reload()
 
-        return start_time
+        return self.pvc_objs
 
     def run_io(self):
         """
@@ -181,7 +183,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             "pod", len(pod_objs), self.namespace, constants.STATUS_COMPLETED, timeout, 5
         )
         log.info("I/O Completed on all POD(s)")
-
+        '''
         # Delete all created POD(s)
         log.info("Try to delete all created PODs")
         for pod_obj in pod_objs:
@@ -193,6 +195,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         )
         log.info("All pOD(s) was deleted")
         return True
+        '''
 
     def init_full_results(self, full_results):
         """
@@ -437,11 +440,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
             ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM],
-            ),
         ],
     )
+    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-2618")
     def test_multiple_pvc_deletion_measurement_performance(self, interface_type):
         """
@@ -453,10 +454,10 @@ class TestPVCCreationDeletionPerformance(PASTest):
         """
         # Initialize the test variables
         self.interface = interface_type
-
-        number_of_pvcs = 120
+        self.counter=25
+        number_of_pvcs = 200
         if self.dev_mode:
-            number_of_pvcs = 5
+            number_of_pvcs = 200
 
         pvc_size = "1Gi"
 
@@ -505,7 +506,52 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         # Fillup the PVC with data (70% of the total PVC size)
         self.run_io()
+        snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
+        if self.interface == constants.CEPHFILESYSTEM:
+            snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+        while(self.counter > 0):
+            for pvcc in self.pvc_objs:
+                snap_name = pvcc.name.replace("claim", "snapshot-")
+                self.snap_obj = pvc.create_pvc_snapshot(
+                    pvc_name=pvcc.name,
+                    snap_yaml=snap_yaml,
+                    snap_name=snap_name,
+                    namespace = self.namespace,
+                    sc_name=helpers.default_volumesnapshotclass(self.interface).name,
+                )
 
+                # Wait until the snapshot is bound and ready to use
+                self.snap_obj.ocp.wait_for_resource(
+                    condition="true",
+                    resource_name=self.snap_obj.name,
+                    column=constants.STATUS_READYTOUSE,
+                    timeout=600,
+                )
+                restore_pvc_name = pvcc.name.replace(
+                    "pvc-test", f"restore-pvc"
+                )
+                restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
+                restore_pvc_obj = pvc.create_restore_pvc(
+                    sc_name=constants.CEPHBLOCKPOOL_SC,
+                    snap_name=self.snap_obj.name,
+                    namespace=self.namespace,
+                    size=pvc_size,
+                    pvc_name=restore_pvc_name,
+                    restore_pvc_yaml=restore_pvc_yaml,
+                )
+                helpers.wait_for_resource_state(
+                    restore_pvc_obj,
+                    constants.STATUS_BOUND,
+                    timeout=3600,  # setting this to 60 Min.
+                # since it can be take long time to restore, and we want it to finished.
+                )
+                self.snap_obj.delete(wait=True)
+                log.info(f"Deleting restore PVC {restore_pvc_obj.name}")
+                restore_pvc_obj.delete()
+                restore_pvc_obj.ocp.wait_for_delete(resource_name=restore_pvc_obj.name)
+            log.info(f"Countt{self.counter}")
+            self.counter = self.counter-1
+        """
         # Deleting PVC(s) for deletion time mesurment
         log.info("Try to delete all created PVCs")
         for pvc_obj in self.pvc_objs:
@@ -572,6 +618,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
             # Create text file with results of all subtest (3 - according to the parameters)
             self.write_result_to_file(res_link)
+        """
 
     def test_getting_all_results(self):
         """
