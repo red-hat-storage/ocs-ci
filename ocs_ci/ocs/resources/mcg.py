@@ -960,37 +960,6 @@ class MCG:
         )
         wait_for_resource_state(self.core_pod, constants.STATUS_RUNNING)
 
-    def reset_endpoint_pods(self):
-        """
-        Delete the noobaa endpoint pod and wait for it to come up again
-
-        """
-
-        from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
-
-        endpoint_pods = [
-            Pod(**pod_data)
-            for pod_data in get_pods_having_label(
-                constants.NOOBAA_ENDPOINT_POD_LABEL, self.namespace
-            )
-        ]
-        for pod in endpoint_pods:
-            pod.delete(wait=True)
-
-        wait_for_pods_by_label_count(
-            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            exptected_count=len(endpoint_pods),
-        )
-
-        endpoint_pods = [
-            Pod(**pod_data)
-            for pod_data in get_pods_having_label(
-                constants.NOOBAA_ENDPOINT_POD_LABEL, self.namespace
-            )
-        ]
-        for pod in endpoint_pods:
-            wait_for_resource_state(pod, constants.STATUS_RUNNING)
-
     def get_noobaa_admin_credentials_from_secret(self):
         """
         Get the NooBaa admin credentials from the OCP secret
