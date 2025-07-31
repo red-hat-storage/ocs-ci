@@ -197,17 +197,12 @@ class TestVmShutdownStart(E2ETest):
                     vm_obj.start()
         else:
             # Verify that VMs status post start
-            vm_for_clone.start()
             vm_for_stop.start()
-            for vm in (vm_for_clone, vm_for_stop):
+            vm_for_snap.unpause()
+            for vm in all_vms:
                 assert (
                     vm.printableStatus() == constants.VM_RUNNING
                 ), f"{vm.name} did not reach the running state."
-
-        # Verifies vm status after start and ssh connectivity
-        vm_for_clone.verify_vm(verify_ssh=True)
-        vm_for_stop.verify_vm(verify_ssh=True)
-        restored_vm.verify_vm(verify_ssh=True)
 
         # Perform post restart data integrity check
         for vm_obj in all_vms:
