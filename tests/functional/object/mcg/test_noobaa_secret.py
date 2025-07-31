@@ -393,9 +393,10 @@ def test_operator_logs_for_secret():
 
     # get the noobaa operator logs filtered
     pattern = r"Identity:\S+ Secret:\S+"
-    filtered_log = search_pattern_in_pod_logs(
-        pod_name=get_noobaa_operator_pod().name, pattern=pattern
-    )
+    with config.RunWithProviderConfigContextIfAvailable():
+        filtered_log = search_pattern_in_pod_logs(
+            pod_name=get_noobaa_operator_pod().name, pattern=pattern
+        )
 
     # check if secrets are exposed in the noobaa operator logs
     for log_line in filtered_log:
