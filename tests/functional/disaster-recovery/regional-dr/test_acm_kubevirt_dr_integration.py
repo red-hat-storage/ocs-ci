@@ -4,10 +4,11 @@ from time import sleep
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import skipif_ocs_version, tier1
+from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import (
     rdr,
     turquoise_squad,
+    tier2,
 )
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 @rdr
-@tier1
+@tier2
 @turquoise_squad
 @skipif_ocs_version("<4.19")
 class TestACMKubevirtDRIntergration:
@@ -48,8 +49,8 @@ class TestACMKubevirtDRIntergration:
         node_restart_teardown,
     ):
         """
-        DR operation on discovered VMs using Shared Protection type, both VMs are tied to a single DRPC where DRPolicy
-        is applied via UI
+        DR operation on discovered VMs using Shared Protection type, both VMs are tied to a single DRPC
+        in the same namespace where same DRPolicy is applied via UI to both the apps.
 
         """
 
@@ -154,7 +155,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(360)
+        sleep(wait_time * 60)
 
         # Shutdown primary managed cluster nodes
         active_primary_index = config.cur_index
@@ -270,7 +271,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(360)
+        sleep(wait_time * 60)
 
         logger.info("Relocating the workloads.....")
         dr_helpers.relocate(

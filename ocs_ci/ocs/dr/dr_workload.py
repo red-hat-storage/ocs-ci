@@ -1868,9 +1868,9 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         """
 
-        log.info("Deleting DRPC")
         config.switch_acm_ctx()
         if not shared_drpc_protection:
+            log.info("Deleting DRPC")
             try:
                 run_cmd(
                     f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
@@ -1900,4 +1900,5 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                     discovered_apps=True,
                     workload_cleanup=True,
                 )
-            run_cmd(f"oc delete project {self.workload_namespace}")
+                run_cmd(f"oc delete project {self.workload_namespace}")
+                log.info(f"Project {self.workload_namespace} deleted successfully")
