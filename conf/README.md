@@ -320,6 +320,7 @@ higher priority).
     * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
     * `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
     * `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
+    * `additional_ntp_source` - A comma-separated list of NTP sources (name or IP) going to be added to all the hosts.
     * `servers` - definition of the servers in the BM environment (map where key is the name of the server)
         * `<server-name>`
             * `mgmt_provider` - defines how the server should be managed (`ipmitool` or `ibmcloud`)
