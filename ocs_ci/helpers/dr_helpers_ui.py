@@ -5,6 +5,8 @@ Helper functions specific to DR User Interface
 import logging
 import time
 
+from typing import List
+
 from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
@@ -658,7 +660,7 @@ def protected_volume_count_per_cluster(acm_obj, cluster_name):
 
 
 def check_apps_running_on_selected_cluster(
-    acm_obj, cluster_name, app_names=[], timeout=10
+    acm_obj, cluster_name, app_names: List[str], timeout=10
 ):
     """
     Function to check the apps running on selected managed cluster on DR monitoring dashboard
@@ -673,6 +675,10 @@ def check_apps_running_on_selected_cluster(
         True if all the apps are found on selected managed cluster, False if any of the apps are missing
 
     """
+    if not app_names or any(not app.strip() for app in app_names):
+        raise ValueError(
+            "Parameter 'app_names' is required and must be a non-empty list"
+        )
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
     acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
@@ -780,3 +786,108 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
     else:
         log.error("Applications not present to delete from UI")
         return False
+
+
+def assign_drpolicy_for_discovered_vms_via_ui(
+    acm_obj, vms: List[str], standalone=True, protection_name=None, namespace=None
+):
+    """
+    This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
+    of the ACM console.
+    With ACM 2.14 and above, Data Policy can be assigned as Standalone or Shared Protection type (if there is an
+    existing DRPC for another VM workload, and you want to club it together)
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        vms (list): Specify the names of VMs for DR protection in the form of a list
+        standalone (bool): True by default, will switch to Shared Protection type when False
+        protection_name (str): Protection name used to DR protect the workload using which
+                                DRPC and Placement would be created
+        namespace (str): None by default, namespace of the workload
+     Returns:
+         True if function executes successfully
+
+    """
+    if not vms or any(not vm.strip() for vm in vms):
+        raise ValueError("Parameter 'vms' is required and must be a non-empty list")
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    acm_obj.navigate_clusters_page(vms=True)
+    for vm in vms:
+        existing_filter = acm_obj.check_element_presence(
+            acm_loc["remove-existing-filter"][::-1]
+        )
+        if existing_filter:
+            acm_obj.do_click(acm_loc["remove-existing-filter"])
+            log.info("Existing filter removed")
+        else:
+            log.info("No filter exists")
+        log.info("Select name as filter")
+        acm_obj.do_click(acm_loc["filter-vms"], enable_screenshot=True)
+        acm_obj.do_click(acm_loc["filter-with-name"], enable_screenshot=True)
+        log.info("Select the name of the VM and apply filter")
+        acm_obj.do_click(format_locator(acm_loc["vm_name"], vm))
+        log.info("Select namespace as filter")
+        acm_obj.do_click(acm_loc["filter-vms-2"], enable_screenshot=True)
+        acm_obj.do_click(acm_loc["filter-with-namespace"], enable_screenshot=True)
+        log.info("Select the name of the namespace where VM is running")
+        acm_obj.do_click(format_locator(acm_loc["vm-namespace"], namespace))
+        log.info("Click on forward arrow to apply filter")
+        acm_obj.do_click(acm_loc["click-forward-arrow"], enable_screenshot=True)
+        log.info("Check the status of the VM")
+        vm_current_status = acm_obj.get_element_text(acm_loc["vm-status"])
+        if vm_current_status != "Running":
+            wait_for_status = acm_obj.wait_until_expected_text_is_found(
+                acm_loc["vm-status"], expected_text="Running", timeout=300
+            )
+            assert (
+                wait_for_status
+            ), f"Expected VM status is 'Running', but got '{vm_current_status}'"
+        log.info("Click on the kebab menu option")
+        acm_obj.do_click(acm_loc["vm-kebab-menu"], enable_screenshot=True)
+        log.info("Click on Manage disaster recovery")
+        acm_obj.do_click(acm_loc["manage-dr"], enable_screenshot=True)
+        log.info("Click on Enroll virtual machine")
+        acm_obj.do_click(acm_loc["enroll-vm"], enable_screenshot=True)
+        if standalone:
+            log.info("Send Protection name")
+            acm_obj.do_click(acm_loc["name-input-btn"])
+            acm_obj.do_send_keys(acm_loc["name-input-btn"], text=protection_name)
+        else:
+            log.info("Protecting VM with Shared Protection type")
+            acm_obj.do_click(acm_loc["select-shared"], enable_screenshot=True)
+            radio_buttons = acm_obj.get_elements(acm_loc["select-drpc"])
+            # Assert that exactly one element is found
+            assert (
+                len(radio_buttons) == 1
+            ), f"Expected 1 radio button but found {len(radio_buttons)}"
+            log.info("Expected 1 radio button found, select existing DRPC")
+            acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
+        log.info("Click next")
+        acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
+        if standalone:
+            log.info("Select policy")
+            acm_obj.do_click(acm_loc["dr-policy"], enable_screenshot=True)
+            acm_obj.do_click(acm_loc["select-policy"], enable_screenshot=True)
+        log.info("Click next")
+        acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
+        log.info("Verify selected protection type")
+        selected_protection_type = "Standalone" if standalone else "Shared"
+        protection_type = acm_obj.get_element_text(
+            format_locator(
+                acm_loc["selected-protection-type"], selected_protection_type
+            )
+        )
+        assert protection_type == (
+            "Standalone" if standalone else "Shared"
+        ), f"Expected {'Standalone' if standalone else 'Shared'}, but got '{protection_type}'"
+        log.info("Assign DRPolicy")
+        acm_obj.do_click(acm_loc["assign"], enable_screenshot=True)
+        time.sleep(2)
+        log.info("Policy confirmation")
+        conf_msg = acm_obj.get_element_text(acm_loc["conf-msg"])
+        log.info(f"Confirmation message is {conf_msg}")
+        expected_conf_msg = conf_msg.split("\n", 1)[1].strip()
+        assert expected_conf_msg == "New policy assigned to application"
+        log.info("Close page")
+        acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
+        return True

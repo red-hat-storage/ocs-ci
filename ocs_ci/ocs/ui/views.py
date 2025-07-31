@@ -1286,12 +1286,51 @@ acm_configuration_4_18 = {
 }
 
 acm_configuration_4_19 = {
+    "replication-policy": ("//td[@data-label='replicationPolicy']", By.XPATH),
     "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
     "install-submariner-btn": (
         "//a[@id='install-submariner'] | //button[@id='install-submariner']",
         By.XPATH,
     ),
     "nat-t-checkbox": ("//input[@id='natt-enable']", By.XPATH),
+    "vms_page": (
+        "//a[@data-test='nav' and normalize-space()='Virtual machines']",
+        By.XPATH,
+    ),
+    "remove-existing-filter": (
+        "button[aria-label='Clear button for chips and input']",
+        By.CSS_SELECTOR,
+    ),
+    "filter-vms": ("input[placeholder='Filter VirtualMachines']", By.CSS_SELECTOR),
+    "filter-with-name": (
+        "(//span[@class='pf-v5-c-menu__item-text'][normalize-space()='name'])[1]",
+        By.XPATH,
+    ),
+    "filter-vms-2": ("input[aria-label='Search input']", By.CSS_SELECTOR),
+    "filter-with-namespace": (
+        "//span[contains(text(),'namespace')]",
+        By.XPATH,
+    ),
+    "vm-namespace": ("//span[contains(text(),'{}')]", By.XPATH),
+    "vm_name": ("//span[contains(text(),'{}')]", By.XPATH),
+    "click-forward-arrow": (
+        "//button[@id='run-search-button']//*[name()='svg']",
+        By.XPATH,
+    ),
+    "vm-status": ("td[data-label='Status']", By.CSS_SELECTOR),
+    "vm-kebab-menu": ("button[aria-label='Actions']", By.CSS_SELECTOR),
+    "manage-dr": ("//span[contains(text(),'Manage disaster recovery')]", By.XPATH),
+    "enroll-vm": ("button[aria-label='Empty Page']", By.CSS_SELECTOR),
+    "name-input-btn": ("#name-input", By.CSS_SELECTOR),
+    "vm-page-next-btn": ("button[type='submit']", By.CSS_SELECTOR),
+    "dr-policy": ("#pf-select-toggle-id-0", By.CSS_SELECTOR),
+    "select-policy": ("(//span[@class='pf-v5-c-select__menu-item-main'])[1]", By.XPATH),
+    "selected-protection-type": ("//div[normalize-space()='{}']", By.XPATH),
+    "assign": ("button[type='submit']", By.CSS_SELECTOR),
+    "conf-msg": ("(//h4[@class='pf-v5-c-alert__title'])[1]", By.XPATH),
+    "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
+    "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
+    "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
 }
 
 add_capacity = {
