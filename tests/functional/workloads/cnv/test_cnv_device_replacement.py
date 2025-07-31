@@ -117,7 +117,6 @@ class TestCnvDeviceReplace(E2ETest):
 
         logger.info("Starting vms")
         vm_for_stop.start()
-        vm_for_snap.unpause()
 
         # Combined IO operations and data integrity check
         for vm_obj in all_vms:
