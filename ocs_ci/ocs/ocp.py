@@ -838,7 +838,12 @@ class OCP(object):
 
     @catch_exceptions(Exception)
     def _process_oc_wait_cmd(self, column, condition):
-
+        """
+        Process oc wait command for a resource kind and condition.
+        This method is a helper function to determine if the given condition and cr kind are supported by the
+        'oc wait' command. If the condition is not supported, it returns False and we must proceed with the legacy
+        approach of using 'oc get' and TimeoutSampler.
+        """
         if not column == "STATUS":
             return False
 
@@ -880,7 +885,7 @@ class OCP(object):
         ):
             return True
         else:
-            print(
+            log.warning(
                 f"{inspect.currentframe().f_code.co_name}: Condition '{condition}' is not supported for resource kind "
                 f"'{self.kind}' at column '{column}'"
             )
