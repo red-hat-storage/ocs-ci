@@ -1860,7 +1860,9 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def delete_workload(self):
+    def delete_workload(
+        self, shared_drpc_protection=False, skip_resource_deletion_verification=False
+    ):
         """
         Delete Discovered Apps
 
@@ -1868,21 +1870,22 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         log.info("Deleting DRPC")
         config.switch_acm_ctx()
-        try:
+        if not shared_drpc_protection:
+            try:
+                run_cmd(
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+                )
+            except CommandFailed:
+                # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
+                # hence deletion fails
+                run_cmd(
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-drpc"
+                )
+                log.info("DRPC deleted")
+            log.info("Deleting Placement")
             run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
             )
-        except CommandFailed:
-            # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
-            # hence deletion fails
-            run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-drpc"
-            )
-            log.info("DRPC deleted")
-        log.info("Deleting Placement")
-        run_cmd(
-            f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
-        )
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -1891,9 +1894,10 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
                 ignore_error=True,
             )
-            dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace,
-                discovered_apps=True,
-                workload_cleanup=True,
-            )
+            if not skip_resource_deletion_verification:
+                dr_helpers.wait_for_all_resources_deletion(
+                    namespace=self.workload_namespace,
+                    discovered_apps=True,
+                    workload_cleanup=True,
+                )
             run_cmd(f"oc delete project {self.workload_namespace}")

@@ -1981,7 +1981,7 @@ def do_discovered_apps_cleanup(
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
         )
-    if skip_resource_deletion_verification:
+    if not skip_resource_deletion_verification:
         wait_for_all_resources_deletion(
             namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
         )

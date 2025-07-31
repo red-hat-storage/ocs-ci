@@ -7606,11 +7606,11 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         return instances
 
     def teardown():
-        for instance in instances:
-            try:
-                instance.delete_workload()
-            except ResourceNotDeleted:
-                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+        try:
+            instances[0].delete_workload(skip_resource_deletion_verification=True)
+            instances[1].delete_workload(shared_drpc_protection=True)
+        except ResourceNotDeleted:
+            raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
     request.addfinalizer(teardown)
     return factory

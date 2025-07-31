@@ -154,7 +154,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(360)
 
         # Shutdown primary managed cluster nodes
         active_primary_index = config.cur_index
@@ -270,7 +270,7 @@ class TestACMKubevirtDRIntergration:
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(360)
 
         logger.info("Relocating the workloads.....")
         dr_helpers.relocate(

@@ -213,8 +213,8 @@ ENV_DATA:
       dr_workload_app_pod_selector_value: "kubevirt",
       dr_workload_app_pvc_selector_key: "appname",
       dr_workload_app_pvc_selector_value: "kubevirt",
-      workload_namespace: "cnv-dict-gg",
-      dr_workload_app_placement_name: "cnv-dict-gg",
+      workload_namespace: "cnv-dict-h2",
+      dr_workload_app_placement_name: "cnv-dict-h2",
       vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
     }
@@ -228,8 +228,8 @@ ENV_DATA:
       dr_workload_app_pod_selector_value: "kubevirt",
       dr_workload_app_pvc_selector_key: "appname",
       dr_workload_app_pvc_selector_value: "kubevirt",
-      workload_namespace: "cnv-dict-gg",
-      dr_workload_app_placement_name: "cnv-dict-gg",
+      workload_namespace: "cnv-dict-h2",
+      dr_workload_app_placement_name: "cnv-dict-h2",
       vm_name: "vm-workload-2",
       vm_secret: "vm-secret-1", vm_username: "cirros",
     }
