@@ -7557,11 +7557,9 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
 
         """
         total_pvc_count = 0
-        workload_key = (
-            "dr_cnv_discovered_apps_shared"
-            if shared_drpc_protection
-            else "dr_cnv_discovered_apps"
-        )
+        workload_key = "dr_cnv_discovered_apps"
+        if shared_drpc_protection:
+            workload_key = "dr_cnv_discovered_apps_shared"
         if custom_sc:
             log.info("Calling fixture to create Custom Pool/SC..")
             cnv_custom_storage_class()
