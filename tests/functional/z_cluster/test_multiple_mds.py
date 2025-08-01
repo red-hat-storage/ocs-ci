@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     tier4c,
     skipif_external_mode,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
@@ -91,6 +92,7 @@ class TestMultipleMds:
         """
         self.sanity_helpers = Sanity()
 
+    @skipif_ibm_cloud_managed
     def test_node_replacement_multiple_mds(self):
         """
         1. Trigger the scale-up process to add new pods.
