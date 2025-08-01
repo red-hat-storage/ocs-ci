@@ -1,0 +1,11 @@
+pvc_scenario:
+  {% if pvc_name %}
+  pvc_name: {{ pvc_name }}            # Name of the target PVC
+  {% endif %}
+  {% if pod_name %}
+  pod_name: {{ pod_name }}            # Name of the pod where the PVC is mounted, it will be ignored if the pvc_name is defined
+  {% endif %}
+  namespace: {{ namespace }}          # Namespace where the PVC is
+  fill_percentage: {{ fill_percentage | default(50) }}    # Target percentage to fill up the cluster (0–99)
+  duration: {{ duration | default(60) }}                  # Duration in seconds for the fault
+  block_size: {{ block_size | default(102400) }}          # Used only by dd if fallocate is not present in the container

@@ -1,0 +1,15 @@
+application_outage:                                  # Scenario to create an outage of an application by blocking traffic
+  duration: {{ duration | default(600) }}            # Duration in seconds after which the routes will be accessible
+  namespace: {{ namespace }}                         # Namespace to target - all application routes will go inaccessible if pod selector is empty
+  {% if pod_selector %}
+  pod_selector: {
+    {% for key, value in pod_selector.items() %}
+    {{ key }}: {{ value }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  }
+  {% endif %}
+  block: [
+    {% for direction in block %}
+    {{ direction }}{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  ]
