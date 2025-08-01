@@ -91,7 +91,8 @@ class TestCnvDeviceReplace(E2ETest):
 
             # Use cal_md5sum_vm here
             source_csums[vm_obj.name] = cal_md5sum_vm(vm_obj, file_paths[0])
-            all_vms.append(vm_obj)
+            if vm == vm_for_clone:
+                all_vms.append(vm_obj)
 
         # Keep vms in different states (power on, paused, stoped)
         vm_for_stop.stop()
