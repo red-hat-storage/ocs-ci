@@ -1,6 +1,8 @@
 import re
 import logging
 
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
+from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.utils import retry
 from ocs_ci.helpers.helpers import (
     modify_deployment_replica_count,
@@ -13,6 +15,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_deletion,
     get_not_running_pods,
     get_pod_node,
+    wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -323,3 +326,93 @@ def recover_from_ceph_stuck(sc_obj):
 
     sc_obj.reset_conn_score()
     return sc_obj.check_ceph_accessibility(timeout=120)
+
+
+def verify_data_loss(sc_obj):
+    """
+    Verify data loss for both cephfs and rbd workloads
+
+    Args:
+        sc_obj (Stretchcluster): Stretch cluster object
+
+    """
+    assert sc_obj.check_for_data_loss(
+        constants.LOGWRITER_CEPHFS_LABEL
+    ), "[CephFS] Data is lost"
+    logger.info("[CephFS] No data loss is seen")
+    assert sc_obj.check_for_data_loss(
+        constants.LOGWRITER_RBD_LABEL
+    ), "[RBD] Data is lost"
+    logger.info("[RBD] No data loss is seen")
+
+
+def verify_data_corruption(sc_obj, logreader_workload_factory):
+    """
+    Verify if there is any data corruption in both logwriter cephfs and rbd data
+
+    Args:
+        sc_obj (Stretchcluster): Stretch cluster object
+        logreader_workload_factory (pytest.fixture): Logreader workload factory fixture
+
+    """
+
+    # Deploy new logreader cephfs to verify the data corruption
+    pvc = get_pvc_objs(
+        pvc_names=[
+            sc_obj.cephfs_logwriter_dep.get()["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]["claimName"]
+        ],
+        namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+    )[0]
+    logreader_workload_factory(
+        pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
+    )
+    sc_obj.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
+
+    wait_for_pods_to_be_in_statuses(
+        expected_statuses=constants.STATUS_COMPLETED,
+        pod_names=[pod.name for pod in sc_obj.cephfs_logreader_pods],
+        timeout=900,
+        namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+    )
+    logger.info("Logreader job pods have reached 'Completed' state!")
+
+    # Check logreader workload pod logs for
+    # data corruption entries
+    assert sc_obj.check_for_data_corruption(
+        label=constants.LOGREADER_CEPHFS_LABEL
+    ), "Data is corrupted for cephFS workloads"
+    logger.info("No data corruption is seen in CephFS workloads")
+
+    assert sc_obj.check_for_data_corruption(
+        label=constants.LOGWRITER_RBD_LABEL
+    ), "Data is corrupted for RBD workloads"
+    logger.info("No data corruption is seen in RBD workloads")
+
+
+def verify_vm_workload(vm_obj, md5sum_before):
+    """
+    Validate vm workload data, new data creation and data copy-back
+
+    Args:
+        vm_obj (VirtualMachine): VirtualMachine object
+        md5sum_before (String): checksum value calculated
+        before failure
+
+    """
+    md5sum_after = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
+    assert (
+        md5sum_before == md5sum_after
+    ), "Data integrity of the file inside VM is not maintained during the failure"
+    logger.info("Data integrity of the file inside VM is maintained during the failure")
+
+    # check if new data can be created
+    vm_obj.run_ssh_cmd(
+        command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_2.txt"
+    )
+    logger.info("Successfully created new data inside VM")
+
+    # check if the data can be copied back to local machine
+    vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/test/file_1.txt")
+    logger.info("VM data is successfully copied back to local machine")
