@@ -7297,8 +7297,9 @@ def dr_workload(request):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
 
-    def teardown():
+    def teardown(switch_ctx=None):
         failed_to_delete = []
+        config.switch_ctx(switch_ctx)
         for instance in instances:
             try:
                 instance.delete_workload(switch_ctx=ctx[0])
