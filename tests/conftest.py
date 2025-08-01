@@ -7235,6 +7235,7 @@ def dr_workload(request):
 
     def teardown(switch_ctx=None):
         failed_to_delete = []
+        log.info("Setting context in teardown")
         config.switch_ctx(switch_ctx)
         for instance in instances:
             try:
