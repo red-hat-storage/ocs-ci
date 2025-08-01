@@ -6,6 +6,7 @@ import re
 import tempfile
 from uuid import uuid4
 import yaml
+import pytest
 
 import requests
 import json
@@ -36,6 +37,7 @@ from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.utility import templating
 from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
 from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
+from ocs_ci.ocs.ui.performance_lib_ui import grafana_resource_consumption_ui
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -1080,7 +1082,8 @@ class PASTest(BaseTest):
             log.warning("The POD failed to delete")
             pass
 
-    def deploy_odf_grafana(self):
+    @pytest.fixture()
+    def deploy_odf_grafana(self, test_duration):
         env = os.environ.copy()
         kubeconfig_path = config.RUN.get("kubeconfig")
         full_kubeconfig_path = os.path.abspath(kubeconfig_path)
@@ -1113,3 +1116,4 @@ class PASTest(BaseTest):
                 log.info(f"Command timed out, {e.output.strip()}")
         else:
             log.info(f"grafana is running")
+            grafana_resource_consumption_ui(test_duration)
