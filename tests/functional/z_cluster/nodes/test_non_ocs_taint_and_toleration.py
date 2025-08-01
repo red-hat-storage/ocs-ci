@@ -51,7 +51,6 @@ from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
 logger = logging.getLogger(__name__)
 
 
-@retry(tries=5, delay=10)
 def verify_pod_count_unchanged(namespace, number_of_pods_before):
     number_of_pods_after = len(get_all_pods(namespace=namespace))
     assert (
@@ -153,7 +152,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             self.sanity_helpers.health_check()
 
         logger.info("Check number of pods before and after adding non ocs taint")
-        verify_pod_count_unchanged(number_of_pods_before)
+        retry(
+            (CommandFailed, TolerationNotFoundException),
+            tries=5,
+            delay=10,
+        )(
+            verify_pod_count_unchanged
+        )(number_of_pods_before)
         if not (
             config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
         ):
