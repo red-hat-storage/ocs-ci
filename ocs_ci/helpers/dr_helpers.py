@@ -1983,6 +1983,8 @@ def get_cluster_set_name():
         list: List of uniq cluster set name
     """
     cluster_set = []
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
     # ignore local-cluster here
     for i in managed_clusters:
@@ -1995,4 +1997,5 @@ def get_cluster_set_name():
             "There are more then one clusterset added to multiple managedcluters"
         )
 
+    config.switch_ctx(restore_index)
     return cluster_set
