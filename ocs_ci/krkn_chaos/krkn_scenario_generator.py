@@ -74,7 +74,6 @@ class HogScenarios:
             KRKN_SCENARIO_TEMPLATE, "kube", "cpu-hog.yml.j2"
         )
 
-        # Prepare selector fields based on priority
         selector_config = {}
         if node_name:
             selector_config["node_name"] = node_name
@@ -93,10 +92,9 @@ class HogScenarios:
             "cpu_method": cpu_method,
             "number_of_nodes": number_of_nodes,
             "taints": taints or [],
-            **selector_config,  # Injects either node_name or node_selector
+            **selector_config,
         }
 
-        # Create a TemplateWriter instance and write the YAML
         writer = TemplateWriter(cpu_hog_template)
         writer.config = hog_data
         output_path = os.path.join(scenario_dir, "cpu_hog.yaml")
@@ -105,6 +103,7 @@ class HogScenarios:
 
     @staticmethod
     def io_hog(
+        scenario_dir,
         duration=30,
         workers="''",
         image="quay.io/krkn-chaos/krkn-hog",
@@ -115,13 +114,23 @@ class HogScenarios:
         io_target_pod_volume=None,
         node_name=None,
         node_selector=None,
-        number_of_nodes="",
+        number_of_nodes=3,
         taints=None,
     ):
         """
         Static method to generate dictionary for IO hog Jinja template.
         """
-        return {
+        io_hog_template = os.path.join(KRKN_SCENARIO_TEMPLATE, "kube", "io-hog.yml.j2")
+
+        selector_config = {}
+        if node_name:
+            selector_config["node_name"] = node_name
+        elif node_selector:
+            selector_config["node_selector"] = node_selector
+        else:
+            selector_config["node_selector"] = {}
+
+        hog_data = {
             "duration": duration,
             "workers": workers,
             "hog_type": "io",
@@ -132,14 +141,20 @@ class HogScenarios:
             "io_target_pod_folder": io_target_pod_folder,
             "io_target_pod_volume": io_target_pod_volume
             or {"name": "node-volume", "hostPath": {"path": "/tmp"}},
-            "node_name": node_name,
-            "node_selector": node_selector,
             "number_of_nodes": number_of_nodes,
             "taints": taints or [],
+            **selector_config,
         }
+
+        writer = TemplateWriter(io_hog_template)
+        writer.config = hog_data
+        output_path = os.path.join(scenario_dir, "io_hog.yaml")
+        writer.write_to_file(output_path)
+        return output_path
 
     @staticmethod
     def memory_hog(
+        scenario_dir,
         duration=60,
         workers="''",
         image="quay.io/krkn-chaos/krkn-hog",
@@ -147,21 +162,38 @@ class HogScenarios:
         memory_vm_bytes="90%",
         node_name=None,
         node_selector=None,
-        number_of_nodes="''",
+        number_of_nodes=3,
         taints=None,
     ):
         """
         Static method to generate dictionary for Memory hog Jinja template.
         """
-        return {
+        memory_hog_template = os.path.join(
+            KRKN_SCENARIO_TEMPLATE, "kube", "memory-hog.yml.j2"
+        )
+
+        selector_config = {}
+        if node_name:
+            selector_config["node_name"] = node_name
+        elif node_selector:
+            selector_config["node_selector"] = node_selector
+        else:
+            selector_config["node_selector"] = {}
+
+        hog_data = {
             "duration": duration,
             "workers": workers,
             "hog_type": "memory",
             "image": image,
             "namespace": namespace,
             "memory_vm_bytes": memory_vm_bytes,
-            "node_name": node_name,
-            "node_selector": node_selector,
             "number_of_nodes": number_of_nodes,
             "taints": taints or [],
+            **selector_config,
         }
+
+        writer = TemplateWriter(memory_hog_template)
+        writer.config = hog_data
+        output_path = os.path.join(scenario_dir, "memory_hog.yaml")
+        writer.write_to_file(output_path)
+        return output_path

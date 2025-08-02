@@ -3,24 +3,15 @@ import logging
 import fauxfactory
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import (
-    green_squad,
-    chaos,
-    polarion_id,
-)
-from ocs_ci.helpers.vdbench_helpers import (
-    create_temp_config_file,
-)
-
+from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, polarion_id
+from ocs_ci.helpers.vdbench_helpers import create_temp_config_file
 from ocs_ci.krkn_chaos.krkn_scenario_generator import HogScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
+from ocs_ci.ocs.utils import label_pod_security_admission
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
-from ocs_ci.ocs.exceptions import (
-    CommandFailed,
-    UnexpectedBehaviour,
-)
 
 
 @green_squad
@@ -43,46 +34,49 @@ class TestChaosHogScenarios:
         Create VDBENCH workloads and initiate scaling on eligible ones.
 
         Returns:
-            tuple: (List of workload objects, scaling thread)
+            list: List of workload objects
         """
-        project = proj_obj
         size = 20
         workloads = []
+
+        def get_fs_config():
+            return create_temp_config_file(
+                vdbench_filesystem_config(
+                    rdpct=0,
+                    size="10m",
+                    depth=4,
+                    width=5,
+                    files=10,
+                    threads=10,
+                    elapsed=1200,
+                    interval=30,
+                    anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
+                )
+            )
+
+        def get_blk_config():
+            return create_temp_config_file(
+                vdbench_block_config(threads=10, size="10g", elapsed=1200, interval=30)
+            )
 
         interface_configs = {
             constants.CEPHFILESYSTEM: {
                 "access_modes": [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO],
-                "config_file": lambda: create_temp_config_file(
-                    vdbench_filesystem_config(
-                        rdpct=0,
-                        size="10m",
-                        depth=4,
-                        width=5,
-                        files=10,
-                        threads=10,
-                        elapsed=1200,
-                        interval=30,
-                        anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
-                    )
-                ),
+                "config_file": get_fs_config,
             },
             constants.CEPHBLOCKPOOL: {
                 "access_modes": [
                     f"{constants.ACCESS_MODE_RWO}-Block",
                     f"{constants.ACCESS_MODE_RWX}-Block",
                 ],
-                "config_file": lambda: create_temp_config_file(
-                    vdbench_block_config(
-                        threads=10, size="10g", elapsed=1200, interval=30
-                    )
-                ),
+                "config_file": get_blk_config,
             },
         }
 
         for interface, config in interface_configs.items():
             pvcs = multi_pvc_factory(
                 interface=interface,
-                project=project,
+                project=proj_obj,
                 access_modes=config["access_modes"],
                 size=size,
                 num_of_pvc=4,
@@ -96,7 +90,6 @@ class TestChaosHogScenarios:
                 workload.start_workload()
                 workloads.append(workload)
 
-        # return workloads, scaling_thread
         return workloads
 
     def _validate_and_cleanup_workloads(self, workloads):
@@ -110,7 +103,7 @@ class TestChaosHogScenarios:
                 result = workload.workload_impl.get_all_deployment_pod_logs()
                 workload.stop_workload()
 
-                if result is None:
+                if not result:
                     validation_errors.append(
                         f"Workload {workload.workload_impl.deployment_name} returned no logs after failure injection"
                     )
@@ -119,7 +112,6 @@ class TestChaosHogScenarios:
                         f"Workload {workload.workload_impl.deployment_name} failed after failure injection"
                     )
 
-                # Clean up individual workload
                 workload.cleanup_workload()
 
             except UnexpectedBehaviour as e:
@@ -128,9 +120,8 @@ class TestChaosHogScenarios:
                 )
 
         if validation_errors:
-            error_msg = "\n".join(validation_errors)
-            log.error(f"Workload validation errors:\n{error_msg}")
-            pytest.fail(error_msg)
+            log.error("Workload validation errors:\n" + "\n".join(validation_errors))
+            pytest.fail("Workload validation failed.")
 
         log.info("All workloads passed validation after failure injection.")
 
@@ -149,9 +140,7 @@ class TestChaosHogScenarios:
         Test to verify Krkn chaos scenarios
         """
         proj_obj = project_factory()
-        workloads = []
-
-        # Prepare workloads and start background scaling
+        label_pod_security_admission(namespace=proj_obj.namespace)
         workloads = self._prepare_pvcs_and_workloads(
             proj_obj,
             multi_pvc_factory,
@@ -161,38 +150,64 @@ class TestChaosHogScenarios:
         )
 
         scenario_dir = krkn_scenario_directory
+        ns = proj_obj.namespace
+        selector = "node-role.kubernetes.io/worker"
 
-        cpu_hog = HogScenarios.cpu_hog(
-            scenario_dir,
-            duration=60,
-            workers="''",
-            namespace=proj_obj.namespace,
-            cpu_load_percentage=90,
-            cpu_method="all",
-            node_name=None,
-            node_selector="node-role.kubernetes.io/worker",
-            number_of_nodes=3,
-            taints=[],
-        )
+        scenarios = [
+            HogScenarios.cpu_hog(
+                scenario_dir,
+                duration=120,
+                workers="''",
+                namespace=ns,
+                cpu_load_percentage=90,
+                cpu_method="all",
+                node_name=None,
+                node_selector=selector,
+                number_of_nodes=3,
+                taints=[],
+            ),
+            HogScenarios.memory_hog(
+                scenario_dir,
+                duration=120,
+                namespace=ns,
+                node_selector=selector,
+                number_of_nodes=3,
+            ),
+            HogScenarios.io_hog(
+                scenario_dir,
+                duration=120,
+                namespace=ns,
+                node_selector=selector,
+                io_block_size="1m",
+                io_write_bytes="1g",
+                io_target_pod_folder="/hog-data",
+                io_target_pod_volume=None,
+                number_of_nodes=3,
+            ),
+        ]
 
-        krkn_config = KrknConfigGenerator()
-        krkn_config.add_scenario(
-            "hog_scenarios",
-            cpu_hog,
-        )
-        krkn_config.set_tunings(wait_duration=60, iterations=2)
-        krkn_config.write_to_file(location=scenario_dir)
+        config = KrknConfigGenerator()
+        for s in scenarios:
+            config.add_scenario("hog_scenarios", s)
+        config.set_tunings(wait_duration=60, iterations=2)
+        config.write_to_file(location=scenario_dir)
 
-        krkn = KrKnRunner(krkn_config.global_config)
+        krkn = KrKnRunner(config.global_config)
         try:
             krkn.run_async()
-
-            # Periodically check status every 60 seconds
             krkn.wait_for_completion(check_interval=60)
-
-            # krkn.run()
         except CommandFailed as e:
             log.error(f"Krkn command failed: {str(e)}")
             pytest.fail(f"Krkn command failed: {str(e)}")
 
         self._validate_and_cleanup_workloads(workloads)
+
+        chaos_run_output = krkn.get_chaos_data()
+        failing_scenarios = [
+            s
+            for s in chaos_run_output["telemetry"]["scenarios"]
+            if s["affected_pods"]["error"] is not None
+        ]
+        assert (
+            not failing_scenarios
+        ), f"Scenarios failed with pod errors: {failing_scenarios}"

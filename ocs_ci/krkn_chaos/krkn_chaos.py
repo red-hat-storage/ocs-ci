@@ -3,6 +3,7 @@ import logging
 import threading
 import subprocess
 import time
+import json
 
 from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -72,3 +73,48 @@ class KrKnRunner:
             time.sleep(check_interval)
 
         log.info("✅ Krkn process has completed.")
+
+    def get_chaos_data(self):
+        """
+        Extracts the 'Chaos data' JSON dict from a Krkn log file.
+
+        Args:
+            filepath (str): Path to the Krkn output log file
+
+        Returns:
+            dict: Parsed 'telemetry' chaos data
+        """
+        with open(self.output_log, "r") as file:
+            lines = file.readlines()
+
+        # Look for line where Chaos data starts
+        start_index = None
+        for i, line in enumerate(lines):
+            if "[INFO] Chaos data:" in line:
+                start_index = i + 1  # JSON starts after this line
+                break
+
+        if start_index is None:
+            raise ValueError("Chaos data block not found in the log.")
+
+        # Extract JSON block (look for the next balanced brace structure)
+        json_lines = []
+        brace_balance = 0
+        started = False
+
+        for line in lines[start_index:]:
+            if "telemetry" in line and not started:
+                started = True
+            if started:
+                brace_balance += line.count("{")
+                brace_balance -= line.count("}")
+                json_lines.append(line)
+                if brace_balance == 0:
+                    break
+
+        chaos_json_str = "".join(json_lines)
+        try:
+            chaos_data = json.loads(chaos_json_str)
+            return chaos_data
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse chaos data JSON: {e}")
