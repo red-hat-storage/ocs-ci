@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 @black_squad
-@pytest.mark.polarion_id("OCS-6863")
 class TestBucketLifecycleUI:
     """
     Test bucket lifecycle policy management via UI
@@ -105,6 +104,7 @@ class TestBucketLifecycleUI:
 
     @ui
     @tier2
+    @pytest.mark.polarion_id("OCS-6888")
     @pytest.mark.parametrize(
         "rules_dict,description",
         [
@@ -166,6 +166,7 @@ class TestBucketLifecycleUI:
 
     @ui
     @tier2
+    @pytest.mark.polarion_id("OCS-6890")
     @pytest.mark.parametrize(
         "rules_dict,description,target_prefix",
         [
@@ -244,6 +245,7 @@ class TestBucketLifecycleUI:
 
     @ui
     @tier2
+    @pytest.mark.polarion_id("OCS-6891")
     def test_edit_lifecycle_rule(self, setup_ui_class_factory, mcg_obj):
         """
         Test editing existing lifecycle rule
@@ -315,6 +317,7 @@ class TestBucketLifecycleUI:
     @ui
     @tier2
     @pytest.mark.jira("DFBUGS-2265")
+    @pytest.mark.polarion_id("OCS-6892")
     def test_delete_lifecycle_rule(self, setup_ui_class_factory, mcg_obj):
         """
         Test deletion of lifecycle rule
