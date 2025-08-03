@@ -1608,13 +1608,13 @@ class TestS3BucketPolicy(MCGTest):
         bucketclass_dict,
     ):
         """
-        This test verifies that it is possible to access the bucket after putting noobaa credentials
+        This test verifies that it is possible to access the bucket after putting noobaa admin credentials
         Scenario:
         1. Create a bucket and write file
         2. Verify that there is the access to the bucket
         3. Put "allow all" policy to the bucket and verify that the access still exist
         5. Put Public Access Block with Block/Restrict=True to the bucket and verify that the access still exist
-        6. Put noobaa admin credentials on the bucket and verify that the access is not interrupted
+        6. Access the bucket with noobaa admin credentials and verify that it's accessible despite Block configuration
         Args:
             mcg_obj (obj): An object representing the current state of the MCG in the cluster
             awscli_pod_session (pod): A pod running the AWSCLI tools
