@@ -10261,7 +10261,7 @@ def vm_snapshot_restore_fixture(request):
             (
                 volumes[0].get("dataVolume", {}).get("name")
                 if volumes[0].get("dataVolume")
-                else volumes[0].get("persistentVolumeClaim", {}).get("claimName")
+                else None
             )
         ]
 
@@ -10279,16 +10279,16 @@ def vm_snapshot_restore_fixture(request):
 
         vm.start()
         vm.wait_for_ssh_connectivity(timeout=1200)
-
         log.info("Delete original PVCs")
-        for pvc_name in original_pvcs:
-            pvc = PersistentVolumeClaim(
-                client=admin_client,
-                name=pvc_name,
-                namespace=vm.namespace,
-            )
-        if pvc.exists:
-            pvc.delete(wait=True)
+        if original_pvcs:
+            for pvc_name in original_pvcs:
+                pvc = PersistentVolumeClaim(
+                    client=admin_client,
+                    name=pvc_name,
+                    namespace=vm.namespace,
+                )
+            if pvc.exists:
+                pvc.delete(wait=True)
         return vm
 
     def teardown():
