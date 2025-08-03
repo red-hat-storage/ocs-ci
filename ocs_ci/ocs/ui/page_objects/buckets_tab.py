@@ -35,6 +35,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         """
         Creates a bucket via UI using specified method.
 
+        Note: For new code, consider using create_bucket_ui_with_details() which always
+        returns a consistent type (tuple[ObjectStorage, str]).
+
         Args:
             method (str): Creation method, either 'obc' or 's3'.
             return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
@@ -120,6 +123,56 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         if return_name:
             return ObjectStorage(), name_generator
         return ObjectStorage()
+
+    def create_bucket_ui_with_details(self, method: str) -> tuple[ObjectStorage, str]:
+        """
+        Creates a bucket via UI using specified method and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Args:
+            method (str): Method to use for bucket creation ('obc' or 's3').
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            ValueError: If method is not 'obc' or 's3'.
+        """
+        self.do_click(self.bucket_tab["create_bucket_button"])
+        if method == "obc":
+            return self.create_bucket_via_obc_with_details()
+        elif method == "s3":
+            return self.create_bucket_via_s3_with_details()
+        else:
+            raise ValueError(f"Invalid method: {method}")
+
+    def create_bucket_via_obc_with_details(self) -> tuple[ObjectStorage, str]:
+        """
+        Creates bucket via OBC and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        # Call the existing method with return_name=True to get both values
+        return self.create_bucket_via_obc(return_name=True)
+
+    def create_bucket_via_s3_with_details(self) -> tuple[ObjectStorage, str]:
+        """
+        Creates bucket via S3 and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        # Call the existing method with return_name=True to get both values
+        return self.create_bucket_via_s3(return_name=True)
 
     def create_folder_in_bucket(
         self, bucket_name: str = None, folder_name: str = None

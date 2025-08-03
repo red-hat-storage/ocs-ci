@@ -34,7 +34,7 @@ class TestBucketLifecycleUI:
 
         bucket_ui.nav_object_storage_page()
         bucket_ui.nav_buckets_page()
-        _, bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
+        _, bucket_name = bucket_ui.create_bucket_ui_with_details("s3")
         logger.info(f"Created bucket via UI: {bucket_name}")
 
         lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
