@@ -124,10 +124,14 @@ class TestCustomCredsUsingMcgCli(MCGTest):
         logger.info("Credentials with incorrect length didnt updated as expected")
         logger.info("Updating credentials with invalid characters")
         bad_access_key = bad_length_access_key + "".join(
-            random.choices(string.punctuation, k=1)
+            random.choices(
+                [ch for ch in string.punctuation if ch not in ['"', "'"]], k=1
+            )
         )
         bad_secret_key = bad_length_secret_key + "".join(
-            random.choices(string.punctuation.replace("+", "").replace("/", ""), k=1)
+            random.choices(
+                [ch for ch in string.punctuation if ch not in ['"', "'", "+", "/"]], k=1
+            )
         )
         self.update_nb_account(account_name, bad_access_key, bad_secret_key)
         retrived_access_key, retrived_secret_key = get_s3_credentials_from_secret(
@@ -141,4 +145,4 @@ class TestCustomCredsUsingMcgCli(MCGTest):
         assert (
             retrived_secret_key != bad_secret_key
         ), "CLI is accepting invalid special characters in secret key"
-        logger.info("Credentials with bad keywords didnt updated as expected")
+        logger.info("Credentials with bad keywords were not updated as expected")
