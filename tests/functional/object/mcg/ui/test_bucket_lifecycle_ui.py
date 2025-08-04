@@ -316,7 +316,7 @@ class TestBucketLifecycleUI:
 
     @ui
     @tier2
-    @pytest.mark.jira("DFBUGS-2265")
+    @pytest.mark.jira("DFBUGS-2960")
     @pytest.mark.polarion_id("OCS-6892")
     def test_delete_lifecycle_rule(self, setup_ui_class_factory, mcg_obj):
         """
