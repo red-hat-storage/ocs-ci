@@ -28,7 +28,7 @@ class TestCnvDeviceReplace(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, multi_cnv_workload):
+    def setup(self, request, project_factory, multi_cnv_workload):
         """
         Setting up VMs for tests
 
@@ -43,6 +43,25 @@ class TestCnvDeviceReplace(E2ETest):
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
         logger.info("All vms created successfully")
+
+        # Register the teardown
+        request.addfinalizer(self.teardown)
+
+    def teardown(self, vm_for_stop, vm_for_snap):
+        """
+        Teardown operations for the test case.
+        """
+        logger.info("Performing teardown operations...")
+
+        # Start the stopped VM if it is in stopped state
+        if vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED:
+            vm_for_stop.start()
+            logger.info(f"VM {vm_for_stop.name} started.")
+
+        # Unpause the paused VM if it is in paused state
+        if vm_for_snap.printableStatus() == constants.VM_PAUSED:
+            vm_for_snap.unpause()
+            logger.info(f"VM {vm_for_snap.name} unpaused.")
 
     def test_vms_with_device_replacement(
         self,
