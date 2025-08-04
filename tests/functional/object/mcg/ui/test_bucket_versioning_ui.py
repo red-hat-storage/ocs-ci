@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 @ui
 @black_squad
 @tier1
-@polarion_id("OCS-6863")
 class TestBucketVersioningUI:
     """
     Test class for bucket versioning functionality via UI.
@@ -337,6 +336,7 @@ class TestBucketVersioningUI:
 
         logger.info(f"Successfully found {len(latest_label_texts)} 'Latest' label(s)")
 
+    @polarion_id("OCS-6884")
     def test_enable_bucket_versioning(self, setup_ui_class_factory):
         """
         Test bucket versioning enable functionality via UI.
@@ -429,6 +429,7 @@ class TestBucketVersioningUI:
             "Bucket versioning test with label validation completed successfully"
         )
 
+    @polarion_id("OCS-6886")
     def test_bucket_versioning_with_modification(self, setup_ui_class_factory):
         """
         Test bucket versioning with object modification and version management.
