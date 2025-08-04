@@ -8,6 +8,7 @@ import logging
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_indexes,
+    get_passive_acm_index,
     get_primary_cluster_index,
     get_active_acm_index,
     get_all_acm_indexes,
@@ -70,16 +71,16 @@ class MultiClusterUpgradeParametrize(object):
         ex: {"ActiveACM": 0, "PassiveACM": 2, "PrimaryODF": 1, "SecondaryODF": 3}
 
         """
+        active_acm_index = get_active_acm_index()
+        primary_index = get_primary_cluster_index()
+
         for cluster in ocsci_config.clusters:
             cluster_index = cluster.MULTICLUSTER["multicluster_index"]
-            if cluster_index == get_active_acm_index():
+            if cluster_index == active_acm_index:
                 self.roles_to_config_index_map["ActiveACM"] = cluster_index
-            elif cluster_index == get_primary_cluster_index():
+            elif cluster_index == primary_index:
                 self.roles_to_config_index_map["PrimaryODF"] = cluster_index
-            elif (
-                cluster_index in get_all_acm_indexes()
-                and cluster_index != get_active_acm_index()
-            ):
+            elif cluster_index == get_passive_acm_index():
                 # We would have already ruled out the ActiveACM in the first 'if'
                 self.roles_to_config_index_map["PassiveACM"] = cluster_index
             else:
@@ -236,9 +237,8 @@ class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         self.all_roles = RDR_ROLES
         # If the current run includes PassiveACM then we need to add
         # it to the list as by default RDR Roles list will not have PassiveACM
-        for cluster in get_all_acm_indexes():
-            if cluster != get_active_acm_index():
-                self.all_roles.append("PassiveACM")
+        if get_passive_acm_index():
+            self.all_roles.append("PassiveACM")
 
     def config_init(self):
         super().config_init()
