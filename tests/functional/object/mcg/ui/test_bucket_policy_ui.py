@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
-@polarion_id("OCS-6863")
 @black_squad
 @post_upgrade
 class TestBucketPolicyUI:
@@ -27,6 +26,7 @@ class TestBucketPolicyUI:
     Test class for bucket policy UI operations
     """
 
+    @polarion_id("OCS-6889")
     @pytest.mark.parametrize(
         "policy_config",
         [
@@ -149,6 +149,7 @@ class TestBucketPolicyUI:
 
         logger.info(f"Successfully completed {policy_name} bucket policy test")
 
+    @polarion_id("OCS-6893")
     def test_delete_bucket_policy_ui(self, setup_ui_class_factory):
         """
         Test deleting bucket policy via UI.
@@ -181,6 +182,7 @@ class TestBucketPolicyUI:
 
         logger.info("Successfully completed delete bucket policy test")
 
+    @polarion_id("OCS-6894")
     @pytest.mark.parametrize("policy_name", ["AllowPublicReadAccess"])
     def test_bucket_policy_workflow_steps(self, setup_ui_class_factory, policy_name):
         """
