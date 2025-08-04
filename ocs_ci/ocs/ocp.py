@@ -760,6 +760,7 @@ class OCP(object):
         selector=None,
         timeout=60,
         ignore_timeout=False,
+        sleep=3,
     ):
         """
         This method is an alternative way to wait for a resource to reach a desired condition. Can not be used in more
@@ -776,6 +777,8 @@ class OCP(object):
                 Example: 'app=rook-ceph-mds'
             timeout (int): Time in seconds to wait
             ignore_timeout (bool): If True, will not raise TimeoutExpiredError
+            sleep (int): Sampling time in seconds in wait_for_resource_oc_wait waits using selector and there is
+                no matching resources found on cluster
 
         Returns:
             bool: True in case resource reached desired condition, False otherwise
@@ -800,48 +803,82 @@ class OCP(object):
         if timeout:
             command += f" --timeout={timeout}s"
 
-        try:
-            res = self.exec_oc_cmd(command)
-        except CommandFailed as ex:
-            res = ex.args[0] if ex.args else str(ex)
+        start_time = time.time()
 
-        if res:
-            if "timed out" in res:
-                log.error("Timeout expired")
-                output = self.describe(resource_name, selector=selector)
-                log.warning(
-                    f"{inspect.currentframe().f_code.co_name}: Description of the resource(s) "
-                    f"we were waiting for:\n{output}"
-                )
-                if ignore_timeout:
-                    return False
-                else:
-                    raise TimeoutExpiredError(
-                        f"{inspect.currentframe().f_code.co_name}: Timed out waiting for resource {resource_name} "
-                        f"to reach condition {condition} at column {column}"
+        while (time.time() - start_time) < timeout:
+            try:
+                res = self.exec_oc_cmd(command)
+            except CommandFailed as ex:
+                res = ex.args[0] if ex.args else str(ex)
+                elapsed_time = time.time() - start_time
+                remaining_time = timeout - elapsed_time
+
+                if "no matching resources found" in res or "(NotFound)" in res:
+                    if remaining_time > 0:
+                        log.warning(
+                            f"Retrying 'oc wait' due to 'no matching resources found'. "
+                            f"Remaining time: {remaining_time:.2f} seconds. Executing 'sleep {sleep}' sec"
+                        )
+                        time.sleep(sleep)
+                        continue
+                    else:
+                        log.error("Timeout expired while waiting for resource.")
+                        if ignore_timeout:
+                            return False
+                        raise TimeoutExpiredError(
+                            f"{inspect.currentframe().f_code.co_name}: Timed out waiting for resource {resource_name} "
+                            f"to reach condition {condition} at column {column}"
+                        )
+                elif "timed out" in res:
+                    log.error("Timeout expired")
+                    output = self.describe(resource_name, selector=selector)
+                    log.warning(
+                        f"{inspect.currentframe().f_code.co_name}: Description of the resource(s) "
+                        f"we were waiting for:\n{output}"
                     )
-            elif "condition met" in res:
-                log.info(
-                    f"{inspect.currentframe().f_code.co_name}: Resource {resource_name} reached condition {condition}"
-                )
-                return True
-            else:
-                raise CommandFailed(
-                    f"{inspect.currentframe().f_code.co_name}: Unexpected output from 'oc wait' command: {res}. "
-                )
-        else:
-            log.error(
-                f"{inspect.currentframe().f_code.co_name}:Failed to get resource {resource_name} at column {column} "
-                f"to reach condition {condition}"
+                    if ignore_timeout:
+                        return False
+                    else:
+                        raise TimeoutExpiredError(
+                            f"{inspect.currentframe().f_code.co_name}: Timed out waiting for resource {resource_name} "
+                            f"to reach condition {condition} at column {column}"
+                        )
+                else:
+                    # we should not reach this line; all outputs must be processed in this except section
+                    raise CommandFailed(
+                        f"{inspect.currentframe().f_code.co_name}: Unexpected output from 'oc wait' command: {res}."
+                    )
+
+            if res:
+                if "condition met" in res:
+                    log.info(
+                        f"{inspect.currentframe().f_code.co_name}: Resource {resource_name} "
+                        f"has reached condition {condition}"
+                    )
+                    return True
+
+        log.error("Timeout expired")
+        try:
+            output = self.describe(resource_name, selector=selector)
+            log.warning(
+                f"{inspect.currentframe().f_code.co_name}: Description of the resource(s) "
+                f"we were waiting for:\n{output}"
             )
-            return False
+        # we want to catch any error, since description of resource is not always possible
+        except Exception:
+            pass
+
+        raise TimeoutExpiredError(
+            f"{inspect.currentframe().f_code.co_name}: Timed out waiting for resource '{resource_name}', "
+            f"selector '{selector}' to reach condition {condition} at column {column}"
+        )
 
     @catch_exceptions(Exception)
     def _process_oc_wait_cmd(self, column, condition):
         """
         Process oc wait command for a resource kind and condition.
         This method is a helper function to determine if the given condition and cr kind are supported by the
-        'oc wait' command. If the condition is not supported, it returns False and we must proceed with the legacy
+        'oc wait' command. If the condition is not supported, it returns False, and we must proceed with the legacy
         approach of using 'oc get' and TimeoutSampler.
         """
         if not column == "STATUS":
@@ -957,6 +994,7 @@ class OCP(object):
                     column=column,
                     selector=selector,
                     timeout=timeout,
+                    sleep=sleep,
                 )
 
         log.info(
