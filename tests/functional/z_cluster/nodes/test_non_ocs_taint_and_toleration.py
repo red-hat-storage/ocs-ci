@@ -51,8 +51,11 @@ from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
 logger = logging.getLogger(__name__)
 
 
-def verify_pod_count_unchanged(namespace, number_of_pods_before):
-    number_of_pods_after = len(get_all_pods(namespace=namespace))
+@retry(CommandFailed, tries=5, delay=10)
+def verify_pod_count_unchanged(number_of_pods_before):
+    number_of_pods_after = len(
+        get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+    )
     assert (
         number_of_pods_before == number_of_pods_after
     ), f"Number of pods didn't match: before={number_of_pods_before}, after={number_of_pods_after}"
@@ -152,13 +155,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             self.sanity_helpers.health_check()
 
         logger.info("Check number of pods before and after adding non ocs taint")
-        retry(
-            (CommandFailed, TolerationNotFoundException),
-            tries=5,
-            delay=10,
-        )(
-            verify_pod_count_unchanged
-        )(number_of_pods_before)
+        verify_pod_count_unchanged(number_of_pods_before)
         if not (
             config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
         ):
