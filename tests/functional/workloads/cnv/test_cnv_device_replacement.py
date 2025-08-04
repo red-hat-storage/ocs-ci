@@ -47,21 +47,21 @@ class TestCnvDeviceReplace(E2ETest):
         # Register the teardown
         request.addfinalizer(self.teardown)
 
-    def teardown(self, vm_for_stop, vm_for_snap):
+    def teardown(self):
         """
         Teardown operations for the test case.
         """
         logger.info("Performing teardown operations...")
 
         # Start the stopped VM if it is in stopped state
-        if vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED:
-            vm_for_stop.start()
-            logger.info(f"VM {vm_for_stop.name} started.")
+        if self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED:
+            self.vm_for_stop.start()
+            logger.info(f"VM {self.vm_for_stop.name} started.")
 
         # Unpause the paused VM if it is in paused state
-        if vm_for_snap.printableStatus() == constants.VM_PAUSED:
-            vm_for_snap.unpause()
-            logger.info(f"VM {vm_for_snap.name} unpaused.")
+        if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
+            self.vm_for_snap.unpause()
+            logger.info(f"VM {self.vm_for_snap.name} unpaused.")
 
     def test_vms_with_device_replacement(
         self,
@@ -98,24 +98,26 @@ class TestCnvDeviceReplace(E2ETest):
         }
 
         # Randomly select VMs for operations
-        vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
+        self.vm_for_clone, self.vm_for_stop, self.vm_for_snap = random.sample(
+            all_vms, 3
+        )
 
         # Create clone and snapshot, update checksums
-        for vm in [vm_for_clone, vm_for_snap]:
+        for vm in [self.vm_for_clone, self.vm_for_snap]:
             vm_obj = (
                 vm_clone_fixture(vm, admin_client)
-                if vm == vm_for_clone
+                if vm == self.vm_for_clone
                 else vm_snapshot_restore_fixture(vm, admin_client)
             )
 
             # Use cal_md5sum_vm here
             source_csums[vm_obj.name] = cal_md5sum_vm(vm_obj, file_paths[0])
-            if vm == vm_for_clone:
+            if vm == self.vm_for_clone:
                 all_vms.append(vm_obj)
 
         # Keep vms in different states (power on, paused, stoped)
-        vm_for_stop.stop()
-        vm_for_snap.pause()
+        self.vm_for_stop.stop()
+        self.vm_for_snap.pause()
 
         # Perform device replacement
         osd_operations.osd_device_replacement(nodes)
@@ -126,18 +128,18 @@ class TestCnvDeviceReplace(E2ETest):
 
         # Check VMs status post-replacement
         assert (
-            vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
+            self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
         ), "Stopped VM state not preserved."
         logger.info("After device replacement, stopped VM preserved state.")
 
         assert (
-            vm_for_snap.printableStatus() == constants.VM_PAUSED
+            self.vm_for_snap.printableStatus() == constants.VM_PAUSED
         ), "Paused VM state not preserved."
         logger.info("After device replacement, paused VM preserved state.")
 
         logger.info("Starting vms")
-        vm_for_stop.start()
-        vm_for_snap.unpause()
+        self.vm_for_stop.start()
+        self.vm_for_snap.unpause()
 
         # Combined IO operations and data integrity check
         for vm_obj in all_vms:
