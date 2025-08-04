@@ -79,7 +79,6 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         logger.info(
             f"Primary cluster name before failover is {primary_cluster_name_before_failover}"
         )
-        return
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         # Download and extract the virtctl binary to bin_dir. Skips if already present.
         CNVInstaller().download_and_extract_virtctl_binary()
