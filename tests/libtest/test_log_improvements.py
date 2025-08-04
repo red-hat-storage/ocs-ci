@@ -6,7 +6,7 @@ import logging
 
 from ocs_ci.framework.pytest_customization.marks import ignore_leftovers, libtest
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ class TestWaitForResource:
         ocp_pod_obj.delete(resource_name=self.pod_obj.name, wait=True, force=True)
         ocp_pvc_obj.delete(resource_name=self.pvc_obj.name, wait=True, force=True)
 
-        with pytest.raises(CommandFailed, match=".*"):
+        with pytest.raises(TimeoutExpiredError, match=".*"):
             ocp_pod_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 resource_name=self.pod_obj.name,
@@ -154,7 +154,7 @@ class TestWaitForResource:
             f"Expected exception raised. Pod {self.pod_obj.name} does not exist after deletion"
         )
 
-        with pytest.raises(CommandFailed, match=".*"):
+        with pytest.raises(TimeoutExpiredError, match=".*"):
             ocp_pvc_obj.wait_for_resource(
                 condition=constants.STATUS_BOUND,
                 resource_name=self.pvc_obj.name,
