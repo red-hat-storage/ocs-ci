@@ -29,17 +29,32 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     """
 
     @pytest.mark.parametrize(
-        argnames=["custom_sc"],
+        argnames=["custom_sc", "compression"],
         argvalues=[
             pytest.param(
                 *[False],
+                False,
                 marks=pytest.mark.polarion_id("OCS-6266"),
-                id="default_sc",
+                id="default_sc_without_compression",
             ),
             pytest.param(
                 True,
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
-                id="custom_sc",
+                id="custom_sc_without_compression",
+            ),
+            # TODO: ADD Polarion ID for Custom SC test
+            pytest.param(
+                *[False],
+                True,
+                marks=pytest.mark.polarion_id("OCS-6266"),
+                id="default_sc_with_compression",
+            ),
+            pytest.param(
+                True,
+                False,
+                # marks=pytest.mark.polarion_id("OCS-XXXX"),
+                id="custom_sc_with_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
