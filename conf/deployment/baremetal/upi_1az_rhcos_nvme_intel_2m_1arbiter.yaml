@@ -2,7 +2,6 @@
 # Configuration for baremetal UPI deployment with 2 control plane nodes and 1 arbiter node
 # Following Red Hat OCP 4.19 documentation for local arbiter node topology
 # Reference: https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html-single/installing_on_bare_metal/index#ipi-install-config-local-arbiter-node_ipi-install-installation-workflow
----
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
