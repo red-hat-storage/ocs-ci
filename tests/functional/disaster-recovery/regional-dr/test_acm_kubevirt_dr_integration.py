@@ -263,13 +263,6 @@ class TestACMKubevirtDRIntergration:
             resource_name=resource_name,
         )
 
-        scheduling_interval = dr_helpers.get_scheduling_interval(
-            cnv_workloads[0].workload_namespace,
-            discovered_apps=True,
-            resource_name=resource_name,
-        )
-
-        wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 

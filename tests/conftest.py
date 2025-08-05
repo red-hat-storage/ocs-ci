@@ -7603,12 +7603,15 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         return instances
 
     def teardown():
-        try:
+        if request.node.name == "test_acm_kubevirt_using_shared_protection":
             instances[0].delete_workload(skip_resource_deletion_verification=True)
-            if request.node.name == "test_acm_kubevirt_using_shared_protection":
-                instances[1].delete_workload(shared_drpc_protection=True)
-        except ResourceNotDeleted:
-            raise ResourceNotDeleted("Workload deletion was unsuccessful")
+            instances[1].delete_workload(shared_drpc_protection=True)
+        else:
+            for instance in instances:
+                try:
+                    instance.delete_workload()
+                except ResourceNotDeleted:
+                    raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
     request.addfinalizer(teardown)
     return factory
