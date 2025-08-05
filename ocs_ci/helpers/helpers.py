@@ -5752,7 +5752,7 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
 
 def remove_toleration():
     """
-    Remove toleration on storagecluster, subscription, configmap, ocsinit and drivers
+    Remove toleration on storagecluster, subscription and drivers
 
     Returns:
         bool: True if all operations succeed, otherwise False.
