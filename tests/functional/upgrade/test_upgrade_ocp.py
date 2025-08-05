@@ -211,7 +211,14 @@ class TestUpgradeOCP(ManageTest):
             # ROSA Upgrades Are Controlled by the Hive Operator
             # HCP Clusters use a Control Plane Queue to manage the upgrade process
             # upgrades on ROSA clusters does not start immediately after the upgrade command but scheduled
-            operator_upgrade_timeout = 4000 if not rosa_platform else 8000
+            num_nodes = (
+                config.ENV_DATA["worker_replicas"]
+                + config.ENV_DATA["master_replicas"]
+                + config.ENV_DATA.get("infra_replicas", 0)
+            )
+            operator_upgrade_timeout = 4000
+            if rosa_platform or num_nodes >= 6:
+                operator_upgrade_timeout = 9800
             for ocp_operator in cluster_operators:
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
                 # ############ Workaround for issue 2624 #######
