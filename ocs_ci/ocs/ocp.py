@@ -830,7 +830,6 @@ class OCP(object):
                             f"to reach condition {condition} at column {column}"
                         )
                 elif "timed out" in res:
-                    log.error("Timeout expired")
                     output = self.describe(resource_name, selector=selector)
                     log.warning(
                         f"{inspect.currentframe().f_code.co_name}: Description of the resource(s) "
@@ -857,7 +856,6 @@ class OCP(object):
                     )
                     return True
 
-        log.error("Timeout expired")
         try:
             output = self.describe(resource_name, selector=selector)
             log.warning(
