@@ -1,7 +1,6 @@
 import logging
 import os
 import time
-import uuid
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -195,15 +194,12 @@ class TestBucketVersioningUI:
         logger.info(f"Created new bucket: {bucket_name}")
         logger.info(f"Current test will work with bucket: {bucket_name}")
         buckets_tab = bucket_ui
-        folder_name = f"test-folder-{uuid.uuid4()}"
-        buckets_tab.do_click(buckets_tab.bucket_tab["create_folder_button"])
-        buckets_tab.do_send_keys(
-            buckets_tab.bucket_tab["folder_name_input"], folder_name
-        )
-        buckets_tab.do_click(buckets_tab.bucket_tab["submit_button_folder"])
 
+        # Upload folder directly to bucket root (no nested test-folder creation)
         self._upload_folder_to_bucket(buckets_tab, folder_path)
 
+        # Extract the actual folder name from the uploaded content
+        folder_name = os.path.basename(folder_path)
         logger.info(
             f"Successfully uploaded folder: {folder_name} to bucket: {bucket_name}"
         )
@@ -301,7 +297,6 @@ class TestBucketVersioningUI:
         except TimeoutException:
             logger.warning("Timeout waiting for version checkboxes, continuing anyway")
 
-        # Retry logic for version count validation
         max_retries = 6
         retry_interval = 2
         actual_version_count = 0
@@ -328,7 +323,6 @@ class TestBucketVersioningUI:
                     f"Version count mismatch, waiting {retry_interval} seconds before retry..."
                 )
                 time.sleep(retry_interval)
-                # Refresh the page elements to get updated version list
                 try:
                     buckets_tab.wait_for_element_to_be_present(
                         buckets_tab.bucket_tab["version_row_checkboxes"],
@@ -339,7 +333,6 @@ class TestBucketVersioningUI:
                         "Timeout waiting for version checkboxes during retry"
                     )
         else:
-            # If we exhausted all retries without success
             raise AssertionError(
                 f"Version count validation failed after {max_retries} attempts: Expected {expected_versions} versions, "
                 f"but found {actual_version_count} checkboxes"
@@ -383,7 +376,6 @@ class TestBucketVersioningUI:
         """
         setup_ui_class_factory()
 
-        # Navigate to object storage
         bucket_versioning = BucketVersioning()
         bucket_versioning.nav_object_storage_page()
 
