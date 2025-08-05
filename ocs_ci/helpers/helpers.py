@@ -5611,7 +5611,7 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
     """
     Apply custom taints and tolerations.
     1. Taint ocs nodes with non-ocs taint
-    2. Set custom tolerations on storagecluster, subscription, configmap and ocsinit
+    2. Set custom tolerations on storagecluster, subscription, configmap, ocsinit and drivers
 
     Args:
         taint_label (str): The taint label to apply (default is "xyz").
@@ -5662,10 +5662,26 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
                 f'"csi-provisioner": {tolerations}, "mds": {tolerations}, "metrics-exporter": {tolerations}, '
                 f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}'
             )
-        param = f'{{"spec": {{"placement": {{{param}}}}}}}'
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
     storagecluster_obj.patch(params=param, format_type="merge")
     logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
+    # Add tolerations to CSI drivers for OCS version >= 4.19
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19:
+        logger.info("Add tolerations to all CSI drivers")
+        driver_obj = ocp.OCP(
+            kind=constants.DRIVER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        driver_list = ocp.get_all_resource_names_of_a_kind(
+            kind=constants.DRIVER,
+        )
+        for driver_name in driver_list:
+            param = f'{{"spec": {{"controllerPlugin": {tolerations}, "nodePlugin": {tolerations}}}}}'
+            driver_obj.patch(
+                resource_name=driver_name, params=param, format_type="merge"
+            )
+            logger.info(f"Successfully added tolerations to CSI driver {driver_name}")
 
     logger.info("Add tolerations to the subscription")
     sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
@@ -5732,6 +5748,73 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
             for pod_obj in pod_list:
                 pod_obj.delete(wait=False)
+
+
+def remove_toleration():
+    """
+    Remove toleration on storagecluster, subscription and drivers
+
+    Returns:
+        bool: True if all operations succeed, otherwise False.
+
+    """
+    success = True
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    if config.DEPLOYMENT["external_mode"]:
+        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+    logger.info("Remove tolerations from storagecluster")
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+    params = '[{"op": "remove", "path": "/spec/placement"}]'
+    result = storagecluster_obj.patch(params=params, format_type="json")
+    if not result:
+        logger.error("Failed to remove toleration from storagecluster")
+        success = False
+    logger.info("Remove tolerations from subscriptions")
+
+    sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+    sub_obj = ocp.OCP(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.SUBSCRIPTION,
+    )
+    for sub in sub_list:
+        subscription_data = sub_obj.get(resource_name=sub)
+        if "config" in subscription_data.get("spec", {}):
+            params = '[{"op": "remove", "path": "/spec/config"}]'
+            result = sub_obj.patch(resource_name=sub, params=params, format_type="json")
+            if not result:
+                logger.error(f"Failed to remove toleration from subscription {sub}")
+                success = False
+
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19:
+        logger.info("Removing tolerations from all CSI drivers")
+        driver_obj = ocp.OCP(
+            kind=constants.DRIVER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        driver_list = ocp.get_all_resource_names_of_a_kind(kind=constants.DRIVER)
+        for driver_name in driver_list:
+            params = (
+                '[{"op": "remove", "path": "/spec/controllerPlugin/tolerations"},'
+                '{"op": "remove", "path": "/spec/nodePlugin/tolerations"}]'
+            )
+            result = driver_obj.patch(
+                resource_name=driver_name, params=params, format_type="json"
+            )
+            if result:
+                logger.info(
+                    f"Successfully removed tolerations from CSI driver {driver_name}"
+                )
+            else:
+                logger.error(
+                    f"Failed to remove tolerations from CSI driver {driver_name}"
+                )
+                success = False
+
+    return success
 
 
 def get_reclaimspacecronjob_for_pvc(pvc_obj):

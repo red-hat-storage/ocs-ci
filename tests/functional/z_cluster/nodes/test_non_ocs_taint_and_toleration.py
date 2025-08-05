@@ -4,7 +4,7 @@ import random
 import pytest
 import time
 
-from ocs_ci.helpers.helpers import apply_custom_taint_and_toleration
+from ocs_ci.helpers.helpers import apply_custom_taint_and_toleration, remove_toleration
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
@@ -51,6 +51,16 @@ from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
 logger = logging.getLogger(__name__)
 
 
+@retry(CommandFailed, tries=5, delay=10)
+def verify_pod_count_unchanged(number_of_pods_before):
+    number_of_pods_after = len(
+        get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+    )
+    assert (
+        number_of_pods_before == number_of_pods_after
+    ), f"Number of pods didn't match: before={number_of_pods_before}, after={number_of_pods_after}"
+
+
 @brown_squad
 @tier4b
 @ignore_leftovers
@@ -83,32 +93,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 taint_label="xyz=true:NoSchedule",
             ), "Failed to untaint"
 
-            resource_name = constants.DEFAULT_CLUSTERNAME
-            if config.DEPLOYMENT["external_mode"]:
-                resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-
-            logger.info("Remove tolerations from storagecluster")
-            storagecluster_obj = ocp.OCP(
-                resource_name=resource_name,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                kind=constants.STORAGECLUSTER,
-            )
-            params = '[{"op": "remove", "path": "/spec/placement"},]'
-            storagecluster_obj.patch(params=params, format_type="json")
-
-            logger.info("Remove tolerations from subscriptions")
-            sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
-
-            sub_obj = ocp.OCP(
-                namespace=config.ENV_DATA["cluster_namespace"],
-                kind=constants.SUBSCRIPTION,
-            )
-            for sub in sub_list:
-                subscription_data = sub_obj.get(resource_name=sub)
-                if "config" in subscription_data.get("spec", {}):
-                    params = '[{"op": "remove", "path": "/spec/config"}]'
-                    sub_obj.patch(resource_name=sub, params=params, format_type="json")
+            assert remove_toleration(), "Failed to remove toleration"
             time.sleep(180)
+
             assert wait_for_pods_to_be_running(
                 timeout=900, sleep=15
             ), "Few pods failed to reach the desired running state"
@@ -168,13 +155,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             self.sanity_helpers.health_check()
 
         logger.info("Check number of pods before and after adding non ocs taint")
-        number_of_pods_after = len(
-            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
-        )
-        assert (
-            number_of_pods_before == number_of_pods_after
-        ), "Number of pods didn't match"
-
+        verify_pod_count_unchanged(number_of_pods_before)
         if not (
             config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
         ):
