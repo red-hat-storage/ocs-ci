@@ -6851,3 +6851,58 @@ def set_rook_log_level():
     rook_log_level = config.DEPLOYMENT.get("rook_log_level")
     if rook_log_level:
         set_configmap_log_level_rook_ceph_operator(rook_log_level)
+
+
+def check_osds_down(osd_ids: list[str]) -> bool:
+    """
+    Check if specified OSDs are marked as 'down' in Ceph
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to check
+
+    Returns:
+        bool: True if all OSDs are down, False otherwise
+    """
+    log = logging.getLogger(__name__)
+    ceph_pod = pod.get_ceph_tools_pod()
+    osd_dump = ceph_pod.exec_ceph_cmd("ceph osd dump")
+
+    osds_status = {}
+    for osd in osd_dump["osds"]:
+        osd_id = str(osd["osd"])
+        if osd_id in osd_ids:
+            osds_status[osd_id] = {"up": osd["up"], "in": osd["in"]}
+
+    for osd_id, status in osds_status.items():
+        state = "up" if status["up"] == 1 else "down"
+        log.info(f"OSD {osd_id}: {state}")
+
+    all_down = all(status["up"] == 0 for status in osds_status.values())
+    return all_down
+
+
+def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) -> None:
+    """
+    Wait for OSDs to be marked as 'down' in Ceph using polling
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to wait for
+        timeout (int): Timeout in seconds (default: 300)
+        sleep (int): Sleep interval between checks (default: 10)
+
+    Raises:
+        TimeoutExpiredError: If OSDs don't go down within timeout
+    """
+    log = logging.getLogger(__name__)
+    log.info(f"Waiting for OSDs {osd_ids} to be marked as 'down' in Ceph")
+
+    sample = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_osds_down, osd_ids=osd_ids
+    )
+
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"OSDs {osd_ids} did not go down within {timeout} seconds"
+        )
+
+    log.info(f"All OSDs {osd_ids} are now marked as 'down'")
