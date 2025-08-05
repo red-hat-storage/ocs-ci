@@ -270,6 +270,7 @@ def relocate(
     old_primary=None,
     workload_instance=None,
     multi_ns=False,
+    workload_instances_shared=None,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -284,7 +285,7 @@ def relocate(
         old_primary (str): Name of cluster where workload were running
         workload_instance (object): Discovered App instance to get namespace and dir location
         multi_ns (bool): Multi Namespace
-
+        workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
 
     """
     restore_index = config.cur_index
@@ -327,7 +328,7 @@ def relocate(
             old_primary=old_primary, workload_instance=workload_instance
         )
     else:
-        if discovered_apps and workload_instance:
+        if discovered_apps and workload_instance and not workload_instances_shared:
             logger.info("Doing Cleanup Operations")
             do_discovered_apps_cleanup(
                 drpc_name=workload_placement_name,
@@ -336,6 +337,20 @@ def relocate(
                 workload_dir=workload_instance.workload_dir,
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
+        elif discovered_apps and workload_instance and workload_instances_shared:
+            logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
+            for cnv_wl in workload_instances_shared:
+                do_discovered_apps_cleanup(
+                    drpc_name=workload_placement_name,
+                    old_primary=old_primary,
+                    workload_namespace=workload_instances_shared[0].workload_namespace,
+                    workload_dir=cnv_wl.workload_dir,
+                    vrg_name=workload_instances_shared[
+                        0
+                    ].discovered_apps_placement_name,
+                    skip_resource_deletion_verification=True,
+                )
+
     config.switch_ctx(restore_index)
 
 
@@ -1917,7 +1932,13 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name
+    drpc_name,
+    old_primary,
+    workload_namespace,
+    workload_dir,
+    vrg_name,
+    skip_resource_deletion_verification=False,
+    ignore_resource_not_found=False,
 ):
     """
     Function to clean up Resources
@@ -1928,6 +1949,12 @@ def do_discovered_apps_cleanup(
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
         vrg_name (str): Name of VRG
+        skip_resource_deletion_verification (bool): False by default and runs always, else resource verification is
+                                                    handled separately in the test when Shared protection type is used
+                                                    for DR protection via ACM UI
+
+        ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
+                                        DR protected via ACM UI is deleted, refer DFBUGS-3706
 
     """
     restore_index = config.cur_index
@@ -1943,14 +1970,23 @@ def do_discovered_apps_cleanup(
     )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
-    run_cmd(
-        f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
-    )
-    wait_for_all_resources_deletion(
-        namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
-    )
-    config.switch_acm_ctx()
-    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+    if not ignore_resource_not_found:
+
+        # --ignore-not-found is needed to avoid https://issues.redhat.com/browse/DFBUGS-3706
+        logger.info("Using '--ignore-not-found' during workload deletion")
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
+        )
+    else:
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        )
+    if not skip_resource_deletion_verification:
+        wait_for_all_resources_deletion(
+            namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
+        )
+        config.switch_acm_ctx()
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
     config.switch_ctx(restore_index)
 
 

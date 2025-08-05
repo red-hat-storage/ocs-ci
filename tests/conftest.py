@@ -7561,13 +7561,18 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
 
     instances = []
 
-    def factory(pvc_vm=1, custom_sc=False):
+    def factory(
+        pvc_vm=1, custom_sc=False, dr_protect=True, shared_drpc_protection=False
+    ):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
             custom_sc (bool): False by default, will create and use custom Pool and Storage Class
                             when set to True for CNV workload
-
+            dr_protect (bool): True by default where workload will be DR protected via CLI,
+                            else test case should handle it (via UI)
+            shared_drpc_protection (bool): False by default, True will use Shared Protection type to DR Protect
+                                        a workload using the existing DRPC in the same namespace
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -7577,12 +7582,16 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         """
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
+        if shared_drpc_protection:
+            workload_key = "dr_cnv_discovered_apps_shared"
         if custom_sc:
             log.info("Calling fixture to create Custom Pool/SC..")
             cnv_custom_storage_class()
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            if shared_drpc_protection and instances:
+                workload_details["workload_namespace"] = instances[0].workload_namespace
             workload = CnvWorkloadDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -7611,16 +7620,22 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(
+                dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
+            )
 
         return instances
 
     def teardown():
-        for instance in instances:
-            try:
-                instance.delete_workload()
-            except ResourceNotDeleted:
-                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+        if request.node.name == "test_acm_kubevirt_using_shared_protection":
+            instances[0].delete_workload(skip_resource_deletion_verification=True)
+            instances[1].delete_workload(shared_drpc_protection=True)
+        else:
+            for instance in instances:
+                try:
+                    instance.delete_workload()
+                except ResourceNotDeleted:
+                    raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
     request.addfinalizer(teardown)
     return factory

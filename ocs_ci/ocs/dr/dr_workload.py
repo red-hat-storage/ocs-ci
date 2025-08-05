@@ -1647,8 +1647,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             "discovered_apps_pod_selector_value"
         )
 
-    def deploy_workload(self):
+    def deploy_workload(self, shared_drpc_protection=False, dr_protect=True):
         """
+
+        Args:
+            shared_drpc_protection (bool): False by default, another workload in an existing namespace
+                            will share the DRPC and DR protect it using Shared Protection type via UI
+            dr_protect (bool): True by default where workload will be DR protected via CLI,
+                                else test case should handle it (via UI)
 
         Deployment specific to CNV workload for Discovered/Imperative Apps
 
@@ -1656,16 +1662,23 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self._deploy_prereqs()
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            self.create_namespace()
-        self.manage_dr_vm_secrets()
+            if not shared_drpc_protection:
+                self.create_namespace()
+            else:
+                # Shared=False means namespace exists, so skip creation
+                log.info(
+                    f"Namespace in use: {self.workload_namespace} for Shared Protection type"
+                )
+        self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
         config.switch_acm_ctx()
-        self.create_placement()
-        self.create_drpc()
-        self.verify_workload_deployment()
+        if dr_protect:
+            self.create_placement()
+            self.create_drpc()
+            self.verify_workload_deployment()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
         )
@@ -1689,20 +1702,25 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         run_cmd(f"oc create namespace {self.workload_namespace}")
 
-    def manage_dr_vm_secrets(self):
+    def manage_dr_vm_secrets(self, shared_drpc_protection=False):
         """
         Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
+
+        Args:
+            shared_drpc_protection (bool): False by default, True when Shared Protection type is used to DR Protect
+            a workload in an existing namespace
 
         """
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
 
             # Create namespace if it doesn't exist
-            try:
-                create_project(project_name=self.workload_namespace)
-            except CommandFailed as ex:
-                if "(AlreadyExists)" in str(ex):
-                    log.warning("The namespace already exists!")
+            if not shared_drpc_protection:
+                try:
+                    create_project(project_name=self.workload_namespace)
+                except CommandFailed as ex:
+                    if "(AlreadyExists)" in str(ex):
+                        log.warning("The namespace already exists!")
 
             # Create or recreate the secret for ssh access
             try:
@@ -1842,21 +1860,39 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def delete_workload(self):
+    def delete_workload(
+        self, shared_drpc_protection=False, skip_resource_deletion_verification=False
+    ):
         """
         Delete Discovered Apps
 
+        Args:
+            shared_drpc_protection (bool): False by default, another workload in an existing namespace
+                            will share the DRPC and DR protect it using Shared Protection type via UI
+            skip_resource_deletion_verification (bool): False by default, resource verification is
+                                                    handled based upon Standalone or Shared protection type is used
+                                                    for DR protection (via ACM UI)
+
         """
 
-        log.info("Deleting DRPC")
         config.switch_acm_ctx()
-        run_cmd(
-            f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
-        )
-        log.info("Deleting Placement")
-        run_cmd(
-            f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
-        )
+        if not shared_drpc_protection:
+            log.info("Deleting DRPC")
+            try:
+                run_cmd(
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+                )
+            except CommandFailed:
+                # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
+                # hence deletion fails
+                run_cmd(
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-drpc"
+                )
+                log.info("DRPC deleted")
+            log.info("Deleting Placement")
+            run_cmd(
+                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
+            )
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -1865,9 +1901,11 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
                 ignore_error=True,
             )
-            dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace,
-                discovered_apps=True,
-                workload_cleanup=True,
-            )
-            run_cmd(f"oc delete project {self.workload_namespace}")
+            if not skip_resource_deletion_verification:
+                dr_helpers.wait_for_all_resources_deletion(
+                    namespace=self.workload_namespace,
+                    discovered_apps=True,
+                    workload_cleanup=True,
+                )
+                run_cmd(f"oc delete project {self.workload_namespace}")
+                log.info(f"Project {self.workload_namespace} deleted successfully")
