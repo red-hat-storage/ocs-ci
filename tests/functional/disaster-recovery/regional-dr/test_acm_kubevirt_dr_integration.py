@@ -52,6 +52,19 @@ class TestACMKubevirtDRIntergration:
         DR operation on discovered VMs using Shared Protection type, both VMs are tied to a single DRPC
         in the same namespace where same DRPolicy is applied via UI to both the apps.
 
+        Test steps:
+
+        1. Deploy a CNV discovered workload in a test NS via CLI
+        2. Deploy another CNV discovered workload in the same namespace via CLI
+        3. Using ACM UI, DR protect the 1st workload from the VMs page using Standalone as Protection type
+        4. Then DR protect 2nd workload from the VMs page using Shared option, which will use the existing DRPC
+        of the 1st workload and gets tied to it.
+        5. Write data, take md5sum, failover this workload via CLI (both VMs) by shutting down the primary managed
+        cluster.
+        6. After successful failover, check md5sum, recover the down managed cluster and perform cleanup.
+        7. Let sync resume and then perform Relocate operation back to the original cluster.
+
+
         """
 
         md5sum_original = []
