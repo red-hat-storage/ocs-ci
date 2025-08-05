@@ -13,6 +13,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs import osd_operations
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.framework.testlib import ignore_leftover_label
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 @magenta_squad
 @workloads
 @skipif_external_mode
+@ignore_leftover_label(constants.OSD_APP_LABEL)
 class TestCnvDeviceReplace(E2ETest):
     """
     Test case for Device replacement
