@@ -603,8 +603,14 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
-            "region": self.DEFAULT_REGION,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(
+                bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]["aws"][
+                    0
+                ][1]
+            ),
+            "region": bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"][
+                "aws"
+            ][0][1],
         }
 
         original_folder = test_directory_setup.origin_dir
@@ -678,8 +684,14 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
-            "region": self.DEFAULT_REGION,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(
+                bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]["aws"][
+                    0
+                ][1]
+            ),
+            "region": bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"][
+                "aws"
+            ][0][1],
         }
 
         original_folder = test_directory_setup.origin_dir
