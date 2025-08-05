@@ -155,6 +155,8 @@ class TestVmShutdownStart(E2ETest):
         logger.info("Starting worker & master nodes")
         nodes.start_nodes(nodes=master_nodes)
         nodes.start_nodes(nodes=worker_nodes)
+        all_nodes = master_nodes + worker_nodes
+        all_node_names = [node.name for node in all_nodes]
         retry(
             (
                 CommandFailed,
@@ -164,7 +166,7 @@ class TestVmShutdownStart(E2ETest):
             ),
             tries=15,
             delay=15,
-        )(wait_for_nodes_status(timeout=1800))
+        )(wait_for_nodes_status(node_names=all_node_names, timeout=1800))
         logger.info("All nodes are now in READY state")
         if not force:
             run_oc_command(
