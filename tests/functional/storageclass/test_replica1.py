@@ -1,6 +1,5 @@
-import pytest
 from logging import getLogger
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -10,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.storage_cluster import (
     set_non_resilient_pool,
     validate_non_resilient_pool,
@@ -23,19 +23,18 @@ from ocs_ci.ocs.constants import (
     REPLICA1_STORAGECLASS,
     STATUS_RUNNING,
     VOLUME_MODE_BLOCK,
-    CSI_RBD_RAW_BLOCK_POD_YAML,
     DEFALUT_DEVICE_CLASS,
     VSPHERE_PLATFORM,
     RACK_LABEL,
     ZONE_LABEL,
 )
-from ocs_ci.helpers.helpers import create_pvc
+from ocs_ci.helpers.helpers import create_pvc, create_pod, wait_for_resource_state
 from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
 from ocs_ci.ocs.replica_one import (
     delete_replica_1_sc,
     get_osd_pgs_used,
     get_replica_1_osds,
-    purge_replica1_osd,
+    sequential_remove_replica1_osds,
     delete_replica1_cephblockpools_cr,
     count_osd_pods,
     get_osd_kb_used_data,
@@ -43,6 +42,7 @@ from ocs_ci.ocs.replica_one import (
     get_all_osd_names_by_device_class,
     get_failure_domains,
 )
+from ocs_ci.ocs.resources.pvc import get_pvcs_using_storageclass
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 
 
@@ -51,23 +51,15 @@ log = getLogger(__name__)
 
 def _get_node_selector_for_failure_domain(
     failure_domain: str,
-) -> Tuple[Optional[Dict[str, str]], Optional[dict]]:
+) -> Optional[Dict[str, str]]:
     """
-    Return either
-
-    * a **hard** node‐selector — when at least one *worker* carries the
-      requested domain label, or
-    * a **preferred (soft) node‑affinity** — as a last‑chance
-      fallback when no worker has the label, or
-    * (None, None) if absolutely nothing can be used.
+    Return a hard node selector if workers exist with the requested failure domain label.
 
     Args:
         failure_domain (str): The failure domain value to match.
 
     Returns:
-        tuple: (node_selector, preferred_affinity)
-            node_selector (dict[str, str] | None): Hard selector if possible.
-            preferred_affinity (dict | None): Soft affinity if possible.
+        dict[str, str] | None: Hard node selector if workers found, None otherwise.
     """
     if config.ENV_DATA["platform"].lower() == VSPHERE_PLATFORM:
         label_key = RACK_LABEL
@@ -90,39 +82,15 @@ def _get_node_selector_for_failure_domain(
         log.info(
             f"Found worker(s) with {label_key}={failure_domain}, using hard node selector."
         )
-        return {label_key: failure_domain}, None  # hard selector
-
-    if workers_with_label:  # label exists but not the value
-        log.info(
-            f"No worker with {label_key}={failure_domain}, but label exists. Using soft affinity."
-        )
-        soft_affinity = {
-            "nodeAffinity": {
-                "preferredDuringSchedulingIgnoredDuringExecution": [
-                    {
-                        "weight": 100,
-                        "preference": {
-                            "matchExpressions": [
-                                {
-                                    "key": label_key,
-                                    "operator": "In",
-                                    "values": [failure_domain],
-                                }
-                            ]
-                        },
-                    }
-                ]
-            }
-        }
-        return None, soft_affinity
+        return {label_key: failure_domain}
 
     log.warning(
-        f"No workers expose label {label_key} for failure-domain {failure_domain}."
+        f"No workers with {label_key}={failure_domain}. Pod will be created without node selector."
     )
-    return None, None
+    return None
 
 
-def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: str):
+def create_pod_on_failure_domain(project_factory, failure_domain: str):
     ns = project_factory().namespace
     pvc = create_pvc(
         namespace=ns,
@@ -131,25 +99,24 @@ def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: s
         access_mode=ACCESS_MODE_RWO,
     )
 
-    node_selector, preferred_affinity = _get_node_selector_for_failure_domain(
-        failure_domain
-    )
+    node_selector = _get_node_selector_for_failure_domain(failure_domain)
 
     if node_selector:
         log.info(f"Creating pod with node selector: {node_selector}")
-        return pod_factory(pvc=pvc, node_selector=node_selector)
-
-    if preferred_affinity:
+    else:
         log.info(
-            f"Creating pod with preferred node affinity for domain: {failure_domain}"
+            f"Creating pod without node selector for failure domain: {failure_domain}"
         )
-        return pod_factory(pvc=pvc, raw_payload_override=preferred_affinity)
 
-    log.warning(
-        "No nodes expose label for failure‑domain %s – creating unconstrained pod.",
-        failure_domain,
+    pod_obj = create_pod(
+        interface_type=CEPHBLOCKPOOL,
+        pvc_name=pvc.name,
+        namespace=ns,
+        node_selector=node_selector,
     )
-    return pod_factory(pvc=pvc)
+    wait_for_resource_state(pod_obj, STATUS_RUNNING, timeout=300)
+    pod_obj.reload()
+    return pod_obj
 
 
 @polarion_id("OCS-5720")
@@ -157,8 +124,12 @@ def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: s
 @tier1
 @skipif_external_mode
 class TestReplicaOne:
-    @pytest.fixture(scope="class")
     def replica1_setup(self):
+        # Initialize workload tracking for this test run
+        self.created_projects = []
+        self.created_pvcs = []
+        self.created_pods = []
+
         log.info("Setup function called")
         storage_cluster = StorageCluster(
             resource_name=config.ENV_DATA["storage_cluster_name"],
@@ -176,29 +147,139 @@ class TestReplicaOne:
             pod = OCP(
                 kind=POD,
                 namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=osd,
             )
-            pod.wait_for_resource(condition=STATUS_RUNNING, column="STATUS")
+            pod.wait_for_resource(
+                condition=STATUS_RUNNING, column="STATUS", resource_name=osd
+            )
 
         return storage_cluster
 
-    @pytest.fixture(scope="class")
-    def replica1_teardown(self, request, replica1_setup):
-        yield
-        log.info("Teardown function called")
-        storage_cluster = replica1_setup
+    def delete_replica1_pvcs(self):
+        """
+        Delete all PVCs created with replica-1 StorageClass.
+
+        Returns:
+            int: Number of PVCs deleted
+        """
+        log.info("Deleting PVCs created with replica-1 StorageClass")
+        try:
+            replica1_pvcs = get_pvcs_using_storageclass(REPLICA1_STORAGECLASS)
+            if replica1_pvcs:
+                log.info(
+                    f"Found {len(replica1_pvcs)} PVCs using {REPLICA1_STORAGECLASS}"
+                )
+                for pvc_info in replica1_pvcs:
+                    pvc_name = pvc_info["name"]
+                    pvc_namespace = pvc_info["namespace"]
+                    log.info(f"Deleting PVC {pvc_name} in namespace {pvc_namespace}")
+                    pvc_obj = OCP(kind="PersistentVolumeClaim", namespace=pvc_namespace)
+                    pvc_obj.delete(resource_name=pvc_name)
+                    log.info(f"PVC {pvc_name} deletion initiated")
+                return len(replica1_pvcs)
+            else:
+                log.info(f"No PVCs found using StorageClass {REPLICA1_STORAGECLASS}")
+                return 0
+        except (CommandFailed, ValueError) as e:
+            log.error(f"Failed to delete replica-1 PVCs: {e}")
+            raise
+
+    def delete_tracked_workloads(self):
+        """
+        Delete all workloads tracked during test execution.
+
+        Returns:
+            dict: Summary of deleted resources
+        """
+        log.info("Deleting tracked workloads created during test")
+        summary = {"pods": 0, "pvcs": 0, "projects": 0}
+
+        # Delete pods first
+        for pod in getattr(self, "created_pods", []):
+            try:
+                log.info(f"Deleting pod {pod.name} in namespace {pod.namespace}")
+                pod.delete()
+                summary["pods"] += 1
+            except CommandFailed as e:
+                log.warning(f"Failed to delete pod {pod.name}: {e}")
+
+        # Delete PVCs
+        for pvc in getattr(self, "created_pvcs", []):
+            try:
+                log.info(f"Deleting PVC {pvc.name} in namespace {pvc.namespace}")
+                pvc.delete()
+                summary["pvcs"] += 1
+            except CommandFailed as e:
+                log.warning(f"Failed to delete PVC {pvc.name}: {e}")
+
+        # Delete projects last
+        for project in getattr(self, "created_projects", []):
+            try:
+                log.info(f"Deleting project {project.namespace}")
+                project.delete()
+                summary["projects"] += 1
+            except CommandFailed as e:
+                log.warning(f"Failed to delete project {project.namespace}: {e}")
+
+        log.info(f"Workload deletion summary: {summary}")
+        return summary
+
+    def replica1_teardown(self, storage_cluster):
+        """
+        Comprehensive replica-1 teardown orchestrator following 7-step documentation.
+
+        Steps:
+        1. Delete workloads using replica-1 storage
+        2. Delete PVCs created with replica-1 StorageClass
+        3. Mark non-resilient pool for disabling
+        4. Delete replica-1 StorageClass
+        5. Delete replica-1 CephBlockPools
+        6. Remove replica-1 OSDs sequentially
+        """
+        log.info("Starting comprehensive replica-1 teardown orchestrator")
+
+        # Capture failure domains early before deleting CephBlockPools
+        log.info("Capturing failure domains before teardown")
+        failure_domains = get_failure_domains()
+        log.info(f"Captured failure domains: {failure_domains}")
+
+        # Step 1: Delete workloads using replica-1 storage
+        log.info("Step 1: Deleting workloads using replica-1 storage")
+        workload_summary = self.delete_tracked_workloads()
+        log.info(f"Step 1 completed: {workload_summary}")
+
+        # Step 2: Delete PVCs created with replica-1 StorageClass
+        log.info("Step 2: Deleting PVCs created with replica-1 StorageClass")
+        deleted_pvcs = self.delete_replica1_pvcs()
+        log.info(f"Step 2 completed: {deleted_pvcs} PVCs deleted")
+
+        # Step 3: Mark non-resilient pool for disabling
+        log.info("Step 3: Marking non-resilient pool for disabling")
+        set_non_resilient_pool(storage_cluster, enable=False)
+
+        # Step 4: Delete replica-1 StorageClass
+        log.info("Step 4: Deleting replica-1 StorageClass")
+        delete_replica_1_sc()
+        log.info("StorageClass Deleted")
+
+        # Step 5: Delete replica-1 CephBlockPools
+        log.info("Step 5: Deleting replica-1 CephBlockPools")
         cephblockpools = OCP(
             kind=CEPHBLOCKPOOL, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        set_non_resilient_pool(storage_cluster, enable=False)
-        delete_replica_1_sc()
-        log.info("StorageClass Deleted")
         delete_replica1_cephblockpools_cr(cephblockpools)
         log.info("CephBlockPool CR Deleted")
-        purge_replica1_osd()
+
+        # Step 6: Remove replica-1 OSDs sequentially
+        log.info("Step 6: Removing replica-1 OSDs sequentially")
+        removal_summary = sequential_remove_replica1_osds(failure_domains)
+        log.info(f"Step 6 completed: {removal_summary}")
+
+        # Final verification
+        log.info("Waiting for storage cluster to return to ready state")
         storage_cluster.wait_for_resource(
             condition=STATUS_READY, column="PHASE", timeout=1800, sleep=60
         )
+        log.info("Replica-1 teardown orchestrator completed successfully")
 
     def test_cluster_before_configuration(
         self, pod_factory, pvc_factory, project_factory
@@ -213,9 +294,14 @@ class TestReplicaOne:
             interface=CEPHBLOCKPOOL,
             project=self.project,
             size="1",
+            access_mode=ACCESS_MODE_RWO,
             volume_mode=VOLUME_MODE_BLOCK,
         )
-        self.pod = pod_factory(pvc=self.pvc, pod_dict_path=CSI_RBD_RAW_BLOCK_POD_YAML)
+        self.pod = pod_factory(
+            interface=CEPHBLOCKPOOL,
+            pvc=self.pvc,
+            raw_block_pv=True,
+        )
 
         self.pod.run_io(storage_type="fs", size="100M")
         self.kb_after_workload = get_osd_kb_used_data()
@@ -231,16 +317,18 @@ class TestReplicaOne:
             for value in self.device_class_before_test.values()
         ), f"Device class is not as expected. expected 'ssd', actual: {self.device_class_before_test}"
 
-    def test_configure_replica1(
-        self, replica1_setup, project_factory, pod_factory, replica1_teardown
-    ):
+    def test_configure_replica1(self, project_factory, pod_factory):
         log.info("Starting Tier1 replica one test")
+
+        # Call setup function directly
+        storage_cluster = self.replica1_setup()
         failure_domains = get_failure_domains()
         testing_pod = create_pod_on_failure_domain(
             project_factory,
-            pod_factory,
             failure_domain=failure_domains[0],
         )
+        # Track the testing pod (note: create_pod_on_failure_domain also creates PVC but doesn't return it)
+        self.created_pods.append(testing_pod)
         log.info(testing_pod)
         pgs_before_workload = get_osd_pgs_used()
         kb_before_workload = get_osd_kb_used_data()
@@ -257,3 +345,7 @@ class TestReplicaOne:
         osd_number = get_all_osd_names_by_device_class(osds, failure_domains[0])
         diff = compare_dictionaries(kb_before_workload, kb_after_workload, osd_number)
         assert not diff, "KB amount in used OSD is not equal"
+
+        # Call teardown function directly
+        log.info("Test completed successfully, starting teardown")
+        self.replica1_teardown(storage_cluster)
