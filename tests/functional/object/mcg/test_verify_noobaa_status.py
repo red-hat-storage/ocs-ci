@@ -64,7 +64,10 @@ def test_verify_noobaa_db_service(mcg_obj_session):
     pattern = "Not found: Service noobaa-db"
     with config.RunWithProviderConfigContextIfAvailable():
         primary_nb_db_pod = get_primary_nb_db_pod()
-        noobaa_db_log = get_pod_logs(pod_name=primary_nb_db_pod.name)
+        noobaa_db_log = get_pod_logs(
+            pod_name=primary_nb_db_pod.name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
     assert (
         re.search(pattern=pattern, string=noobaa_db_log) is None
     ), f"Error: {pattern} msg found in the noobaa db logs."
