@@ -32,7 +32,7 @@ class TestBucketVersioningUI:
     NAVIGATION_WAIT_TIME = 2
     VERSIONS_LOAD_WAIT_TIME = 3
     INITIAL_UPLOAD_WAIT_TIME = 2
-    VERSION_DETECTION_TIMEOUT = 10
+    VERSION_DETECTION_TIMEOUT = 30
     created_buckets = []
 
     def _upload_folder_to_bucket(
@@ -301,18 +301,47 @@ class TestBucketVersioningUI:
         except TimeoutException:
             logger.warning("Timeout waiting for version checkboxes, continuing anyway")
 
-        version_checkboxes = buckets_tab.get_elements(
-            buckets_tab.bucket_tab["version_row_checkboxes"]
-        )
-        actual_version_count = len(version_checkboxes)
+        # Retry logic for version count validation
+        max_retries = 6
+        retry_interval = 2
+        actual_version_count = 0
 
-        logger.info(
-            f"Version count by checkboxes: Expected {expected_versions}, Found {actual_version_count}"
-        )
+        for attempt in range(max_retries):
+            version_checkboxes = buckets_tab.get_elements(
+                buckets_tab.bucket_tab["version_row_checkboxes"]
+            )
+            actual_version_count = len(version_checkboxes)
 
-        if actual_version_count != expected_versions:
+            logger.info(
+                f"Version count by checkboxes\n"
+                f"attempt {attempt + 1}/{max_retries}\n"
+                f"Expected {expected_versions}\n"
+                f"Found {actual_version_count}"
+            )
+
+            if actual_version_count == expected_versions:
+                logger.info(f"Successfully found all {expected_versions} versions")
+                break
+
+            if attempt < max_retries - 1:
+                logger.info(
+                    f"Version count mismatch, waiting {retry_interval} seconds before retry..."
+                )
+                time.sleep(retry_interval)
+                # Refresh the page elements to get updated version list
+                try:
+                    buckets_tab.wait_for_element_to_be_present(
+                        buckets_tab.bucket_tab["version_row_checkboxes"],
+                        timeout=5,
+                    )
+                except TimeoutException:
+                    logger.warning(
+                        "Timeout waiting for version checkboxes during retry"
+                    )
+        else:
+            # If we exhausted all retries without success
             raise AssertionError(
-                f"Version count validation failed: Expected {expected_versions} versions, "
+                f"Version count validation failed after {max_retries} attempts: Expected {expected_versions} versions, "
                 f"but found {actual_version_count} checkboxes"
             )
 
@@ -501,6 +530,12 @@ class TestBucketVersioningUI:
         self._navigate_to_folder_and_enable_versions(
             bucket_versioning, buckets_tab, folder_name, current_bucket_name
         )
+
+        # Wait for UI to refresh after enabling version listing
+        logger.info(
+            "Waiting for UI to load all versions after enabling version listing..."
+        )
+        time.sleep(self.VERSIONS_LOAD_WAIT_TIME)
 
         # Step 6: Verify version ID mapping with "Latest" tag
         logger.info("Step 6: Verifying version ID for latest object")
