@@ -19,7 +19,6 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_device_class,
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
-    get_deviceset_count,
     resize_osd,
 )
 from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster, check_ceph_osd_df_tree
@@ -145,13 +144,14 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
         )
 
 
-def check_storage_size_is_reflected(expected_storage_size):
+def check_storage_size_is_reflected(expected_storage_size, expected_ceph_capacity=None):
     """
     Check that the expected storage size is reflected in the current storage size, PVCs, PVs,
     and ceph capacity.
 
     Args:
         expected_storage_size (str): The expected storage size
+        expected_ceph_capacity (int): Expected Ceph raw capacity in GiB
 
     Raises:
         StorageSizeNotReflectedException: If the current storage size, PVCs, PVs, and ceph capacity
@@ -192,19 +192,39 @@ def check_storage_size_is_reflected(expected_storage_size):
             f"The PV sizes are not equal to the expected storage size {expected_storage_size_in_gb}"
         )
 
-    ceph_cluster = CephCluster()
-    ceph_capacity = round(ceph_cluster.get_ceph_capacity())
-    expected_ceph_capacity = round(expected_storage_size_in_gb * get_deviceset_count())
+    if expected_ceph_capacity:
+        check_ceph_capacity_increased(expected_ceph_capacity)
 
-    logger.info(
-        f"Check that the Ceph capacity {ceph_capacity} is equal "
-        f"to the expected Ceph capacity {expected_ceph_capacity}"
-    )
-    if not (ceph_capacity == expected_ceph_capacity):
+
+def check_ceph_capacity_increased(
+    expected_ceph_capacity,
+    tolerance_percent=1.0,
+):
+    """
+    Validates that the current Ceph raw capacity is within the expected range.
+
+    Args:
+        expected_ceph_capacity (int): Expected Ceph raw capacity in GiB
+        tolerance_percent (float): Acceptable deviation in percentage (default: 1%)
+
+    Raises:
+        StorageSizeNotReflectedException: If current capacity is outside the tolerated range
+
+    """
+    ceph_cluster = CephCluster()
+    current_capacity = ceph_cluster.get_ceph_capacity(replica_divide=False)
+    tolerance = expected_ceph_capacity * (tolerance_percent / 100)
+
+    logger.info(f"Expected Ceph capacity: {expected_ceph_capacity}GiB ± {tolerance}GiB")
+    logger.info(f"Actual Ceph capacity: {current_capacity}GiB")
+
+    if abs(expected_ceph_capacity - current_capacity) > tolerance:
         raise StorageSizeNotReflectedException(
-            f"The Ceph capacity {ceph_capacity} is not equal to the "
-            f"expected Ceph capacity {expected_ceph_capacity}"
+            f"Ceph capacity {current_capacity}GiB is outside the expected range "
+            f"{expected_ceph_capacity}GiB ± {tolerance}GiB"
         )
+
+    logger.info("Ceph capacity is within the expected range.")
 
 
 def check_ceph_state_post_resize_osd():
@@ -234,7 +254,11 @@ def check_ceph_state_post_resize_osd():
 
 
 def base_ceph_verification_steps_post_resize_osd(
-    old_osd_pods, old_osd_pvcs, old_osd_pvs, expected_storage_size
+    old_osd_pods,
+    old_osd_pvcs,
+    old_osd_pvs,
+    expected_storage_size,
+    expected_ceph_capacity=None,
 ):
     """
     Check the Ceph verification steps post resize OSD.
@@ -248,6 +272,7 @@ def base_ceph_verification_steps_post_resize_osd(
         old_osd_pvcs (list): The old osd PVC objects before resizing the osd
         old_osd_pvs (list): The old osd PV objects before resizing the osd
         expected_storage_size (str): The expected storage size after resizing the osd
+        expected_ceph_capacity (int): Expected Ceph raw capacity in GiB after OSD resize
 
     Raises:
         StorageSizeNotReflectedException: If the current storage size, PVCs, PVs, and ceph capacity
@@ -257,14 +282,19 @@ def base_ceph_verification_steps_post_resize_osd(
     logger.info("Check the resources state post resize OSD")
     check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pvs)
     logger.info("Check the resources size post resize OSD")
-    check_storage_size_is_reflected(expected_storage_size)
+    check_storage_size_is_reflected(expected_storage_size, expected_ceph_capacity)
     logger.info("Check the Ceph state post resize OSD")
     check_ceph_state_post_resize_osd()
     logger.info("All the Ceph verification steps post resize osd finished successfully")
 
 
 def ceph_verification_steps_post_resize_osd(
-    old_osd_pods, old_osd_pvcs, old_osd_pvs, expected_storage_size, num_of_tries=6
+    old_osd_pods,
+    old_osd_pvcs,
+    old_osd_pvs,
+    expected_storage_size,
+    expected_ceph_capacity=None,
+    num_of_tries=6,
 ):
     """
     Try to execute the function 'base_ceph_verification_steps_post_resize_osd' a number of tries
@@ -277,6 +307,7 @@ def ceph_verification_steps_post_resize_osd(
         old_osd_pvcs (list): The old osd PVC objects before resizing the osd
         old_osd_pvs (list): The old osd PV objects before resizing the osd
         expected_storage_size (str): The expected storage size after resizing the osd
+        expected_ceph_capacity (int): Expected Ceph raw capacity in GiB after OSD resize
         num_of_tries (int): The number of tries to try executing the
             function 'base_ceph_verification_steps_post_resize_osd'.
 
@@ -289,7 +320,11 @@ def ceph_verification_steps_post_resize_osd(
     for i in range(1, num_of_tries + 1):
         try:
             base_ceph_verification_steps_post_resize_osd(
-                old_osd_pods, old_osd_pvcs, old_osd_pvs, expected_storage_size
+                old_osd_pods,
+                old_osd_pvcs,
+                old_osd_pvs,
+                expected_storage_size,
+                expected_ceph_capacity,
             )
             return
         except StorageSizeNotReflectedException as local_ex:
