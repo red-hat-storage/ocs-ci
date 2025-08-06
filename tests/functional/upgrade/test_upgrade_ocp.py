@@ -217,8 +217,10 @@ class TestUpgradeOCP(ManageTest):
                 + config.ENV_DATA.get("infra_replicas", 0)
             )
             operator_upgrade_timeout = 4000
+            operator_ready_timeout = 2700
             if rosa_platform or num_nodes >= 6:
                 operator_upgrade_timeout = 9800
+                operator_ready_timeout = 5400
             for ocp_operator in cluster_operators:
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
                 # ############ Workaround for issue 2624 #######
@@ -244,7 +246,6 @@ class TestUpgradeOCP(ManageTest):
                 resume_machinehealthcheck()
 
             # post upgrade validation: check cluster operator status
-            operator_ready_timeout = 2700 if not rosa_platform else 5400
             cluster_operators = ocp.get_all_cluster_operators()
             for ocp_operator in cluster_operators:
                 logger.info(f"Checking cluster status of {ocp_operator}")
