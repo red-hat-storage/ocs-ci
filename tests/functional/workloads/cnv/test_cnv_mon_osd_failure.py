@@ -20,12 +20,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.usefixtures("setup_cnv_workload")
 class TestMonAndOSDFailures:
     """
-    Here we test the Mon and OSD failures while CNV
-    workloads are being run in the background.
-        * Run the workloads in the session scoped fixture setup
-        * Execute the mon & osd failure tests
-        * Verify the IO during the teardown
-
+    Tests Mon and OSD failures while CNV workloads are running.
     """
 
     @pytest.fixture(scope="class")
@@ -81,39 +76,16 @@ class TestMonAndOSDFailures:
             vm.verify_vm(verify_ssh=True)
 
     @polarion_id("OCS-6609")
-    def test_single_mon_failures(self):
+    @pytest.mark.parametrize("mon_count", [1, 2])
+    def test_mon_failures(self, mon_count):
         """
         Test single mon failure with cephFS/RBD workloads running in the background
 
         """
         ceph_obj = CephCluster()
-        logger.info("testing single mon failures scenario")
+        logger.info("testing mon failures scenario with {mon_count} mon")
 
-        self.mons = ceph_obj.get_mons_from_cluster()[:1]
-
-        # Scale Down Mon Count to replica=0
-        for mon in self.mons:
-            modify_deployment_replica_count(mon, 0)
-
-        # Sleeping for 600 seconds to emulate a condition where the 2 mons is inaccessibe  for 10 seconds.
-        time.sleep(600)
-
-        # Verify vm statuses when mon pod is down
-        self.verify_vm_status()
-
-        # scale mon deployment back to 1
-        for mon in self.mons:
-            modify_deployment_replica_count(mon, 1)
-
-    @polarion_id("OCS-6609")
-    def test_both_mon_failure(self):
-        """
-        Test both data zone mon failure with cnv workloads running in the background
-
-        """
-        ceph_obj = CephCluster()
-
-        self.mons = ceph_obj.get_mons_from_cluster()[:2]
+        self.mons = ceph_obj.get_mons_from_cluster()[:mon_count]
 
         # Scale Down Mon Count to replica=0
         for mon in self.mons:
@@ -126,7 +98,6 @@ class TestMonAndOSDFailures:
         self.verify_vm_status()
 
         # scale mon deployment back to 1
-        logger.info(f"Scaling up mons {','.join(self.mons)}")
         for mon in self.mons:
             modify_deployment_replica_count(mon, 1)
 
