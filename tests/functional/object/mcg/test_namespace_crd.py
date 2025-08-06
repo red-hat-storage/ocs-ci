@@ -731,7 +731,7 @@ class TestNamespace(MCGTest):
                         "type": "Cache",
                         "ttl": 10000,
                         "namespacestore_dict": {
-                            "aws": [(1, "eu-central-1")],
+                            "aws": [(1, DEFAULT_REGION)],
                         },
                     },
                     "placement_policy": {
