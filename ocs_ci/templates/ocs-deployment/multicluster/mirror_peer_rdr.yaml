@@ -4,18 +4,13 @@ metadata:
   name: mirrorpeer-sample
   labels:
     cluster.open-cluster-management.io/backup: resource
-    control-plane: odfmo-controller-manager
 spec:
   items:
   - clusterName: PLACE_HOLDER
     storageClusterRef:
       name: ocs-storagecluster
-      namespace: openshift-storage
   - clusterName: PLACE_HOLDER
     storageClusterRef:
       name: ocs-storagecluster
-      namespace: openshift-storage
   manageS3: true
-  schedulingIntervals:
-  - 5m
-  - 15m
+  type: async
