@@ -245,7 +245,7 @@ def create_pod(
     interface_type=None,
     pvc_name=None,
     do_reload=True,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     node_name=None,
     pod_dict_path=None,
     sa_name=None,
@@ -299,7 +299,7 @@ def create_pod(
         AssertionError: In case of any failure
 
     """
-
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if (
         interface_type == constants.CEPHBLOCKPOOL
         or interface_type == constants.CEPHBLOCKPOOL_THICK
@@ -622,9 +622,7 @@ def create_ceph_block_pool(
     return cbp_obj
 
 
-def create_ceph_file_system(
-    cephfs_name=None, label=None, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def create_ceph_file_system(cephfs_name=None, label=None, namespace=None):
     """
     Create a Ceph file system
 
@@ -636,6 +634,7 @@ def create_ceph_file_system(
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
     cephfs_data["metadata"]["name"] = (
         cephfs_name if cephfs_name else create_unique_resource_name("test", "cfs")
@@ -868,7 +867,7 @@ def create_storage_class(
 def create_pvc(
     sc_name,
     pvc_name=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     size=None,
     do_reload=True,
     access_mode=constants.ACCESS_MODE_RWO,
@@ -893,6 +892,7 @@ def create_pvc(
     Returns:
         PVC: PVC instance
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["name"] = (
         pvc_name if pvc_name else create_unique_resource_name("test", "pvc")
@@ -1089,7 +1089,7 @@ def get_cephfs_data_pool_name():
     return out[0]["data_pools"][0]
 
 
-def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespace"]):
+def validate_cephfilesystem(fs_name, namespace=None):
     """
     Verify CephFileSystem exists at Ceph and OCP
 
@@ -1100,6 +1100,7 @@ def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespac
         bool: True if CephFileSystem is created at Ceph and OCP side else
            will return False with valid msg i.e Failure cause
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
@@ -2908,9 +2909,7 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
-def modify_deployment_replica_count(
-    deployment_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def modify_deployment_replica_count(deployment_name, replica_count, namespace=None):
     """
     Function to modify deployment replica count,
     i.e to scale up or down deployment
@@ -2924,6 +2923,7 @@ def modify_deployment_replica_count(
         bool: True in case if changes are applied. False otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=deployment_name, params=params)
@@ -2951,9 +2951,7 @@ def modify_deploymentconfig_replica_count(
     return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
 
 
-def modify_job_parallelism_count(
-    job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def modify_job_parallelism_count(job_name, count, namespace=None):
     """
     Function to modify Job instances count,
 
@@ -2966,6 +2964,7 @@ def modify_job_parallelism_count(
         bool: True in case if changes are applied. False otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = ocp.OCP(kind=constants.JOB, namespace=namespace)
     params = f'{{"spec": {{"parallelism": {count}}}}}'
     return ocp_obj.patch(resource_name=job_name, params=params)
@@ -3040,9 +3039,7 @@ def collect_performance_stats(dir_name):
         json.dump(performance_stats, outfile)
 
 
-def validate_pod_oomkilled(
-    pod_name, namespace=config.ENV_DATA["cluster_namespace"], container=None
-):
+def validate_pod_oomkilled(pod_name, namespace=None, container=None):
     """
     Validate pod oomkilled message are found on log
 
@@ -3059,6 +3056,7 @@ def validate_pod_oomkilled(
         Assertion if failed to fetch logs
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     rc = True
     try:
         pod_log = pod.get_pod_logs(
@@ -3722,9 +3720,7 @@ def get_failure_domain():
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
 
 
-def modify_statefulset_replica_count(
-    statefulset_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def modify_statefulset_replica_count(statefulset_name, replica_count, namespace=None):
     """
     Function to modify statefulset replica count,
     i.e to scale up or down statefulset
@@ -3737,6 +3733,7 @@ def modify_statefulset_replica_count(
         bool: True in case if changes are applied. False otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind=constants.STATEFULSET, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
@@ -3860,7 +3857,7 @@ def check_number_of_mon_pods(expected_mon_num=3):
     return False
 
 
-def get_secret_names(namespace=config.ENV_DATA["cluster_namespace"], resource_name=""):
+def get_secret_names(namespace=None, resource_name=""):
     """
     Get secrets names
 
@@ -3872,6 +3869,7 @@ def get_secret_names(namespace=config.ENV_DATA["cluster_namespace"], resource_na
         dict: secret names
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     logger.info(f"Get secret names on project {namespace}")
     secret_obj = ocp.OCP(kind=constants.SECRET, namespace=namespace)
     secrets_objs = secret_obj.get(resource_name=resource_name)
@@ -4288,7 +4286,7 @@ def get_cephfs_subvolumegroup():
     return subvolume_group_name
 
 
-def create_sa_token_secret(sa_name, namespace=config.ENV_DATA["cluster_namespace"]):
+def create_sa_token_secret(sa_name, namespace=None):
     """
     Creates a serviceaccount token secret
 
@@ -4681,7 +4679,7 @@ def verify_log_exist_in_pods_logs(
     pod_names,
     expected_log,
     container=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     all_containers_flag=True,
     since=None,
 ):
@@ -4700,6 +4698,7 @@ def verify_log_exist_in_pods_logs(
         bool: return True if log exist otherwise False
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     for pod_name in pod_names:
         pod_logs = pod.get_pod_logs(
             pod_name,
@@ -4904,9 +4903,7 @@ def is_rbd_default_storage_class(sc_name=None):
     return False
 
 
-def get_network_attachment_definitions(
-    nad_name, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def get_network_attachment_definitions(nad_name, namespace=None):
     """
     Get NetworkAttachmentDefinition obj
 
@@ -4917,6 +4914,7 @@ def get_network_attachment_definitions(
         network_attachment_definitions (obj) : network_attachment_definitions object
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return OCP(
         kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
         namespace=namespace,
@@ -5136,7 +5134,7 @@ def restart_node_if_debug_doesnt_work(worker_node_name):
         oc_cmd.exec_oc_debug_cmd(node=worker_node_name, cmd_list=[cmd])
 
 
-def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_daemonsets_names(namespace=None):
     """
     Get all daemonspaces in namespace
 
@@ -5147,6 +5145,7 @@ def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
         list: all daemonset names in the namespace
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     daemonset_names = list()
     daemonset_objs = OCP(
         kind=constants.DAEMONSET,
@@ -5157,7 +5156,7 @@ def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
     return daemonset_names
 
 
-def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
+def get_daemonsets_obj(name, namespace=None):
     """
     Get daemonset obj
     Args:
@@ -5168,6 +5167,7 @@ def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
         ocp_obj: daemonset ocp obj
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return OCP(kind=constants.DAEMONSET, namespace=namespace, resource_name=name)
 
 
