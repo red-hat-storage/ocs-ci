@@ -150,4 +150,3 @@ class TestCnvDeviceReplace(E2ETest):
             assert (
                 source_csums[vm_obj.name] == new_csum
             ), f"Data integrity failed for VM '{vm_obj.name}'."
-            vm_obj.stop()
