@@ -333,9 +333,7 @@ class StorageClient:
 
     @if_version("<4.19")
     @retry(AssertionError, 20, 10, 1)
-    def verify_storagerequest_exists(
-        self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
-    ):
+    def verify_storagerequest_exists(self, storageclient_name=None, namespace=None):
         """
         Fetch storagerequests for storageclient
 
@@ -344,6 +342,7 @@ class StorageClient:
             namespace (str): Namespace where the storageclient is present.
 
         """
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
         storage_requests = ocp.OCP(
             kind="StorageRequest",
             namespace=namespace,
