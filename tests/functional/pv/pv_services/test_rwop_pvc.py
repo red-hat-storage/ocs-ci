@@ -5,7 +5,10 @@ import time
 import yaml
 
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    run_on_all_clients_push_missing_configs,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     polarion_id,
@@ -50,7 +53,8 @@ class TestRwopPvc(ManageTest):
         )
 
     @polarion_id("OCS-5924")
-    def test_pod_with_same_priority(self, pod_factory, interface):
+    @run_on_all_clients_push_missing_configs
+    def test_pod_with_same_priority(self, pod_factory, interface, cluster_index):
         """
         Test RBD Block volume mode RWOP PVC
 

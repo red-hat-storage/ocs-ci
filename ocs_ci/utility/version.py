@@ -437,6 +437,40 @@ def get_running_odf_version():
     return odf_full_version
 
 
+def get_running_odf_client_version():
+    """
+    Get current running ODF Client version
+
+    Returns:
+        string: ODF Client version
+    """
+    odf_client_csv = []
+    from ocs_ci.ocs.resources import csv
+    from ocs_ci.ocs.ocp import OCP
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+    try:
+        odf_client_csv = csv.get_csvs_start_with_prefix(
+            defaults.ODF_CLIENT_OPERATOR, namespace=namespace
+        )
+    except Exception as e:
+        # try second time to search ns. On Client clusters we usually have storage ns "openshift-storage-client"
+        if "not found" in str(e):
+            ns_data = OCP(kind=constants.NAMESPACE).get().get("items", [])
+            ns_list = [
+                ns["metadata"]["name"]
+                for ns in ns_data
+                if ns["metadata"]["name"].startswith(namespace)
+            ]
+            odf_client_csv = csv.get_csvs_start_with_prefix(
+                defaults.ODF_CLIENT_OPERATOR, namespace=ns_list.pop()
+            )
+
+    odf_client_full_version = odf_client_csv[0]["metadata"]["labels"]["full_version"]
+    log.info(f"ODF Client full version is {odf_client_full_version}")
+    return odf_client_full_version
+
+
 def get_semantic_running_odf_version():
     """
     Get current running ODF semantic version
