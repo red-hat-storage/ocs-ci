@@ -8,6 +8,7 @@ import yaml
 import copy
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci import framework
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.hyperconverged import HyperConverged
 from ocs_ci.deployment.mce import MCEInstaller
@@ -2137,13 +2138,14 @@ def hypershift_cluster_factory(
             try:
                 running_odf_version = get_running_odf_version()
             except IndexError:
-                logger.warning(
+                # Hard Requirement: ODF operator and ODF client operator must run on the same version
+                logger.error(
                     "No existing ODF operator and its version found for the cluster, trying Client operator"
                 )
                 try:
                     running_odf_version = get_running_odf_client_version()
                 except IndexError:
-                    logger.warning(
+                    logger.error(
                         "No existing ODF client operator and its version found for the cluster, ODF is not installed"
                     )
                     continue
@@ -2191,6 +2193,23 @@ def hypershift_cluster_factory(
             def_client_config_dict.setdefault("RUN", {}).update(
                 {"kubeconfig": kubeconf_path}
             )
+            run_keys = [
+                "run_id",
+                "log_dir",
+                "bin_dir",
+                "jenkins_build_url",
+                "logs_url",
+                "cluster_dir_full_path",
+                "kubeconfig",
+            ]
+            def_client_config_dict.setdefault("RUN", {})
+            for key in run_keys:
+                def_client_config_dict["RUN"][key] = (
+                    framework.config.RUN.get(key, "")
+                    if key != "kubeconfig"
+                    else kubeconf_path
+                )
+
             cluster_config = Config()
             cluster_config.update(def_client_config_dict)
 
