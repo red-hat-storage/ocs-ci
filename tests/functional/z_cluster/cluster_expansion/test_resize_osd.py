@@ -111,6 +111,13 @@ class TestResizeOSD(ManageTest):
         self.old_osd_pvcs = get_deviceset_pvcs()
         self.old_osd_pvs = get_deviceset_pvs()
 
+        # Calculate the expected Ceph raw capacity
+        new_storage_size_gb = convert_device_size(self.new_storage_size, "GB", 1024)
+        self.expected_ceph_capacity = int(len(self.old_osd_pods) * new_storage_size_gb)
+        logger.info(
+            f"The new expected ceph capacity is {self.expected_ceph_capacity}GiB"
+        )
+
         self.pod_file_name = "fio_test"
         self.sanity_helpers = Sanity()
 
@@ -184,6 +191,7 @@ class TestResizeOSD(ManageTest):
             self.old_osd_pvcs,
             self.old_osd_pvs,
             self.new_storage_size,
+            self.expected_ceph_capacity,
         )
         logger.info("Verify the md5sum of the pods for integrity check")
         verify_md5sum_on_pod_files(self.pods_for_integrity_check, self.pod_file_name)
