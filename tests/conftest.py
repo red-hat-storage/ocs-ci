@@ -10361,6 +10361,21 @@ def distribute_storage_classes_to_all_consumers_factory():
 
 
 @if_version(">4.18")
+@pytest.fixture(scope="class")
+def distribute_storage_classes_to_all_consumers_factory_class():
+    """
+    Factory to distribute storage classes to all Storage Consumers in the cluster.
+    Returns:
+        function: A callable function to execute the distribution logic.
+    """
+
+    def factory():
+        return distribute_storage_classes_to_all_consumers()
+
+    return factory
+
+
+@if_version(">4.18")
 def distribute_storage_classes_to_all_consumers():
     """
     This fixture patches all Storage Consumers, except the internal one, with the list of Storage Classes if
