@@ -90,7 +90,7 @@ class TestNfsEnable(ManageTest):
 
     @pytest.fixture(scope="class", autouse=True)
     def setup_teardown(
-        self, request, distribute_storage_classes_to_all_consumers_factory
+        self, request, distribute_storage_classes_to_all_consumers_factory_class
     ):
         """
         Setup-Teardown for the class
@@ -178,7 +178,7 @@ class TestNfsEnable(ManageTest):
                 self.storage_cluster_obj,
             )
         if config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
-            distribute_storage_classes_to_all_consumers_factory()
+            distribute_storage_classes_to_all_consumers_factory_class()
         yield
 
         log.info("-----Teardown-----")
