@@ -312,3 +312,33 @@ def create_nfs_sc_retain(sc_name):
     retain_nfs_sc._name = retain_nfs_sc.data["metadata"]["name"]
     retain_nfs_sc.create()
     return retain_nfs_sc
+
+
+def nfs_access_for_clients(
+    storage_cluster_obj,
+    config_map_obj,
+    pod_obj,
+    namespace,
+    distribute_storage_classes_to_all_consumers_factory,
+):
+    """
+    This method is for client clusters to be able to access nfs
+    """
+    # switch to provider
+    config.switch_to_provider()
+
+    # Enable nfs
+    nfs_enable(storage_cluster_obj, config_map_obj, pod_obj, namespace)
+
+    # Create nfs-load balancer service
+    if config.ENV_DATA.get("platform", "").lower() == constants.HCI_BAREMETAL:
+        # Create loadbalancer service for nfs
+        hostname_add = create_nfs_load_balancer_service(storage_cluster_obj)
+        print("######Amtita#######")
+        print(f"hostname: {hostname_add}")
+
+    # Distribute the scs to consumers
+    distribute_storage_classes_to_all_consumers_factory()
+
+    # switch to consumer
+    config.switch_to_consumer()
