@@ -127,7 +127,10 @@ class TestNfsEnable(ManageTest):
         """
         self = request.node.cls
         log.info("-----Setup-----")
-        self.namespace = config.ENV_DATA["cluster_namespace"]
+        if config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+            self.namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        else:
+            self.namespace = config.ENV_DATA["cluster_namespace"]
         self.storage_cluster_obj = ocp.OCP(
             kind=constants.STORAGECLUSTER, namespace=self.namespace
         )
