@@ -70,6 +70,10 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.version import get_running_odf_version
+from ocs_ci.utility.ssl_certs import (
+    create_ocs_ca_bundle,
+    get_root_ca_cert,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +253,20 @@ class HostedClients(HyperShiftBase):
             hosted_ocp_verification_passed = (
                 self.verify_hosted_ocp_clusters_from_provider()
             )
+
+        # configure proxy object with trusted ca bundle for custom ingress ssl certificate
+        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            ssl_ca_cert = get_root_ca_cert()
+            ocs_ca_bundle_name = "ocs-ca-bundle"
+            create_ocs_ca_bundle(ssl_ca_cert, ocs_ca_bundle_name, namespace="clusters")
+            patch = f'{{"spec":{{"configuration":{{"proxy":{{"trustedCA":{{"name":"{ocs_ca_bundle_name}"}}}}}}}}}}'
+            if ssl_ca_cert:
+                for cluster_name in cluster_names:
+                    cmd = (
+                        f"oc patch -n clusters {constants.HOSTED_CLUSTERS}/{cluster_name} --type=merge "
+                        f"--patch='{patch}'"
+                    )
+                    exec_cmd(cmd)
 
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
