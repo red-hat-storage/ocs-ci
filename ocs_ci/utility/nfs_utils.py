@@ -7,7 +7,7 @@ import logging
 import yaml
 import time
 import pytest
-from ocs_ci.ocs import constants, resources
+from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
@@ -352,24 +352,33 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
     return check_storage_classes_on_clients(ready_consumer_names)
 
 
-def nfs_access_for_clients(
-    storage_cluster_obj, config_map_obj, pod_obj, namespace, nfs_sc
-):
+def nfs_access_for_clients(nfs_sc):
     """
     This method is for client clusters to be able to access nfs
     """
+    provider_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     # switch to provider
     config.switch_to_provider()
+    provider_storage_cluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER, namespace=provider_namespace
+    )
+    provider_config_map_obj = ocp.OCP(
+        kind=constants.CONFIGMAP, namespace=provider_namespace
+    )
+    provider_pod_obj = ocp.OCP(kind=constants.POD, namespace=provider_namespace)
 
     # Enable nfs
-    nfs_enable(storage_cluster_obj, config_map_obj, pod_obj, namespace)
+    nfs_enable(
+        provider_storage_cluster_obj,
+        provider_config_map_obj,
+        provider_pod_obj,
+        provider_namespace,
+    )
 
     # Create nfs-load balancer service
-    if config.ENV_DATA.get("platform", "").lower() == constants.HCI_BAREMETAL:
-        # Create loadbalancer service for nfs
-        hostname_add = create_nfs_load_balancer_service(storage_cluster_obj)
-        print("######Amtita#######")
-        print(f"hostname: {hostname_add}")
+    hostname_add = create_nfs_load_balancer_service(provider_storage_cluster_obj)
+    print("######Amtita#######")
+    print(f"hostname: {hostname_add}")
 
     # Distribute the scs to consumers
     distribute_nfs_storage_class_to_all_consumers(nfs_sc)
