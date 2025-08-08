@@ -36,7 +36,7 @@ class TestCnvNodeReplace(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, multi_cnv_workload):
+    def setup(self, request, project_factory, multi_cnv_workload):
         """
         Setting up VMs for tests
 
@@ -50,8 +50,28 @@ class TestCnvNodeReplace(E2ETest):
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
-
         logger.info("All vms created successfully")
+
+        # Register the teardown
+        request.addfinalizer(self.teardown)
+
+    def teardown(self):
+        """
+        Teardown operations for the test case.
+        """
+        logger.info("Performing teardown operations...")
+
+        # Start the stopped VM if it is in stopped state
+        if self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED:
+            self.vm_for_stop.start()
+            logger.info(f"VM {self.vm_for_stop.name} started.")
+        # Unpause the paused VM if it is in paused state
+        if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
+            self.vm_for_snap.unpause()
+            logger.info(f"VM {self.vm_for_snap.name} unpaused.")
+        # Start VM if its in different state after node replacement
+        if self.vm_obj_on_replacing_node.printableStatus() != constants.VM_RUNNING:
+            self.vm_for_stop.start()
 
     def test_vms_with_node_replacement(
         self,
@@ -73,28 +93,31 @@ class TestCnvNodeReplace(E2ETest):
             source_csums[vm_obj.name] = source_csum
 
         # Choose VMs randomaly
-        vm_for_clone, vm_for_stop, vm_for_snap, vm_obj_on_replacing_node = (
-            random.sample(all_vms, 4)
-        )
+        (
+            self.vm_for_clone,
+            self.vm_for_stop,
+            self.vm_for_snap,
+            self.vm_obj_on_replacing_node,
+        ) = random.sample(all_vms, 4)
 
-        # Create Clone of VM
-        logger.info(f"Cloning VM {vm_for_clone.name}...")
-        cloned_vm = vm_clone_fixture(vm_for_clone, admin_client)
-        csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
-        source_csums[cloned_vm.name] = csum
+        for vm in [self.vm_for_clone, self.vm_for_snap]:
+            vm_obj = (
+                vm_clone_fixture(vm, admin_client)
+                if vm == self.vm_for_clone
+                else vm_snapshot_restore_fixture(vm, admin_client)
+            )
 
-        # Create a snapshot
-        logger.info(f"Snapshot and restore VM {vm_for_snap.name}...")
-        restored_vm = vm_snapshot_restore_fixture(vm_for_snap, admin_client)
-        csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
-        source_csums[vm_for_snap.name] = csum
+            # Use cal_md5sum_vm here
+            source_csums[vm_obj.name] = cal_md5sum_vm(vm_obj, file_paths[0])
+            if vm == self.vm_for_clone:
+                all_vms.append(vm_obj)
 
         # Keep vms in different states(paused, stoped)
-        vm_for_stop.stop()
-        vm_for_snap.pause()
+        self.vm_for_stop.stop()
+        self.vm_for_snap.pause()
 
         # Find node where VM is running
-        node_name = vm_obj_on_replacing_node.get_vmi_instance().node()
+        node_name = self.vm_obj_on_replacing_node.get_vmi_instance().node()
 
         # Replace Node
         delete_and_create_osd_node(node_name)
@@ -114,23 +137,23 @@ class TestCnvNodeReplace(E2ETest):
 
         # Check VMs status
         assert (
-            vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
+            self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
         ), "VM did not stop with preserved state after device replacement."
         logger.info("After Node replacement, stopped VM preserved state.")
 
         assert (
-            vm_for_snap.printableStatus() == constants.VM_PAUSED
+            self.vm_for_snap.printableStatus() == constants.VM_PAUSED
         ), "VM did not pause with preserved state after device replacement."
         logger.info("After Node replacement, paused VM preserved state.")
 
         assert (
-            vm_obj_on_replacing_node.printableStatus() == constants.VM_RUNNING
+            self.vm_obj_on_replacing_node.printableStatus() == constants.VM_RUNNING
         ), "VM is not in ruuning state after node replacement."
         logger.info("After Node replacement vm is running.")
 
         logger.info("Starting vms")
-        vm_for_stop.start()
-        vm_for_snap.unpause()
+        self.vm_for_stop.start()
+        self.vm_for_snap.unpause()
 
         # Perform post node replacement data integrity check
         for vm_obj in all_vms:
@@ -139,6 +162,3 @@ class TestCnvNodeReplace(E2ETest):
                 f"ERROR: Failed data integrity before replacing device and after replacing the device "
                 f"for VM '{vm_obj.name}'."
             )
-
-        for vm_obj in all_vms:
-            vm_obj.stop()
