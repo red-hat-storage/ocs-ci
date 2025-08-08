@@ -1,6 +1,7 @@
 import logging
 import re
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ocs_version,
@@ -61,8 +62,12 @@ def test_verify_noobaa_db_service(mcg_obj_session):
 
     # verify noobaa db logs
     pattern = "Not found: Service noobaa-db"
-    primary_nb_db_pod = get_primary_nb_db_pod()
-    noobaa_db_log = get_pod_logs(pod_name=primary_nb_db_pod.name)
+    with config.RunWithProviderConfigContextIfAvailable():
+        primary_nb_db_pod = get_primary_nb_db_pod()
+        noobaa_db_log = get_pod_logs(
+            pod_name=primary_nb_db_pod.name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
     assert (
         re.search(pattern=pattern, string=noobaa_db_log) is None
     ), f"Error: {pattern} msg found in the noobaa db logs."
