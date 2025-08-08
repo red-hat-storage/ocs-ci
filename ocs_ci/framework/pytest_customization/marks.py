@@ -757,6 +757,9 @@ ceph_health_retry = pytest.mark.ceph_health_retry
 config_index = pytest.mark.config_index
 multicluster_roles = pytest.mark.multicluster_roles
 
+# Workload markers
+workload_targets = pytest.mark.workload_targets
+
 # Marks to identify if Vault KMS deployment is required
 vault_kms_deployment_required = pytest.mark.skipif(
     not config.DEPLOYMENT.get("kms_deployment", False)
