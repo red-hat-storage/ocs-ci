@@ -92,7 +92,6 @@ class OCP(object):
             (not cluster_kubeconfig)
             and config.multicluster
             and "hci_" in config.ENV_DATA["platform"]
-            and len(config.get_provider_cluster_indexes()) == 1
             and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
         ):
             provider_cluster_index = config.get_provider_index()
