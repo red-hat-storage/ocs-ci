@@ -15,7 +15,7 @@ import string
 import subprocess
 import time
 import traceback
-from typing import Match, Iterator
+from typing import Match, Iterator, Union, List, Optional
 import stat
 import shutil
 from copy import deepcopy
@@ -499,6 +499,9 @@ def run_cmd(
         output_file=output_file,
         **kwargs,
     )
+    log.warning(
+        "You are using the deprecated form of exec_cmd. Please use exec_cmd instead."
+    )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
@@ -597,18 +600,20 @@ def run_cmd_multicluster(
 
 
 def exec_cmd(
-    cmd,
-    secrets=None,
-    timeout=600,
-    ignore_error=False,
-    threading_lock=None,
-    silent=False,
-    use_shell=False,
-    cluster_config=None,
-    lock_timeout=7200,
-    output_file=None,
+    cmd: Union[str, List[str]],
+    secrets: Optional[List[str]] = None,
+    timeout: int = 600,
+    ignore_error: bool = False,
+    threading_lock: Optional = None,
+    silent: bool = False,
+    use_shell: bool = False,
+    cluster_config: Optional[object] = None,
+    lock_timeout: int = 7200,
+    output_file: Optional[str] = None,
+    log_stdout: bool = True,
+    log_stderr_level: int = logging.DEBUG,
     **kwargs,
-):
+) -> subprocess.CompletedProcess:
     """
     Run an arbitrary command locally
 
@@ -631,6 +636,8 @@ def exec_cmd(
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
         output_file (str): path where to write output of stderr from command - apply only when silent mode is True
+        log_stdout (bool): If True will log stdout, default true
+        log_stderr_level (int): Log level for stderr on successful commands, default DEBUG
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -679,7 +686,7 @@ def exec_cmd(
                 # If oc cmdline has plugin name then we need to push the
                 # --kubeconfig to next index
                 kube_index = 2
-                log.info(f"Found oc plugin {subcmd}")
+                log.info("Found oc plugin %s", subcmd)
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
@@ -687,7 +694,7 @@ def exec_cmd(
             masked_cmd = mask_secrets(cmd, secrets)
         else:
             masked_cmd = shlex.join(mask_secrets(cmd, secrets))
-        log.info(f"Executing command: {masked_cmd}")
+        log.info("Executing command: %s", masked_cmd)
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         completed_process = subprocess.run(
@@ -699,38 +706,39 @@ def exec_cmd(
             env=_env,
             **kwargs,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise CommandFailed(
+            f"Command timed out after {timeout}s: {masked_cmd}"
+        ) from exc
     finally:
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
-    if len(completed_process.stdout) > 0:
-        log.debug(f"Command stdout: {masked_stdout}")
-    else:
-        log.debug("Command stdout is empty")
+    if log_stdout and len(completed_process.stdout) > 0:
+        log.debug("Command stdout: %s", masked_stdout.rstrip())
 
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
         if not silent:
-            log.warning(f"Command stderr: {masked_stderr}")
+            # Use ERROR level for failed commands, configurable level for successful ones
+            level = logging.ERROR if completed_process.returncode else log_stderr_level
+            log.log(level, "Command stderr: %s", masked_stderr.rstrip())
         else:
             if output_file:
                 with open(output_file, "a") as out_fd:
                     out_fd.write(masked_stderr)
-    else:
-        if not silent:
-            log.debug("Command stderr is empty")
-    log.debug(f"Command return code: {completed_process.returncode}")
+    log.debug("Command return code: %d", completed_process.returncode)
     if completed_process.returncode and not ignore_error:
         masked_stderr = bin_xml_escape(filter_out_emojis(masked_stderr))
         if (
             "grep" in masked_cmd
             and b"command terminated with exit code 1" in completed_process.stderr
         ):
-            log.info(f"No results found for grep command: {masked_cmd}")
+            log.info("No results found for grep command: %s", masked_cmd)
         else:
             raise CommandFailed(
-                f"Error during execution of command: {masked_cmd}."
-                f"\nError is {masked_stderr}"
+                f"Command '{masked_cmd}' failed with return code {completed_process.returncode}.\n"
+                f"Error: {masked_stderr}"
             )
     return completed_process
 
