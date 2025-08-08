@@ -178,7 +178,7 @@ class TestNfsEnable(ManageTest):
                 )
         elif config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
             nfs_utils.nfs_access_for_clients(
-                self.sc,
+                self.nfs_sc,
             )
 
         yield
