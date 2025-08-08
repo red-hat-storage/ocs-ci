@@ -206,6 +206,9 @@ STORAGECLUSTER = "storagecluster"
 CLUSTER_OPERATOR = "ClusterOperator"
 CRONJOB = "CronJob"
 MONITORING = "monitoring"
+
+# Resource types that can produce massive output when queried without selectors
+HIGH_VOLUME_RESOURCES = {POD, NODE, PVC, SERVICE, DEPLOYMENT, DAEMONSET, CONFIGMAP}
 CLUSTER_SERVICE_VERSION = "csv"
 JOB = "job"
 OAUTH = "OAuth"
