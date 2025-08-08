@@ -314,12 +314,46 @@ def create_nfs_sc_retain(sc_name):
     return retain_nfs_sc
 
 
+def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
+    """
+    This method is to distribute nfs storage class to Storage Consumers
+    Function validates Storage Class is available on Client cluster and return combined result for all consumers.
+
+    Returns:
+        bool: True if the nfs Storage Classes is distributed successfully to all consumers, False otherwise.
+
+    """
+
+    # to avoid overloading this module with imports, we import only when this fixture is called
+    from ocs_ci.ocs.resources.storageconsumer import (
+        get_ready_storage_consumers,
+        check_storage_classes_on_clients,
+    )
+
+    consumers = get_ready_storage_consumers()
+    print("########Amrita########")
+    print(f"storage consumers {consumers}")
+    consumers = [
+        consumer
+        for consumer in consumers
+        if consumer.name != constants.INTERNAL_STORAGE_CONSUMER_NAME
+    ]
+    ready_consumer_names = [consumer.name for consumer in consumers]
+
+    if not ready_consumer_names:
+        log.warning("No ready storage consumers found")
+        return
+
+    storage_class_name = nfs_sc
+    for consumer in consumers:
+        log.info(f"Distributing storage classes to consumer {consumer.name}")
+        consumer.set_storage_classes(storage_class_name)
+
+    return check_storage_classes_on_clients(ready_consumer_names)
+
+
 def nfs_access_for_clients(
-    storage_cluster_obj,
-    config_map_obj,
-    pod_obj,
-    namespace,
-    distribute_storage_classes_to_all_consumers_factory,
+    storage_cluster_obj, config_map_obj, pod_obj, namespace, nfs_sc
 ):
     """
     This method is for client clusters to be able to access nfs
@@ -338,7 +372,7 @@ def nfs_access_for_clients(
         print(f"hostname: {hostname_add}")
 
     # Distribute the scs to consumers
-    distribute_storage_classes_to_all_consumers_factory()
+    distribute_nfs_storage_class_to_all_consumers(nfs_sc)
 
     # switch to consumer
     config.switch_to_consumer()

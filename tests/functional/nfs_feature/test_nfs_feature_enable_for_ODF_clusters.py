@@ -182,6 +182,7 @@ class TestNfsEnable(ManageTest):
                 self.config_map_obj,
                 self.pod_obj,
                 self.namespace,
+                self.sc,
             )
 
         yield
