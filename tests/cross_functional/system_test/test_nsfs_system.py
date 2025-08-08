@@ -52,8 +52,7 @@ class TestNSFSSystem(MCGTest):
         nsfs_bucket_factory,
         awscli_pod_session,
         test_directory_setup,
-        snapshot_factory,
-        noobaa_db_backup_and_recovery,
+        noobaa_db_backup_and_recovery_locally,
     ):
         """
         The objectives of this test case are:
@@ -225,7 +224,7 @@ class TestNSFSSystem(MCGTest):
         wait_for_storage_pods()
 
         logger.info("Performing noobaa db backup/recovery")
-        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
+        noobaa_db_backup_and_recovery_locally()
         for nsfs_obj in nsfs_objs:
             logger.info(
                 f"Downloading the objects and validating the integrity on {nsfs_obj.bucket_name} "
