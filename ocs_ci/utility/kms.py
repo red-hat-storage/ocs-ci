@@ -1909,7 +1909,7 @@ class KMIP(KMS):
         secret_name = run_cmd(cmd=cmd)
 
         cmd = (
-            rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'UniqueIdentifier\']}}\""
+            rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'UniqueIdentifierNew\']}}\""
             f" -n {config.ENV_DATA['cluster_namespace']}"
         )
         noobaa_key_id = base64.b64decode(run_cmd(cmd=cmd)).decode()
