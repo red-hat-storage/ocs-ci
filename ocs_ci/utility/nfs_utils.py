@@ -7,7 +7,7 @@ import logging
 import yaml
 import time
 import pytest
-from ocs_ci.ocs import constants, resources
+from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
@@ -312,3 +312,76 @@ def create_nfs_sc_retain(sc_name):
     retain_nfs_sc._name = retain_nfs_sc.data["metadata"]["name"]
     retain_nfs_sc.create()
     return retain_nfs_sc
+
+
+def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
+    """
+    This method is to distribute nfs storage class to Storage Consumers
+    Function validates Storage Class is available on Client cluster and return combined result for all consumers.
+
+    Returns:
+        bool: True if the nfs Storage Classes is distributed successfully to all consumers, False otherwise.
+
+    """
+
+    # to avoid overloading this module with imports, we import only when this fixture is called
+    from ocs_ci.ocs.resources.storageconsumer import (
+        get_ready_storage_consumers,
+        check_storage_classes_on_clients,
+    )
+
+    consumers = get_ready_storage_consumers()
+    print("########Amrita########")
+    print(f"storage consumers {consumers}")
+    consumers = [
+        consumer
+        for consumer in consumers
+        if consumer.name != constants.INTERNAL_STORAGE_CONSUMER_NAME
+    ]
+    ready_consumer_names = [consumer.name for consumer in consumers]
+
+    if not ready_consumer_names:
+        log.warning("No ready storage consumers found")
+        return
+
+    storage_class_name = nfs_sc
+    for consumer in consumers:
+        log.info(f"Distributing storage classes to consumer {consumer.name}")
+        consumer.set_storage_classes(storage_class_name)
+
+    return check_storage_classes_on_clients(ready_consumer_names)
+
+
+def nfs_access_for_clients(nfs_sc):
+    """
+    This method is for client clusters to be able to access nfs
+    """
+    provider_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    # switch to provider
+    config.switch_to_provider()
+    provider_storage_cluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER, namespace=provider_namespace
+    )
+    provider_config_map_obj = ocp.OCP(
+        kind=constants.CONFIGMAP, namespace=provider_namespace
+    )
+    provider_pod_obj = ocp.OCP(kind=constants.POD, namespace=provider_namespace)
+
+    # Enable nfs
+    nfs_enable(
+        provider_storage_cluster_obj,
+        provider_config_map_obj,
+        provider_pod_obj,
+        provider_namespace,
+    )
+
+    # Create nfs-load balancer service
+    hostname_add = create_nfs_load_balancer_service(provider_storage_cluster_obj)
+    print("######Amtita#######")
+    print(f"hostname: {hostname_add}")
+
+    # Distribute the scs to consumers
+    distribute_nfs_storage_class_to_all_consumers(nfs_sc)
+
+    # switch to consumer
+    config.switch_to_consumer()

@@ -89,7 +89,10 @@ class TestNfsEnable(ManageTest):
     """
 
     @pytest.fixture(scope="class", autouse=True)
-    def setup_teardown(self, request):
+    def setup_teardown(
+        self,
+        request,
+    ):
         """
         Setup-Teardown for the class
 
@@ -156,22 +159,28 @@ class TestNfsEnable(ManageTest):
 
         # Enable nfs feature
         log.info("----Enable nfs----")
-        nfs_ganesha_pod_name = nfs_utils.nfs_enable(
-            self.storage_cluster_obj,
-            self.config_map_obj,
-            self.pod_obj,
-            self.namespace,
-        )
-
-        if (
-            platform == constants.AWS_PLATFORM
-            or platform == constants.IBMCLOUD_PLATFORM
-            or platform == constants.HCI_BAREMETAL
-        ):
-            # Create loadbalancer service for nfs
-            self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
+        if not config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+            nfs_ganesha_pod_name = nfs_utils.nfs_enable(
                 self.storage_cluster_obj,
+                self.config_map_obj,
+                self.pod_obj,
+                self.namespace,
             )
+
+            if (
+                platform == constants.AWS_PLATFORM
+                or platform == constants.IBMCLOUD_PLATFORM
+                or platform == constants.HCI_BAREMETAL
+            ):
+                # Create loadbalancer service for nfs
+                self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
+                    self.storage_cluster_obj,
+                )
+        elif config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+            nfs_utils.nfs_access_for_clients(
+                self.nfs_sc,
+            )
+
         yield
 
         log.info("-----Teardown-----")
