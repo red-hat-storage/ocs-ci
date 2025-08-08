@@ -13,7 +13,7 @@ from ocs_ci.helpers.cnv_helpers import (
     clone_dv,
     verifyvolume,
 )
-
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_project,
@@ -685,18 +685,37 @@ class VirtualMachine(Virtctl):
             # Deletes only when PVC & VIS obj exists
             if self.pvc_obj:
                 self.pvc_obj.reload()
+                pv_name = self.pvc_obj.get().get("spec").get("volumeName")
+                data = dict()
+                data["api_version"] = self.pvc_obj.get().get("apiVersion")
+                data["kind"] = "PersistentVolume"
+                data["metadata"] = {"name": pv_name, "namespace": self.namespace}
+                self.pv_obj = OCS(**data)
                 self.pvc_obj.delete()
                 self.pvc_obj.ocp.wait_for_delete(
                     resource_name=self.pvc_obj.name, timeout=180
+                )
+                self.pv_obj.ocp.wait_for_delete(
+                    resource_name=self.pv_obj.name, timeout=600
                 )
             if self.volumeimportsource_obj:
                 self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
             # Deletes only when DV obj exists
             if self.dv_obj:
+                dv_pvc_name = self.dv_obj.get().get("status").get("claimName")
+                data = dict()
+                data["api_version"] = "v1"
+                data["kind"] = "PersistentVolumeClaim"
+                data["metadata"] = {"name": dv_pvc_name, "namespace": self.namespace}
+                dv_pvc = PVC(**data)
+                self.dv_pv = dv_pvc.backed_pv_obj
                 self.dv_obj.delete()
                 self.dv_obj.ocp.wait_for_delete(
                     resource_name=self.dv_obj.name, timeout=300
+                )
+                self.dv_pv.ocp.wait_for_delete(
+                    resource_name=self.dv_pv.name, timeout=600
                 )
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)

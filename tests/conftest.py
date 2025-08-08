@@ -10279,7 +10279,6 @@ def vm_snapshot_restore_fixture(request):
         """
         from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
         from ocp_resources.virtual_machine_restore import VirtualMachineRestore
-        from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 
         snapshot_name = f"snapshot-{vm.name}"
         vm_snapshot = VirtualMachineSnapshot(
@@ -10292,22 +10291,6 @@ def vm_snapshot_restore_fixture(request):
         vm_snapshot.create()
         vm_snapshot.wait_snapshot_done()
         snapshots.append(vm_snapshot)
-
-        volumes = (
-            vm.get()
-            .get("spec", {})
-            .get("template", {})
-            .get("spec", {})
-            .get("volumes", [])
-        )
-        original_pvcs = [
-            (
-                volumes[0].get("dataVolume", {}).get("name")
-                if volumes[0].get("dataVolume")
-                else volumes[0].get("persistentVolumeClaim", {}).get("claimName")
-            )
-        ]
-
         vm.stop()
         restore_snapshot_name = create_unique_resource_name(snapshot_name, "restore")
         with VirtualMachineRestore(
@@ -10319,19 +10302,8 @@ def vm_snapshot_restore_fixture(request):
             teardown=False,
         ) as vm_restore:
             vm_restore.wait_restore_done()
-
         vm.start()
         vm.wait_for_ssh_connectivity(timeout=1200)
-
-        log.info("Delete original PVCs")
-        for pvc_name in original_pvcs:
-            pvc = PersistentVolumeClaim(
-                client=admin_client,
-                name=pvc_name,
-                namespace=vm.namespace,
-            )
-        if pvc.exists:
-            pvc.delete(wait=True)
         return vm
 
     def teardown():
