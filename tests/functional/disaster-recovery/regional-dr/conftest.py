@@ -53,7 +53,13 @@ def cnv_custom_storage_class(request, storageclass_factory):
 
     """
 
-    def factory():
+    def factory(replica, compression):
+        """
+        Args:
+            replica (int):  Replica count used in Pool creation
+            compression (str): Type of compression to be used in the Pool, defaults to None
+
+        """
 
         pool_name = constants.RDR_CUSTOM_RBD_POOL
         sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
@@ -68,7 +74,8 @@ def cnv_custom_storage_class(request, storageclass_factory):
                 try:
                     sc_obj = storageclass_factory(
                         sc_name=sc_name,
-                        replica=2,
+                        replica=replica,
+                        compression=compression,
                         new_rbd_pool=True,
                         pool_name=pool_name,
                         mapOptions="krbd:rxbounce",
