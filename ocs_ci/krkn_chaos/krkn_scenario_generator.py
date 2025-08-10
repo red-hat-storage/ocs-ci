@@ -197,3 +197,52 @@ class HogScenarios:
         output_path = os.path.join(scenario_dir, "memory_hog.yaml")
         writer.write_to_file(output_path)
         return output_path
+
+
+class ApplicationOutageScenarios:
+    """Generate config for application-outage Jinja template."""
+
+    @staticmethod
+    def application_outage(
+        scenario_dir,
+        duration=600,
+        namespace="default",
+        pod_selector=None,
+        block=None,
+    ):
+        """
+        Create application_outage.yaml from application-outage.yml.j2.
+
+        Args:
+            scenario_dir: Directory to write the rendered YAML.
+            duration: Seconds after which routes become accessible.
+            namespace: Target namespace.
+            pod_selector: Label selector dict for target pods, e.g. {"app": "foo"}.
+            block: List of directions to block, e.g. ["Ingress", "Egress"].
+
+        Returns:
+            Path to the rendered YAML file.
+        """
+        template_path = os.path.join(
+            KRKN_SCENARIO_TEMPLATE, "openshift", "app_outage.yml.j2"
+        )
+
+        # Defaults
+        if pod_selector is None:
+            pod_selector = {}
+        if block is None:
+            block = ["Ingress", "Egress"]
+
+        config = {
+            "duration": duration,
+            "namespace": namespace,
+            "pod_selector": pod_selector,
+            "block": block,
+        }
+
+        writer = TemplateWriter(template_path)
+        writer.config = config
+
+        output_path = os.path.join(scenario_dir, "application_outage.yaml")
+        writer.write_to_file(output_path)
+        return output_path
