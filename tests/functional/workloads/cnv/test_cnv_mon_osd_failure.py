@@ -8,7 +8,6 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import polarion_id, magenta_squad
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs.resources.pod import get_deployment_name
-from ocs_ci.ocs import constants
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.pod import get_osd_pods
@@ -22,6 +21,8 @@ class TestMonAndOSDFailures:
     """
     Tests Mon and OSD failures while CNV workloads are running.
     """
+
+    all_vms = []
 
     @pytest.fixture(scope="class")
     def setup_cnv_workload(
@@ -67,11 +68,6 @@ class TestMonAndOSDFailures:
         Verify the status of randomly selected VMs.
         """
         vm_samples = random.sample(self.all_vms, 3)
-        for vm in vm_samples:
-            assert (
-                vm.printableStatus() == constants.VM_RUNNING
-            ), f"{vm.name} did not reach the running state."
-
         for vm in vm_samples:
             vm.verify_vm(verify_ssh=True)
 
