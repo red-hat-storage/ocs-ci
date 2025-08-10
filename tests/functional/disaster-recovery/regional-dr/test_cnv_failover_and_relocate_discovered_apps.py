@@ -29,32 +29,37 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     """
 
     @pytest.mark.parametrize(
-        argnames=["custom_sc", "compression"],
+        argnames=["custom_sc", "replica", "compression"],
         argvalues=[
             pytest.param(
                 *[False],
-                False,
+                3,
+                None,
                 marks=pytest.mark.polarion_id("OCS-6266"),
-                id="default_sc_without_compression",
+                id="default_pool_replica3_without_compression",
             ),
             pytest.param(
                 True,
-                False,
+                2,
+                None,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
-                id="custom_sc_without_compression",
+                id="custom_pool_replica2_without_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
             pytest.param(
-                *[False],
-                True,
-                marks=pytest.mark.polarion_id("OCS-6266"),
-                id="default_sc_with_compression",
+                *[True],
+                3,
+                "aggressive",
+                # marks=pytest.mark.polarion_id("OCS-XXXX"),
+                id="custom_pool_replica3_with_compression",
             ),
+            # TODO: ADD Polarion ID for Custom SC test
             pytest.param(
                 True,
-                False,
+                2,
+                "aggressive",
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
-                id="custom_sc_with_compression",
+                id="custom_pool_replica2_with_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
@@ -62,6 +67,8 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     def test_cnv_failover_and_relocate_discovered_apps(
         self,
         custom_sc,
+        replica,
+        compression,
         cnv_custom_storage_class,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
@@ -81,6 +88,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
+
+        if custom_sc:
+            cnv_custom_storage_class(replica=replica, compression=compression)
 
         cnv_workloads = discovered_apps_dr_workload_cnv(pvc_vm=1, custom_sc=custom_sc)
 
