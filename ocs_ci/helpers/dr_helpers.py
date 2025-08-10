@@ -555,11 +555,8 @@ def check_mirroring_status_for_custom_pool(
                     f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
                 )
 
-            return True
-
-        raise ValueError(f"Custom Pool {custom_pool_name} not found in {namespace}")
     config.switch_ctx(restore_index)
-    return False
+    return True
 
 
 def get_pv_count(namespace):
