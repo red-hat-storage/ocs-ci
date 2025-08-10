@@ -16,7 +16,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
 from ocs_ci.utility.azure_utils import azure_storageaccount_check
 from ocs_ci.deployment.provider_client.storage_client_deployment import (
-    ODFAndNativeStorageClientDeploymentOnProvider,
+    ODFMultiClientHubDeployment,
 )
 
 log = logging.getLogger(__name__)
@@ -60,9 +60,7 @@ def test_deployment(pvc_factory, pod_factory):
                     mcg_only_install_verification(ocs_registry_image=ocs_registry_image)
                     return
                 elif config.ENV_DATA.get("odf_provider_mode_deployment", False):
-                    storage_client_deployment_obj = (
-                        ODFAndNativeStorageClientDeploymentOnProvider()
-                    )
+                    storage_client_deployment_obj = ODFMultiClientHubDeployment()
                     storage_client_deployment_obj.verify_provider_mode_deployment()
                 else:
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)

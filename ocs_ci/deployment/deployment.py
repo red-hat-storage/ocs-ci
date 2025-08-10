@@ -359,11 +359,6 @@ class Deployment(object):
         Deploy OCS/ODF and run verification as well
 
         """
-        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
-            logger.warning(
-                "Skipping normal ODF deployment because ODF deployment in Provider mode will be performed"
-            )
-            return
         try:
             if not config.ENV_DATA["skip_ocs_deployment"]:
                 for i in range(config.nclusters):
@@ -630,17 +625,57 @@ class Deployment(object):
         """
         # deploy provider-client deployment
         from ocs_ci.deployment.provider_client.storage_client_deployment import (
-            ODFAndNativeStorageClientDeploymentOnProvider,
+            ODFMultiClientHubDeployment,
         )
 
-        storage_client_deployment_obj = ODFAndNativeStorageClientDeploymentOnProvider()
+        odf_depl_obj = ODFMultiClientHubDeployment()
 
         # Provider-client deployment if odf_provider_mode_deployment: True
         if (
             config.ENV_DATA.get("odf_provider_mode_deployment", False)
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
-            storage_client_deployment_obj.provider_and_native_client_installation()
+            if config.DEPLOYMENT.get("local_storage"):
+                # Usually we create local storage for multi-client setups via checkbox in jenkins UI, in such case
+                # config.DEPLOYMENT["lso_standalone_deployment"] is set to True and at this point
+                # we can assume that local storage is installed with other Dependencies *(when Install Dependencies
+                # is being marked too)
+                # Following lso installation section is for redundancy and non-standard setups, for example,
+                # when we create multi-client not from ODF Provider Client Multicluster Job
+
+                # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
+                is_local_storage_available = odf_depl_obj.sc_obj.is_exist(
+                    resource_name=odf_depl_obj.storageclass,
+                )
+                if not is_local_storage_available:
+                    # avoid circular import
+                    from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+                    from ocs_ci.ocs.node import get_nodes
+
+                    worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+                    disks_available_on_worker_nodes_for_cleanup = (
+                        disks_available_to_cleanup(worker_node_objs[0])
+                    )
+                    number_of_disks_available = len(
+                        disks_available_on_worker_nodes_for_cleanup
+                    )
+                    logger.info(
+                        f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
+                        f"number of disks avilable for cleanup, {number_of_disks_available}"
+                    )
+
+                    cleanup_nodes_for_lso_install()
+                    setup_local_storage(storageclass=odf_depl_obj.storageclass)
+                else:
+                    logger.info("local storage is already installed")
+            else:
+                logger.info(
+                    "Skipping local storage setup as local_storage is not requested in config"
+                )
+
+            odf_depl_obj.provider_and_native_client_installation(
+                worker_node_objs, number_of_disks_available
+            )
 
     def do_deploy_cnv(self):
         """
@@ -762,13 +797,20 @@ class Deployment(object):
         if perform_lso_standalone_deployment:
             cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+
+        if config.DEPLOYMENT.get("enable_nested_virtualization"):
+            from ocs_ci.deployment.hosted_cluster import enable_nested_virtualization
+
+            enable_nested_virtualization()
+
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
-        self.do_deploy_odf_provider_mode()
+        # we need to drop do_deploy_odf_provider_mode in favor of do_deploy_ocs ^^
+        # self.do_deploy_odf_provider_mode()
         self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
@@ -1483,6 +1525,14 @@ class Deployment(object):
                 config.COMPONENTS[f"disable_{component}"] = True
                 logger.warning(f"disabling: {component}")
 
+        if config.DEPLOYMENT.get("host_network"):
+            logger.info("Using host network for ODF operator")
+            cluster_data["spec"]["network"] = {"hostNetwork": True}
+
+        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
+            cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
+            cluster_data["spec"]["providerAPIServerServiceType"] = "NodePort"
+
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
             comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
@@ -1535,11 +1585,26 @@ class Deployment(object):
             and ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
+            and not (self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS)
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
+        elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+            from ocs_ci.ocs.node import get_nodes
+            from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+
+            worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+            no_of_worker_nodes = len(worker_node_objs)
+            number_of_disks_available = len(
+                disks_available_to_cleanup(worker_node_objs[0])
+            )
+            cluster_data["spec"]["storageDeviceSets"][0][
+                "count"
+            ] = number_of_disks_available
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = no_of_worker_nodes
+            cluster_data["spec"]["flexibleScaling"] = True
 
         # set size of request for storage
         if self.platform.lower() in [
@@ -1894,7 +1959,24 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
 
         log_step("Create StorageCluster CR")
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+        storage_cluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        is_storagecluster = storage_cluster_obj.is_exist(
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER
+        )
+
+        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
+            if not is_storagecluster:
+                run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+            else:
+                logger.info(
+                    f"StorageCluster {constants.DEFAULT_STORAGE_CLUSTER} already exists, skipping creation."
+                )
+        else:
+            run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
             _ocp = ocp.OCP(kind="node")
@@ -2193,6 +2275,19 @@ class Deployment(object):
             "disconnected_env_skip_image_mirroring"
         ):
             image = prepare_disconnected_ocs_deployment()
+
+        if (
+            config.ENV_DATA.get("odf_provider_mode_deployment", False)
+            and not config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            path = "/spec/routeAdmission"
+            value = '{wildcardPolicy: "WildcardsAllowed"}'
+            params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
+            patch_cmd = (
+                f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
+                + f"default --type json -p '{params}'"
+            )
+            OCP().exec_oc_cmd(command=patch_cmd)
 
         if config.DEPLOYMENT["external_mode"]:
             self.deploy_with_external_mode()

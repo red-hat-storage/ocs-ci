@@ -17,10 +17,6 @@ from ocs_ci.ocs.rados_utils import (
     verify_cephblockpool_status,
     check_phase_of_rados_namespace,
 )
-from ocs_ci.deployment.helpers.lso_helpers import (
-    setup_local_storage,
-    cleanup_nodes_for_lso_install,
-)
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -33,7 +29,6 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 from ocs_ci.deployment.encryption import (
     add_encryption_details_to_cluster_data,
     add_in_transit_encryption_to_cluster_data,
@@ -52,13 +47,16 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 
 
-class ODFAndNativeStorageClientDeploymentOnProvider(object):
-    def __init__(self):
-        # Call a function during initialization
-        self.initial_function()
+class ODFMultiClientHubDeployment(object):
+    """
+    Class to handle ODF and native storage client deployment on provider mode / converged mode for multi-client setup.
 
-    def initial_function(self):
-        log.info("initial_function called during initialization.")
+    """
+
+    def __init__(self):
+        log.info(
+            "ODFAndNativeStorageClientDeploymentOnProvider constructor called during initialization."
+        )
         self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
         self.ocp_obj = ocp.OCP()
         self.storage_cluster_obj = ocp.OCP(
@@ -97,6 +95,8 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
     def provider_and_native_client_installation(
         self,
+        worker_node_objs,
+        number_of_disks_available=None,
     ):
         """
         This method installs odf on provider mode and creates native client
@@ -105,14 +105,20 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         2. allow hosting cluster domain to be usable by hosted clusters
         3. Enable nested virtualization
         4. Install ODF
-        5. Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-        6. Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
-        7. Create storage profile
+        5. Create storage profile
+
+        Args:
+            worker_node_objs (list): List of worker node objects
+            number_of_disks_available (int): Number of disks available on the worker nodes.
+                Required for LSO-based deployments.
+                If not provided, it will default to the number of worker nodes.
+
         """
         nodes = get_all_nodes()
         node_objs = get_node_objs(nodes)
-        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
         no_of_worker_nodes = len(worker_node_objs)
+        if not number_of_disks_available:
+            number_of_disks_available = len(worker_node_objs)
 
         # Allow hosting cluster domain to be usable by hosted clusters
         path = "/spec/routeAdmission"
@@ -151,25 +157,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             log.info("labeling worker nodes as storage nodes")
             label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
 
-        disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
-            worker_node_objs[0]
-        )
-        number_of_disks_available = len(disks_available_on_worker_nodes_for_cleanup)
-        log.info(
-            f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
-            f"number of disks avilable for cleanup, {number_of_disks_available}"
-        )
-
-        # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-        is_local_storage_available = self.sc_obj.is_exist(
-            resource_name=self.storageclass,
-        )
-        if not is_local_storage_available:
-            cleanup_nodes_for_lso_install()
-            setup_local_storage(storageclass=self.storageclass)
-        else:
-            log.info("local storage is already installed")
-
         # odf subscription for provider
         self.odf_subscription_on_provider()
 
@@ -181,28 +168,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 resource_count=1,
                 timeout=600,
             )
-
-        if self.ocs_version in [version.VERSION_4_14, version.VERSION_4_15]:
-            # Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
-            disable_CEPHFS_RBD_CSI = '{"data":{"ROOK_CSI_ENABLE_CEPHFS":"false", "ROOK_CSI_ENABLE_RBD":"false"}}'
-            assert self.config_map_obj.patch(
-                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-                params=disable_CEPHFS_RBD_CSI,
-            ), "configmap/rook-ceph-operator-config not patched"
-
-            # Storageprofiles are deprecated from ODF 4.16
-            # Create storage profiles if not available
-            is_storageprofile_available = self.storage_profile_obj.is_exist(
-                resource_name="ssd-storageprofile"
-            )
-            if not is_storageprofile_available:
-                storage_profile_data = templating.load_yaml(
-                    constants.STORAGE_PROFILE_YAML
-                )
-                templating.dump_data_to_temp_yaml(
-                    storage_profile_data, constants.STORAGE_PROFILE_YAML
-                )
-                self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_PROFILE_YAML}")
 
         # Create KMS resources if needed
         if config.DEPLOYMENT.get("kms_deployment"):
@@ -235,14 +200,13 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             storage_cluster_data = add_in_transit_encryption_to_cluster_data(
                 storage_cluster_data
             )
-            storage_cluster_data["spec"]["storageDeviceSets"][0][
-                "replica"
-            ] = no_of_worker_nodes
-
             if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
                 storage_cluster_data["spec"]["storageDeviceSets"][0][
                     "count"
                 ] = number_of_disks_available
+                storage_cluster_data["spec"]["storageDeviceSets"][0][
+                    "replica"
+                ] = no_of_worker_nodes
 
             # configure dynamic namespace
             storage_cluster_data["metadata"]["namespace"] = config.ENV_DATA[
@@ -266,41 +230,32 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
         # Native storageclients are created as part of ODF 4.16 subscription and each of rbd and
         # cephfs storageclaims gets created automatically with the storageclient creation
-        if self.ocs_version >= version.VERSION_4_16:
-            # Validate native client is created in openshift-storage namespace
-            self.deployment.wait_for_csv(
-                self.ocs_client_operator, config.ENV_DATA["cluster_namespace"]
-            )
 
-            # Verify native storageclient is created successfully
-            self.storage_clients.verify_native_storageclient()
+        # Validate native client is created in openshift-storage namespace
+        self.deployment.wait_for_csv(
+            self.ocs_client_operator, config.ENV_DATA["cluster_namespace"]
+        )
 
-            # Validate cephblockpool created
-            assert verify_block_pool_exists(
-                constants.DEFAULT_BLOCKPOOL
-            ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+        # Verify native storageclient is created successfully
+        self.storage_clients.verify_native_storageclient()
+
+        # Validate cephblockpool created
+        assert verify_block_pool_exists(
+            constants.DEFAULT_BLOCKPOOL
+        ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+        assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
+
+        # Validate radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclasses created
+        storage_class_classes = get_all_storageclass_names()
+        for storage_class in self.storage_class_claims:
             assert (
-                verify_cephblockpool_status()
-            ), "the cephblockpool is not in Ready phase"
-
-            # Validate radosnamespace created and in 'Ready' status
-            assert (
-                check_phase_of_rados_namespace()
-            ), "The radosnamespace is not in Ready phase"
-
-            # Validate storageclasses created
-            storage_class_classes = get_all_storageclass_names()
-            for storage_class in self.storage_class_claims:
-                assert (
-                    storage_class in storage_class_classes
-                ), "Storage classes ae not created as expected"
-
-        else:
-            # Create ODF subscription for storage client operator and native client
-            self.storage_clients.create_native_storage_client()
-
-            # Verify native storageclient is created successfully
-            self.storage_clients.verify_native_storageclient()
+                storage_class in storage_class_classes
+            ), "Storage classes ae not created as expected"
 
     def odf_subscription_on_provider(self):
         """
@@ -387,3 +342,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         assert (
             rgw_restart_count == 0
         ), f"Error rgw pod has restarted {rgw_restart_count} times"
+
+        Deployment().wait_for_csv(
+            defaults.OCS_CLIENT_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
+        )
+        assert verify_block_pool_exists(
+            constants.DEFAULT_BLOCKPOOL
+        ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+        assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
