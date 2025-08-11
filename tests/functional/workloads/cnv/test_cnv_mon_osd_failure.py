@@ -41,33 +41,41 @@ class TestMonAndOSDFailures:
             _,
             _,
         ) = multi_cnv_workload_class(namespace=self.proj_obj.namespace)
-        self.all_vms = self.vm_objs_def + self.vm_objs_aggr
+        request.cls.all_vms = self.vm_objs_def + self.vm_objs_aggr
         source_csums = {
             vm_obj.name: run_dd_io(vm_obj, file_path=file_paths[0], verify=True)
             for vm_obj in self.all_vms
         }
 
         def finalizer():
-            for vm_obj in self.all_vms:
+            for vm_obj in request.cls.all_vms:
                 vm_obj.wait_for_ssh_connectivity()
                 md5sum_after = cal_md5sum_vm(vm_obj, file_path=file_paths[0])
                 assert (
                     source_csums[vm_obj.name] == md5sum_after
-                ), "Data integrity of the file inside VM is not maintained during the failure"
-                logger.info(
-                    "Data integrity of the file inside VM is maintained during the failure"
-                )
+                ), "Data integrity failed for VM {vm_obj.name}"
+                logger.info("Data integrity maintained for VM {vm_obj.name}")
 
                 run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
                 vm_obj.stop()
 
         request.addfinalizer(finalizer)
 
-    def verify_vm_status(self):
+    def verify_vm_status(self, count=3):
         """
         Verify the status of randomly selected VMs.
         """
-        vm_samples = random.sample(self.all_vms, 3)
+        if not self.all_vms:
+            raise RuntimeError(
+                "No VMs available to verify — setup_cnv_workload did not run correctly"
+            )
+
+        if len(self.all_vms) < count:
+            logger.warning(
+                f"Requested {count} VM samples, but only {len(self.all_vms)} available. Using all."
+            )
+            count = len(self.all_vms)
+        vm_samples = random.sample(self.all_vms, count)
         for vm in vm_samples:
             vm.verify_vm(verify_ssh=True)
 
@@ -83,18 +91,20 @@ class TestMonAndOSDFailures:
 
         self.mons = ceph_obj.get_mons_from_cluster()[:mon_count]
 
-        # Scale Down Mon Count to replica=0
         for mon in self.mons:
+            logger.info(f"Scaling down mon deployment {mon} to 0 replicas")
             modify_deployment_replica_count(mon, 0)
 
-        # Sleeping for 600 seconds to emulate a condition where the 2 mons is inaccessibe  for 10 seconds.
+        logger.info(
+            "Sleeping for 600 seconds to emulate a condition where the 2 mons is inaccessibe  for 10 seconds."
+        )
         time.sleep(600)
 
         # Verify vm statuses when mon pod is down
         self.verify_vm_status()
 
-        # scale mon deployment back to 1
         for mon in self.mons:
+            logger.info(f"Scaling mon deployment {mon} back to 1 replica")
             modify_deployment_replica_count(mon, 1)
 
     @polarion_id("OCS-6608")
