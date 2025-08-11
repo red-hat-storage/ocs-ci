@@ -5,6 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
+    run_on_all_clients,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_hci_provider_and_client
 from ocs_ci.framework.testlib import (
@@ -58,6 +59,7 @@ class TestClone(ManageTest):
 
     @provider_mode
     @acceptance
+    @run_on_all_clients
     @pytest.mark.parametrize(
         argnames=["interface_type", "pod_dict_path", "access"],
         argvalues=[
@@ -76,7 +78,9 @@ class TestClone(ManageTest):
         ],
     )
     @tier1
-    def test_pvc_to_pvc_clone(self, interface_type, setup, teardown_factory):
+    def test_pvc_to_pvc_clone(
+        self, interface_type, setup, teardown_factory, cluster_index
+    ):
         """
         Create a clone from an existing pvc,
         verify data is preserved in the cloning.
@@ -160,6 +164,7 @@ class TestClone(ManageTest):
         clone_pod_obj.get_fio_results()
         logger.info(f"IO completed on pod {clone_pod_obj.name}")
 
+    @skipif_ocs_version(">4.19")
     @provider_mode
     @acceptance
     @pytest.mark.polarion_id("OCS-5162")
@@ -258,8 +263,8 @@ class TestClone(ManageTest):
         ), f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
+    @skipif_ocs_version(">4.19")
     @skipif_hci_provider_and_client
-    @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5444")
     @pytest.mark.polarion_id("OCS-5446")
     @pytest.mark.parametrize(
@@ -387,8 +392,8 @@ class TestClone(ManageTest):
         ), f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {snapshot_restore_pod_obj.name}")
 
+    @skipif_ocs_version(">4.19")
     @skipif_hci_provider_and_client
-    @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5445")
     @pytest.mark.polarion_id("OCS-5447")
     @pytest.mark.parametrize(

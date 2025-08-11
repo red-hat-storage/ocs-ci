@@ -90,7 +90,7 @@ class NamespaceStore:
         }
         if retry:
             sample = TimeoutSampler(
-                timeout=120,
+                timeout=240,
                 sleep=20,
                 func=cmdMap[self.method],
             )
@@ -156,7 +156,7 @@ class NamespaceStore:
             == constants.STATUS_READY
         )
 
-    def verify_health(self, timeout=180, interval=5):
+    def verify_health(self, timeout=240, interval=5):
         """
         Health verification function that tries to verify
         a namespacestores's health until a given time limit is reached
@@ -369,7 +369,7 @@ def oc_create_namespacestore(
 
 def template_pvc(
     name,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     storageclass=constants.CEPHFILESYSTEM_SC,
     access_mode=constants.ACCESS_MODE_RWX,
     size=20,
@@ -384,6 +384,7 @@ def template_pvc(
         size (str): Size of the PVC in GiB
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["name"] = name
     pvc_data["metadata"]["namespace"] = namespace

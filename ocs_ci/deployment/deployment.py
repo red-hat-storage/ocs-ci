@@ -1170,10 +1170,28 @@ class Deployment(object):
             log_step("Create STS role and attach AmazonS3FullAccess Policy")
             role_data = create_and_attach_sts_role()
             self.sts_role_arn = role_data["Role"]["Arn"]
-
-        if not live_deployment:
+        stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
+        konflux_build = config.DEPLOYMENT.get("konflux_build")
+        upgrade = config.UPGRADE.get("upgrade", False)
+        if not live_deployment and not (stage_testing and konflux_build):
             log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
+        if konflux_build and stage_testing:
+            log_step("Creating stage ImageDigestMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            if not upgrade:
+                log_step("Creating stage TagMirrorSet")
+                exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+                log_step("Sleeping 60 seconds after applying tag mirror set.")
+            time.sleep(60)
+            log_step("Waiting max 30 mins for master MCP to get updated")
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
+            )
+            log_step("Waiting max 30 mins for worker MCP to get updated")
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
+            )
 
         if local_storage:
             log_step("Deploy and setup Local Storage Operator")
@@ -2007,7 +2025,8 @@ class Deployment(object):
             label_pod_security_admission(
                 namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
             )
-            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
+            if is_storage_system_needed():
+                exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
         else:
             cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
@@ -2133,6 +2152,23 @@ class Deployment(object):
             f"oc wait --timeout=5m --for condition=Available -n {self.namespace} "
             f"deployment {deployments_string}"
         )
+
+    @retry(exception_to_check=AssertionError, tries=12, delay=30, backoff=1)
+    def objectstore_user_check(self):
+        if self.platform in [constants.BAREMETAL_PLATFORM, constants.VSPHERE_PLATFORM]:
+            logger.info("Checking cephobjectstore user exist for bug: DFBUGS-2929")
+            cephobjectstoreuser = ocp.OCP(
+                kind="cephobjectstoreuser",
+                namespace=self.namespace,
+            )
+            cephobjectstoreusers = cephobjectstoreuser.get()["items"]
+            for objectstoreuser in cephobjectstoreusers:
+                name = objectstoreuser["metadata"]["name"]
+                phase = objectstoreuser.get("status", {}).get("phase")
+                logger.info(f"ObjectStoreUser user: {name} is in phase: {phase}")
+                assert (
+                    phase != "ReconcileFailed"
+                ), f"ObjectStoreUser {name} is in phase: {phase}"
 
     def deploy_ocs(self):
         """
@@ -2348,6 +2384,7 @@ class Deployment(object):
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
+        self.objectstore_user_check()
 
     def deploy_lvmo(self):
         """
@@ -2531,7 +2568,13 @@ class Deployment(object):
             return
 
         if config.ENV_DATA.get("acm_hub_unreleased"):
-            self.deploy_acm_hub_unreleased()
+            if version.compare_versions(
+                f"{config.ENV_DATA.get('acm_version')} >= 2.14"
+            ):
+                self.deploy_acm_hub_unreleased_konflux()
+                self.deploy_multicluster_hub()
+            else:
+                self.deploy_acm_hub_unreleased()
         else:
             self.deploy_acm_hub_released()
             self.deploy_multicluster_hub()
@@ -2782,6 +2825,108 @@ class Deployment(object):
         csv.wait_for_phase("Succeeded", timeout=720)
         logger.info("ACM HUB Operator Deployment Succeeded")
 
+    def deploy_acm_hub_unreleased_konflux(self):
+        """
+        Handle ACM HUB unreleased image deployment for 2.14 and later version
+        """
+        logger.info("Creating Konflux Catalogsource for ACM ")
+        acm_konflux_catsrc_yaml_data = templating.load_yaml(
+            constants.ACM_CATALOGSOURCE_YAML
+        )
+        acm_konflux_catsrc_yaml_data["spec"][
+            "image"
+        ] = f"{constants.ACM_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('acm_version')}"
+        acm_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_konflux_catsrc_yaml_data_manifest", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            acm_konflux_catsrc_yaml_data, acm_konflux_catsrc_yaml_data_manifest.name
+        )
+        run_cmd(f"oc create -f {acm_konflux_catsrc_yaml_data_manifest.name}")
+
+        acm_operator_catsrc = CatalogSource(
+            resource_name="acm-dev-catalog",
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        acm_operator_catsrc.wait_for_state("READY")
+
+        logger.info("Creating Konflux Catalogsource for MCE ")
+
+        mce_konflux_catsrc_yaml_data = templating.load_yaml(
+            constants.MCE_CATALOGSOURCE_YAML
+        )
+        mce_konflux_catsrc_yaml_data["spec"][
+            "image"
+        ] = f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
+        mce_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="mce_konflux_catsrc_yaml_data_manifest", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            mce_konflux_catsrc_yaml_data, mce_konflux_catsrc_yaml_data_manifest.name
+        )
+        run_cmd(f"oc create -f {mce_konflux_catsrc_yaml_data_manifest.name}")
+
+        mce_operator_catsrc = CatalogSource(
+            resource_name="mce-dev-catalog",
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        mce_operator_catsrc.wait_for_state("READY")
+        logger.info("Creating ImageDigestMirrorSet for ACM Deployment")
+        run_cmd(f"oc create -f {constants.ACM_BREW_IDMS_YAML}")
+        wait_for_machineconfigpool_status(node_type="all")
+        channel = config.ENV_DATA.get("acm_hub_channel")
+        logger.info("Creating ACM HUB namespace")
+        acm_hub_namespace_yaml_data = templating.load_yaml(constants.NAMESPACE_TEMPLATE)
+        acm_hub_namespace_yaml_data["metadata"]["name"] = constants.ACM_HUB_NAMESPACE
+        acm_hub_namespace_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_hub_namespace_manifest", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            acm_hub_namespace_yaml_data, acm_hub_namespace_manifest.name
+        )
+        run_cmd(f"oc apply -f {acm_hub_namespace_manifest.name}")
+
+        logger.info("Creating OperationGroup for ACM deployment")
+        package_manifest = PackageManifest(
+            resource_name=constants.ACM_HUB_OPERATOR_NAME,
+            selector="catalog=acm-dev-catalog",
+        )
+
+        run_cmd(
+            f"oc apply -f {constants.ACM_HUB_OPERATORGROUP_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+        )
+
+        logger.info("Creating ACM HUB Subscription")
+        acm_hub_subscription_yaml_data = templating.load_yaml(
+            constants.ACM_HUB_SUBSCRIPTION_YAML
+        )
+        acm_hub_subscription_yaml_data["spec"]["channel"] = channel
+        retry(
+            (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
+            tries=10,
+            delay=2,
+        )(package_manifest.get_current_csv)(channel, constants.ACM_HUB_OPERATOR_NAME)
+        acm_hub_subscription_yaml_data["spec"]["source"] = "acm-dev-catalog"
+        acm_hub_subscription_yaml_data["spec"]["startingCSV"] = (
+            package_manifest.get_current_csv(
+                channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+            )
+        )
+
+        acm_hub_subscription_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_hub_subscription_manifest", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
+        )
+        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        logger.info("Sleeping for 90 seconds after subscribing to ACM")
+        time.sleep(90)
+        csv_name = package_manifest.get_current_csv(channel=channel)
+        csv = CSV(resource_name=csv_name, namespace=constants.ACM_HUB_NAMESPACE)
+        csv.wait_for_phase("Succeeded", timeout=720)
+        logger.info("ACM HUB Operator Deployment Succeeded")
+
     def deploy_multicluster_hub(self):
         """
         Handle Multicluster HUB creation
@@ -2912,8 +3057,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
     if config.DEPLOYMENT.get("stage_rh_osbs"):
-        image = config.DEPLOYMENT.get("stage_index_image", constants.OSBS_BOUNDLE_IMAGE)
         ocp_version = version.get_semantic_ocp_version_from_config()
+        image = config.DEPLOYMENT.get("stage_index_image", constants.OSBS_BOUNDLE_IMAGE)
         osbs_image_tag = config.DEPLOYMENT.get(
             "stage_index_image_tag", f"v{ocp_version}"
         )
@@ -2924,7 +3069,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
             "}}}'"
         )
-        run_cmd(f"oc apply -f {constants.STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML}")
+        run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
         wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)
@@ -2960,7 +3105,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     # apply idms if present in the catalog image
     image = f"{image}:{image_tag if image_tag else 'latest'}"
     insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
-
     get_and_apply_idms_from_catalog(image=image, insecure=insecure_mode)
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(

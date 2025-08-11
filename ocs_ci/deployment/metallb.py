@@ -323,7 +323,7 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(metallb_inst_data, metallb_inst_file.name)
 
-        retry(CommandFailed, tries=6, delay=30)(exec_cmd)(
+        retry(CommandFailed, tries=18, delay=30)(exec_cmd)(
             f"oc apply -f {metallb_inst_file.name}", timeout=240
         )
 
@@ -391,7 +391,7 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(ipaddresspool_data, ipaddresspool_file.name)
 
-        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(
+        retry(CommandFailed, tries=12, delay=15)(exec_cmd)(
             f"oc apply -f {ipaddresspool_file.name}", timeout=240
         )
 

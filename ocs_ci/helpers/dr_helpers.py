@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pv import get_all_pvs
@@ -252,7 +253,10 @@ def failover(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
 
-    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER)
+    drpc_obj.wait_for_phase(
+        constants.STATUS_FAILEDOVER,
+        timeout=360,
+    )
     config.switch_ctx(restore_index)
 
 
@@ -266,6 +270,7 @@ def relocate(
     old_primary=None,
     workload_instance=None,
     multi_ns=False,
+    workload_instances_shared=None,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -280,7 +285,7 @@ def relocate(
         old_primary (str): Name of cluster where workload were running
         workload_instance (object): Discovered App instance to get namespace and dir location
         multi_ns (bool): Multi Namespace
-
+        workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
 
     """
     restore_index = config.cur_index
@@ -323,7 +328,7 @@ def relocate(
             old_primary=old_primary, workload_instance=workload_instance
         )
     else:
-        if discovered_apps and workload_instance:
+        if discovered_apps and workload_instance and not workload_instances_shared:
             logger.info("Doing Cleanup Operations")
             do_discovered_apps_cleanup(
                 drpc_name=workload_placement_name,
@@ -332,6 +337,20 @@ def relocate(
                 workload_dir=workload_instance.workload_dir,
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
+        elif discovered_apps and workload_instance and workload_instances_shared:
+            logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
+            for cnv_wl in workload_instances_shared:
+                do_discovered_apps_cleanup(
+                    drpc_name=workload_placement_name,
+                    old_primary=old_primary,
+                    workload_namespace=workload_instances_shared[0].workload_namespace,
+                    workload_dir=cnv_wl.workload_dir,
+                    vrg_name=workload_instances_shared[
+                        0
+                    ].discovered_apps_placement_name,
+                    skip_resource_deletion_verification=True,
+                )
+
     config.switch_ctx(restore_index)
 
 
@@ -465,6 +484,84 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
     return True
 
 
+@retry(ValueError, tries=10)
+def check_mirroring_status_for_custom_pool(
+    pool_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, min_replaying=1
+):
+    """
+    Check the health and mirroring status of a custom CephBlockPoolRadosNamespace resource.
+    Refer For OCSQE-2294 or RHSTOR-5129 in ODF 4.19 for details
+
+    This function verifies that:
+    - At least two such resources exist in the given namespace
+    - The specified pool has all health fields set to 'OK'
+    - The replaying count in both 'image_states' and 'states' meets the minimum threshold
+
+    Args:
+        pool_name (str): Base name of the Ceph block pool (without '-builtin-implicit' suffix) whose
+        mirroring status has to be validated.
+        namespace (str): Namespace to look for the resource. Default is 'openshift-storage'.
+        min_replaying (int): Minimum expected value for replaying count. Default is 1.
+
+    Returns:
+        bool: True if all checks pass, otherwise False.
+
+    Raises:
+        ValueError: If custom Pool is missing, insufficient Pool count, or summary is not found.
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info("Checking count of CephBlockPoolRadosNamespace resource")
+        custom_pool_name = f"{pool_name}-builtin-implicit"
+        ocp = OCP(kind="CephBlockPoolRadosNamespace", namespace=namespace)
+        items = ocp.get().get("items", [])
+
+        if len(items) < 2:
+            raise ValueError(
+                f"Expected at least 2 resources, found {len(items)} in {namespace}"
+            )
+
+        for obj in items:
+            if obj.get("metadata", {}).get("name") != custom_pool_name:
+                continue
+            logger.info("Validate if mirroring status summary is present or not")
+            summary = obj.get("status", {}).get("mirroringStatus", {}).get("summary")
+            if not summary:
+                raise ValueError(f"No summary found for {custom_pool_name}")
+            logger.info("Validate health")
+            for key in ("health", "daemon_health", "group_health", "image_health"):
+                val = summary.get(key)
+                logger.info(f"{custom_pool_name} - {key}: {val}")
+                if val != "OK":
+                    logger.error(f"{key} is not OK: {val}")
+                    raise ValueError(
+                        f"Health check for {key} is not OK: {val} for pool {custom_pool_name}"
+                    )
+
+            img = summary.get("image_states", {}).get("replaying", 0)
+            state = summary.get("states", {}).get("replaying", 0)
+            logger.info(
+                f"{custom_pool_name} - replaying counts: image_states={img}, states={state}"
+            )
+
+            if img < min_replaying or state < min_replaying:
+                logger.error(
+                    f"Replaying count too low: image_states={img}, states={state}"
+                )
+                raise ValueError(
+                    f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
+                )
+
+            return True
+
+        raise ValueError(f"Custom Pool {custom_pool_name} not found in {namespace}")
+    config.switch_ctx(restore_index)
+    return False
+
+
 def get_pv_count(namespace):
     """
     Gets PV resource count in the given namespace
@@ -587,6 +684,7 @@ def check_vrg_existence(namespace, vrg_name=""):
         vrg_name (str): Name of VRG
 
     """
+    vrg_list = []
     try:
 
         vrg_list = (
@@ -598,13 +696,16 @@ def check_vrg_existence(namespace, vrg_name=""):
             .get()
             .get("items")
         )
-    except CommandFailed as e:
+    except Exception as e:
         if (
             f'Error from server (NotFound): volumereplicationgroups.ramendr.openshift.io "{vrg_name}" not found'
             in str(e)
         ):
             logger.info(f"VRG {vrg_name} not found in namespace {namespace}.")
-            vrg_list = []
+        else:
+            logger.warning(
+                f"Exception raised when fetching Volume Replication Group: {e}"
+            )
 
     if len(vrg_list) > 0:
         return True
@@ -1831,7 +1932,13 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name
+    drpc_name,
+    old_primary,
+    workload_namespace,
+    workload_dir,
+    vrg_name,
+    skip_resource_deletion_verification=False,
+    ignore_resource_not_found=False,
 ):
     """
     Function to clean up Resources
@@ -1842,6 +1949,12 @@ def do_discovered_apps_cleanup(
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
         vrg_name (str): Name of VRG
+        skip_resource_deletion_verification (bool): False by default and runs always, else resource verification is
+                                                    handled separately in the test when Shared protection type is used
+                                                    for DR protection via ACM UI
+
+        ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
+                                        DR protected via ACM UI is deleted, refer DFBUGS-3706
 
     """
     restore_index = config.cur_index
@@ -1857,14 +1970,23 @@ def do_discovered_apps_cleanup(
     )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
-    run_cmd(
-        f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
-    )
-    wait_for_all_resources_deletion(
-        namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
-    )
-    config.switch_acm_ctx()
-    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+    if not ignore_resource_not_found:
+
+        # --ignore-not-found is needed to avoid https://issues.redhat.com/browse/DFBUGS-3706
+        logger.info("Using '--ignore-not-found' during workload deletion")
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
+        )
+    else:
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        )
+    if not skip_resource_deletion_verification:
+        wait_for_all_resources_deletion(
+            namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
+        )
+        config.switch_acm_ctx()
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
     config.switch_ctx(restore_index)
 
 
@@ -2102,6 +2224,8 @@ def get_cluster_set_name():
         list: List of uniq cluster set name
     """
     cluster_set = []
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
     current_managed_clusters_list = [
         cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
@@ -2117,9 +2241,10 @@ def get_cluster_set_name():
         logger.info(f"Found the unique clusterset {cluster_set[0]}")
     else:
         raise UnexpectedDeploymentConfiguration(
-            "There are more then one clusterset added to multiple managedcluters"
+            "There are more then one clusterset added to the managed clusters"
         )
 
+    config.switch_ctx(restore_index)
     return cluster_set
 
 

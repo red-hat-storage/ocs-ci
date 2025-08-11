@@ -7,6 +7,7 @@ import time
 
 from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.helpers import verify_nb_db_psql_version
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
@@ -41,7 +42,10 @@ from ocs_ci.ocs.resources.csv import (
     get_csvs_start_with_prefix,
 )
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.pod import get_noobaa_pods, verify_pods_upgraded
+from ocs_ci.ocs.resources.pod import (
+    get_noobaa_pods,
+    verify_pods_upgraded,
+)
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -142,17 +146,12 @@ def get_expected_noobaa_pod_count(upgrade_version):
         int: number of expected noobaa pods
 
     """
-    default_noobaa_pods = 4
-    if (
-        config.ENV_DATA.get("mcg_only_deployment")
-        and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
-        and config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
-    ):
-        default_noobaa_pods = 5 if upgrade_version >= parse_version("4.19") else 4
-
-    if upgrade_version >= parse_version("4.19"):
-        log.info("Increased default noobaa pod count by 1 due to cnpg pod")
-        default_noobaa_pods += 1
+    expected_noobaa_pods = [
+        "noobaa-core-0",
+        "noobaa-operator",
+        "noobaa-db-pg-cluster-1",
+        "noobaa-db-pg-cluster-2",
+    ]
 
     endpoint_count = 0
     noobaa_pod_obj = get_noobaa_pods()
@@ -160,9 +159,18 @@ def get_expected_noobaa_pod_count(upgrade_version):
     logger.info(f"Current noobaa pods under validation: {noobaa_pod_names}")
     for pod in noobaa_pod_obj:
         if "pv-backingstore" in pod.name:
-            default_noobaa_pods += 1
+            expected_noobaa_pods.append(pod.name)
+        if upgrade_version >= parse_version("4.19"):
+            if "noobaa-default-backing-store" in pod.name:
+                logger.info(
+                    "In some cases like MCG only or HCI we are counting noobaa-default-backing-store"
+                )
+                expected_noobaa_pods.append(pod.name)
+            if "cnpg-controller-manager" in pod.name:
+                expected_noobaa_pods.append(pod.name)
         if "noobaa-endpoint" in pod.name:
             endpoint_count += 1
+            expected_noobaa_pods.append(pod.name)
 
     noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
     resource = noobaa.get()["items"][0]
@@ -177,7 +185,11 @@ def get_expected_noobaa_pod_count(upgrade_version):
             f"Endpoint pod count {endpoint_count} not in allowed range [{min_endpoints}, {max_endpoints}]"
         )
 
-    return default_noobaa_pods + endpoint_count
+    if len(noobaa_pod_obj) != len(expected_noobaa_pods):
+        raise ValueError(
+            f"Expected noobaa pods: {expected_noobaa_pods} do not match actual noobaa pods: {noobaa_pod_names}"
+        )
+    return len(noobaa_pod_obj)
 
 
 @retry(Exception, tries=3, delay=60, backoff=1)
@@ -622,7 +634,24 @@ class OCSUpgrade(object):
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
-
+        stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
+        konflux_build = config.DEPLOYMENT.get("konflux_build")
+        if konflux_build and stage_testing:
+            log_step("Creating stage TagMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+            log_step("Creating stage ImageDigestMirrorSet")
+            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            log_step("Sleeping 60 seconds after applying tag mirror set.")
+            time.sleep(60)
+            log_step("Waiting max 30 mins for master MCP to get updated")
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
+            )
+            log_step("Waiting max 30 mins for worker MCP to get updated")
+            exec_cmd(
+                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
+            )
+            return
         if not self.upgrade_in_current_source:
             disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
             if not ocs_catalog.is_exist():

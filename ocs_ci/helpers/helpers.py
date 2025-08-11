@@ -245,7 +245,7 @@ def create_pod(
     interface_type=None,
     pvc_name=None,
     do_reload=True,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     node_name=None,
     pod_dict_path=None,
     sa_name=None,
@@ -299,7 +299,7 @@ def create_pod(
         AssertionError: In case of any failure
 
     """
-
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if (
         interface_type == constants.CEPHBLOCKPOOL
         or interface_type == constants.CEPHBLOCKPOOL_THICK
@@ -622,9 +622,7 @@ def create_ceph_block_pool(
     return cbp_obj
 
 
-def create_ceph_file_system(
-    cephfs_name=None, label=None, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def create_ceph_file_system(cephfs_name=None, label=None, namespace=None):
     """
     Create a Ceph file system
 
@@ -636,6 +634,7 @@ def create_ceph_file_system(
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
     cephfs_data["metadata"]["name"] = (
         cephfs_name if cephfs_name else create_unique_resource_name("test", "cfs")
@@ -868,7 +867,7 @@ def create_storage_class(
 def create_pvc(
     sc_name,
     pvc_name=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     size=None,
     do_reload=True,
     access_mode=constants.ACCESS_MODE_RWO,
@@ -893,6 +892,7 @@ def create_pvc(
     Returns:
         PVC: PVC instance
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["name"] = (
         pvc_name if pvc_name else create_unique_resource_name("test", "pvc")
@@ -1089,7 +1089,7 @@ def get_cephfs_data_pool_name():
     return out[0]["data_pools"][0]
 
 
-def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespace"]):
+def validate_cephfilesystem(fs_name, namespace=None):
     """
     Verify CephFileSystem exists at Ceph and OCP
 
@@ -1100,6 +1100,7 @@ def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespac
         bool: True if CephFileSystem is created at Ceph and OCP side else
            will return False with valid msg i.e Failure cause
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
@@ -1254,6 +1255,22 @@ def get_cephfs_name():
     ct_pod = pod.get_ceph_tools_pod()
     result = ct_pod.exec_ceph_cmd("ceph fs ls")
     return result[0]["name"]
+
+
+def get_cephfs_subvolumegroup_names():
+    """
+    Get all CephFS subvolume groups present in the cluster.
+
+    Returns:
+        list: Names of all CephFS subvolume groups
+
+    """
+    cephfs_name = config.ENV_DATA.get("cephfs_name") or get_cephfs_name()
+    ct_pod = pod.get_ceph_tools_pod()
+    subvolume_groups = ct_pod.exec_ceph_cmd(
+        ceph_cmd=f"ceph fs subvolumegroup ls {cephfs_name}", format=None
+    )
+    return [sg["name"] for sg in subvolume_groups]
 
 
 @retry(exceptions.CommandFailed, tries=5, delay=10, backoff=1)
@@ -2892,9 +2909,7 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
-def modify_deployment_replica_count(
-    deployment_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def modify_deployment_replica_count(deployment_name, replica_count, namespace=None):
     """
     Function to modify deployment replica count,
     i.e to scale up or down deployment
@@ -2908,6 +2923,7 @@ def modify_deployment_replica_count(
         bool: True in case if changes are applied. False otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=deployment_name, params=params)
@@ -2935,9 +2951,7 @@ def modify_deploymentconfig_replica_count(
     return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
 
 
-def modify_job_parallelism_count(
-    job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def modify_job_parallelism_count(job_name, count, namespace=None):
     """
     Function to modify Job instances count,
 
@@ -2950,6 +2964,7 @@ def modify_job_parallelism_count(
         bool: True in case if changes are applied. False otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = ocp.OCP(kind=constants.JOB, namespace=namespace)
     params = f'{{"spec": {{"parallelism": {count}}}}}'
     return ocp_obj.patch(resource_name=job_name, params=params)
@@ -3024,9 +3039,7 @@ def collect_performance_stats(dir_name):
         json.dump(performance_stats, outfile)
 
 
-def validate_pod_oomkilled(
-    pod_name, namespace=config.ENV_DATA["cluster_namespace"], container=None
-):
+def validate_pod_oomkilled(pod_name, namespace=None, container=None):
     """
     Validate pod oomkilled message are found on log
 
@@ -3043,6 +3056,7 @@ def validate_pod_oomkilled(
         Assertion if failed to fetch logs
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     rc = True
     try:
         pod_log = pod.get_pod_logs(
@@ -3706,9 +3720,7 @@ def get_failure_domain():
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
 
 
-def modify_statefulset_replica_count(
-    statefulset_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def modify_statefulset_replica_count(statefulset_name, replica_count, namespace=None):
     """
     Function to modify statefulset replica count,
     i.e to scale up or down statefulset
@@ -3721,6 +3733,7 @@ def modify_statefulset_replica_count(
         bool: True in case if changes are applied. False otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind=constants.STATEFULSET, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
@@ -3844,7 +3857,7 @@ def check_number_of_mon_pods(expected_mon_num=3):
     return False
 
 
-def get_secret_names(namespace=config.ENV_DATA["cluster_namespace"], resource_name=""):
+def get_secret_names(namespace=None, resource_name=""):
     """
     Get secrets names
 
@@ -3856,6 +3869,7 @@ def get_secret_names(namespace=config.ENV_DATA["cluster_namespace"], resource_na
         dict: secret names
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     logger.info(f"Get secret names on project {namespace}")
     secret_obj = ocp.OCP(kind=constants.SECRET, namespace=namespace)
     secrets_objs = secret_obj.get(resource_name=resource_name)
@@ -4272,7 +4286,7 @@ def get_cephfs_subvolumegroup():
     return subvolume_group_name
 
 
-def create_sa_token_secret(sa_name, namespace=config.ENV_DATA["cluster_namespace"]):
+def create_sa_token_secret(sa_name, namespace=None):
     """
     Creates a serviceaccount token secret
 
@@ -4324,6 +4338,42 @@ def get_mon_db_size_in_kb(mon_pod_obj):
     mon_db_size_kb = convert_device_size(size + "i", "KB")
     logger.info(f"mon-{mon_pod_label} DB size: {mon_db_size_kb} KB")
     return mon_db_size_kb
+
+
+def get_noobaa_db_usage_percent():
+    """
+    Get noobaa db usage percentage
+
+    Returns:
+        str: Noobaa db usage percentage
+
+    """
+    noobaa_db_pod_obj = pod.get_noobaa_pods(
+        noobaa_label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+    )
+    cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
+        command="df -h /var/lib/pgsql/", out_yaml_format=False
+    )
+    df_out = cmd_out.split()
+    return df_out[-2]
+
+
+def get_noobaa_db_size():
+    """
+    Get noobaa db size
+
+    Returns:
+        str: Noobaa db size
+
+    """
+    noobaa_db_pod_obj = pod.get_noobaa_pods(
+        noobaa_label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+    )
+    cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
+        command="df -h /var/lib/pgsql/", out_yaml_format=False
+    )
+    df_out = cmd_out.split()
+    return df_out[-5]
 
 
 def get_noobaa_db_used_space():
@@ -4629,7 +4679,7 @@ def verify_log_exist_in_pods_logs(
     pod_names,
     expected_log,
     container=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     all_containers_flag=True,
     since=None,
 ):
@@ -4648,6 +4698,7 @@ def verify_log_exist_in_pods_logs(
         bool: return True if log exist otherwise False
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     for pod_name in pod_names:
         pod_logs = pod.get_pod_logs(
             pod_name,
@@ -4685,12 +4736,12 @@ def retrieve_cli_binary(cli_type="mcg"):
     if cli_type == "mcg":
         local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
     elif cli_type == "odf":
-        local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli")
+        local_cli_path = constants.ODF_CLI_LOCAL_PATH
     local_cli_dir = os.path.dirname(local_cli_path)
     live_deployment = config.DEPLOYMENT["live_deployment"]
     if live_deployment and semantic_version >= version.VERSION_4_13:
         if semantic_version >= version.VERSION_4_15:
-            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}.0"
+            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
         else:
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
@@ -4852,9 +4903,7 @@ def is_rbd_default_storage_class(sc_name=None):
     return False
 
 
-def get_network_attachment_definitions(
-    nad_name, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def get_network_attachment_definitions(nad_name, namespace=None):
     """
     Get NetworkAttachmentDefinition obj
 
@@ -4865,6 +4914,7 @@ def get_network_attachment_definitions(
         network_attachment_definitions (obj) : network_attachment_definitions object
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return OCP(
         kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
         namespace=namespace,
@@ -5084,7 +5134,7 @@ def restart_node_if_debug_doesnt_work(worker_node_name):
         oc_cmd.exec_oc_debug_cmd(node=worker_node_name, cmd_list=[cmd])
 
 
-def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_daemonsets_names(namespace=None):
     """
     Get all daemonspaces in namespace
 
@@ -5095,6 +5145,7 @@ def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
         list: all daemonset names in the namespace
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     daemonset_names = list()
     daemonset_objs = OCP(
         kind=constants.DAEMONSET,
@@ -5105,7 +5156,7 @@ def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
     return daemonset_names
 
 
-def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
+def get_daemonsets_obj(name, namespace=None):
     """
     Get daemonset obj
     Args:
@@ -5116,6 +5167,7 @@ def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
         ocp_obj: daemonset ocp obj
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return OCP(kind=constants.DAEMONSET, namespace=namespace, resource_name=name)
 
 
@@ -5559,7 +5611,7 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
     """
     Apply custom taints and tolerations.
     1. Taint ocs nodes with non-ocs taint
-    2. Set custom tolerations on storagecluster, subscription, configmap and ocsinit
+    2. Set custom tolerations on storagecluster, subscription, configmap, ocsinit and drivers
 
     Args:
         taint_label (str): The taint label to apply (default is "xyz").
@@ -5610,10 +5662,26 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
                 f'"csi-provisioner": {tolerations}, "mds": {tolerations}, "metrics-exporter": {tolerations}, '
                 f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}'
             )
-        param = f'{{"spec": {{"placement": {{{param}}}}}}}'
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
     storagecluster_obj.patch(params=param, format_type="merge")
     logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
+    # Add tolerations to CSI drivers for OCS version >= 4.19
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19:
+        logger.info("Add tolerations to all CSI drivers")
+        driver_obj = ocp.OCP(
+            kind=constants.DRIVER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        driver_list = ocp.get_all_resource_names_of_a_kind(
+            kind=constants.DRIVER,
+        )
+        for driver_name in driver_list:
+            param = f'{{"spec": {{"controllerPlugin": {tolerations}, "nodePlugin": {tolerations}}}}}'
+            driver_obj.patch(
+                resource_name=driver_name, params=param, format_type="merge"
+            )
+            logger.info(f"Successfully added tolerations to CSI driver {driver_name}")
 
     logger.info("Add tolerations to the subscription")
     sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
@@ -5680,6 +5748,73 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
             for pod_obj in pod_list:
                 pod_obj.delete(wait=False)
+
+
+def remove_toleration():
+    """
+    Remove toleration on storagecluster, subscription and drivers
+
+    Returns:
+        bool: True if all operations succeed, otherwise False.
+
+    """
+    success = True
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    if config.DEPLOYMENT["external_mode"]:
+        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+    logger.info("Remove tolerations from storagecluster")
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+    params = '[{"op": "remove", "path": "/spec/placement"}]'
+    result = storagecluster_obj.patch(params=params, format_type="json")
+    if not result:
+        logger.error("Failed to remove toleration from storagecluster")
+        success = False
+    logger.info("Remove tolerations from subscriptions")
+
+    sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+    sub_obj = ocp.OCP(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.SUBSCRIPTION,
+    )
+    for sub in sub_list:
+        subscription_data = sub_obj.get(resource_name=sub)
+        if "config" in subscription_data.get("spec", {}):
+            params = '[{"op": "remove", "path": "/spec/config"}]'
+            result = sub_obj.patch(resource_name=sub, params=params, format_type="json")
+            if not result:
+                logger.error(f"Failed to remove toleration from subscription {sub}")
+                success = False
+
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19:
+        logger.info("Removing tolerations from all CSI drivers")
+        driver_obj = ocp.OCP(
+            kind=constants.DRIVER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        driver_list = ocp.get_all_resource_names_of_a_kind(kind=constants.DRIVER)
+        for driver_name in driver_list:
+            params = (
+                '[{"op": "remove", "path": "/spec/controllerPlugin/tolerations"},'
+                '{"op": "remove", "path": "/spec/nodePlugin/tolerations"}]'
+            )
+            result = driver_obj.patch(
+                resource_name=driver_name, params=params, format_type="json"
+            )
+            if result:
+                logger.info(
+                    f"Successfully removed tolerations from CSI driver {driver_name}"
+                )
+            else:
+                logger.error(
+                    f"Failed to remove tolerations from CSI driver {driver_name}"
+                )
+                success = False
+
+    return success
 
 
 def get_reclaimspacecronjob_for_pvc(pvc_obj):
@@ -6199,7 +6334,7 @@ def create_auto_scaler(
     namespace=None,
     sc_name=None,
     device_class=None,
-    capacity_limit="4Ti",
+    capacity_limit="8Ti",
     scaling_threshold=70,
     max_osd_size="8Ti",
     timeout=1800,

@@ -137,6 +137,9 @@ STATUS_POWERON = "ON"
 STATUS_POWEROFF = "OFF"
 STATUS_STOPPED = "stopped"
 STATUS_STOPPING = "stopping"
+STATUS_REPLACING = "Replacing"
+STATUS_SUCCEED = "Succeeded"
+STATUS_ACTIVE = "Active"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -151,7 +154,12 @@ HEALTHY_PV_BS = ["OPTIMAL", "LOW_CAPACITY"]
 # Storage-Auto-Scaler statuses
 NOT_STARTED = "NotStarted"
 IN_PROGRES = "InProgress"
-SUCCEEDED = "Succeeded"
+SUCCEEDED = STATUS_SUCCEED
+
+# check health
+CEPH_HEALTH_WARN = "HEALTH_WARN"
+CEPH_HEALTH_ERROR = "HEALTH_ERR"
+CEPH_HEALTH_OK = "HEALTH_OK"
 
 # noobaa-core config.js parameters
 CONFIG_JS_PREFIX = "CONFIG_JS_"
@@ -946,6 +954,10 @@ SCALECLI_SERVICE_CA_YAML = os.path.join(
 
 SCALECLI_POD_YAML = os.path.join(TEMPLATE_MCG_DIR, "scalecli_pod.yaml")
 
+STRESS_CLI_SERVICE_CA_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "stress-cli-service-ca-configmap.yaml"
+)
+
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
 )
@@ -957,6 +969,8 @@ AWSCLI_MULTIARCH_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "awscli_multiarch
 S3CLI_MULTIARCH_STS_YAML = os.path.join(TEMPLATE_MCG_DIR, "s3cli-sts.yaml")
 
 S3CLI_STS_NAME = "s3cli"
+
+STRESS_CLI_STS_YAML = os.path.join(TEMPLATE_MCG_DIR, "stress-cli-sts.yaml")
 
 JAVA_SDK_S3_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "java_sdk_s3_pod.yaml")
 
@@ -1035,8 +1049,11 @@ FUSION_CATALOG_SOURCE_YAML = os.path.join(
 
 OCS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ocs-secret.yaml")
 
-STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "stageImageContentSourcePolicy.yaml"
+STAGE_IMAGE_DIGEST_MIRROR_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage_image_digest_mirror_set.yaml"
+)
+STAGE_TAG_MIRROR_SET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage_image_tag_mirror_set.yaml"
 )
 
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
@@ -1378,7 +1395,8 @@ RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
-
+RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool-2way"
+RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc-r2"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -1915,6 +1933,7 @@ REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
+STRESS_CLI_APP_LABEL = "app=stress-cli"
 S3CLI_APP_LABEL = "app=s3cli"
 OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
 OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-storage"
@@ -2223,6 +2242,8 @@ RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
 CLI_TOOL_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
+# New constant for unified CLI usage (same as CLI_TOOL_LOCAL_PATH but more explicit)
+ODF_CLI_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
@@ -2232,12 +2253,15 @@ AWSCLI_CA_BUNDLE_PATH = "/tmp/ca-bundle.crt"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
+STRESSCLI_SERVICE_CA_CM_NAME = "stress-cli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
 MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
+ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
+MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -2774,6 +2798,21 @@ osd_memory_target_cgroup_limit_ratio = 0.8
 bluestore_prefer_deferred_size_hdd = 0
 """
 
+ROOK_CEPH_CONFIG_VALUES_415 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+mon_warn_on_pool_no_redundancy = false
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+bluestore_prefer_deferred_size_hdd = 0
+"""
+
 ROOK_CEPH_CONFIG_VALUES_416 = """
 [global]
 bdev_flock_retry = 20
@@ -2787,6 +2826,36 @@ mon_warn_on_pool_no_redundancy = false
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.8
 bluestore_prefer_deferred_size_hdd = 0
+"""
+
+ROOK_CEPH_CONFIG_VALUES_419 = r"""
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+mon_warn_on_pool_no_redundancy = false
+
+bluestore_prefer_deferred_size_hdd = 0
+bluestore_slow_ops_warn_lifetime = 0
+
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+
+[client.rbd-mirror.a]
+debug_ms = 1
+debug_rbd = 15
+debug_rbd_mirror = 30
+log_file = /var/log/ceph/\$cluster-\$name.log
+
+[client.rbd-mirror-peer]
+debug_ms = 1
+debug_rbd = 15
+debug_rbd_mirror = 30
+log_file = /var/log/ceph/\$cluster-\$name.log
+
 """
 
 
@@ -2899,7 +2968,7 @@ ACM_CATSRC_NAME = "acm-catalogsource"
 SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
     "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
     "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
-    "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
+    "&rows_per_page=25&delta=12960000&contains=submariner-operator-bundle-container-v"
 )
 ACM_BREW_BUILD_URL = (
     "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
@@ -2980,6 +3049,13 @@ SUBMARINER_DOWNSTREAM_BREW_IDMS = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_idms.yaml"
 )
 ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
+ACM_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "acm_catalogsource.yaml"
+)
+MCE_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "mce_catalogsource.yaml"
+)
+ACM_BREW_IDMS_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_idms.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
@@ -3351,6 +3427,9 @@ DELETE = "delete"
 MACHINE_POOL_ACTIONS = [CREATE, EDIT, DELETE]
 # MDR multicluster roles
 MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
+RDR_ROLES = ["ActiveACM", "PrimaryODF", "SecondaryODF"]
+ACM_RANK = 1
+MANAGED_CLUSTER_RANK = 2
 
 ENCRYPTION_DASHBOARD_CONTEXT_MAP = {
     "Cluster-wide encryption": "cluster_wide_encryption",
@@ -3395,3 +3474,43 @@ LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
 
 # Auto-scaling Yaml files
 AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
+
+TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
+
+# Workload YAML files (around line 200-250)
+VDBENCH_DEPLOYMENT_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "deployment.yaml")
+VDBENCH_CONFIGMAP_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "configmap.yaml")
+VDBENCH_BENCHMARK_YAML = os.path.join(TEMPLATE_VDBENCH_DIR, "vdbench_benchmark.yaml")
+
+# Container images (around line 800-900)
+VDBENCH_DEFAULT_IMAGE = "quay.io/pakamble/vdbench:latest"
+
+# Workload types (around line 950-1000)
+VDBENCH_WORKLOAD_TYPE = "vdbench"
+VDBENCH_CONTAINER_NAME = "vdbench-container"
+VDBENCH_CONFIG_MOUNT_PATH = "/config"
+VDBENCH_DATA_MOUNT_PATH = "/vdbench-data"
+VDBENCH_BLOCK_DEVICE_PATH = "/dev/vdbench-device"
+
+# Default resource limits
+VDBENCH_DEFAULT_MEMORY_REQUEST = "1Gi"
+VDBENCH_DEFAULT_MEMORY_LIMIT = "2Gi"
+VDBENCH_DEFAULT_CPU_REQUEST = "500m"
+VDBENCH_DEFAULT_CPU_LIMIT = "1000m"
+
+# Timeout values
+VDBENCH_POD_READY_TIMEOUT = 300
+VDBENCH_WORKLOAD_COMPLETION_TIMEOUT = 3600
+VDBENCH_SCALING_TIMEOUT = 180
+# StorageAutoScaler Values
+PROMETHEUS_RECONCILE_TIMEOUT = 660
+
+# ODF recovery profiles
+LOW_RECOVERY_OPS = "low_recovery_ops"
+BALANCED = "balanced"
+HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# mclock_recovery_profiles
+MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
+MCLOCK_BALANCED = "balanced"
+MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"

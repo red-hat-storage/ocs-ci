@@ -1922,7 +1922,7 @@ class KMIP(KMS):
         """
         self.validate_ciphertrust_deployment()
 
-    @retry(NotFoundError, tries=2, delay=30)
+    @retry(NotFoundError, tries=10, delay=30)
     def validate_ciphertrust_deployment(self):
         """
         Verify whether OSD and NooBaa keys are stored in CipherTrust Manager

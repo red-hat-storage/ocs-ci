@@ -20,6 +20,7 @@ import math
 
 from datetime import datetime
 from semantic_version import Version
+from ocs_ci.utility.decorators import enable_high_recovery_during_rebalance_flag
 
 from ocs_ci.ocs.utils import thread_init_class
 
@@ -394,7 +395,7 @@ class CephCluster(object):
                 " and noobaa-default-bucket-class status"
             )
 
-    def wait_for_noobaa_health_ok(self, tries=60, delay=5):
+    def wait_for_noobaa_health_ok(self, tries=120, delay=5):
         """
         Wait for Noobaa health to be OK
         """
@@ -824,6 +825,7 @@ class CephCluster(object):
                 and states["count"] == total_pg_count
             )
 
+    @enable_high_recovery_during_rebalance_flag
     def wait_for_rebalance(self, timeout=600, repeat=3):
         """
         Wait for re-balance to complete
@@ -3776,7 +3778,7 @@ def check_ceph_osd_df_tree():
             return False
         # If it's a regular OSD entry, check if the expected osd size
         # and the current size are equal ignoring a small diff
-        diff = size * 0.02
+        diff = size * 0.04
         if not osd_id.startswith("-") and not (
             size - diff <= storage_size <= size + diff
         ):

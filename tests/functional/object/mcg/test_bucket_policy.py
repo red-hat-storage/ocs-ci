@@ -12,6 +12,7 @@ from ocs_ci.ocs.exceptions import (
     NoBucketPolicyResponse,
     InvalidStatusCode,
     UnexpectedBehaviour,
+    CommandFailed,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -29,6 +30,8 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
     get_bucket_policy,
+    put_public_access_block_config,
+    get_public_access_block,
     s3_put_object,
     delete_bucket_policy,
     s3_get_object,
@@ -43,11 +46,13 @@ from ocs_ci.ocs.bucket_utils import (
     list_multipart_upload,
     list_uploaded_parts,
     complete_multipart_upload,
+    craft_s3_command,
 )
 from ocs_ci.ocs.defaults import website_config, index, error
 from ocs_ci.ocs.constants import (
     bucket_website_action_list,
     bucket_version_action_list,
+    AWSCLI_TEST_OBJ_DIR,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
@@ -92,6 +97,178 @@ def delete_bucket_policy_verify(s3_obj, bucket_name):
             raise UnexpectedBehaviour(
                 f"{e.response} received invalid error code {response.error['Code']}"
             )
+
+
+def put_allow_bucket_policy(bucket_name, mcg_obj):
+    """
+    This utility function puts allow policy on the specified bucket
+    Args:
+        bucket_name (str): The bucket on which the policy should be put
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+    """
+
+    bucket_policy_generated = gen_bucket_policy(
+        user_list="*",
+        actions_list=["*"],
+        resources_list=[bucket_name, f'{bucket_name}/{"*"}'],
+    )
+    bucket_policy = json.dumps(bucket_policy_generated)
+    # Put bucket policy
+    logger.info(f"Putting bucket policy {bucket_policy} on bucket: {bucket_name}")
+    put_bucket_policy(mcg_obj, bucket_name, bucket_policy)
+    # Hardcoded sleep is needed because we lack a confirmation mechanism
+    # we could wait for - even the get-policy result has been observed to be
+    # unreliable in confirming whether the policy is actually taking effect
+    timeout = 120
+    logger.info(f"Waiting for {timeout} seconds for the policy to take effect")
+    time.sleep(timeout)
+    get_policy = get_bucket_policy(mcg_obj, bucket_name)
+    logger.info(f"Got bucket policy: {get_policy['Policy']} on bucket {bucket_name}")
+
+
+def put_public_access_block_configuration(
+    bucket_name, mcg_obj, public_access_block_configuration
+):
+    """
+    This utility function puts public access block configuration on the specified bucket
+    Args:
+        bucket_name (str): The bucket on which the policy should be put
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        public_access_block_configuration (dict): access block configuration to put
+    """
+    timeout = 120
+    logger.info(
+        f"Putting public access block configuration {public_access_block_configuration} "
+        f"on bucket: {bucket_name}"
+    )
+    put_public_access_block_config(
+        mcg_obj, bucket_name, public_access_block_configuration
+    )
+    # Hardcoded sleep is needed because we lack a confirmation mechanism
+    # we could wait for - even the get_public_access_block result has been observed to be
+    # unreliable in confirming whether the public access block is actually taking effect
+    logger.info(
+        f"Waiting for {timeout} seconds for the public access block to take effect"
+    )
+    time.sleep(timeout)
+    public_access_block_configuration_defined = get_public_access_block(
+        mcg_obj, bucket_name
+    )
+    logger.info(
+        f"Public access block configuration on bucket {bucket_name} is: "
+        f"{public_access_block_configuration_defined}"
+    )
+
+
+def check_ls_command(
+    mcg_obj,
+    awscli_pod_session,
+    bucket_name,
+    file_name,
+):
+    """
+    Check that 'cp' and 'ls' commands on the bucket work. If the commands succeed, nothing happens.
+    If not, an exception thrown from craft_s3_command will be raised
+    Args:
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        awscli_pod_session (pod): A pod running the AWSCLI tools
+        bucket_name (str): Name of the bucket on which ls should be run
+        file_name (str): File to be looked for
+    """
+
+    awscli_pod_session.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}",
+            mcg_obj=mcg_obj,
+        ),
+        out_yaml_format=False,
+    )
+
+    awscli_pod_session.exec_cmd_on_pod(
+        command=craft_s3_command(f"ls s3://{bucket_name}/{file_name}", mcg_obj=mcg_obj),
+        out_yaml_format=False,
+    )
+
+
+def check_commands(
+    mcg_obj,
+    awscli_pod_session,
+    bucket_name,
+    path_on_bucket,
+    file_name,
+    allow_ls_anonymous,
+):
+    """
+    Check that 'ls' and 'cp' commands on the bucket work as expected.
+    The expected behavior of 'ls' is:
+        1. Success in finding 'file_name' file with non-anonymous access
+        2. Success with anonymous access when 'allow_anonymous' is True
+        3. Failure with "Access Denied" on anonymous access when 'allow_anonymous' is False
+    The expected behavior of 'cp' is:
+        1. Success with non-anonymous access
+        2. Failure with "Access Denied" on anonymous access
+    Args:
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        awscli_pod_session (pod): A pod running the AWSCLI tools
+        path_on_bucket (str) Target path on the bucket, to which the file is copied. If empty, the files
+                is copied to the bucket root.
+        bucket_name (str): Name of the bucket on which ls should be run
+        file_name (str): File to be looked for
+        allow_ls_anonymous (bool): Defines whether 'ls' with anonymous access is allowed
+    Raises:
+        UnexpectedBehaviour if the ls is not working as expected
+    """
+
+    ls_command = f"ls s3://{bucket_name}/{path_on_bucket}"
+    cp_command = f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{path_on_bucket}{file_name}"
+
+    awscli_pod_session.exec_cmd_on_pod(
+        command=craft_s3_command(cp_command, mcg_obj=mcg_obj),
+        out_yaml_format=False,
+    )
+
+    awscli_pod_session.exec_cmd_on_pod(
+        command=craft_s3_command(f"{ls_command}{file_name}", mcg_obj=mcg_obj),
+        out_yaml_format=False,
+    )
+
+    try:
+        awscli_pod_session.exec_cmd_on_pod(
+            command=craft_s3_command(
+                f"{ls_command} --no-sign-request", mcg_obj=mcg_obj
+            ),
+            out_yaml_format=False,
+        )
+        if not allow_ls_anonymous:
+            raise UnexpectedBehaviour(
+                "ls command with anonymous user (--no-sign-request) should not be allowed"
+            )
+    except CommandFailed as ex:
+        if not allow_ls_anonymous and "Access Denied" in str(ex):
+            logger.info(
+                "ls command with anonymous user (--no-sign-request) is not allowed, continue the test"
+            )
+        else:
+            raise
+
+    # check copy with anonymous user, it should always fail
+    try:
+        awscli_pod_session.exec_cmd_on_pod(
+            command=craft_s3_command(
+                f"{cp_command} --no-sign-request", mcg_obj=mcg_obj
+            ),
+            out_yaml_format=False,
+        )
+        raise UnexpectedBehaviour(
+            "cp command with anonymous user (--no-sign-request) should not be allowed"
+        )
+    except CommandFailed as ex:
+        if "Access Denied" in str(ex):
+            logger.info(
+                "cp command with anonymous user (--no-sign-request) is not allowed, continue the test"
+            )
+        else:
+            raise
 
 
 @provider_mode
@@ -1292,6 +1469,189 @@ class TestS3BucketPolicy(MCGTest):
         assert (
             not missing_policies
         ), f"Some bucket_policies are not created : {missing_policies}"
+
+    @pytest.mark.parametrize(
+        argnames=["test_bucket_name", "bucketclass_dict"],
+        argvalues=[
+            pytest.param(*["first.bucket", {}]),
+            pytest.param(
+                *["", {"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}}]
+            ),
+            pytest.param(
+                *[
+                    "",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                ]
+            ),
+            pytest.param(
+                *["", {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}}]
+            ),
+            pytest.param(
+                *["", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}]
+            ),
+            pytest.param(
+                *["", {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}}]
+            ),
+        ],
+        ids=[
+            "FIRST-BUCKET",
+            "RGW-OC",
+            "AWS-OC",
+            "AZURE-OC",
+            "GCP-OC",
+            "IBMCOS-OC",
+        ],
+    )
+    @tier2
+    def test_public_access_block_anonymous(
+        self,
+        mcg_obj,
+        bucket_factory,
+        awscli_pod_session,
+        test_bucket_name,
+        bucketclass_dict,
+    ):
+        """
+        This test verifies that anonymous user cannot access the bucket after public access block settings were applied
+        Scenario:
+        1. Create a bucket (or use predefined bucket) and write file
+        2. Verify that anonymous user cannot list the bucket content and cannot copy to the bucket
+        3. Put "allow all" policy to the bucket
+        4. Verify that anonymous user can list the bucket content but still cannot copy to the bucket
+        5. Put Public Access Block with Block/Restrict=True to the bucket
+        6. Verify that anonymous user cannot list the bucket content again and still cannot copy to the bucket
+        7. Put Public Access Block with Block/Restrict=False to the bucket
+        8. Verify that anonymous user can list the bucket content again.
+        Args:
+            mcg_obj (obj): An object representing the current state of the MCG in the cluster
+            awscli_pod_session (pod): A pod running the AWSCLI tools
+            bucket_factory: Calling this fixture creates a new bucket(s)
+            test_bucket_name(str) If is not empty, use the bucket by this name in the test. If empty -- create bucket
+            bucketclass_dict(dict) Parameters for bucket creation, used only if test_bucket_name is empty
+
+        """
+
+        bucket_name = (
+            bucket_factory(1, bucketclass=bucketclass_dict)[0].name
+            if not test_bucket_name
+            else test_bucket_name
+        )
+
+        # Copy a file to the bucket
+        standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
+            f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
+        ).split(" ")
+        file_name = standard_test_obj_list[0]
+        logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
+        deep_dir_name = "dir1/dir2/dir3/"
+
+        check_commands(mcg_obj, awscli_pod_session, bucket_name, "", file_name, False)
+        check_commands(
+            mcg_obj, awscli_pod_session, bucket_name, deep_dir_name, file_name, False
+        )
+
+        put_allow_bucket_policy(bucket_name, mcg_obj)
+
+        check_commands(mcg_obj, awscli_pod_session, bucket_name, "", file_name, True)
+        check_commands(
+            mcg_obj, awscli_pod_session, bucket_name, deep_dir_name, file_name, True
+        )
+
+        # Put allow public access block configuration
+        public_access_block_configuration = {
+            "BlockPublicPolicy": True,
+            "RestrictPublicBuckets": True,
+        }
+        put_public_access_block_configuration(
+            bucket_name, mcg_obj, public_access_block_configuration
+        )
+
+        check_commands(mcg_obj, awscli_pod_session, bucket_name, "", file_name, False)
+        check_commands(
+            mcg_obj, awscli_pod_session, bucket_name, deep_dir_name, file_name, False
+        )
+
+        # Put deny public access block configuration
+        public_access_block_configuration = {
+            "BlockPublicPolicy": False,
+            "RestrictPublicBuckets": False,
+        }
+        put_public_access_block_configuration(
+            bucket_name, mcg_obj, public_access_block_configuration
+        )
+
+        check_commands(mcg_obj, awscli_pod_session, bucket_name, "", file_name, True)
+        check_commands(
+            mcg_obj, awscli_pod_session, bucket_name, deep_dir_name, file_name, True
+        )
+
+    @pytest.mark.parametrize(
+        argnames=["bucketclass_dict"],
+        argvalues=[
+            pytest.param(
+                *[{"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}}]
+            ),
+        ],
+        ids=[
+            "RGW-OC",
+        ],
+    )
+    @tier2
+    def test_public_access_block_noobaa_admin(
+        self,
+        mcg_obj,
+        bucket_factory,
+        awscli_pod_session,
+        bucketclass_dict,
+    ):
+        """
+        This test verifies that it is possible to access the bucket after putting noobaa admin credentials
+        Scenario:
+        1. Create a bucket and write file
+        2. Verify that there is the access to the bucket
+        3. Put "allow all" policy to the bucket and verify that the access still exist
+        5. Put Public Access Block with Block/Restrict=True to the bucket and verify that the access still exist
+        6. Access the bucket with noobaa admin credentials and verify that it's accessible despite Block configuration
+        Args:
+            mcg_obj (obj): An object representing the current state of the MCG in the cluster
+            awscli_pod_session (pod): A pod running the AWSCLI tools
+            bucket_factory: Calling this fixture creates a new bucket(s)
+            bucketclass_dict(dict) Parameters for bucket creation, used only if test_bucket_name is empty
+        """
+
+        bucket_name = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
+
+        # Copy a file to the bucket
+        standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
+            f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
+        ).split(" ")
+        file_name = standard_test_obj_list[0]
+        logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
+
+        check_ls_command(mcg_obj, awscli_pod_session, bucket_name, file_name)
+
+        put_allow_bucket_policy(bucket_name, mcg_obj)
+
+        check_ls_command(mcg_obj, awscli_pod_session, bucket_name, file_name)
+
+        # Put public access block configuration
+        public_access_block_configuration = {
+            "BlockPublicPolicy": True,
+            "RestrictPublicBuckets": True,
+        }
+        put_public_access_block_configuration(
+            bucket_name, mcg_obj, public_access_block_configuration
+        )
+
+        check_ls_command(mcg_obj, awscli_pod_session, bucket_name, file_name)
+
+        # Update MCG object to use noobaa admin credentials
+        mcg_obj.update_s3_creds()
+
+        check_ls_command(mcg_obj, awscli_pod_session, bucket_name, file_name)
 
 
 @mcg

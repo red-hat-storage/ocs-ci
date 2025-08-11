@@ -1,7 +1,7 @@
 import logging
 
 import pytest
-
+import time
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
@@ -147,6 +147,7 @@ def test_update_strategy_config_change(
     ds_obj = DaemonSet(
         resource_name=daemonset, namespace=config.ENV_DATA["cluster_namespace"]
     )
+    time.sleep(10)  # wait a few second
     results = ds_obj.get_update_strategy()
     assert str(expected_value) == str(results["rollingUpdate"]["maxUnavailable"])
 

@@ -68,8 +68,7 @@ class TestCachedBuckets(MCGTest):
             source_bucket_uls_name = cached_bucket_obj.bucketclass.namespacestores[
                 0
             ].uls_name
-
-            return cached_bucket, source_bucket_uls_name
+            return cached_bucket, source_bucket_uls_name, cache_bucketclass
 
         return factory
 
@@ -86,13 +85,19 @@ class TestCachedBuckets(MCGTest):
         ttl = 300000  # 300 seconds
         object_name = "fileobj0"
 
-        cached_bucket, source_bucket_uls_name = setup(ttl=ttl)
+        cached_bucket, source_bucket_uls_name, cache_bucketclass = setup(ttl=ttl)
 
         namespacestore_aws_s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.AWS_S3_ENDPOINT,
-            "region": "eu-central-1",
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(
+                cache_bucketclass["namespace_policy_dict"]["namespacestore_dict"][
+                    "aws"
+                ][0][1]
+            ),
+            "region": cache_bucketclass["namespace_policy_dict"]["namespacestore_dict"][
+                "aws"
+            ][0][1],
         }
 
         first_dir = test_directory_setup.origin_dir
@@ -183,13 +188,19 @@ class TestCachedBuckets(MCGTest):
         ttl = 300000  # 300 seconds
         object_name = "fileobj0"
 
-        cached_bucket, source_bucket_uls_name = setup(ttl=ttl)
+        cached_bucket, source_bucket_uls_name, cache_bucketclass = setup(ttl=ttl)
 
         namespacestore_aws_s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.AWS_S3_ENDPOINT,
-            "region": "eu-central-1",
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(
+                cache_bucketclass["namespace_policy_dict"]["namespacestore_dict"][
+                    "aws"
+                ][0][1]
+            ),
+            "region": cache_bucketclass["namespace_policy_dict"]["namespacestore_dict"][
+                "aws"
+            ][0][1],
         }
 
         first_dir = test_directory_setup.origin_dir

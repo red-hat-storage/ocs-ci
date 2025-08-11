@@ -203,7 +203,6 @@ def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
 
     else:
         base_command = f"s3cmd {no_ssl}"
-
     return f"{base_command}{cmd}"
 
 
@@ -577,26 +576,22 @@ def download_objects_using_s3cmd(
     else:
         retrieve_cmd = f"get {src} {target}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
-    elif signed_request_creds:
-        secrets = [
-            signed_request_creds.get("access_key_id"),
-            signed_request_creds.get("access_key"),
-            signed_request_creds.get("endpoint"),
-        ]
-    else:
-        secrets = None
+        signed_request_creds = {
+            "access_key_id": s3_obj.access_key_id,
+            "access_key": s3_obj.access_key,
+            "endpoint": s3_obj.s3_external_endpoint,
+            "region": s3_obj.region,
+        }
     podobj.exec_cmd_on_pod(
         command=craft_s3cmd_command(
-            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+            retrieve_cmd, signed_request_creds=signed_request_creds
         ),
         out_yaml_format=False,
-        secrets=secrets,
         **kwargs,
     ), "Failed to download objects"
 
 
-def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
+def rm_object_recursive(podobj, target, mcg_obj, option="", prefix=None, timeout=600):
     """
     Remove bucket objects with --recursive option
 
@@ -609,7 +604,12 @@ def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
         option (str): Extra s3 remove command option
 
     """
-    rm_command = f"rm s3://{target} --recursive {option}"
+
+    rm_command = (
+        f"rm s3://{target} --recursive {option}"
+        if prefix is None
+        else f"rm s3://{target}/{prefix} --recursive {option}"
+    )
     podobj.exec_cmd_on_pod(
         command=craft_s3_command(rm_command, mcg_obj),
         out_yaml_format=False,
@@ -1285,6 +1285,39 @@ def put_bucket_policy(s3_obj, bucketname, policy):
     return s3_obj.s3_client.put_bucket_policy(Bucket=bucketname, Policy=policy)
 
 
+def put_public_access_block_config(s3_obj, bucketname, public_access_block):
+    """
+    Adds public access block configuration to a bucket
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        public_access_block (dict): Desired public access block configuration
+
+    Returns:
+        dict : Bucket public access block response
+
+    """
+    return s3_obj.s3_client.put_public_access_block(
+        Bucket=bucketname, PublicAccessBlockConfiguration=public_access_block
+    )
+
+
+def get_public_access_block(s3_obj, bucketname):
+    """
+    Gets public access block configuration from a bucket
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : Get Bucket public access block response
+
+    """
+    return s3_obj.s3_client.get_public_access_block(Bucket=bucketname)
+
+
 def get_bucket_policy(s3_obj, bucketname):
     """
     Gets bucket policy from a bucket
@@ -1781,7 +1814,7 @@ def compare_directory(
     return all(comparisons)
 
 
-def s3_copy_object(s3_obj, bucketname, source, object_key):
+def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=""):
     """
     Boto3 client based copy object
 
@@ -1796,7 +1829,7 @@ def s3_copy_object(s3_obj, bucketname, source, object_key):
 
     """
     return s3_obj.s3_client.copy_object(
-        Bucket=bucketname, CopySource=source, Key=object_key
+        Bucket=bucketname, CopySource=source, Key=object_key, Metadata=metadata
     )
 
 

@@ -19,6 +19,10 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import update_container_with_mirrored_image
+from ocs_ci.utility.ssl_certs import (
+    create_ocs_ca_bundle,
+    get_root_ca_cert,
+)
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +65,27 @@ def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
     update_container_with_mirrored_image(awscli_sts_dict)
     update_container_with_proxy_env(awscli_sts_dict)
     _add_startup_commands_to_set_ca(awscli_sts_dict)
+
+    # create configmap with CA certificate used for signing ingress ssl certificate if custom certificate is used
+    if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+        ssl_ca_cert = get_root_ca_cert()
+        ocs_ca_bundle_name = "ocs-ca-bundle"
+        create_ocs_ca_bundle(ssl_ca_cert, ocs_ca_bundle_name, namespace=namespace)
+        awscli_sts_dict["spec"]["template"]["spec"]["volumes"].append(
+            {
+                "name": ocs_ca_bundle_name,
+                "configMap": {"name": ocs_ca_bundle_name},
+            }
+        )
+        awscli_sts_dict["spec"]["template"]["spec"]["containers"][0][
+            "volumeMounts"
+        ].append(
+            {
+                "name": ocs_ca_bundle_name,
+                "mountPath": "/cert/ocs-ca-bundle.crt",
+                "subPath": "ca-bundle.crt",
+            }
+        )
 
     s3cli_sts_obj = create_resource(**awscli_sts_dict)
 
@@ -130,6 +155,10 @@ def _add_startup_commands_to_set_ca(awscli_sts_dict):
     if storagecluster_independent_check() and config.EXTERNAL_MODE.get("rgw_secure"):
         startup_cmds.append(
             f"wget -O - {config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}"
+        )
+    if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+        startup_cmds.append(
+            f"cat /cert/ocs-ca-bundle.crt >> {constants.AWSCLI_CA_BUNDLE_PATH}"
         )
 
     # Keep the pod running after the commands

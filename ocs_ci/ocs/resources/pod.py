@@ -1228,7 +1228,7 @@ def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace
 
 def get_lvm_vg_manager_pod(
     label=constants.LVMO_POD_LABEL["default"]["vg-manager_label"],
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
 ):
     """
     Get vg manager pod in the lvm cluster
@@ -1241,13 +1241,14 @@ def get_lvm_vg_manager_pod(
         Pod: Pod object of vg manager pod
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     vg_manager = get_pods_having_label(label, namespace)
     return Pod(**vg_manager[0])
 
 
 def get_lvm_operator_pod(
     label=constants.LVMO_POD_LABEL["default"]["controller_manager_label"],
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
 ):
     """
     Get lvm operator controller manager pod in the lvm cluster
@@ -1260,13 +1261,14 @@ def get_lvm_operator_pod(
         Pod: Pod object of lvm operator controller manager pod
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     lvm_operator = get_pods_having_label(label, namespace)
     return Pod(**lvm_operator[0])
 
 
 def get_topolvm_controller_pod(
     label=constants.LVMO_POD_LABEL["default"]["topolvm-controller_label"],
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
 ):
     """
     Get topolvm controller pod in the lvm cluster
@@ -1279,13 +1281,14 @@ def get_topolvm_controller_pod(
         Pod: Pod object of topolvm controller pod
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     topolvm_controller = get_pods_having_label(label, namespace)
     return Pod(**topolvm_controller[0])
 
 
 def get_topolvm_node_pod(
     label=constants.LVMO_POD_LABEL["default"]["topolvm-node_label"],
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
 ):
     """
     Get topolvm node pod in the lvm cluster
@@ -1298,6 +1301,7 @@ def get_topolvm_node_pod(
         Pod: Pod object of topolvm node pod
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     topolvm_node_pod = get_pods_having_label(label, namespace)
     return Pod(**topolvm_node_pod[0])
 
@@ -1632,7 +1636,7 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
 
 def get_pods_having_label(
     label,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     retry=0,
     cluster_config=None,
     statuses=None,
@@ -1651,6 +1655,7 @@ def get_pods_having_label(
         list: of pods info
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label, retry=retry, cluster_config=cluster_config).get(
         "items"
@@ -1756,7 +1761,7 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
 
 def get_osd_prepare_pods(
     osd_prepare_label=constants.OSD_PREPARE_APP_LABEL,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
 ):
     """
     Fetches info about osd prepare pods in the cluster
@@ -1872,7 +1877,7 @@ def get_pod_obj(name, namespace=None):
 def get_pod_logs(
     pod_name,
     container=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     previous=False,
     all_containers=False,
     since=None,
@@ -1892,6 +1897,7 @@ def get_pod_logs(
         str: Output from 'oc get logs <pod_name> command
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pod = OCP(kind=constants.POD, namespace=namespace)
     cmd = f"logs {pod_name}"
     if container:
@@ -2191,13 +2197,33 @@ def download_file_from_pod(
     run_cmd(cmd, cluster_config=cluster_config)
 
 
-def wait_for_storage_pods(timeout=200):
+def is_pod_owned_by_job(pod_obj):
+    """
+    Check if pod is owned by Job controller.
+
+    Args:
+        pod_obj: Pod object to check
+
+    Returns:
+        bool: True if pod is owned by Job controller, False otherwise
+    """
+    try:
+        pod_data = pod_obj.get()
+        owner_refs = pod_data.get("metadata", {}).get("ownerReferences", [])
+        return any(ref.get("kind") == "Job" for ref in owner_refs)
+    except CommandFailed:
+        return False
+
+
+def wait_for_storage_pods(timeout=200, skip_job_pods=False):
     """
     Check all OCS pods status, they should be in Running or Completed state
 
     Args:
         timeout (int): Number of seconds to wait for pods to get into correct
             state
+        skip_job_pods (bool): If True, skip pods owned by Job controllers
+            (useful for tests that expect ephemeral job pods to be cleaned up)
 
     """
     all_pod_obj = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
@@ -2218,9 +2244,13 @@ def wait_for_storage_pods(timeout=200):
         and "storageclient" not in pod.name
     ]
 
+    # Filter out job pods if requested
+    if skip_job_pods:
+        all_pod_obj = [pod for pod in all_pod_obj if not is_pod_owned_by_job(pod)]
+
     for pod_obj in all_pod_obj:
         state = constants.STATUS_RUNNING
-        if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare"]):
+        if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare", "debug-"]):
             state = constants.STATUS_COMPLETED
         helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
@@ -2432,9 +2462,7 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
         logger.warning("None of the new osd pods reached the desired status")
 
 
-def get_pod_restarts_count(
-    namespace=config.ENV_DATA["cluster_namespace"], label=None, list_of_pods=None
-):
+def get_pod_restarts_count(namespace=None, label=None, list_of_pods=None):
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2442,6 +2470,7 @@ def get_pod_restarts_count(
         dict: dictionary of pod name and its corresponding restart count
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if label:
         selector = label.split("=")[1]
         selector_label = label.split("=")[0]
@@ -2473,7 +2502,7 @@ def get_pod_restarts_count(
 
 
 def check_pods_in_running_state(
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     pod_names=None,
     raise_pod_not_found_error=False,
     skip_for_status=None,
@@ -2499,6 +2528,7 @@ def check_pods_in_running_state(
         Boolean: True, if all pods in Running state. False, otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ret_val = True
 
     if pod_names:
@@ -2544,9 +2574,7 @@ def check_pods_in_running_state(
     return ret_val
 
 
-def get_running_state_pods(
-    namespace=config.ENV_DATA["cluster_namespace"], ignore_selector=None
-):
+def get_running_state_pods(namespace=None, ignore_selector=None):
     """
     Checks the running state pods in a given namespace.
 
@@ -2558,6 +2586,7 @@ def get_running_state_pods(
         List: all the pod objects that are in running state only
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if ignore_selector:
         list_of_pods = get_all_pods(
             namespace, selector=ignore_selector, exclude_selector=True
@@ -2578,7 +2607,7 @@ def get_running_state_pods(
     return running_pods_object
 
 
-def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_namespace"]):
+def get_not_running_pods(selector=None, namespace=None):
     """
     Get all the non-running pods in a given namespace
     and give selector
@@ -2587,7 +2616,7 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
         List: all the pods that are not Running
 
     """
-
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if selector is not None:
         pod_objs = [
             Pod(**pod_info) for pod_info in get_pods_having_label(selector, namespace)
@@ -2609,7 +2638,7 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
 
 
 def wait_for_pods_to_be_running(
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     pod_names=None,
     raise_pod_not_found_error=False,
     timeout=200,
@@ -2635,6 +2664,7 @@ def wait_for_pods_to_be_running(
          bool: True, if all pods in Running state. False, otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     try:
         for pods_running in TimeoutSampler(
             timeout=timeout,
@@ -2660,7 +2690,7 @@ def wait_for_pods_to_be_running(
 def wait_for_pods_by_label_count(
     label,
     expected_count,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     timeout=200,
     sleep=10,
 ):
@@ -2676,7 +2706,7 @@ def wait_for_pods_by_label_count(
         sleep (int): Time in seconds to sleep between attempts
 
     """
-
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     try:
         for pods_count in TimeoutSampler(
             timeout=timeout,
@@ -2696,19 +2726,19 @@ def wait_for_pods_by_label_count(
         return False
 
 
-def list_of_nodes_running_pods(
-    selector, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def list_of_nodes_running_pods(selector, namespace=None):
     """
     The function returns the list of nodes for the given selector
 
     Args:
         selector (str): The resource selector to search with
+        namespace (str): the namespace ot the pods
 
     Returns:
         list: a list of nodes that runs the given selector pods
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pod_obj_list = get_all_pods(namespace=namespace, selector=[selector])
     pods_running_nodes = [get_pod_node(pod) for pod in pod_obj_list]
     logger.info(f"{selector} running on nodes {pods_running_nodes}")
@@ -3035,7 +3065,7 @@ def get_osd_pod_id(osd_pod):
 
 def get_pods_in_statuses(
     status_options,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     exclude_pod_name_prefixes=None,
 ):
     """
@@ -3050,6 +3080,7 @@ def get_pods_in_statuses(
         list: All the pods that their status in the 'status_options' list.
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pods = get_all_pods(namespace)
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods_in_status_options = list()
@@ -3190,7 +3221,7 @@ def get_osd_pods_having_ids(osd_ids):
 def get_pod_objs(
     pod_names,
     raise_pod_not_found_error=False,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     cluster_kubeconfig="",
 ):
     """
@@ -3212,6 +3243,7 @@ def get_pod_objs(
             and not all the pod names were found
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     # Convert it to set to reduce complexity
     pod_names_set = set(pod_names)
     pods = get_all_pods(namespace=namespace, cluster_kubeconfig=cluster_kubeconfig)
@@ -3232,7 +3264,7 @@ def get_pod_objs(
 def wait_for_change_in_pods_statuses(
     pod_names,
     current_statuses=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     timeout=300,
     sleep=20,
 ):
@@ -3251,6 +3283,7 @@ def wait_for_change_in_pods_statuses(
         bool: True, if the pod statuses have changed. False, otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if current_statuses is None:
         # If 'current_statuses' is None the default value will be the ready statues
         current_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
@@ -3320,7 +3353,7 @@ def get_mon_pod_id(mon_pod):
     return mon_pod.get().get("metadata").get("labels").get("ceph_daemon_id")
 
 
-def delete_all_osd_removal_jobs(namespace=config.ENV_DATA["cluster_namespace"]):
+def delete_all_osd_removal_jobs(namespace=None):
     """
     Delete all the osd removal jobs in a specific namespace
 
@@ -3331,6 +3364,7 @@ def delete_all_osd_removal_jobs(namespace=config.ENV_DATA["cluster_namespace"]):
         bool: True, if all the jobs deleted successfully. False, otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     result = True
     osd_removal_jobs = get_jobs_with_prefix("ocs-osd-removal-", namespace=namespace)
     for osd_removal_job in osd_removal_jobs:
@@ -3370,7 +3404,7 @@ def get_crashcollector_pods(
 def check_pods_in_statuses(
     expected_statuses,
     pod_names=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     raise_pod_not_found_error=False,
     exclude_pod_name_prefixes=None,
 ):
@@ -3391,6 +3425,7 @@ def check_pods_in_statuses(
         Boolean: True, if the pods are in the expected statuses. False, otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if pod_names:
         list_of_pods = get_pod_objs(
             pod_names=pod_names,
@@ -3427,7 +3462,7 @@ def check_pods_in_statuses(
 def wait_for_pods_to_be_in_statuses(
     expected_statuses,
     pod_names=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     raise_pod_not_found_error=False,
     exclude_pod_name_prefixes=None,
     timeout=180,
@@ -3451,6 +3486,7 @@ def wait_for_pods_to_be_in_statuses(
     Returns:
         Boolean: True, if all pods are in the expected statuses. False, otherwise
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
         timeout=timeout,
         sleep=sleep,
@@ -3555,21 +3591,28 @@ def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
 
 
 def pod_resource_utilization_raw_output_from_adm_top(
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
+    selector=None,
 ):
     """
     Gets the pod's memory utilization using adm top command.
 
     Args:
         namespace (str) : The pod's namespace where the adm top command has to be run
+        selector (str): selector to filter the pods. Ex: for noobaa, selector='app=noobaa'
 
     Returns:
         str : Raw output of adm top pods command
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     obj = ocp.OCP()
+    command = f"adm top pods -n {namespace}"
+    if selector:
+        command += f" --selector={selector}"
+
     resource_utilization_all_pods = obj.exec_oc_cmd(
-        command=f"adm top pods -n {namespace}", out_yaml_format=False
+        command=command, out_yaml_format=False
     )
     logger.info("Command RAW output of adm top pods")
     logger.info(f"{resource_utilization_all_pods}")
@@ -3670,7 +3713,7 @@ def exit_osd_maintenance_mode(osd_deployment):
             os.remove(f"backup_{deployment.name}.yaml")
 
 
-def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespace"]):
+def restart_pods_having_label(label, namespace=None):
     """
     Restart the pods having particular label
 
@@ -3679,6 +3722,7 @@ def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespac
         namespace (str): namespace where the pods are running
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pods_to_restart = [
         Pod(**pod_data)
         for pod_data in get_pods_having_label(label, namespace=namespace)
@@ -3687,9 +3731,7 @@ def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespac
     logger.info(f"Deleted all the pods with label {label} and in namespace {namespace}")
 
 
-def restart_pods_in_statuses(
-    status_options, namespace=config.ENV_DATA["cluster_namespace"], wait=True
-):
+def restart_pods_in_statuses(status_options, namespace=None, wait=True):
     """
     Restart all the pods in specific statuses
 
@@ -3703,6 +3745,7 @@ def restart_pods_in_statuses(
         list: Restart all the pods that their status in the 'status_options' list.
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     logger.info(f"Get the pods in the statuses: {status_options}")
     pods_to_restart = get_pods_in_statuses(status_options, namespace)
     logger.info(
@@ -3765,7 +3808,7 @@ def check_ceph_cmd_execute_successfully():
 def search_pattern_in_pod_logs(
     pod_name,
     pattern,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     container=None,
     all_containers=False,
 ):
@@ -3782,6 +3825,7 @@ def search_pattern_in_pod_logs(
     Returns:
         A list of matched lines with the pattern.
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pod_logs = get_pod_logs(
         pod_name=pod_name,
         namespace=namespace,
@@ -3851,7 +3895,7 @@ def get_mon_pod_by_pvc_name(pvc_name: str):
     return Pod(**mon_pod_ocp)
 
 
-def get_debug_pods(debug_nodes, namespace=config.ENV_DATA["cluster_namespace"]):
+def get_debug_pods(debug_nodes, namespace=None):
     """
     Get debug pods created for the nodes in debug
 
@@ -3863,6 +3907,7 @@ def get_debug_pods(debug_nodes, namespace=config.ENV_DATA["cluster_namespace"]):
         List: of Pod objects
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     debug_pods = []
     for node_name in debug_nodes:
         debug_pods.extend(
@@ -3875,9 +3920,7 @@ def get_debug_pods(debug_nodes, namespace=config.ENV_DATA["cluster_namespace"]):
     return debug_pods
 
 
-def wait_for_pods_deletion(
-    label, timeout=120, sleep=5, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def wait_for_pods_deletion(label, timeout=120, sleep=5, namespace=None):
     """
     Wait for the pods with particular label to be deleted
     until the given timeout
@@ -3891,6 +3934,7 @@ def wait_for_pods_deletion(
         TimeoutExpiredError
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
     def _check_if_pod_deleted(label, namespace):
         return len(get_pods_having_label(label, namespace)) == 0
@@ -3966,7 +4010,7 @@ def verify_md5sum_on_pod_files(pods_for_integrity_check, pod_file_name):
     logger.info("Data integrity check passed on all pods")
 
 
-def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
+def fetch_rgw_pod_restart_count(namespace=None):
     """
     This method fetches the restart count of rgw pod
 
@@ -3978,6 +4022,7 @@ def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
         rgw_pod_restart_count: restart count for rgw pod
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     list_of_rgw_pods = get_rgw_pods(namespace=namespace)
     rgw_pod_obj = list_of_rgw_pods[0]
     restart_count_for_rgw_pod = get_pod_restarts_count(
@@ -4178,7 +4223,7 @@ def get_pods_pvcs(pod_objs, namespace=None):
 
 def delete_pod_by_phase(
     pod_phase,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
 ):
     """
     Delete the pods in a specific phase
@@ -4188,6 +4233,7 @@ def delete_pod_by_phase(
     Returns:
         bool: True, if the pods deleted successfully. False, otherwise
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     logger.info(f"Delete all the pods in the status '{pod_phase}'")
     if pod_phase.lower() == "succeeded":
         phase = "Succeeded"

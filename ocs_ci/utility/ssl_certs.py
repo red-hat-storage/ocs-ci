@@ -11,7 +11,7 @@ import tempfile
 from OpenSSL import crypto
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions, ocp
+from ocs_ci.ocs import constants, defaults, exceptions, ocp
 from ocs_ci.utility.utils import (
     download_file,
     exec_cmd,
@@ -293,7 +293,9 @@ def get_root_ca_cert():
 
     """
     signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
-    ssl_ca_cert = config.DEPLOYMENT.get("ingress_ssl_ca_cert", "")
+    ssl_ca_cert = config.DEPLOYMENT.get(
+        "ingress_ssl_ca_cert", defaults.INGRESS_SSL_CA_CERT
+    )
     if ssl_ca_cert and not os.path.exists(ssl_ca_cert):
         cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
         if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
@@ -335,8 +337,8 @@ def configure_custom_ingress_cert(
     cluster_name = config.ENV_DATA["cluster_name"]
     apps_domain = f"*.apps.{cluster_name}.{base_domain}"
 
-    ssl_key = config.DEPLOYMENT.get("ingress_ssl_key")
-    ssl_cert = config.DEPLOYMENT.get("ingress_ssl_cert")
+    ssl_key = config.DEPLOYMENT.get("ingress_ssl_key", defaults.INGRESS_SSL_KEY)
+    ssl_cert = config.DEPLOYMENT.get("ingress_ssl_cert", defaults.INGRESS_SSL_CERT)
 
     signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
 
@@ -427,8 +429,8 @@ def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=
     cluster_name = config.ENV_DATA["cluster_name"]
     api_domain = f"api.{cluster_name}.{base_domain}"
 
-    ssl_key = config.DEPLOYMENT.get("api_ssl_key")
-    ssl_cert = config.DEPLOYMENT.get("api_ssl_cert")
+    ssl_key = config.DEPLOYMENT.get("api_ssl_key", defaults.API_SSL_KEY)
+    ssl_cert = config.DEPLOYMENT.get("api_ssl_cert", defaults.API_SSL_CERT)
 
     signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
 
@@ -526,6 +528,46 @@ def configure_ingress_and_api_certificates(skip_tls_verify=False):
     )
 
 
+def create_ocs_ca_bundle(
+    ca_cert_path,
+    ca_bundle_name="ocs-ca-bundle",
+    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+    skip_tls_verify=False,
+):
+    """
+    Create or update configmap object with ocs-ca-bundle
+
+    Args:
+        ca_cert_path (str): path to CA Certificate(s) bundle file
+        ca_bundle_name (str): name of the created or updated configmap object (default: ocs-ca-bundle)
+        namespace (str): namespace where to create the configmap (default: openshift-config)
+        skip_tls_verify (bool): True if allow skipping TLS verification
+
+    """
+    # check if ocs-ca-bundle configmap already exists, if yes, concatenate
+    # existing ca-bundle.crt with the new CA bundle (ca_cert_path) and delete
+    # the old configmap before the new one is created
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=namespace,
+        resource_name=ca_bundle_name,
+        skip_tls_verify=skip_tls_verify,
+    )
+    if configmap_obj.is_exist():
+        existing_ca_bundle = configmap_obj.get()["data"]["ca-bundle.crt"]
+        with open(ca_cert_path, "a") as fd:
+            fd.write(existing_ca_bundle)
+        configmap_obj.delete(resource_name=ca_bundle_name, wait=True)
+    ignore_tls = ""
+    if skip_tls_verify:
+        ignore_tls = "--insecure-skip-tls-verify "
+    cmd = (
+        f"oc create configmap {ca_bundle_name} -n {namespace} {ignore_tls}"
+        f"--from-file=ca-bundle.crt={ca_cert_path}"
+    )
+    exec_cmd(cmd)
+
+
 def configure_trusted_ca_bundle(ca_cert_path, skip_tls_verify=False):
     """
     Configure cluster-wide trusted CA bundle in Proxy object
@@ -536,28 +578,12 @@ def configure_trusted_ca_bundle(ca_cert_path, skip_tls_verify=False):
 
     """
     ocs_ca_bundle_name = "ocs-ca-bundle"
-    # check if ocs-ca-bundle configmap already exists, if yes, concatenate
-    # existing ca-bundle.crt with the new CA bundle (ca_cert_path) and delete
-    # the old configmap before the new one is created
-    configmap_obj = ocp.OCP(
-        kind=constants.CONFIGMAP,
-        namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
-        resource_name=ocs_ca_bundle_name,
-        skip_tls_verify=skip_tls_verify,
+    create_ocs_ca_bundle(
+        ca_cert_path, ocs_ca_bundle_name, skip_tls_verify=skip_tls_verify
     )
-    if configmap_obj.is_exist():
-        existing_ca_bundle = configmap_obj.get()["data"]["ca-bundle.crt"]
-        with open(ca_cert_path, "a") as fd:
-            fd.write(existing_ca_bundle)
-        configmap_obj.delete(resource_name=ocs_ca_bundle_name, wait=True)
     ignore_tls = ""
     if skip_tls_verify:
         ignore_tls = "--insecure-skip-tls-verify "
-    cmd = (
-        f"oc create configmap {ocs_ca_bundle_name} -n openshift-config {ignore_tls}"
-        f"--from-file=ca-bundle.crt={ca_cert_path}"
-    )
-    exec_cmd(cmd)
     cmd = (
         f"oc patch proxy/cluster --type=merge {ignore_tls}"
         f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{ocs_ca_bundle_name}"}}}}}}\''

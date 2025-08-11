@@ -175,7 +175,7 @@ CRUSH_DEVICE_CLASS = "ssd"
 
 
 # IBM Cloud
-IBM_CLOUD_LOAD_BALANCER_QUOTA = 50
+IBM_CLOUD_LOAD_BALANCER_QUOTA = 100
 IBM_CLOUD_REGIONS = {"us-south", "us-east"}
 
 # HyperShift defaults
@@ -183,3 +183,11 @@ HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 2
 HYPERSHIFT_MEMORY_DEFAULT = "12Gi"
 HYPERSHIFT_CPU_CORES_DEFAULT = 6
 HOSTED_ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"
+
+# Custom Ingress SSL certificate, key and CA certificate related defaults
+INGRESS_SSL_CERT = os.path.join(constants.DATA_DIR, "ingress-cert.crt")
+INGRESS_SSL_KEY = os.path.join(constants.DATA_DIR, "ingress-cert.key")
+INGRESS_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
+API_SSL_CERT = os.path.join(constants.DATA_DIR, "api-cert.crt")
+API_SSL_KEY = os.path.join(constants.DATA_DIR, "api-cert.key")
+API_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")

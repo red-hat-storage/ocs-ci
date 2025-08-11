@@ -86,7 +86,7 @@ class TestOCSWorkerNodeShutdown(ManageTest):
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
-        wait_for_storage_pods()
+        wait_for_storage_pods(skip_job_pods=True)
 
         # Get MDS, rbd & cephfs plugin provisioner pods running
         # nodes post-recovery

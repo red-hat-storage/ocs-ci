@@ -22,17 +22,6 @@ from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
-polarion_id_primary_up = "OCS-4430"
-polarion_id_primary_down = "OCS-4427"
-polarion_id_primary_down_cephfs = "OCS-4727"
-polarion_id_primary_up_cephfs = "OCS-4730"
-
-
-if config.RUN.get("rdr_failover_via_ui"):
-    polarion_id_primary_down = "OCS-4744"
-# TODO: Specify polarion id when available for test case where primary is up when failedover and relocate back.
-#  This test case is added in ODF 4.13 test plan.
-
 
 @rdr
 @turquoise_squad
@@ -40,43 +29,77 @@ if config.RUN.get("rdr_failover_via_ui"):
 @tier1
 class TestFailoverAndRelocate:
     """
-    Test Failover and Relocate actions
+    Test Failover and Relocate actions via CLI and UI
 
     """
 
+    params = [
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            marks=pytest.mark.polarion_id("OCS-4430"),
+            id="primary_up-rbd-cli",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            marks=pytest.mark.polarion_id("OCS-4427"),
+            id="primary_down-rbd-cli",
+        ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            marks=pytest.mark.polarion_id("OCS-4730"),
+            id="primary_up-cephfs-cli",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            marks=pytest.mark.polarion_id("OCS-4727"),
+            id="primary_down-cephfs-cli",
+        ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHBLOCKPOOL,
+            True,  # via_ui = True
+            marks=pytest.mark.polarion_id("OCS-6861"),
+            id="primary_up-rbd-ui",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            True,  # via_ui = True
+            marks=pytest.mark.polarion_id("OCS-4743"),
+            id="primary_down-rbd-ui",
+        ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHFILESYSTEM,
+            True,  # via_ui = True
+            marks=pytest.mark.polarion_id("OCS-6860"),
+            id="primary_up-cephfs-ui",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            True,  # via_ui = True
+            marks=pytest.mark.polarion_id("OCS-6859"),
+            id="primary_down-cephfs-ui",
+        ),
+    ]
+
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface"],
-        argvalues=[
-            pytest.param(
-                False,
-                constants.CEPHBLOCKPOOL,
-                marks=pytest.mark.polarion_id(polarion_id_primary_up),
-                id="primary_up-rbd",
-            ),
-            pytest.param(
-                True,
-                constants.CEPHBLOCKPOOL,
-                marks=pytest.mark.polarion_id(polarion_id_primary_down),
-                id="primary_down-rbd",
-            ),
-            pytest.param(
-                False,
-                constants.CEPHFILESYSTEM,
-                marks=pytest.mark.polarion_id(polarion_id_primary_up_cephfs),
-                id="primary_up-cephfs",
-            ),
-            pytest.param(
-                True,
-                constants.CEPHFILESYSTEM,
-                marks=pytest.mark.polarion_id(polarion_id_primary_down_cephfs),
-                id="primary_down-cephfs",
-            ),
-        ],
+        argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
     )
     def test_failover_and_relocate(
         self,
         primary_cluster_down,
         pvc_interface,
+        via_ui,
         setup_acm_ui,
         dr_workload,
         nodes_multicluster,
@@ -85,11 +108,11 @@ class TestFailoverAndRelocate:
         """
         Tests to verify application failover when the primary cluster is either UP or DOWN and relocate between managed
         clusters.
-        This test is also compatible to be run from ACM UI,
-        pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
+
+        This test will run twice both via CLI and UI
 
         """
-        if config.RUN.get("rdr_failover_via_ui"):
+        if via_ui:
             acm_obj = AcmAddClusters()
 
         workloads = dr_workload(
@@ -134,7 +157,7 @@ class TestFailoverAndRelocate:
             )
         logger.info("Verified lastGroupSyncTime before failover.")
 
-        if config.RUN.get("rdr_failover_via_ui"):
+        if via_ui:
             logger.info("Start the process of Failover from ACM UI")
             config.switch_acm_ctx()
             dr_submariner_validation_from_ui(acm_obj)
@@ -146,18 +169,18 @@ class TestFailoverAndRelocate:
             nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
 
             # Verify if cluster is marked unavailable on ACM console
-            if config.RUN.get("rdr_failover_via_ui"):
+            if via_ui:
                 config.switch_acm_ctx()
                 check_cluster_status_on_acm_console(
                     acm_obj,
                     down_cluster_name=primary_cluster_name,
                     expected_text="Unknown",
                 )
-        elif config.RUN.get("rdr_failover_via_ui"):
+        elif via_ui:
             check_cluster_status_on_acm_console(acm_obj)
 
         for wl in workloads:
-            if config.RUN.get("rdr_failover_via_ui"):
+            if via_ui:
                 # Failover via ACM UI
                 failover_relocate_ui(
                     acm_obj,
@@ -231,7 +254,7 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if config.RUN.get("rdr_relocate_via_ui"):
+        if via_ui:
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(acm_obj)
 
@@ -251,7 +274,7 @@ class TestFailoverAndRelocate:
 
         # Relocate action
         for wl in workloads:
-            if config.RUN.get("rdr_relocate_via_ui"):
+            if via_ui:
                 logger.info("Start the process of Relocate from ACM UI")
                 check_cluster_status_on_acm_console(acm_obj)
                 dr_submariner_validation_from_ui(acm_obj)
@@ -309,7 +332,7 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if config.RUN.get("rdr_relocate_via_ui"):
+        if via_ui:
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE

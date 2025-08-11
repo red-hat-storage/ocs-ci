@@ -22,6 +22,9 @@ import os
 import glob
 import logging
 import subprocess
+import threading
+import time
+import random
 from ocs_ci.ocs import constants
 from ocs_ci.resiliency.platform_failures import PlatformFailures
 from ocs_ci.resiliency.storagecluster_component_failure import (
@@ -36,6 +39,12 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.resources.pod import delete_pod_by_phase
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+    CancelledError,
+    TimeoutError as ThreadTimeoutError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -352,3 +361,231 @@ class InjectFailures:
         log.info(
             f"Failure injection for scenario '{self.scenario}' completed successfully."
         )
+
+
+class WorkloadScalingHelper:
+    """
+    Helper class for managing workload scaling operations in background threads.
+
+    This class provides functionality to:
+    - Scale workloads randomly up or down within defined limits
+    - Run scaling operations in parallel using ThreadPoolExecutor
+    - Manage background scaling threads with proper error handling
+    - Wait for scaling completion with timeout support
+    """
+
+    def __init__(self, min_replicas=1, max_replicas=5):
+        """
+        Initialize the WorkloadScalingHelper.
+
+        Args:
+            min_replicas: Minimum number of replicas allowed
+            max_replicas: Maximum number of replicas allowed
+        """
+        self.min_replicas = min_replicas
+        self.max_replicas = max_replicas
+        self._scaling_threads = []
+
+    def start_background_scaling(self, workloads, delay=30):
+        """
+        Start scaling workloads in background using a separate thread.
+
+        Args:
+            workloads: List of workload objects to scale
+            delay: Delay in seconds before starting scaling operations
+
+        Returns:
+            threading.Thread: The scaling thread
+        """
+
+        def scale_workloads():
+            """Scale workloads after delay."""
+            log.info(f"Waiting {delay} seconds before starting scaling operations")
+            time.sleep(delay)
+
+            with ThreadPoolExecutor(max_workers=len(workloads)) as executor:
+                scaling_futures = {
+                    executor.submit(self.scale_single_workload, workload): workload
+                    for workload in workloads
+                }
+
+                for future in as_completed(scaling_futures):
+                    workload = scaling_futures[future]
+                    future.result()
+                    log.info(
+                        f"Successfully scaled workload {workload.workload_impl.deployment_name}"
+                    )
+
+        scaling_thread = threading.Thread(target=scale_workloads, daemon=True)
+        scaling_thread.start()
+        self._scaling_threads.append(scaling_thread)
+        return scaling_thread
+
+    def scale_single_workload(self, workload):
+        """
+        Randomly scale a single workload up or down within limits.
+
+        Args:
+            workload: The workload object to scale
+
+        Returns:
+            bool: True if the workload was scaled, False otherwise
+        """
+        current_replicas = workload.workload_impl.current_replicas
+        deployment_name = workload.workload_impl.deployment_name
+
+        log.info(f"Current replicas for {deployment_name}: {current_replicas}")
+
+        action = random.choice(["up", "down"])
+
+        if action == "up":
+            if current_replicas >= self.max_replicas:
+                log.info(
+                    f"Already at max replicas ({self.max_replicas}). "
+                    f"Skipping scale up for {deployment_name}"
+                )
+                return False
+
+            desired_count = random.randint(current_replicas + 1, self.max_replicas)
+            log.info(f"Scaling up {deployment_name} to {desired_count} replicas")
+            workload.scale_up_pods(desired_count)
+            return True
+
+        else:  # action == "down"
+            if current_replicas <= self.min_replicas:
+                log.info(
+                    f"Already at min replicas ({self.min_replicas}). "
+                    f"Skipping scale down for {deployment_name}"
+                )
+                return False
+
+            desired_count = random.randint(self.min_replicas, current_replicas - 1)
+            log.info(f"Scaling down {deployment_name} to {desired_count} replicas")
+            workload.scale_down_pods(desired_count)
+            return True
+
+    def wait_for_scaling_completion(self, scaling_thread, timeout=120):
+        """
+        Wait for scaling thread to complete with timeout.
+
+        Args:
+            scaling_thread: The scaling thread to wait for
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            bool: True if thread completed, False if not started or timeout occurred
+        """
+        if not scaling_thread:
+            log.warning("No scaling thread was provided")
+            return False
+
+        if not scaling_thread.is_alive():
+            log.warning("Scaling thread is not running or already completed")
+            return False
+
+        log.info(f"Waiting for scaling operations to complete (timeout: {timeout}s)")
+        scaling_thread.join(timeout=timeout)
+
+        if scaling_thread.is_alive():
+            log.warning("Scaling operations did not complete within timeout")
+            return False
+
+        log.info("Scaling operations completed successfully")
+        return True
+
+    def wait_for_all_scaling_threads(self, timeout=120):
+        """
+        Wait for all scaling threads managed by this helper to complete.
+
+        Args:
+            timeout: Maximum time to wait in seconds for each thread
+
+        Returns:
+            bool: True if all threads completed, False if any timed out
+        """
+        all_completed = True
+        for thread in self._scaling_threads:
+            if not self.wait_for_scaling_completion(thread, timeout):
+                all_completed = False
+        return all_completed
+
+    def scale_workloads_synchronously(self, workloads):
+        """
+        Scale all workloads synchronously (blocking operation).
+
+        Args:
+            workloads: List of workload objects to scale
+        """
+        log.info(f"Starting synchronous scaling of {len(workloads)} workloads")
+
+        for workload in workloads:
+            if self.scale_single_workload(workload):
+                log.info(
+                    f"Successfully scaled workload {workload.workload_impl.deployment_name}"
+                )
+            else:
+                log.info(
+                    f"Workload {workload.workload_impl.deployment_name} already at limits, skipping"
+                )
+
+    def scale_workloads_parallel(self, workloads, max_workers=None):
+        """
+        Scale all workloads in parallel (blocking operation).
+
+        Args:
+            workloads: List of workload objects to scale
+            max_workers: Maximum number of worker threads. If None, uses len(workloads)
+        """
+        if max_workers is None:
+            max_workers = len(workloads)
+
+        log.info(
+            f"Starting parallel scaling of {len(workloads)} workloads with {max_workers} workers"
+        )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all scaling tasks
+            scaling_futures = {
+                executor.submit(self.scale_single_workload, workload): workload
+                for workload in workloads
+            }
+
+            # Wait for all scaling operations to complete
+            for future in as_completed(scaling_futures):
+                workload = scaling_futures[future]
+                try:
+                    future.result()  # This will raise exception if scaling failed
+                    log.info(
+                        f"Successfully scaled workload {workload.workload_impl.deployment_name}"
+                    )
+                except CancelledError:
+                    log.warning(
+                        f"Scaling task was cancelled for workload {workload.workload_impl.deployment_name}"
+                    )
+                except ThreadTimeoutError:
+                    log.error(
+                        f"Scaling task timed out for workload {workload.workload_impl.deployment_name}"
+                    )
+                except (ValueError, RuntimeError) as e:
+                    log.error(
+                        f"Error while scaling workload {workload.workload_impl.deployment_name}: {e}"
+                    )
+
+    def cleanup(self, timeout=60):
+        """
+        Cleanup any running scaling threads.
+
+        Args:
+            timeout: Maximum time to wait for each thread to complete
+        """
+        log.info("Cleaning up scaling threads...")
+        for thread in self._scaling_threads:
+            if thread.is_alive():
+                thread.join(timeout=timeout)
+                if thread.is_alive():
+                    log.warning(
+                        f"Scaling thread did not complete within {timeout}s timeout"
+                    )
+
+        self._scaling_threads.clear()
+        log.info("Scaling thread cleanup completed")

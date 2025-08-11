@@ -69,9 +69,14 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Home"])
         self.do_click(locator=self.acm_page_nav["Overview_page"])
 
-    def navigate_clusters_page(self, timeout=120):
+    def navigate_clusters_page(self, timeout=120, vms=False):
         """
         Navigate to ACM Clusters Page
+
+        Args:
+            timeout (int): Timeout for which an element presence should be checked
+            vms (bool): False by default, if True, navigation happens on the Virtual machines page under Infrastructure
+                        instead of Clusters page on the ACM console, useful with ACM 2.14 and higher use cases
 
         """
         self.page_has_loaded(retries=12, sleep_time=5)
@@ -105,13 +110,22 @@ class AcmPageNavigator(BaseUI):
                 "Successfully expanded Infrastructure sidecar to enable all dropdown options"
             )
         self.take_screenshot()
-        log.info("Navigate into Clusters Page")
-        self.do_click(
-            locator=self.acm_page_nav["Clusters_page"],
-            timeout=timeout,
-            enable_screenshot=True,
-            avoid_stale=True,
-        )
+        if vms:
+            log.info("Navigate into Virtual machines Page instead")
+            self.do_click(
+                locator=self.acm_page_nav["vms_page"],
+                timeout=timeout,
+                enable_screenshot=True,
+                avoid_stale=True,
+            )
+        else:
+            log.info("Navigate into Clusters Page")
+            self.do_click(
+                locator=self.acm_page_nav["Clusters_page"],
+                timeout=timeout,
+                enable_screenshot=True,
+                avoid_stale=True,
+            )
 
     def navigate_bare_metal_assets_page(self):
         """

@@ -153,12 +153,13 @@ ceph_metrics_healthy = (
     "ceph_bluefs_slow_used_bytes",
     "ceph_osd_op_r_latency_sum",
     "ceph_bluestore_kv_flush_lat_count",
-    # "ceph_rocksdb_compact_range" replaced with compact_running, compact_lasted, compact_completed
+    # "ceph_rocksdb_compact_range" replaced with:
+    # ceph_rocksdb_compact_running, ceph_rocksdb_compact_lasted, ceph_rocksdb_compact_completed
     # more info in https://issues.redhat.com/browse/DFBUGS-2760,
     # https://tracker.ceph.com/issues/67040 and https://github.com/ceph/ceph/pull/57107
-    "compact_running",
-    "compact_lasted",
-    "compact_completed",
+    "ceph_rocksdb_compact_running",
+    "ceph_rocksdb_compact_lasted",
+    "ceph_rocksdb_compact_completed",
     "ceph_osd_op_latency_sum",
     "ceph_mon_session_add",
     "ceph_paxos_share_state_keys_count",

@@ -15,6 +15,7 @@ from math import floor
 from shutil import copyfile, rmtree
 from functools import partial
 from copy import deepcopy
+from subprocess import CalledProcessError
 
 import boto3
 from botocore.exceptions import ClientError
@@ -24,7 +25,10 @@ from collections import namedtuple
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+from ocs_ci.deployment.hosted_cluster import (
+    hypershift_cluster_factory,
+    get_autodistributed_storage_classes,
+)
 from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
@@ -40,7 +44,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
-from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
@@ -71,7 +75,6 @@ from ocs_ci.ocs.exceptions import (
     StorageClassNotDeletedFromUI,
     ResourceNotDeleted,
     MissingDecoratorError,
-    MissingRequiredConfigKeyError,
     UnsupportedWorkloadError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
@@ -131,7 +134,12 @@ from ocs_ci.ocs.resources.pvc import (
     get_all_pvc_objs,
     get_pvc_objs,
 )
-from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
+from ocs_ci.ocs.version import (
+    get_ocs_version,
+    get_ocp_version_dict,
+    report_ocs_version,
+    if_version,
+)
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
@@ -181,7 +189,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
 )
-from ocs_ci.helpers import helpers, dr_helpers, dr_helpers_ui
+from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
     create_unique_resource_name,
@@ -189,9 +197,10 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
     modify_deployment_replica_count,
-    modify_statefulset_replica_count,
     create_resource,
     create_network_fence_class,
+    wait_for_resource_state,
+    storagecluster_independent_check,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -215,7 +224,6 @@ from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
-
 
 log = logging.getLogger(__name__)
 
@@ -377,8 +385,10 @@ def pytest_generate_tests(metafunc):
         if roles:
             upgrade_parametrizer.config_init()
             params = upgrade_parametrizer.generate_pytest_parameters(metafunc, roles)
+            log.debug(f"upgrade params = {params}")
             for marker in metafunc.definition.iter_markers():
                 if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
+                    log.debug(f"Parametrizing the test: {metafunc.function.__name__}")
                     metafunc.parametrize("zone_rank, role_rank, config_index", params)
 
 
@@ -498,11 +508,21 @@ def pytest_collection_modifyitems(session, config, items):
                 )
                 and ocsci_config.multicluster
             ):
-                if getattr(item, "callspec", ""):
-                    zone_rank = item.callspec.params["zone_rank"]
-                    role_rank = item.callspec.params["role_rank"]
-                else:
+                callspec = getattr(item, "callspec", None)
+                if not callspec:
                     continue
+
+                params = callspec.params
+                if not params or not all(
+                    k in params for k in ("zone_rank", "role_rank")
+                ):
+                    continue
+
+                log.debug(f"Getting the params in the test {item.name}")
+                log.debug(f"{params['zone_rank']}, {params['role_rank']}")
+                zone_rank = params["zone_rank"]
+                role_rank = params["role_rank"]
+
                 markers_update = []
                 item_markers = copy.copy(item.own_markers)
                 if not item_markers:
@@ -533,8 +553,8 @@ def pytest_collection_modifyitems(session, config, items):
                         item.add_marker(pytest.mark.order(param))
                     else:
                         item.add_marker(mark(param))
-                log.info(f"TEST={item.name}")
-                log.info(
+                log.debug(f"TEST={item.name}")
+                log.debug(
                     f"MARKERS = {[(i.name, i.args, i.kwargs) for i in item.iter_markers()]}"
                 )
     # Update PREUPGRADE_CONFIG for each of the Config class
@@ -556,6 +576,18 @@ def pytest_collection_finish(session):
 
     """
     ocsci_config.RUN["number_of_tests"] = len(session.items)
+
+
+def pytest_runtest_protocol(item, nextitem):
+    """
+    Experimental:- earliest per-test hook that runs before any fixtures are initialized
+
+    """
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        for mark in item.iter_markers():
+            if mark.name == "config_index":
+                log.info(f"Switching the test context to index: {mark.args[0]}")
+                ocsci_config.switch_ctx(mark.args[0])
 
 
 def pytest_runtest_setup(item):
@@ -599,12 +631,13 @@ def pytest_fixture_setup(fixturedef, request):
                     ocsci_config.switch_ctx(mark.args[0])
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
-            if hasattr(request.node, "callspec"):
-                if mark.name == "parametrize":
-                    if request.node.callspec.params.get("cluster_index"):
-                        context = request.node.callspec.params.get("cluster_index")
-                        log.info(f"Switching the fixture context to index: {context}")
-                        ocsci_config.switch_ctx(context)
+            if mark.name == "parametrize":
+                if isinstance(
+                    request.node, pytest.Function
+                ) and request.node.callspec.params.get("cluster_index"):
+                    context = request.node.callspec.params.get("cluster_index")
+                    log.info(f"Switching the fixture context to index: {context}")
+                    ocsci_config.switch_ctx(context)
 
 
 def pytest_fixture_post_finalizer(fixturedef, request):
@@ -614,10 +647,11 @@ def pytest_fixture_post_finalizer(fixturedef, request):
     """
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
-            if hasattr(request.node, "callspec"):
-                if mark.name == "parametrize":
-                    if request.node.callspec.params.get("cluster_index"):
-                        ocsci_config.reset_ctx()
+            if mark.name == "parametrize":
+                if isinstance(
+                    request.node, pytest.Function
+                ) and request.node.callspec.params.get("cluster_index"):
+                    ocsci_config.reset_ctx()
 
 
 @pytest.fixture()
@@ -667,6 +701,18 @@ def auto_load_auth_config():
         ocsci_config.update(auth_config)
     except FileNotFoundError:
         pass  # If auth file doesn't exist we just ignore.
+
+
+@pytest.fixture
+def cluster_index(request):
+    """
+    Fixture used as a placeholder for a parameter required by run_on_all_clients marker.
+    """
+    try:
+        parameter = request.param
+    except AttributeError:
+        parameter = None
+    return parameter
 
 
 @pytest.fixture(scope="class")
@@ -909,11 +955,13 @@ def ceph_pool_factory_session(request, replica=3, compression=None):
 
 
 @pytest.fixture(scope="function")
-def ceph_pool_factory(request, replica=3, compression=None):
-    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
+def ceph_pool_factory(request, replica=3, compression=None, pool_name=None):
+    return ceph_pool_factory_fixture(
+        request, replica=replica, compression=compression, pool_name=pool_name
+    )
 
 
-def ceph_pool_factory_fixture(request, replica=3, compression=None):
+def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=None):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -923,11 +971,14 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
     instances = []
 
     def factory(
-        interface=constants.CEPHBLOCKPOOL, replica=replica, compression=compression
+        interface=constants.CEPHBLOCKPOOL,
+        replica=replica,
+        compression=compression,
+        pool_name=pool_name,
     ):
         if interface == constants.CEPHBLOCKPOOL:
             ceph_pool_obj = helpers.create_ceph_block_pool(
-                replica=replica, compression=compression
+                replica=replica, compression=compression, pool_name=pool_name
             )
         elif interface == constants.CEPHFILESYSTEM:
             cfs = ocp.OCP(
@@ -1114,6 +1165,7 @@ def storageclass_factory_fixture(
                         replica=ocsci_config.ENV_DATA.get("replica") or replica,
                         compression=ocsci_config.ENV_DATA.get("compression")
                         or compression,
+                        pool_name=pool_name,
                     )
                     interface_name = pool_obj.name
                 else:
@@ -2988,6 +3040,16 @@ def javasdk_pod_fixture(request, scope_name):
     ]
     update_container_with_mirrored_image(javas3_pod_dict)
     update_container_with_proxy_env(javas3_pod_dict)
+    if config.DEPLOYMENT.get("ipv6"):
+        if "containers" in javas3_pod_dict["spec"]:
+            container = javas3_pod_dict["spec"]["containers"][0]
+        else:
+            container = javas3_pod_dict["spec"]["template"]["spec"]["containers"][0]
+        if "env" not in container:
+            container["env"] = []
+        container["env"].append(
+            {"name": "MAVEN_OPTS", "value": "-Djava.net.preferIPv6Addresses=true"}
+        )
     javas3_pod_obj = Pod(**javas3_pod_dict)
 
     assert javas3_pod_obj.create(do_reload=True), f"Failed to create {javas3_pod_name}"
@@ -3006,6 +3068,110 @@ def javasdk_pod_fixture(request, scope_name):
     request.addfinalizer(_javas3_pod_cleanup)
 
     return javas3_pod_obj
+
+
+@pytest.fixture(scope="session")
+def nb_stress_cli_pods(request):
+    """
+    A session scoped fixture to create stress cli pod
+
+    """
+    return nb_stress_cli_pod_fixture(request, scope_name="session")
+
+
+def nb_stress_cli_pod_fixture(request, scope_name):
+    """
+    Creates AWS cli pod with object data specific to stress testing
+
+    Args:
+        request: request object
+        scope_name: scope of the calling fixture used for giving a
+        descriptive name to the pod and configmap
+
+    Returns:
+        Pod(): Pod object representing stress cli pod
+
+    """
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_data = templating.load_yaml(constants.STRESS_CLI_SERVICE_CA_YAML)
+    resource_type = scope_name or "caconfigmap"
+    service_ca_configmap_name = create_unique_resource_name(
+        constants.STRESSCLI_SERVICE_CA_CM_NAME, resource_type
+    )
+    service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    service_ca_data["metadata"]["namespace"] = namespace
+    s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
+    service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
+
+    log.info("Trying to create the Stress CLI service CA")
+    service_ca_configmap = create_resource(**service_ca_data)
+    OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
+        resource_name=service_ca_configmap.name, column="DATA", condition="1"
+    )
+
+    log.info("Creating the Stress CLI StatefulSet")
+    stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
+    stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
+        "name"
+    ] = service_ca_configmap_name
+    stress_cli_sts_dict["metadata"]["namespace"] = namespace
+    update_container_with_mirrored_image(stress_cli_sts_dict)
+    update_container_with_proxy_env(stress_cli_sts_dict)
+    stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
+
+    log.info("Verifying the AWS CLI StatefulSet is running")
+    assert stress_cli_sts_obj, "Failed to create S3CLI STS"
+
+    wait_for_pods_by_label_count(
+        constants.STRESS_CLI_APP_LABEL, expected_count=2, namespace=namespace
+    )
+    stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
+        lambda: [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                constants.STRESS_CLI_APP_LABEL, namespace
+            )
+        ]
+    )()
+    for pod_obj in stress_cli_pod_objs:
+        wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
+
+        pod_obj.exec_cmd_on_pod(
+            f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+        )
+
+        if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
+            "rgw_secure"
+        ):
+            log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
+            pod_obj.exec_cmd_on_pod(
+                f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+            )
+
+    def cleanup():
+        """
+        Clean up the Stress CLI resources
+
+        """
+
+        log.info("Deleting the Stress CLI STS")
+        stress_cli_sts_obj.delete()
+
+        log.info("Deleting the Stress CLI configmap")
+        service_ca_configmap.delete()
+
+    request.addfinalizer(cleanup)
+    return stress_cli_pod_objs
+
+
+@pytest.fixture()
+def stress_test_directory_setup(request, nb_stress_cli_pods):
+    """
+    Setup test directories on noobaa stress CLI pod
+
+    """
+    return test_directory_setup_fixture(request, nb_stress_cli_pods[1])
 
 
 @pytest.fixture()
@@ -5318,12 +5484,6 @@ def setup_acm_ui(request):
 
 
 def setup_acm_ui_fixture(request):
-    if not ocsci_config.RUN.get("dr_action_via_ui"):
-        log.error(
-            "'dr_action_via_ui' params are missing, please pass conf/ocsci/dr_ui.yaml config to "
-            "run UI tests on Regional DR setup"
-        )
-        return MissingRequiredConfigKeyError
     restore_ctx_index = ocsci_config.cur_index
     ocsci_config.switch_acm_ctx()
     driver = login_to_acm()
@@ -7063,7 +7223,7 @@ def dr_workload(request):
 
 
 @pytest.fixture(scope="class")
-def dr_workloads_on_managed_clusters(request, setup_acm_ui):
+def dr_workloads_on_managed_clusters(request):
     """
     Deploying subscription apps on both primary and secondary managed clusters
     """
@@ -7130,16 +7290,21 @@ def dr_workloads_on_managed_clusters(request, setup_acm_ui):
         return primary_cluster_instances, secondary_cluster_instances
 
     def teardown():
-        acm_obj = AcmAddClusters()
+        failed_to_delete = []
         managed_cluster_instances = [
             primary_cluster_instances,
             secondary_cluster_instances,
         ]
-        app_list = []
         for cluster_instances in managed_cluster_instances:
             for apps in cluster_instances:
-                app_list.append(apps.app_name)
-        dr_helpers_ui.delete_application_ui(acm_obj, workloads_to_delete=app_list)
+                try:
+                    apps.delete_workload()
+                except ResourceNotDeleted:
+                    failed_to_delete.append(apps.workload_namespace)
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
+            )
 
     request.addfinalizer(teardown)
     return factory
@@ -7297,9 +7462,9 @@ def discovered_apps_dr_workload(request):
                 if multi_ns:
                     multi_ns_list.append(workload.workload_namespace)
 
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload(recipe=False)
+                instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(recipe=False)
 
         if multi_ns:
             if pvc_interface == constants.CEPHBLOCKPOOL:
@@ -7392,7 +7557,7 @@ def discovered_apps_dr_workload(request):
 
 
 @pytest.fixture()
-def discovered_apps_dr_workload_cnv(request):
+def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
     """
     Deploys CNV Discovered App based workload for DR setup
 
@@ -7400,11 +7565,18 @@ def discovered_apps_dr_workload_cnv(request):
 
     instances = []
 
-    def factory(pvc_vm=1):
+    def factory(
+        pvc_vm=1, custom_sc=False, dr_protect=True, shared_drpc_protection=False
+    ):
         """
         Args:
             kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
-
+            custom_sc (bool): False by default, will create and use custom Pool and Storage Class
+                            when set to True for CNV workload
+            dr_protect (bool): True by default where workload will be DR protected via CLI,
+                            else test case should handle it (via UI)
+            shared_drpc_protection (bool): False by default, True will use Shared Protection type to DR Protect
+                                        a workload using the existing DRPC in the same namespace
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -7414,8 +7586,16 @@ def discovered_apps_dr_workload_cnv(request):
         """
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
+        if shared_drpc_protection:
+            workload_key = "dr_cnv_discovered_apps_shared"
+        if custom_sc:
+            log.info("Calling fixture to create Custom Pool/SC..")
+            cnv_custom_storage_class()
+            workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            if shared_drpc_protection and instances:
+                workload_details["workload_namespace"] = instances[0].workload_namespace
             workload = CnvWorkloadDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -7444,16 +7624,22 @@ def discovered_apps_dr_workload_cnv(request):
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(
+                dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
+            )
 
         return instances
 
     def teardown():
-        for instance in instances:
-            try:
-                instance.delete_workload()
-            except ResourceNotDeleted:
-                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+        if request.node.name == "test_acm_kubevirt_using_shared_protection":
+            instances[0].delete_workload(skip_resource_deletion_verification=True)
+            instances[1].delete_workload(shared_drpc_protection=True)
+        else:
+            for instance in instances:
+                try:
+                    instance.delete_workload()
+                except ResourceNotDeleted:
+                    raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
     request.addfinalizer(teardown)
     return factory
@@ -8323,7 +8509,7 @@ def setup_logwriter_workload(request, teardown_factory):
                 label="app=logwriter-cephfs", namespace=pvc.namespace
             )
         ]
-        wait_for_pods_to_be_running(
+        retry(CommandFailed, tries=6, delay=10)(wait_for_pods_to_be_running)(
             namespace=pvc.namespace, pod_names=logwriter_dc_pods
         )
 
@@ -8376,7 +8562,7 @@ def setup_logreader_workload(request, teardown_factory):
         logreader_job = helpers.create_resource(**job_data)
         teardown_factory(logreader_job)
 
-        logreader_job_obj = get_job_obj(
+        logreader_job_obj = retry(CommandFailed, tries=6, delay=10)(get_job_obj)(
             name="logreader-cephfs", namespace=pvc.namespace
         )
         logreader_job_pods = [
@@ -8385,7 +8571,7 @@ def setup_logreader_workload(request, teardown_factory):
                 label="app=logreader-cephfs", namespace=pvc.namespace
             )
         ]
-        wait_for_pods_to_be_running(
+        retry(CommandFailed, tries=6, delay=10)(wait_for_pods_to_be_running)(
             namespace=pvc.namespace, pod_names=logreader_job_pods
         )
 
@@ -8523,7 +8709,7 @@ def setup_logwriter_rbd_workload(
                 namespace=setup_stretch_cluster_project.namespace,
             )
         ]
-        wait_for_pods_to_be_running(
+        retry(CommandFailed, tries=6, delay=10)(wait_for_pods_to_be_running)(
             namespace=setup_stretch_cluster_project.namespace,
             pod_names=logwriter_sts_pods,
         )
@@ -8822,7 +9008,7 @@ def scale_noobaa_resources_session(request):
     Session scoped fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 @pytest.fixture()
@@ -8831,7 +9017,7 @@ def scale_noobaa_resources_fixture(request):
     Fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 def scale_noobaa_resources(request):
@@ -8852,12 +9038,12 @@ def scale_noobaa_resources(request):
             f'{{"endpoints": {{"minCount": {min_ep_count},"maxCount": {max_ep_count}}}}}}}}}'
         )
         scale_noobaa_resources_param = (
-            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": "{memory}}}}}}}}}}}'
+            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}}}}}}}}'
         )
         storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
         log.info("Scaled noobaa endpoint counts")
@@ -9123,6 +9309,8 @@ def benchmark_workload_storageutilization(request):
         benchmark_name=None,
         use_kustomize_build=True,
         is_completed=True,
+        numjobs=1,
+        iodepth=16,
     ):
         """
         Setup of benchmark fio
@@ -9137,11 +9325,18 @@ def benchmark_workload_storageutilization(request):
             benchmark_name (str): Optional. Name for the Benchmark resource.
             use_kustomize_build (bool): True, if use kustomize build. False, otherwise.
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
+            numjobs (int): Number of threads per job
+            iodepth (int): I/O queue depth
+
+        Returns:
+            BenchmarkOperatorFIO: The Benchmark operator FIO object
 
         """
         nonlocal benchmark_obj
 
-        size = get_file_size(target_percentage)
+        size = retry(CommandFailed, tries=6, delay=20, backoff=1)(get_file_size)(
+            target_percentage
+        )
         benchmark_obj = BenchmarkOperatorFIO()
         benchmark_obj.setup_benchmark_fio(
             total_size=size,
@@ -9152,12 +9347,21 @@ def benchmark_workload_storageutilization(request):
             timeout_completed=timeout_completed,
             benchmark_name=benchmark_name,
             use_kustomize_build=use_kustomize_build,
+            numjobs=numjobs,
+            iodepth=iodepth,
         )
         benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 
+        return benchmark_obj
+
     def finalizer():
         if benchmark_obj is not None:
-            benchmark_obj.cleanup()
+            try:
+                benchmark_obj.cleanup()
+            except CalledProcessError as ex:
+                log.warning(
+                    f"Failed to delete the benchmark due to the exception: {str(ex)}"
+                )
 
     request.addfinalizer(finalizer)
     return factory
@@ -9165,6 +9369,10 @@ def benchmark_workload_storageutilization(request):
 
 @pytest.fixture()
 def scale_noobaa_db_pod_pv_size(request):
+    return scale_noobaa_db_pv(request)
+
+
+def scale_noobaa_db_pv(request):
     """
     This fixtue helps to scale the noobaa db pv size.
     follows KCS: https://access.redhat.com/solutions/6976547
@@ -9182,9 +9390,9 @@ def scale_noobaa_db_pod_pv_size(request):
         constants.OCS_OPERATOR_LABEL,
         constants.OPERATOR_LABEL,
         constants.NOOBAA_OPERATOR_POD_LABEL,
-        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
     ]
-    nb_pvc = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_47_AND_ABOVE)[0]
+    nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
 
     def factory(pv_size="50"):
         """
@@ -9198,18 +9406,9 @@ def scale_noobaa_db_pod_pv_size(request):
             modify_deployment_replica_count(deployment_name=operator, replica_count=0)
         log.info(f"Scaled down operators: {operators}")
 
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=0
-        )
-        log.info("Scaled down noobaa db sts")
-
-        nb_pvc.resize_pvc(new_size=pv_size)
-        log.info(f"{nb_pvc.name} is resized to {pv_size}")
-
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
-        )
-        log.info("Scaled up noobaa db sts")
+        for nb_pvc in nb_pvcs:
+            nb_pvc.resize_pvc(new_size=pv_size)
+            log.info(f"{nb_pvc.name} is resized to {pv_size}")
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=1)
@@ -9230,11 +9429,6 @@ def scale_noobaa_db_pod_pv_size(request):
 
     def finalizer():
         pods = []
-
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
-        )
-        log.info("Scaled up noobaa db sts")
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=1)
@@ -10003,9 +10197,10 @@ def vm_clone_fixture(request):
         from ocs_ci.ocs.cnv import virtual_machine
         from ocp_resources.virtual_machine_clone import VirtualMachineClone
 
+        name = create_unique_resource_name("api", "clone")
         target_name = f"clone-{vm.name}"
         with VirtualMachineClone(
-            name="clone-vm-test",
+            name=name,
             namespace=vm.namespace,
             source_name=vm.name,
             target_name=target_name,
@@ -10084,7 +10279,6 @@ def vm_snapshot_restore_fixture(request):
         """
         from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
         from ocp_resources.virtual_machine_restore import VirtualMachineRestore
-        from ocs_ci.utility.utils import create_unique_resource_name
 
         snapshot_name = f"snapshot-{vm.name}"
         vm_snapshot = VirtualMachineSnapshot(
@@ -10108,7 +10302,6 @@ def vm_snapshot_restore_fixture(request):
             teardown=False,
         ) as vm_restore:
             vm_restore.wait_restore_done()
-
         vm.start()
         vm.wait_for_ssh_connectivity(timeout=1200)
         return vm
@@ -10122,3 +10315,70 @@ def vm_snapshot_restore_fixture(request):
 
     request.addfinalizer(teardown)
     return factory
+
+
+@if_version(">4.18")
+@pytest.fixture()
+def distribute_storage_classes_to_all_consumers_factory():
+    """
+    Factory to distribute storage classes to all Storage Consumers in the cluster.
+    Returns:
+        function: A callable function to execute the distribution logic.
+    """
+
+    def factory():
+        return distribute_storage_classes_to_all_consumers()
+
+    return factory
+
+
+@if_version(">4.18")
+def distribute_storage_classes_to_all_consumers():
+    """
+    This fixture patches all Storage Consumers, except the internal one, with the list of Storage Classes if
+    provisioner is csi.rbd or csi.cephfs.
+    Function validates Storage Class is available on Client cluster and return combined result for all consumers.
+    This function can be called at the end too, to sync up list of Storage Classes after Storage Classes were removed.
+
+    Returns:
+        bool: True if all Storage Classes are distributed successfully to all consumers, False otherwise.
+
+    """
+
+    # to avoid overloading this module with imports, we import only when this fixture is called
+    from ocs_ci.ocs.resources.storageconsumer import (
+        get_ready_storage_consumers,
+        check_storage_classes_on_clients,
+    )
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        if not ocsci_config.multicluster:
+            log.info(
+                "Skipping distribution of storage classes to consumers as multicluster is not enabled in ocsci_config."
+            )
+            return
+
+        consumers = get_ready_storage_consumers()
+        consumers = [
+            consumer
+            for consumer in consumers
+            if consumer.name != constants.INTERNAL_STORAGE_CONSUMER_NAME
+        ]
+        ready_consumer_names = [consumer.name for consumer in consumers]
+
+        if not ready_consumer_names:
+            log.warning("No ready storage consumers found")
+            return
+
+        storage_class_names = get_autodistributed_storage_classes()
+        for consumer in consumers:
+            log.info(f"Distributing storage classes to consumer {consumer.name}")
+            consumer.set_storage_classes(storage_class_names)
+
+    return check_storage_classes_on_clients(ready_consumer_names)
+
+
+@pytest.fixture(scope="session")
+def disable_debug_logs():
+    log.info("Disabling debug logs for the current session")
+    logging.disable(logging.DEBUG)

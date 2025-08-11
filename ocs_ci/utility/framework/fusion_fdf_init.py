@@ -14,7 +14,7 @@ from ocs_ci.framework.exceptions import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility import utils
+from ocs_ci.utility import reporting, utils
 from ocs_ci.utility.framework.initialization import load_config
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import (
@@ -83,6 +83,8 @@ class Initializer(object):
             except FileNotFoundError:
                 raise ClusterNameNotProvidedError()
 
+        config.REPORTING["report_path"] = args.report
+
     def init_cli(self, args: list) -> list:
         """
         Initialize the CLI and parse provided arguments.
@@ -103,6 +105,9 @@ class Initializer(object):
             action="append",
             default=[],
             help="Path to config file. Repeatable.",
+        )
+        parser.add_argument(
+            "--report", default=None, help="Filepath for generated junit report"
         )
         parsed_args, _ = parser.parse_known_args(args)
 
@@ -156,6 +161,7 @@ class Initializer(object):
             dict: TestSuite properties
 
         """
+        # General properties
         props = {}
         props["run_id"] = config.RUN.get("run_id")
         props["cluster_path"] = config.ENV_DATA.get("cluster_path")
@@ -164,11 +170,21 @@ class Initializer(object):
             kubeconfig=config.RUN["kubeconfig"]
         )
 
+        # ReportPortal properties
+        props["rp_launch_name"] = reporting.get_rp_launch_name()
+        props["rp_launch_description"] = reporting.get_rp_launch_description()
+        props["rp_launch_url"] = config.REPORTING.get("rp_launch_url")
+        attributes = reporting.get_rp_launch_attributes()
+        for key, value in attributes.items():
+            props[f"rp_{key}"] = value
+
+        # Fusion Pre-Release properties
         if config.DEPLOYMENT.get("fusion_pre_release"):
             props["fusion_pre_release_image"] = config.DEPLOYMENT.get(
                 "fusion_pre_release_image"
             )
 
+        # FDF Pre-release properties
         if self.deployment_type == "fdf":
             if config.DEPLOYMENT.get("fdf_pre_release"):
                 props["fdf_image_tag"] = config.DEPLOYMENT.get("fdf_image_tag")
@@ -285,9 +301,12 @@ def create_junit_report(
             xml = JUnitXml()
             xml.add_testsuite(test_suite)
 
-            log_dir = os.path.expanduser(config.RUN["log_dir"])
-            run_id = config.RUN["run_id"]
-            filepath = os.path.join(log_dir, f"{case_name}_{run_id}.xml")
+            if config.REPORTING.get("report_path"):
+                filepath = config.REPORTING.get("report_path")
+            else:
+                log_dir = os.path.expanduser(config.RUN["log_dir"])
+                run_id = config.RUN["run_id"]
+                filepath = os.path.join(log_dir, f"{case_name}_{run_id}.xml")
 
             logger.info(f"Writing report to {filepath}")
             xml.write(filepath, pretty=True)

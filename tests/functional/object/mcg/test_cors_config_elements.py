@@ -202,13 +202,13 @@ class TestCorsConfig:
                         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                     },
                 ],
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 *[
                     {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
                 ],
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 *[{"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
@@ -228,7 +228,7 @@ class TestCorsConfig:
                         "namespacestore_dict": {"aws": [(1, None)]},
                     },
                 },
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {
@@ -656,7 +656,7 @@ class TestCorsConfig:
             )
             sample.wait_for_func_value(self.POSITIVE_RESPONSE)
 
-    @tier1
+    @tier2
     def test_allowed_header_cors_element(
         self, mcg_obj_session, awscli_pod_session, bucket_factory
     ):
@@ -864,7 +864,7 @@ class TestCorsConfig:
     @pytest.mark.parametrize(
         argnames="bucketclass_dict",
         argvalues=[
-            pytest.param(*[None], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]),
+            pytest.param(*[None]),
             pytest.param(
                 *[
                     {
@@ -965,7 +965,6 @@ class TestCorsConfig:
         # Cache the bucket name for the post-upgrade test
         request.config.cache.set(request.node.callspec.id, bucket_name)
 
-    @tier1
     @post_upgrade
     def test_default_cors_post_upgrade(
         self,

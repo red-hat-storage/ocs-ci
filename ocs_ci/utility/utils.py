@@ -67,7 +67,6 @@ from ocs_ci.utility.retry import retry
 from psutil._common import bytes2human
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
-
 log = logging.getLogger(__name__)
 
 # variables
@@ -836,6 +835,7 @@ def expose_ocp_version(version):
         return version
 
 
+@retry(CommandFailed, tries=2, delay=5, backoff=2)
 def get_openshift_installer(
     version=None,
     bin_dir=None,
@@ -3087,18 +3087,7 @@ def get_ocs_olm_operator_tags(limit=100):
     all_tags = []
     page = 1
     while True:
-        log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
-        resp = requests.get(
-            constants.OPERATOR_CS_QUAY_API_QUERY.format(
-                tag_limit=limit,
-                image=image,
-                page=page,
-            ),
-            headers=headers,
-        )
-        if not resp.ok:
-            raise requests.RequestException(resp.json())
-        tags = resp.json()["tags"]
+        tags = query_quay_for_operator_tags(image, headers, limit, page)
         if len(tags) == 0:
             log.info("No more tags to retrieve")
             break
@@ -3106,6 +3095,41 @@ def get_ocs_olm_operator_tags(limit=100):
         all_tags.extend(tags)
         page += 1
     return all_tags
+
+
+@retry(requests.RequestException, 10, 30, 1)
+def query_quay_for_operator_tags(
+    image: str, headers: dict, limit: int, page: int
+) -> list:
+    """
+    Query quay tags for the specified image.
+
+    Args:
+        image (str): Image to query tags for
+        headers (dict): Request headers
+        limit (int): Maximum number of tags to query
+        page (int): Which page of results to return
+
+    Raises:
+        requests.RequestException: If we do not receive an ok response from quay after several retries.
+
+    Returns:
+        list: list of tags queried from quay
+
+    """
+    log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+    resp = requests.get(
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(
+            tag_limit=limit,
+            image=image,
+            page=page,
+        ),
+        headers=headers,
+    )
+    if not resp.ok:
+        raise requests.RequestException(resp.json())
+    tags = resp.json()["tags"]
+    return tags
 
 
 def check_if_executable_in_path(exec_name):
@@ -5866,3 +5890,23 @@ def skip_for_provider_if_ocs_version(expressions):
             version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
             for expr in expr_list
         )
+
+
+def get_noobaa_cli_config():
+    """
+    Get the appropriate NooBaa CLI path and command prefix based on OCS version.
+
+    For OCS version >= 4.20: Returns odf-cli path with 'noobaa' prefix
+    For OCS version < 4.20: Returns mcg-cli path with empty prefix
+
+    Returns:
+        tuple: (cli_path, command_prefix) where cli_path is the path to CLI binary
+               and command_prefix is the prefix to use with the command
+    """
+
+    ocs_version = version_module.get_semantic_ocs_version_from_config()
+
+    if ocs_version >= version_module.VERSION_4_20:
+        return constants.ODF_CLI_LOCAL_PATH, "noobaa"
+    else:
+        return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, ""

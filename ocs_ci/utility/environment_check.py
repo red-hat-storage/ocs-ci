@@ -58,7 +58,9 @@ def compare_dicts(before, after):
     return [added, removed]
 
 
-def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
+def assign_get_values(
+    env_status_dict, key, kind=None, exclude_labels=None, exclude_job_owned_pods=True
+):
     """
     Assigning kind status into env_status_dict
 
@@ -68,6 +70,7 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
         key (str): Name of the resource
         kind (OCP obj): OCP object for a resource
         exclude_labels (list): App labels to ignore leftovers
+        exclude_job_owned_pods (bool): If True, exclude pods owned by Jobs
     """
     items = kind.get(all_namespaces=True)["items"]
     items_filtered = []
@@ -117,6 +120,12 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             if name.startswith("storageclient") and constants.STATUS_REPORTER in name:
                 log.debug(f"ignoring item: {name}")
                 continue
+            if exclude_job_owned_pods:
+                # Check if pod is owned by a Job (same logic as is_pod_owned_by_job)
+                owner_refs = item.get("metadata", {}).get("ownerReferences", [])
+                if any(ref.get("kind") == "Job" for ref in owner_refs):
+                    log.debug(f"ignoring job-owned pod: {name}")
+                    continue
         if item.get("kind") == constants.NAMESPACE:
             name = item.get("metadata").get("generateName")
             if name == "openshift-must-gather-":
@@ -135,27 +144,34 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
     env_status_dict[key] = items_filtered
 
 
-def get_environment_status(env_dict, exclude_labels=None):
+def get_environment_status(env_dict, exclude_labels=None, exclude_job_owned_pods=True):
     """
     Get the environment status per kind in KINDS and save it in a dictionary
 
     Args:
         env_dict (dict): Dictionary that is a copy.deepcopy(ENV_STATUS_DICT)
         exclude_labels (list): App labels to ignore leftovers
+        exclude_job_owned_pods (bool): If True, exclude pods owned by Jobs
     """
     with ThreadPoolExecutor(max_workers=len(config.RUN["KINDS"])) as executor:
         for key, kind in zip(env_dict.keys(), config.RUN["KINDS"]):
             executor.submit(
-                assign_get_values, env_dict, key, kind, exclude_labels=exclude_labels
+                assign_get_values,
+                env_dict,
+                key,
+                kind,
+                exclude_labels=exclude_labels,
+                exclude_job_owned_pods=exclude_job_owned_pods,
             )
 
 
-def get_status_before_execution(exclude_labels=None):
+def get_status_before_execution(exclude_labels=None, exclude_job_owned_pods=True):
     """
     Set the environment status and assign it into ENV_STATUS_PRE dictionary
 
     Args:
         exclude_labels (list): App labels to ignore leftovers
+        exclude_job_owned_pods (bool): If True, exclude pods owned by Jobs
     """
 
     POD = ocp.OCP(kind=constants.POD)
@@ -193,22 +209,31 @@ def get_status_before_execution(exclude_labels=None):
     config.RUN["ENV_STATUS_PRE"] = copy.deepcopy(config.RUN["ENV_STATUS_DICT"])
     config.RUN["ENV_STATUS_POST"] = copy.deepcopy(config.RUN["ENV_STATUS_DICT"])
 
-    get_environment_status(config.RUN["ENV_STATUS_PRE"], exclude_labels=exclude_labels)
+    get_environment_status(
+        config.RUN["ENV_STATUS_PRE"],
+        exclude_labels=exclude_labels,
+        exclude_job_owned_pods=exclude_job_owned_pods,
+    )
 
 
-def get_status_after_execution(exclude_labels=None):
+def get_status_after_execution(exclude_labels=None, exclude_job_owned_pods=True):
     """
     Set the environment status and assign it into ENV_STATUS_PRE dictionary.
     In addition compare the dict before the execution and after using DeepDiff
 
     Args:
         exclude_labels (list): App labels to ignore leftovers
+        exclude_job_owned_pods (bool): If True, exclude pods owned by Jobs
 
     Raises:
          ResourceLeftoversException: In case there are leftovers in the
             environment after the execution
     """
-    get_environment_status(config.RUN["ENV_STATUS_POST"], exclude_labels=exclude_labels)
+    get_environment_status(
+        config.RUN["ENV_STATUS_POST"],
+        exclude_labels=exclude_labels,
+        exclude_job_owned_pods=exclude_job_owned_pods,
+    )
 
     pod_diff = compare_dicts(
         config.RUN["ENV_STATUS_PRE"]["pod"], config.RUN["ENV_STATUS_POST"]["pod"]

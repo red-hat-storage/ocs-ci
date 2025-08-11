@@ -1,6 +1,7 @@
 import logging
-from time import sleep
+import pytest
 
+from time import sleep
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
@@ -26,7 +27,20 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
     """
 
-    def test_failover_and_relocate_discovered_apps(self, discovered_apps_dr_workload):
+    @pytest.mark.parametrize(
+        argnames=["pvc_interface"],
+        argvalues=[
+            pytest.param(
+                constants.CEPHBLOCKPOOL,
+            ),
+            pytest.param(
+                constants.CEPHFILESYSTEM,
+            ),
+        ],
+    )
+    def test_failover_and_relocate_discovered_apps(
+        self, pvc_interface, discovered_apps_dr_workload
+    ):
         """
         Tests to verify application failover and Relocate with Discovered Apps
         There are two test cases:
@@ -34,7 +48,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             2) Relocate back to primary
 
         """
-        rdr_workload = discovered_apps_dr_workload(kubeobject=2, multi_ns=True)
+        rdr_workload = discovered_apps_dr_workload(
+            kubeobject=2, multi_ns=True, pvc_interface=pvc_interface
+        )
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
                 rdr_workload[0].workload_namespace,

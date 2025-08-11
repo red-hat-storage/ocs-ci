@@ -24,6 +24,7 @@ from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework import config as ocsci_config, Config, config
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS, FUSION_CONF_DIR
 from ocs_ci.ocs.exceptions import (
@@ -34,6 +35,11 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.rados_utils import (
+    fetch_pool_names,
+    fetch_rados_namespaces,
+    fetch_filesystem_names,
+)
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
@@ -45,6 +51,11 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.storageconsumer import (
     create_storage_consumer_on_default_cluster,
+    check_consumers_rns,
+    check_consumers_svg,
+    check_consumer_rns,
+    get_ready_consumers_names,
+    check_consumer_svg,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
@@ -59,6 +70,10 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.version import get_running_odf_version
+from ocs_ci.utility.ssl_certs import (
+    create_ocs_ca_bundle,
+    get_root_ca_cert,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +173,19 @@ def apply_cluster_roles_wa(cluster_names):
             logger.warning("rbac w/a already exist")
 
 
+@if_version(">4.18")
+def verify_backing_ceph_storage_for_clients():
+    """
+    Verify that backing Ceph storage classes exist on the Provider cluster
+
+    Returns:
+        bool: True if all checks passed, False otherwise
+    """
+
+    all_checks = [check_consumers_svg(), check_consumers_rns()]
+    return all(all_checks)
+
+
 class HostedClients(HyperShiftBase):
     """
     The class is intended to deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them.
@@ -225,6 +253,20 @@ class HostedClients(HyperShiftBase):
             hosted_ocp_verification_passed = (
                 self.verify_hosted_ocp_clusters_from_provider()
             )
+
+        # configure proxy object with trusted ca bundle for custom ingress ssl certificate
+        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            ssl_ca_cert = get_root_ca_cert()
+            ocs_ca_bundle_name = "ocs-ca-bundle"
+            create_ocs_ca_bundle(ssl_ca_cert, ocs_ca_bundle_name, namespace="clusters")
+            patch = f'{{"spec":{{"configuration":{{"proxy":{{"trustedCA":{{"name":"{ocs_ca_bundle_name}"}}}}}}}}}}'
+            if ssl_ca_cert:
+                for cluster_name in cluster_names:
+                    cmd = (
+                        f"oc patch -n clusters {constants.HOSTED_CLUSTERS}/{cluster_name} --type=merge "
+                        f"--patch='{patch}'"
+                    )
+                    exec_cmd(cmd)
 
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
@@ -332,6 +374,44 @@ class HostedClients(HyperShiftBase):
             if self.storage_installation_requested(name)
         )
 
+        log_step("verify backing Ceph storage for newly deployed clients")
+
+        consumer_names = get_ready_consumers_names()
+        # we want to validate only consumers that are in ready status, that are newly deployed
+        # and storage installation for them was requested from ENV_DATA.clusters.<cluster_name>.setup_storage_client
+        consumers_to_validate = [
+            consumer_name
+            for consumer_name in consumer_names
+            if any(
+                [
+                    cluster_name
+                    for cluster_name in cluster_names
+                    if (
+                        (cluster_name in consumer_name)
+                        and self.storage_installation_requested(cluster_name)
+                    )
+                ]
+            )
+        ]
+
+        logger.info(
+            f"Consumers to validate: {consumers_to_validate} "
+            f"from all consumers: {consumer_names}"
+        )
+        pool_names = fetch_pool_names()
+        rados_namespaces = fetch_rados_namespaces()
+        svg_names = get_cephfs_subvolumegroup_names()
+        filesystems = fetch_filesystem_names()
+        rns_for_consumer_verified = []
+        svg_for_consumer_verified = []
+        for consumer in consumers_to_validate:
+            consumer_rns_verified = check_consumer_rns(
+                consumer, pool_names, rados_namespaces
+            )
+            consumer_svg_verified = check_consumer_svg(consumer, filesystems, svg_names)
+            rns_for_consumer_verified.append(consumer_rns_verified)
+            svg_for_consumer_verified.append(consumer_svg_verified)
+
         assert (
             hosted_ocp_verification_passed
         ), "Some of the hosted OCP clusters are not ready"
@@ -344,6 +424,13 @@ class HostedClients(HyperShiftBase):
         assert all(
             hosted_odf_storage_verified
         ), "Storage is not available on all hosted ODF clusters"
+        assert all(
+            rns_for_consumer_verified
+        ), "RNS for consumers of deployed clusters failed verification"
+        assert all(
+            svg_for_consumer_verified
+        ), "SVG for consumers of deployed clusters failed verification"
+
         return hosted_odf_clusters_installed
 
     def verify_client_cluster_storage(self, cluster_name):
@@ -1462,30 +1549,41 @@ class HostedODF(HypershiftHostedOCP):
         )
 
     @kubeconfig_exists_decorator
-    def create_catalog_source(self):
+    def create_catalog_source(self, reapply=False, odf_version_tag=None):
         """
         Create catalog source for ODF
 
+        Args:
+            reapply (bool): If True, will reapply the catalog source even if it exists
+            odf_version_tag (str): Optional ODF version tag to use for the catalog source image.
+
         Returns:
             bool: True if the catalog source is created, False otherwise
+
         """
         if self.catalog_source_exists():
             logger.info("CatalogSource already exists")
-            return True
+            if not reapply:
+                return True
 
         catalog_source_data = templating.load_yaml(
             constants.PROVIDER_MODE_CATALOGSOURCE
         )
 
         if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
-            raise ValueError(
-                "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
-                "in the 'hosted_odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
-            )
+            if not reapply:
+                raise ValueError(
+                    "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
+                    "in the 'hosted_odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
+                )
 
-        odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
+        if odf_version_tag:
+            # If odf_version_tag is provided, use it instead of the one from config
+            odf_version = odf_version_tag
+        else:
+            odf_version = (
+                config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+            )
         odf_registry = (
             config.ENV_DATA.get("clusters")
             .get(self.name)
@@ -1576,15 +1674,12 @@ class HostedODF(HypershiftHostedOCP):
         hosted_odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
-        if "latest" in hosted_odf_version:
+        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
-        if "konflux" in hosted_odf_version and "-" in hosted_odf_version:
-            version_semantic = version.get_semantic_version(
-                hosted_odf_version.split("-")[0]
-            )
-            hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
+        version_semantic = version.get_semantic_version(hosted_odf_version)
 
+        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
         subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
