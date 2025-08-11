@@ -23,6 +23,7 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_creation,
     wait_for_all_resources_deletion,
     gracefully_reboot_ocp_nodes,
+    verify_cluster_data_protected_and_peer_ready_true,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
@@ -30,7 +31,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     verify_failover_relocate_status_ui,
 )
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
-from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -119,15 +119,11 @@ class TestApplicationFailoverAndRelocate:
         pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
         """
 
-        if config.RUN.get("mdr_failover_via_ui"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version <= version.VERSION_4_12:
-                logger.error(
-                    "ODF/ACM version isn't supported for Failover/Relocate operation"
-                )
-                raise NotImplementedError
+        self.primary_cluster_name = ""
 
-        acm_obj = AcmAddClusters()
+        if config.RUN.get("mdr_failover_via_ui"):
+            acm_obj = AcmAddClusters()
+
         if workload_type == constants.SUBSCRIPTION:
             workload = dr_workload(num_of_subscription=1)[0]
         else:
@@ -141,6 +137,9 @@ class TestApplicationFailoverAndRelocate:
         self.primary_cluster_name = get_current_primary_cluster_name(
             namespace=workload.workload_namespace, workload_type=workload_type
         )
+
+        # Verify that the cluster dataProtected is True and peerReady is True
+        verify_cluster_data_protected_and_peer_ready_true(namespace=self.namespace)
 
         # Stop primary cluster nodes
         if primary_cluster_down:
@@ -233,6 +232,9 @@ class TestApplicationFailoverAndRelocate:
         # Validate data integrity
         set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
+
+        # Verify that the cluster dataProtected is True and peerReady is True
+        verify_cluster_data_protected_and_peer_ready_true(namespace=self.namespace)
 
         # Un-fence the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.primary_cluster_name)
