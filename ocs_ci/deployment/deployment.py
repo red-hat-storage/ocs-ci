@@ -85,7 +85,14 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
-from ocs_ci.ocs.node import get_worker_nodes, verify_all_nodes_created
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    verify_all_nodes_created,
+    label_nodes,
+    get_all_nodes,
+    get_node_objs,
+    get_nodes,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
@@ -619,63 +626,63 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
 
-    def do_deploy_odf_provider_mode(self):
-        """
-        Deploy ODF in provider mode and setup native client
-        """
-        # deploy provider-client deployment
-        from ocs_ci.deployment.provider_client.storage_client_deployment import (
-            ODFMultiClientHubDeployment,
-        )
-
-        odf_depl_obj = ODFMultiClientHubDeployment()
-
-        # Provider-client deployment if odf_provider_mode_deployment: True
-        if (
-            config.ENV_DATA.get("odf_provider_mode_deployment", False)
-            and not config.ENV_DATA["skip_ocs_deployment"]
-        ):
-            if config.DEPLOYMENT.get("local_storage"):
-                # Usually we create local storage for multi-client setups via checkbox in jenkins UI, in such case
-                # config.DEPLOYMENT["lso_standalone_deployment"] is set to True and at this point
-                # we can assume that local storage is installed with other Dependencies *(when Install Dependencies
-                # is being marked too)
-                # Following lso installation section is for redundancy and non-standard setups, for example,
-                # when we create multi-client not from ODF Provider Client Multicluster Job
-
-                # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-                is_local_storage_available = odf_depl_obj.sc_obj.is_exist(
-                    resource_name=odf_depl_obj.storageclass,
-                )
-                if not is_local_storage_available:
-                    # avoid circular import
-                    from ocs_ci.deployment.baremetal import disks_available_to_cleanup
-                    from ocs_ci.ocs.node import get_nodes
-
-                    worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-                    disks_available_on_worker_nodes_for_cleanup = (
-                        disks_available_to_cleanup(worker_node_objs[0])
-                    )
-                    number_of_disks_available = len(
-                        disks_available_on_worker_nodes_for_cleanup
-                    )
-                    logger.info(
-                        f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
-                        f"number of disks avilable for cleanup, {number_of_disks_available}"
-                    )
-
-                    cleanup_nodes_for_lso_install()
-                    setup_local_storage(storageclass=odf_depl_obj.storageclass)
-                else:
-                    logger.info("local storage is already installed")
-            else:
-                logger.info(
-                    "Skipping local storage setup as local_storage is not requested in config"
-                )
-
-            odf_depl_obj.provider_and_native_client_installation(
-                worker_node_objs, number_of_disks_available
-            )
+    # def do_deploy_odf_provider_mode(self):
+    #     """
+    #     Deploy ODF in provider mode and setup native client
+    #     """
+    #     # deploy provider-client deployment
+    #     from ocs_ci.deployment.provider_client.storage_client_deployment import (
+    #         ODFMultiClientHubDeployment,
+    #     )
+    #
+    #     odf_depl_obj = ODFMultiClientHubDeployment()
+    #
+    #     # Provider-client deployment if odf_provider_mode_deployment: True
+    #     if (
+    #         config.ENV_DATA.get("odf_provider_mode_deployment", False)
+    #         and not config.ENV_DATA["skip_ocs_deployment"]
+    #     ):
+    #         if config.DEPLOYMENT.get("local_storage"):
+    #             # Usually we create local storage for multi-client setups via checkbox in jenkins UI, in such case
+    #             # config.DEPLOYMENT["lso_standalone_deployment"] is set to True and at this point
+    #             # we can assume that local storage is installed with other Dependencies *(when Install Dependencies
+    #             # is being marked too)
+    #             # Following lso installation section is for redundancy and non-standard setups, for example,
+    #             # when we create multi-client not from ODF Provider Client Multicluster Job
+    #
+    #             # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
+    #             is_local_storage_available = odf_depl_obj.sc_obj.is_exist(
+    #                 resource_name=odf_depl_obj.storageclass,
+    #             )
+    #             if not is_local_storage_available:
+    #                 # avoid circular import
+    #                 from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+    #                 from ocs_ci.ocs.node import get_nodes
+    #
+    #                 worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+    #                 disks_available_on_worker_nodes_for_cleanup = (
+    #                     disks_available_to_cleanup(worker_node_objs[0])
+    #                 )
+    #                 number_of_disks_available = len(
+    #                     disks_available_on_worker_nodes_for_cleanup
+    #                 )
+    #                 logger.info(
+    #                     f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
+    #                     f"number of disks avilable for cleanup, {number_of_disks_available}"
+    #                 )
+    #
+    #                 cleanup_nodes_for_lso_install()
+    #                 setup_local_storage(storageclass=odf_depl_obj.storageclass)
+    #             else:
+    #                 logger.info("local storage is already installed")
+    #         else:
+    #             logger.info(
+    #                 "Skipping local storage setup as local_storage is not requested in config"
+    #             )
+    #
+    #         odf_depl_obj.provider_and_native_client_installation(
+    #             worker_node_objs, number_of_disks_available
+    #         )
 
     def do_deploy_cnv(self):
         """
@@ -1591,14 +1598,35 @@ class Deployment(object):
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
         elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-            from ocs_ci.ocs.node import get_nodes
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
-            worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-            no_of_worker_nodes = len(worker_node_objs)
-            number_of_disks_available = len(
-                disks_available_to_cleanup(worker_node_objs[0])
+            nodes_obj = OCP(
+                kind=constants.NODE,
+                selector=f"{constants.OPERATOR_NODE_LABEL}",
             )
+            nodes_data = nodes_obj.get()["items"]
+            node_names = [nodes["metadata"]["name"] for nodes in nodes_data]
+
+            no_of_worker_nodes = len(node_names)
+            number_of_disks_available_total = 0
+            # count number of disks available on all labeled nodes and divide to number of nodes
+            for node in node_names:
+                node_obj = OCP(
+                    kind=constants.NODE,
+                    selector=f"{constants.OPERATOR_NODE_LABEL}",
+                    resource_name=node,
+                )
+                number_of_disks_available_total += len(
+                    disks_available_to_cleanup(node_obj)
+                )
+
+            number_of_disks_available = int(
+                number_of_disks_available_total / no_of_worker_nodes
+            )
+
+            # with this approach of datermining the number of nodes we assume worker nodes number of disks is equal
+            # to master nodes number of disks, in case when config.ENV_DATA.get("mark_masters_schedulable") == True,
+            # and we labeled master nodes to serve as a storage nodes
             cluster_data["spec"]["storageDeviceSets"][0][
                 "count"
             ] = number_of_disks_available
@@ -2287,6 +2315,27 @@ class Deployment(object):
                 + f"default --type json -p '{params}'"
             )
             OCP().exec_oc_cmd(command=patch_cmd)
+
+            # Mark master nodes schedulable if mark_masters_schedulable: True
+            if config.ENV_DATA.get("mark_masters_schedulable", False):
+                path = "/spec/mastersSchedulable"
+                params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+                scheduler_obj = ocp.OCP(
+                    kind=constants.SCHEDULERS_CONFIG,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )
+                assert scheduler_obj.patch(
+                    params=params, format_type="json"
+                ), "Failed to run patch command to update control nodes as scheduleable"
+                # Allow ODF to be deployed on all nodes
+                logger.info("labeling all nodes as storage nodes")
+                nodes = get_all_nodes()
+                node_objs = get_node_objs(nodes)
+                label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+            else:
+                logger.info("labeling worker nodes as storage nodes")
+                worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+                label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
 
         if config.DEPLOYMENT["external_mode"]:
             self.deploy_with_external_mode()
