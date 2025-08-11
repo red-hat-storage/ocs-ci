@@ -22,7 +22,9 @@ class TestCSISubvolumeGroup(ManageTest):
         result = run_oc_command("get CephFilesystemSubVolumeGroup -o yaml")
         yaml_dict = yaml.safe_load("\n".join(result))
         try:
-            pinning_val = yaml_dict["items"][0]["spec"]["pinning"]["distributed"]
+            pinning = yaml_dict["items"][0]["status"]["pinning"]
+            pinning_key, pinning_val = pinning.strip().split("=")
+            assert pinning_key == "distributed", "Pinning must be 'distributed'"
         except KeyError as e:
             err_msg = 'Pinning property not found, missing key "%s"' % str(e)
             logger.error(err_msg)
