@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier3,
     skipif_external_mode,
+    skipif_ms_provider_and_consumer,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.framework import config
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 @green_squad
 @skipif_external_mode
 @skipif_ocs_version("<4.14")
+@skipif_ms_provider_and_consumer
 class TestCustomStorageClassNames:
     def setup(self):
         self.custom_sc_list = []
