@@ -2979,6 +2979,8 @@ def verify_osd_removal_job_completed_successfully(osd_id):
                 return False
 
     # Verify OSD removal from the ocs-osd-removal pod logs
+    logger.info("Wait for 60 seconds before verifying removal of OSD")
+    time.sleep(60)
     logger.info(f"Verifying removal of OSD from {osd_removal_pod_name} pod logs")
     logs = get_pod_logs(osd_removal_pod_name)
     patterns = [
