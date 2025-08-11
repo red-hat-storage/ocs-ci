@@ -3467,7 +3467,8 @@ def cloud_uls_factory(request, cld_mgr):
            an Underlying Storage factory
 
     """
-    return cloud_uls_factory_implementation(request, cld_mgr)
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        return cloud_uls_factory_implementation(request, cld_mgr)
 
 
 @pytest.fixture(scope="session")
@@ -3481,7 +3482,8 @@ def cloud_uls_factory_session(request, cld_mgr):
            an Underlying Storage factory
 
     """
-    return cloud_uls_factory_implementation(request, cld_mgr)
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        return cloud_uls_factory_implementation(request, cld_mgr)
 
 
 @pytest.fixture(scope="function")
