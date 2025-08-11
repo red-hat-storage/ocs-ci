@@ -1952,7 +1952,7 @@ class KMIP(KMS):
             logger.info("KMIP: Noobaa encryption key found in CipherTrust Manager")
         else:
             raise NotFoundError(
-                "KMIP: Noobaa encryption key found in CipherTrust Manager"
+                "KMIP: Noobaa encryption key not found in CipherTrust Manager"
             )
 
         # Check kms enabled
