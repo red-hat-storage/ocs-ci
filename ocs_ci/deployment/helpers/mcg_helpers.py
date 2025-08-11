@@ -9,7 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.utils import enable_console_plugin
 from ocs_ci.utility import templating, version
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import get_primary_nb_db_pod, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -95,30 +95,26 @@ def check_if_mcg_secrets_in_env():
         True if secrets are used in env variable else False
 
     """
+    with config.RunWithProviderConfigContextIfAvailable():
+        noobaa_endpoint_env = ocp.OCP(
+            kind=constants.DEPLOYMENT,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+        ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
 
-    noobaa_endpoint_env = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
-    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
+        noobaa_operator_env = ocp.OCP(
+            kind=constants.DEPLOYMENT,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT,
+        ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
 
-    noobaa_operator_env = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT,
-    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
+        noobaa_core_env = ocp.OCP(
+            kind=constants.STATEFULSET,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+        ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
 
-    noobaa_core_env = ocp.OCP(
-        kind=constants.STATEFULSET,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.NOOBAA_CORE_STATEFULSET,
-    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
-
-    noobaa_db_env = ocp.OCP(
-        kind=constants.STATEFULSET,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.NOOBAA_DB_STATEFULSET,
-    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
+        noobaa_db_env = get_primary_nb_db_pod().get()["spec"]["containers"][0]["env"]
 
     def _check_env_vars(env_vars):
         """
