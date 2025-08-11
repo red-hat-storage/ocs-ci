@@ -48,7 +48,6 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedBehaviour,
-    NotSupportedException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -4736,11 +4735,26 @@ def retrieve_cli_binary(cli_type="mcg"):
         )
         cli_type = "odf"
 
-    if cli_type == "odf" and semantic_version < version.VERSION_4_15:
-        raise NotSupportedException(
-            f"odf cli tool not supported on ODF {semantic_version}"
-        )
+    # Use ODFCLIRetriever for odf-cli downloads
+    if cli_type == "odf":
+        from ocs_ci.helpers.odf_cli import ODFCLIRetriever
 
+        odf_retriever = ODFCLIRetriever()
+        odf_retriever.retrieve_odf_cli_binary()
+
+        # Create symlink for backward compatibility if mcg was originally requested
+        if original_cli_type == "mcg" and semantic_version >= version.VERSION_4_20:
+            mcg_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            odf_cli_path = odf_retriever.local_cli_path
+            if os.path.exists(mcg_cli_path) or os.path.islink(mcg_cli_path):
+                os.remove(mcg_cli_path)
+            os.symlink(odf_cli_path, mcg_cli_path)
+            logger.info(
+                f"Created symlink from {mcg_cli_path} to {odf_cli_path} for backward compatibility"
+            )
+        return
+
+    # Continue with original mcg-cli download logic for OCS < 4.20
     remote_path = get_architecture_path(cli_type)
     remote_cli_basename = os.path.basename(remote_path)
 
@@ -4801,21 +4815,6 @@ def retrieve_cli_binary(cli_type="mcg"):
     assert os.access(
         local_cli_path, os.X_OK
     ), f"The {cli_type} CLI binary does not have execution permissions"
-
-    # For OCS >= 4.20, if mcg-cli was originally requested but we downloaded odf-cli,
-    # create a symlink from mcg-cli to odf-cli for backward compatibility
-    if (
-        original_cli_type == "mcg"
-        and cli_type == "odf"
-        and semantic_version >= version.VERSION_4_20
-    ):
-        mcg_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-        if os.path.exists(mcg_cli_path) or os.path.islink(mcg_cli_path):
-            os.remove(mcg_cli_path)
-        os.symlink(local_cli_path, mcg_cli_path)
-        logger.info(
-            f"Created symlink from {mcg_cli_path} to {local_cli_path} for backward compatibility"
-        )
 
 
 def get_architecture_path(cli_type):

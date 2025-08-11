@@ -1,4 +1,5 @@
 import os
+import platform
 from stat import S_IEXEC
 from logging import getLogger
 from typing import Union
@@ -63,15 +64,40 @@ class ODFCLIRetriever:
                 f"ODF CLI tool not supported on ODF {self.semantic_version}"
             )
 
-    def _get_odf_cli_image(self, build_no: str = None):
-        if build_no:
-            return f"{ODF_CLI_DEV_IMAGE}:{build_no}"
-        else:
-            return f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}"
+    def _get_odf_cli_image(self):
+        return f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}"
+
+    def _get_architecture_path(self):
+        """Get architecture-specific path for ODF CLI binary in the container image."""
+        system = platform.system()
+        machine = platform.machine()
+        path = "/usr/share/odf/"
+
+        if system == "Linux":
+            path = os.path.join(path, "linux")
+            if machine == "x86_64":
+                path = os.path.join(path, "odf-amd64")
+            elif machine == "ppc64le":
+                path = os.path.join(path, "odf-ppc64le")
+            elif machine == "s390x":
+                path = os.path.join(path, "odf-s390x")
+        elif system == "Darwin":  # Mac
+            # For ODF CLI 4.20+, Mac has architecture-specific binaries
+            path = os.path.join(path, "macosx")
+            if machine == "arm64" or machine == "aarch64":  # Apple Silicon
+                path = os.path.join(path, "odf-arm64")
+            else:  # Intel Mac (x86_64/amd64)
+                path = os.path.join(path, "odf-amd64")
+
+        return path
 
     def _extract_cli_binary(self, image):
         pull_secret_path = download_pull_secret()
         local_cli_dir = os.path.dirname(self.local_cli_path)
+
+        # Get architecture-specific path for odf-cli
+        remote_path = self._get_architecture_path()
+        remote_cli_basename = os.path.basename(remote_path)
 
         # Ensure the directory exists
         os.makedirs(local_cli_dir, exist_ok=True)
@@ -79,8 +105,14 @@ class ODFCLIRetriever:
         exec_cmd(
             f"oc image extract --registry-config {pull_secret_path} "
             f"{image} --confirm "
-            f"--path /usr/bin/odf:{local_cli_dir}"
+            f"--path {remote_path}:{local_cli_dir}"
         )
+
+        # For ODF CLI 4.20+, Mac binaries need to be renamed from odf-{arch} to odf
+        extracted_path = os.path.join(local_cli_dir, remote_cli_basename)
+        if os.path.exists(extracted_path) and extracted_path != self.local_cli_path:
+            log.info(f"Renaming {extracted_path} to {self.local_cli_path}")
+            os.rename(extracted_path, self.local_cli_path)
 
         if not os.path.exists(self.local_cli_path):
             raise FileNotFoundError(
