@@ -139,7 +139,9 @@ class TestApplicationFailoverAndRelocate:
         )
 
         # Verify that the cluster dataProtected is True and peerReady is True
-        verify_cluster_data_protected_and_peer_ready_true(namespace=self.namespace)
+        verify_cluster_data_protected_and_peer_ready_true(
+            workload_type=workload_type, namespace=self.namespace
+        )
 
         # Stop primary cluster nodes
         if primary_cluster_down:
