@@ -2552,11 +2552,12 @@ def verify_volsync():
 
 
 @retry(UnexpectedBehaviour, tries=25, delay=3, backoff=3)
-def verify_cluster_data_protected_and_peer_ready_true(namespace):
+def verify_cluster_data_protected_and_peer_ready_true(workload_type, namespace):
     """
     Verify that the cluster dataProtected is True and peerReady is True
 
      Args:
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         namespace (str): the namespace of the drpc resources
 
     Returns:
@@ -2567,6 +2568,8 @@ def verify_cluster_data_protected_and_peer_ready_true(namespace):
     config.switch_acm_ctx()
     retries = 0
     max_retries = 5
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     while retries < max_retries:
         try:
             drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace)
