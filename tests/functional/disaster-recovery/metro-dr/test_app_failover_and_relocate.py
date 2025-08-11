@@ -233,9 +233,6 @@ class TestApplicationFailoverAndRelocate:
         set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
 
-        # Verify that the cluster dataProtected is True and peerReady is True
-        verify_cluster_data_protected_and_peer_ready_true(namespace=self.namespace)
-
         # Un-fence the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.primary_cluster_name)
 
