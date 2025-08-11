@@ -25,6 +25,7 @@ class TestCSISubvolumeGroup(ManageTest):
             pinning = yaml_dict["items"][0]["status"]["pinning"]
             pinning_key, pinning_val = pinning.strip().split("=")
             assert pinning_key == "distributed", "Pinning must be 'distributed'"
+            pinning_val = int(pinning_val)
         except KeyError as e:
             err_msg = 'Pinning property not found, missing key "%s"' % str(e)
             logger.error(err_msg)
