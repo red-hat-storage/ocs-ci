@@ -237,6 +237,7 @@ STORAGECLASSCLAIM = "StorageClassClaim"
 # Deprecated and data moved to StorageClient starting from 4.19
 STORAGECLAIM = "StorageClaim"
 STORAGECONSUMER = "StorageConsumer"
+STORAGECONSUMER_NAME_PREFIX = "consumer-"
 MACHINEHEALTHCHECK = "machinehealthcheck"
 STORAGECLIENT = "StorageClient"
 STORAGECLIENTS = "storageclients.ocs.openshift.io"

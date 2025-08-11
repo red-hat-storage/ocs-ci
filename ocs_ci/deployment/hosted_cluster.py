@@ -56,6 +56,7 @@ from ocs_ci.ocs.resources.storageconsumer import (
     check_consumer_rns,
     get_ready_consumers_names,
     check_consumer_svg,
+    verify_storage_consumer_resources,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
@@ -330,7 +331,7 @@ class HostedClients(HyperShiftBase):
                 else:
                     start_time = time.time()
                     client_installed = hosted_odf.setup_storage_client_converged(
-                        storage_consumer_name=f"consumer-{cluster_name}"
+                        storage_consumer_name=f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
                     )
                     time_taken = time.time() - start_time
                     time_sec = int(time_taken % 60) + 1
@@ -373,6 +374,20 @@ class HostedClients(HyperShiftBase):
             for name in cluster_names
             if self.storage_installation_requested(name)
         )
+
+        log_step("storage consumers and configmaps for newly deployed clients")
+        storage_consumers_verified = []
+        for cluster_name in hosted_odf_clusters_installed:
+            try:
+                verify_storage_consumer_resources(
+                    f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
+                )
+                storage_consumers_verified.append(True)
+            except Exception as e:
+                logger.error(
+                    f"Storage consumer resources verification failed for cluster {cluster_name}: {e}"
+                )
+                storage_consumers_verified.append(False)
 
         log_step("verify backing Ceph storage for newly deployed clients")
 
@@ -430,6 +445,9 @@ class HostedClients(HyperShiftBase):
         assert all(
             svg_for_consumer_verified
         ), "SVG for consumers of deployed clusters failed verification"
+        assert all(
+            storage_consumers_verified
+        ), "Storage consumer resources verification failed for some of the clusters"
 
         return hosted_odf_clusters_installed
 
