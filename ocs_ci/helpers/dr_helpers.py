@@ -2565,24 +2565,43 @@ def verify_cluster_data_protected_and_peer_ready_true(namespace):
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
-    drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace)
-    cluster_data_protected = (
-        drpc_obj.get()
-        .get("items")[0]
-        .get("status")
-        .get("resourceConditions")
-        .get("conditions")[3]
-        .get("status")
-    )
-    peer_ready = (
-        drpc_obj.get().get("items")[0].get("status").get("conditions")[1].get("status")
-    )
-    if cluster_data_protected and peer_ready:
-        logger.info("cluster dataProtected is True and peerReady is True")
-        config.switch_ctx(restore_index)
-        return True
-    else:
-        logger.error("cluster dataProtected is not True or peerReady is not True")
-        raise UnexpectedBehaviour(
-            "Applications either clusterdataProtected is not True or peerReady is not True "
+    retries = 0
+    max_retries = 5
+    while retries < max_retries:
+        try:
+            drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace)
+            cluster_data_protected = (
+                drpc_obj.get()
+                .get("items")[0]
+                .get("status")
+                .get("resourceConditions")
+                .get("conditions")[3]
+                .get("status")
+            )
+            peer_ready = (
+                drpc_obj.get()
+                .get("items")[0]
+                .get("status")
+                .get("conditions")[1]
+                .get("status")
+            )
+            if cluster_data_protected and peer_ready:
+                logger.info("cluster dataProtected is True and peerReady is True")
+                config.switch_ctx(restore_index)
+                return True
+            else:
+                logger.error(
+                    "cluster dataProtected is not True or peerReady is not True"
+                )
+                raise UnexpectedBehaviour(
+                    "Applications either clusterdataProtected is not True or peerReady is not True "
+                )
+        except (IndexError, KeyError) as e:
+            retries += 1
+            logger.warning(
+                f"Index error occurred: {e}. Retrying in 5 seconds (attempt {retries}/{max_retries})..."
+            )
+            time.sleep(5)
+        raise CommandFailed(
+            "Not able to get either clusterdataprocted or peerready value"
         )
