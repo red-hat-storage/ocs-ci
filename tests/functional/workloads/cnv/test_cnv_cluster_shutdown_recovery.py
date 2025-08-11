@@ -91,8 +91,18 @@ class TestVmShutdownStart(E2ETest):
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             source_csums[vm_obj.name] = source_csum
 
-        # Choose VMs randomaly
-        vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
+        vm_for_clone = next(
+            (vm for vm in all_vms if vm.volume_interface == "DVT"), None
+        )
+        vm_for_snap = next((vm for vm in all_vms if vm.volume_interface == "PVC"), None)
+        vm_for_stop = next((vm for vm in all_vms if vm.volume_interface == "DV"), None)
+
+        if vm_for_clone is None:
+            vm_for_clone = random.choice(all_vms)
+        if vm_for_snap is None:
+            vm_for_snap = random.choice(all_vms)
+        if vm_for_stop is None:
+            vm_for_stop = random.choice(all_vms)
 
         # Create Clone of VM
         cloned_vm = vm_clone_fixture(vm_for_clone, admin_client)
