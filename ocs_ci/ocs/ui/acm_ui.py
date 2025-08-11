@@ -80,6 +80,32 @@ class AcmPageNavigator(BaseUI):
 
         """
         self.page_has_loaded(retries=12, sleep_time=5)
+        
+        assert self.check_element_presence(
+            (
+                self.acm_page_nav["left_menu_toggle_dropdown"][1],
+                self.acm_page_nav["left_menu_toggle_dropdown"][0],
+            ),
+            timeout=timeout,
+        )
+        menu_toggle_dropdown_button = WebDriverWait(self.driver, 30).until(
+            EC.element_to_be_clickable(
+                (
+                    self.acm_page_nav["left_menu_toggle_dropdown"][1],
+                    self.acm_page_nav["left_menu_toggle_dropdown"][0],
+                )
+            )
+        )
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});",
+            menu_toggle_dropdown_button,
+        )
+
+        log.info("Click on menu view toggle dropdown")
+        self.do_click(self.acm_page_nav["left_menu_toggle_dropdown"])
+        log.info("Select Fleet Management view")
+        self.do_click(self.acm_page_nav["fleet-manager-view"])
+
         log.info("Now on Infrastructure page")
         assert self.check_element_presence(
             (

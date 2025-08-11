@@ -842,6 +842,19 @@ acm_page_nav_419 = {
     "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
 }
 
+acm_page_nav_420 = {
+    "Infrastructure": (
+        "//button[normalize-space()='Infrastructure' and @class='pf-v6-c-nav__link']",
+        By.XPATH,
+    ),
+    "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
+    "left_menu_toggle_dropdown": (
+        "//button[@class='pf-v6-c-menu-toggle pf-m-full-width']",
+        By.XPATH,
+    ),
+    "fleet-manager-view": ("//h2[normalize-space()='Fleet Management']", By.XPATH),
+}
+
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
     "create-cluster-set": (
@@ -2333,6 +2346,65 @@ bucket_tab = {
     ),  # Input field for bucket name confirmation
 }
 locators = {
+    "4.20": {
+        "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "generic": {**generic_locators, **generic_locators_4_19},
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+            **deployment_4_15,
+            **deployment_4_16,
+            **deployment_4_17,
+            **deployment_4_19,
+        },
+        "obc": obc,
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+            **pvc_4_19,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+            **acm_configuration_4_14,
+            **acm_configuration_4_16,
+            **acm_configuration_4_18,
+            **acm_page_nav_420,
+            **acm_configuration_4_19,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+            **validation_4_17,
+            **validation_4_18,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+        "alerting": alerting,
+        "bucket_tab": bucket_tab,
+    },
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
