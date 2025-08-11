@@ -2549,3 +2549,40 @@ def verify_volsync():
             timeout=600,
         )
     config.switch_ctx(restore_index)
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=3, backoff=3)
+def verify_cluster_data_protected_and_peer_ready_true(namespace):
+    """
+    Verify that the cluster dataProtected is True and peerReady is True
+
+     Args:
+        namespace (str): the namespace of the drpc resources
+
+    Returns:
+        bool: True if application dataProtected is True and peerReady is True, Otherwise raise exception
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace)
+    cluster_data_protected = (
+        drpc_obj.get()
+        .get("items")[0]
+        .get("status")
+        .get("resourceConditions")
+        .get("conditions")[3]
+        .get("status")
+    )
+    peer_ready = (
+        drpc_obj.get().get("items")[0].get("status").get("conditions")[1].get("status")
+    )
+    if cluster_data_protected and peer_ready:
+        logger.info("cluster dataProtected is True and peerReady is True")
+        config.switch_ctx(restore_index)
+        return True
+    else:
+        logger.error("cluster dataProtected is not True or peerReady is not True")
+        raise UnexpectedBehaviour(
+            "Applications either clusterdataProtected is not True or peerReady is not True "
+        )
