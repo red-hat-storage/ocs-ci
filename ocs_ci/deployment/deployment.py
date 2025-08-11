@@ -1530,7 +1530,6 @@ class Deployment(object):
             cluster_data["spec"]["network"] = {"hostNetwork": True}
 
         if config.ENV_DATA.get("odf_provider_mode_deployment", False):
-            cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
             cluster_data["spec"]["providerAPIServerServiceType"] = "NodePort"
 
         # Update cluster_data with respective component enable/disable
