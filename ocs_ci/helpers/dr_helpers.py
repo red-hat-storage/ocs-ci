@@ -2604,7 +2604,7 @@ def verify_cluster_data_protected_and_peer_ready_true(workload_type, namespace):
                 logger.error(
                     f"An error occurred: {e}. Retrying in 5 seconds (attempt {retries + 1}/{max_retries})..."
                 )
-                time.sleep(5)
+                time.sleep(10)
                 retries += 1
         raise CommandFailed(
             "Not able to get either clusterdataprocted or peerready value"
