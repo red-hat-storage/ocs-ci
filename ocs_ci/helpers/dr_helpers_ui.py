@@ -791,6 +791,7 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         log.error("Applications not present to delete from UI")
         return False
 
+
 def assign_drpolicy_for_discovered_vms_via_ui(
     acm_obj, vms: List[str], standalone=True, protection_name=None, namespace=None
 ):
@@ -870,7 +871,7 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         if standalone:
             log.info("Select policy")
             acm_obj.do_click(acm_loc["dr-policy"], enable_screenshot=True)
-            acm_obj.do_click(acm_loc["select-policy"], enable_screenshot=True)
+            acm_obj.do_click(acm_loc["select-dr-policy"], enable_screenshot=True)
         log.info("Click next")
         acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
         log.info("Verify selected protection type")
@@ -894,20 +895,30 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         log.info("Close page")
         acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
         return True
-def check_dr_status(acm_obj, workloads=None, expected_status=None):
+
+
+def check_dr_status(
+    acm_obj,
+    workloads=None,
+    primary_cluster_name=None,
+    target_cluster_name=None,
+    expected_status=None,
+):
     """
-    Function to validate the specified application's dr health status on UI
+    Function to validate the specified application's DR health status on UI
 
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
+        primary_cluster_name(str): Expected primary cluster name during failover/relocate in the popover
+        target_cluster_name(str): Expected Target cluster during failover/relocate in the popover
         workloads(list): List of applications to validate dr health status
-        expected_status(str): expected status from UI
+        expected_status(str): expected status of the respective workload on UI
 
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Navigating to the Applications page")
-    acm_obj.take_screenshot()
     acm_obj.navigate_applications_page()
+    acm_obj.take_screenshot()
 
     for workload in workloads:
         log.info(f"Click on search bar for the workload {workload}")
@@ -935,30 +946,58 @@ def check_dr_status(acm_obj, workloads=None, expected_status=None):
             f" for the application {workload}"
         )
 
-        expected_status_popover_messages = {
-            "healthy": "All volumes are synced",
-            "warning": "Volumes are syncing slower than usual",
-            "critical": "Volumes are not syncing",
-        }
-
         log.info("Clicking on the dr status button...")
-        dr_status_button = acm_obj.find_an_element_by_xpath(
-            "//button[@data-test-id='dr-status-button']"
-        )
-        acm_obj.driver.execute_script("arguments[0].click();", dr_status_button)
 
-        log.info("Waiting 10 secs for the popover to load...")
-        time.sleep(10)
+        for _ in range(10):
+            try:
+                log.info("Clicking on the dr status button...")
+                button_action = wait_for_element_to_be_clickable(
+                    acm_loc["dr_status_button"]
+                )
+                acm_obj.driver.execute_script("arguments[0].click();", button_action)
+            except (TimeoutException, NoSuchElementException):
+                log.warning("Dr status button is not clickable yest, retrying...")
+                time.sleep(1)
 
         log.info("Validating the message in popover...")
         current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
 
+        if expected_status == "FailingOver" or expected_status == "Relocating":
+            cluster_details_in_popover = acm_obj.get_element_text(
+                acm_loc["cluster_details_in_popover"]
+            )
+            acm_obj.take_screenshot()
+            primary_cluster_popover = cluster_details_in_popover.split("\n")[1]
+            target_cluster_popover = cluster_details_in_popover.split("\n")[3]
+            log.info(f"Primary cluster during failover {cluster_details_in_popover}")
+
+            if primary_cluster_popover != primary_cluster_name:
+                log.error(
+                    f"Primary cluster name is not as expected as {primary_cluster_name} "
+                    f"current primary cluster in popover is {primary_cluster_popover}"
+                )
+                raise UnexpectedBehaviour
+
+            if target_cluster_popover != target_cluster_name:
+                log.error(
+                    f"Secondary cluster name is not as expected as {target_cluster_name} "
+                    f"current target cluster in popover is {target_cluster_popover}"
+                )
+                raise UnexpectedBehaviour
+
+        expected_status_popover_messages = {
+            "healthy": "All volumes are synced",
+            "warning": "Volumes are syncing slower than usual",
+            "critical": "Volumes are not syncing",
+            "FailingOver": "Failover in progress",
+            "Relocating": "Relocate in progress",
+        }
+
         if expected_status_popover_messages[expected_status] != current_pop_over_text:
-            log.info(
+            log.error(
                 f"current popover message is {current_pop_over_text} "
                 f"but the expected is {expected_status_popover_messages[expected_status]}"
             )
-            acm_obj.take_screenshot()
             raise UnexpectedBehaviour
 
         log.info("Popover message validation is successful")
@@ -967,4 +1006,3 @@ def check_dr_status(acm_obj, workloads=None, expected_status=None):
             f"'{expected_status_popover_messages[expected_status]}' found"
             f"for the workload {workload}"
         )
-

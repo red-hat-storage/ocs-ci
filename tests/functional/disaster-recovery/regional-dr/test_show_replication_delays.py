@@ -16,7 +16,6 @@ from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
     check_dr_status,
-    verify_failover_relocate_status_ui,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.utils import (
@@ -34,13 +33,30 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 class TestShowReplicationDelays:
     """
-    Test class for RDR health status
+    Test class for RDR health status for ACM Managed application
 
     """
 
+    params = [
+        pytest.param(
+            constants.CEPHBLOCKPOOL,
+            id="CephBlockPool",
+        ),
+        pytest.param(
+            constants.CEPHFILESYSTEM,
+            id="CephFileSystem",
+        ),
+    ]
+
+    @pytest.mark.parametrize(
+        argnames=[
+            "pvc_interface",
+        ],
+        argvalues=params,
+    )
     @skipif_ocs_version("<4.19")
     def test_rdr_replication_delay(
-        self, setup_acm_ui, dr_workload, scale_up_deployment
+        self, setup_acm_ui, dr_workload, scale_up_deployment, pvc_interface
     ):
         """
         Test to verify the display of DR health status of appset based and
@@ -67,20 +83,23 @@ class TestShowReplicationDelays:
 
         workload_names = []
         rdr_workload = dr_workload(
-            num_of_subscription=1,
-            num_of_appset=0,
-            pvc_interface=constants.CEPHBLOCKPOOL,
+            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
         )
         workload_names.append(f"{rdr_workload[0].workload_name}-1")
-        dr_workload(
-            num_of_subscription=0,
-            num_of_appset=1,
-            pvc_interface=constants.CEPHFILESYSTEM,
+
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            workload_names.append(f"{rdr_workload[1].workload_name}-1")
+        else:
+            workload_names.append(f"{rdr_workload[1].workload_name}-1-cephfs")
+
+        drpc_subscription = DRPC(namespace=rdr_workload[0].workload_namespace)
+        drpc_appset = DRPC(
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            resource_name=f"{rdr_workload[1].appset_placement_name}-drpc",
         )
-        workload_names.append(f"{rdr_workload[1].workload_name}-1-cephfs")
+        drpc_objs = [drpc_subscription, drpc_appset]
 
         logger.info(f"Workload names are {workload_names}")
-        logger.info(f"rdr_workload {rdr_workload}")
 
         dr_helpers.set_current_primary_cluster_context(
             rdr_workload[0].workload_namespace
@@ -100,18 +119,12 @@ class TestShowReplicationDelays:
             rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
 
-        config.switch_acm_ctx()
+        # config.switch_acm_ctx()
         acm_obj = AcmAddClusters()
         page_nav = ValidationUI()
         page_nav.refresh_web_console()
 
         config.switch_to_cluster_by_name(primary_cluster_name)
-        drpc_subscription = DRPC(namespace=rdr_workload[0].workload_namespace)
-        drpc_appset = DRPC(
-            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{rdr_workload[1].appset_placement_name}-drpc",
-        )
-        drpc_objs = [drpc_subscription, drpc_appset]
         before_failover_last_group_sync_time = []
         for obj in drpc_objs:
             before_failover_last_group_sync_time.append(
@@ -122,11 +135,17 @@ class TestShowReplicationDelays:
         logger.info("Verifying the DR health status on UI")
         check_dr_status(acm_obj, workload_names, expected_status="healthy")
 
-        logger.info(
-            "Change replica count to 0 for rbd-mirror and "
-            "mds deployment on the secondary and primary cluster respectively "
-        )
-        modify_replica_count(replica_count=0)
+        # Bring DOWN the corresponding deployment
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            logger.info(
+                "Change replica count to 1 for rbd-mirror and " "on the secondary "
+            )
+            modify_rbd_replica_count(replica_count=1)
+        else:
+            logger.info(
+                "Change replica count to 1 for mds deployment and " "on the primary "
+            )
+            modify_mds_replica_count(replica_count=1)
 
         # Wait for the range of interval between 2x - 3x interval to
         # validate the message "warning"
@@ -135,22 +154,28 @@ class TestShowReplicationDelays:
             "Waiting for interval between the sync interval time and 2x of sync interval"
             " to validate 'warning' state"
         )
-        wait_time = 2 * scheduling_interval
+        wait_time = scheduling_interval + 3
         sleep(wait_time * 60)
 
         check_dr_status(acm_obj, workload_names, expected_status="warning")
 
         logger.info("Waiting to validate 'critical' state")
-        sleep(scheduling_interval * 60)
+        wait_time = 3 * scheduling_interval
+        sleep(wait_time * 60)
 
         check_dr_status(acm_obj, workload_names, expected_status="critical")
 
-        # Bring UP the RBD and MDS deployment
-        logger.info(
-            "Change replica count to 1 for rbd-mirror and "
-            "mds deployment on the secondary and primary cluster respectively "
-        )
-        modify_replica_count(replica_count=1)
+        # Bring UP the corresponding deployment
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            logger.info(
+                "Change replica count to 1 for rbd-mirror and " "on the secondary "
+            )
+            modify_rbd_replica_count(replica_count=1)
+        else:
+            logger.info(
+                "Change replica count to 1 for mds deployment and " "on the primary "
+            )
+            modify_mds_replica_count(replica_count=1)
 
         logger.info(
             "Waiting for the first sync to happen after scaling up the deployment"
@@ -162,60 +187,58 @@ class TestShowReplicationDelays:
         # Navigate to failover modal via ACM UI
         logger.info("Navigate to failover modal via ACM UI")
         for workload in rdr_workload:
-            if workload.workload_type == constants.SUBSCRIPTION:
-                failover_relocate_ui(
-                    acm_obj,
-                    scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[0],
-                    policy_name=workload.dr_policy_name,
-                    action=constants.ACTION_FAILOVER,
-                    failover_or_preferred_cluster=secondary_cluster_name,
-                    do_not_trigger=True,
-                )
-                check_dr_status(acm_obj, workload_names, expected_status="FailingOver")
-                verify_failover_relocate_status_ui(acm_obj)
-            else:
-                failover_relocate_ui(
-                    acm_obj,
-                    scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[1],
-                    policy_name=workload.dr_policy_name,
-                    action=constants.ACTION_RELOCATE,
-                    failover_or_preferred_cluster=secondary_cluster_name,
-                    workload_type=constants.APPLICATION_SET,
-                    do_not_trigger=True,
-                )
-                check_dr_status(acm_obj, workload_names, expected_status="Relocating")
-                verify_failover_relocate_status_ui(acm_obj)
+            failover_relocate_ui(
+                acm_obj,
+                scheduling_interval=scheduling_interval,
+                workload_to_move=f"{workload.workload_name}-1",
+                policy_name=workload.dr_policy_name,
+                action=constants.ACTION_FAILOVER,
+                failover_or_preferred_cluster=secondary_cluster_name,
+                workload_type=workload.workload_type,
+            )
+            check_dr_status(
+                acm_obj,
+                [workload.workload_name],
+                primary_cluster_name=primary_cluster_name,
+                target_cluster_name=secondary_cluster_name,
+                expected_status="FailingOver",
+            )
 
-        sleep(scheduling_interval * 60)
+        logger.info(f"Waiting for {wait_time} minutes to run IOs post failover")
+        sleep(wait_time * 60)
+        check_dr_status(acm_obj, workload_names, expected_status="healthy")
+
+        for workload in rdr_workload:
+            failover_relocate_ui(
+                acm_obj,
+                scheduling_interval=scheduling_interval,
+                workload_to_move=f"{workload.workload_name}-1",
+                policy_name=workload.dr_policy_name,
+                action=constants.ACTION_RELOCATE,
+                failover_or_preferred_cluster=secondary_cluster_name,
+                workload_type=workload.workload_type,
+            )
+            check_dr_status(
+                acm_obj,
+                [workload.workload_name],
+                primary_cluster_name=secondary_cluster_name,
+                target_cluster_name=primary_cluster_name,
+                expected_status="Relocating",
+            )
+
+        logger.info(f"Waiting for {wait_time} minutes to run IOs post relocate")
+        sleep(wait_time * 60)
         check_dr_status(acm_obj, workload_names, expected_status="healthy")
 
 
-def modify_replica_count(replica_count=1):
+def modify_mds_replica_count(replica_count=1):
     """
-    Function that modifies the deployment count of rbd mirror and
-    mds daemons on secondary cluster
+    Function that modifies the deployment count of
+    mds daemons on primary cluster
 
     Args:
         replica(int): 1, by default that sets the replica count to 1
     """
-
-    config.switch_ctx(secondary_index)
-
-    helpers.modify_deployment_replica_count(
-        deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT,
-        replica_count=replica_count,
-    )
-
-    helpers.modify_deployment_replica_count(
-        deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE,
-        replica_count=replica_count,
-    )
-    helpers.modify_deployment_replica_count(
-        deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO,
-        replica_count=replica_count,
-    )
 
     config.switch_ctx(primary_index)
 
@@ -232,9 +255,26 @@ def modify_replica_count(replica_count=1):
         ceph_health_check(tries=10, delay=30)
 
 
+def modify_rbd_replica_count(replica_count=1):
+    """
+    Function that modifies the deployment count of rbd mirror
+    on secondary cluster
+
+    Args:
+        replica(int): 1, by default that sets the replica count to 1
+    """
+    config.switch_ctx(secondary_index)
+
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT,
+        replica_count=replica_count,
+    )
+
+
 @pytest.fixture
 def scale_up_deployment(request):
     def teardown():
-        modify_replica_count(replica_count=1)
+        modify_rbd_replica_count(replica_count=1)
+        modify_mds_replica_count(replica_count=1)
 
     request.addfinalizer(teardown)
