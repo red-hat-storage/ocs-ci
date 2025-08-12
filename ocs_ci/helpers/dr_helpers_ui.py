@@ -946,8 +946,6 @@ def check_dr_status(
             f" for the application {workload}"
         )
 
-        log.info("Clicking on the dr status button...")
-
         for _ in range(10):
             try:
                 log.info("Clicking on the dr status button...")
@@ -969,19 +967,18 @@ def check_dr_status(
             acm_obj.take_screenshot()
             primary_cluster_popover = cluster_details_in_popover.split("\n")[1]
             target_cluster_popover = cluster_details_in_popover.split("\n")[3]
-            log.info(f"Primary cluster during failover {cluster_details_in_popover}")
 
             if primary_cluster_popover != primary_cluster_name:
                 log.error(
                     f"Primary cluster name is not as expected as {primary_cluster_name} "
-                    f"current primary cluster in popover is {primary_cluster_popover}"
+                    f"current Primary cluster in popover is {primary_cluster_popover}"
                 )
                 raise UnexpectedBehaviour
 
             if target_cluster_popover != target_cluster_name:
                 log.error(
-                    f"Secondary cluster name is not as expected as {target_cluster_name} "
-                    f"current target cluster in popover is {target_cluster_popover}"
+                    f"Target cluster name is not as expected as {target_cluster_name} "
+                    f"current Target cluster in popover is {target_cluster_popover}"
                 )
                 raise UnexpectedBehaviour
 
