@@ -243,18 +243,20 @@ class AcmPageNavigator(BaseUI):
 
         if not self.check_element_presence(
             (
-                self.acm_page_nav["click-local-cluster"][1],
-                self.acm_page_nav["click-local-cluster"][0],
+                self.acm_page_nav["click-admin-dropdown"][1],
+                self.acm_page_nav["click-admin-dropdown"][0],
             ),
             timeout=300,
         ):
-            log.error("local-cluster is not found, can not switch to ACM console")
+            log.error(
+                "Administrator dropdown is not found, can not switch to ACM console"
+            )
             self.take_screenshot()
             raise NoSuchElementException
-        log.info("Click on local-cluster")
-        self.do_click(self.acm_page_nav["click-local-cluster"])
-        log.info("Select All Clusters view")
-        self.do_click(self.acm_page_nav["all-clusters-view"])
+        log.info("Click on Administrator dropdown")
+        self.do_click(self.acm_page_nav["click-admin-dropdown"])
+        log.info("Select Fleet Management view")
+        self.do_click(self.acm_page_nav["fleet-management-view"])
         # There is a modal dialog box which appears as soon as we login
         # we need to click on close on that dialog box
         if self.check_element_presence(
