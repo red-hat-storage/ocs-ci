@@ -3026,18 +3026,23 @@ def generate_nodes_for_provider_worker_node_tests():
     return generated_nodes
 
 
-def gracefully_reboot_nodes(disable_eviction=False):
+def gracefully_reboot_nodes(disable_eviction=False, worker_nodes=False):
     """
 
     Gracefully reboot OpenShift Container Platform nodes
 
     Args:
         disable_eviction (bool): On True will delete pod that is protected by PDB, False by default
+        worker_nodes (bool): On True will gracefully reboot only worker nodes
 
     """
     from ocs_ci.ocs import platform_nodes
 
-    node_objs = get_node_objs()
+    if worker_nodes:
+        nodes_list = get_worker_nodes()
+        node_objs = get_node_objs(nodes_list)
+    else:
+        node_objs = get_node_objs()
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
     waiting_time = 30

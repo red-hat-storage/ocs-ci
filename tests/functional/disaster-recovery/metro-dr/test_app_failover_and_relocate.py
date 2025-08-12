@@ -239,7 +239,9 @@ class TestApplicationFailoverAndRelocate:
         enable_unfence(drcluster_name=self.primary_cluster_name)
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
+        gracefully_reboot_ocp_nodes(
+            self.primary_cluster_name, disable_eviction=True, worker_nodes=True
+        )
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
