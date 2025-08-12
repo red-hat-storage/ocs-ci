@@ -119,7 +119,6 @@ class TestShowReplicationDelays:
             rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
 
-        # config.switch_acm_ctx()
         acm_obj = AcmAddClusters()
         page_nav = ValidationUI()
         page_nav.refresh_web_console()
