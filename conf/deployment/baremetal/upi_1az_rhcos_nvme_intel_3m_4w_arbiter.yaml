@@ -1,11 +1,11 @@
 ---
 DEPLOYMENT:
   allow_lower_instance_requirements: false
-  local_storage: true
-  local_storage_storagedeviceset_count: 4
   dummy_zone_node_labels: true
   network_split_setup: true
   network_zone_latency: 5
+  make_master_schedulable: true
+  arbiter_hci: true
 ENV_DATA:
   platform: 'baremetal'
   deployment_type: 'upi'

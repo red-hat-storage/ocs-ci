@@ -85,7 +85,11 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
-from ocs_ci.ocs.node import get_worker_nodes, verify_all_nodes_created
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    verify_all_nodes_created,
+    make_master_nodes_schedulable,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
@@ -831,6 +835,8 @@ class Deployment(object):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
             create_dummy_zone_labels()
+        if config.DEPLOYMENT.get("mark_masters_schedulable"):
+            make_master_nodes_schedulable()
         ibmcloud_ipi = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "ipi"
