@@ -150,6 +150,9 @@ def create_nfs_load_balancer_service(
     Args:
         storage_cluster_obj (obj): storage cluster object
 
+    Returns:
+        str: host details
+
     """
     # Create loadbalancer service for nfs
     log.info("----create loadbalancer service----")
@@ -290,28 +293,39 @@ def provisioner_selectors(nfs_plugins=False, cephfs_plugin=False):
         return cephfs_provisioner_list
 
 
-def create_nfs_sc_retain(sc_name):
+def create_nfs_sc(
+    sc_name_to_create,
+    sc_name_to_copy="ocs-storagecluster-cephfs",
+    retain_reclaim_policy=False,
+    server=None,
+):
     """
-    This method is to create nfs retain storageclass.
+    This method is to create a new storageclass.
 
     Args:
-        sc_name (str): name of the storageclass to create
+        sc_name_to_create (str): name of the storageclass to create
+        sc_name_to_copy (str): name of the sc to copy
+        retain_reclaim_policy (bool): if true set retain reclaim policy
+        server (str): if server details passed set that value
 
     Returns:
-        retain_nfs_sc(obj): returns storageclass obj created
+        new_sc(obj): returns storageclass obj created
 
     """
     # Create storage class
-    retain_nfs_sc = resources.ocs.OCS(
-        kind=constants.STORAGECLASS, metadata={"name": "ocs-storagecluster-cephfs"}
+    new_sc = resources.ocs.OCS(
+        kind=constants.STORAGECLASS, metadata={"name": sc_name_to_copy}
     )
-    retain_nfs_sc.reload()
-    retain_nfs_sc.data["reclaimPolicy"] = constants.RECLAIM_POLICY_RETAIN
-    retain_nfs_sc.data["metadata"]["name"] = sc_name
-    retain_nfs_sc.data["metadata"]["ownerReferences"] = None
-    retain_nfs_sc._name = retain_nfs_sc.data["metadata"]["name"]
-    retain_nfs_sc.create()
-    return retain_nfs_sc
+    new_sc.reload()
+    if retain_reclaim_policy:
+        new_sc.data["reclaimPolicy"] = constants.RECLAIM_POLICY_RETAIN
+    if server:
+        new_sc.data["parameters"]["server"] = server
+    new_sc.data["metadata"]["name"] = sc_name_to_create
+    new_sc.data["metadata"]["ownerReferences"] = None
+    new_sc._name = new_sc.data["metadata"]["name"]
+    new_sc.create()
+    return new_sc
 
 
 def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
@@ -355,6 +369,14 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
 def nfs_access_for_clients(nfs_sc):
     """
     This method is for client clusters to be able to access nfs
+
+    Args:
+        nfs_sc (str): storage class name
+
+    Returns:
+        str: nfs-ganesha pod name
+        str: host details
+
     """
     provider_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     # switch to provider
@@ -368,7 +390,7 @@ def nfs_access_for_clients(nfs_sc):
     provider_pod_obj = ocp.OCP(kind=constants.POD, namespace=provider_namespace)
 
     # Enable nfs
-    nfs_enable(
+    nfs_ganesha_pod = nfs_enable(
         provider_storage_cluster_obj,
         provider_config_map_obj,
         provider_pod_obj,
@@ -377,11 +399,44 @@ def nfs_access_for_clients(nfs_sc):
 
     # Create nfs-load balancer service
     hostname_add = create_nfs_load_balancer_service(provider_storage_cluster_obj)
-    print("######Amtita#######")
-    print(f"hostname: {hostname_add}")
 
     # Distribute the scs to consumers
     distribute_nfs_storage_class_to_all_consumers(nfs_sc)
 
     # switch to consumer
     config.switch_to_consumer()
+
+    return nfs_ganesha_pod, hostname_add
+
+
+def disable_nfs_service_from_provider(nfs_sc, nfs_ganesha_pod_name):
+    """
+    This method is for disabling nfs feature from provider cluster
+
+    Args:
+        nfs_ganesha_pod_name (str): rook-ceph-nfs * pod name
+        nfs_sc (str): storage class name
+
+    """
+    provider_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    # switch to provider
+    config.switch_to_provider()
+    provider_storage_cluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER, namespace=provider_namespace
+    )
+    provider_config_map_obj = ocp.OCP(
+        kind=constants.CONFIGMAP, namespace=provider_namespace
+    )
+    provider_pod_obj = ocp.OCP(kind=constants.POD, namespace=provider_namespace)
+
+    # Disable nfs
+    nfs_disable(
+        provider_storage_cluster_obj,
+        provider_config_map_obj,
+        provider_pod_obj,
+        nfs_sc,
+        nfs_ganesha_pod_name,
+    )
+
+    # Delete load balancer service
+    delete_nfs_load_balancer_service(provider_storage_cluster_obj)
