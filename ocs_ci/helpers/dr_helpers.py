@@ -2600,11 +2600,12 @@ def verify_cluster_data_protected_and_peer_ready_true(workload_type, namespace):
                     "Applications either clusterdataProtected is not True or peerReady is not True "
                 )
         except (IndexError, KeyError, TypeError) as e:
-            retries += 1
-            logger.warning(
-                f"Index error occurred: {e}. Retrying in 5 seconds (attempt {retries}/{max_retries})..."
-            )
-            time.sleep(5)
+            if "NoneType" in str(e):
+                logger.error(
+                    f"An error occurred: {e}. Retrying in 5 seconds (attempt {retries + 1}/{max_retries})..."
+                )
+                time.sleep(5)
+                retries += 1
         raise CommandFailed(
             "Not able to get either clusterdataprocted or peerready value"
         )
