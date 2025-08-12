@@ -954,7 +954,7 @@ def check_dr_status(
                 )
                 acm_obj.driver.execute_script("arguments[0].click();", button_action)
             except (TimeoutException, NoSuchElementException):
-                log.warning("Dr status button is not clickable yest, retrying...")
+                log.warning("Dr status button is not clickable yet, retrying...")
                 time.sleep(1)
 
         log.info("Validating the message in popover...")

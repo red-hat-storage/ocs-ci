@@ -136,15 +136,11 @@ class TestShowReplicationDelays:
 
         # Bring DOWN the corresponding deployment
         if pvc_interface == constants.CEPHBLOCKPOOL:
-            logger.info(
-                "Change replica count to 1 for rbd-mirror and " "on the secondary "
-            )
-            modify_rbd_replica_count(replica_count=1)
+            logger.info("Change replica count to 0 for rbd-mirror on the secondary ")
+            modify_rbd_replica_count(replica_count=0)
         else:
-            logger.info(
-                "Change replica count to 1 for mds deployment and " "on the primary "
-            )
-            modify_mds_replica_count(replica_count=1)
+            logger.info("Change replica count to 0 for mds deployment on the primary ")
+            modify_mds_replica_count(replica_count=0)
 
         # Wait for the range of interval between 2x - 3x interval to
         # validate the message "warning"
@@ -166,14 +162,10 @@ class TestShowReplicationDelays:
 
         # Bring UP the corresponding deployment
         if pvc_interface == constants.CEPHBLOCKPOOL:
-            logger.info(
-                "Change replica count to 1 for rbd-mirror and " "on the secondary "
-            )
+            logger.info("Change replica count to 1 for rbd-mirror on the secondary ")
             modify_rbd_replica_count(replica_count=1)
         else:
-            logger.info(
-                "Change replica count to 1 for mds deployment and " "on the primary "
-            )
+            logger.info("Change replica count to 1 for mds deployment on the primary ")
             modify_mds_replica_count(replica_count=1)
 
         logger.info(
