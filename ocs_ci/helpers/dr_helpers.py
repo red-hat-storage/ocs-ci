@@ -2556,7 +2556,7 @@ def verify_cluster_data_protected_status(
 ):
     """
 
-    Verify that the cluster dataProtected is True and peerReady is True
+    Verify that the cluster dataProtected is True
 
     Args:
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
