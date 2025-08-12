@@ -2599,7 +2599,7 @@ def verify_cluster_data_protected_and_peer_ready_true(workload_type, namespace):
                 raise UnexpectedBehaviour(
                     "Applications either clusterdataProtected is not True or peerReady is not True "
                 )
-        except (IndexError, KeyError) as e:
+        except (IndexError, KeyError, TypeError) as e:
             retries += 1
             logger.warning(
                 f"Index error occurred: {e}. Retrying in 5 seconds (attempt {retries}/{max_retries})..."
