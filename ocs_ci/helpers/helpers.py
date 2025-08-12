@@ -3219,10 +3219,13 @@ def default_volumesnapshotclass(interface_type):
         OCS: VolumeSnapshotClass Instance
     """
     external = config.DEPLOYMENT["external_mode"]
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
     if interface_type == constants.CEPHBLOCKPOOL:
         if (
             config.ENV_DATA["platform"].lower()
             in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and ocs_version <= version.VERSION_4_18
         ):
             sc_obj = OCP(kind=constants.STORAGECLASS)
             # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
@@ -3248,6 +3251,7 @@ def default_volumesnapshotclass(interface_type):
         if (
             config.ENV_DATA["platform"].lower()
             in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and ocs_version <= version.VERSION_4_18
         ):
             sc_obj = OCP(kind=constants.STORAGECLASS)
             # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
