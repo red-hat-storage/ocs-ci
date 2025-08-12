@@ -518,7 +518,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
 
             time.sleep(300)
 
-    @retry(CephHealthException, tries=10, delay=10)
+    @retry((CommandFailed, CephHealthException), tries=10, delay=10)
     def check_ceph_health():
 
         while True:
