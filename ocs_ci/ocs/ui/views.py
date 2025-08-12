@@ -1361,7 +1361,6 @@ acm_configuration_4_19 = {
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
     "dr-status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
     "popover_text": ("//div[@data-test-id='popover-header']", By.XPATH),
-    "replication-policy": ("//td[@data-label='replicationPolicy']", By.XPATH),
     "kebab-action": (
         "(//td[@class='pf-v5-c-table__td pf-v5-c-table__action']//button)[2]",
         By.XPATH,
