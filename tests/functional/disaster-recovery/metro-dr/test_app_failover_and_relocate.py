@@ -23,7 +23,7 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_creation,
     wait_for_all_resources_deletion,
     gracefully_reboot_ocp_nodes,
-    verify_cluster_data_protected_and_peer_ready_true,
+    verify_cluster_data_protected_status,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
@@ -139,8 +139,14 @@ class TestApplicationFailoverAndRelocate:
         )
 
         # Verify that the cluster dataProtected is True and peerReady is True
-        verify_cluster_data_protected_and_peer_ready_true(
-            workload_type=workload_type, namespace=self.namespace
+        verify_cluster_data_protected_status(
+            workload_type=workload_type,
+            namespace=self.namespace,
+            workload_placement_name=(
+                workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None
+            ),
         )
 
         # Stop primary cluster nodes
@@ -239,9 +245,7 @@ class TestApplicationFailoverAndRelocate:
         enable_unfence(drcluster_name=self.primary_cluster_name)
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_ocp_nodes(
-            self.primary_cluster_name, disable_eviction=True, worker_nodes=True
-        )
+        gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(

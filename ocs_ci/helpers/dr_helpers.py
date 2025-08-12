@@ -1729,9 +1729,7 @@ def create_backup_schedule():
     config.switch_ctx(old_ctx)
 
 
-def gracefully_reboot_ocp_nodes(
-    drcluster_name, disable_eviction=False, worker_nodes=True
-):
+def gracefully_reboot_ocp_nodes(drcluster_name, disable_eviction=False):
     """
     Gracefully reboot OpenShift Container Platform
     nodes which was fenced before
@@ -1739,13 +1737,10 @@ def gracefully_reboot_ocp_nodes(
     Args:
         drcluster_name (str): Name of the drcluster which needs to be rebooted
         disable_eviction (bool): On True will delete pod that is protected by PDB, False by default
-        worker_nodes (bool): On True, it will gracefully reboot only the worker nodes
 
     """
     config.switch_to_cluster_by_name(drcluster_name)
-    gracefully_reboot_nodes(
-        disable_eviction=disable_eviction, worker_nodes=worker_nodes
-    )
+    gracefully_reboot_nodes(disable_eviction=disable_eviction)
 
 
 def restore_backup():
@@ -2556,61 +2551,26 @@ def verify_volsync():
     config.switch_ctx(restore_index)
 
 
-@retry(UnexpectedBehaviour, tries=25, delay=3, backoff=3)
-def verify_cluster_data_protected_and_peer_ready_true(workload_type, namespace):
+def verify_cluster_data_protected_status(
+    workload_type, namespace, workload_placement_name=None
+):
     """
+
     Verify that the cluster dataProtected is True and peerReady is True
 
-     Args:
+    Args:
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         namespace (str): the namespace of the drpc resources
-
-    Returns:
-        bool: True if application dataProtected is True and peerReady is True, Otherwise raise exception
+        workload_placement_name (str): Placement name
 
     """
-    restore_index = config.cur_index
-    config.switch_acm_ctx()
-    retries = 0
-    max_retries = 5
+
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
-    while retries < max_retries:
-        try:
-            drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace)
-            cluster_data_protected = (
-                drpc_obj.get()
-                .get("items")[0]
-                .get("status")
-                .get("resourceConditions")
-                .get("conditions")[3]
-                .get("status")
-            )
-            peer_ready = (
-                drpc_obj.get()
-                .get("items")[0]
-                .get("status")
-                .get("conditions")[1]
-                .get("status")
-            )
-            if cluster_data_protected and peer_ready:
-                logger.info("cluster dataProtected is True and peerReady is True")
-                config.switch_ctx(restore_index)
-                return True
-            else:
-                logger.error(
-                    "cluster dataProtected is not True or peerReady is not True"
-                )
-                raise UnexpectedBehaviour(
-                    "Applications either clusterdataProtected is not True or peerReady is not True "
-                )
-        except (IndexError, KeyError, TypeError) as e:
-            if "NoneType" in str(e):
-                logger.error(
-                    f"An error occurred: {e}. Retrying in 5 seconds (attempt {retries + 1}/{max_retries})..."
-                )
-                time.sleep(10)
-                retries += 1
-        raise CommandFailed(
-            "Not able to get either clusterdataprocted or peerready value"
+        drpc_obj = DRPC(
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
         )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+    drpc_obj.wait_for_clusterdataprotected_status()
