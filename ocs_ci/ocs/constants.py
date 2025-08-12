@@ -3514,3 +3514,11 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# RDR performance test parameters
+simple_fio_namespace = "simple-fio"
+simple_fio_image = "quay.io/ocsci/simple-fio:latest"
+simple_fio_label_key = "app"
+simple_fio_label_value = "fio"
+storage_type_block="ceph-rbd"
+storage_type_cephfs="ocs-storagecluster-cephfs"

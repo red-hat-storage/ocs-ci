@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.dr.dr_workload import BusyboxDiscoveredApps
+from ocs_ci.ocs.dr.dr_workload import BusyboxDiscoveredApps, CnvWorkloadDiscoveredApps
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 
@@ -22,30 +22,22 @@ log = logging.getLogger(__name__)
 @grey_squad
 @rdr
 @performance
-class RDRPerformance:
+class RDRPerformance(PASTest):
     """
     RDR discovered apps performance test using simple-fio tool
 
     """
 
     @pytest.mark.parametrize(
-        argnames=["interface", "server"],
+        argnames=["storage_type", "server", "storage", "size"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 5],
-                marks=pytest.mark.polarion_id("OCS-844"),
+                *[constants.storage_type_block, "5", "200", "10G" ],
+                marks=pytest.mark.polarion_id("OCS-XXX"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 5],
-                marks=pytest.mark.polarion_id("OCS-845"),
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, 10],
-                marks=pytest.mark.polarion_id("OCS-846"),
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 10],
-                marks=pytest.mark.polarion_id("OCS-847"),
+                *[constants.storage_type_cephfs, "5", "200", "10G",
+                marks=pytest.mark.polarion_id("OCS-XXX"),
             ),
         ],
     )
@@ -54,17 +46,15 @@ class RDRPerformance:
         Test case to capture RDR discovered apps performance test using simple-fio tool
 
         """
+        # We need to provide placemnt name for DR workload, which inturn requires drpc_name
+        drpc_name = "simple-fio-drpc"
         # Deployment of simple-fio tool
         log.info("Deploying the simple-fio tool")
-        simple_fio_image = "quay.io/ocsci/simple-fio:latest"
-        drpc_name = "fio_25"
         kubeconfig = config.RUN.get("kubeconfig")
-        namespace = "simple-fio"
-        label_key = "app"
-        label_value = "fio"
+
         try:
             cmd = (
-                f"podman run --rm -e KUBECONFIG={kubeconfig} {simple_fio_image} server={} "
+                f"podman run --rm -e KUBECONFIG={kubeconfig} {constants.simple_fio_image} server={server} "
             )
             exec_cmd(cmd, timeout=9000)
 
@@ -76,19 +66,52 @@ class RDRPerformance:
         pvc_objs = get_pvc_objs(pvc_names=pvc_list, namespace="simple-fio")
         for pvc_obj in pvc_objs:
             run_cmd(
-                f"oc label {pvc_obj.name} -n {namespace} {label_key}={label_value}"
+                f"oc label {pvc_obj.name} -n {constants.simple_fio_namespace} {constants.simple_fio_label_key}={constants.simple_fio_label_value}"
             )
+
+        discovered_apps_placement_name = drpc_name
+        CnvWorkloadDiscoveredApps.create_placement(placement_name=discovered_apps_placement_name)
+
         BusyboxDiscoveredApps.create_drpc(
-            drpc_name=drpc_name,
-            placement_name=placement_name,
-            protected_namespaces=namespace,
-            pvc_selector_key=label_key,
-            pvc_selector_value=label_value,
+            drpc_name="simple-fio",
+            placement_name=discovered_apps_placement_name,
+            protected_namespaces=constants.simple_fio_namespace,
+            pvc_selector_key=constants.simple_fio_label_key,
+            pvc_selector_value=constants.simple_fio_label_value,
         )
         cmd = (
-            f"podman run --rm -e KUBECONFIG={kubeconfig} {simple_fio_image} ./02_run_tests.sh server={} "
+            f"podman run --rm -e KUBECONFIG={kubeconfig} {constants.simple_fio_image} ./02_run_tests.sh server={server} size={size} "
         )
         exec_cmd(cmd, timeout=9000)
+        wait_for_wl_to_finish(self, namespace=constants.simple_fio_namespace)
+
+        cmd = (
+            f"podman run --rm -e KUBECONFIG={kubeconfig} {constants.simple_fio_image} ./extract_data.sh server={} "
+        )
+        output = exec_cmd(cmd, timeout=9000)
+
+        for line in output:
+            # Split by '|' and strip whitespace
+            out = [p.strip() for p in line.strip().split('|') if p.strip()]
+            for part in out:
+                if 'randrw' in part:
+                    operation = 'randrw'
+                    break
+                elif 'randread' in part:
+                    operation = 'randread'
+                    break
+                elif 'randwrite' in part:
+                    operation = 'randwrite'
+                    break
+            if out[-1] and out[-2]:
+                # Get last two values
+                data = out[-2:]
+            else:
+                pass
+            log.info(f"Latency and throughput for operation {operation}: {data}")
+            log.info(f"Latency for  {operation}: {data[0]}")
+            log.info(f"Throughput for  {operation}: {data[1]}")
+
 
 
 
