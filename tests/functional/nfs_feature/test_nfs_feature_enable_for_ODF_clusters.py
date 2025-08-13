@@ -1547,7 +1547,7 @@ class TestNfsEnable(ManageTest):
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @tier1
-class TestNfsForClients(ManageTest):
+class TestNfsForClients(TestNfsEnable):
     """
     Test nfs feature enable for client clusters from 4.19
 
@@ -1640,15 +1640,7 @@ class TestNfsForClients(ManageTest):
         and remove those.
         Delete nfs retain storage class if left.
         """
-        if self.con:
-            retcode, stdout, _ = self.con.exec_cmd(
-                "findmnt -t nfs4 " + self.test_folder
-            )
-            if stdout:
-                log.info("unmounting existing nfs mount")
-                nfs_utils.unmount(self.con, self.test_folder)
-            log.info("Delete mount point")
-            _, _, _ = self.con.exec_cmd("rm -rf " + self.test_folder)
+        super().teardown()
 
     def test_incluster_nfs_export_for_clients(
         self,
