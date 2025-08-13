@@ -375,9 +375,10 @@ class HostedClients(HyperShiftBase):
             if self.storage_installation_requested(name)
         )
 
-        log_step("storage consumers and configmaps for newly deployed clients")
+        log_step("Verify storage consumers and configmaps for newly deployed clients")
         storage_consumers_verified = []
-        for cluster_name in hosted_odf_clusters_installed:
+        for hosted_odf_obj in hosted_odf_clusters_installed:
+            cluster_name = hosted_odf_obj.name
             try:
                 verify_storage_consumer_resources(
                     f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
