@@ -165,7 +165,7 @@ class TestNfsEnable(ManageTest):
             config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
             == constants.HCI_CLIENT
         ):
-            nfs_ganesha_pod, hostname_add = nfs_utils.nfs_access_for_clients(
+            nfs_ganesha_pod, self.hostname_add = nfs_utils.nfs_access_for_clients(
                 self.nfs_sc
             )
 
@@ -173,7 +173,7 @@ class TestNfsEnable(ManageTest):
             _ = nfs_utils.create_nfs_sc(
                 sc_name_to_create=self.nfs_sc_copy,
                 sc_name_to_copy=self.nfs_sc,
-                server=hostname_add,
+                server=self.hostname_add,
             )
             self.nfs_sc = self.nfs_sc_copy
             yield
