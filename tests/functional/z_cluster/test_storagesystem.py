@@ -33,11 +33,13 @@ class TestStorageSystem(ManageTest):
         storage_system = ocp.OCP(
             kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
         )
+        storage_system_removed = False
         try:
-            storage_system_data = storage_system.get()
-        except CommandFailed:
-            storage_system_data = {}
-        assert not storage_system_data.get("items")
+            storage_system.get()
+        except CommandFailed as e:
+            if 'server doesn\'t have a resource type "StorageSystem"' in str(e):
+                storage_system_removed = True
+        assert removed
         log_step(
             "Verify that Storage Cluster owner reference doesn't contain storage system"
         )
