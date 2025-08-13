@@ -109,7 +109,7 @@ def nfs_disable(
         storage_cluster_obj (obj): storage cluster object
         config_map_obj (obj): config map object
         pod_obj (obj): pod object
-        sc (str): nfs storage class
+        sc (object): nfs storage class object
         nfs_ganesha_pod_name (str): rook-ceph-nfs * pod name
 
     """
@@ -409,13 +409,13 @@ def nfs_access_for_clients(nfs_sc):
     return nfs_ganesha_pod, hostname_add
 
 
-def disable_nfs_service_from_provider(nfs_sc, nfs_ganesha_pod_name):
+def disable_nfs_service_from_provider(nfs_sc_obj, nfs_ganesha_pod_name):
     """
     This method is for disabling nfs feature from provider cluster
 
     Args:
         nfs_ganesha_pod_name (str): rook-ceph-nfs * pod name
-        nfs_sc (str): storage class name
+        nfs_sc_obj (object): storage class object
 
     """
     provider_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -434,7 +434,7 @@ def disable_nfs_service_from_provider(nfs_sc, nfs_ganesha_pod_name):
         provider_storage_cluster_obj,
         provider_config_map_obj,
         provider_pod_obj,
-        nfs_sc,
+        nfs_sc_obj,
         nfs_ganesha_pod_name,
     )
 
