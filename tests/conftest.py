@@ -4961,8 +4961,16 @@ def collect_logs_fixture(request):
                 if not skip_rpm_go_version_collection:
                     utils.collect_pod_container_rpm_package("testcases")
             except Exception as ex:
-                failure_in_mg.append(("rpm_package_info", ex))
-                log.error(f"Failure in collecting RPM package info! Exception: {ex}")
+                # At times the pod might be killed/restarted during this operation, hence skipping if pod not found error is shown
+                if "Error is Error from server (NotFound)" in str(ex):
+                    log.info(
+                        f"One of the pod was not found, assuming it was already deleted. refer {ex}"
+                    )
+                else:
+                    failure_in_mg.append(("rpm_package_info", ex))
+                    log.error(
+                        f"Failure in collecting RPM package info! Exception: {ex}"
+                    )
             if failure_in_mg:
                 if config.REPORTING.get("dont_fail_on_collect_logs"):
                     exception_errors = [str(ex) for ex in failure_in_mg]
