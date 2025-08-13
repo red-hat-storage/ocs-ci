@@ -1,7 +1,11 @@
 import pytest
 import logging
 
-from ocs_ci.framework.pytest_customization.marks import libtest, run_on_all_clients
+from ocs_ci.framework.pytest_customization.marks import (
+    libtest,
+    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
+)
 
 logger = logging.getLogger(name=__file__)
 
@@ -9,6 +13,12 @@ logger = logging.getLogger(name=__file__)
 @libtest
 @run_on_all_clients
 def test_run_on_all_clients_marker(cluster_index):
+    pass
+
+
+@libtest
+@run_on_all_clients_push_missing_configs
+def test_run_on_all_clients_push_missing_config_marker(cluster_index):
     pass
 
 

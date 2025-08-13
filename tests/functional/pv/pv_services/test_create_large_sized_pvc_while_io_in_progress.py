@@ -6,7 +6,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.testlib import ManageTest, tier2
 
@@ -34,7 +34,7 @@ class TestCreateLargeSizedPVCWhileIOInProgress(ManageTest):
             ),
         ],
     )
-    @run_on_all_clients
+    @run_on_all_clients_push_missing_configs
     def test_create_large_sized_pvc_while_io_in_progress(
         self, interface, pvc_factory, pod_factory, cluster_index
     ):

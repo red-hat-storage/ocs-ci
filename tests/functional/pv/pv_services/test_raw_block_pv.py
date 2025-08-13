@@ -8,7 +8,7 @@ from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.testlib import (
     tier1,
@@ -160,7 +160,7 @@ class TestRawBlockPV(ManageTest):
             get_fio_rw_iops(pod)
         return pods, pvcs, pvs
 
-    @run_on_all_clients
+    @run_on_all_clients_push_missing_configs
     def test_raw_block_pv(
         self, storageclass, namespace, teardown_factory, cluster_index
     ):

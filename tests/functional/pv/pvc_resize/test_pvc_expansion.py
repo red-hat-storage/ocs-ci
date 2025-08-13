@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -151,7 +151,7 @@ class TestPvcExpand(ManageTest):
 
             # Split file size and write from two pods if access mode is RWX
             size = (
-                f"{int(file_size/2)}G"
+                f"{int(file_size / 2)}G"
                 if (pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX)
                 else f"{file_size}G"
             )
@@ -181,7 +181,7 @@ class TestPvcExpand(ManageTest):
 
     @provider_mode
     @acceptance
-    @run_on_all_clients
+    @run_on_all_clients_push_missing_configs
     @tier1
     @pytest.mark.polarion_id("OCS-2219")
     def test_pvc_expansion(self, cluster_index):
