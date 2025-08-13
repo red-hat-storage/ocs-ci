@@ -453,9 +453,6 @@ class TestFIOBenchmark(PASTest):
         # Setting the global parameters of the test
         full_results.add_key("io_pattern", io_pattern)
 
-        # Clean up fio benchmark
-        self.cleanup()
-
         log.debug(f"Full results is : {full_results.results}")
         if isinstance(self.es, ElasticSearch):
             # Using internal deployed elasticsearch
@@ -472,6 +469,8 @@ class TestFIOBenchmark(PASTest):
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
         self.test_duration = self.end_time - self.start_time
+        # Cleanup fio benchmark
+        self.cleanup()
 
         # Writing the analyzed test results to the Elastic-Search server
         if full_results.es_write():
