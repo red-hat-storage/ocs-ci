@@ -437,7 +437,7 @@ class TestPvPool:
                     1,
                     "5K",
                     1,
-                    10000,  # dataset contains 50000 small files of 5K each, 1 pv per backingstore
+                    25000,  # dataset contains 25000 small files of 5K each, 1 pv per backingstore
                 ],
                 marks=pytest.mark.polarion_id("OCS-6852"),
             ),
@@ -542,7 +542,6 @@ class TestPvPool:
             "lim_mem": "4000Mi",
         }
         bs_specs_tuple = tuple(pv_backingstore_specs.values())
-
         bucketclass_dict = {
             "interface": "CLI",
             "backingstore_dict": {
@@ -568,7 +567,7 @@ class TestPvPool:
         )
 
         if total_size_too_big:
-            # Make individual dd calls for bigger datasets
+            # Make individual dd and s3 cp calls for bigger datasets
             for i in range(file_count):
                 awscli_pod_session.exec_cmd_on_pod(
                     f"dd if=/dev/urandom of=/tmp/testfile bs={block_size} count={block_count} status=none"
@@ -578,8 +577,8 @@ class TestPvPool:
                     mcg_obj_session,
                 )
         else:
-            # Upload smaller files by batched dd and sync calls,
-            # but batch their upload to support many small files
+            # Upload smaller files with grouped dd and s3 sync calls,
+            # but limit the batch size to support many small files
             batch_size = 1000
             full_batches_num = file_count // batch_size
             remainder = file_count % batch_size
@@ -596,9 +595,9 @@ class TestPvPool:
                 awscli_pod_session.exec_cmd_on_pod(
                     f"sh -ec 'mkdir -p {dataset_dir}; "
                     f"dd if=/dev/zero bs={block_size} of={dataset_dir}/bigfile "
-                    f"   count={block_count * file_count_in_batch} status=none; "
-                    f"split -a 4 -b {block_size_int * block_count}{block_size_char.lower()}"
-                    f" {dataset_dir}/bigfile {dataset_dir}/testfile_; "
+                    f"count={block_count * file_count_in_batch} status=none; "
+                    f"split -a 4 -b {block_size_int * block_count}{block_size_char.lower()} "
+                    f"{dataset_dir}/bigfile {dataset_dir}/testfile_; "
                     f"rm {dataset_dir}/bigfile;'"
                 )
                 awscli_pod_session.exec_s3_cmd_on_pod(
