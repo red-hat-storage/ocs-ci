@@ -2249,6 +2249,22 @@ def wait_for_storage_pods(timeout=200, skip_job_pods=False):
         all_pod_obj = [pod for pod in all_pod_obj if not is_pod_owned_by_job(pod)]
 
     for pod_obj in all_pod_obj:
+        # Skip pods in completed states or owned by Jobs/CronJobs
+        current_status = pod_obj.status()
+        if current_status in [constants.STATUS_COMPLETED, "Succeeded"]:
+            logger.info(
+                f"Pod {pod_obj.name} is already in {current_status} state, skipping"
+            )
+            continue
+
+        # Check if pod is owned by a Job or CronJob
+        pod_data = pod_obj.get()
+        owner_refs = pod_data.get("metadata", {}).get("ownerReferences", [])
+        if any(owner.get("kind") in ["Job", "CronJob"] for owner in owner_refs):
+            logger.info(f"Pod {pod_obj.name} is owned by a Job/CronJob, skipping")
+            continue
+
+        # For remaining pods, set expected state based on patterns
         state = constants.STATUS_RUNNING
         if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare", "debug-"]):
             state = constants.STATUS_COMPLETED
