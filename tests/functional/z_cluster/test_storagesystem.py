@@ -39,7 +39,7 @@ class TestStorageSystem(ManageTest):
         except CommandFailed as e:
             if 'server doesn\'t have a resource type "StorageSystem"' in str(e):
                 storage_system_removed = True
-        assert removed
+        assert storage_system_removed
         log_step(
             "Verify that Storage Cluster owner reference doesn't contain storage system"
         )
