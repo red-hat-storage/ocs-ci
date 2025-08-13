@@ -440,3 +440,6 @@ def disable_nfs_service_from_provider(nfs_sc, nfs_ganesha_pod_name):
 
     # Delete load balancer service
     delete_nfs_load_balancer_service(provider_storage_cluster_obj)
+
+    # switch to consumer
+    config.switch_to_consumer()
