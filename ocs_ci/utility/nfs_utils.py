@@ -14,7 +14,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
-
+from ocs_ci.deployment.hosted_cluster import get_autodistributed_storage_classes
 
 log = logging.getLogger(__name__)
 
@@ -333,6 +333,9 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
     This method is to distribute nfs storage class to Storage Consumers
     Function validates Storage Class is available on Client cluster and return combined result for all consumers.
 
+    Args:
+        nfs_sc (str): nfs storage class name
+
     Returns:
         bool: True if the nfs Storage Classes is distributed successfully to all consumers, False otherwise.
 
@@ -345,8 +348,6 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
     )
 
     consumers = get_ready_storage_consumers()
-    print("########Amrita########")
-    print(f"storage consumers {consumers}")
     consumers = [
         consumer
         for consumer in consumers
@@ -357,11 +358,11 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
     if not ready_consumer_names:
         log.warning("No ready storage consumers found")
         return
-
-    storage_class_name = nfs_sc
+    storage_class_names = get_autodistributed_storage_classes()
+    storage_class_names = storage_class_names.append(nfs_sc)
     for consumer in consumers:
         log.info(f"Distributing storage classes to consumer {consumer.name}")
-        consumer.set_storage_classes(storage_class_name)
+        consumer.set_storage_classes(storage_class_names)
 
     return check_storage_classes_on_clients(ready_consumer_names)
 
