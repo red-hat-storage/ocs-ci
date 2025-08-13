@@ -5950,6 +5950,7 @@ def skip_for_provider_if_ocs_version(expressions):
     if (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
         or config.hci_provider_exist()
+        or config.hci_client_exist()
     ):
         return any(
             version_module.compare_versions(config.ENV_DATA["ocs_version"] + expr)
