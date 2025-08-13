@@ -359,7 +359,8 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
         log.warning("No ready storage consumers found")
         return
     storage_class_names = get_autodistributed_storage_classes()
-    storage_class_names = storage_class_names.append(nfs_sc)
+    storage_class_names.append(nfs_sc)
+    log.info(f"storage classes: {storage_class_names}")
     for consumer in consumers:
         log.info(f"Distributing storage classes to consumer {consumer.name}")
         consumer.set_storage_classes(storage_class_names)
