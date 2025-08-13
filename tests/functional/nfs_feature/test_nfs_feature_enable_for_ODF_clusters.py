@@ -171,7 +171,9 @@ class TestNfsEnable(ManageTest):
 
             # Create a duplicate sc of nfs-sc and update the server details with hostname_add
             _ = nfs_utils.create_nfs_sc(
-                sc_name_to_create=self.nfs_sc_copy, server=hostname_add
+                sc_name_to_create=self.nfs_sc_copy,
+                sc_name_to_copy=self.nfs_sc,
+                server=hostname_add,
             )
             self.nfs_sc = self.nfs_sc_copy
             yield
