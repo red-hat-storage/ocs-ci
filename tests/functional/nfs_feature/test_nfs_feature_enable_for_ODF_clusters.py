@@ -178,7 +178,7 @@ class TestNfsEnable(ManageTest):
             self.nfs_sc = self.nfs_sc_copy
             yield
             # Disable nfs feature
-            nfs_utils.disable_nfs_service_from_provider(self.nfs_sc, nfs_ganesha_pod)
+            nfs_utils.disable_nfs_service_from_provider(self.sc, nfs_ganesha_pod)
             # Delete nfs sc created
             self.sc_obj.delete(resource_name=self.nfs_sc_copy)
 
