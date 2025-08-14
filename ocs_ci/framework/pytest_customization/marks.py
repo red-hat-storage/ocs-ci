@@ -40,12 +40,13 @@ from ocs_ci.ocs.constants import (
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
     NFS_OUTCLUSTER_TEST_PLATFORMS,
-    DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+    # DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
-from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+
+# from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
 
 # tier marks
 
@@ -427,17 +428,16 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
         Parametrized marker or original marker if setup fails
     """
     try:
-        if push_missing_configs:
-            # run this only if cluster type is provider
-            if (
-                config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
-                == "provider"
-                and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
-                in HCI_PROVIDER_CLIENT_PLATFORMS
-            ):
-                hypershift_cluster_factory(
-                    duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
-                )
+        # if push_missing_configs:
+        #     if (
+        #         config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+        #         == "provider"
+        #         and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+        #         in HCI_PROVIDER_CLIENT_PLATFORMS
+        #     ):
+        #         hypershift_cluster_factory(
+        #             duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+        #         )
         client_indexes = [
             pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
         ]
