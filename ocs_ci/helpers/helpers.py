@@ -6458,14 +6458,15 @@ def get_node_plugin_label(interface):
     return label
 
 
-def is_even(number):
-    """
-    Check if a number is even.
+def get_noobaa_metrics_token_from_secret():
+    ocp_secret_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
-    Args:
-        number (int): The number to check.
+    noobaa_metrics_secret = ocp_secret_obj.get(
+        resource_name=constants.NOOBAA_METRICS_AUTH_SECRET
+    )
 
-    Returns:
-        bool: True if the number is even, False otherwise.
-    """
-    return number % 2 == 0
+    base64_metrics_auth_token = noobaa_metrics_secret["data"]["metrics_token"]
+
+    metrics_auth_token = base64.b64decode(base64_metrics_auth_token).decode("utf-8")
+
+    return metrics_auth_token
