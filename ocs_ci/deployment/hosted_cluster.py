@@ -8,6 +8,7 @@ import yaml
 import copy
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci import framework
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.hyperconverged import HyperConverged
 from ocs_ci.deployment.mce import MCEInstaller
@@ -70,10 +71,13 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
-from ocs_ci.utility.version import get_running_odf_version
 from ocs_ci.utility.ssl_certs import (
     create_ocs_ca_bundle,
     get_root_ca_cert,
+)
+from ocs_ci.utility.version import (
+    get_running_odf_version,
+    get_running_odf_client_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,6 +176,25 @@ def apply_cluster_roles_wa(cluster_names):
             )
         except CommandFailed:
             logger.warning("rbac w/a already exist")
+
+
+def skip_if_not_hcp_provider(func):
+    """
+    Decorator to skip the function execution if deployment is not Hosted Control Plane provider
+
+    Returns:
+        function: wrapped function
+    """
+
+    def wrapper(*args, **kwargs):
+        if (
+            config.default_cluster_ctx.ENV_DATA["platform"].lower()
+            not in HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            return
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 @if_version(">4.18")
@@ -683,7 +706,9 @@ class HostedClients(HyperShiftBase):
             )
             return False
 
-    def download_hosted_clusters_kubeconfig_files(self, cluster_names_paths_dict=None):
+    def download_hosted_clusters_kubeconfig_files(
+        self, cluster_names_paths_dict=None, from_hcp=True
+    ):
         """
         Get HyperShift hosted cluster kubeconfig for multiple clusters.
         Provided cluster_names_paths_dict will always be a default source of cluster names and paths
@@ -692,6 +717,7 @@ class HostedClients(HyperShiftBase):
             cluster_names_paths_dict (dict): Optional argument. The function will download all kubeconfigs
             to the folders specified in the configuration, or download a specific cluster's kubeconfig
             to the folder provided as an argument.
+            from_hcp (bool): If True, download kubeconfig from HCP, otherwise from the secret
 
         Returns:
             list: the list of hosted cluster kubeconfig paths
@@ -712,9 +738,8 @@ class HostedClients(HyperShiftBase):
             path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
                 "clusters", {}
             ).setdefault(name, {}).get("hosted_cluster_path")
-
             self.kubeconfig_paths.append(
-                self.download_hosted_cluster_kubeconfig(name, path)
+                self.download_hosted_cluster_kubeconfig(name, path, from_hcp=from_hcp)
             )
 
         return self.kubeconfig_paths
@@ -1996,6 +2021,7 @@ class HostedODF(HypershiftHostedOCP):
         return False
 
 
+@skip_if_not_hcp_provider
 def hypershift_cluster_factory(
     cluster_names=None,
     ocp_version=None,
@@ -2020,9 +2046,10 @@ def hypershift_cluster_factory(
     """
 
     hosted_clients_obj = HostedClients()
-    logger.info(f"Factory duty is '{duty}'")
+    logger.info(f"hypershift_cluster_factory duty is '{duty}'")
 
-    if duty == "create_hosted_cluster_push_config":
+    # this section 1. is to gather and remove configurations and execute deployment due to the duty
+    if duty == constants.DUTY_CREATE_HOSTED_CLUSTER_PUSH_CONFIG:
         hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
         for cluster_name in cluster_names:
             # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
@@ -2050,16 +2077,22 @@ def hypershift_cluster_factory(
         deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
 
     elif duty in [
-        "use_existing_hosted_clusters_force_push_configs",
-        "use_existing_hosted_clusters_push_missing_configs",
+        constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_FORCE_PUSH_CONFIG,
+        constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
     ]:
         cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
+        if not cl_name_ver_dict:
+            logger.warning(
+                "No hosted clusters found. Please create hosted clusters first."
+            )
+            return
         deployed_clusters = list(cl_name_ver_dict.keys())
 
-        if "use_existing_hosted_clusters_force_push_configs" in duty:
+        if constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_FORCE_PUSH_CONFIG in duty:
             existing_clusters = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
+            # remove clusters from config that are already deployed and exist in MultiClusterConfig
             clusters_to_remove = existing_clusters.intersection(deployed_clusters)
             if clusters_to_remove:
                 for cluster_name in clusters_to_remove:
@@ -2067,8 +2100,11 @@ def hypershift_cluster_factory(
                         f"Removing cluster config {cluster_name} from config file, as it is already deployed"
                     )
                     config.remove_cluster_by_name(cluster_name)
-
-        if duty == "use_existing_hosted_clusters_push_missing_configs":
+            # assign to deployed_clusters remaining clusters after removal
+            deployed_clusters = {
+                conf.ENV_DATA.get("cluster_name") for conf in config.clusters
+            }
+        if duty == constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG:
             clusters_in_config = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
@@ -2080,7 +2116,10 @@ def hypershift_cluster_factory(
         logger.warning("Factory function was called without deployment duty")
         deployed_clusters = []
 
+    # this section 2. is to push the config of the existing clusters to MultiClusterConfig due to the duty,
+    # including newly created clusters, in case we can detect nodes of guest cluster and ODF version
     for cluster_name in deployed_clusters:
+        default_index = config.get_provider_index()
 
         if not nodepool_replicas:
             nodepool_replicas = get_current_nodepool_size(cluster_name)
@@ -2108,10 +2147,28 @@ def hypershift_cluster_factory(
                 k: (v if v is not None else {})
                 for (k, v) in yaml.safe_load(file_stream).items()
             }
+
             def_client_config_dict.get("ENV_DATA").update(
                 {"cluster_name": cluster_name}
             )
-            running_odf_version = get_running_odf_version()
+            def_client_config_dict["ENV_DATA"].setdefault(
+                "default_cluster_context_index", default_index
+            )
+            try:
+                running_odf_version = get_running_odf_version()
+            except IndexError:
+                # Hard Requirement: ODF operator and ODF client operator must run on the same version
+                logger.error(
+                    "No existing ODF operator and its version found for the cluster, trying Client operator"
+                )
+                try:
+                    running_odf_version = get_running_odf_client_version()
+                except IndexError:
+                    logger.error(
+                        "No existing ODF client operator and its version found for the cluster, ODF is not installed"
+                    )
+                    continue
+
             if running_odf_version:
                 env_data = def_client_config_dict.setdefault("ENV_DATA", {})
                 env_data["ocs_version"] = running_odf_version
@@ -2125,17 +2182,53 @@ def hypershift_cluster_factory(
                     "installer_version"
                 ] = running_ocp_version
 
-            cluster_path = create_cluster_dir(cluster_name)
-            kubeconf_path = (
-                hosted_clients_obj.download_hosted_clusters_kubeconfig_files(
-                    {cluster_name: cluster_path}
+            with ocsci_config.RunWithConfigContext(default_index):
+                cluster_path = create_cluster_dir(cluster_name)
+                def_client_config_dict["ENV_DATA"]["cluster_path"] = cluster_path
+                kubeconf_paths = (
+                    hosted_clients_obj.download_hosted_clusters_kubeconfig_files(
+                        {cluster_name: cluster_path}, from_hcp=False
+                    )
                 )
-            )
+                if not kubeconf_paths:
+                    from ocs_ci.framework.exceptions import (
+                        ClusterKubeconfigNotFoundError,
+                    )
 
-            logger.info(f"Kubeconfig path: {kubeconf_path}")
+                    raise ClusterKubeconfigNotFoundError(
+                        f"Failed to download kubeconfig for cluster {cluster_name}"
+                    )
+                else:
+                    kubeconf_path = [
+                        path for path in kubeconf_paths if cluster_name in path
+                    ][0]
+            logger.debug(f"Kubeconfig path: {kubeconf_path}")
+
+            logger.debug(
+                "Setting default context to config. Every config should have same default context"
+            )
+            # sync our configurations with the one in MultiClusterConfig to have the same default context index
+            # we set provider's index to every client config
             def_client_config_dict.setdefault("RUN", {}).update(
                 {"kubeconfig": kubeconf_path}
             )
+            run_keys = [
+                "run_id",
+                "log_dir",
+                "bin_dir",
+                "jenkins_build_url",
+                "logs_url",
+                "cluster_dir_full_path",
+                "kubeconfig",
+            ]
+            def_client_config_dict.setdefault("RUN", {})
+            for key in run_keys:
+                def_client_config_dict["RUN"][key] = (
+                    framework.config.RUN.get(key, "")
+                    if key != "kubeconfig"
+                    else kubeconf_path
+                )
+
             cluster_config = Config()
             cluster_config.update(def_client_config_dict)
 

@@ -460,6 +460,16 @@ PROVIDER_CLUSTER_RESOURCE_KINDS = [
 ]
 PROVIDER_SUBSCRIPTION = "subs"
 
+# duties for fixtures to create hosted clusters and manipulate configurations
+DUTY_USE_EXISTING_HOSTED_CLUSTERS_FORCE_PUSH_CONFIG = (
+    "use_existing_hosted_clusters_force_push_configs"
+)
+DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG = (
+    "use_existing_hosted_clusters_push_missing_configs"
+)
+DUTY_CREATE_HOSTED_CLUSTER_PUSH_CONFIG = "create_hosted_cluster_push_config"
+
+
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
 STORAGE_CLIENT_NAME = "ocs-storagecluster"

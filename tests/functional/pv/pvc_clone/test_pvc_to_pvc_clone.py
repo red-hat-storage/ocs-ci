@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_hci_provider_and_client
 from ocs_ci.framework.testlib import (
@@ -59,7 +59,7 @@ class TestClone(ManageTest):
 
     @provider_mode
     @acceptance
-    @run_on_all_clients
+    @run_on_all_clients_push_missing_configs
     @pytest.mark.parametrize(
         argnames=["interface_type", "pod_dict_path", "access"],
         argvalues=[

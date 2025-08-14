@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -42,7 +42,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
         """
         self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=3, pods_for_rwx=1)
 
-    @run_on_all_clients
+    @run_on_all_clients_push_missing_configs
     def test_snapshot_restore_with_different_access_mode(
         self, pod_factory, snapshot_factory, snapshot_restore_factory, cluster_index
     ):

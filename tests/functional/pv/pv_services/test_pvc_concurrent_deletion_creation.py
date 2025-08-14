@@ -12,7 +12,7 @@ from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.testlib import tier2, ManageTest
 from ocs_ci.helpers.helpers import (
@@ -65,7 +65,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             wait_each=False,
         )
 
-    @run_on_all_clients
+    @run_on_all_clients_push_missing_configs
     def test_multiple_pvc_concurrent_creation_deletion(
         self, interface, multi_pvc_factory, cluster_index
     ):

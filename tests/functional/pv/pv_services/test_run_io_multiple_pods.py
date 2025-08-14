@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.testlib import ManageTest, tier2
 
@@ -52,7 +52,7 @@ class TestIOMultiplePods(ManageTest):
 
         return pod_objs
 
-    @run_on_all_clients
+    @run_on_all_clients_push_missing_configs
     def test_run_io_multiple_pods(self, pods, cluster_index):
         """
         Run IO on multiple pods in parallel

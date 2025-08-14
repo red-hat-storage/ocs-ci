@@ -40,11 +40,12 @@ from ocs_ci.ocs.constants import (
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
     NFS_OUTCLUSTER_TEST_PLATFORMS,
+    DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
-
+from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
 
 # tier marks
 
@@ -410,18 +411,45 @@ hci_provider_and_client_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Fusion HCI provider and client clusters",
 )
+
+
 # when run_on_all_clients marker is used, there needs to be added cluster_index
 # parameter to the test to prevent any issues with the test parametrization
-run_on_all_clients = pytest.mark.run_on_all_clients
-try:
-    client_indexes = [
-        pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
-    ]
-    run_on_all_clients = pytest.mark.parametrize(
-        argnames=["cluster_index"], argvalues=client_indexes, indirect=True
-    )
-except ClusterNotFoundException:
-    pass
+def setup_multicluster_marker(marker_base, push_missing_configs=False):
+    """
+    Set up multicluster marker with parametrization based on client indexes.
+
+    Args:
+        marker_base: Base pytest marker to be parametrized
+        push_missing_configs: Boolean flag to push missing configs
+
+    Returns:
+        Parametrized marker or original marker if setup fails
+    """
+    try:
+        if push_missing_configs:
+
+            hypershift_cluster_factory(
+                duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+            )
+        client_indexes = [
+            pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
+        ]
+        if len(client_indexes):
+            config.multicluster = True
+            return pytest.mark.parametrize(
+                argnames=["cluster_index"], argvalues=client_indexes, indirect=True
+            )
+        return marker_base
+    except ClusterNotFoundException:
+        return marker_base
+
+
+run_on_all_clients = setup_multicluster_marker(pytest.mark.run_on_all_clients)
+run_on_all_clients_push_missing_configs = setup_multicluster_marker(
+    pytest.mark.run_on_all_clients, True
+)
+
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER

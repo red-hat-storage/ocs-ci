@@ -5,7 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     red_squad,
-    run_on_all_clients,
+    run_on_all_clients_push_missing_configs,
     runs_on_provider,
     mcg,
     provider_client_ms_platform_required,
@@ -60,7 +60,7 @@ def test_verify_backingstore_uses_rgw(mcg_obj_session):
 @red_squad
 @tier1
 @provider_client_ms_platform_required
-@run_on_all_clients
+@run_on_all_clients_push_missing_configs
 @pytest.mark.polarion_id("OCS-5214")
 def test_write_file_to_bucket_on_client(
     bucket_factory,
