@@ -622,8 +622,6 @@ def _should_log_command_at_all(
     Returns:
         tuple: (should_log, log_level) - log_level is None if should_log is False
     """
-    import re
-
     cmd_lower = cmd_str.lower()
 
     # ALWAYS log failures (regardless of command type)
@@ -823,7 +821,7 @@ def _smart_yaml_truncation(yaml_output: str) -> str:
     return result
 
 
-def _smart_output_logging(output: str, cmd_str: str, is_stdout: bool) -> str:
+def _smart_output_logging(output: str) -> str:
     """
     Intelligent output truncation and summarization for non-YAML outputs.
     """
@@ -969,7 +967,7 @@ def exec_cmd(
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
-        if kwargs.get("shell"):
+        if use_shell:
             masked_cmd = mask_secrets(cmd, secrets)
         else:
             masked_cmd = shlex.join(mask_secrets(cmd, secrets))
@@ -992,6 +990,7 @@ def exec_cmd(
             stdin=subprocess.PIPE,
             timeout=timeout,
             env=_env,
+            shell=use_shell,
             **kwargs,
         )
     except subprocess.TimeoutExpired as exc:
@@ -1016,7 +1015,7 @@ def exec_cmd(
             truncated_stdout = _smart_yaml_truncation(masked_stdout)
         else:
             # Use general output truncation
-            truncated_stdout = _smart_output_logging(masked_stdout, masked_cmd, True)
+            truncated_stdout = _smart_output_logging(masked_stdout)
 
         # Only log if truncated output is reasonable size (increased threshold)
         if len(truncated_stdout) < 25000:  # Increased from 8000 to 25000
