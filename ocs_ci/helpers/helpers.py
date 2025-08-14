@@ -6456,3 +6456,16 @@ def get_node_plugin_label(interface):
         elif interface == constants.CEPHBLOCKPOOL:
             label = constants.CSI_RBDPLUGIN_LABEL
     return label
+
+
+def is_even(number):
+    """
+    Check if a number is even.
+
+    Args:
+        number (int): The number to check.
+
+    Returns:
+        bool: True if the number is even, False otherwise.
+    """
+    return number % 2 == 0
