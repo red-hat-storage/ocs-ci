@@ -2555,14 +2555,12 @@ def verify_cluster_data_protected_status(
     workload_type, namespace, workload_placement_name=None
 ):
     """
-
     Verify that the cluster dataProtected is True
 
     Args:
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         namespace (str): the namespace of the drpc resources
         workload_placement_name (str): Placement name
-
     """
 
     if workload_type == constants.APPLICATION_SET:
