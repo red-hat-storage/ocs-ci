@@ -32,7 +32,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         argnames=["custom_sc", "replica", "compression"],
         argvalues=[
             pytest.param(
-                *[False],
+                False,
                 3,
                 None,
                 marks=pytest.mark.polarion_id("OCS-6266"),
@@ -47,7 +47,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             ),
             # TODO: ADD Polarion ID for Custom SC test
             pytest.param(
-                *[True],
+                True,
                 3,
                 "aggressive",
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
