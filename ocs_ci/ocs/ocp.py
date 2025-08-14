@@ -994,15 +994,18 @@ class OCP(object):
                     sleep=sleep,
                 )
 
-        log.info(
-            (
-                f"Waiting for a resource(s) of kind {self._kind}"
-                f" identified by name '{resource_name}'"
-                f" using selector {selector}"
-                f" at column name {column}"
-                f" to reach desired condition {condition}"
-            )
+        log_msg = (
+            f"Waiting for a resource(s) of kind {self._kind}"
+            f" identified by name '{resource_name}'"
+            f" using selector {selector}"
+            f" at column name {column}"
+            f" to reach desired condition {condition}"
         )
+        # Avoid emitting duplicate 'Waiting for...' log lines with identical details
+        if getattr(self, "_last_wait_for_resource_log", None) != log_msg:
+            log.info(log_msg)
+            self._last_wait_for_resource_log = log_msg
+
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
 
