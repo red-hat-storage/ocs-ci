@@ -84,7 +84,7 @@ class DRPC(OCP):
         )
         assert sample.wait_for_func_status(
             result=True
-        ), "Clusterdataprotectedtatus is not true, failover action can not be performed"
+        ), "ClusterdataprotectedStatus is not true, failover action can not be performed"
 
     def get_progression_status(self, status_to_check=None):
         logger.info("Getting progression Status")
