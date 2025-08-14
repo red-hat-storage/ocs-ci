@@ -428,10 +428,16 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
     """
     try:
         if push_missing_configs:
-
-            hypershift_cluster_factory(
-                duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
-            )
+            # run this only if cluster type is provider
+            if (
+                config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+                == "provider"
+                and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+                in HCI_PROVIDER_CLIENT_PLATFORMS
+            ):
+                hypershift_cluster_factory(
+                    duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+                )
         client_indexes = [
             pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
         ]
