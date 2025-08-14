@@ -641,23 +641,15 @@ def _should_log_command_at_all(
     if any(op in cmd_lower for op in state_changing_patterns):
         return True, logging.INFO
 
-    # NEVER log routine health checks and monitoring commands
+    # ONLY skip truly repetitive monitoring commands (be very selective)
     routine_patterns = [
-        r"get pod",
-        r"get pods",
-        r"describe pod",
-        r"get node",
-        r"get pvc",
-        r"get service",
-        r"get csv",
-        r"get storageCluster",
-        r"rsh.*ceph health",
-        r"exec.*stat",
-        r"whoami",
-        r"get.*-o yaml.*selector",
-        r"get.*--selector",
-        r"version",
-        r"status",
+        r"rsh.*ceph health$",  # Skip basic ceph health checks
+        r"exec.*stat -c %i.*\.log",  # Skip log file stat monitoring
+        r"get pod.*openshift-storage.*-o yaml",  # Skip repetitive pod yaml dumps
+        r"get pod.*selector=app=rook-ceph.*-o yaml",  # Skip ceph pod selectors
+        r"get storagecluster.*-o yaml",  # Skip storage cluster yaml dumps
+        r"whoami$",  # Skip standalone whoami
+        r"version$",  # Skip standalone version commands
     ]
     if any(re.search(pattern, cmd_lower) for pattern in routine_patterns):
         return False, None  # Skip logging entirely
@@ -749,8 +741,8 @@ def _smart_yaml_truncation(yaml_output: str) -> str:
                 in_events_section = False
             continue
 
-        # For first 30 lines, keep metadata and basic structure
-        if i < 30:
+        # For first 100 lines, keep metadata and basic structure (increased from 30)
+        if i < 100:
             preserved_lines.append(line)
         # After that, only keep important fields
         elif any(
@@ -770,19 +762,21 @@ def _smart_yaml_truncation(yaml_output: str) -> str:
     result = "\n".join(preserved_lines)
 
     # If still too large, do a final truncation but preserve events at end
-    if len(result) > 5000:
+    if len(result) > 15000:  # Increased threshold from 5000 to 15000
         # Find events section
         events_start = result.rfind("\nevents:")
         if events_start > 0:
-            # Keep first part + events
-            first_part = result[:2000]
+            # Keep first part + events (preserve much more)
+            first_part = result[:8000]  # Increased from 2000 to 8000
             events_part = result[events_start:]
-            if len(events_part) > 3000:
-                events_part = events_part[:3000] + "\n  ... [events truncated]"
+            if len(events_part) > 7000:  # Increased from 3000 to 7000
+                events_part = events_part[:7000] + "\n  ... [events truncated]"
             result = f"{first_part}\n... [middle section removed] ...\n{events_part}"
         else:
-            # No events, just truncate
-            result = result[:5000] + "\n... [truncated]"
+            # No events, preserve much more content
+            result = (
+                result[:15000] + "\n... [truncated]"
+            )  # Increased from 5000 to 15000
 
     # Add summary stats
     original_lines = len(lines)
@@ -798,39 +792,55 @@ def _smart_output_logging(output: str, cmd_str: str, is_stdout: bool) -> str:
     """
     Intelligent output truncation and summarization for non-YAML outputs.
     """
-    if len(output) < 500:
+    if len(output) < 2000:  # Increased from 500 to 2000
         return output  # Short outputs: log in full
 
-    # JSON outputs: summarize structure
+    # JSON outputs: show first part + structure summary
     if output.strip().startswith("{"):
         try:
             import json
 
             data = json.loads(output)
             if isinstance(data, dict):
-                keys = list(data.keys())[:10]
-                return f"JSON keys ({len(keys)}/{len(data)}): {keys} [Full: {len(output)} chars]"
+                keys = list(data.keys())[:15]  # Show more keys
+                # Show first 1000 chars + summary
+                preview = output[:1000] + "..."
+                return f"{preview}\n[JSON structure - Keys: {keys}] [Full: {len(output)} chars]"
         except (json.JSONDecodeError, TypeError):
             pass
 
-    # Base64/binary data: just show stats
-    if "base64" in output.lower() or output.count("\n") > 100:
-        lines = output.count("\n")
+    # Detect actual base64 content blocks (not just the word "base64")
+    lines = output.split("\n")
+    base64_line_count = sum(
+        1
+        for line in lines
+        if len(line.strip()) > 50
+        and line.strip().replace("+", "").replace("/", "").replace("=", "").isalnum()
+    )
+
+    # Only truncate if >500 lines AND >30% are likely base64 content
+    if len(lines) > 500 and base64_line_count > len(lines) * 0.3:
         return (
-            f"Large output: {lines} lines, {len(output)} chars [truncated for brevity]"
+            f"Large base64/binary output: {len(lines)} lines, {len(output)} chars "
+            f"[~{base64_line_count} base64 lines detected, truncated for brevity]"
         )
 
-    # Default truncation with context preservation
-    lines = output.split("\n")
-    if len(lines) > 20:
-        # Keep first 10 and last 5 lines for context
-        truncated_lines = (
-            lines[:10] + [f"... [{len(lines)-15} lines omitted] ..."] + lines[-5:]
-        )
-        return "\n".join(truncated_lines)
+    # For large outputs, preserve much more content
+    if len(lines) > 100:  # Increased threshold from 20 to 100
+        # Keep first 50 and last 20 lines for context (much more than before)
+        if len(lines) > 70:
+            truncated_lines = (
+                lines[:50] + [f"... [{len(lines)-70} lines omitted] ..."] + lines[-20:]
+            )
+            return "\n".join(truncated_lines)
+        else:
+            return output  # Show everything if <70 lines
     else:
-        # Just truncate by character count
-        return f"{output[:1000]}...\n[TRUNCATED: {len(output)} chars total]"
+        # For medium outputs, increase character limit significantly
+        if len(output) > 5000:  # Increased from 1000 to 5000
+            return f"{output[:5000]}...\n[TRUNCATED: {len(output)} chars total]"
+        else:
+            return output  # Show in full
 
 
 def exec_cmd(
@@ -973,8 +983,8 @@ def exec_cmd(
             # Use general output truncation
             truncated_stdout = _smart_output_logging(masked_stdout, masked_cmd, True)
 
-        # Only log if truncated output is reasonable size
-        if len(truncated_stdout) < 8000:
+        # Only log if truncated output is reasonable size (increased threshold)
+        if len(truncated_stdout) < 25000:  # Increased from 8000 to 25000
             log.debug("Command stdout: %s", truncated_stdout.rstrip())
 
     # Smart stderr logging
