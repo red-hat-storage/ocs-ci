@@ -247,7 +247,7 @@ class AcmPageNavigator(BaseUI):
                     self.acm_page_nav["click-local-cluster"][1],
                     self.acm_page_nav["click-local-cluster"][0],
                 ),
-                timeout=300,
+                timeout=15,
             ):
                 log.warning("local-cluster is not found while switching to ACM console")
                 self.take_screenshot()
@@ -266,7 +266,7 @@ class AcmPageNavigator(BaseUI):
                     self.acm_page_nav["click-admin-dropdown"][1],
                     self.acm_page_nav["click-admin-dropdown"][0],
                 ),
-                timeout=300,
+                timeout=15,
             ):
                 log.error(
                     "Administrator dropdown is not found, can not switch to ACM console"
@@ -285,9 +285,9 @@ class AcmPageNavigator(BaseUI):
                 self.acm_page_nav["modal_dialog_close_button"][1],
                 self.acm_page_nav["modal_dialog_close_button"][0],
             ),
-            timeout=200,
+            timeout=15,
         ):
-            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=15)
         log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 
