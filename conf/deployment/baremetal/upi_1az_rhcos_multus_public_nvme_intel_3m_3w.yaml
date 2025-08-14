@@ -10,10 +10,12 @@ ENV_DATA:
   mon_type: 'hostpath'
   osd_type: 'nvme'
   is_multus_enabled: true
-  multus_public_net_interface: 'enp1s0f1'
   multus_create_public_net: true
   multus_create_cluster_net: false
-  multus_public_net_namespace: "default"
+  multus_public_net_interface: 'enp1s0f1'
+  multus_public_net_namespace: 'openshift-storage'
+  multus_public_net_type: 'macvlan'
+  multus_public_net_mode: 'bridge'
 REPORTING:
   polarion:
     deployment_id: 'OCS-2510'
