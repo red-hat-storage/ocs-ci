@@ -16,6 +16,7 @@ import subprocess
 import time
 import traceback
 from typing import Match, Iterator, Union, List, Optional
+from collections import defaultdict
 import stat
 import shutil
 from copy import deepcopy
@@ -86,6 +87,10 @@ RC = []
 failure = {}
 output = []
 unique_test_names = []
+
+# Command throttling state for reducing repetitive log noise
+_command_throttle_state = defaultdict(lambda: {"last_logged": 0, "skip_count": 0})
+_throttle_window_seconds = int(os.environ.get("OCS_LOG_THROTTLE_WINDOW", "60"))
 
 
 # function for getting the clients
@@ -604,7 +609,10 @@ def _should_log_command_at_all(
     cmd_str: str, return_code: int, stderr: str
 ) -> tuple[bool, int]:
     """
-    Decide if command deserves any logging and at what level.
+    Decide if command deserves logging with time-based throttling.
+
+    For monitoring commands, implements time-based throttling to reduce noise
+    while preserving visibility. Always logs failures and state changes.
 
     Args:
         cmd_str: The command string to evaluate
@@ -641,18 +649,45 @@ def _should_log_command_at_all(
     if any(op in cmd_lower for op in state_changing_patterns):
         return True, logging.INFO
 
-    # ONLY skip truly repetitive monitoring commands (be very selective)
-    routine_patterns = [
-        r"rsh.*ceph health$",  # Skip basic ceph health checks
-        r"exec.*stat -c %i.*\.log",  # Skip log file stat monitoring
-        r"get pod.*openshift-storage.*-o yaml",  # Skip repetitive pod yaml dumps
-        r"get pod.*selector=app=rook-ceph.*-o yaml",  # Skip ceph pod selectors
-        r"get storagecluster.*-o yaml",  # Skip storage cluster yaml dumps
-        r"whoami$",  # Skip standalone whoami
-        r"version$",  # Skip standalone version commands
+    # Monitoring commands that should be throttled (not skipped entirely)
+    monitoring_patterns = [
+        r"rsh.*ceph health$",  # Ceph health checks
+        r"exec.*stat -c %i.*\.log",  # Log file stat monitoring
+        r"get pod.*openshift-storage.*-o yaml",  # Pod yaml dumps
+        r"get pod.*selector=app=rook-ceph.*-o yaml",  # Ceph pod selectors
+        r"get storagecluster.*-o yaml",  # Storage cluster yaml dumps
+        r"whoami$",  # Standalone whoami
+        r"version$",  # Standalone version commands
     ]
-    if any(re.search(pattern, cmd_lower) for pattern in routine_patterns):
-        return False, None  # Skip logging entirely
+
+    is_monitoring = any(
+        re.search(pattern, cmd_lower) for pattern in monitoring_patterns
+    )
+
+    if is_monitoring and _throttle_window_seconds > 0:
+        current_time = time.time()
+        cmd_state = _command_throttle_state[cmd_str]
+
+        # Check if we should throttle
+        time_since_last = current_time - cmd_state["last_logged"]
+
+        if time_since_last >= _throttle_window_seconds:
+            # Log this occurrence with skip count if any
+            cmd_state["last_logged"] = current_time
+            skip_count = cmd_state["skip_count"]
+            cmd_state["skip_count"] = 0
+
+            if skip_count > 0:
+                # Will log a message about skipped occurrences
+                log.debug(
+                    f"[Command was executed {skip_count} more times in last "
+                    f"{_throttle_window_seconds}s but logging was throttled]"
+                )
+            return True, logging.DEBUG
+        else:
+            # Throttle this occurrence
+            cmd_state["skip_count"] += 1
+            return False, None
 
     # Everything else at DEBUG level
     return True, logging.DEBUG
