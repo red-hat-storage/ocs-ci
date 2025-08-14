@@ -4574,6 +4574,24 @@ def verify_storagecluster_nodetopology():
     return ocs_node_names.sort() == nodes_storage_cluster.sort()
 
 
+def get_noobaa_metrics_token_from_secret():
+    """
+    Retrieve the JWT needed to authenticate NooBaa metrics queries
+    """
+
+    ocp_secret_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+
+    noobaa_metrics_secret = ocp_secret_obj.get(
+        resource_name=constants.NOOBAA_METRICS_AUTH_SECRET
+    )
+
+    base64_metrics_auth_token = noobaa_metrics_secret["data"]["metrics_token"]
+
+    metrics_auth_token = base64.b64decode(base64_metrics_auth_token).decode("utf-8")
+
+    return metrics_auth_token
+
+
 def get_s3_credentials_from_secret(secret_name):
     ocp_secret_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
 
