@@ -109,7 +109,7 @@ def nfs_disable(
         storage_cluster_obj (obj): storage cluster object
         config_map_obj (obj): config map object
         pod_obj (obj): pod object
-        sc (object): nfs storage class object
+        sc (obj): nfs storage class object
         nfs_ganesha_pod_name (str): rook-ceph-nfs * pod name
 
     """
@@ -417,7 +417,7 @@ def disable_nfs_service_from_provider(nfs_sc_obj, nfs_ganesha_pod_name):
 
     Args:
         nfs_ganesha_pod_name (str): rook-ceph-nfs * pod name
-        nfs_sc_obj (object): storage class object
+        nfs_sc_obj (obj): storage class object
 
     """
     provider_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
