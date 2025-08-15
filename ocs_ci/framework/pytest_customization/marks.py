@@ -4,6 +4,7 @@ all related hooks/plugins to markers.
 """
 
 import os
+import sys
 
 import pytest
 from funcy import compose
@@ -428,10 +429,26 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
     """
     try:
         if push_missing_configs:
-
-            hypershift_cluster_factory(
-                duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
-            )
+            # run this only if cluster type is provider and it is part of test execution stage (not deployment or
+            # teardown)
+            # FIXME: the usage of `sys.argv` here is not correct, but we can't use something like
+            # `config.RUN["cli_params"]["deploy"]`, because this setup_multicluster_marker(...) function is called on
+            # the module level (see the lines below this function definition) which means that it is actually called
+            # immediately when the module is imported and the config object is not fully initialized (especially some of
+            # the command line arguments are not processed)
+            # the solution will be to move following logic to some fixture (similarly as we have session scope autouse
+            # fixture `cluster`, which is responsible for deploying and teardown of the whole cluster (when particular
+            # parameters are passed)
+            test_stage = not ("--deploy" in sys.argv or "--teardown" in sys.argv)
+            if (
+                config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+                == HCI_PROVIDER
+                and config.default_cluster_ctx.ENV_DATA["platform"].lower()
+                in HCI_PROVIDER_CLIENT_PLATFORMS
+            ) and test_stage:
+                hypershift_cluster_factory(
+                    duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+                )
         client_indexes = [
             pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
         ]
