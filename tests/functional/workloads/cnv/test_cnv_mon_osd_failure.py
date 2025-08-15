@@ -11,6 +11,7 @@ from ocs_ci.ocs.resources.pod import get_deployment_name, wait_for_pods_by_label
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.pod import get_osd_pods
+from ocs_ci.utility import utils
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,8 @@ class TestMonAndOSDFailures:
         wait_for_pods_by_label_count(
             label=constants.MON_APP_LABEL, expected_count=3, timeout=300
         )
+        # Check ceph health status
+        utils.ceph_health_check(tries=20)
 
     @polarion_id("OCS-6608")
     def test_single_osd_failure(self):
