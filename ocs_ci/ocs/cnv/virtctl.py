@@ -221,7 +221,7 @@ class Virtctl(object):
              str: stdout of command
 
         """
-        base_command = f"{self.base_command} ssh {vm} "
+        base_command = f"{self.base_command} ssh vmi/{vm} "
         base_command += "--local-ssh-opts='-o StrictHostKeyChecking=no'"
 
         if use_sudo:
