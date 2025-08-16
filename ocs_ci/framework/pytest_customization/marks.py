@@ -97,6 +97,7 @@ acm_import = pytest.mark.acm_import
 rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
+chaos = pytest.mark.chaos
 
 tier_marks = [
     tier1,
@@ -116,6 +117,7 @@ tier_marks = [
     scale_changed_layout,
     workloads,
     resiliency,
+    chaos,
 ]
 
 # upgrade related markers
