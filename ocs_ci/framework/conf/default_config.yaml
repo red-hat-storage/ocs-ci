@@ -129,7 +129,8 @@ DEPLOYMENT:
   # Multicluster engine
   deploy_mce: false
   fusion_channel: v2.0
-
+  enable_nested_virtualization: False # Enable nested virtualization on the cluster nodes
+  host_network: False # Use host network for ODF pods, propagates to spec of StorageCluster. Mandatory for Hub/Spoke deployments.
 
 
 # Section for reporting configuration
