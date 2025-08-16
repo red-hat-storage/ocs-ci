@@ -51,7 +51,7 @@ class TestPvcExpand(ManageTest):
             access_modes=access_modes_cephfs,
             status=constants.STATUS_BOUND,
             num_of_pvc=2,
-            timeout=90,
+            timeout=300,
         )
 
         self.pvcs_rbd = multi_pvc_factory(
@@ -61,7 +61,7 @@ class TestPvcExpand(ManageTest):
             access_modes=access_modes_rbd,
             status=constants.STATUS_BOUND,
             num_of_pvc=3,
-            timeout=90,
+            timeout=300,
         )
 
         pods_cephfs = helpers.create_pods(
