@@ -31,3 +31,10 @@ ENV_DATA:
   compute_memory: '65536'
   extra_disks: 2
   fio_storageutilization_min_mbps: 10.0
+  is_multus_enabled: true
+  multus_public_net_interface: "ens224"
+  multus_cluster_net_interface: "ens224"
+  multus_create_public_net: true
+  multus_create_cluster_net: true
+  multus_public_net_namespace: "default"
+  multus_cluster_net_namespace: "default"
