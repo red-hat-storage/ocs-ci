@@ -207,6 +207,7 @@ from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlu
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
+from ocs_ci.ocs.md_blow import MdBlow
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
@@ -3803,6 +3804,21 @@ def fio_pvc_dict():
 
     """
     return fio_artefacts.get_pvc_dict()
+
+
+@pytest.fixture()
+def md_blow_pre_req(request):
+    md_blow_obj = MdBlow()
+
+    def factory():
+        md_blow_obj.patch_lines_in_core_pod()
+        return md_blow_obj
+
+    def teardown():
+        md_blow_obj.cleanup()
+
+    request.addfinalizer(teardown)
+    return factory
 
 
 @pytest.fixture(scope="session")
