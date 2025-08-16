@@ -9,6 +9,7 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     NoSuchElementException,
+    TimeoutException,
 )
 
 from ocs_ci.helpers.dr_helpers import get_cluster_set_name
@@ -566,16 +567,34 @@ def login_to_acm():
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
     page_nav.page_has_loaded(retries=10, sleep_time=5)
-    look_for_local_cluster = page_nav.wait_until_expected_text_is_found(
-        locator=page_nav.acm_page_nav["click-local-cluster"],
-        expected_text="local-cluster",
-        timeout=15,
-    )
-    if look_for_local_cluster:
-        log.info("local-cluster dropdown found, navigating from OCP to ACM console")
-        page_nav.navigate_from_ocp_to_acm_cluster_page()
-    else:
-        log.warning("local-cluster dropdown not found, view is already on ACM console")
+    try:
+        look_for_local_cluster = page_nav.wait_until_expected_text_is_found(
+            locator=page_nav.acm_page_nav["click-local-cluster"],
+            expected_text="local-cluster",
+            timeout=15,
+        )
+        if look_for_local_cluster:
+            log.info("local-cluster dropdown found, navigating from OCP to ACM console")
+            page_nav.navigate_from_ocp_to_acm_cluster_page()
+        else:
+            log.warning(
+                "local-cluster dropdown not found, view is already on ACM console"
+            )
+    except (NoSuchElementException, TimeoutException) as e:
+        log.exception(f"Exception occurred: {e} while finding 'local-cluster'")
+        look_for_administrator_dropdown = page_nav.wait_until_expected_text_is_found(
+            locator=page_nav.acm_page_nav["click-local-cluster"],
+            expected_text="Administrator",
+            timeout=15,
+        )
+        if look_for_administrator_dropdown:
+            log.info("Administrator dropdown found, navigating from OCP to ACM console")
+            page_nav.navigate_from_ocp_to_acm_cluster_page()
+        else:
+            log.warning(
+                "Administrator dropdown not found, view is already on ACM console"
+            )
+            raise
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
