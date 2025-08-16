@@ -504,12 +504,12 @@ class TestReplication(MCGTest):
             logger.info(f"Deleted source bucket {source_bucket_name}")
 
             # check in db that the replication config was deleted
-            replication_conf_count = exec_nb_db_query(
-                f"SELECT COUNT (*) FROM replicationconfigs WHERE _id='{replication_id}'"
-            )[0].strip()
+            replication_conf_info = exec_nb_db_query(
+                f"SELECT * FROM replicationconfigs WHERE _id='{replication_id}'"
+            )
 
             assert (
-                int(replication_conf_count) == 0
+                "deleted" in replication_conf_info[0]
             ), f"Replication config for {source_bucket_name} is not deleted!"
 
             # check in noobaa core logs
