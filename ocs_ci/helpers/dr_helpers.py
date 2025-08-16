@@ -2365,3 +2365,26 @@ def verify_volsync():
             timeout=600,
         )
     config.switch_ctx(restore_index)
+
+
+def verify_cluster_data_protected_status(
+    workload_type, namespace, workload_placement_name=None
+):
+    """
+    Verify that the cluster dataProtected is True
+
+    Args:
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        namespace (str): the namespace of the drpc resources
+        workload_placement_name (str): Placement name
+    """
+
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+    drpc_obj.wait_for_clusterdataprotected_status()
