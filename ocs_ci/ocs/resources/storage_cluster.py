@@ -777,7 +777,7 @@ def ocs_install_verification(
                 namespace,
                 health_check_tries,
                 health_check_delay,
-                fix_ceph_health=rdr_run,
+                fix_ceph_health=True,
             )
         except CephHealthRecoveredException as ex:
             if rdr_run and "slow ops" in str(ex):
