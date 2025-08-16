@@ -23,7 +23,6 @@ from ocs_ci.ocs import cluster, constants, ocp
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -45,14 +44,9 @@ class TestMCGResourcesDisruptions(MCGTest):
 
     """
 
-    nb_db_label = (
-        constants.NOOBAA_DB_LABEL_46_AND_UNDER
-        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_7
-        else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
-    )
     labels_map = {
         "noobaa_core": constants.NOOBAA_CORE_POD_LABEL,
-        "noobaa_db": nb_db_label,
+        "noobaa_db": constants.CNPG_POD_ROLE_INSTANCE_LABEL,
         "noobaa_endpoint": constants.NOOBAA_ENDPOINT_POD_LABEL,
         "noobaa_operator": constants.NOOBAA_OPERATOR_POD_LABEL,
     }
