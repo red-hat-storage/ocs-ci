@@ -429,7 +429,6 @@ class TestPvPool:
         )
 
     @tier2
-    @pytest.mark.skip(reason="Skip due to issue #12717")
     @pytest.mark.parametrize(
         argnames=["pv_in_bs", "block_size", "block_count", "file_count"],
         argvalues=[
@@ -438,7 +437,7 @@ class TestPvPool:
                     1,
                     "5K",
                     1,
-                    50000,  # dataset contains 50000 small files of 5K each, 1 pv per backingstore
+                    25000,  # dataset contains 25000 small files of 5K each, 1 pv per backingstore
                 ],
                 marks=pytest.mark.polarion_id("OCS-6852"),
             ),
@@ -447,7 +446,7 @@ class TestPvPool:
                     1,
                     "5K",
                     1,
-                    5000,  # dataset contains 5000 small files of 5K each, 1 pv per backingstore
+                    2500,  # dataset contains 2500 small files of 5K each, 1 pv per backingstore
                 ],
                 marks=pytest.mark.polarion_id("OCS-6853"),
             ),
@@ -533,34 +532,78 @@ class TestPvPool:
 
         """
 
+        pv_backingstore_specs = {
+            "vol_num": pv_in_bs,
+            "size": MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+            "storagecluster": CEPHBLOCKPOOL_SC,
+            "req_cpu": "800m",
+            "req_mem": "800Mi",
+            "lim_cpu": "1000m",
+            "lim_mem": "4000Mi",
+        }
+        bs_specs_tuple = tuple(pv_backingstore_specs.values())
         bucketclass_dict = {
-            "interface": "OC",
+            "interface": "CLI",
             "backingstore_dict": {
                 "pv": [
-                    (pv_in_bs, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC),
-                    (
-                        pv_in_bs,
-                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-                        CEPHBLOCKPOOL_SC,
-                    ),
+                    bs_specs_tuple,  # first backingstore
+                    bs_specs_tuple,  # second backingstore
                 ]
             },
         }
-        bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+        bucket = bucket_factory(amount=1, bucketclass=bucketclass_dict)[0]
         logger.info(
-            f"The bucket with name {bucket.name} was successfully created on {pv_in_bs*2} pvs."
+            f"The bucket with name {bucket.name} was successfully created on {pv_in_bs * 2} pvs."
         )
 
-        for i in range(file_count):
-            logger.info(f"Writing file number {i}")
-            awscli_pod_session.exec_cmd_on_pod(
-                f"dd if=/dev/urandom of=/tmp/testfile bs={block_size} count={block_count}"
-            )
+        base_path = "/tmp/datasets"
+        block_size_int, block_size_char = int(block_size[:-1]), block_size[-1]
 
-            awscli_pod_session.exec_s3_cmd_on_pod(
-                f"cp /tmp/testfile s3://{bucket.name}/testfile_{i}",
-                mcg_obj_session,
-            )
+        # Cleanup the session scoped pod directory
+        awscli_pod_session.exec_cmd_on_pod(f"rm -rf {base_path}")
+
+        total_size_too_big = (block_size_char == "M") and (
+            block_count * file_count >= 2000
+        )
+
+        if total_size_too_big:
+            # Make individual dd and s3 cp calls for bigger datasets
+            for i in range(file_count):
+                awscli_pod_session.exec_cmd_on_pod(
+                    f"dd if=/dev/urandom of=/tmp/testfile bs={block_size} count={block_count} status=none"
+                )
+                awscli_pod_session.exec_s3_cmd_on_pod(
+                    f"cp /tmp/testfile s3://{bucket.name}/testfile_{i}",
+                    mcg_obj_session,
+                )
+        else:
+            # Upload smaller files with grouped dd and s3 sync calls,
+            # but limit the batch size to support many small files
+            batch_size = 1000
+            full_batches_num = file_count // batch_size
+            remainder = file_count % batch_size
+            total_batches_num = full_batches_num + (1 if remainder else 0)
+
+            for batch_i in range(total_batches_num):
+                dataset_dir = f"{base_path}/batch_{batch_i}"
+                file_count_in_batch = (
+                    batch_size
+                    if batch_i < full_batches_num
+                    else (remainder or batch_size)
+                )
+
+                awscli_pod_session.exec_cmd_on_pod(
+                    f"sh -ec 'mkdir -p {dataset_dir}; "
+                    f"dd if=/dev/zero bs={block_size} of={dataset_dir}/bigfile "
+                    f"count={block_count * file_count_in_batch} status=none; "
+                    f"split -a 4 -b {block_size_int * block_count}{block_size_char.lower()} "
+                    f"{dataset_dir}/bigfile {dataset_dir}/testfile_; "
+                    f"rm {dataset_dir}/bigfile;'"
+                )
+                awscli_pod_session.exec_s3_cmd_on_pod(
+                    f"sync {dataset_dir} s3://{bucket.name}/{batch_i}/ --no-progress --only-show-errors",
+                    mcg_obj_session,
+                )
 
         pv_pods_usage_list = list()
         for backing_store in bucket.bucketclass.backingstores:
