@@ -626,64 +626,6 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
 
-    # def do_deploy_odf_provider_mode(self):
-    #     """
-    #     Deploy ODF in provider mode and setup native client
-    #     """
-    #     # deploy provider-client deployment
-    #     from ocs_ci.deployment.provider_client.storage_client_deployment import (
-    #         ODFMultiClientHubDeployment,
-    #     )
-    #
-    #     odf_depl_obj = ODFMultiClientHubDeployment()
-    #
-    #     # Provider-client deployment if odf_provider_mode_deployment: True
-    #     if (
-    #         config.ENV_DATA.get("odf_provider_mode_deployment", False)
-    #         and not config.ENV_DATA["skip_ocs_deployment"]
-    #     ):
-    #         if config.DEPLOYMENT.get("local_storage"):
-    #             # Usually we create local storage for multi-client setups via checkbox in jenkins UI, in such case
-    #             # config.DEPLOYMENT["lso_standalone_deployment"] is set to True and at this point
-    #             # we can assume that local storage is installed with other Dependencies *(when Install Dependencies
-    #             # is being marked too)
-    #             # Following lso installation section is for redundancy and non-standard setups, for example,
-    #             # when we create multi-client not from ODF Provider Client Multicluster Job
-    #
-    #             # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-    #             is_local_storage_available = odf_depl_obj.sc_obj.is_exist(
-    #                 resource_name=odf_depl_obj.storageclass,
-    #             )
-    #             if not is_local_storage_available:
-    #                 # avoid circular import
-    #                 from ocs_ci.deployment.baremetal import disks_available_to_cleanup
-    #                 from ocs_ci.ocs.node import get_nodes
-    #
-    #                 worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-    #                 disks_available_on_worker_nodes_for_cleanup = (
-    #                     disks_available_to_cleanup(worker_node_objs[0])
-    #                 )
-    #                 number_of_disks_available = len(
-    #                     disks_available_on_worker_nodes_for_cleanup
-    #                 )
-    #                 logger.info(
-    #                     f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
-    #                     f"number of disks avilable for cleanup, {number_of_disks_available}"
-    #                 )
-    #
-    #                 cleanup_nodes_for_lso_install()
-    #                 setup_local_storage(storageclass=odf_depl_obj.storageclass)
-    #             else:
-    #                 logger.info("local storage is already installed")
-    #         else:
-    #             logger.info(
-    #                 "Skipping local storage setup as local_storage is not requested in config"
-    #             )
-    #
-    #         odf_depl_obj.provider_and_native_client_installation(
-    #             worker_node_objs, number_of_disks_available
-    #         )
-
     def do_deploy_cnv(self):
         """
         Deploy CNV
@@ -816,8 +758,6 @@ class Deployment(object):
         self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
-        # we need to drop do_deploy_odf_provider_mode in favor of do_deploy_ocs ^^
-        # self.do_deploy_odf_provider_mode()
         self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
