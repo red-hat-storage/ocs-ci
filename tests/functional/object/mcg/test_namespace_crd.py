@@ -1084,22 +1084,22 @@ class TestNamespace(MCGTest):
         argvalues=[
             pytest.param(
                 *["noobaa-db"],
-                respin_count=0,
+                False,
                 marks=[pytest.mark.polarion_id("OCS-2291")],
             ),
             pytest.param(
                 *["noobaa-db"],
-                respin_count=10,
+                True,
                 marks=[pytest.mark.polarion_id("OCS-6907")],
             ),
             pytest.param(
                 *["noobaa-core"],
-                respin_count=0,
+                False,
                 marks=pytest.mark.polarion_id("OCS-2319"),
             ),
             pytest.param(
                 *["noobaa-operator"],
-                respin_count=0,
+                True,
                 marks=pytest.mark.polarion_id("OCS-2320"),
             ),
         ],
@@ -1162,32 +1162,12 @@ class TestNamespace(MCGTest):
             raise UnexpectedBehaviour("Failed to sync objects")
 
         if respin_count:
-            for _ in range(respin_count):
-                logger.info(f"Respin mcg resource {mcg_pod}")
-                noobaa_pods = pod.get_noobaa_pods()
-                pod_obj = [pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)][
-                    0
-                ]
-                pod_obj.delete(force=True)
-                logger.info("Wait for noobaa pods to come up")
-                assert pod_obj.ocp.wait_for_resource(
-                    condition="Running",
-                    selector="app=noobaa",
-                    resource_count=len(noobaa_pods),
-                    timeout=1000,
-                )
+            count = 10
+            for _ in range(count):
+                self.respin_mcg_pod(mcg_pod)
         else:
-            logger.info(f"Respin mcg resource {mcg_pod}")
-            noobaa_pods = pod.get_noobaa_pods()
-            pod_obj = [pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)][0]
-            pod_obj.delete(force=True)
-            logger.info("Wait for noobaa pods to come up")
-            assert pod_obj.ocp.wait_for_resource(
-                condition="Running",
-                selector="app=noobaa",
-                resource_count=len(noobaa_pods),
-                timeout=1000,
-            )
+            self.respin_mcg_pod(mcg_pod)
+
         logger.info("Wait for noobaa health to be OK")
         ceph_cluster_obj = CephCluster()
         ceph_cluster_obj.wait_for_noobaa_health_ok()
@@ -1468,3 +1448,19 @@ class TestNamespace(MCGTest):
                 )
                 result = False
         return result
+
+    def respin_mcg_pod(self, mcg_pod):
+        """
+        Respin specified mcg pod
+        """
+        logger.info(f"Respin mcg resource {mcg_pod}")
+        noobaa_pods = pod.get_noobaa_pods()
+        pod_obj = [pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)][0]
+        pod_obj.delete(force=True)
+        logger.info("Wait for noobaa pods to come up")
+        assert pod_obj.ocp.wait_for_resource(
+            condition="Running",
+            selector="app=noobaa",
+            resource_count=len(noobaa_pods),
+            timeout=1000,
+        )
