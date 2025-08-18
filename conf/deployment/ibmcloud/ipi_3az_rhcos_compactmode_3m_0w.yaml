@@ -8,7 +8,7 @@ ENV_DATA:
   region: 'us-east'
   base_domain: 'ibmcloud2.qe.rh-ocs.com'
   worker_instance_type: 'bx2-16x64'
-  master_instance_type: 'bx2.16x64'
+  master_instance_type: 'bx2-16x64'
   master_availability_zones:
     - 'us-east-1'
     - 'us-east-2'
