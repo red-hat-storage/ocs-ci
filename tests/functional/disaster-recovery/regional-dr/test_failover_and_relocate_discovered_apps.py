@@ -127,7 +127,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         rdr_workload = discovered_apps_dr_workload(
             pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
         )[0]
-
+        is_mix = pvc_interface == "Mix"
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
                 rdr_workload.workload_namespace,
@@ -228,7 +228,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
-            mix_workload=True if pvc_interface == "Mix" else False,
+            mix_workload=is_mix,
             mix_workload_data=(
                 mix_workload_data
                 if pvc_interface != "Mix"
@@ -307,7 +307,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
-            mix_workload=True if pvc_interface == "Mix" else False,
+            mix_workload=is_mix,
             mix_workload_data=rdr_workload.mix_workload_data,
         )
 
