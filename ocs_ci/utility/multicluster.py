@@ -4,8 +4,11 @@ All multicluster specific utility functions and classes can be here
 """
 
 import logging
+import tempfile
 
-from ocs_ci.framework import config as ocsci_config
+from ocs_ci.framework import config as ocsci_config, config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_indexes,
     get_passive_acm_index,
@@ -14,6 +17,8 @@ from ocs_ci.ocs.utils import (
     get_all_acm_indexes,
 )
 from ocs_ci.ocs.constants import MDR_ROLES, RDR_ROLES, ACM_RANK, MANAGED_CLUSTER_RANK
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import run_cmd, wait_for_machineconfigpool_status
 
 log = logging.getLogger(__name__)
 
@@ -254,3 +259,28 @@ def get_multicluster_upgrade_parametrizer():
     return multicluster_upgrade_parametrizer[
         ocsci_config.MULTICLUSTER["multicluster_mode"]
     ]()
+
+
+def create_mce_catsrc():
+    log.info("Creating Konflux Catalogsource for MCE ")
+    mce_konflux_catsrc_yaml_data = templating.load_yaml(
+        constants.MCE_CATALOGSOURCE_YAML
+    )
+    mce_konflux_catsrc_yaml_data["spec"][
+        "image"
+    ] = f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
+    mce_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="mce_konflux_catsrc_yaml_data_manifest", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        mce_konflux_catsrc_yaml_data, mce_konflux_catsrc_yaml_data_manifest.name
+    )
+    run_cmd(f"oc create -f {mce_konflux_catsrc_yaml_data_manifest.name}")
+    mce_operator_catsrc = CatalogSource(
+        resource_name=constants.MCE_DEV_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    mce_operator_catsrc.wait_for_state("READY")
+    log.info("Creating ImageDigestMirrorSet for ACM Deployment")
+    run_cmd(f"oc create -f {constants.ACM_BREW_IDMS_YAML}")
+    wait_for_machineconfigpool_status(node_type="all")

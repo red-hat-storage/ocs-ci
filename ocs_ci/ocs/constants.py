@@ -1523,6 +1523,7 @@ OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OPTIONAL_OPERATORS = "optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+MCE_DEV_CATALOG_SOURCE_NAME = "mce-dev-catalog"
 
 OCS_DEPLOYMENTS = [
     "csi-addons-controller-manager",

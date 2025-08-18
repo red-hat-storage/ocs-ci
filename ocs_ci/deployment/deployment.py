@@ -148,6 +148,7 @@ from ocs_ci.utility import (
     version,
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
+from ocs_ci.utility.multicluster import create_mce_catsrc
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -2850,30 +2851,7 @@ class Deployment(object):
         )
         acm_operator_catsrc.wait_for_state("READY")
 
-        logger.info("Creating Konflux Catalogsource for MCE ")
-
-        mce_konflux_catsrc_yaml_data = templating.load_yaml(
-            constants.MCE_CATALOGSOURCE_YAML
-        )
-        mce_konflux_catsrc_yaml_data["spec"][
-            "image"
-        ] = f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
-        mce_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="mce_konflux_catsrc_yaml_data_manifest", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            mce_konflux_catsrc_yaml_data, mce_konflux_catsrc_yaml_data_manifest.name
-        )
-        run_cmd(f"oc create -f {mce_konflux_catsrc_yaml_data_manifest.name}")
-
-        mce_operator_catsrc = CatalogSource(
-            resource_name="mce-dev-catalog",
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        mce_operator_catsrc.wait_for_state("READY")
-        logger.info("Creating ImageDigestMirrorSet for ACM Deployment")
-        run_cmd(f"oc create -f {constants.ACM_BREW_IDMS_YAML}")
-        wait_for_machineconfigpool_status(node_type="all")
+        create_mce_catsrc()
         channel = config.ENV_DATA.get("acm_hub_channel")
         logger.info("Creating ACM HUB namespace")
         acm_hub_namespace_yaml_data = templating.load_yaml(constants.NAMESPACE_TEMPLATE)
