@@ -173,14 +173,14 @@ class TestFIOBenchmark(PASTest):
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
         log.info(f"Total storage capacity is {ceph_capacity} GiB")
-        self.total_data_set = int(ceph_capacity * 0.04)
+        self.total_data_set = int(ceph_capacity * 0.004)
         self.filesize = int(
             self.crd_data["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
         )
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if self.total_data_set > 50:
-            self.filesize = int(ceph_capacity * 0.00415)
+            self.filesize = int(ceph_capacity * 0.000415)
             self.crd_data["spec"]["workload"]["args"][
                 "filesize"
             ] = f"{self.filesize}GiB"
@@ -468,7 +468,11 @@ class TestFIOBenchmark(PASTest):
         full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
-        self.test_duration = self.end_time - self.start_time
+        struct1 = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(struct1)
+        struct2 = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(struct2)
+        self.test_duration = epoch_gmte - epoch_gmts
         # Cleanup fio benchmark
         self.cleanup()
 
