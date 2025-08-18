@@ -1273,16 +1273,10 @@ class BusyboxDiscoveredApps(DRWorkload):
         elif not self.discovered_apps_multi_ns:
             self.create_drpc()
 
-        if not self.pvc_interface == "Mix":
-            mix_workload_data = None
-
+        is_mix = self.pvc_interface == "Mix"
         self.verify_workload_deployment(
-            mix_workload=True if self.pvc_interface == "Mix" else False,
-            mix_workload_data=(
-                mix_workload_data
-                if self.pvc_interface != "Mix"
-                else self.mix_workload_data
-            ),
+            mix_workload=is_mix,
+            mix_workload_data=self.mix_workload_data if is_mix else None,
         )
 
     def _deploy_prereqs(self):
