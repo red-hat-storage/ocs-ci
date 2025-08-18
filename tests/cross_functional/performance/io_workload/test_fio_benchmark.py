@@ -191,12 +191,8 @@ class TestFIOBenchmark(PASTest):
         self.crd_data["spec"]["workload"]["args"]["servers"] = int(
             self.total_data_set / self.filesize
         )
-        self.crd_data["spec"]["workload"]["args"][
-            "filesize"
-        ] = "5GiB"
-        self.crd_data["spec"]["workload"]["args"][
-            "storagesize"
-        ] = "7Gi"
+        self.crd_data["spec"]["workload"]["args"]["filesize"] = "5GiB"
+        self.crd_data["spec"]["workload"]["args"]["storagesize"] = "7Gi"
         self.crd_data["spec"]["workload"]["args"]["servers"] = 1
         self.crd_data["spec"]["workload"]["args"]["read_runtime"] = 30
         self.crd_data["spec"]["workload"]["args"]["write_runtime"] = 30
