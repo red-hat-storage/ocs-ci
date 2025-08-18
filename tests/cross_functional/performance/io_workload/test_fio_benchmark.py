@@ -173,14 +173,14 @@ class TestFIOBenchmark(PASTest):
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
         log.info(f"Total storage capacity is {ceph_capacity} GiB")
-        self.total_data_set = int(ceph_capacity * 0.004)
+        self.total_data_set = int(ceph_capacity * 0.04)
         self.filesize = int(
             self.crd_data["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
         )
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
-        if self.total_data_set > 5:
-            self.filesize = int(ceph_capacity * 0.000415)
+        if self.total_data_set > 50:
+            self.filesize = int(ceph_capacity * 0.0415)
             self.crd_data["spec"]["workload"]["args"][
                 "filesize"
             ] = f"{self.filesize}GiB"
@@ -191,6 +191,17 @@ class TestFIOBenchmark(PASTest):
         self.crd_data["spec"]["workload"]["args"]["servers"] = int(
             self.total_data_set / self.filesize
         )
+        self.crd_data["spec"]["workload"]["args"][
+            "filesize"
+        ] = "5GiB"
+        self.crd_data["spec"]["workload"]["args"][
+            "storagesize"
+        ] = "7Gi"
+        self.crd_data["spec"]["workload"]["args"]["servers"] = 1
+        self.crd_data["spec"]["workload"]["args"]["read_runtime"] = 30
+        self.crd_data["spec"]["workload"]["args"]["write_runtime"] = 30
+        self.crd_data["spec"]["workload"]["args"]["bs"] = ["64KiB"]
+
         log.info(f"Total Data set to work on is : {self.total_data_set} GiB")
         log.info("Setting prefill value to False ")
         self.crd_data["spec"]["workload"]["args"]["prefill"] = False
