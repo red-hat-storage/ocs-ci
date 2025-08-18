@@ -146,6 +146,10 @@ class MCEInstaller(object):
                 mce_subscription_yaml_data["spec"]["channel"] = config.DEPLOYMENT.get(
                     "mce_channel"
                 )
+            else:
+                mce_subscription_yaml_data["spec"][
+                    "channel"
+                ] = f"stable-{config.ENV_DATA.get('mce_version')}"
             mce_subscription_yaml_data["spec"][
                 "source"
             ] = constants.MCE_DEV_CATALOG_SOURCE_NAME

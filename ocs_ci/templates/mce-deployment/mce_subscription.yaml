@@ -6,7 +6,7 @@ metadata:
   labels:
     operators.coreos.com/multicluster-engine.multicluster-engine: ""
 spec:
-  channel: stable-2.9
+  channel: {}
   installPlanApproval: Automatic
   name: multicluster-engine
   source: {}
