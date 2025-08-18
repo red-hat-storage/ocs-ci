@@ -8,6 +8,7 @@ import logging
 import pytest
 import time
 import json
+import calendar
 
 from ocs_ci.framework import config
 from ocs_ci.utility import templating
