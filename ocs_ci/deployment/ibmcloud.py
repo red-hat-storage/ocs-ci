@@ -345,6 +345,116 @@ class IBMCloudIPI(CloudDeploymentBase):
 
             _verify_volumes_deleted(resource_group)
 
+    def force_cleanup_leftovers(self, resource_group):
+        """
+        Extra force cleanup for IBM Cloud leftovers
+        that installer + normal ocs-ci cleanup misses.
+        Mirrors what the bash script does.
+        """
+        raised_exceptions = []
+        # Delete compute instances
+        try:
+            cmd = f"ibmcloud is instances --resource-group-name {resource_group} --output json"
+            proc = exec_cmd(cmd)
+            instances = json.loads(proc.stdout)
+            for inst in instances:
+                logger.info(f"Deleting instance {inst['name']} ({inst['id']})")
+                exec_cmd(f"ibmcloud is instance-delete -f {inst['id']}")
+        except Exception as ex:
+            logger.warning(f"Instance cleanup failed: {ex}")
+            raised_exceptions.append(ex)
+
+        # Delete load balancers (with wait loop)
+        try:
+            cmd = f"ibmcloud is load-balancers --resource-group-name {resource_group} --output json"
+            proc = exec_cmd(cmd)
+            lbs = json.loads(proc.stdout)
+            for lb in lbs:
+                lb_id = lb["id"]
+                logger.info(f"Deleting load balancer {lb['name']} ({lb_id})")
+                exec_cmd(f"ibmcloud is load-balancer-delete -f {lb_id}")
+                # wait until gone or max attempts reached
+                max_attempts = 30
+                attempts = 0
+                while attempts < max_attempts:
+                    attempts += 1
+                    try:
+                        exec_cmd(f"ibmcloud is load-balancer {lb_id} --output json")
+                        logger.info(f"Waiting for load balancer {lb_id} deletion...")
+                        time.sleep(10)
+                    except CommandFailed:
+                        break
+                if attempts == max_attempts:
+                    raise LeftoversExistError(
+                        f"Load balancer {lb_id} deletion timed out"
+                    )
+        except Exception as ex:
+            logger.warning(f"Load balancer cleanup failed: {ex}")
+            raised_exceptions.append(ex)
+
+        # Delete subnets and detach public gateways
+        try:
+            cmd = f"ibmcloud is subnets --resource-group-name {resource_group} --output json"
+            proc = exec_cmd(cmd)
+            subnets = json.loads(proc.stdout)
+            for subnet in subnets:
+                subnet_id = subnet["id"]
+                subnet_name = subnet["name"]
+                logger.info(f"Handling subnet {subnet_name} ({subnet_id})")
+
+                pgw = subnet.get("public_gateway", {})
+                if pgw and pgw.get("id"):
+                    pgw_id = pgw["id"]
+                    logger.info(
+                        f" Detaching public gateway {pgw_id} from subnet {subnet_id}"
+                    )
+                    try:
+                        exec_cmd(
+                            f"ibmcloud is subnet-public-gateway-detach -f {subnet_id}"
+                        )
+                    except CommandFailed as ex:
+                        if "subnet_no_public_gateway" in str(ex):
+                            logger.info(" No public gateway attached.")
+                        else:
+                            raise
+                    logger.info(f"Deleting public gateway {pgw_id}")
+                    exec_cmd(f"ibmcloud is public-gateway-delete -f {pgw_id}")
+
+                logger.info(f"Deleting subnet {subnet_id}")
+                exec_cmd(f"ibmcloud is subnet-delete -f {subnet_id}")
+        except Exception as ex:
+            logger.warning(f"Subnet/PGW cleanup failed: {ex}")
+            raised_exceptions.append(ex)
+
+        # Delete VPN Gateways
+        try:
+            cmd = f"ibmcloud is vpn-gateways --resource-group-name {resource_group} --output json"
+            proc = exec_cmd(cmd)
+            vpns = json.loads(proc.stdout)
+            for vpn in vpns:
+                logger.info(f"Deleting VPN Gateway {vpn['name']} ({vpn['id']})")
+                exec_cmd(f"ibmcloud is vpn-gateway-delete -f {vpn['id']}")
+        except Exception as ex:
+            logger.warning(f"VPN cleanup failed: {ex}")
+            raised_exceptions.append(ex)
+
+        # VPC deletion (after cleaning subnets/PGWs)
+        try:
+            cmd = (
+                f"ibmcloud is vpcs --resource-group-name {resource_group} --output json"
+            )
+            proc = exec_cmd(cmd)
+            vpcs = json.loads(proc.stdout)
+            for vpc in vpcs:
+                logger.info(f"Deleting VPC {vpc['name']} ({vpc['id']})")
+                exec_cmd(f"ibmcloud is vpc-delete -f {vpc['id']}")
+        except Exception as ex:
+            logger.warning(f"VPC cleanup failed: {ex}")
+            raised_exceptions.append(ex)
+        if raised_exceptions:
+            ex_msgs = [str(ex) for ex in raised_exceptions]
+            raise LeftoversExistError(f"Leftovers cleanup failed: {ex_msgs}")
+
     @retry((LeftoversExistError, CommandFailed), tries=3, delay=30, backoff=1)
     def delete_leftover_resources(self, resource_group):
         """
@@ -519,6 +629,7 @@ class IBMCloudIPI(CloudDeploymentBase):
                     resource_names = set([r["name"] for r in leftovers])
                     logger.info(f"Deleting leftovers {resource_names}")
                     _delete_resources(resource_names, ignore_errors=True)
+                    self.force_cleanup_leftovers(resource_group)
             reclamations = _get_reclamations(resource_group)
             if reclamations:
                 _delete_reclamations(reclamations)
