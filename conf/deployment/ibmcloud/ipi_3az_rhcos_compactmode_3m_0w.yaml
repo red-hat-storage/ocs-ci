@@ -1,0 +1,29 @@
+---
+DEPLOYMENT:
+  openshift_install_timeout: 4800
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'ibm_cloud'
+  deployment_type: 'ipi'
+  region: 'us-east'
+  base_domain: 'ibmcloud2.qe.rh-ocs.com'
+  worker_instance_type: 'bx2-16x64'
+  master_instance_type: 'bx2-16x64'
+  master_availability_zones:
+    - 'us-east-1'
+    - 'us-east-2'
+    - 'us-east-3'
+  worker_availability_zones:
+    - 'us-east-1'
+    - 'us-east-2'
+    - 'us-east-3'
+  worker_replicas: 0
+  master_replicas: 3
+
+# The following values need to be set in a separate config and passed to ocs-ci in
+# order to deploy OCP/OCS cluster on IBM Cloud using IPI.
+#
+#AUTH:
+#  ibmcloud:
+#    account_id: ACCOUNT ID PLACEHOLDER
+#    api_key: IBM CLOUD API KEY PLACEHOLDER
