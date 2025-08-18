@@ -1183,7 +1183,13 @@ class Deployment(object):
                 "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
             )
 
-        if local_storage:
+        # with Hub/Spoke deployments LSO on IBM Cloud is a mandatory requirement and must run with Dependency stage
+        perform_lso_standalone_deployment = config.DEPLOYMENT.get(
+            "lso_standalone_deployment", False
+        ) and not ocp.OCP(kind=constants.STORAGECLASS).is_exist(
+            resource_name=constants.DEFAULT_STORAGECLASS_LSO
+        )
+        if local_storage and not perform_lso_standalone_deployment:
             log_step("Deploy and setup Local Storage Operator")
             setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
