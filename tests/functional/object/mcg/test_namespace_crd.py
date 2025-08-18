@@ -1099,7 +1099,7 @@ class TestNamespace(MCGTest):
             ),
             pytest.param(
                 *["noobaa-operator"],
-                True,
+                False,
                 marks=pytest.mark.polarion_id("OCS-2320"),
             ),
         ],
