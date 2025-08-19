@@ -1953,7 +1953,9 @@ class Deployment(object):
         disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
         noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
         dr_cmd_arg = ""
-        if config.MULTICLUSTER.get("multicluster_mode") == constants.RDR_MODE:
+        if config.MULTICLUSTER.get("multicluster_mode") == constants.RDR_MODE and (
+            ocs_version <= version.VERSION_4_17
+        ):
             dr_cmd_arg = "--param prepareForDisasterRecovery=true"
         device_size = int(
             config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED)
