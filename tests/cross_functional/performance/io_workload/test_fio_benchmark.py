@@ -269,7 +269,7 @@ class TestFIOBenchmark(PASTest):
         )
         return full_results
 
-    def cleanup(self, deploy_odf_grafana):
+    def cleanup(self):
         """
         Do cleanup in the benchmark-operator namespace.
         delete the benchmark, an make sure no PVC's an no PV's are left.
