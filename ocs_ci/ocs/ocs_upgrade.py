@@ -236,7 +236,17 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     """
     number_of_worker_nodes = len(get_nodes())
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
-    verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
+    if not (
+        config.ENV_DATA.get("mcg_only_deployment")
+        and (
+            upgrade_version >= parse_version("4.20")
+            or (
+                version_before_upgrade == parse_version("4.19")
+                and upgrade_version == parse_version("4.19")
+            )
+        )
+    ):
+        verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     verify_noobaa_pods_upgraded(old_images, upgrade_version)
     if not config.ENV_DATA.get("mcg_only_deployment"):
         odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
