@@ -1563,13 +1563,9 @@ class Deployment(object):
             number_of_disks_available_total = 0
             # count number of disks available on all labeled nodes and divide to number of nodes
             for node in node_names:
-                node_obj = OCP(
-                    kind=constants.NODE,
-                    selector=f"{constants.OPERATOR_NODE_LABEL}",
-                    resource_name=node,
-                )
+                node_obj_list = get_node_objs([node])
                 number_of_disks_available_total += len(
-                    disks_available_to_cleanup(node_obj)
+                    disks_available_to_cleanup(node_obj_list.pop())
                 )
 
             number_of_disks_available = int(
