@@ -141,11 +141,13 @@ def test_update_strategy_config_change(
     """
     if daemonset == "csi-rbdplugin":
         set_update_strategy(rbd_max_unavailable=value_to_set)
+        daemonset_name = constants.DAEMONSET_CSI_RBD
     elif daemonset == "csi-cephfsplugin":
         set_update_strategy(cephfs_max_unavailable=value_to_set)
+        daemonset_name = constants.DAEMONSET_CSI_CEPHFS
 
     ds_obj = DaemonSet(
-        resource_name=daemonset, namespace=config.ENV_DATA["cluster_namespace"]
+        resource_name=daemonset_name, namespace=config.ENV_DATA["cluster_namespace"]
     )
     time.sleep(10)  # wait a few second
     results = ds_obj.get_update_strategy()
