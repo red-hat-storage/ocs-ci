@@ -596,6 +596,13 @@ def run_cmd_multicluster(
     return completed_process
 
 
+@retry(
+    CommandFailed,
+    tries=6,
+    delay=10,
+    backoff=1,
+    text_in_exception="client connection lost",
+)
 def exec_cmd(
     cmd,
     secrets=None,
