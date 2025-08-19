@@ -1133,4 +1133,4 @@ class PASTest(BaseTest):
                 log.info(f"Command timed out, {e.output.strip()}")
         else:
             log.info(f"grafana is running")
-            grafana_resource_consumption_ui(self.test_duration)
+            grafana_resource_consumption_ui(self.test_duration, url,"grafana", "grafanapassword123")
