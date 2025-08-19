@@ -269,11 +269,12 @@ class TestFIOBenchmark(PASTest):
         )
         return full_results
 
-    def cleanup(self):
+    def cleanup(self, deploy_odf_grafana):
         """
         Do cleanup in the benchmark-operator namespace.
         delete the benchmark, an make sure no PVC's an no PV's are left.
         """
+        deploy_odf_grafana(self)
         log.info("Deleting FIO benchmark")
         self.benchmark_obj.delete()
         time.sleep(180)
@@ -481,7 +482,7 @@ class TestFIOBenchmark(PASTest):
         self.test_duration = 356
 
         # Cleanup fio benchmark
-        self.cleanup(self.deploy_odf_grafana)
+        self.cleanup()
 
         # Writing the analyzed test results to the Elastic-Search server
         if full_results.es_write():
