@@ -1102,7 +1102,7 @@ class PASTest(BaseTest):
         a= config.ENV_DATA['cluster_name']
         b= config.ENV_DATA["base_domain"]
         all_file_path = constants.ODF_GRAFANA_PATH+"/group_vars/all.yml"
-        url = f"grafana-route-perfscale.apps.{a}.{b}"
+        url = f"https://grafana-route-perfscale.apps.{a}.{b}"
         log.info(f"clllllllll{config.ENV_DATA['cluster_name']}")
         log.info(f"urllll{url}")
         with open(all_file_path, "a") as f:
