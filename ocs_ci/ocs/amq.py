@@ -247,7 +247,7 @@ class AMQ(object):
                 "class": sc_name,
                 "size": f"{size}Gi",
                 "kraftMetadata": "shared",
-                "deleteClaim": True,
+                "deleteClaim": False,  # self.cleanup() deletes the claims
             }
             for dict in kafka_persistent_dicts:
                 if dict["kind"] == "KafkaNodePool":
@@ -1015,9 +1015,8 @@ class AMQ(object):
                 self.kafka_connect.delete()
             if self.kafka_bridge:
                 self.kafka_bridge.delete()
-            if self.kafkanodepools:
-                for kafkanodepool in self.kafkanodepools:
-                    kafkanodepool.delete()
+            for kafkanodepool in self.kafkanodepools:
+                kafkanodepool.delete()
             if self.kafka_persistent:
                 self.kafka_persistent.delete()
                 log.info("Waiting for 20 seconds to delete persistent")
