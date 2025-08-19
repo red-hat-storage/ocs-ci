@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_mcg_only,
     tier1,
+    jira,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -132,6 +133,7 @@ def test_max_unavaialable_cephfs(upgrade_stats):
 )
 @brown_squad
 @runs_on_provider
+@jira("DFBUGS-3826")
 def test_update_strategy_config_change(
     daemonset, value_to_set, expected_value, rook_operator_configmap_cleanup
 ):
@@ -141,11 +143,13 @@ def test_update_strategy_config_change(
     """
     if daemonset == "csi-rbdplugin":
         set_update_strategy(rbd_max_unavailable=value_to_set)
+        daemonset_name = constants.DAEMONSET_CSI_RBD
     elif daemonset == "csi-cephfsplugin":
         set_update_strategy(cephfs_max_unavailable=value_to_set)
+        daemonset_name = constants.DAEMONSET_CSI_CEPHFS
 
     ds_obj = DaemonSet(
-        resource_name=daemonset, namespace=config.ENV_DATA["cluster_namespace"]
+        resource_name=daemonset_name, namespace=config.ENV_DATA["cluster_namespace"]
     )
     time.sleep(10)  # wait a few second
     results = ds_obj.get_update_strategy()
