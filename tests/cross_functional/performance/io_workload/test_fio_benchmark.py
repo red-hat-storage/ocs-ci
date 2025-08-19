@@ -274,11 +274,12 @@ class TestFIOBenchmark(PASTest):
         Do cleanup in the benchmark-operator namespace.
         delete the benchmark, an make sure no PVC's an no PV's are left.
         """
+
+        deploy_odf_grafana(self.test_duration)
+
         log.info("Deleting FIO benchmark")
         self.benchmark_obj.delete()
         time.sleep(180)
-        deploy_odf_grafana(self.test_duration)
-
         # Getting all PVCs created in the test (if left).
         NL = "\\n"  # NewLine character
         command = ["oc", "get", "pvc", "-n"]
