@@ -753,6 +753,9 @@ NOOBAA_CORE_POD = "noobaa-core-0"
 NOOBAA_DB_SECRET = "noobaa-db-pg-cluster-app"
 NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
+# Noobaa metrics secret
+NOOBAA_METRICS_AUTH_SECRET = "noobaa-metrics-auth-secret"
+
 # NooBaa DB CNPG
 NB_DB_PRIMARY_POD_LABEL = "cnpg.io/instanceRole=primary"
 CNPG_POD_ROLE_INSTANCE_LABEL = "cnpg.io/podRole=instance"
@@ -1881,6 +1884,7 @@ ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
+NOOBAA_CONFIGMAP = "noobaa-config"
 NOOBAA_POSTGRES_SECRET = "noobaa-pgsql-secret"
 NOOBAA_POSTGRES_12_VERSION = 12
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
