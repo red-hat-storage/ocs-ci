@@ -32,7 +32,10 @@ class HyperConverged:
         self.catsrc = OCP(
             kind=constants.CATSRC, namespace=constants.MARKETPLACE_NAMESPACE
         )
-        self.subs = OCP(kind=constants.PROVIDER_SUBSCRIPTION, namespace=self.hyperconverged_namespace)
+        self.subs = OCP(
+            kind=constants.PROVIDER_SUBSCRIPTION,
+            namespace=self.hyperconverged_namespace,
+        )
         # type of hyperconverged becomes available after the Hyperconverged operator is deployed
         self.hyperconverged = None
         self.ocp_version = get_ocp_version()
@@ -132,7 +135,9 @@ class HyperConverged:
         pod_names = get_pod_name_by_pattern(
             "hco-operator", self.hyperconverged_namespace
         ) + get_pod_name_by_pattern("virt-operator", self.hyperconverged_namespace)
-        wait_for_pods_to_be_running(namespace=self.hyperconverged_namespace, pod_names=pod_names)
+        wait_for_pods_to_be_running(
+            namespace=self.hyperconverged_namespace, pod_names=pod_names
+        )
 
     def create_hyperconverged_instance(self):
         """
