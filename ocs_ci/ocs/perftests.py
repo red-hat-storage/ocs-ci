@@ -1100,7 +1100,7 @@ class PASTest(BaseTest):
         except:
             log.error("failed")
         all_file_path = constants.ODF_GRAFANA_PATH+"/group_vars/all.yml"
-        url = "grafana-route-perfscale.apps."+{config.ENV_DATA['cluster_name']}+config.ENV_DATA["base_domain"]
+        url = f"grafana-route-perfscale.apps.{config.ENV_DATA['cluster_name']}{config.ENV_DATA["base_domain"]}"
         log.info(f"clllllllll{config.ENV_DATA['cluster_name']}")
         log.info(f"urllll{url}")
         with open(all_file_path, "a") as f:
