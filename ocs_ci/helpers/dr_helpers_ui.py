@@ -900,15 +900,20 @@ def assign_drpolicy_for_discovered_vms_via_ui(
 def check_dr_status(
     acm_obj,
     workloads=None,
+    workload_objs=None,
     primary_cluster_name=None,
     target_cluster_name=None,
     expected_status=None,
 ):
     """
     Function to validate the specified application's DR health status on UI
+    and it's messages in popover window. In case of failover and relocate,
+    priamry and target clusters will be validated
 
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workloads(list): list of workload names to validate the status
+        workload_objs(list): list of workload objs
         primary_cluster_name(str): Expected primary cluster name during failover/relocate in the popover
         target_cluster_name(str): Expected Target cluster during failover/relocate in the popover
         workloads(list): List of applications to validate dr health status
@@ -920,7 +925,24 @@ def check_dr_status(
     acm_obj.navigate_applications_page()
     acm_obj.take_screenshot()
 
-    for workload in workloads:
+    for workload, workload_obj in zip(workloads, workload_objs):
+        clear_filter = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["clear-filter"],
+            expected_text="Clear all filters",
+            timeout=10,
+        )
+        if clear_filter:
+            log.info("Clear existing filters")
+            acm_obj.do_click(acm_loc["clear-filter"])
+        if workload_obj.workload_type == constants.SUBSCRIPTION:
+            log.info(f"Apply filter for workload type {constants.SUBSCRIPTION}")
+            acm_obj.do_click(acm_loc["apply-filter"], enable_screenshot=True)
+            acm_obj.do_click(acm_loc["sub-checkbox"], enable_screenshot=True)
+        elif workload_obj.workload_type == constants.APPLICATION_SET:
+            log.info(f"Apply filter for workload type {constants.APPLICATION_SET}")
+            acm_obj.do_click(acm_loc["apply-filter"], enable_screenshot=True)
+            acm_obj.do_click(acm_loc["appset-checkbox"], enable_screenshot=True)
+
         log.info(f"Click on search bar for the workload {workload}")
         acm_obj.do_click(acm_loc["search-bar"])
         log.info("Clear existing text from search bar if any")
@@ -931,11 +953,14 @@ def check_dr_status(
 
         log.info("Verifying DR status on UI...")
         wait_for_text_result = acm_obj.wait_until_expected_text_is_found(
-            acm_loc["dr-status"], expected_status, timeout=10
+            acm_loc["dr-status"], expected_status, timeout=50
         )
 
         if not wait_for_text_result:
-            log.info(f"DR Healthy status is not as expected as {expected_status}")
+            log.info(
+                f"DR Healthy status is not as expected as {expected_status}"
+                f" for the application {workload}"
+            )
             current_status = acm_obj.get_element_text(acm_loc["dr-status"])
             log.info(f"Current status is {current_status}")
             acm_obj.take_screenshot()
