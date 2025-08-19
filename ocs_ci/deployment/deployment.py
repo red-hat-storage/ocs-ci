@@ -1141,6 +1141,9 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
         local_storage = config.DEPLOYMENT.get("local_storage")
+        perform_lso_standalone_deployment = config.DEPLOYMENT.get(
+            "lso_standalone_deployment", False
+        )
         platform = config.ENV_DATA.get("platform").lower()
         aws_sts_deployment = (
             config.DEPLOYMENT.get("sts_enabled")
@@ -1183,15 +1186,18 @@ class Deployment(object):
                 "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
             )
 
-        # with Hub/Spoke deployments LSO on IBM Cloud is a mandatory requirement and must run with Dependency stage
-        perform_lso_standalone_deployment = config.DEPLOYMENT.get(
-            "lso_standalone_deployment", False
-        ) and not ocp.OCP(kind=constants.STORAGECLASS).is_exist(
-            resource_name=constants.DEFAULT_STORAGECLASS_LSO
-        )
+        # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
+        # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
+        # hence perform_lso_standalone_deployment must be False if we want to deploy LSO with ODF operator and do not
+        # execute 2nd LSO installation
         if local_storage and not perform_lso_standalone_deployment:
-            log_step("Deploy and setup Local Storage Operator")
-            setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+            # we only deploy LSO if localblock storageclass is not present, otherwise we will fail with 2nd installation
+            lso_deployed = ocp.OCP(kind=constants.STORAGECLASS).is_exist(
+                resource_name=constants.DEFAULT_STORAGECLASS_LSO
+            )
+            if not lso_deployed:
+                log_step("Deploy and setup Local Storage Operator")
+                setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
