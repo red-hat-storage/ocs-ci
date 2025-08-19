@@ -2293,9 +2293,16 @@ def validate_storage_cluster_peer_state():
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
     for cluster in managed_clusters:
-        index = cluster.MULTICLUSTER["multicluster_index"]
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            index = config.get_provider_index()
+        else:
+            index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         logger.info("Validating Storage Cluster Peer status")
+        # TODO: Check whether storageclusterpeer is created for each RDR pair of client clusters
         sample = TimeoutSampler(
             timeout=300,
             sleep=5,
@@ -2343,6 +2350,12 @@ def create_service_exporter():
     for cluster in managed_clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            logger.info(f"Skipping ServiceExport creation")
+            continue
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
     config.switch_ctx(restore_index)
@@ -2355,12 +2368,19 @@ def verify_volsync():
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
     for cluster in managed_clusters:
-        index = cluster.MULTICLUSTER["multicluster_index"]
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            index = config.get_provider_index()
+        else:
+            index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         logger.info(
             f"Verifying volsync pod in namespace {constants.VOLSYNC_SYSTEM_NAMESPACE}"
         )
         pod = ocp.OCP(kind=constants.POD, namespace=constants.VOLSYNC_SYSTEM_NAMESPACE)
+        # TODO: Check whether volsync pod is created for each RDR pair of client clusters
         assert pod.wait_for_resource(
             condition="Running",
             selector=constants.VOLSYNC_LABEL,
