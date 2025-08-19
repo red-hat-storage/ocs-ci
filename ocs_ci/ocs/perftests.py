@@ -1110,6 +1110,7 @@ class PASTest(BaseTest):
                     env=env,
                     check=True,
                 )
+                grafana_resource_consumption_ui(self.test_duration)
             except subprocess.CalledProcessError as e:
                 log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
             except subprocess.TimeoutExpired as e:
