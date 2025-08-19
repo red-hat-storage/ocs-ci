@@ -1100,6 +1100,7 @@ class PASTest(BaseTest):
         except:
             log.error("failed")
         all_file_path = constants.ODF_GRAFANA_PATH+"/group_vars/all.yml"
+        log.info(f"clllllllll{config.ENV_DATA['cluster_name']}")
         with open(all_file_path, "a") as f:
             f.write("\ngrafana_user: grafana\n")
             f.write("grafana_password: grafanapassword123\n")
@@ -1122,6 +1123,7 @@ class PASTest(BaseTest):
                     env=env,
                     check=True,
                 )
+                log.info(f"clllllllll{config.ENV_DATA['cluster_name']}")
                 grafana_resource_consumption_ui(self.test_duration, "grafana","grafapassword")
             except subprocess.CalledProcessError as e:
                 log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
