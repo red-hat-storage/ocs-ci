@@ -24,15 +24,15 @@ class HyperConverged:
     """
 
     def __init__(self):
-        self.namespace = constants.HYPERCONVERGED_NAMESPACE
+        self.hyperconverged_namespace = constants.HYPERCONVERGED_NAMESPACE
         self.ns_obj = OCP(kind=constants.NAMESPACES)
         self.operator_group = OCP(
-            kind=constants.OPERATOR_GROUP, namespace=self.namespace
+            kind=constants.OPERATOR_GROUP, namespace=self.hyperconverged_namespace
         )
         self.catsrc = OCP(
             kind=constants.CATSRC, namespace=constants.MARKETPLACE_NAMESPACE
         )
-        self.subs = OCP(kind=constants.PROVIDER_SUBSCRIPTION, namespace=self.namespace)
+        self.subs = OCP(kind=constants.PROVIDER_SUBSCRIPTION, namespace=self.hyperconverged_namespace)
         # type of hyperconverged becomes available after the Hyperconverged operator is deployed
         self.hyperconverged = None
         self.ocp_version = get_ocp_version()
@@ -43,10 +43,10 @@ class HyperConverged:
 
         """
         if not self.ns_obj.is_exist(
-            resource_name=self.namespace,
+            resource_name=self.hyperconverged_namespace,
         ):
             logger.info(
-                f"Creating namespace {self.namespace} for hyperconverged resources"
+                f"Creating namespace {self.hyperconverged_namespace} for hyperconverged resources"
             )
             namespace_yaml_file = templating.load_yaml(
                 constants.HYPERCONVERGED_NAMESPACE_YAML
@@ -54,9 +54,9 @@ class HyperConverged:
             namespace_yaml = OCS(**namespace_yaml_file)
             namespace_yaml.create()
         else:
-            logger.info(f"{self.namespace} already exists")
+            logger.info(f"{self.hyperconverged_namespace} already exists")
         return self.ns_obj.check_resource_existence(
-            should_exist=True, resource_name=self.namespace
+            should_exist=True, resource_name=self.hyperconverged_namespace
         )
 
     def create_operator_group(self):
@@ -130,16 +130,16 @@ class HyperConverged:
         )
 
         pod_names = get_pod_name_by_pattern(
-            "hco-operator", self.namespace
-        ) + get_pod_name_by_pattern("virt-operator", self.namespace)
-        wait_for_pods_to_be_running(namespace=self.namespace, pod_names=pod_names)
+            "hco-operator", self.hyperconverged_namespace
+        ) + get_pod_name_by_pattern("virt-operator", self.hyperconverged_namespace)
+        wait_for_pods_to_be_running(namespace=self.hyperconverged_namespace, pod_names=pod_names)
 
     def create_hyperconverged_instance(self):
         """
         Create Hyperconverged instance
         """
         self.hyperconverged = OCP(
-            kind=constants.HYPERCONVERGED_KIND, namespace=self.namespace
+            kind=constants.HYPERCONVERGED_KIND, namespace=self.hyperconverged_namespace
         )
         if not self.hyperconverged.is_exist(
             resource_name=constants.HYPERCONVERGED_NAME
@@ -161,7 +161,7 @@ class HyperConverged:
         for resource_name in deployments:
             depl_ocp_obj = OCP(
                 kind=constants.DEPLOYMENT,
-                namespace=self.namespace,
+                namespace=self.hyperconverged_namespace,
                 resource_name=resource_name,
             )
             deployment_obj = Deployment(
