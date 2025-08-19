@@ -1091,6 +1091,18 @@ class PASTest(BaseTest):
         clone_repo(
             constants.ODF_GRAFANA_REPO, constants.ODF_GRAFANA_PATH, branch="main"
         )
+        try:
+            subprocess.run(
+                "yum install -y pwgen",
+                shell=True,
+                check=True,
+            )
+        except:
+            log.error("failed")
+        all_file_path = constants.ODF_GRAFANA_PATH+"/group_vars/all.yml"
+        with open(all_file_path, "a") as f:
+            f.write("\ngrafana_user: grafana\n")
+            f.write("grafana_password: grafanapassword\n")
         self.kubeconfig_path = config.RUN.get("kubeconfig")
         self.kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
@@ -1110,7 +1122,7 @@ class PASTest(BaseTest):
                     env=env,
                     check=True,
                 )
-                grafana_resource_consumption_ui(self.test_duration)
+                grafana_resource_consumption_ui(self.test_duration, "grafana","grafapassword")
             except subprocess.CalledProcessError as e:
                 log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
             except subprocess.TimeoutExpired as e:
