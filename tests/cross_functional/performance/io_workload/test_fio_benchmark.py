@@ -275,7 +275,7 @@ class TestFIOBenchmark(PASTest):
         delete the benchmark, an make sure no PVC's an no PV's are left.
         """
 
-        deploy_odf_grafana(self.test_duration)
+        self.deploy_odf_grafana(self.test_duration)
 
         log.info("Deleting FIO benchmark")
         self.benchmark_obj.delete()
