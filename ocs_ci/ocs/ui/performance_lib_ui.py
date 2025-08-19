@@ -43,7 +43,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         last_duration = "Last 24 hour"
     else:
         logger.error(f"The test duration value {test_duration} is invalid")
-
+    logger.info(f"yurl{url}")
     try:
         driver.get(url)
 
