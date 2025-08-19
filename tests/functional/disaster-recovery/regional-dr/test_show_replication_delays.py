@@ -91,7 +91,6 @@ class TestShowReplicationDelays:
             workload_names.append(f"{rdr_workload[1].workload_name}-1")
         else:
             workload_names.append(f"{rdr_workload[1].workload_name}-1-cephfs")
-
         drpc_subscription = DRPC(namespace=rdr_workload[0].workload_namespace)
         drpc_appset = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
@@ -132,7 +131,9 @@ class TestShowReplicationDelays:
         logger.info("Verified lastGroupSyncTime in CLI")
 
         logger.info("Verifying the DR health status on UI")
-        check_dr_status(acm_obj, workload_names, expected_status="healthy")
+        check_dr_status(
+            acm_obj, workload_names, rdr_workload, expected_status="healthy"
+        )
 
         # Bring DOWN the corresponding deployment
         if pvc_interface == constants.CEPHBLOCKPOOL:
@@ -149,16 +150,20 @@ class TestShowReplicationDelays:
             "Waiting for interval between the sync interval time and 2x of sync interval"
             " to validate 'warning' state"
         )
-        wait_time = scheduling_interval + 3
+        wait_time = scheduling_interval + 2
         sleep(wait_time * 60)
 
-        check_dr_status(acm_obj, workload_names, expected_status="warning")
+        check_dr_status(
+            acm_obj, workload_names, rdr_workload, expected_status="warning"
+        )
 
         logger.info("Waiting to validate 'critical' state")
         wait_time = 3 * scheduling_interval
         sleep(wait_time * 60)
 
-        check_dr_status(acm_obj, workload_names, expected_status="critical")
+        check_dr_status(
+            acm_obj, workload_names, rdr_workload, expected_status="critical"
+        )
 
         # Bring UP the corresponding deployment
         if pvc_interface == constants.CEPHBLOCKPOOL:
@@ -173,7 +178,9 @@ class TestShowReplicationDelays:
         )
         sleep(scheduling_interval * 60)
 
-        check_dr_status(acm_obj, workload_names, expected_status="healthy")
+        check_dr_status(
+            acm_obj, workload_names, rdr_workload, expected_status="healthy"
+        )
 
         # Navigate to failover modal via ACM UI
         logger.info("Navigate to failover modal via ACM UI")
@@ -190,6 +197,7 @@ class TestShowReplicationDelays:
             check_dr_status(
                 acm_obj,
                 [workload.workload_name],
+                [workload],
                 primary_cluster_name=primary_cluster_name,
                 target_cluster_name=secondary_cluster_name,
                 expected_status="FailingOver",
@@ -197,7 +205,9 @@ class TestShowReplicationDelays:
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs post failover")
         sleep(wait_time * 60)
-        check_dr_status(acm_obj, workload_names, expected_status="healthy")
+        check_dr_status(
+            acm_obj, workload_names, rdr_workload, expected_status="healthy"
+        )
 
         for workload in rdr_workload:
             failover_relocate_ui(
@@ -212,6 +222,7 @@ class TestShowReplicationDelays:
             check_dr_status(
                 acm_obj,
                 [workload.workload_name],
+                [workload],
                 primary_cluster_name=secondary_cluster_name,
                 target_cluster_name=primary_cluster_name,
                 expected_status="Relocating",
@@ -219,7 +230,9 @@ class TestShowReplicationDelays:
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs post relocate")
         sleep(wait_time * 60)
-        check_dr_status(acm_obj, workload_names, expected_status="healthy")
+        check_dr_status(
+            acm_obj, workload_names, [rdr_workload], expected_status="healthy"
+        )
 
 
 def modify_mds_replica_count(replica_count=1):
