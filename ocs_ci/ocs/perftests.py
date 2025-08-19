@@ -1082,7 +1082,7 @@ class PASTest(BaseTest):
             log.warning("The POD failed to delete")
             pass
 
-    @pytest.fixture()
+
     def deploy_odf_grafana(self):
         env = os.environ.copy()
         kubeconfig_path = config.RUN.get("kubeconfig")
