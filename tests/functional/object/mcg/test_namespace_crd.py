@@ -1080,7 +1080,7 @@ class TestNamespace(MCGTest):
 
     @tier4c
     @pytest.mark.parametrize(
-        argnames=["mcg_pod", "respin_count"],
+        argnames=["mcg_pod", "respin_multiple_times"],
         argvalues=[
             pytest.param(
                 *["noobaa-db"],
@@ -1113,7 +1113,7 @@ class TestNamespace(MCGTest):
         bucket_factory,
         test_directory_setup,
         mcg_pod,
-        respin_count,
+        respin_multiple_times,
     ):
         """
         Test Write to ns bucket using CRDs and read directly from AWS.
@@ -1161,7 +1161,7 @@ class TestNamespace(MCGTest):
         if not obj_ls:
             raise UnexpectedBehaviour("Failed to sync objects")
 
-        if respin_count:
+        if respin_multiple_times:
             count = 10
             for _ in range(count):
                 self.respin_mcg_pod(mcg_pod)
