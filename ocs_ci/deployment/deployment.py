@@ -276,7 +276,11 @@ class Deployment(object):
         )
 
         logger.info("Creating Namespace for GitOps Operator ")
-        run_cmd(f"oc apply namespace {constants.GITOPS_NAMESPACE}")
+        gitops_namespace = OCP(
+            kind=constants.NAMESPACE, resource_name=constants.GITOPS_NAMESPACE
+        )
+        if not gitops_namespace.is_exist():
+            run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
 
         logger.info("Creating OperatorGroup for GitOps Operator ")
         run_cmd(f"oc apply -f {constants.GITOPS_OPERATORGROUP_YAML}")
