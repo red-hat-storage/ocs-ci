@@ -1093,7 +1093,7 @@ class PASTest(BaseTest):
         )
         try:
             subprocess.run(
-                "yum install -y pwgen",
+                "sudo yum install -y pwgen",
                 shell=True,
                 check=True,
             )
