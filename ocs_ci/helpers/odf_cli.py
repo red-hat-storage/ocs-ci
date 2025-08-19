@@ -136,8 +136,6 @@ class ODFCliRunner:
             )
 
         output = exec_cmd(full_command)
-        log.info(f"output type: {type(output)}")
-        log.info(f"*Command output*: {output}")
         return output
 
     def run_help(self):
