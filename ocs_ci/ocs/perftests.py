@@ -1082,11 +1082,10 @@ class PASTest(BaseTest):
             log.warning("The POD failed to delete")
             pass
 
-
     def deploy_odf_grafana(self):
-        all_file_path = constants.ODF_GRAFANA_PATH+"/group_vars/all.yml"
+        all_file_path = constants.ODF_GRAFANA_PATH + "/group_vars/all.yml"
 
-        cluster_name = config.ENV_DATA['cluster_name']
+        cluster_name = config.ENV_DATA["cluster_name"]
         base_domain = config.ENV_DATA["base_domain"]
         grafana_user = "grafana"
         grafana_pwd = "grafanapassword123"
@@ -1129,11 +1128,15 @@ class PASTest(BaseTest):
                     env=env,
                     check=True,
                 )
-                grafana_resource_consumption_ui(self.test_duration, url, grafana_user, grafana_pwd)
+                grafana_resource_consumption_ui(
+                    self.test_duration, url, grafana_user, grafana_pwd
+                )
             except subprocess.CalledProcessError as e:
                 log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
             except subprocess.TimeoutExpired as e:
                 log.info(f"Command timed out, {e.output.strip()}")
         else:
             log.info(f"grafana is running")
-            grafana_resource_consumption_ui(self.test_duration, url, grafana_user, grafana_pwd)
+            grafana_resource_consumption_ui(
+                self.test_duration, url, grafana_user, grafana_pwd
+            )

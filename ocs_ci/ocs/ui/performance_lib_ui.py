@@ -19,6 +19,9 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
 
     Args:
     test_duration (int): Test duration, for which the resource consumption needs to be captured
+    url (str) : Grafana url
+    username (str) : grafana username
+    password (str): grafana password
 
     """
     driver = SeleniumDriver()
@@ -62,7 +65,9 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             print("Can not find login page, May have already been logged in")
         #  Locate PerfScale
         expand_button = wait.until(
-            ec.element_to_be_clickable((By.XPATH, "//button[@aria-label='Expand folder PerfScale']"))
+            ec.element_to_be_clickable(
+                (By.XPATH, "//button[@aria-label='Expand folder PerfScale']")
+            )
         )
         expand_button.click()
 
