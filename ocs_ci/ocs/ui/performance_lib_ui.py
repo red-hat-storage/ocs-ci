@@ -49,7 +49,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
 
         # Try grafana login prompt
         try:
-            wait = WebDriverWait(driver, 20)
+            wait = WebDriverWait(driver, 30)
             logger.info(f"1{wait}")
             wait.until(ec.presence_of_element_located((By.NAME, "user")))
             logger.info(f"2{wait}")
@@ -103,6 +103,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             )
         )
         last_duration_option.click()
+        logger.info(f"lksvt{last_duration}")
 
         print(f"Time range is updated to {last_duration}")
 
