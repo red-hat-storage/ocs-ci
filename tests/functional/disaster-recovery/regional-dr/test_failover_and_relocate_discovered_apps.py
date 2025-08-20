@@ -229,11 +229,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
             mix_workload=is_mix,
-            mix_workload_data=(
-                mix_workload_data
-                if not is_mix
-                else rdr_workload.mix_workload_data
-            ),
+            mix_workload_data=None if not is_mix else rdr_workload.mix_workload_data,
         )
 
         if pvc_interface == (constants.CEPHFILESYSTEM or "Mix"):
@@ -246,7 +242,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             dr_helpers.wait_for_replication_destinations_creation(
                 (
                     rdr_workload.workload_pvc_count
-                    if not pvc_interface == "Mix"
+                    if not is_mix
                     else rdr_workload.mix_workload_data
                 ),
                 rdr_workload.workload_namespace,
@@ -308,7 +304,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
             mix_workload=is_mix,
-            mix_workload_data=rdr_workload.mix_workload_data,
+            mix_workload_data=None if not is_mix else rdr_workload.mix_workload_data,
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
