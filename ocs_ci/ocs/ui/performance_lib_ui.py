@@ -146,7 +146,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         # Take screenshot
 
         time.sleep(3)
-        driver.save_screenshot("network_utilization.png")
+        driver.save_screenshot("/tmp/network_utilization.png")
         logger.info("Screenshot for network utilization is captured.")
 
         # Go back to previous menu
@@ -189,7 +189,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         view.click()
 
         time.sleep(2)
-        driver.save_screenshot("Ceph_CPU.png")
+        driver.save_screenshot("/tmp/Ceph_CPU.png")
         logger.info("Ceph CPU resource consumption is captured")
 
         # Go back to previous menu
@@ -223,7 +223,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         view_option.click()
 
         time.sleep(2)
-        driver.save_screenshot("Ceph_memory.png")
+        driver.save_screenshot("/tmp/Ceph_memory.png")
         logger.info("Ceph Memory resource consumption is captured")
 
         # Go back to previous menu
