@@ -17,19 +17,21 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class")
-def setup_cnv_workload(request, setup_cnv, multi_cnv_workload_class):
+def setup_cnv_workload(
+    request, setup_cnv, project_factory_class, multi_cnv_workload_class
+):
     """
     Set up CNV workload and create initial data.
     """
     logger.info("Setting up CNV workload and creating initial data")
-
+    proj_obj = project_factory_class()
     file_paths = ["/source_file.txt", "/new_file.txt"]
     (
         vm_objs_def,
         vm_objs_aggr,
         _,
         _,
-    ) = multi_cnv_workload_class()
+    ) = multi_cnv_workload_class(namespace=proj_obj.namespace)
     all_vms = vm_objs_def + vm_objs_aggr
     source_csums = {
         vm_obj.name: run_dd_io(vm_obj, file_path=file_paths[0], verify=True)
