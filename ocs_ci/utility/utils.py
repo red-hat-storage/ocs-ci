@@ -596,6 +596,13 @@ def run_cmd_multicluster(
     return completed_process
 
 
+@retry(
+    CommandFailed,
+    tries=3,
+    delay=60,
+    backoff=1,
+    text_in_exception="Unexpected error when reading response body",
+)
 def exec_cmd(
     cmd,
     secrets=None,

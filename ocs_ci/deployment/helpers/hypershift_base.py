@@ -53,7 +53,9 @@ def get_hosted_cluster_names():
     hosted_clusters_obj = OCP(
         kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
     ).get()
-    return [cluster.get("metadata").get("name") for cluster in hosted_clusters_obj]
+    return [
+        cluster.get("metadata").get("name") for cluster in hosted_clusters_obj["items"]
+    ]
 
 
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
