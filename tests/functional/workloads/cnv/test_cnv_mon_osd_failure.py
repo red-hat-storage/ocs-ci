@@ -67,7 +67,7 @@ class TestMonAndOSDFailures:
 
         """
         ceph_obj = CephCluster()
-        logger.info("testing mon failures scenario with {mon_count} mon")
+        logger.info(f"testing mon failures scenario with {mon_count} mon")
 
         self.mons = ceph_obj.get_mons_from_cluster()[:mon_count]
 
