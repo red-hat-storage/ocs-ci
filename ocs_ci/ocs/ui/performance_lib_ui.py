@@ -99,7 +99,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         logger.info(f"lkst{last_duration}")
         last_duration_option = wait.until(
             ec.element_to_be_clickable(
-                (By.XPATH, f"//label[normalize-space()={last_duration}]")
+                (By.XPATH, f"//label[normalize-space()='{last_duration}']")
             )
         )
         last_duration_option.click()
