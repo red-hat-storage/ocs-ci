@@ -965,17 +965,30 @@ class TestCorsConfig:
         # Cache the bucket name for the post-upgrade test
         request.config.cache.set(request.node.callspec.id, bucket_name)
 
-    @post_upgrade
-    def test_default_cors_post_upgrade(
-        self,
-        request,
-        mcg_obj_session,
-        awscli_pod_session,
-    ):
-        """
-        Verify CORS config is set to existing bucket post-upgrade
-        """
-        ids = [
+    @pytest.mark.parametrize(
+        argnames="obc_id",
+        argvalues=[
+            pytest.param("OBC-DEFAULT"),
+            pytest.param("OBC-AWS"),
+            pytest.param("OBC-AZURE"),
+            pytest.param("OBC-GCP"),
+            pytest.param(
+                "OBC-IBMCOS",
+                marks=[skipif_fips_enabled],
+            ),
+            pytest.param("OBC-AWS-NSS"),
+            pytest.param("OBC-Azure-NSS"),
+            pytest.param(
+                "OBC-RGW-NSS",
+                marks=[on_prem_platform_required],
+            ),
+            pytest.param("OBC-GCP-NSS"),
+            pytest.param(
+                "OBC-IBM-NSS",
+                marks=[skipif_fips_enabled],
+            ),
+        ],
+        ids=[
             "OBC-DEFAULT",
             "OBC-AWS",
             "OBC-AZURE",
@@ -986,16 +999,27 @@ class TestCorsConfig:
             "OBC-RGW-NSS",
             "OBC-GCP-NSS",
             "OBC-IBM-NSS",
-        ]
-        for i in ids:
-            # Retrieve the bucket name from the pre-upgrade test
-            bucket_name = request.config.cache.get(i, None)
-            # Verify the default CORS is set to buckets post-upgrade
-            get_bucket_cors_op = self.exec_cors_command(
-                operation="get-bucket-cors",
-                bucket_name=bucket_name,
-                awscli_pod_session=awscli_pod_session,
-                mcg_obj_session=mcg_obj_session,
-                response=True,
-            )
-            logger.info(get_bucket_cors_op)
+        ],
+    )
+    @post_upgrade
+    def test_default_cors_post_upgrade(
+        self,
+        request,
+        mcg_obj_session,
+        awscli_pod_session,
+        obc_id,
+    ):
+        """
+        Verify CORS config is set to existing bucket post-upgrade
+        """
+        # Retrieve the bucket name from the pre-upgrade test
+        bucket_name = request.config.cache.get(obc_id, None)
+        # Verify the default CORS is set to buckets post-upgrade
+        get_bucket_cors_op = self.exec_cors_command(
+            operation="get-bucket-cors",
+            bucket_name=bucket_name,
+            awscli_pod_session=awscli_pod_session,
+            mcg_obj_session=mcg_obj_session,
+            response=True,
+        )
+        logger.info(get_bucket_cors_op)
