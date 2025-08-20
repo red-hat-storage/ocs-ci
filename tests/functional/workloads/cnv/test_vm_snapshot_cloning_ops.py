@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads, tier2
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
     cal_md5sum_vm,
@@ -145,7 +145,7 @@ class TestVmSnapshotClone(E2ETest):
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
 
-    @workloads
+    @tier2
     @pytest.mark.parametrize(
         argnames=["pvc_expand_before_snapshot", "pvc_expand_after_restore"],
         argvalues=[
@@ -333,7 +333,7 @@ class TestVmSnapshotClone(E2ETest):
                 run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
                 log.info(f"[{vm_obj.name}] VM processing completed successfully.")
             else:
-                log.info(f"Creating snapshot and restore VM [{cloned_vm.name}]")
+                log.info(f"Creating snapshot and restore VM [{vm_obj.name}]")
                 restored_vm = vm_snapshot_restore_fixture(vm_obj, admin_client)
                 restore_csum = cal_md5sum_vm(
                     vm_obj=restored_vm, file_path=file_paths[0]
@@ -441,7 +441,7 @@ class TestVmSnapshotClone(E2ETest):
             vm_snapshot_restore_fixture,
         )
 
-    @workloads
+    @tier2
     @pytest.mark.polarion_id("")
     def test_clone_of_restored_vm(
         self,
