@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     blue_squad,
     provider_mode,
 )
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
 import ocs_ci.utility.prometheus
 from ocs_ci.ocs.resources.pod import get_pod_logs
@@ -40,7 +40,7 @@ def test_alerting_works(threading_lock):
 def test_prometheus_rule_failures(threading_lock):
     """
     There should be no PrometheusRuleFailures alert when OCS is configured.
-    This test is extended to check for many-to-many matching errors in Prometheus logs.
+    This test is extended to check for many-to-many matching errors in Prometheus logs (more in DFBUGS-2571).
     If such error message found PrometheusRuleFailures alert must fire as well.
     """
     # any check with state False will fail the test
@@ -58,7 +58,7 @@ def test_prometheus_rule_failures(threading_lock):
         not in [alert["labels"]["alertname"] for alert in alerts]
     )
     prometheus_pods = get_pod_name_by_pattern(
-        "prometheus-k8s", constants.MONITORING_NAMESPACE
+        defaults.PROMETHEUS_ROUTE, constants.MONITORING_NAMESPACE
     )
     for pod_name in prometheus_pods:
         log.info(f"Checking logs of pod {pod_name}")
