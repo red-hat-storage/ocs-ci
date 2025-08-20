@@ -61,14 +61,25 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             logger.info(f"5{wait}")
         except TimeoutException:
             print("Can not find login page, May have already been logged in")
-
+        '''
         expand_button = driver.find_element(By.XPATH, "//button[@aria-label='Expand folder PerfScale']")
         expand_button.click()
         time.sleep(3)
-        
+
         perfscale = driver.find_element(By.LINK_TEXT, "PerfScale")
         perfscale.click()
         time.sleep(3)
+        '''
+        expand_button = wait.until(
+            ec.element_to_be_clickable((By.XPATH, "//button[@aria-label='Expand folder PerfScale']"))
+        )
+        expand_button.click()
+
+        # Step 2: Wait for the link to become visible and clickable
+        perfscale_link = wait.until(
+            ec.element_to_be_clickable((By.XPATH, "//a[text()='PerfScale']"))
+        )
+        perfscale_link.click()
 
         dashboard = wait.until(
             ec.element_to_be_clickable((By.LINK_TEXT, "ODF Performance Analysis"))
