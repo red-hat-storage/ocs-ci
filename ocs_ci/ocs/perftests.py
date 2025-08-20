@@ -1084,13 +1084,24 @@ class PASTest(BaseTest):
 
 
     def deploy_odf_grafana(self):
+        all_file_path = constants.ODF_GRAFANA_PATH+"/group_vars/all.yml"
+
+        cluster_name = config.ENV_DATA['cluster_name']
+        base_domain = config.ENV_DATA["base_domain"]
+        grafana_user = "grafana"
+        grafana_pwd = "grafanapassword123"
+        url = f"https://grafana-route-perfscale.apps.{cluster_name}.{base_domain}./dashboards"
         env = os.environ.copy()
+
         kubeconfig_path = config.RUN.get("kubeconfig")
         full_kubeconfig_path = os.path.abspath(kubeconfig_path)
         env["KUBECONFIG"] = full_kubeconfig_path
+
         clone_repo(
             constants.ODF_GRAFANA_REPO, constants.ODF_GRAFANA_PATH, branch="main"
         )
+
+        # ODF grafana requires pwgen package which is not included in ocs-ci
         try:
             subprocess.run(
                 "sudo yum install -y pwgen",
@@ -1098,28 +1109,19 @@ class PASTest(BaseTest):
                 check=True,
             )
         except:
-            log.error("failed")
-        a= config.ENV_DATA['cluster_name']
-        b= config.ENV_DATA["base_domain"]
-        all_file_path = constants.ODF_GRAFANA_PATH+"/group_vars/all.yml"
-        url = f"https://grafana-route-perfscale.apps.{a}.{b}./dashboards"
-        log.info(f"clllllllll{config.ENV_DATA['cluster_name']}")
-        log.info(f"urllll{url}")
+            log.error("Failed to install pwgen")
+
+        # Update grafana username and password
         with open(all_file_path, "a") as f:
-            f.write("\ngrafana_user: grafana\n")
-            f.write("grafana_password: grafanapassword123\n")
-        self.kubeconfig_path = config.RUN.get("kubeconfig")
-        self.kubeconfig_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
-        )
-        full_path = os.path.abspath(self.kubeconfig_path)
+            f.write(f"\ngrafana_user: {grafana_user}\n")
+            f.write(f"grafana_password: {grafana_pwd}\n")
+
         pods = get_pod_name_by_pattern(
             pattern="grafana",
             namespace=constants.GRAFANA_NAMESPACE,
         )
         if len(pods) == 0:
             log.info("No grafana pods found")
-            cmd = f"KUBECONFIG={full_path} ansible-playbook {os.path.join(constants.ODF_GRAFANA_PATH, 'deploy-grafana.yml')}"
             try:
                 subprocess.run(
                     "ansible-playbook /tmp/odf-grafana/deploy-grafana.yml",
@@ -1127,12 +1129,11 @@ class PASTest(BaseTest):
                     env=env,
                     check=True,
                 )
-                log.info(f"clllllllll{config.ENV_DATA['cluster_name']}")
-                grafana_resource_consumption_ui(self.test_duration, url,"grafana", "grafanapassword123")
+                grafana_resource_consumption_ui(self.test_duration, url, grafana_user, grafana_pwd)
             except subprocess.CalledProcessError as e:
                 log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
             except subprocess.TimeoutExpired as e:
                 log.info(f"Command timed out, {e.output.strip()}")
         else:
             log.info(f"grafana is running")
-            grafana_resource_consumption_ui(self.test_duration, url,"grafana", "grafanapassword123")
+            grafana_resource_consumption_ui(self.test_duration, url, grafana_user, grafana_pwd)

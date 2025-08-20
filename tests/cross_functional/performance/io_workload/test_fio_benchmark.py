@@ -8,7 +8,6 @@ import logging
 import pytest
 import time
 import json
-import calendar
 
 from ocs_ci.framework import config
 from ocs_ci.utility import templating
@@ -174,13 +173,13 @@ class TestFIOBenchmark(PASTest):
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
         log.info(f"Total storage capacity is {ceph_capacity} GiB")
-        self.total_data_set = int(ceph_capacity * 0.04)
+        self.total_data_set = int(ceph_capacity * 0.4)
         self.filesize = int(
             self.crd_data["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
         )
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
-        if self.total_data_set > 50:
+        if self.total_data_set > 500:
             self.filesize = int(ceph_capacity * 0.0415)
             self.crd_data["spec"]["workload"]["args"][
                 "filesize"
@@ -192,11 +191,6 @@ class TestFIOBenchmark(PASTest):
         self.crd_data["spec"]["workload"]["args"]["servers"] = int(
             self.total_data_set / self.filesize
         )
-        self.crd_data["spec"]["workload"]["args"]["filesize"] = "5GiB"
-        self.crd_data["spec"]["workload"]["args"]["storagesize"] = "7Gi"
-        self.crd_data["spec"]["workload"]["args"]["servers"] = 1
-        self.crd_data["spec"]["workload"]["args"]["bs"] = ["64KiB"]
-
         log.info(f"Total Data set to work on is : {self.total_data_set} GiB")
         log.info("Setting prefill value to False ")
         self.crd_data["spec"]["workload"]["args"]["prefill"] = False
@@ -277,6 +271,7 @@ class TestFIOBenchmark(PASTest):
         log.info("Deleting FIO benchmark")
         self.benchmark_obj.delete()
         time.sleep(180)
+
         # Getting all PVCs created in the test (if left).
         NL = "\\n"  # NewLine character
         command = ["oc", "get", "pvc", "-n"]
@@ -444,7 +439,7 @@ class TestFIOBenchmark(PASTest):
         self.get_env_info()
 
         self.setting_io_pattern(io_pattern)
-        '''
+
         self.run()
 
         # Initialize the results doc file.
@@ -456,6 +451,20 @@ class TestFIOBenchmark(PASTest):
 
         # Setting the global parameters of the test
         full_results.add_key("io_pattern", io_pattern)
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = epoch_gmte - epoch_gmts
+
+        self.test_duration
+
+        self.deploy_odf_grafana()
+
+        # Clean up fio benchmark
+        self.cleanup()
 
         log.debug(f"Full results is : {full_results.results}")
         if isinstance(self.es, ElasticSearch):
@@ -472,17 +481,6 @@ class TestFIOBenchmark(PASTest):
         full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
-        struct1 = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
-        epoch_gmts = calendar.timegm(struct1)
-        struct2 = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
-        epoch_gmte = calendar.timegm(struct2)
-        self.test_duration = epoch_gmte - epoch_gmts
-        '''
-        self.test_duration = 356
-        self.deploy_odf_grafana()
-
-        # Cleanup fio benchmark
-        self.cleanup()
 
         # Writing the analyzed test results to the Elastic-Search server
         if full_results.es_write():

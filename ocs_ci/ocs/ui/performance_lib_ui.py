@@ -43,7 +43,6 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         last_duration = "Last 24 hour"
     else:
         logger.error(f"The test duration value {test_duration} is invalid")
-    logger.info(f"yurl{url}")
     try:
         driver.get(url)
 
@@ -61,21 +60,13 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             logger.info(f"5{wait}")
         except TimeoutException:
             print("Can not find login page, May have already been logged in")
-        '''
-        expand_button = driver.find_element(By.XPATH, "//button[@aria-label='Expand folder PerfScale']")
-        expand_button.click()
-        time.sleep(3)
-
-        perfscale = driver.find_element(By.LINK_TEXT, "PerfScale")
-        perfscale.click()
-        time.sleep(3)
-        '''
+        #  Locate PerfScale
         expand_button = wait.until(
             ec.element_to_be_clickable((By.XPATH, "//button[@aria-label='Expand folder PerfScale']"))
         )
         expand_button.click()
 
-        # Step 2: Wait for the link to become visible and clickable
+        # Wait for the link to become clickable
         perfscale_link = wait.until(
             ec.element_to_be_clickable((By.XPATH, "//a[text()='PerfScale']"))
         )
@@ -103,9 +94,8 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             )
         )
         last_duration_option.click()
-        logger.info(f"lksvt{last_duration}")
 
-        print(f"Time range is updated to {last_duration}")
+        logger.info(f"Time range is updated to {last_duration}")
 
         # Capture network usage information
         network_selector = wait.until(
