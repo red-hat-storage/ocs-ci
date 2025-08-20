@@ -61,7 +61,11 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             logger.info(f"5{wait}")
         except TimeoutException:
             print("Can not find login page, May have already been logged in")
-            
+
+        expand_button = driver.find_element(By.XPATH, "//button[@aria-label='Expand folder PerfScale']")
+        expand_button.click()
+        time.sleep(3)
+        
         perfscale = driver.find_element(By.LINK_TEXT, "PerfScale")
         perfscale.click()
         time.sleep(3)
