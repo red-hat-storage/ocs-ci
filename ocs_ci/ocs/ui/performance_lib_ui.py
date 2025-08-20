@@ -50,14 +50,22 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         # Try grafana login prompt
         try:
             wait = WebDriverWait(driver, 20)
+            logger.info(f"1{wait}")
             wait.until(ec.presence_of_element_located((By.NAME, "user")))
+            logger.info(f"2{wait}")
             driver.find_element(By.NAME, "user").send_keys(username)
+            logger.info(f"3{wait}")
             driver.find_element(By.NAME, "password").send_keys(password)
+            logger.info(f"4{wait}")
             driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+            logger.info(f"5{wait}")
         except TimeoutException:
             print("Can not find login page, May have already been logged in")
+            
+        perfscale = driver.find_element(By.LINK_TEXT, "PerfScale")
+        perfscale.click()
+        time.sleep(3)
 
-        wait = WebDriverWait(driver, 20)
         dashboard = wait.until(
             ec.element_to_be_clickable((By.LINK_TEXT, "ODF Performance Analysis"))
         )
