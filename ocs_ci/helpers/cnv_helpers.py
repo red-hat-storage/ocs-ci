@@ -521,7 +521,7 @@ def run_fio(
     size="1G",
     io_direction="randrw",
     jobs=1,
-    runtime=900,
+    runtime=300,
     depth=4,
     rate="1m",
     bs="4K",
