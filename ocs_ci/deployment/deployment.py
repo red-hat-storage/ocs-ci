@@ -768,7 +768,7 @@ class Deployment(object):
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
-        #self.do_gitops_deploy()
+        # self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
@@ -3288,7 +3288,7 @@ class RBDDRDeployOps(object):
         out_list = run_cmd_multicluster(
             cmd,
             skip_index=get_all_acm_and_recovery_indexes()
-            + config.get_consumer_indexes_list(),
+            + config.get_consumer_indexes_list(raise_exception=False),
         )
         index = 0
         for out in out_list:
@@ -3326,10 +3326,9 @@ class RBDDRDeployOps(object):
 
         for cluster in get_non_acm_and_non_recovery_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            if (
-                cluster.MULTICLUSTER["multicluster_index"]
-                not in config.get_consumer_indexes_list()
-            ):
+            if cluster.MULTICLUSTER[
+                "multicluster_index"
+            ] not in config.get_consumer_indexes_list(raise_exception=False):
                 _get_mirror_pod_count()
             self.validate_csi_sidecar()
 

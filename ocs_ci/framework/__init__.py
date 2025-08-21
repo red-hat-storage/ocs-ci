@@ -298,7 +298,7 @@ class MultiClusterConfig:
                 provider_indexes_list.append(cluster_index)
         return provider_indexes_list
 
-    def get_consumer_indexes_list(self):
+    def get_consumer_indexes_list(self, raise_exception=True):
         """
         Get the consumer cluster indexes
 
@@ -318,7 +318,7 @@ class MultiClusterConfig:
             ]:
                 consumer_indexes_list.append(i)
 
-        if not consumer_indexes_list:
+        if (not consumer_indexes_list) and raise_exception:
             raise ClusterNotFoundException("Didn't find any consumer cluster")
 
         return consumer_indexes_list
