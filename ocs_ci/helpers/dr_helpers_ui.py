@@ -849,6 +849,19 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         log.info("Click on Enroll virtual machine")
         acm_obj.do_click(acm_loc["enroll-vm"], enable_screenshot=True)
         if standalone:
+            log.info("Check for Shared Protection type")
+            shared_radio_btn = acm_obj.find_an_element_by_xpath(
+                "//input[@id='shared-vm-protection']"
+            )
+            aria_disabled = shared_radio_btn.get_attribute("aria-disabled")
+            if aria_disabled == "false":
+                log.info(
+                    "Shared protection type is disabled as expected"
+                )
+                acm_obj.take_screenshot()
+            else:
+                log.error("Shared protection type is enabled for the first VM")
+                raise ResourceWrongStatusException
             log.info("Send Protection name")
             acm_obj.do_click(acm_loc["name-input-btn"])
             acm_obj.do_send_keys(acm_loc["name-input-btn"], text=protection_name)
@@ -862,6 +875,10 @@ def assign_drpolicy_for_discovered_vms_via_ui(
             ), f"Expected 1 radio button but found {len(radio_buttons)}"
             log.info("Expected 1 radio button found, select existing DRPC")
             acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
+            log.info("View VMs")
+            acm_obj.do_click(acm_loc["view-vms"], enable_screenshot=True)
+            log.info("Look for existing VM name")
+
         log.info("Click next")
         acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
         if standalone:
