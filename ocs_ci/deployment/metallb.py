@@ -133,6 +133,9 @@ class MetalLBInstaller:
     def get_catsrc_name(self):
         """
         Helper function to get the catalog source name
+
+        Returns:
+            str: The name of the catalog source for MetalLB
         """
         optional_operators_data = list(
             templating.load_yaml(
