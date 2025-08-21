@@ -573,7 +573,7 @@ class Deployment(object):
                     templating.dump_data_to_temp_yaml(
                         oadp_subscription_yaml_data, oadp_subscription_manifest.name
                     )
-                    run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
+                    run_cmd(f"oc create -f {oadp_subscription_manifest.name}")
                     self.wait_for_subscription(
                         constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
                     )
@@ -768,7 +768,7 @@ class Deployment(object):
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
-        # self.do_gitops_deploy()
+        self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
