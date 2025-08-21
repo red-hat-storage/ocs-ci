@@ -3,7 +3,6 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
-    bugzilla,
 )
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -21,7 +20,6 @@ log = logging.getLogger(__name__)
 
 
 @tier2
-@bugzilla("2141422")
 @brown_squad
 @skipif_external_mode
 @cloud_platform_required
