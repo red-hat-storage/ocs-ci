@@ -71,13 +71,6 @@ def test_prometheus_rule_failures(threading_lock):
         pod_logs.reverse()
         for log_line in pod_logs:
             if "many-to-many matching not allowed" in log_line.lower():
-                log.error(
-                    f"Found 'warn' msg in logs of pod {pod_name}:"
-                    f"\n\n****************** Log message: ******************\n{log_line}"
-                    f"\n****************** End of logs ******************"
-                    f"\n\nThis is a known issue. Follow OCSQECL-5384 and knowledge base article "
-                    f"solutions/7103336 for more details."
-                )
                 test_results[f"many-to-many-error-present-{pod_name}-check"] = False
                 break
         else:
