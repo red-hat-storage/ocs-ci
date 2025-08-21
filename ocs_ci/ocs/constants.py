@@ -487,7 +487,7 @@ KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
-KAFKA_PODS_LABEL = "strimzi.io/pool-name=kafka"
+KAFKA_PODS_LABEL = "strimzi.io/pool-name=broker"
 KAFKA_KIND_LABEL = "strimzi.io/kind=Kafka"
 
 # ODF monitoring tool

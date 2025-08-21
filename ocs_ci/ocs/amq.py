@@ -64,6 +64,7 @@ class AMQ(object):
         self.consumer_pod = self.producer_pod = None
         self.kafka_topic = self.kafka_user = None
         self.kafka_connect = self.kafka_bridge = self.kafka_persistent = None
+        self.kafkanodepools = []
         # ToDo: Remove skip once the issue is fixed
         if config.ENV_DATA.get("fips"):
             pytest.skip(
@@ -79,13 +80,7 @@ class AMQ(object):
         """
         try:
             log.info(f"cloning amq in {self.dir}")
-
-            # Further setup in this class assumes the use of zookeeper, before
-            # the following change was made to strimzi-kafka-operator:
-            # https://github.com/strimzi/strimzi-kafka-operator/pull/10982
-            last_compatible_branch = "release-0.44.x"
-            git_clone_cmd = f"git clone --branch {last_compatible_branch} {self.repo} "
-
+            git_clone_cmd = f"git clone {self.repo} "
             run(git_clone_cmd, shell=True, cwd=self.dir, check=True)
             self.amq_dir = "strimzi-kafka-operator/packaging/install/cluster-operator/"
             self.amq_kafka_pers_yaml = (
@@ -231,7 +226,7 @@ class AMQ(object):
         Args:
             sc_name (str): Name of sc
             size (int): Size of the storage in Gi
-            replicas (int): Number of kafka and zookeeper pods to be created
+            replicas (int): Number of broker and controller pods to be created
 
         return : kafka_persistent
 
@@ -243,22 +238,26 @@ class AMQ(object):
         ):
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         try:
-            kafka_persistent = templating.load_yaml(
-                os.path.join(self.dir, self.amq_kafka_pers_yaml)
+            kafka_persistent_dicts = templating.load_yaml(
+                os.path.join(self.dir, self.amq_kafka_pers_yaml), multi_document=True
             )
-            kafka_persistent["spec"]["kafka"]["replicas"] = replicas
-            kafka_persistent["spec"]["kafka"]["storage"]["volumes"][0][
-                "class"
-            ] = sc_name
-            kafka_persistent["spec"]["kafka"]["storage"]["volumes"][0][
-                "size"
-            ] = f"{size}Gi"
 
-            kafka_persistent["spec"]["zookeeper"]["replicas"] = replicas
-            kafka_persistent["spec"]["zookeeper"]["storage"]["class"] = sc_name
-            kafka_persistent["spec"]["zookeeper"]["storage"]["size"] = f"{size}Gi"
-            self.kafka_persistent = OCS(**kafka_persistent)
-            self.kafka_persistent.create()
+            storage_dict = {
+                "type": "persistent-claim",
+                "class": sc_name,
+                "size": f"{size}Gi",
+                "kraftMetadata": "shared",
+                "deleteClaim": False,  # self.cleanup() deletes the claims
+            }
+            for dict in kafka_persistent_dicts:
+                if dict["kind"] == "KafkaNodePool":
+                    dict["spec"]["replicas"] = replicas
+                    dict["spec"]["storage"] = storage_dict
+                    self.kafkanodepools.append(OCS(**dict))
+                    self.kafkanodepools[-1].create()
+                else:
+                    self.kafka_persistent = OCS(**dict)
+                    self.kafka_persistent.create()
 
         except (CommandFailed, CalledProcessError) as cf:
             log.error("Failed during setup of AMQ Kafka-persistent")
@@ -271,7 +270,7 @@ class AMQ(object):
             return self.kafka_persistent
         else:
             raise ResourceWrongStatusException(
-                "my-cluster-kafka and my-cluster-zookeeper "
+                "my-cluster-broker and my-cluster-controller "
                 "Pod is not getting to running state"
             )
 
@@ -1016,6 +1015,8 @@ class AMQ(object):
                 self.kafka_connect.delete()
             if self.kafka_bridge:
                 self.kafka_bridge.delete()
+            for kafkanodepool in self.kafkanodepools:
+                kafkanodepool.delete()
             if self.kafka_persistent:
                 self.kafka_persistent.delete()
                 log.info("Waiting for 20 seconds to delete persistent")

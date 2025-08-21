@@ -354,7 +354,7 @@ class BucketNotificationsManager:
             )
         )
 
-    def get_events(self, topic, timeout_in_ms=10000):
+    def get_events(self, topic, timeout_in_ms=15000):
         """
         Query a Kafka topic for events
 
@@ -375,7 +375,9 @@ class BucketNotificationsManager:
         for kafka_pod in kafka_pods:
             cmd = (
                 f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
-                f"--topic {topic} --from-beginning --timeout-ms {timeout_in_ms}"
+                f"--topic {topic} --from-beginning "
+                f"--max-messages 999999 "  # timeout-ms by itself might exit early
+                f"--timeout-ms {timeout_in_ms}"
             )
 
             # for some test involving node shutdown, we make sure we get the events
