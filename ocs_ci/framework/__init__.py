@@ -276,6 +276,8 @@ class MultiClusterConfig:
         provider_index = None
         if provider_name:
             provider_index = self.get_cluster_index_by_name(cluster_name=provider_name)
+        elif config.ENV_DATA.get("cluster_type") == "provider":
+            provider_index = config.cur_index
         else:
             for i, cluster in enumerate(self.clusters):
                 if cluster.ENV_DATA["cluster_type"] == "provider":
