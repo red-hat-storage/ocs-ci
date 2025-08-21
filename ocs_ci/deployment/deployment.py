@@ -3298,7 +3298,7 @@ class RBDDRDeployOps(object):
             if out.stdout.decode() != expected_state:
                 # If there are more than one cephblockpoolradosnamespaces resource
                 if resource_name == constants.CEPHBLOCKPOOLRADOSNS:
-                    item_states = out.stdout.decode().strip.split()
+                    item_states = out.stdout.decode().strip().split()
                     if all(
                         rns_state.strip() == expected_state for rns_state in item_states
                     ):
