@@ -216,8 +216,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             vrg_name=rdr_workload.discovered_apps_placement_name,
         )
 
-        if not pvc_interface == "Mix":
-            mix_workload_data = None
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
