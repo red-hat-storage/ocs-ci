@@ -149,6 +149,12 @@ class TestApplicationFailoverAndRelocate:
             ),
         )
 
+        wait_time = 120
+        logger.info(
+            f"Wait for {wait_time} seconds before starting Failover of application"
+        )
+        time.sleep(wait_time)
+
         # Stop primary cluster nodes
         if primary_cluster_down:
             logger.info("Stopping primary cluster nodes")
@@ -212,7 +218,6 @@ class TestApplicationFailoverAndRelocate:
             verify_failover_relocate_status_ui(acm_obj)
 
         # Start nodes if cluster is down
-        wait_time = 120
         if primary_cluster_down:
             logger.info(
                 f"Waiting for {wait_time} seconds before starting nodes of previous primary cluster"
@@ -248,6 +253,10 @@ class TestApplicationFailoverAndRelocate:
         gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
 
         # Application Relocate to Primary managed cluster
+        logger.info(
+            f"Wait for {wait_time} seconds before starting Relocate of application"
+        )
+        time.sleep(wait_time)
         secondary_cluster_name = get_current_secondary_cluster_name(
             workload.workload_namespace, workload_type
         )
