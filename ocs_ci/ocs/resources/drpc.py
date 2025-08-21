@@ -70,6 +70,9 @@ class DRPC(OCP):
         ), "PeerReady status is not true, failover or relocate action can not be performed"
 
     def get_clusterdataprotected_status(self):
+        """
+        Get clusterdataproctected status from drpc
+        """
         logger.info("Getting Clusterdataprotected Status")
         current_conditions = self.get()["status"]["resourceConditions"]["conditions"]
         for condition in current_conditions:
@@ -78,6 +81,9 @@ class DRPC(OCP):
         return status
 
     def wait_for_clusterdataprotected_status(self):
+        """
+        Verify clusterdataproctected status from drpc is set to True, otherwise raise assert error
+        """
         logger.info("Waiting for Clusterdataprotected status to be True")
         sample = TimeoutSampler(
             timeout=300, sleep=10, func=self.get_clusterdataprotected_status
