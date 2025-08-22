@@ -551,7 +551,13 @@ class VMWareNodes(NodesBase):
             f"{self.platform.upper()}{self.deployment_type.upper()}Node"
         ]
         node_cls_obj = node_cls(node_conf, node_type, num_nodes)
-        node_cls_obj.add_node()
+        use_terraform = True
+        if (
+            cluster.is_lso_cluster()
+            and config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM
+        ):
+            use_terraform = False
+        node_cls_obj.add_node(use_terraform=use_terraform)
 
     def terminate_nodes(self, nodes, wait=True):
         """
@@ -1996,7 +2002,9 @@ class VSPHEREUPINode(VMWareNodes):
         Add nodes without terraform
         """
         # generate new node names
-        new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
+        # new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
+        new_nodes_names = self.get_missing_node_name()
+        logger.info(f"self.compute_count: {self.compute_count}")
         logger.info(f"New node names: {new_nodes_names}")
 
         # get the worker ignition
@@ -2044,6 +2052,38 @@ class VSPHEREUPINode(VMWareNodes):
                     logger.info("setting host name")
                     self.wait_for_connection_and_set_host_name(ip, node_name)
                     break
+
+    def get_missing_node_name(self, prefix="compute-"):
+        """
+        Get the missing node name
+
+        Args:
+            prefix (str): Prefix for the node name
+
+        Returns:
+            str: Node name
+
+        """
+        compute_vms = self.vsphere.get_compute_vms_in_pool(
+            self.cluster_name, self.datacenter, self.cluster
+        )
+        compute_node_names = [compute_vm.name for compute_vm in compute_vms]
+        logger.info(f"Current node names: {compute_node_names}")
+        compute_node_names.sort()
+        existing_suffixes = [int(node.split("-")[-1]) for node in compute_node_names]
+
+        xor_all = 0
+        xor_suffixes = 0
+        total_nodes = len(compute_node_names) + 1
+
+        for i in range(0, total_nodes):
+            xor_all ^= i
+
+        for num in existing_suffixes:
+            xor_suffixes ^= num
+
+        missing_node_suffix = xor_all ^ xor_suffixes
+        return [f"{prefix}{missing_node_suffix}"]
 
     def generate_node_names_for_vsphere(self, count, prefix="compute-"):
         """
@@ -2659,6 +2699,33 @@ class VMWareLSONodes(VMWareNodes):
         else:
             raise VolumePathNotFoundException
 
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VMs.
+        The VMs will be deleted only from the inventory and not from the disk.
+        After deleting the VMs, it will also modify terraform state file of the removed VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the VMs to terminate,
+            False otherwise
+
+        """
+        vmware_upi_obj = VMWareUPINodes()
+        vmware_upi_obj.terminate_nodes(nodes=nodes)
+
+    def get_uuid(self, node_obj):
+        """
+        Args:
+            node_obj (obj) : The OCS objects of the nodes
+
+        Returns:
+            str: UUID of VM
+
+        """
+        vm = super().get_vms([node_obj])
+        return vm[0].config.uuid
+
 
 class RHVNodes(NodesBase):
     """
@@ -3125,9 +3192,17 @@ class VMWareUPINodes(VMWareNodes):
             node_conf={}, node_type=node_type, compute_count=0
         )
         logger.info(f"Modifying terraform state file of the removed VMs {vm_names}")
-        for vm_name in vm_names:
-            node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
-            node_cls_obj.change_terraform_tfvars_after_remove_vm()
+        if (
+            cluster.is_lso_cluster()
+            and config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM
+        ):
+            logger.info(
+                "skip modifying terraform files for vSphere LSO platform due to adding nodes without terraform"
+            )
+        else:
+            for vm_name in vm_names:
+                node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
+                node_cls_obj.change_terraform_tfvars_after_remove_vm()
 
 
 class GCPNodes(NodesBase):
