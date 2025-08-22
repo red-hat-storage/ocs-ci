@@ -2904,6 +2904,26 @@ class Deployment(object):
         csv = CSV(resource_name=csv_name, namespace=constants.ACM_HUB_NAMESPACE)
         csv.wait_for_phase("Succeeded", timeout=720)
         logger.info("ACM HUB Operator Deployment Succeeded")
+        # TODO: dont use latest tag
+        # Temp Fix will come up with new solution. Setting subscription to manual because we don't want to auto upgrade
+        logger.info(
+            f"Setting installPlanApproval to Manual for {constants.ACM_HUB_OPERATOR_NAME} "
+        )
+        cmd = (
+            f"oc patch subscription {constants.ACM_HUB_OPERATOR_NAME} -n {constants.ACM_HUB_NAMESPACE} --type merge "
+            f'-p \'{{"spec": {{"installPlanApproval": "Manual"}}}}\''
+        )
+
+        run_cmd(cmd=cmd)
+        logger.info(
+            f"Setting installPlanApproval to Manual for {constants.MCE_OPERATOR} "
+        )
+        cmd = (
+            f"oc patch subscription {constants.MCE_OPERATOR} -n {constants.MCE_NAMESPACE} --type merge "
+            f'-p \'{{"spec": {{"installPlanApproval": "Manual"}}}}\''
+        )
+
+        run_cmd(cmd=cmd)
 
     def deploy_multicluster_hub(self):
         """
