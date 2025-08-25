@@ -268,7 +268,7 @@ def create_mce_catsrc():
     )
 
     mce_konflux_catsrc_yaml_data["spec"]["image"] = (
-        config.ENV_DATA.get("mce_unreleased_image")
+        f"{constants.MCE_CATSRC_IMAGE}:{config.ENV_DATA.get('mce_unreleased_image')}"
         or f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
     )
 

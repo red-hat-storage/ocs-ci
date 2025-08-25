@@ -2836,7 +2836,7 @@ class Deployment(object):
         )
 
         acm_konflux_catsrc_yaml_data["spec"]["image"] = (
-            config.ENV_DATA.get("acm_unreleased_image")
+            f"{constants.ACM_CATSRC_IMAGE}:{config.ENV_DATA.get('acm_unreleased_image')}"
             or f"{constants.ACM_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('acm_version')}"
         )
 
