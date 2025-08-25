@@ -3264,7 +3264,10 @@ class RBDDRDeployOps(object):
     """
 
     def deploy(self):
-        self.configure_rbd()
+        # TODO: Skip this check for now in client clusters.
+        #  This should be enhanced to get details from the provider cluster
+        if config.hci_client_exist():
+            self.configure_rbd()
 
     @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
@@ -3326,10 +3329,7 @@ class RBDDRDeployOps(object):
 
         for cluster in get_non_acm_and_non_recovery_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            if cluster.MULTICLUSTER[
-                "multicluster_index"
-            ] not in config.get_consumer_indexes_list(raise_exception=False):
-                _get_mirror_pod_count()
+            _get_mirror_pod_count()
             self.validate_csi_sidecar()
 
         # Reset CTX back to ACM
@@ -4195,6 +4195,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             validate_storage_cluster_peer_state()
             verify_volsync()
 
+        # TODO: Skip backup configuration if the managed clusters under test is client clusters
+        #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
+        #  This should be updated for the client clusters
+        if config.hci_client_exist():
+            return
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
             config.switch_ctx(i)
