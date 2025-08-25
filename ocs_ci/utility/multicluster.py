@@ -266,9 +266,12 @@ def create_mce_catsrc():
     mce_konflux_catsrc_yaml_data = templating.load_yaml(
         constants.MCE_CATALOGSOURCE_YAML
     )
-    mce_konflux_catsrc_yaml_data["spec"][
-        "image"
-    ] = f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
+
+    mce_konflux_catsrc_yaml_data["spec"]["image"] = (
+        f"{constants.MCE_CATSRC_IMAGE}:{config.ENV_DATA.get('mce_unreleased_image')}"
+        or f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
+    )
+
     mce_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="mce_konflux_catsrc_yaml_data_manifest", delete=False
     )

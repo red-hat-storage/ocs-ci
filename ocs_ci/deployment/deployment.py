@@ -2834,9 +2834,12 @@ class Deployment(object):
         acm_konflux_catsrc_yaml_data = templating.load_yaml(
             constants.ACM_CATALOGSOURCE_YAML
         )
-        acm_konflux_catsrc_yaml_data["spec"][
-            "image"
-        ] = f"{constants.ACM_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('acm_version')}"
+
+        acm_konflux_catsrc_yaml_data["spec"]["image"] = (
+            f"{constants.ACM_CATSRC_IMAGE}:{config.ENV_DATA.get('acm_unreleased_image')}"
+            or f"{constants.ACM_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('acm_version')}"
+        )
+
         acm_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_konflux_catsrc_yaml_data_manifest", delete=False
         )
