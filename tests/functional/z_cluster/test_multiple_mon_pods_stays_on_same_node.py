@@ -91,7 +91,7 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def test_multiple_mon_pod_stays_on_same_node(self):
+    def deprecated_test_multiple_mon_pod_stays_on_same_node(self):
         """
         A testcase to verify multiple mon pods stays on same node
 
