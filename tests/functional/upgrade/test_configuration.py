@@ -17,7 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.utility.utils import exec_cmd
-from ocs_ci.helpers.helpers import get_logs_rook_ceph_operator
+from ocs_ci.helpers.helpers import get_logs_rook_ceph_operator, get_node_plugin_label
 from ocs_ci.ocs.ocs_upgrade import set_update_strategy
 
 log = logging.getLogger(__name__)
@@ -141,12 +141,12 @@ def test_update_strategy_config_change(
     Test that tested value added to configmap rook-ceph-operator-config is
     reflected in respective daemonset.
     """
+    daemonset_name = get_node_plugin_label(constants.CEPHBLOCKPOOL)
     if daemonset == "csi-rbdplugin":
         set_update_strategy(rbd_max_unavailable=value_to_set)
-        daemonset_name = constants.DAEMONSET_CSI_RBD
     elif daemonset == "csi-cephfsplugin":
         set_update_strategy(cephfs_max_unavailable=value_to_set)
-        daemonset_name = constants.DAEMONSET_CSI_CEPHFS
+        daemonset_name = get_node_plugin_label(constants.CEPHFILESYSTEM)
 
     ds_obj = DaemonSet(
         resource_name=daemonset_name, namespace=config.ENV_DATA["cluster_namespace"]
