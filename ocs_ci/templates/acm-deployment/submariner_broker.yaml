@@ -1,0 +1,10 @@
+apiVersion: submariner.io/v1alpha1
+kind: Broker
+metadata:
+  name: submariner-broker
+  namespace: PLACEHOLDER
+  labels:
+    cluster.open-cluster-management.io/backup: submariner
+spec:
+  globalnetEnabled: true
+  globalnetCIDRRange: 242.0.0.0/8

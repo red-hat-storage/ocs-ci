@@ -762,3 +762,11 @@ class ActiveMdsValueNotMatch(Exception):
 
 class DistributionStatusError(Exception):
     pass
+
+
+class InvalidPodPresent(Exception):
+    pass
+
+
+class FloatingIPAssignException(Exception):
+    pass
