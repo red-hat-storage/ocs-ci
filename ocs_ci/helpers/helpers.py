@@ -48,7 +48,6 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedBehaviour,
-    NotSupportedException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -4748,26 +4747,72 @@ def retrieve_cli_binary(cli_type="mcg"):
     """
     semantic_version = version.get_semantic_ocs_version_from_config()
     ocs_build = get_ocs_build_number()
-    if cli_type == "odf" and semantic_version < version.VERSION_4_15:
-        raise NotSupportedException(
-            f"odf cli tool not supported on ODF {semantic_version}"
-        )
+    original_cli_type = cli_type
 
+    # For OCS >= 4.20, mcg-cli is no longer available, redirect to odf-cli
+    if semantic_version >= version.VERSION_4_20 and cli_type == "mcg":
+        logger.info(
+            f"OCS {semantic_version} >= 4.20 detected. MCG CLI is now part of ODF CLI. "
+            "Redirecting to download odf-cli instead."
+        )
+        cli_type = "odf"
+
+    # Use ODFCLIRetriever for odf-cli downloads
+    if cli_type == "odf":
+        from ocs_ci.helpers.odf_cli import ODFCLIRetriever
+
+        odf_retriever = ODFCLIRetriever()
+        odf_retriever.retrieve_odf_cli_binary()
+
+        # Create symlink for backward compatibility if mcg was originally requested
+        if original_cli_type == "mcg" and semantic_version >= version.VERSION_4_20:
+            mcg_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            odf_cli_path = odf_retriever.local_cli_path
+            if os.path.exists(mcg_cli_path) or os.path.islink(mcg_cli_path):
+                os.remove(mcg_cli_path)
+            os.symlink(odf_cli_path, mcg_cli_path)
+            logger.info(
+                f"Created symlink from {mcg_cli_path} to {odf_cli_path} for backward compatibility"
+            )
+        return
+
+    # Continue with original mcg-cli download logic for OCS < 4.20
     remote_path = get_architecture_path(cli_type)
     remote_cli_basename = os.path.basename(remote_path)
-    if cli_type == "mcg":
-        local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-    elif cli_type == "odf":
+
+    # Set the local path based on the actual CLI being downloaded
+    if cli_type == "odf":
         local_cli_path = constants.ODF_CLI_LOCAL_PATH
+    else:
+        local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
     local_cli_dir = os.path.dirname(local_cli_path)
     live_deployment = config.DEPLOYMENT["live_deployment"]
+
+    # Determine which image to use based on version and CLI type
     if live_deployment and semantic_version >= version.VERSION_4_13:
-        if semantic_version >= version.VERSION_4_15:
+        if semantic_version >= version.VERSION_4_20:
+            # For 4.20+, always use ODF CLI image (mcg-cli no longer exists)
             image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+        elif semantic_version >= version.VERSION_4_15:
+            # For 4.15-4.19, use appropriate image based on requested CLI type
+            if cli_type == "odf":
+                image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+            else:
+                image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
         else:
+            # For 4.13-4.14, only mcg-cli is available
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
-        image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
+        # Development builds
+        if semantic_version >= version.VERSION_4_20:
+            # For 4.20+ dev builds, always use ODF CLI
+            image = f"{constants.ODF_CLI_DEV_IMAGE}:{ocs_build}"
+        elif cli_type == "odf" and semantic_version >= version.VERSION_4_15:
+            # For 4.15+ dev builds requesting odf-cli
+            image = f"{constants.ODF_CLI_DEV_IMAGE}:{ocs_build}"
+        else:
+            # For older versions or mcg-cli requests in dev
+            image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
     exec_cmd(
