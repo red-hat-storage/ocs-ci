@@ -2354,7 +2354,7 @@ def create_service_exporter():
             config.ENV_DATA["platform"].lower()
             in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
-            logger.info(f"Skipping ServiceExport creation")
+            logger.info("Skipping ServiceExport creation for multiclient cluster")
             continue
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
