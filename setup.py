@@ -63,6 +63,8 @@ setup(
         "python-cinderclient==7.1.0",
         "oslo.utils==8.2.0",  # Dependency of python-novaclient and python-cinderclient
         "oslo.i18n==6.5.1",  # Dependency of python-novaclient and python-cinderclient
+        "oslo.serialization==5.7.0",  # Dependency of python-novaclient and python-cinderclient
+        "oslo.serialization==5.7.0",  # Dependency of python-novaclient and python-cinderclient
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
         "GitPython==3.1.41",
