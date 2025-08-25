@@ -275,6 +275,8 @@ class MultiClusterConfig:
         provider_index = None
         if provider_name:
             provider_index = self.get_cluster_index_by_name(cluster_name=provider_name)
+        elif config.ENV_DATA.get("cluster_type") == "provider":
+            provider_index = config.cur_index
         else:
             for i, cluster in enumerate(self.clusters):
                 if cluster.ENV_DATA["cluster_type"] == "provider":
@@ -297,7 +299,7 @@ class MultiClusterConfig:
                 provider_indexes_list.append(cluster_index)
         return provider_indexes_list
 
-    def get_consumer_indexes_list(self):
+    def get_consumer_indexes_list(self, raise_exception=True):
         """
         Get the consumer cluster indexes
 
@@ -317,7 +319,7 @@ class MultiClusterConfig:
             ]:
                 consumer_indexes_list.append(i)
 
-        if not consumer_indexes_list:
+        if (not consumer_indexes_list) and raise_exception:
             raise ClusterNotFoundException("Didn't find any consumer cluster")
 
         return consumer_indexes_list
