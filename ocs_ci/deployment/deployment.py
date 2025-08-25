@@ -39,6 +39,7 @@ from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
 from ocs_ci.deployment.helpers.lso_helpers import (
     setup_local_storage,
     cleanup_nodes_for_lso_install,
+    create_optional_operators_catalogsource_non_ga,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
@@ -1229,6 +1230,7 @@ class Deployment(object):
                 config.ENV_DATA.get("multus_create_public_net")
                 and ocs_version >= version.VERSION_4_16
             ):
+                create_optional_operators_catalogsource_non_ga()
                 from ocs_ci.deployment.nmstate import NMStateInstaller
 
                 logger.info("Install NMState operator and create an instance")
