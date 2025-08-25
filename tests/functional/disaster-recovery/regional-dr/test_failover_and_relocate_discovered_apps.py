@@ -304,4 +304,4 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
                 )
             logger.info(f"Iteration {iteration} completed !!!!!!!")
-        iteration += 1
+            iteration += 1
