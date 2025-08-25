@@ -4,13 +4,8 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import acceptance, skipif_ocs_version
-from ocs_ci.framework.pytest_customization.marks import (
-    rdr,
-    turquoise_squad,
-    tier4,
-    tier1,
-)
+from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -23,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 @rdr
 @acceptance
+@tier1
 @turquoise_squad
 @skipif_ocs_version("<4.16")
 class TestFailoverAndRelocateWithDiscoveredApps:
@@ -47,7 +43,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 id="primary_up-rbd-recipe-resourcelabel",
-                marks=[tier1],
             ),
             pytest.param(
                 True,
@@ -56,7 +51,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 id="primary_down-rbd-recipe-resourcelabel",
-                marks=[tier4],
             ),
             pytest.param(
                 False,
@@ -65,7 +59,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 3,
                 id="primary_up-rbd-multiple-iterations",
-                marks=[tier4],
             ),
             pytest.param(
                 True,
@@ -74,7 +67,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 3,
                 id="primary_down-rbd-multiple-iterations",
-                marks=[tier4],
             ),
             pytest.param(
                 False,
@@ -82,7 +74,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
-                marks=[skipif_ocs_version("<4.19"), tier1],
+                marks=[skipif_ocs_version("<4.19")],
                 id="primary_up-cephfs-recipe-resourcelabel",
             ),
             pytest.param(
@@ -91,7 +83,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
-                marks=[skipif_ocs_version("<4.19"), tier4],
+                marks=[skipif_ocs_version("<4.19")],
                 id="primary_down-cephfs-recipe-resourcelabel",
             ),
             pytest.param(
@@ -100,7 +92,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 3,
-                marks=[skipif_ocs_version("<4.19"), tier4],
+                marks=[skipif_ocs_version("<4.19")],
                 id="primary_up-cephfs-multiple-iterations",
             ),
             pytest.param(
@@ -109,7 +101,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 3,
-                marks=[skipif_ocs_version("<4.19"), tier4],
+                marks=[skipif_ocs_version("<4.19")],
                 id="primary_down-cephfs-multiple-iterations",
             ),
         ],
@@ -134,7 +126,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         rdr_workload = discovered_apps_dr_workload(
             pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
         )[0]
-        for iteration in range(iterations):
+        iteration = 1
+        while iteration <= iterations:
             primary_cluster_name_before_failover = (
                 dr_helpers.get_current_primary_cluster_name(
                     rdr_workload.workload_namespace,
