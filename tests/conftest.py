@@ -7795,8 +7795,27 @@ def operator_pods():
     return operator_pods
 
 
+@pytest.fixture(scope="class")
+def multi_cnv_workload_class(request, storageclass_factory_class, cnv_workload_class):
+    """
+    Class scoped fixture to deploy multiple CNV workload
+
+    """
+    return multi_cnv_workload_factory(
+        request, storageclass_factory_class, cnv_workload_class
+    )
+
+
 @pytest.fixture()
 def multi_cnv_workload(request, storageclass_factory, cnv_workload):
+    """
+    Class scoped fixture to deploy multiple CNV workload
+
+    """
+    return multi_cnv_workload_factory(request, storageclass_factory, cnv_workload)
+
+
+def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
     The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
