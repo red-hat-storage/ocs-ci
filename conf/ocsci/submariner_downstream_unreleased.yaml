@@ -2,4 +2,4 @@ ENV_DATA:
   submariner_source: "downstream"
   submariner_release_type: "unreleased"
   submariner_unreleased_channel: ""
-  enable_globalnet: true
+  subctl_version: "subctl-rhel9:v0.20"
