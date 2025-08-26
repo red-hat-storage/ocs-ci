@@ -1,20 +1,19 @@
 ---
-apiVersion: operator.openshift.io/v1alpha1
-kind: ImageContentSourcePolicy
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
 metadata:
-  name: olmcontentsourcepolicy
+  name: brew-registry
 spec:
-  repositoryDigestMirrors:
-  - mirrors:
+  imageDigestMirrors:
+  - source: registry.redhat.io
+    mirrors:
     - brew.registry.redhat.io
-    source: registry.redhat.io
-  - mirrors:
+  - source: registry.stage.redhat.io
+    mirrors:
     - brew.registry.redhat.io
-    source: registry.stage.redhat.io
-  - mirrors:
+  - source: registry-proxy.engineering.redhat.com
+    mirrors:
     - brew.registry.redhat.io
-    source: registry-proxy.engineering.redhat.com
-
 
 ---
 apiVersion: operators.coreos.com/v1alpha1

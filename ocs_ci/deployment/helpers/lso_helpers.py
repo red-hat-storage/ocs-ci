@@ -266,20 +266,6 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             ocp_version_image = f"{image}:v{ocp_version}"
             operator["spec"]["image"] = ocp_version_image
 
-    # check if idms bre-registry exist, drop similar ImageContentSourcePolicy from optional_operators_data
-    # their content is almost identical, besides brew-registry has additional mirrors item in it
-    if OCP(
-        kind="ImageDigestMirrorSet", resource_name="brew-registry"
-    ).check_resource_existence(timeout=5, should_exist=True):
-        logger.info(
-            "ImageDigestMirrorSet 'brew-registry' already exists, "
-            "ImageContentSourcePolicy from applied optional_operators_data"
-        )
-        optional_operators_data = [
-            _dict
-            for _dict in optional_operators_data
-            if _dict.get("kind").lower() != "ImageContentSourcePolicy"
-        ]
     optional_operators_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="optional_operators", delete=False
     )
@@ -318,7 +304,7 @@ def create_optional_operators_catalogsource_non_ga(force=False):
         logger.info(
             "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
-        run_cmd(f"oc create -f {optional_operators_yaml.name}")
+        run_cmd(f"oc apply -f {optional_operators_yaml.name}")
     wait_for_machineconfigpool_status("all")
 
 
