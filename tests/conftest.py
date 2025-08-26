@@ -3167,7 +3167,8 @@ def nb_stress_cli_pod_fixture(request, scope_name):
             ):
                 log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
                 pod_obj.exec_cmd_on_pod(
-                    f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+                    f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> "
+                    f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
                 )
 
     def cleanup():
