@@ -5348,6 +5348,7 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
+@config.run_with_provider_context_if_available
 def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get the NooBaa DB pod that has been assigned the
@@ -5377,6 +5378,7 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     return nb_db_pod
 
 
+@config.run_with_provider_context_if_available
 def exec_nb_db_query(query):
     """
     Send a psql query to the Noobaa DB
