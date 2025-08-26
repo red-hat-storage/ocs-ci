@@ -85,6 +85,18 @@ class Initializer(object):
 
         config.REPORTING["report_path"] = args.report
 
+        if self.deployment_type == "fusion" and args.fusion_version:
+            base_dir = os.path.join(constants.FRAMEWORK_CONF_DIR, "fusion_version")
+            version_file = f"fusion-{args.fusion_version}.yaml"
+            cfg_file = os.path.join(base_dir, version_file)
+            load_config([cfg_file])
+
+        if self.deployment_type == "fdf" and args.fdf_version:
+            base_dir = os.path.join(constants.FRAMEWORK_CONF_DIR, "fdf_version")
+            version_file = f"fdf-{args.fdf_version}.yaml"
+            cfg_file = os.path.join(base_dir, version_file)
+            load_config([cfg_file])
+
     def init_cli(self, args: list) -> list:
         """
         Initialize the CLI and parse provided arguments.
@@ -109,6 +121,17 @@ class Initializer(object):
         parser.add_argument(
             "--report", default=None, help="Filepath for generated junit report"
         )
+        # Fusion specific args
+        if self.deployment_type == "fusion":
+            parser.add_argument(
+                "--fusion-version", default=None, help="Version of Fusion to install"
+            )
+        # FDF specific args
+        elif self.deployment_type == "fdf":
+            parser.add_argument(
+                "--fdf-version", default=None, help="Version of FDF to install"
+            )
+
         parsed_args, _ = parser.parse_known_args(args)
 
         return parsed_args
