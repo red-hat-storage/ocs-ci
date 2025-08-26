@@ -3366,7 +3366,11 @@ def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_sessio
 
 
 def bucket_factory_fixture(
-    request, bucket_class_factory=None, mcg_obj=None, rgw_obj=None
+    request,
+    bucket_class_factory=None,
+    mcg_obj=None,
+    rgw_obj=None,
+    cluster_context=ocsci_config.RunWithProviderConfigContextIfAvailable,
 ):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
@@ -3382,6 +3386,8 @@ def bucket_factory_fixture(
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
             credentials
         rgw_obj (RGW): An RGW object
+        cluster_context (object): context object in which the bucket will be created.
+            Default is provider context.
 
     """
     created_buckets = []
@@ -3413,55 +3419,57 @@ def bucket_factory_fixture(
                 buckets
 
         """
-        if isinstance(bucketclass, dict):
-            interface = bucketclass["interface"]
+        with cluster_context():
+            if isinstance(bucketclass, dict):
+                interface = bucketclass["interface"]
 
-        current_call_created_buckets = []
-        if interface.lower() not in BUCKET_MAP:
-            raise RuntimeError(
-                f"Invalid interface type received: {interface}. "
-                f'available types: {", ".join(BUCKET_MAP.keys())}'
+            current_call_created_buckets = []
+            if interface.lower() not in BUCKET_MAP:
+                raise RuntimeError(
+                    f"Invalid interface type received: {interface}. "
+                    f'available types: {", ".join(BUCKET_MAP.keys())}'
+                )
+
+            bucketclass = (
+                bucketclass
+                if bucketclass is None or isinstance(bucketclass, BucketClass)
+                else bucket_class_factory(bucketclass)
             )
 
-        bucketclass = (
-            bucketclass
-            if bucketclass is None or isinstance(bucketclass, BucketClass)
-            else bucket_class_factory(bucketclass)
-        )
-
-        for _ in range(amount):
-            bucket_name = helpers.create_unique_resource_name(
-                resource_description="bucket", resource_type=interface.lower()
-            )
-            created_bucket = BUCKET_MAP[interface.lower()](
-                bucket_name,
-                mcg=mcg_obj,
-                rgw=rgw_obj,
-                bucketclass=bucketclass,
-                replication_policy=replication_policy,
-                *args,
-                **kwargs,
-            )
-            current_call_created_buckets.append(created_bucket)
-            created_buckets.append(created_bucket)
-            if verify_health:
-                created_bucket.verify_health(
-                    timeout=kwargs.pop("timeout") if "timeout" in kwargs else 180,
+            for _ in range(amount):
+                bucket_name = helpers.create_unique_resource_name(
+                    resource_description="bucket", resource_type=interface.lower()
+                )
+                created_bucket = BUCKET_MAP[interface.lower()](
+                    bucket_name,
+                    mcg=mcg_obj,
+                    rgw=rgw_obj,
+                    bucketclass=bucketclass,
+                    replication_policy=replication_policy,
+                    *args,
                     **kwargs,
                 )
+                current_call_created_buckets.append(created_bucket)
+                created_buckets.append(created_bucket)
+                if verify_health:
+                    created_bucket.verify_health(
+                        timeout=kwargs.pop("timeout") if "timeout" in kwargs else 180,
+                        **kwargs,
+                    )
 
         return current_call_created_buckets
 
     def bucket_cleanup():
-        for bucket in created_buckets:
-            log.info(f"Cleaning up bucket {bucket.name}")
-            try:
-                bucket.delete()
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "NoSuchBucket":
-                    log.warning(f"{bucket.name} could not be found in cleanup")
-                else:
-                    raise
+        with cluster_context():
+            for bucket in created_buckets:
+                log.info(f"Cleaning up bucket {bucket.name}")
+                try:
+                    bucket.delete()
+                except ClientError as e:
+                    if e.response["Error"]["Code"] == "NoSuchBucket":
+                        log.warning(f"{bucket.name} could not be found in cleanup")
+                    else:
+                        raise
 
     request.addfinalizer(bucket_cleanup)
 
@@ -6256,7 +6264,11 @@ def mcg_account_factory(request, mcg_obj_session):
     return mcg_account_factory_fixture(request, mcg_obj_session)
 
 
-def mcg_account_factory_fixture(request, mcg_obj_session):
+def mcg_account_factory_fixture(
+    request,
+    mcg_obj_session,
+    cluster_context=ocsci_config.RunWithProviderConfigContextIfAvailable,
+):
     created_accounts = []
 
     def mcg_account_factory_implementation(
@@ -6297,38 +6309,39 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         if gid == -1:
             gid = random.randint(1000, 10000)
 
-        # Build the mcg-cli command for creating an account
-        cli_cmd = (
-            f"account create {name} "
-            f"--allow_bucket_create={allow_bucket_create} "
-            f"--default_resource {default_resource} "
-            f"--gid {gid} "
-            f"--new_buckets_path {new_buckets_path} "
-            f"--nsfs_account_config={nsfs_account_config} "
-            f"--nsfs_only={nsfs_only} "
-            f"--uid {uid} "
-        )
+        with cluster_context():
+            # Build the mcg-cli command for creating an account
+            cli_cmd = (
+                f"account create {name} "
+                f"--allow_bucket_create={allow_bucket_create} "
+                f"--default_resource {default_resource} "
+                f"--gid {gid} "
+                f"--new_buckets_path {new_buckets_path} "
+                f"--nsfs_account_config={nsfs_account_config} "
+                f"--nsfs_only={nsfs_only} "
+                f"--uid {uid} "
+            )
 
-        # Create the account
-        acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
-        created_accounts.append(name)
+            # Create the account
+            acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
+            created_accounts.append(name)
 
-        # Verify that the account was created successfuly and that the response contains the needed data
-        assert "access_key" in str(acc_creation_process_output).lower(), (
-            "Did not find access_key in account creation response. Response:"
-            f" {str(acc_creation_process_output)}"
-        )
+            # Verify that the account was created successfuly and that the response contains the needed data
+            assert "access_key" in str(acc_creation_process_output).lower(), (
+                "Did not find access_key in account creation response. Response:"
+                f" {str(acc_creation_process_output)}"
+            )
 
-        # Prepare the credentials dict
-        acc_secret_dict = OCP(
-            kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-        ).get(f"noobaa-account-{name}")
-        access_key_id = base64.b64decode(
-            acc_secret_dict["data"]["AWS_ACCESS_KEY_ID"]
-        ).decode()
-        access_key = base64.b64decode(
-            acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"]
-        ).decode()
+            # Prepare the credentials dict
+            acc_secret_dict = OCP(
+                kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+            ).get(f"noobaa-account-{name}")
+            access_key_id = base64.b64decode(
+                acc_secret_dict["data"]["AWS_ACCESS_KEY_ID"]
+            ).decode()
+            access_key = base64.b64decode(
+                acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"]
+            ).decode()
 
         return {
             "access_key_id": access_key_id,
@@ -6338,12 +6351,13 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         }
 
     def mcg_account_factory_cleanup():
-        for acc_name in created_accounts:
-            log.info(f"Deleting MCG account {acc_name}")
-            deletion_process_output = mcg_obj_session.exec_mcg_cmd(
-                f"account delete {acc_name}"
-            )
-            assert "Deleted" in str(deletion_process_output)
+        with cluster_context():
+            for acc_name in created_accounts:
+                log.info(f"Deleting MCG account {acc_name}")
+                deletion_process_output = mcg_obj_session.exec_mcg_cmd(
+                    f"account delete {acc_name}"
+                )
+                assert "Deleted" in str(deletion_process_output)
 
     request.addfinalizer(mcg_account_factory_cleanup)
     return mcg_account_factory_implementation
