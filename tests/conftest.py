@@ -10408,3 +10408,19 @@ def distribute_storage_classes_to_all_consumers():
 def disable_debug_logs():
     log.info("Disabling debug logs for the current session")
     logging.disable(logging.DEBUG)
+
+
+@pytest.fixture(scope="session")
+def enable_reclaimspace_on_storageclass():
+    """
+    Enable reclaim space on storage class
+    """
+
+    def factory(sc_obj):
+        """
+
+
+        Args:
+            sc_obj (_type_): _description_
+        """
+        sc_obj.anno
