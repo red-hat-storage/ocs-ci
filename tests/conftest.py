@@ -9331,6 +9331,7 @@ def benchmark_workload_storageutilization(request):
         is_completed=True,
         numjobs=1,
         iodepth=16,
+        max_servers=20,
     ):
         """
         Setup of benchmark fio
@@ -9347,6 +9348,7 @@ def benchmark_workload_storageutilization(request):
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
             numjobs (int): Number of threads per job
             iodepth (int): I/O queue depth
+            max_servers (int): Maximum number of fio server pods to deploy.
 
         Returns:
             BenchmarkOperatorFIO: The Benchmark operator FIO object
@@ -9357,6 +9359,7 @@ def benchmark_workload_storageutilization(request):
         size = retry(CommandFailed, tries=6, delay=20, backoff=1)(get_file_size)(
             target_percentage
         )
+        log.info(f"Total size = {size}")
         benchmark_obj = BenchmarkOperatorFIO()
         benchmark_obj.setup_benchmark_fio(
             total_size=size,
@@ -9369,6 +9372,7 @@ def benchmark_workload_storageutilization(request):
             use_kustomize_build=use_kustomize_build,
             numjobs=numjobs,
             iodepth=iodepth,
+            max_servers=max_servers,
         )
         benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 
