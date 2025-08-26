@@ -4163,7 +4163,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             )
             if orchestrator_controller.is_exist():
                 logger.info(
-                    f"{constants.DEPLOYMENT} {constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER} already exists"
+                    f"{constants.DEPLOYMENT} {constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER} "
+                    f"already exists"
                 )
                 orchestrator_controller.wait_for_resource(
                     condition="1", column="AVAILABLE", resource_count=1, timeout=300
