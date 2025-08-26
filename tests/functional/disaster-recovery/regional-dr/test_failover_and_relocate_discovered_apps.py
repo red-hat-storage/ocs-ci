@@ -216,7 +216,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             vrg_name=rdr_workload.discovered_apps_placement_name,
         )
 
-
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
         dr_helpers.wait_for_all_resources_creation(
