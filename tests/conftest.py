@@ -3112,62 +3112,63 @@ def nb_stress_cli_pod_fixture(request, scope_name):
         Pod(): Pod object representing stress cli pod
 
     """
-    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
-    # Create the service-ca configmap to be mounted upon pod creation
-    service_ca_data = templating.load_yaml(constants.STRESS_CLI_SERVICE_CA_YAML)
-    resource_type = scope_name or "caconfigmap"
-    service_ca_configmap_name = create_unique_resource_name(
-        constants.STRESSCLI_SERVICE_CA_CM_NAME, resource_type
-    )
-    service_ca_data["metadata"]["name"] = service_ca_configmap_name
-    service_ca_data["metadata"]["namespace"] = namespace
-    s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
-    service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        # Create the service-ca configmap to be mounted upon pod creation
+        service_ca_data = templating.load_yaml(constants.STRESS_CLI_SERVICE_CA_YAML)
+        resource_type = scope_name or "caconfigmap"
+        service_ca_configmap_name = create_unique_resource_name(
+            constants.STRESSCLI_SERVICE_CA_CM_NAME, resource_type
+        )
+        service_ca_data["metadata"]["name"] = service_ca_configmap_name
+        service_ca_data["metadata"]["namespace"] = namespace
+        s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
+        service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
 
-    log.info("Trying to create the Stress CLI service CA")
-    service_ca_configmap = create_resource(**service_ca_data)
-    OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
-        resource_name=service_ca_configmap.name, column="DATA", condition="1"
-    )
-
-    log.info("Creating the Stress CLI StatefulSet")
-    stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
-    stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
-        "name"
-    ] = service_ca_configmap_name
-    stress_cli_sts_dict["metadata"]["namespace"] = namespace
-    update_container_with_mirrored_image(stress_cli_sts_dict)
-    update_container_with_proxy_env(stress_cli_sts_dict)
-    stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
-
-    log.info("Verifying the AWS CLI StatefulSet is running")
-    assert stress_cli_sts_obj, "Failed to create S3CLI STS"
-
-    wait_for_pods_by_label_count(
-        constants.STRESS_CLI_APP_LABEL, expected_count=2, namespace=namespace
-    )
-    stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
-        lambda: [
-            Pod(**pod_info)
-            for pod_info in get_pods_having_label(
-                constants.STRESS_CLI_APP_LABEL, namespace
-            )
-        ]
-    )()
-    for pod_obj in stress_cli_pod_objs:
-        wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
-
-        pod_obj.exec_cmd_on_pod(
-            f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+        log.info("Trying to create the Stress CLI service CA")
+        service_ca_configmap = create_resource(**service_ca_data)
+        OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
+            resource_name=service_ca_configmap.name, column="DATA", condition="1"
         )
 
-        if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
-            "rgw_secure"
-        ):
-            log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
+        log.info("Creating the Stress CLI StatefulSet")
+        stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
+        stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
+            "name"
+        ] = service_ca_configmap_name
+        stress_cli_sts_dict["metadata"]["namespace"] = namespace
+        update_container_with_mirrored_image(stress_cli_sts_dict)
+        update_container_with_proxy_env(stress_cli_sts_dict)
+        stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
+
+        log.info("Verifying the AWS CLI StatefulSet is running")
+        assert stress_cli_sts_obj, "Failed to create S3CLI STS"
+
+        wait_for_pods_by_label_count(
+            constants.STRESS_CLI_APP_LABEL, expected_count=2, namespace=namespace
+        )
+        stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
+            lambda: [
+                Pod(**pod_info)
+                for pod_info in get_pods_having_label(
+                    constants.STRESS_CLI_APP_LABEL, namespace
+                )
+            ]
+        )()
+        for pod_obj in stress_cli_pod_objs:
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
+
             pod_obj.exec_cmd_on_pod(
-                f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+                f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
             )
+
+            if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
+                "rgw_secure"
+            ):
+                log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
+                pod_obj.exec_cmd_on_pod(
+                    f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+                )
 
     def cleanup():
         """
