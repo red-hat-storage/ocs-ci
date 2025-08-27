@@ -464,6 +464,7 @@ class Deployment(object):
                 )
                 package_manifest = PackageManifest(
                     resource_name=constants.OADP_OPERATOR_NAME,
+                    selector="catalog=redhat-operators",
                 )
                 oadp_default_channel = package_manifest.get_default_channel()
                 oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
