@@ -165,8 +165,8 @@ class Initializer(object):
         # General properties
         props = {}
         props["run_id"] = config.RUN.get("run_id")
-        props["cluster_path"] = config.ENV_DATA.get("cluster_path")
-        props["logs_dir"] = config.RUN.get("log_dir")
+        props["cluster_path"] = config.RUN.get("cluster_dir_full_path")
+        props["logs_url"] = config.RUN.get("logs_url")
         props["ocp_version"] = get_running_ocp_version(
             kubeconfig=config.RUN["kubeconfig"]
         )
