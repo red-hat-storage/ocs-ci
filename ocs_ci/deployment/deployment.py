@@ -573,7 +573,7 @@ class Deployment(object):
                     templating.dump_data_to_temp_yaml(
                         oadp_subscription_yaml_data, oadp_subscription_manifest.name
                     )
-                    run_cmd(f"oc create -f {oadp_subscription_manifest.name}")
+                    run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
                     self.wait_for_subscription(
                         constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
                     )
