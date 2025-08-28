@@ -354,7 +354,7 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(
                 managedclustersetbinding_obj, managedclustersetbinding.name
             )
-            run_cmd(f"oc create -f {managedclustersetbinding.name}")
+            run_cmd(f"oc apply -f {managedclustersetbinding.name}")
 
             gitops_obj = ocp.OCP(
                 resource_name=constants.GITOPS_CLUSTER_NAME,
@@ -372,7 +372,7 @@ class Deployment(object):
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
                     config.switch_to_cluster_by_name(cluster["metadata"]["name"])
                     exec_cmd(
-                        f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
+                        f"oc apply -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
                     )
 
     def do_deploy_ocs(self):
