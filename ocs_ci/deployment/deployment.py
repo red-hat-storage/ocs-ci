@@ -1829,6 +1829,9 @@ class Deployment(object):
         upgrade_osd_requires_healthy_pgs = config.ENV_DATA.get(
             "upgrade_osd_requires_healthy_pgs"
         )
+        wipe_devices_from_other_clusters = config.ENV_DATA.get(
+            "wipe_devices_from_other_clusters", False
+        )
 
         set_managed_resources_ceph_cluster = (
             wait_timeout_for_healthy_osd_in_minutes
@@ -1839,6 +1842,7 @@ class Deployment(object):
             or skip_upgrade_checks is not None
             or continue_upgrade_after_checks_even_if_not_healthy is not None
             or upgrade_osd_requires_healthy_pgs is not None
+            or wipe_devices_from_other_clusters
         )
         if set_managed_resources_ceph_cluster:
             cluster_data.setdefault("spec", {}).setdefault(
@@ -1881,6 +1885,13 @@ class Deployment(object):
                 managed_resources_ceph_cluster["upgradeOSDRequiresHealthyPGs"] = (
                     upgrade_osd_requires_healthy_pgs
                 )
+            # Flag to enable wiping devices that were used by other Ceph clusters
+            if wipe_devices_from_other_clusters:
+                logger.info(
+                    "Enabling cleanupPolicy.wipeDevicesFromOtherClusters on CephCluster"
+                )
+                cp = managed_resources_ceph_cluster.setdefault("cleanupPolicy", {})
+                cp["wipeDevicesFromOtherClusters"] = True
 
         storage_cluster_override = config.DEPLOYMENT.get("storage_cluster_override", {})
         if storage_cluster_override:
