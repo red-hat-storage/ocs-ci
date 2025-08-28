@@ -2835,10 +2835,13 @@ class Deployment(object):
             constants.ACM_CATALOGSOURCE_YAML
         )
 
-        acm_konflux_catsrc_yaml_data["spec"]["image"] = (
-            f"{constants.ACM_CATSRC_IMAGE}:{config.ENV_DATA.get('acm_unreleased_image')}"
-            or f"{constants.ACM_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('acm_version')}"
+        acm_image_tag = (
+            config.ENV_DATA.get("acm_unreleased_image")
+            or f"latest-{config.ENV_DATA.get('acm_version')}"
         )
+        acm_konflux_catsrc_yaml_data["spec"][
+            "image"
+        ] = f"{constants.ACM_CATSRC_IMAGE}:{acm_image_tag}"
 
         acm_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_konflux_catsrc_yaml_data_manifest", delete=False
