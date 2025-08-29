@@ -731,7 +731,7 @@ def default_storage_class(
             column="NAME",
             timeout=240,
         )
-    except TimeoutExpiredError:
+    except (CommandFailed, TimeoutExpiredError):
         logger.error(
             f"Storage class {resource_name} not found due to bug DFBUGS-3791. "
             f"Applying workaround to fix the issue"
@@ -750,6 +750,9 @@ def default_storage_class(
         )
         cmd = f"oc patch storageclient ocs-storagecluster --subresource status --type merge -p '{patch}'"
         exec_cmd(cmd)
+        waiting_time = 60
+        logger.info(f"Sleeping for {waiting_time} seconds to create Storage classes")
+        time.sleep(waiting_time)
     sc = OCS(**base_sc.data)
     return sc
 
