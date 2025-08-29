@@ -654,6 +654,11 @@ skipif_vsphere_ipi = pytest.mark.skipif(
     reason="Test will not run on vSphere IPI cluster",
 )
 
+skipif_vsphere_platform = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() == "vsphere"),
+    reason="Test will not run on vSphere cluster",
+)
+
 skipif_tainted_nodes = pytest.mark.skipif(
     config.DEPLOYMENT.get("infra_nodes") is True
     or config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0,
