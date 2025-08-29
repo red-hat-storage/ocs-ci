@@ -1,0 +1,23 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  dummy_zone_node_labels: true
+  network_split_setup: true
+  network_zone_latency: 5
+  make_master_schedulable: true
+  arbiter_hci: true
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'upi'
+  worker_replicas: 4
+  master_replicas: 3
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+  worker_availability_zones:
+    - 'data-1'
+    - 'data-2'
+  master_availability_zones:
+    - 'arbiter'
+    - 'data-1'
+    - 'data-2'
+  extra_disks: 2
