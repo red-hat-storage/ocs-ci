@@ -655,11 +655,21 @@ def create_ceph_file_system(cephfs_name=None, label=None, namespace=None):
     return cephfs_data
 
 
+@retry(
+    CommandFailed,
+    tries=6,
+    delay=30,
+    backoff=1,
+)
 def default_storage_class(
     interface_type,
 ):
     """
     Return default storage class based on interface_type
+
+    This function usually runs as one of the first functions after the StorageCluster CR is applied.
+    This makes the function more prone to failures when DF/DF Client operators have not finalized provisioning;
+    retry adds redundancy to the function.
 
     Args:
         interface_type (str): The type of the interface

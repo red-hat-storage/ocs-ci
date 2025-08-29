@@ -69,6 +69,7 @@ from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.ssl_certs import (
@@ -208,6 +209,23 @@ def verify_backing_ceph_storage_for_clients():
 
     all_checks = [check_consumers_svg(), check_consumers_rns()]
     return all(all_checks)
+
+
+def enable_nested_virtualization():
+    """
+    Enable nested virtualization for the hosted OCP cluster
+    """
+    # Enable nested virtualization on nodes
+    machine_config_data = templating.load_yaml(
+        constants.MACHINE_CONFIG_YAML, multi_document=True
+    )
+    templating.dump_data_to_temp_yaml(
+        machine_config_data, constants.MACHINE_CONFIG_YAML
+    )
+    ocp_obj = ocp.OCP()
+    ocp_obj.exec_oc_cmd(f"apply -f {constants.MACHINE_CONFIG_YAML}")
+    wait_for_machineconfigpool_status(node_type="all")
+    logger.info("All the nodes are upgraded")
 
 
 class HostedClients(HyperShiftBase):

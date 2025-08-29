@@ -2,8 +2,11 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
+  host_network: true
 ENV_DATA:
   platform: 'hci_baremetal'
   deployment_type: 'ai'
+  cluster_type: 'provider'
+  odf_provider_mode_deployment: true
   worker_replicas: 3
   master_replicas: 3

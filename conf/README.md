@@ -178,6 +178,8 @@ version.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
 * `storage_cluster_override` - Dictionary with data which will allow you to dynamically override data in storageCluster CR.
 * `konflux_build` - Set to True if build is made by Konflux build system.
+* `enable_nested_virtualization` - Enable nested virtualization for vSphere platform primarily. Used for kubevirt on HCP Clusters. It sets options kvm_intel nested=1 options kvm_amd nested=1 in MachineConfig
+* `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
 
 #### REPORTING
 
