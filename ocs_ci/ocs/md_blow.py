@@ -33,6 +33,11 @@ class MdBlow(object):
         self.password = self.creds["password"]
         self.noobaa_core_pod = get_noobaa_core_pod()
         self.noobaa_db_pod = get_noobaa_db_pod()
+
+    def increase_core_pod_cpu_memory(self):
+        """
+        Increase memory to 4Gi and CPU to 6 for faster IO operations
+        """
         namespace = config.ENV_DATA["cluster_namespace"]
         storage_cluster = constants.DEFAULT_STORAGE_CLUSTER
 
@@ -40,6 +45,23 @@ class MdBlow(object):
         ptch_cmd = (
             f"oc patch storagecluster {storage_cluster} "
             f"-n {namespace}  --type merge --patch '{ptch}'"
+        )
+        run_cmd(ptch_cmd)
+        logger.info("Wait for noobaa-core pod move to Running state")
+        helpers.wait_for_resource_state(
+            self.noobaa_core_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
+
+    def reduce_core_pod_cpu_memory(self):
+        """
+        Reduce memory and CPU to default values
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        storage_cluster = constants.DEFAULT_STORAGE_CLUSTER
+        params = """[{{"op": "remove", "path": "/spec/resources/"}}]"""
+        ptch_cmd = (
+            f"oc patch storagecluster {storage_cluster} "
+            f"-n {namespace} --patch '{params}' --type=json"
         )
         run_cmd(ptch_cmd)
         logger.info("Wait for noobaa-core pod move to Running state")
