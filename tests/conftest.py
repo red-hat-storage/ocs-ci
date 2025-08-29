@@ -3461,19 +3461,27 @@ def bucket_factory_fixture(
         return current_call_created_buckets
 
     def bucket_cleanup():
-        for bucket in created_buckets:
-            log.info(f"Cleaning up bucket {bucket.name}")
-            try:
-                bucket.delete()
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "NoSuchBucket":
-                    log.warning(f"{bucket.name} could not be found in cleanup")
-                else:
-                    raise
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            for bucket in created_buckets:
+                log.info(f"Cleaning up bucket {bucket.name}")
+                try:
+                    bucket.delete()
+                except ClientError as e:
+                    if e.response["Error"]["Code"] == "NoSuchBucket":
+                        log.warning(f"{bucket.name} could not be found in cleanup")
+                    else:
+                        raise
 
     request.addfinalizer(bucket_cleanup)
 
-    return _create_buckets
+    def _create_buckets_wrapper(*args, **kwargs):
+        """
+        Create resources on the Provider in Provier-Client deployments
+        """
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            return _create_buckets(*args, **kwargs)
+
+    return _create_buckets_wrapper
 
 
 @pytest.fixture(scope="class")
@@ -3487,7 +3495,8 @@ def cloud_uls_factory(request, cld_mgr):
            an Underlying Storage factory
 
     """
-    return cloud_uls_factory_implementation(request, cld_mgr)
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        return cloud_uls_factory_implementation(request, cld_mgr)
 
 
 @pytest.fixture(scope="session")
@@ -3501,7 +3510,8 @@ def cloud_uls_factory_session(request, cld_mgr):
            an Underlying Storage factory
 
     """
-    return cloud_uls_factory_implementation(request, cld_mgr)
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        return cloud_uls_factory_implementation(request, cld_mgr)
 
 
 @pytest.fixture(scope="function")
