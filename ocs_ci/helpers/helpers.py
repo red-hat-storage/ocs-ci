@@ -668,6 +668,8 @@ def default_storage_class(
     Returns:
         OCS: Existing StorageClass Instance
     """
+    from ocs_ci.ocs.resources.storageconsumer import StorageConsumer
+
     external = config.DEPLOYMENT["external_mode"]
     rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
     custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
@@ -723,11 +725,31 @@ def default_storage_class(
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
-    base_sc.wait_for_resource(
-        condition=resource_name,
-        column="NAME",
-        timeout=240,
-    )
+    try:
+        base_sc.wait_for_resource(
+            condition=resource_name,
+            column="NAME",
+            timeout=240,
+        )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Storage class {resource_name} not found due to bug DFBUGS-3791. "
+            f"Applying workaround to fix the issue"
+        )
+        consumer_context = config.cluster_ctx.ENV_DATA.get(
+            "default_cluster_context_index", 0
+        )
+        storage_consumer = StorageConsumer(
+            constants.INTERNAL_STORAGE_CONSUMER_NAME,
+            config.ENV_DATA["cluster_namespace"],
+            consumer_context,
+        )
+        storage_consumer_uid = storage_consumer.get_uid()
+        patch = json.dumps(
+            {"status": {"phase": "Connected", "id": storage_consumer_uid}}
+        )
+        cmd = f"oc patch storageclient ocs-storagecluster --subresource status --type merge -p '{patch}'"
+        exec_cmd(cmd)
     sc = OCS(**base_sc.data)
     return sc
 
