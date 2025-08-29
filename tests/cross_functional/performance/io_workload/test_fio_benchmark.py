@@ -452,6 +452,17 @@ class TestFIOBenchmark(PASTest):
         # Setting the global parameters of the test
         full_results.add_key("io_pattern", io_pattern)
 
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = epoch_gmte - epoch_gmts
+
+        self.test_duration
+
+        self.deploy_odf_grafana()
+
         # Clean up fio benchmark
         self.cleanup()
 
