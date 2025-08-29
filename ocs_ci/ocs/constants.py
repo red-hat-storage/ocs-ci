@@ -230,6 +230,7 @@ CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
 VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
+RECLAIMSPACEJOBS = "reclaimspacejobs"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
 # Deprecated in favour of StorageClaim starting from 4.16
@@ -3533,3 +3534,5 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
