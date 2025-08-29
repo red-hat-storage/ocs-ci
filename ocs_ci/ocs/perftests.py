@@ -436,7 +436,7 @@ class PASTest(BaseTest):
         time.sleep(15)
         log.info(f"The benchmark pod {self.client_pod_name} is Running")
 
-    def wait_for_wl_to_finish(self, timeout=18000, sleep=300):
+    def wait_for_wl_to_finish(self, wl_namespace=None, timeout=18000, sleep=300):
         """
         Waiting until the workload is finished and get the test log
 
@@ -450,6 +450,8 @@ class PASTest(BaseTest):
             TimeoutExpiredError : test did not completed on time.
 
         """
+        if wl_namespace==None:
+            wl_namespace = benchmark_operator.BMO_NAME
         log.info(f"Waiting for {self.client_pod_name} to complete")
 
         Finished = 0
@@ -458,7 +460,7 @@ class PASTest(BaseTest):
         while not Finished and total_time > 0:
             results = run_oc_command(
                 "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
-                namespace=benchmark_operator.BMO_NAME,
+                namespace=wl_namespace,
             )
             (fname, status) = ["", ""]
             for name in results:
