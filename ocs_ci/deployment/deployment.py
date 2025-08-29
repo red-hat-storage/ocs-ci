@@ -269,14 +269,18 @@ class Deployment(object):
         )
 
         logger.info("Creating Namespace for GitOps Operator ")
-        run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
+        gitops_namespace = OCP(
+            kind=constants.NAMESPACE, resource_name=constants.GITOPS_NAMESPACE
+        )
+        if not gitops_namespace.is_exist():
+            run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
 
         logger.info("Creating OperatorGroup for GitOps Operator ")
-        run_cmd(f"oc create -f {constants.GITOPS_OPERATORGROUP_YAML}")
+        run_cmd(f"oc apply -f {constants.GITOPS_OPERATORGROUP_YAML}")
 
         logger.info("Creating GitOps Operator Subscription")
 
-        run_cmd(f"oc create -f {constants.GITOPS_SUBSCRIPTION_YAML}")
+        run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
         self.wait_for_subscription(
             constants.GITOPS_OPERATOR_NAME, namespace=constants.GITOPS_NAMESPACE
@@ -311,10 +315,10 @@ class Deployment(object):
             config.switch_ctx(get_active_acm_index())
 
             logger.info("Creating GitOps CLuster Resource")
-            run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")
+            run_cmd(f"oc apply -f {constants.GITOPS_CLUSTER_YAML}")
 
             logger.info("Creating GitOps CLuster Placement Resource")
-            run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
+            run_cmd(f"oc apply -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
             cluster_set = config.ENV_DATA.get("cluster_set") or get_cluster_set_name()
@@ -333,7 +337,7 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(
                 managedclustersetbinding_obj, managedclustersetbinding.name
             )
-            run_cmd(f"oc create -f {managedclustersetbinding.name}")
+            run_cmd(f"oc apply -f {managedclustersetbinding.name}")
 
             gitops_obj = ocp.OCP(
                 resource_name=constants.GITOPS_CLUSTER_NAME,
@@ -351,7 +355,7 @@ class Deployment(object):
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
                     config.switch_to_cluster_by_name(cluster["metadata"]["name"])
                     exec_cmd(
-                        f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
+                        f"oc apply -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
                     )
 
     def do_deploy_ocs(self):
@@ -507,7 +511,7 @@ class Deployment(object):
                     logger.info(
                         "Creating namespace and operator group for Openshift-oadp"
                     )
-                    run_cmd(f"oc create -f {constants.OADP_NS_YAML}")
+                    run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
                     logger.info("Creating OADP Operator Subscription")
                     oadp_subscription_yaml_data = templating.load_yaml(
                         constants.OADP_SUBSCRIPTION_YAML
@@ -557,7 +561,7 @@ class Deployment(object):
                     templating.dump_data_to_temp_yaml(
                         oadp_subscription_yaml_data, oadp_subscription_manifest.name
                     )
-                    run_cmd(f"oc create -f {oadp_subscription_manifest.name}")
+                    run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
                     self.wait_for_subscription(
                         constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
                     )
@@ -767,8 +771,8 @@ class Deployment(object):
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
-        self.do_deploy_rdr()
         self.do_deploy_odf_provider_mode()
+        self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
@@ -3154,7 +3158,10 @@ class RBDDRDeployOps(object):
     """
 
     def deploy(self):
-        self.configure_rbd()
+        # TODO: Skip this check for now in client clusters.
+        #  This should be enhanced to get details from the provider cluster
+        if config.hci_client_exist():
+            self.configure_rbd()
 
     @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
@@ -3176,7 +3183,9 @@ class RBDDRDeployOps(object):
             expected_state = "true"
 
         out_list = run_cmd_multicluster(
-            cmd, skip_index=get_all_acm_and_recovery_indexes()
+            cmd,
+            skip_index=get_all_acm_and_recovery_indexes()
+            + config.get_consumer_indexes_list(raise_exception=False),
         )
         index = 0
         for out in out_list:
@@ -3184,6 +3193,14 @@ class RBDDRDeployOps(object):
                 continue
             logger.info(out.stdout.decode())
             if out.stdout.decode() != expected_state:
+                # If there are more than one cephblockpoolradosnamespaces resource
+                if resource_name == constants.CEPHBLOCKPOOLRADOSNS:
+                    item_states = out.stdout.decode().strip().split()
+                    if all(
+                        rns_state.strip() == expected_state for rns_state in item_states
+                    ):
+                        index = +1
+                        continue
                 logger.error(
                     f"On cluster {config.clusters[index].ENV_DATA['cluster_name']}"
                 )
@@ -3418,6 +3435,13 @@ class MultiClusterDROperatorsDeploy(object):
                     "cluster_name"
                 ]
             index += 1
+
+        # Use unique cluster name to easily identify the managed clusters
+        pirror_peer_name = "mirrorpeer"
+        for cluster_info in mirror_peer_data["spec"]["items"]:
+            pirror_peer_name = pirror_peer_name + "-" + cluster_info["clusterName"]
+        mirror_peer_data["metadata"]["name"] = pirror_peer_name
+
         templating.dump_data_to_temp_yaml(mirror_peer_data, mirror_peer_yaml.name)
         # Current CTX: ACM
         # Just being explicit here to make code more readable
@@ -4023,6 +4047,23 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
             config.switch_ctx(i)
+            # Verify whether the multicluster orchestrator deployment exists and available.
+            # This might be already present if the ACM hub cluster is already prepared for RDR
+            # with another set of managed clusters
+            orchestrator_controller = ocp.OCP(
+                kind=constants.DEPLOYMENT,
+                resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
+                namespace=constants.OPENSHIFT_OPERATORS,
+            )
+            if orchestrator_controller.is_exist():
+                logger.info(
+                    f"{constants.DEPLOYMENT} {constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER} "
+                    f"already exists"
+                )
+                orchestrator_controller.wait_for_resource(
+                    condition="1", column="AVAILABLE", resource_count=1, timeout=300
+                )
+                continue
             self.deploy_dr_multicluster_orchestrator()
             # Enable MCO console plugin
             enable_mco_console_plugin()
@@ -4037,7 +4078,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             rbddops = RBDDRDeployOps()
             self.configure_mirror_peer()
             rbddops.deploy()
-        self.enable_acm_observability()
+
+        multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
+        if not multicluster_observability.get(dont_raise=True):
+            # TODO: Check whether this need to be enabled for each pair of RDR clusters
+            self.enable_acm_observability()
 
         self.deploy_dr_policy()
         if odf_running_version >= version.VERSION_4_19:
@@ -4045,6 +4090,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             validate_storage_cluster_peer_state()
             verify_volsync()
 
+        # TODO: Skip backup configuration if the managed clusters under test is client clusters
+        #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
+        #  This should be updated for the client clusters
+        if config.hci_client_exist():
+            return
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
             config.switch_ctx(i)
