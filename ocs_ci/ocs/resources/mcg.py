@@ -9,6 +9,7 @@ from time import sleep
 import time
 
 import boto3
+import botocore.config
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
@@ -1272,12 +1273,22 @@ class MCG:
         self.data_to_mask.extend(flatten_multilevel_dict(admin_credentials))
         self.noobaa_token = self.retrieve_nb_token()
 
+        # Increase boto3's built-in retry configuration to handle transient errors
+        # it uses exponential backoff with a base delay of 0.5 seconds
+        # so with max_attempts=8, backoff is around one minute:
+        # 0.5 * 2^7 = 64
+        retry_cfg = botocore.config.Config(
+            retries={
+                "max_attempts": 8,
+            }
+        )
         self.s3_resource = boto3.resource(
             "s3",
             verify=retrieve_verification_mode(),
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key,
+            config=retry_cfg,
         )
 
         self.s3_client = self.s3_resource.meta.client
