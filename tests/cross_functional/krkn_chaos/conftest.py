@@ -13,6 +13,13 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd
 
+from contextlib import suppress
+
+from ocs_ci.ocs import constants
+from ocs_ci.helpers.vdbench_helpers import create_temp_config_file
+from ocs_ci.ocs.utils import label_pod_security_admission
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+
 log = logging.getLogger(__name__)
 
 
@@ -99,3 +106,129 @@ def krkn_scenario_directory():
     dir_path = os.path.join(KRKN_CHAOS_SCENARIO_DIR, random_dir_name)
     os.makedirs(dir_path, exist_ok=True)
     return dir_path
+
+
+class WorkloadOps:
+    """
+    Helper to manage VDBENCH workloads life cycle (create -> validate -> cleanup).
+    """
+
+    def __init__(self, proj_obj, workloads):
+        self.proj_obj = proj_obj
+        self.workloads = workloads
+
+    @property
+    def namespace(self):
+        return self.proj_obj.namespace
+
+    def validate_and_cleanup(self):
+        """
+        Validate workload results and stop/cleanup all workloads.
+        """
+        validation_errors = []
+        for workload in self.workloads:
+            try:
+                result = workload.workload_impl.get_all_deployment_pod_logs()
+                workload.stop_workload()
+
+                if not result:
+                    validation_errors.append(
+                        f"Workload {workload.workload_impl.deployment_name} returned no logs after network outage"
+                    )
+                elif "error" in result.lower():
+                    validation_errors.append(
+                        f"Workload {workload.workload_impl.deployment_name} failed after network outage"
+                    )
+
+                workload.cleanup_workload()
+
+            except UnexpectedBehaviour as e:
+                validation_errors.append(
+                    f"Failed to get results for workload {workload.workload_impl.deployment_name}: {e}"
+                )
+
+        if validation_errors:
+            log.error("Workload validation errors:\n" + "\n".join(validation_errors))
+            pytest.fail("Workload validation failed.")
+
+        log.info("All workloads passed validation after network outage injection.")
+
+
+@pytest.fixture
+def workload_ops(
+    project_factory,
+    multi_pvc_factory,
+    resiliency_workload,
+    vdbench_block_config,
+    vdbench_filesystem_config,
+):
+    """
+    Creates a project, labels it for PSA, provisions PVCs, starts VDBENCH workloads,
+    and yields a WorkloadOps helper with (namespace, workloads, validate_and_cleanup()).
+
+    Ensures best-effort cleanup even if the test fails early.
+    """
+    proj_obj = project_factory()
+    label_pod_security_admission(namespace=proj_obj.namespace)
+
+    def get_fs_config():
+        return create_temp_config_file(
+            vdbench_filesystem_config(
+                rdpct=0,
+                size="10m",
+                depth=4,
+                width=5,
+                files=10,
+                threads=10,
+                elapsed=1200,
+                interval=30,
+                anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
+            )
+        )
+
+    def get_blk_config():
+        return create_temp_config_file(
+            vdbench_block_config(threads=10, size="10g", elapsed=1200, interval=30)
+        )
+
+    interface_configs = {
+        constants.CEPHFILESYSTEM: {
+            "access_modes": [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO],
+            "config_file": get_fs_config,
+        },
+        constants.CEPHBLOCKPOOL: {
+            "access_modes": [
+                f"{constants.ACCESS_MODE_RWO}-Block",
+                f"{constants.ACCESS_MODE_RWX}-Block",
+            ],
+            "config_file": get_blk_config,
+        },
+    }
+
+    workloads = []
+    size = 20
+    for interface, cfg in interface_configs.items():
+        pvcs = multi_pvc_factory(
+            interface=interface,
+            project=proj_obj,
+            access_modes=cfg["access_modes"],
+            size=size,
+            num_of_pvc=4,
+        )
+        config_file = cfg["config_file"]()
+        for pvc in pvcs:
+            wl = resiliency_workload("VDBENCH", pvc, vdbench_config_file=config_file)
+            wl.start_workload()
+            workloads.append(wl)
+
+    ops = WorkloadOps(proj_obj, workloads)
+
+    try:
+        yield ops
+    finally:
+        # Best-effort cleanup if the test aborted before calling validate_and_cleanup
+        for w in ops.workloads:
+            with suppress(Exception):
+                w.stop_workload()
+            with suppress(Exception):
+                w.cleanup_workload()
