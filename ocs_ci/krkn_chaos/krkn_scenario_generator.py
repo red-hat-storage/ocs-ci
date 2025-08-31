@@ -382,6 +382,15 @@ class NetworkOutageScenarios:
         Raises:
             ValueError: If neither pod_name nor label_selector provided.
         """
+        # Generate unique filename based on scenario configuration
+        direction_str = "_".join(sorted(direction or ["egress", "ingress"]))
+        ports_str = ""
+        if ingress_ports:
+            ports_str += f"_ingress_{'-'.join(map(str, sorted(ingress_ports)))}"
+        if egress_ports:
+            ports_str += f"_egress_{'-'.join(map(str, sorted(egress_ports)))}"
+
+        filename = f"pod_network_outage_{direction_str}{ports_str}.yaml"
         config = {
             "namespace": namespace,
             "direction": direction or ["egress", "ingress"],
@@ -393,7 +402,7 @@ class NetworkOutageScenarios:
             **_get_pod_selector_config(pod_name, label_selector),
         }
         return NetworkOutageScenarios._create_network_scenario(
-            scenario_dir, "pod_network_outage.yml.j2", config, "pod_network_outage.yaml"
+            scenario_dir, "pod_network_outage.yml.j2", config, filename
         )
 
     @staticmethod
