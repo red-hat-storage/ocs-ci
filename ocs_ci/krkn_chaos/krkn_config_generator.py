@@ -56,15 +56,22 @@ class KrknConfigGenerator:
         self.config_data["kraken"].update(kwargs)
 
     def add_scenario(self, category, scenario_path):
-        """Adds a chaos scenario to the flat list of scenarios.
+        """Adds a chaos scenario under the specified category.
 
         Args:
-            category (str): Scenario category (ignored, kept for compatibility).
+            category (str): Scenario category (e.g., 'network_outage_scenarios').
             scenario_path (str): Path to scenario YAML file.
         """
         scenarios = self.config_data["kraken"]["chaos_scenarios"]
-        # Krkn expects a flat list of scenario files, not categorized
-        scenarios.append(scenario_path)
+
+        # Find existing category or create new one
+        for entry in scenarios:
+            if isinstance(entry, dict) and category in entry:
+                entry[category].append(scenario_path)
+                return
+
+        # Create new category entry
+        scenarios.append({category: [scenario_path]})
 
     def set_cerberus_config(self, enabled=False, url=None, check_routes=False):
         """Sets Cerberus configuration."""
