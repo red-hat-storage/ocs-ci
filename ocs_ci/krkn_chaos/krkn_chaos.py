@@ -25,8 +25,25 @@ class KrKnRunner:
         self.thread = None
         os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
 
+    def _print_config_file(self):
+        """Print the contents of the Krkn config file before execution."""
+        try:
+            log.info(f"Reading Krkn config file: {self.krkn_config}")
+            with open(self.krkn_config, "r", encoding="utf-8") as f:
+                config_contents = f.read()
+                log.info(
+                    f"Krkn config file contents:\n{'='*50}\n{config_contents}\n{'='*50}"
+                )
+        except FileNotFoundError:
+            log.warning(f"Config file {self.krkn_config} not found")
+        except Exception as e:
+            log.warning(f"Failed to read config file {self.krkn_config}: {str(e)}")
+
     def _run_krkn_command(self):
         """Internal method to start the Krkn process."""
+        # Print config file contents before starting
+        self._print_config_file()
+
         krkn_cmd = [
             "python3",
             KRKN_RUN_CMD,
