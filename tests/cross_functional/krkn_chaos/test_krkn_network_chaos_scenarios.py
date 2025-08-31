@@ -39,15 +39,15 @@ class TestKrKnNetworkChaosScenarios:
     """
 
     @pytest.mark.parametrize(
-        "ceph_component_label",
+        "ceph_component_label,instance_count",
         [
-            OSD_APP_LABEL,
-            MGR_APP_LABEL,
-            MON_APP_LABEL,
-            MDS_APP_LABEL,
-            RGW_APP_LABEL,
+            (OSD_APP_LABEL, 2),  # OSDs can handle multiple failures
+            (MGR_APP_LABEL, 1),  # Critical: active/standby pair - conservative
+            (MON_APP_LABEL, 1),  # Critical: NEVER >1 (breaks quorum)
+            (MDS_APP_LABEL, 1),  # Critical: usually 1-2 active - conservative
+            (RGW_APP_LABEL, 2),  # HA design: multiple gateways expected
         ],
-        ids=["osd", "mgr", "mon", "mds", "rgw"],
+        ids=["osd-2pods", "mgr-1pod", "mon-1pod", "mds-1pod", "rgw-2pods"],
     )
     def test_krkn_ceph_component_network_outage(
         self,
@@ -55,6 +55,7 @@ class TestKrKnNetworkChaosScenarios:
         krkn_scenario_directory,
         workload_ops,
         ceph_component_label,
+        instance_count,
     ):
         """
         Test network outage scenarios for different Rook Ceph components.
@@ -68,36 +69,15 @@ class TestKrKnNetworkChaosScenarios:
             krkn_scenario_directory: Directory for scenario files
             workload_ops: Workload operations fixture
             ceph_component_label: Parameterized Ceph component label
+            instance_count: Number of pods to target for chaos injection
         """
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        log.info(f"Testing network outage for Ceph component: {ceph_component_label}")
-
-        # Determine safe instance count based on component type
-        if ceph_component_label in [MON_APP_LABEL, MDS_APP_LABEL, MGR_APP_LABEL]:
-            # Critical components - NEVER increase beyond 1
-            # MON: >1 breaks quorum, MDS: usually 1-2 active, MGR: active/standby pair
-            instance_count = 1
-            log.info(
-                f"Using conservative instance_count=1 for critical component {ceph_component_label}"
-            )
-        elif ceph_component_label == OSD_APP_LABEL:
-            # OSDs can handle multiple failures - typically 6+ OSDs in cluster
-            instance_count = 2
-            log.info(
-                "Using instance_count=2 for OSD component (can handle multiple failures)"
-            )
-        elif ceph_component_label == RGW_APP_LABEL:
-            # RGW designed for HA - multiple gateways expected
-            instance_count = 2
-            log.info("Using instance_count=2 for RGW component (HA design)")
-        else:
-            # Default conservative approach
-            instance_count = 1
-            log.info(
-                f"Using default instance_count=1 for component {ceph_component_label}"
-            )
+        log.info(
+            f"Testing network outage for Ceph component: {ceph_component_label} "
+            f"with instance_count={instance_count}"
+        )
 
         # Create network outage scenarios targeting the specific Ceph component
         scenarios = [
