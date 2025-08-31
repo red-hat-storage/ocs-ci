@@ -112,7 +112,7 @@ class TestKrKnNetworkChaosScenarios:
         # Generate Krkn configuration
         config = KrknConfigGenerator()
         for scenario in scenarios:
-            config.add_scenario("network_outage_scenarios", scenario)
+            config.add_scenario("pod_network_scenarios", scenario)
         config.set_tunings(wait_duration=60, iterations=1)
         config.write_to_file(location=scenario_dir)
 
