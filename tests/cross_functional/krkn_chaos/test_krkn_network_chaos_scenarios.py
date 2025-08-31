@@ -74,6 +74,31 @@ class TestKrKnNetworkChaosScenarios:
 
         log.info(f"Testing network outage for Ceph component: {ceph_component_label}")
 
+        # Determine safe instance count based on component type
+        if ceph_component_label in [MON_APP_LABEL, MDS_APP_LABEL, MGR_APP_LABEL]:
+            # Critical components - NEVER increase beyond 1
+            # MON: >1 breaks quorum, MDS: usually 1-2 active, MGR: active/standby pair
+            instance_count = 1
+            log.info(
+                f"Using conservative instance_count=1 for critical component {ceph_component_label}"
+            )
+        elif ceph_component_label == OSD_APP_LABEL:
+            # OSDs can handle multiple failures - typically 6+ OSDs in cluster
+            instance_count = 2
+            log.info(
+                "Using instance_count=2 for OSD component (can handle multiple failures)"
+            )
+        elif ceph_component_label == RGW_APP_LABEL:
+            # RGW designed for HA - multiple gateways expected
+            instance_count = 2
+            log.info("Using instance_count=2 for RGW component (HA design)")
+        else:
+            # Default conservative approach
+            instance_count = 1
+            log.info(
+                f"Using default instance_count=1 for component {ceph_component_label}"
+            )
+
         # Create network outage scenarios targeting the specific Ceph component
         scenarios = [
             # Test egress and ingress blocking
@@ -82,9 +107,9 @@ class TestKrKnNetworkChaosScenarios:
                 namespace=openshift_storage_ns,
                 direction=["egress", "ingress"],
                 label_selector=ceph_component_label,
-                instance_count=1,
-                wait_duration=180,
-                test_duration=60,
+                instance_count=instance_count,
+                wait_duration=600,
+                test_duration=300,
             ),
             # Test egress-only blocking with specific ports
             NetworkOutageScenarios.pod_network_outage(
@@ -93,9 +118,9 @@ class TestKrKnNetworkChaosScenarios:
                 direction=["egress"],
                 egress_ports=[6789, 6800, 6801, 6802, 6803, 6804, 6805],  # Ceph ports
                 label_selector=ceph_component_label,
-                instance_count=1,
-                wait_duration=180,
-                test_duration=45,
+                instance_count=instance_count,
+                wait_duration=360,
+                test_duration=180,
             ),
             # Test ingress-only blocking
             NetworkOutageScenarios.pod_network_outage(
@@ -103,9 +128,9 @@ class TestKrKnNetworkChaosScenarios:
                 namespace=openshift_storage_ns,
                 direction=["ingress"],
                 label_selector=ceph_component_label,
-                instance_count=1,
-                wait_duration=180,
-                test_duration=30,
+                instance_count=instance_count,
+                wait_duration=240,
+                test_duration=120,
             ),
         ]
 
