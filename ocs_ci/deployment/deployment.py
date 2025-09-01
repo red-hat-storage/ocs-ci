@@ -760,7 +760,11 @@ class Deployment(object):
             resource_name=constants.DEFAULT_STORAGECLASS_LSO
         )
         if perform_lso_standalone_deployment:
-            cleanup_nodes_for_lso_install()
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing Disk cleanup")
+                cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
