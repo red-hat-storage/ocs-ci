@@ -72,8 +72,13 @@ class TestKrKnApplicationOutageScenarios:
             krkn_scenario_directory: Directory for scenario configuration files
             workload_ops: WorkloadOps fixture that provides pre-configured VDBENCH workloads
             ceph_component_label: Parameterized Ceph component app label
-            instance_count: Number of pods to target for chaos injection
+            instance_count: Expected impact level (used for test documentation and IDs)
             component_name: Human-readable component name for logging
+
+        Note:
+            Application outage scenarios affect ALL pods matching the pod_selector,
+            not a specific instance_count. The instance_count parameter is used
+            for test documentation and determining conservative vs standard settings.
         """
         log.info(
             f"Starting Krkn application outage test for {component_name} component "
@@ -91,9 +96,7 @@ class TestKrKnApplicationOutageScenarios:
         log.info(
             f"Creating application outage scenarios for {component_name} component"
         )
-        log.info(
-            f"Using pod selector: {pod_selector} with instance_count={instance_count}"
-        )
+        log.info(f"Using pod selector: {pod_selector} (affects all matching pods)")
 
         # Configure scenario parameters based on component criticality
         if component_name in ["mon", "mgr", "mds"]:
@@ -110,13 +113,12 @@ class TestKrKnApplicationOutageScenarios:
             log.info(f"Using standard settings for {component_name} component")
 
         scenarios = [
-            # Primary application outage scenario
+            # Primary application outage scenario (affects all pods matching selector)
             ApplicationOutageScenarios.application_outage(
                 scenario_dir,
                 duration=duration,
                 namespace=openshift_storage_ns,
                 pod_selector=pod_selector,
-                instance_count=instance_count,
             ),
         ]
 
