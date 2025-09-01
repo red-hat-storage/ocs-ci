@@ -1689,6 +1689,11 @@ class Deployment(object):
         if config.DEPLOYMENT.get("host_network"):
             cluster_data["spec"]["hostNetwork"] = True
             logger.info("Host network is enabled")
+            # follow the rule in bug DFBUGS-2324. UI adds this value by default if the ["spec"]["hostNetwork"] = True
+            # this prevents crashes on rgw installation
+            cluster_data["spec"].setdefault("managedResources", {}).setdefault(
+                "cephObjectStores", {}
+            )["hostNetwork"] = False
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 

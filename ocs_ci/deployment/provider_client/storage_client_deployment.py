@@ -15,7 +15,7 @@ from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import verify_block_pool_exists
-
+from ocs_ci.ocs.resources.storageconsumer import verify_storage_consumer_resources
 
 log = logging.getLogger(__name__)
 
@@ -83,3 +83,4 @@ def verify_provider_mode_deployment():
     ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
     assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
     assert check_phase_of_rados_namespace(), "The radosnamespace is not in Ready phase"
+    verify_storage_consumer_resources(constants.INTERNAL_STORAGE_CONSUMER_NAME)
