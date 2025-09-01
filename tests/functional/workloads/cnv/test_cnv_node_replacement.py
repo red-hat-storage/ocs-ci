@@ -50,7 +50,6 @@ class TestCnvNodeReplace(E2ETest):
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
-        logger.info("All vms created successfully")
 
         # Register the teardown
         request.addfinalizer(self.teardown)
@@ -85,7 +84,7 @@ class TestCnvNodeReplace(E2ETest):
         Node Replacement proactive
         """
         all_vms = self.vm_objs_def + self.vm_objs_aggr
-
+        logger.info(f"list of all vms: {all_vms}")
         file_paths = ["/source_file.txt", "/new_file.txt"]
         source_csums = {}
         for vm_obj in all_vms:
