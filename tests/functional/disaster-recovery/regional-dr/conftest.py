@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -87,6 +88,7 @@ def cnv_custom_storage_class(request, storageclass_factory):
                         )
                     else:
                         log.info(f"Successfully created custom RBD SC: {sc_name}")
+                        time.sleep(60)
                 except Exception as e:
                     log.error(f"Error creating SC '{sc_name}': {e}")
                     raise
