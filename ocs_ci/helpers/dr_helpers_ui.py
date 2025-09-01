@@ -855,9 +855,7 @@ def assign_drpolicy_for_discovered_vms_via_ui(
             )
             aria_disabled = shared_radio_btn.get_attribute("aria-disabled")
             if aria_disabled == "false":
-                log.info(
-                    "Shared protection type is disabled as expected"
-                )
+                log.info("Shared protection type is disabled as expected")
                 acm_obj.take_screenshot()
             else:
                 log.error("Shared protection type is enabled for the first VM")
@@ -878,7 +876,15 @@ def assign_drpolicy_for_discovered_vms_via_ui(
             log.info("View VMs")
             acm_obj.do_click(acm_loc["view-vms"], enable_screenshot=True)
             log.info("Look for existing VM name")
-
+            existing_vm_check = acm_obj.wait_until_expected_text_is_found(
+                acm_loc["vm-name"], expected_text="vm-workload-1"
+            )
+            if existing_vm_check:
+                log.info("Existing DR protected VM found")
+                acm_obj.take_screenshot()
+            else:
+                acm_obj.take_screenshot()
+                raise ResourceWrongStatusException
         log.info("Click next")
         acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
         if standalone:

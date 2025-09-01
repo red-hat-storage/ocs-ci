@@ -1377,14 +1377,18 @@ acm_configuration_4_19 = {
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
 }
 
-acm_configuration_420 = {
-    "view-vms": ("button[class='pf-v5-c-button pf-m-link pf-m-inline']", By.CSS_SELECTOR),
+acm_configuration_4_20 = {
     "admin-dropdown": (
         "(//h2[normalize-space()='Administrator'])[1]",
         By.XPATH,
     ),
     "submariner-custom-source": ("//input[@id='source']", By.XPATH),
     "submariner-custom-channel": ("//input[@id='channel']", By.XPATH),
+    "view-vms": (
+        "button[class='pf-v5-c-button pf-m-link pf-m-inline']",
+        By.CSS_SELECTOR,
+    ),
+    "vm-name": ("//td[contains(text(),'vm-workload-1')]", By.XPATH),
 }
 
 add_capacity = {
