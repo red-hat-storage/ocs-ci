@@ -90,6 +90,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
         if custom_sc:
+            logger.info("Calling fixture to create Custom Pool/SC..")
             cnv_custom_storage_class(replica=replica, compression=compression)
 
         cnv_workloads = discovered_apps_dr_workload_cnv(pvc_vm=1, custom_sc=custom_sc)
