@@ -310,6 +310,8 @@ class TestVmSnapshotClone(E2ETest):
             admin_client (object): The admin client instance.
             vm_clone_fixture (fixture): Pytest fixture used to clone the VM.
             vm_snapshot_restore_fixture (fixture): Pytest fixture used to create and restore VM snapshots.
+            flag(bool): if True - function will create clone VM of restored VM
+                        if False - function will create restore VM from cloned VM.
 
         """
         try:
@@ -441,8 +443,7 @@ class TestVmSnapshotClone(E2ETest):
             vm_snapshot_restore_fixture,
         )
 
-    @tier2
-    @pytest.mark.polarion_id("")
+    @pytest.mark.polarion_id("OCS-6321")
     def test_clone_of_restored_vm(
         self,
         setup_cnv,
