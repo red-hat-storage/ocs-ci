@@ -749,8 +749,12 @@ page_nav = {
     "search_page": ("Search", By.LINK_TEXT),
     "explore_page": ("Explore", By.LINK_TEXT),
     "events_page": ("Events", By.LINK_TEXT),
-    "Operators": ("//button[text()='Operators']", By.XPATH),
+    "operators_or_ecosystem": (
+        "//button[text()='Operators'] | //button[text()='Ecosystem']",
+        By.XPATH,
+    ),
     "operatorhub_page": ("OperatorHub", By.LINK_TEXT),
+    "software_catalog": ("Software Catalog", By.LINK_TEXT),
     "installed_operators_page": ("Installed Operators", By.LINK_TEXT),
     "Storage": ("//button[text()='Storage']", By.XPATH),
     "persistentvolumes_page": ("PersistentVolumes", By.LINK_TEXT),
