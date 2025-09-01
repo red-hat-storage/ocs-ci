@@ -116,7 +116,6 @@ class MetalLBInstaller:
         self.catalog_source_name = self.get_catsrc_name()
 
         if not self.catalog_source_created():
-            self.correct_idms()
 
             create_optional_operators_catalogsource_non_ga(force=True)
             metallb_catalog_source = CatalogSource(
@@ -521,6 +520,8 @@ class MetalLBInstaller:
             logger.info("MetalLB operator deployment is not requested")
             return True
 
+        self.correct_idms()
+
         logger.info(
             f"Deploying MetalLB and dependant resources to namespace: '{self.namespace_lb}'"
         )
@@ -853,6 +854,10 @@ class MetalLBInstaller:
         This resolves issue with metallb operator deployment installation when they stuck in ImagePullBackOff
 
         """
+        logger.info(
+            "Correcting IDMS Brew registry if it exists, to stop redirection to quay.io:443/acm-d"
+        )
+
         idms_obj = OCP(kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms")
         if idms_obj.check_resource_existence(
             timeout=self.timeout_check_resources_existence, should_exist=True
@@ -873,3 +878,5 @@ class MetalLBInstaller:
             logger.info("ACM Brew IDMS registry corrected successfully")
 
             wait_for_machineconfigpool_status(node_type="all")
+
+        logger.info("IDMS correction is done")
