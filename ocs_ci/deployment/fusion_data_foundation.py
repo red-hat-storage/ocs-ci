@@ -199,6 +199,11 @@ class FusionDataFoundationDeployment:
         odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
 
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            odfcluster_data["spec"]["allowRemoteStorageConsumers"] = True
+            odfcluster_data["spec"]["autoScaleUp"] = True
+            odfcluster_data["spec"]["storageClient"]["enable"] = True
+
         odfcluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odfcluster", delete=False
         )
