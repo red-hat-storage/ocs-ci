@@ -3,7 +3,7 @@ import time
 
 import yaml
 
-from ocs_ci.framework.testlib import MCGTest, red_squad
+from ocs_ci.framework.testlib import MCGTest, red_squad, mcg
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 
@@ -89,6 +89,7 @@ def set_disable_routes_value(storagecluster_obj, val):
 
 
 @red_squad
+@mcg
 class TestBlockExternalAccess(MCGTest):
     def test_block_access_from_storagecluster(
         self,
