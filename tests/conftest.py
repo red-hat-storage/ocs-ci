@@ -2153,6 +2153,7 @@ def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
+    log.info(marks_to_ignore)
     # app labels of resources to be excluded for leftover check
     exclude_labels = [
         constants.must_gather_pod_label,
@@ -4961,7 +4962,7 @@ def collect_logs_fixture(request):
                 if not skip_rpm_go_version_collection:
                     utils.collect_pod_container_rpm_package("testcases")
             except Exception as ex:
-                # At times the pod might be killed/restarted during this operation, hence skipping if pod not found error is shown
+                # If pod is killed/restarted during this operation, skip if pod not found error is shown
                 if "Error is Error from server (NotFound)" in str(ex):
                     log.info(
                         f"One of the pod was not found, assuming it was already deleted. refer {ex}"
