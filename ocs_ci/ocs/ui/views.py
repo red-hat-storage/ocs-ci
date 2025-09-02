@@ -47,7 +47,10 @@ login_4_19 = {
 }
 
 deployment = {
-    "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
+    "click_install_ocs": (
+        'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
+        By.CSS_SELECTOR,
+    ),
     "choose_ocs_version": (
         'a[data-test="ocs-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
@@ -106,7 +109,10 @@ deployment = {
         'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
-    "click_install_lso": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
+    "click_install_lso": (
+        'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
+        By.CSS_SELECTOR,
+    ),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
     "choose_local_storage_version_non_ga": (
