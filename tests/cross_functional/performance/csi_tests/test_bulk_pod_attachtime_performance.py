@@ -6,6 +6,7 @@ The test results will be uploaded to the ES server
 import json
 import logging
 import pytest
+import calendar
 import pathlib
 import time
 from datetime import datetime
@@ -231,6 +232,15 @@ class TestBulkPodAttachPerformance(PASTest):
         full_results.add_key(
             "test_time", {"start": test_start_time, "end": test_end_time}
         )
+
+        start_t = time.strptime(test_start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(test_end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
 
         # Write the test results into the ES server
         self.results_path = helpers.get_full_test_logs_path(cname=self)

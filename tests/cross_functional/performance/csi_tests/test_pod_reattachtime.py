@@ -5,6 +5,7 @@ import urllib.request
 import time
 import statistics
 import os
+import calendar
 
 from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
@@ -309,7 +310,7 @@ class TestPodReattachTimePerformance(PASTest):
                 self.crd_data,
                 self.full_log_path,
                 "pod_reattach_time_fullres",
-            )
+            ),
         )
 
         full_results.add_key("storageclass", self.sc)
@@ -328,6 +329,15 @@ class TestPodReattachTimePerformance(PASTest):
         full_results.add_key(
             "test_time", {"start": test_start_time, "end": test_end_time}
         )
+
+        start_t = time.strptime(test_start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(test_end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
 
         # Write the test results into the ES server
         if full_results.es_write():

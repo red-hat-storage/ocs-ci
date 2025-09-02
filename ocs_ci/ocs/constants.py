@@ -3561,3 +3561,8 @@ MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
 
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
+
+# ODF Grafana repo
+ODF_GRAFANA_REPO = "https://github.com/redhat-performance/odf-grafana"
+ODF_GRAFANA_PATH = "/tmp/odf-grafana"
+GRAFANA_NAMESPACE = "perfscale"
