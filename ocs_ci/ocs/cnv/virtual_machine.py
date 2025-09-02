@@ -198,7 +198,9 @@ class VirtualMachine(Virtctl):
             access_mode=self.pvc_access_mode,
             namespace=self.namespace,
         )
-        wait_for_resource_state(self.pvc_obj, state=constants.STATUS_BOUND, timeout=900)
+        wait_for_resource_state(
+            self.pvc_obj, state=constants.STATUS_BOUND, timeout=1200
+        )
         self.pvc_name = self.pvc_obj.name
         vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"] = {
             "claimName": self.pvc_obj.name

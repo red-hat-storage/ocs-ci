@@ -499,6 +499,7 @@ def install_fio_on_vm(vm_obj):
         "Debian": "apt-get",
         "RHEL": "yum",
         "Alpine": "apk",
+        "centos": "dnf",
     }
 
     # Extract OS from labels if available
