@@ -4825,17 +4825,9 @@ def retrieve_cli_binary(cli_type="mcg"):
 
     # Determine which image to use based on version and CLI type
     if live_deployment and semantic_version >= version.VERSION_4_13:
-        if semantic_version >= version.VERSION_4_20:
-            # For 4.20+, always use ODF CLI image (mcg-cli no longer exists)
+        if semantic_version >= version.VERSION_4_15:
             image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
-        elif semantic_version >= version.VERSION_4_15:
-            # For 4.15-4.19, use appropriate image based on requested CLI type
-            if cli_type == "odf":
-                image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
-            else:
-                image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
         else:
-            # For 4.13-4.14, only mcg-cli is available
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
         # Development builds
