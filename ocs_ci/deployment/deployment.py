@@ -189,6 +189,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     get_acm_version,
     get_acm_mce_build_tag,
+    apply_oadp_workaround,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -612,6 +613,8 @@ class Deployment(object):
                     )
                     csv.wait_for_phase("Succeeded", timeout=720)
                     logger.info("OADP Operator Deployment Succeeded")
+                    if cluster.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+                        apply_oadp_workaround(namespace=constants.OADP_NAMESPACE)
 
     def do_deploy_rdr(self):
         """
@@ -3962,6 +3965,7 @@ class MultiClusterDROperatorsDeploy(object):
         2. 1 velero pod
         3. backupstoragelocation resource in "Available" phase
         """
+
         # Restic pods have been renamed to node-agent after oadp 1.2
         logger.info("Getting OADP version")
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
@@ -4291,6 +4295,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.create_dpa(self.meta_obj.bucket_name)
 
         config.switch_acm_ctx()
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            apply_oadp_workaround(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
         # Adding Ca Cert
         self.add_cacert_ramen_configmap()
         # Only on the active hub enable managedserviceaccount-preview
