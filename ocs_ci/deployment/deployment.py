@@ -85,7 +85,14 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
-from ocs_ci.ocs.node import get_worker_nodes, verify_all_nodes_created
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    verify_all_nodes_created,
+    label_nodes,
+    get_all_nodes,
+    get_node_objs,
+    get_nodes,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
@@ -359,11 +366,6 @@ class Deployment(object):
         Deploy OCS/ODF and run verification as well
 
         """
-        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
-            logger.warning(
-                "Skipping normal ODF deployment because ODF deployment in Provider mode will be performed"
-            )
-            return
         try:
             if not config.ENV_DATA["skip_ocs_deployment"]:
                 for i in range(config.nclusters):
@@ -624,24 +626,6 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
 
-    def do_deploy_odf_provider_mode(self):
-        """
-        Deploy ODF in provider mode and setup native client
-        """
-        # deploy provider-client deployment
-        from ocs_ci.deployment.provider_client.storage_client_deployment import (
-            ODFAndNativeStorageClientDeploymentOnProvider,
-        )
-
-        storage_client_deployment_obj = ODFAndNativeStorageClientDeploymentOnProvider()
-
-        # Provider-client deployment if odf_provider_mode_deployment: True
-        if (
-            config.ENV_DATA.get("odf_provider_mode_deployment", False)
-            and not config.ENV_DATA["skip_ocs_deployment"]
-        ):
-            storage_client_deployment_obj.provider_and_native_client_installation()
-
     def do_deploy_cnv(self):
         """
         Deploy CNV
@@ -762,13 +746,18 @@ class Deployment(object):
         if perform_lso_standalone_deployment:
             cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+
+        if config.DEPLOYMENT.get("enable_nested_virtualization"):
+            from ocs_ci.deployment.hosted_cluster import enable_nested_virtualization
+
+            enable_nested_virtualization()
+
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
-        self.do_deploy_odf_provider_mode()
         self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
@@ -1152,6 +1141,9 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
         local_storage = config.DEPLOYMENT.get("local_storage")
+        perform_lso_standalone_deployment = config.DEPLOYMENT.get(
+            "lso_standalone_deployment", False
+        )
         platform = config.ENV_DATA.get("platform").lower()
         aws_sts_deployment = (
             config.DEPLOYMENT.get("sts_enabled")
@@ -1194,9 +1186,18 @@ class Deployment(object):
                 "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
             )
 
-        if local_storage:
-            log_step("Deploy and setup Local Storage Operator")
-            setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+        # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
+        # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
+        # hence perform_lso_standalone_deployment must be False if we want to deploy LSO with ODF operator and do not
+        # execute 2nd LSO installation
+        if local_storage and not perform_lso_standalone_deployment:
+            # we only deploy LSO if localblock storageclass is not present, otherwise we will fail with 2nd installation
+            lso_deployed = ocp.OCP(kind=constants.STORAGECLASS).is_exist(
+                resource_name=constants.DEFAULT_STORAGECLASS_LSO
+            )
+            if not lso_deployed:
+                log_step("Deploy and setup Local Storage Operator")
+                setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
@@ -1483,6 +1484,13 @@ class Deployment(object):
                 config.COMPONENTS[f"disable_{component}"] = True
                 logger.warning(f"disabling: {component}")
 
+        if config.DEPLOYMENT.get("host_network"):
+            logger.info("Using host network for ODF operator")
+            cluster_data["spec"]["network"] = {"hostNetwork": True}
+
+        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
+            cluster_data["spec"]["providerAPIServerServiceType"] = "NodePort"
+
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
             comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
@@ -1535,11 +1543,43 @@ class Deployment(object):
             and ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
+            and not (self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS)
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
+        elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+            from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+
+            nodes_obj = OCP(
+                kind=constants.NODE,
+                selector=f"{constants.OPERATOR_NODE_LABEL}",
+            )
+            nodes_data = nodes_obj.get()["items"]
+            node_names = [nodes["metadata"]["name"] for nodes in nodes_data]
+
+            no_of_worker_nodes = len(node_names)
+            number_of_disks_available_total = 0
+            # count number of disks available on all labeled nodes and divide to number of nodes
+            for node in node_names:
+                node_obj_list = get_node_objs([node])
+                number_of_disks_available_total += len(
+                    disks_available_to_cleanup(node_obj_list.pop())
+                )
+
+            number_of_disks_available = int(
+                number_of_disks_available_total / no_of_worker_nodes
+            )
+
+            # with this approach of datermining the number of nodes we assume worker nodes number of disks is equal
+            # to master nodes number of disks, in case when config.ENV_DATA.get("mark_masters_schedulable") == True,
+            # and we labeled master nodes to serve as a storage nodes
+            cluster_data["spec"]["storageDeviceSets"][0][
+                "count"
+            ] = number_of_disks_available
+            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = no_of_worker_nodes
+            cluster_data["spec"]["flexibleScaling"] = True
 
         # set size of request for storage
         if self.platform.lower() in [
@@ -1649,6 +1689,11 @@ class Deployment(object):
         if config.DEPLOYMENT.get("host_network"):
             cluster_data["spec"]["hostNetwork"] = True
             logger.info("Host network is enabled")
+            # follow the rule in bug DFBUGS-2324. UI adds this value by default if the ["spec"]["hostNetwork"] = True
+            # this prevents crashes on rgw installation
+            cluster_data["spec"].setdefault("managedResources", {}).setdefault(
+                "cephObjectStores", {}
+            )["hostNetwork"] = False
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 
@@ -1894,7 +1939,24 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
 
         log_step("Create StorageCluster CR")
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+        storage_cluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        is_storagecluster = storage_cluster_obj.is_exist(
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER
+        )
+
+        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
+            if not is_storagecluster:
+                run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+            else:
+                logger.info(
+                    f"StorageCluster {constants.DEFAULT_STORAGE_CLUSTER} already exists, skipping creation."
+                )
+        else:
+            run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
             _ocp = ocp.OCP(kind="node")
@@ -2193,6 +2255,40 @@ class Deployment(object):
             "disconnected_env_skip_image_mirroring"
         ):
             image = prepare_disconnected_ocs_deployment()
+
+        if (
+            config.ENV_DATA.get("odf_provider_mode_deployment", False)
+            and not config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            path = "/spec/routeAdmission"
+            value = '{wildcardPolicy: "WildcardsAllowed"}'
+            params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
+            patch_cmd = (
+                f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
+                + f"default --type json -p '{params}'"
+            )
+            OCP().exec_oc_cmd(command=patch_cmd)
+
+            # Mark master nodes schedulable if mark_masters_schedulable: True
+            if config.ENV_DATA.get("mark_masters_schedulable", False):
+                path = "/spec/mastersSchedulable"
+                params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+                scheduler_obj = ocp.OCP(
+                    kind=constants.SCHEDULERS_CONFIG,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )
+                assert scheduler_obj.patch(
+                    params=params, format_type="json"
+                ), "Failed to run patch command to update control nodes as scheduleable"
+                # Allow ODF to be deployed on all nodes
+                logger.info("labeling all nodes as storage nodes")
+                nodes = get_all_nodes()
+                node_objs = get_node_objs(nodes)
+                label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+            else:
+                logger.info("labeling worker nodes as storage nodes")
+                worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+                label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
 
         if config.DEPLOYMENT["external_mode"]:
             self.deploy_with_external_mode()
