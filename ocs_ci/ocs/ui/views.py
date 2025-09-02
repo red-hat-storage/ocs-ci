@@ -52,6 +52,11 @@ deployment = {
         'a[data-test="ocs-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
+    "filter_operator_namespace": (
+        'input[data-test="name-filter-input"]',
+        By.CSS_SELECTOR,
+    ),
+    "openshift_operators_namespace": ("openshift-operators", By.LINK_TEXT),
     "search_operators": ('input[placeholder="Filter by keyword..."]', By.CSS_SELECTOR),
     "operators_tab": ("//button[text()='Operators']", By.XPATH),
     "operatorhub_tab": ("OperatorHub", By.LINK_TEXT),

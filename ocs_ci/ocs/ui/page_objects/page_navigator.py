@@ -186,7 +186,7 @@ class PageNavigator(BaseUI):
         Navigate to OperatorHub Page, renamed to Software Catalog in version 4.20
 
         """
-        logger.info("Navigate to OperatorHub Page")
+        logger.info("Navigate to OperatorHub Page or Software Catalog")
         self.choose_expanded_mode(
             mode=True, locator=self.page_nav["operators_or_ecosystem"]
         )
@@ -196,8 +196,9 @@ class PageNavigator(BaseUI):
             )
         else:
             self.do_click(
-                locator=self.page_nav["software_catalog"], enable_screenshot=False
+                locator=self.page_nav["software_catalog"], enable_screenshot=True
             )
+            logger.info("Navigated to Software Catalog")
 
     def navigate_installed_operators_page(self):
         """
