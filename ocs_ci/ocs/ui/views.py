@@ -124,6 +124,8 @@ deployment = {
         By.CSS_SELECTOR,
     ),
     "enable_nfs": ('input[id="enable-nfs"]', By.CSS_SELECTOR),
+    "configure_odf": ('button[data-test="configure-data-foundation"]', By.CSS_SELECTOR),
+    "setup_storage_cluster": ("#setup-storage-cluster", By.CSS_SELECTOR),
 }
 
 deployment_4_6 = {
@@ -1773,9 +1775,10 @@ validation_4_8 = {
 }
 
 validation_4_9 = {
+    # Storage Systems page was renamed to Storage Cluster in 4.20
     "storage_systems": (
-        "a[data-test-id='horizontal-link-Storage Systems']",
-        By.CSS_SELECTOR,
+        "//a[@data-test-id='horizontal-link-Storage Systems'] | //a[text()='Storage cluster'] ",
+        By.XPATH,
     ),
     "ocs-storagecluster-storagesystem-status": (
         "//*[text()= 'Ready']",

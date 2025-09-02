@@ -134,7 +134,15 @@ class DeploymentUI(PageNavigator):
         """
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_19:
+        if ocs_version >= version.VERSION_4_20:
+            logger.info("Navigate to Storage Cluster page")
+            self.nav_odf_default_page().nav_storage_systems_tab()
+            logger.info("Click Configure ODF")
+            self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
+            self.do_click(
+                locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
+            )
+        elif ocs_version >= version.VERSION_4_19:
             self.nav_odf_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
             self.do_click(
