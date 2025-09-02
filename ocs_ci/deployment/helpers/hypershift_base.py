@@ -35,7 +35,6 @@ Main tasks include:
 
 """
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -76,7 +75,6 @@ def get_available_hosted_clusters_to_ocp_ver_dict():
         '"\\(.metadata.name)|\\(.status.version.history[0].version)"\''
     )
     with config.RunWithProviderConfigContextIfAvailable():
-
         out = OCP().exec_oc_cmd(
             command=cmd,
             cluster_config=config,
@@ -375,7 +373,26 @@ class HyperShiftBase:
 
     def __init__(self):
         super().__init__()
-        BaseOCPDeployment(skip_download_installer=True).test_cluster()
+
+        # When the kubeconfig file does NOT exist AND console credentials ARE provided - do not run test_cluster()
+        # If we have password or ocp url we might want to log in to cluster and generate kubeconfig,
+        # which is done very early with process_cluster_cli_params; follow pr/11749
+        if not os.path.isfile(
+            os.path.join(
+                config.ENV_DATA["cluster_path"],
+                config.RUN.get("kubeconfig_location"),
+            )
+        ):
+            logger.warning("kubeconfig path is not set or file does not exist")
+
+            console_creds_provided = config.RUN.get(
+                "kubeadmin_password"
+            ) and config.RUN.get("ocp_url")
+
+            if not console_creds_provided:
+                BaseOCPDeployment(skip_download_installer=True).test_cluster()
+        else:
+            BaseOCPDeployment(skip_download_installer=True).test_cluster()
 
         bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
         self.bin_dir = os.path.abspath(bin_dir_rel_path)
