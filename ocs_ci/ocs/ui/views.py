@@ -297,6 +297,7 @@ deployment_4_19 = {
     ),
     "storage_system_btn": ("yaml-create", By.ID),
     "click_odf_operator": (
+        '//button[@id="odf-operator-redhat-operators-openshift-marketplace-input"] | '
         '//div[@data-test="odf-operator-redhat-operators-openshift-marketplace"] | '
         '//a[@data-test="odf-operator-redhat-operators-openshift-marketplace"]',
         By.XPATH,

@@ -59,7 +59,9 @@ class DeploymentUI(PageNavigator):
         Install OCS/ODF Opeartor
         """
         self.navigate_operatorhub_page()
-        if self.ocp_version_semantic >= version.VERSION_4_20:
+        if self.ocp_version_semantic >= version.VERSION_4_20 and (
+            self.driver.find_elements(*self.dep_loc["filter_operator_namespace"][::-1])
+        ):
             self.do_send_keys(
                 self.dep_loc["filter_operator_namespace"], text="openshift-operators"
             )
