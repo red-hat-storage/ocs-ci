@@ -59,6 +59,14 @@ class DeploymentUI(PageNavigator):
         Install OCS/ODF Opeartor
         """
         self.navigate_operatorhub_page()
+        if self.ocp_version_semantic >= version.VERSION_4_20:
+            self.do_send_keys(
+                self.dep_loc["filter_operator_namespace"], text="openshift-operators"
+            )
+            self.do_click(
+                self.dep_loc["openshift_operators_namespace"], enable_screenshot=True
+            )
+            time.sleep(5)
         self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
         logger.info(f"Choose {self.operator_name} Version")
         if self.operator_name is OCS_OPERATOR:
