@@ -138,10 +138,9 @@ class TestReplicationAndItsMetrics(MCGTest):
             "NooBaa_bucket_last_cycle_error_objects_num": 0,
         }
         for metric, expected_value in expected_metrics.items():
-            pattern = f"^{metric}.*$"
-            matches = re.findall(pattern, metrics_output, re.MULTILINE)[0]
-            logger.info(f"Matches: {matches}")
-            output_value = int(matches.split(" ")[1])
+            pattern = rf'^{metric}{{bucket_name="{bucket_1.name}"}} (\d)$'
+            output_value = re.findall(pattern, metrics_output, re.MULTILINE)[-1]
+            logger.info(f"Metrics {metric} : {output_value}")
             assert (
-                output_value == expected_value
+                int(output_value) == expected_value
             ), f"Metric {metric} has unexpected value"
