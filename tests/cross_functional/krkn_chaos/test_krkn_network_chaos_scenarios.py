@@ -411,7 +411,7 @@ class TestKrKnNetworkChaosScenarios:
         # Generate Krkn configuration
         config = KrknConfigGenerator()
         for scenario in scenarios:
-            config.add_scenario("network_chaos_ingress_scenarios", scenario)
+            config.add_scenario("pod_network_scenarios", scenario)
         config.set_tunings(wait_duration=60, iterations=1)
         config.write_to_file(location=scenario_dir)
 
@@ -556,7 +556,7 @@ class TestKrKnNetworkChaosScenarios:
         # Generate Krkn configuration
         config = KrknConfigGenerator()
         for scenario in scenarios:
-            config.add_scenario("pod_egress_shaping_scenarios", scenario)
+            config.add_scenario("pod_network_scenarios", scenario)
         config.set_tunings(wait_duration=60, iterations=1)
         config.write_to_file(location=scenario_dir)
 
@@ -703,7 +703,7 @@ class TestKrKnNetworkChaosScenarios:
         # Generate Krkn configuration
         config = KrknConfigGenerator()
         for scenario in scenarios:
-            config.add_scenario("pod_ingress_shaping_scenarios", scenario)
+            config.add_scenario("pod_network_scenarios", scenario)
         config.set_tunings(wait_duration=60, iterations=1)
         config.write_to_file(location=scenario_dir)
 

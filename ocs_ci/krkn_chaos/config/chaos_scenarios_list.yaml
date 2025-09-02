@@ -23,25 +23,19 @@ chaos_scenarios:
   #         jinja_template: scenarios/openshift/container_etcd.yml
   #         description: "Kills the etcd container inside the pod"
 
-  - network_chaos_ingress_scenarios:
+  - pod_network_scenarios:
       - network-chaos-ingress:
           jinja_template: scenarios/openshift/network_chaos_ingress.yml.j2
           description: "Disrupts ingress network traffic to simulate outages"
-
-  - pod_egress_shaping_scenarios:
       - pod-egress-shaping:
           jinja_template: scenarios/openshift/pod_egress_shaping.yml.j2
           description: "Applies egress traffic shaping (latency, loss, bandwidth) to pods"
-
-  - pod_ingress_shaping_scenarios:
       - pod-ingress-shaping:
           jinja_template: scenarios/openshift/pod_ingress_shaping.yml.j2
           description: "Applies ingress traffic shaping (latency, loss, bandwidth) to pods"
-
-  # - pod_network_scenarios:
-  #     - pod-network-outage:
-  #         jinja_template: scenarios/openshift/pod_network_outage.yml
-  #         description: "Introduces latency or packet loss at pod level"
+      # - pod-network-outage:
+      #     jinja_template: scenarios/openshift/pod_network_outage.yml
+      #     description: "Introduces latency or packet loss at pod level"
 
   # - pod_disruption_scenarios:
   #     - etcd:
