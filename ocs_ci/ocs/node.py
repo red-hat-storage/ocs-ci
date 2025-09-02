@@ -1139,6 +1139,23 @@ def get_node_az(node):
     return labels.get(constants.ZONE_LABEL)
 
 
+def make_master_nodes_schedulable():
+    """
+    Mark the master nodes as schedulable
+
+    """
+    scheduler_obj = OCP(
+        kind=constants.SCHEDULERS_CONFIG,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    path = "/spec/mastersSchedulable"
+    params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+    assert scheduler_obj.patch(
+        params=params, format_type="json"
+    ), "Failed to run patch command to update control nodes as scheduleable"
+    log.info("Marked master nodes as schedulable")
+
+
 def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=False):
     """
     Unschedule, drain and delete osd node, and creating a new osd node.
