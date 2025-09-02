@@ -3533,3 +3533,8 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# ODF Grafana repo
+ODF_GRAFANA_REPO = "https://github.com/redhat-performance/odf-grafana"
+ODF_GRAFANA_PATH = "/tmp/odf-grafana"
+GRAFANA_NAMESPACE = "perfscale"

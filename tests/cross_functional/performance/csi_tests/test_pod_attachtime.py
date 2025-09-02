@@ -7,6 +7,8 @@ the time is mesure from the POD yaml file : started_time - creation_time.
 import logging
 import os
 import pytest
+import calendar
+import time
 import statistics
 
 from ocs_ci.framework.pytest_customization.marks import grey_squad
@@ -264,6 +266,15 @@ class TestPodStartTime(PASTest):
         self.full_results.add_key(
             "test_time", {"start": self.test_start_time, "end": self.test_end_time}
         )
+
+        start_t = time.strptime(self.test_start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.test_end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
 
         # Write the test results into the ES server
         if self.full_results.es_write():
