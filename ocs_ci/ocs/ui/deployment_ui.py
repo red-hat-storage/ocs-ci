@@ -81,7 +81,13 @@ class DeploymentUI(PageNavigator):
         )
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
-        self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
+        try:
+            self.do_click(
+                self.dep_loc["click_install_ocs_page"], enable_screenshot=True
+            )
+        except Exception as e:
+            logger.error(f"'click_install_ocs_page' locator non clickable: {e}")
+            logger.error("Unable to install ODF. It could be already installed")
         if self.operator_name is ODF_OPERATOR:
             try:
                 self.navigate_installed_operators_page()
@@ -142,6 +148,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
             )
+            time.sleep(15)
         elif ocs_version >= version.VERSION_4_19:
             self.nav_odf_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
