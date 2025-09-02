@@ -3,8 +3,6 @@ import time
 
 import yaml
 
-import pytest
-
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
@@ -114,7 +112,7 @@ class TestBlockExternalAccess(MCGTest):
             sc_dict.get("spec", {}).get("multiCloudGateway", {}).get("disableRoutes")
         )
         assert (
-            not disable_routes_status or disable_routes_status == False
+            not disable_routes_status or disable_routes_status is False
         ), "Disable Routes should be not defined or false when test starts"
 
         check_disable_routes(False)
