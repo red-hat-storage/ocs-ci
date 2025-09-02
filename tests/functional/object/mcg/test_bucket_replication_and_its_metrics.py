@@ -1,6 +1,7 @@
 import logging
 import base64
 import re
+import time
 
 import pytest
 
@@ -12,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
 )
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     update_replication_policy,
@@ -139,6 +141,107 @@ class TestReplicationAndItsMetrics(MCGTest):
         }
         for metric, expected_value in expected_metrics.items():
             pattern = rf'^{metric}{{bucket_name="{bucket_1.name}"}} (\d)$'
+            output_value = re.findall(pattern, metrics_output, re.MULTILINE)[-1]
+            logger.info(f"Metrics {metric} : {output_value}")
+            assert (
+                int(output_value) == expected_value
+            ), f"Metric {metric} has unexpected value"
+
+    @tier1
+    @polarion_id("OCS-6917")
+    def test_failing_bucket_replication_and_its_metrics(
+        self, awscli_pod, mcg_obj, make_buckets, test_directory_setup
+    ):
+        """
+        1. Create source and target buckets.
+        2. Set bucket replication policies on the source buckets
+        3. Patch the target bucket to change the quota
+        4. Write some objects to the source buckets
+        5. Verify the objects were replicated to the target buckets
+        6. Wait before writing to the source bucket so that the replication
+            policy will be applied and quota will get exceeded
+        7. Write an object to the source bucket so that the quota will get exceeded
+        8. Wait before getting the metrics so that the replication policy
+            will be applied and quota will get exceeded
+        9. Get the metrics for the bucket replication
+        10. Verify the metrics
+        """
+        # 1. Create source and target buckets
+        bucket_1, bucket_2 = make_buckets(2)
+
+        # 2. Set bucket replication policies on the source buckets
+        replication_policy = McgReplicationPolicy(destination_bucket=bucket_2.name)
+        update_replication_policy(bucket_1.name, replication_policy.to_dict())
+
+        # 3. Patch the target bucket to change the quota
+        quota_str = '{"spec": {"additionalConfig":{"maxObjects": "4"}}}'
+        cmd = f"patch obc {bucket_2.name} -p '{quota_str}' -n openshift-storage --type=merge"
+        OCP().exec_oc_cmd(cmd)
+        logger.info(f"Patched quota to obc {bucket_2.name}")
+        time.sleep(60)
+
+        # 4. Write some objects to the source buckets
+        test_dir = test_directory_setup.result_dir
+        copy_random_individual_objects(
+            podobj=awscli_pod,
+            target=f"s3://{bucket_1.name}",
+            file_dir=test_dir,
+            pattern="test_obj-",
+            s3_obj=mcg_obj,
+            amount=4,
+        )
+
+        # 5. Verify the objects were replicated to the target buckets
+        wait_for_object_versions_match(
+            mcg_obj,
+            awscli_pod,
+            bucket_1.name,
+            bucket_2.name,
+            obj_key="test_obj-",
+        )
+        logger.info("All the versions were replicated successfully")
+
+        time.sleep(120)
+        logger.info(
+            "Waiting before writing to the source bucket so that the replication \
+            policy will be applied and quota will get exceeded"
+        )
+
+        # 6. Write an object to the source bucket so that the quota will get exceeded
+        copy_random_individual_objects(
+            podobj=awscli_pod,
+            target=f"s3://{bucket_1.name}",
+            file_dir=test_dir,
+            pattern="test_obj-over-quota-",
+            s3_obj=mcg_obj,
+            amount=1,
+        )
+
+        time.sleep(120)
+        logger.info(
+            "Waiting before getting the metrics so that the replication \
+            policy will be applied and quota will get exceeded"
+        )
+
+        # 7. get JWT TOKEN
+        token_cmd = "oc get secret noobaa-metrics-auth-secret -n openshift-storage -o jsonpath='{.data.metrics_token}'"
+        jwt_token = base64.b64decode(run_cmd(cmd=token_cmd)).decode()
+        noobaa_core_pod = get_noobaa_core_pod()
+
+        # 8. Get the metrics for the bucket replication
+        metrics_output = noobaa_core_pod.exec_cmd_on_pod(
+            f"curl -k -H 'Authorization: Bearer {jwt_token}' localhost:8080/metrics/bg_workers",
+            out_yaml_format=False,
+        )
+
+        # 9. Verify the metrics, will get on error object in the last cycle
+        expected_metrics = {
+            "NooBaa_bucket_last_cycle_total_objects_num": 1,
+            "NooBaa_bucket_last_cycle_replicated_objects_num": 0,
+            "NooBaa_bucket_last_cycle_error_objects_num": 1,
+        }
+        for metric, expected_value in expected_metrics.items():
+            pattern = rf"^{metric}{{bucket_name=\"{bucket_1.name}\"}} (\d)$"
             output_value = re.findall(pattern, metrics_output, re.MULTILINE)[-1]
             logger.info(f"Metrics {metric} : {output_value}")
             assert (
