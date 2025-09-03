@@ -2006,9 +2006,14 @@ def email_reports(session):
     aborted_message = ""
     if config.RUN.get("aborted"):
         aborted_message = "[JOB ABORTED] "
+
+    cluster_names = ",".join(
+        [cl_conf.ENV_DATA["cluster_name"] for cl_conf in config.clusters]
+    )
+
     msg["Subject"] = (
         f"{aborted_message}"
-        f"ocs-ci results for {get_testrun_name()} "
+        f"ocs-ci results for {cluster_names} {get_testrun_name()} "
         f"({build_str}"
         f"RUN ID: {config.RUN['run_id']}) "
         # f"Passed: {percentage_passed:.0f}%"
