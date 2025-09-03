@@ -11,6 +11,9 @@ from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, ResourceNotFoundError
+from ocs_ci.deployment.helpers.lso_helpers import (
+    create_optional_operators_catalogsource_non_ga,
+)
 
 
 class NMStateInstaller(object):
@@ -71,6 +74,7 @@ class NMStateInstaller(object):
         try:
             package_manifest.get()
         except ResourceNotFoundError:
+            create_optional_operators_catalogsource_non_ga()
             catalog_name = constants.OPTIONAL_OPERATORS
             package_manifest = PackageManifest(
                 resource_name=constants.NMSTATE_CSV_NAME,
