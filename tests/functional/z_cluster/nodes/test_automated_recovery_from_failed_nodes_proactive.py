@@ -106,7 +106,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         log.info(f"Common OSD and app pod running nodes are {common_nodes}")
 
         try:
-            if config.ENV_DATA["deployment_type"].lower() != "ipi":
+            if config.ENV_DATA["deployment_type"].lower() == "ipi":
                 log.info("IPI setup")
 
                 # Get the machine name using the node name
@@ -126,7 +126,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 machine.delete_machine(machine_name)
                 log.info(f"Successfully deleted machine {machine_name}")
 
-            elif config.ENV_DATA["deployment_type"].lower() != "upi":
+            elif config.ENV_DATA["deployment_type"].lower() == "upi":
                 log.info("UPI setup")
                 # delete the common node and create osd node for aws_upi
                 new_node_name = delete_and_create_osd_node_aws_upi(common_nodes[0])
