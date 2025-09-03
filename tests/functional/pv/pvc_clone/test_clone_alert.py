@@ -1,4 +1,5 @@
 import time
+import pytest
 import logging
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
@@ -24,6 +25,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
     Tests for alerts when too many clones are created
     """
 
+    @pytest.fixture(autouse=True)
     def setup(self, pvc_factory):
         """
         Create a PVC and 199 clones
