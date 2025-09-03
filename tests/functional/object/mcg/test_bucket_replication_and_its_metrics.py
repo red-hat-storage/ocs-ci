@@ -1,6 +1,7 @@
 import logging
-import re
 import time
+import json
+import pytest
 
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -19,8 +20,8 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
-from ocs_ci.ocs.resources.pod import get_noobaa_core_pod
-from ocs_ci.helpers.helpers import get_noobaa_metrics_token_from_secret
+from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +41,23 @@ class TestReplicationAndItsMetrics(MCGTest):
         bucket_last_cycle_error_objects_num
     """
 
+    @pytest.fixture(scope="class", autouse=True)
+    def reduce_replication_delay_setup(self, add_env_vars_to_noobaa_core_class):
+        """
+        A fixture to reduce the replication delay to one minute.
+        Args:
+            new_delay_in_milliseconds (function): A function to add env vars to the noobaa-core pod
+        """
+        new_delay_in_milliseconds = 60 * 1000
+        new_env_var_tuples = [
+            (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconds),
+        ]
+        add_env_vars_to_noobaa_core_class(new_env_var_tuples)
+
     @tier2
     @polarion_id("OCS-6916")
     def test_bucket_replication_and_its_metrics(
-        self, awscli_pod, mcg_obj, test_directory_setup, bucket_factory
+        self, awscli_pod, mcg_obj, test_directory_setup, bucket_factory, threading_lock
     ):
         """
         1. Create source and target buckets.
@@ -51,7 +65,7 @@ class TestReplicationAndItsMetrics(MCGTest):
         3. Write some objects to the source buckets
         4. Verify the objects were replicated to the target buckets
         5. Get the metrics for the bucket replication
-        6. Verify the metrics
+        6. Verify the metrics from Prometheus
         """
         # 1. Create source and target buckets
         bucket_1, bucket_2 = bucket_factory(2, "OC")
@@ -79,36 +93,32 @@ class TestReplicationAndItsMetrics(MCGTest):
             bucket_2.name,
             obj_key="test_obj-",
         )
-        logger.info("All the versions were replicated successfully")
+        logger.info("All the objects were replicated successfully")
 
-        # 5. get JWT TOKEN
-        jwt_token = get_noobaa_metrics_token_from_secret()
-
-        # 6. Get the metrics for the bucket replication
-        noobaa_core_pod = get_noobaa_core_pod()
-        metrics_cmd = f"curl -k -H 'Authorization: Bearer {jwt_token}' localhost:8080/metrics/bg_workers"
-        metrics_output = noobaa_core_pod.exec_cmd_on_pod(
-            metrics_cmd, out_yaml_format=False
-        )
-
-        # 7. Verify the metrics
+        # # 7. Verify the metrics
         expected_metrics = {
             "NooBaa_bucket_last_cycle_total_objects_num": 5,
             "NooBaa_bucket_last_cycle_replicated_objects_num": 5,
             "NooBaa_bucket_last_cycle_error_objects_num": 0,
         }
         for metric, expected_value in expected_metrics.items():
-            pattern = rf"^{metric}{{bucket_name=\"{bucket_1.name}\"}} (\d)$"
-            output_value = re.findall(pattern, metrics_output, re.MULTILINE)[-1]
-            logger.info(f"Metrics {metric} : {output_value}")
-            assert (
-                int(output_value) == expected_value
-            ), f"Metric {metric} has unexpected value"
+            query = f"{metric} {{bucket_name='{bucket_1.name}'}}"
+            api = PrometheusAPI(threading_lock=threading_lock)
+            resp = api.get("query", payload={"query": query})
+            metrics_output = None
+            if resp.ok:
+                logger.debug(query)
+                metrics_output = json.loads(resp.text)
+                got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
+                logger.info(f"Metrics {metric} : {got_metrics_value}")
+                assert (
+                    got_metrics_value == expected_value
+                ), f"Metric {metric} has unexpected value"
 
     @tier2
     @polarion_id("OCS-6917")
     def test_failing_bucket_replication_and_its_metrics(
-        self, awscli_pod, mcg_obj, test_directory_setup, bucket_factory
+        self, awscli_pod, mcg_obj, test_directory_setup, bucket_factory, threading_lock
     ):
         """
         1. Create source and target buckets.
@@ -116,14 +126,8 @@ class TestReplicationAndItsMetrics(MCGTest):
         3. Patch the target bucket to change the quota
         4. Write some objects to the source buckets
         5. Verify the objects were replicated to the target buckets
-        6. Wait before writing to the source bucket so that the replication
-            policy will be applied and quota will get exceeded
-        7. Write an object to the source bucket so that the quota will get
-            exceeded
-        8. Wait before getting the metrics so that the replication
-        policy will be applied and quota will get exceeded
-        9. Get the metrics for the bucket replication
-        10. Verify the metrics
+        6. Write an object to the source bucket so that the quota will get exceeded on target bucket after replication
+        7. Verify the metrics from Prometheus after the replication and get failed object metrics in the last cycle
         """
         # 1. Create source and target buckets
         bucket_1, bucket_2 = bucket_factory(2, "OC")
@@ -137,6 +141,9 @@ class TestReplicationAndItsMetrics(MCGTest):
         cmd = f"patch obc {bucket_2.name} -p '{quota_str}' -n {config.ENV_DATA['cluster_namespace']} --type=merge"
         OCP().exec_oc_cmd(cmd)
         logger.info(f"Patched quota to obc {bucket_2.name}")
+
+        # Wait a bit for the quota to take effect
+        logger.info("Waiting maxObjects quota to take effect on the target bucket")
         time.sleep(60)
 
         # 4. Write some objects to the source buckets
@@ -158,13 +165,12 @@ class TestReplicationAndItsMetrics(MCGTest):
             bucket_2.name,
             obj_key="test_obj-",
         )
-        logger.info("All the versions were replicated successfully")
+        logger.info("All the objects were replicated successfully")
 
-        time.sleep(120)
         logger.info(
-            "Waiting before writing to the source bucket so that the \
-            replication policy will be applied and quota will get exceeded"
+            "Waiting for the quantity of objects inside target bucket to get updated"
         )
+        time.sleep(120)
 
         # 6. Write an object to the source bucket so that the quota will get exceeded
         copy_random_individual_objects(
@@ -176,32 +182,27 @@ class TestReplicationAndItsMetrics(MCGTest):
             amount=1,
         )
 
-        time.sleep(120)
         logger.info(
-            "Waiting before getting the metrics so that the replication policy \
-            will be applied and quota will get exceeded"
+            "Waiting for objects to get replicated and new metrics to be exposed"
         )
+        time.sleep(120)
 
-        # 7. get JWT TOKEN
-        jwt_token = get_noobaa_metrics_token_from_secret()
-
-        # 8. Get the metrics for the bucket replication
-        noobaa_core_pod = get_noobaa_core_pod()
-        metrics_cmd = f"curl -k -H 'Authorization: Bearer {jwt_token}' localhost:8080/metrics/bg_workers"
-        metrics_output = noobaa_core_pod.exec_cmd_on_pod(
-            metrics_cmd, out_yaml_format=False
-        )
-
-        # 9. Verify the metrics, will get on error object in the last cycle
+        # 7. Verify the metrics from Prometheus, will get on error object in the last cycle
         expected_metrics = {
             "NooBaa_bucket_last_cycle_total_objects_num": 1,
             "NooBaa_bucket_last_cycle_replicated_objects_num": 0,
             "NooBaa_bucket_last_cycle_error_objects_num": 1,
         }
         for metric, expected_value in expected_metrics.items():
-            pattern = rf"^{metric}{{bucket_name=\"{bucket_1.name}\"}} (\d)$"
-            output_value = re.findall(pattern, metrics_output, re.MULTILINE)[-1]
-            logger.info(f"Metrics {metric} : {output_value}")
-            assert (
-                int(output_value) == expected_value
-            ), f"Metric {metric} has unexpected value"
+            query = f"{metric} {{bucket_name='{bucket_1.name}'}}"
+            api = PrometheusAPI(threading_lock=threading_lock)
+            resp = api.get("query", payload={"query": query})
+            metrics_output = None
+            if resp.ok:
+                logger.debug(query)
+                metrics_output = json.loads(resp.text)
+                got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
+                logger.info(f"Metrics {metric} : {got_metrics_value}")
+                assert (
+                    got_metrics_value == expected_value
+                ), f"Metric {metric} has unexpected value"
