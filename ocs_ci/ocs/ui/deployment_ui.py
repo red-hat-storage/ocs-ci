@@ -343,16 +343,19 @@ class DeploymentUI(PageNavigator):
             )
         else:
             self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
-
-        logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
-        self.do_click(
-            locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
-        )
-        self.do_click(
-            locator=self.dep_loc[self.storage_class],
-            enable_screenshot=True,
-            copy_dom=True,
-        )
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_20:
+            logger.info("Storage class is chosen automatically")
+        else:
+            logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
+            self.do_click(
+                locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
+            )
+            self.do_click(
+                locator=self.dep_loc[self.storage_class],
+                enable_screenshot=True,
+                copy_dom=True,
+            )
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
