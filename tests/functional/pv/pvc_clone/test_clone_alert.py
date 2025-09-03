@@ -25,7 +25,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
     Tests for alerts when too many clones are created
     """
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture()
     def setup(self, pvc_factory):
         """
         Create a PVC and 199 clones
