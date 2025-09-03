@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 @cloud_platform_required
 @baremetal_deployment_required
 class TestMdsCacheTrimStandby(E2ETest):
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():

@@ -425,6 +425,7 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             return True
     return False
 
+
 def run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=3):
     """
     This function facilitates
