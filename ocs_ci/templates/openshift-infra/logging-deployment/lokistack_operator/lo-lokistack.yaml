@@ -1,0 +1,23 @@
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  name: logging-loki
+  namespace: openshift-logging
+spec:
+  managementState: Managed
+  rules:
+    enabled: true
+    namespaceSelector:
+      matchLabels:
+        openshift.io/cluster-monitoring: "true"
+    selector:
+      matchLabels:
+        openshift.io/cluster-monitoring: "true"
+  size: 1x.demo
+  storage:
+    secret:
+      name: logging-loki-s3
+      type: s3
+  storageClassName: ocs-storagecluster-ceph-rbd
+  tenants:
+    mode: openshift-logging
