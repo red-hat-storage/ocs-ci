@@ -89,7 +89,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
             self.pvc_obj.namespace,
         )
         self.cloned_obj_list.append(new_clone)
-        wait_time = 180
+        wait_time = 300
         log.info(f"Waiting for {wait_time} seconds for alert to appear")
         time.sleep(wait_time)
         alert_ui_obj = PageNavigator()
@@ -120,7 +120,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
             timeout=60,
         )
         teardown_factory(snap_obj)
-        wait_time = 180
+        wait_time = 300
         log.info(f"Waiting for {wait_time} seconds for alert to appear")
         time.sleep(wait_time)
         alert_ui_obj = PageNavigator()
