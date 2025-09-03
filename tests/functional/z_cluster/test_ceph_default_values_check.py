@@ -174,12 +174,8 @@ class TestCephDefaultValuesCheck(ManageTest):
         )
         log.info(f"CephConfig data: {ceph_config}")
 
-        # Get expected values based on version
-        if ocs_version >= version.VERSION_4_20:
-            expected_config = constants.ROOK_CEPH_CONFIG_VALUES_420
-        else:
-            # Fallback for future versions
-            expected_config = constants.ROOK_CEPH_CONFIG_VALUES_420
+        # Get expected values - currently only 4.20+ supported
+        expected_config = constants.ROOK_CEPH_CONFIG_VALUES_420
 
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Expected config values: {expected_config}")
