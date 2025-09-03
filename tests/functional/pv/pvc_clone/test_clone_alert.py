@@ -1,6 +1,5 @@
 import time
 import logging
-import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -25,7 +24,6 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
     Tests for alerts when too many clones are created
     """
 
-    @pytest.fixture()
     def setup(self, pvc_factory):
         """
         Create a PVC and 199 clones
@@ -34,6 +32,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
             pvc_factory: A fixture to create new pvc
 
         """
+        log.info("Starting the test setup")
         self.pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             size=1,
