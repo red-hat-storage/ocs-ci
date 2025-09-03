@@ -69,7 +69,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     ):
         """
         Knip-678 Automated recovery from failed nodes
-        Proactive case - IPI
+        Proactive case - UPI
+
+        To do: Import these tests to polarion and update the polarion id
         """
         osd_running_nodes = get_osd_running_nodes()
         log.info(f"OSDs are running on nodes {osd_running_nodes}")
