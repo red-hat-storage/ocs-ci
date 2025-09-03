@@ -331,6 +331,11 @@ ipi_deployment_required = pytest.mark.skipif(
     reason="Test runs ONLY on IPI deployed cluster",
 )
 
+upi_deployment_required = pytest.mark.skipif(
+    config.ENV_DATA["deployment_type"].lower() != "upi",
+    reason="Test runs ONLY on UPI deployed cluster",
+)
+
 managed_service_required = pytest.mark.skipif(
     (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS),
     reason="Test runs ONLY on OSD or ROSA cluster",

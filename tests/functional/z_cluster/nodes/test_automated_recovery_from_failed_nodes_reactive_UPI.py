@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
-    ipi_deployment_required,
+    upi_deployment_required,
     ignore_leftovers,
     skipif_external_mode,
     skipif_ibm_cloud,
@@ -27,10 +27,9 @@ from ocs_ci.ocs.node import (
     get_app_pod_running_nodes,
     get_both_osd_and_app_pod_running_node,
     get_node_objs,
-    add_new_node_and_label_it,
     get_worker_nodes,
     recover_node_to_ready_state,
-    add_new_nodes_and_label_after_node_failure_ipi,
+    add_new_node_and_label_upi,
     get_another_osd_node_in_same_rack_or_zone,
     get_node_pods,
     wait_for_nodes_racks_or_zones,
@@ -45,7 +44,7 @@ log = logging.getLogger(__name__)
 @brown_squad
 @ignore_leftovers
 @tier4b
-@ipi_deployment_required
+@upi_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes - Reactive
@@ -105,7 +104,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             ),
         ],
     )
-    def test_automated_recovery_from_failed_nodes_IPI_reactive(
+    def test_automated_recovery_from_failed_nodes_UPI_reactive(
         self,
         nodes,
         pvc_factory,
@@ -118,7 +117,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     ):
         """
         Knip-678 Automated recovery from failed nodes
-        Reactive case - IPI
+        Reactive case - UPI
         """
         # Get OSD running nodes
         osd_running_nodes = get_osd_running_nodes()
@@ -150,13 +149,11 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         )
         log.info(f"Both OSD and app pod is running on nodes {common_nodes}")
 
-        # Add a new node and label it
+        log.info("Preparing to create a new node...")
         if config.ENV_DATA.get("rhel_workers"):
             node_type = constants.RHEL_OS
         else:
             node_type = constants.RHCOS
-
-        log.info("Preparing to create a new node...")
         node_conf = {"stack_name": common_nodes[0]}
         new_node_names = node.add_new_node_and_label_upi(
             node_type, 1, node_conf=node_conf
@@ -220,15 +217,20 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @brown_squad
 @ignore_leftovers
 @tier4a
-@ipi_deployment_required
+@upi_deployment_required
 @skipif_ibm_cloud
 @skipif_compact_mode
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
     extra_node = False
-    machineset_name = None
     start_ready_replica_count = None
+
+    def setup(self):
+        if config.ENV_DATA.get("rhel_workers"):
+            self.node_type = constants.RHEL_OS
+        else:
+            self.node_type = constants.RHCOS
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -246,7 +248,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                         f"The recovery of the osd worker node "
                         f"{self.osd_worker_node.name} failed. Adding a new OCS worker node..."
                     )
-                    add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
+                    add_new_node_and_label_upi(self.node_type, 1)
 
             log.info("Wait for node count to be equal to original count")
             wait_for_node_count_to_reach_status(node_count=initial_node_count)
@@ -291,7 +293,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
     ):
         """
         Knip-678 Automated recovery from failed nodes
-        Reactive case - IPI
+        Reactive case - UPI
 
         0) A - add new node, B - don't add new node
         1) Stop node
@@ -303,19 +305,12 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
              A - pods should start on the new node
              B - pods should start on the stopped node after starting it
         """
-        wnode_name = get_worker_nodes()[0]
-        machine_name = machine.get_machine_from_node_name(wnode_name)
-        self.machineset_name = machine.get_machineset_from_machine_name(machine_name)
-        self.start_ready_replica_count = machine.get_ready_replica_count(
-            self.machineset_name
-        )
-
         global initial_node_count
         initial_node_count = len(get_worker_nodes())
-        log.info(f"Initial node count is {initial_node_count}")
+        log.info(f"Initial worker node count is {initial_node_count}")
 
         if additional_node:
-            new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
+            new_ocs_node_names = add_new_node_and_label_upi(self.node_type, 1)
             failure_domain = get_failure_domain()
             log.info("Wait for the nodes racks or zones to appear...")
             wait_for_nodes_racks_or_zones(
