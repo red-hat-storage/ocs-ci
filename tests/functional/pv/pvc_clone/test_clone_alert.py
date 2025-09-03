@@ -40,6 +40,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
             status=constants.STATUS_BOUND,
             access_mode=constants.ACCESS_MODE_RWO,
         )
+        log.info(f"PVC {self.pvc_obj.name} created")
 
         # create 199 clones
         sc_name = self.pvc_obj.backed_sc
@@ -47,16 +48,18 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
         namespace = self.pvc_obj.namespace
         self.cloned_obj_list = []
-        for _ in range(199):
+        for i in range(199):
             cloned_obj = pvc.create_pvc_clone(
                 sc_name, parent_pvc, clone_yaml, namespace
             )
+            log.info(f"Created {i + 1} clones")
             self.cloned_obj_list.append(cloned_obj)
 
     def teardown(self):
         """
         Delete all clones created during setup
         """
+        log.info("Deleting clones")
         for clone_obj in self.cloned_obj_list:
             clone_obj.delete()
 
