@@ -551,3 +551,107 @@ class NetworkOutageScenarios:
             config,
             "pod_ingress_shaping.yaml",
         )
+
+
+class ContainerScenarios:
+    """Generates configuration for container chaos scenarios."""
+
+    @staticmethod
+    def _create_container_scenario(scenario_dir, template_name, config, filename):
+        """Internal method to create container scenario YAML files."""
+        return TemplateWriter.write_template(
+            template_name=template_name,
+            output_path=f"{scenario_dir}/{filename}",
+            **config,
+        )
+
+    @staticmethod
+    def container_kill(
+        scenario_dir,
+        namespace,
+        label_selector=None,
+        pod_name=None,
+        container_name="",
+        kill_signal="SIGKILL",
+        instance_count=1,
+        wait_duration=300,
+    ):
+        """Generates container kill scenario YAML.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            namespace (str): Target namespace (required).
+            label_selector (str, optional): Label selector for target pods.
+            pod_name (str, optional): Specific pod name to target.
+            container_name (str, optional): Specific container name to kill (default: random).
+            kill_signal (str): Signal to send to the container (default: "SIGKILL").
+            instance_count (int): Number of matching pods to act on (default: 1).
+            wait_duration (int): Wait duration in seconds (default: 300).
+
+        Returns:
+            str: Path to the generated YAML file.
+
+        Raises:
+            ValueError: If neither pod_name nor label_selector is provided.
+        """
+        if not pod_name and not label_selector:
+            raise ValueError("Either pod_name or label_selector must be provided")
+
+        config = {
+            "namespace": namespace,
+            "container_name": container_name,
+            "kill_signal": kill_signal,
+            "instance_count": instance_count,
+            "wait_duration": wait_duration,
+            **_get_pod_selector_config(pod_name, label_selector),
+        }
+        return ContainerScenarios._create_container_scenario(
+            scenario_dir,
+            "scenarios/openshift/container_kill.yml.j2",
+            config,
+            "container_kill.yaml",
+        )
+
+    @staticmethod
+    def container_pause(
+        scenario_dir,
+        namespace,
+        label_selector=None,
+        pod_name=None,
+        container_name="",
+        pause_seconds=60,
+        wait_duration=300,
+    ):
+        """Generates container pause scenario YAML.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            namespace (str): Target namespace (required).
+            label_selector (str, optional): Label selector for target pods.
+            pod_name (str, optional): Specific pod name to target.
+            container_name (str, optional): Specific container name to pause (default: random).
+            pause_seconds (int): Duration to pause the container in seconds (default: 60).
+            wait_duration (int): Wait duration in seconds (default: 300).
+
+        Returns:
+            str: Path to the generated YAML file.
+
+        Raises:
+            ValueError: If neither pod_name nor label_selector is provided.
+        """
+        if not pod_name and not label_selector:
+            raise ValueError("Either pod_name or label_selector must be provided")
+
+        config = {
+            "namespace": namespace,
+            "container_name": container_name,
+            "pause_seconds": pause_seconds,
+            "wait_duration": wait_duration,
+            **_get_pod_selector_config(pod_name, label_selector),
+        }
+        return ContainerScenarios._create_container_scenario(
+            scenario_dir,
+            "scenarios/openshift/container_pause.yml.j2",
+            config,
+            "container_pause.yaml",
+        )

@@ -18,10 +18,13 @@ chaos_scenarios:
   #         jinja_template: scenarios/openshift/app_outage.yaml
   #         description: "Simulates complete application unavailability"
 
-  # - container_scenarios:
-  #     - container-etcd:
-  #         jinja_template: scenarios/openshift/container_etcd.yml
-  #         description: "Kills the etcd container inside the pod"
+  - container_scenarios:
+      - container-kill:
+          jinja_template: scenarios/openshift/container_kill.yml.j2
+          description: "Kills specific containers in targeted pods"
+      - container-pause:
+          jinja_template: scenarios/openshift/container_pause.yml.j2
+          description: "Pauses containers temporarily to simulate hang scenarios"
 
   - pod_network_scenarios:
       - network-chaos-ingress:
