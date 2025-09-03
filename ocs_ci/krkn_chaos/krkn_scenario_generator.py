@@ -559,11 +559,10 @@ class ContainerScenarios:
     @staticmethod
     def _create_container_scenario(scenario_dir, template_name, config, filename):
         """Internal method to create container scenario YAML files."""
-        return TemplateWriter.write_template(
-            template_name=template_name,
-            output_path=f"{scenario_dir}/{filename}",
-            **config,
-        )
+        template_path = os.path.join(KRKN_SCENARIO_TEMPLATE, template_name)
+        writer = TemplateWriter(template_path)
+        writer.config = config
+        return writer.write_to_file(os.path.join(scenario_dir, filename))
 
     @staticmethod
     def container_kill(
@@ -607,7 +606,7 @@ class ContainerScenarios:
         }
         return ContainerScenarios._create_container_scenario(
             scenario_dir,
-            "scenarios/openshift/container_kill.yml.j2",
+            "openshift/container_kill.yml.j2",
             config,
             "container_kill.yaml",
         )
@@ -651,7 +650,7 @@ class ContainerScenarios:
         }
         return ContainerScenarios._create_container_scenario(
             scenario_dir,
-            "scenarios/openshift/container_pause.yml.j2",
+            "openshift/container_pause.yml.j2",
             config,
             "container_pause.yaml",
         )
