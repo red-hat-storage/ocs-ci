@@ -49,7 +49,6 @@ class TestNoobaaUnderStress:
         scale_noobaa_db_pod_pv_size,
         threading_lock,
         disable_debug_logs,
-        with_failure,
         test_type,
     ):
         """
@@ -94,7 +93,7 @@ class TestNoobaaUnderStress:
 
         # In-case of disruptive testing,we need to make sure we attempt
         # some re-tries
-        if with_failure:
+        if test_type == "failure":
             tries = 8
         else:
             tries = 1
