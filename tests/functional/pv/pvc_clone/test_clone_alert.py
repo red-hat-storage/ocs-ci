@@ -1,7 +1,9 @@
+import time
 import logging
 import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -10,7 +12,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
 )
 from ocs_ci.ocs.resources import pvc
-from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 
@@ -45,10 +46,46 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
         parent_pvc = self.pvc_obj.name
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
         namespace = self.pvc_obj.namespace
+        self.cloned_obj_list = []
         for _ in range(199):
-            cloned_pvc_obj = pvc.create_pvc_clone(
+            cloned_obj = pvc.create_pvc_clone(
                 sc_name, parent_pvc, clone_yaml, namespace
             )
-            helpers.wait_for_resource_state(
-                cloned_pvc_obj, constants.STATUS_BOUND, timeout=300
-            )
+            self.cloned_obj_list.append(cloned_obj)
+
+    def teardown(self):
+        """
+        Delete all clones created during setup
+        """
+        for clone_obj in self.cloned_obj_list:
+            clone_obj.delete()
+
+    def test_no_alert_under_limit(self, setup_ui_class):
+        """
+        Test that there is no alert in the UI when limit of 200 clones is not reached
+        """
+        time.sleep(60)
+        alert_ui_obj = PageNavigator()
+        alert_ui_obj.navigate_alerting_page()
+        alert_ui_obj.take_screenshot()
+        assert not alert_ui_obj.check_element_text(
+            element="a", expected_text="HighRBDCloneSnapshotCount"
+        ), "Clones alert present on Alerting page. Expected to be absent"
+
+    def test_alert_200_clones(self, setup_ui_class):
+        """
+        Test that there is an alert in the UI when limit of 200 clones is reached"""
+        new_clone = pvc.create_pvc_clone(
+            self.pvc_obj.backed_sc,
+            self.pvc_obj.name,
+            constants.CSI_RBD_PVC_CLONE_YAML,
+            self.pvc_obj.namespace,
+        )
+        self.cloned_obj_list.append(new_clone)
+        time.sleep(60)
+        alert_ui_obj = PageNavigator()
+        alert_ui_obj.navigate_alerting_page()
+        alert_ui_obj.take_screenshot()
+        assert alert_ui_obj.check_element_text(
+            element="a", expected_text="HighRBDCloneSnapshotCount"
+        ), "Clones alert not found on Alerting page. Expected to be present"
