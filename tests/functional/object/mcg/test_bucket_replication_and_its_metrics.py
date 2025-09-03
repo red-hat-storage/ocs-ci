@@ -1,28 +1,26 @@
 import logging
-import base64
 import re
 import time
 
-import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     polarion_id,
     red_squad,
     runs_on_provider,
-    tier1,
+    tier2,
 )
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.ocs.bucket_utils import (
     update_replication_policy,
     wait_for_object_versions_match,
     copy_random_individual_objects,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.pod import get_noobaa_core_pod
+from ocs_ci.helpers.helpers import get_noobaa_metrics_token_from_secret
 
 logger = logging.getLogger(__name__)
 
@@ -35,56 +33,17 @@ TIMEOUT = 300
 @runs_on_provider
 class TestReplicationAndItsMetrics(MCGTest):
     """
-    Test suite for MCG object replication policies
+    Test suite for MCG object replication policies and its metrics
+    Here we will be testing newly added metrices to expose replication per bucket:
+        bucket_last_cycle_total_objects_num,
+        bucket_last_cycle_replicated_objects_num,
+        bucket_last_cycle_error_objects_num
     """
 
-    @pytest.fixture(autouse=True, scope="class")
-    def reduce_replication_delay_setup(self, add_env_vars_to_noobaa_core_class):
-        """
-        Reduce the replication delay to one minute
-
-        Args:
-            new_delay_in_miliseconds (function): A function to add env vars to the noobaa-core pod
-        """
-        new_delay_in_miliseconds = 60 * 1000
-        new_env_var_tuples = [
-            (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
-            (constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
-        ]
-        add_env_vars_to_noobaa_core_class(new_env_var_tuples)
-
-    @pytest.fixture()
-    def make_buckets(self, bucket_factory):
-        """
-        A factory that creates MCG buckets
-
-        Args:
-            bucket_factory: Fixture for creating new buckets
-
-        Returns:
-            function: The factory function
-        """
-
-        def _factory(amount):
-            """
-            Create buckets
-
-            Args:
-                amount (int): The number of buckets to create
-
-            Returns:
-                list(Bucket): The created buckets
-            """
-            # Using the OC interface allows patching a replication policy on the OBC
-            buckets = bucket_factory(amount, "OC")
-            return buckets
-
-        return _factory
-
-    @tier1
+    @tier2
     @polarion_id("OCS-6916")
     def test_bucket_replication_and_its_metrics(
-        self, awscli_pod, mcg_obj, make_buckets, test_directory_setup
+        self, awscli_pod, mcg_obj, test_directory_setup, bucket_factory
     ):
         """
         1. Create source and target buckets.
@@ -95,7 +54,7 @@ class TestReplicationAndItsMetrics(MCGTest):
         6. Verify the metrics
         """
         # 1. Create source and target buckets
-        bucket_1, bucket_2 = make_buckets(2)
+        bucket_1, bucket_2 = bucket_factory(2, "OC")
 
         # 2. Set bucket replication policies on the source buckets
         replication_policy = McgReplicationPolicy(destination_bucket=bucket_2.name)
@@ -123,14 +82,13 @@ class TestReplicationAndItsMetrics(MCGTest):
         logger.info("All the versions were replicated successfully")
 
         # 5. get JWT TOKEN
-        token_cmd = "oc get secret noobaa-metrics-auth-secret -n openshift-storage -o jsonpath='{.data.metrics_token}'"
-        jwt_token = base64.b64decode(run_cmd(cmd=token_cmd)).decode()
-        noobaa_core_pod = get_noobaa_core_pod()
+        jwt_token = get_noobaa_metrics_token_from_secret()
 
         # 6. Get the metrics for the bucket replication
+        noobaa_core_pod = get_noobaa_core_pod()
+        metrics_cmd = f"curl -k -H 'Authorization: Bearer {jwt_token}' localhost:8080/metrics/bg_workers"
         metrics_output = noobaa_core_pod.exec_cmd_on_pod(
-            f"curl -k -H 'Authorization: Bearer {jwt_token}' localhost:8080/metrics/bg_workers",
-            out_yaml_format=False,
+            metrics_cmd, out_yaml_format=False
         )
 
         # 7. Verify the metrics
@@ -140,17 +98,17 @@ class TestReplicationAndItsMetrics(MCGTest):
             "NooBaa_bucket_last_cycle_error_objects_num": 0,
         }
         for metric, expected_value in expected_metrics.items():
-            pattern = rf'^{metric}{{bucket_name="{bucket_1.name}"}} (\d)$'
+            pattern = rf"^{metric}{{bucket_name=\"{bucket_1.name}\"}} (\d)$"
             output_value = re.findall(pattern, metrics_output, re.MULTILINE)[-1]
             logger.info(f"Metrics {metric} : {output_value}")
             assert (
                 int(output_value) == expected_value
             ), f"Metric {metric} has unexpected value"
 
-    @tier1
+    @tier2
     @polarion_id("OCS-6917")
     def test_failing_bucket_replication_and_its_metrics(
-        self, awscli_pod, mcg_obj, make_buckets, test_directory_setup
+        self, awscli_pod, mcg_obj, test_directory_setup, bucket_factory
     ):
         """
         1. Create source and target buckets.
@@ -160,14 +118,15 @@ class TestReplicationAndItsMetrics(MCGTest):
         5. Verify the objects were replicated to the target buckets
         6. Wait before writing to the source bucket so that the replication
             policy will be applied and quota will get exceeded
-        7. Write an object to the source bucket so that the quota will get exceeded
-        8. Wait before getting the metrics so that the replication policy
-            will be applied and quota will get exceeded
+        7. Write an object to the source bucket so that the quota will get
+            exceeded
+        8. Wait before getting the metrics so that the replication
+        policy will be applied and quota will get exceeded
         9. Get the metrics for the bucket replication
         10. Verify the metrics
         """
         # 1. Create source and target buckets
-        bucket_1, bucket_2 = make_buckets(2)
+        bucket_1, bucket_2 = bucket_factory(2, "OC")
 
         # 2. Set bucket replication policies on the source buckets
         replication_policy = McgReplicationPolicy(destination_bucket=bucket_2.name)
@@ -175,7 +134,7 @@ class TestReplicationAndItsMetrics(MCGTest):
 
         # 3. Patch the target bucket to change the quota
         quota_str = '{"spec": {"additionalConfig":{"maxObjects": "4"}}}'
-        cmd = f"patch obc {bucket_2.name} -p '{quota_str}' -n openshift-storage --type=merge"
+        cmd = f"patch obc {bucket_2.name} -p '{quota_str}' -n {config.ENV_DATA['cluster_namespace']} --type=merge"
         OCP().exec_oc_cmd(cmd)
         logger.info(f"Patched quota to obc {bucket_2.name}")
         time.sleep(60)
@@ -203,8 +162,8 @@ class TestReplicationAndItsMetrics(MCGTest):
 
         time.sleep(120)
         logger.info(
-            "Waiting before writing to the source bucket so that the replication \
-            policy will be applied and quota will get exceeded"
+            "Waiting before writing to the source bucket so that the \
+            replication policy will be applied and quota will get exceeded"
         )
 
         # 6. Write an object to the source bucket so that the quota will get exceeded
@@ -219,19 +178,18 @@ class TestReplicationAndItsMetrics(MCGTest):
 
         time.sleep(120)
         logger.info(
-            "Waiting before getting the metrics so that the replication \
-            policy will be applied and quota will get exceeded"
+            "Waiting before getting the metrics so that the replication policy \
+            will be applied and quota will get exceeded"
         )
 
         # 7. get JWT TOKEN
-        token_cmd = "oc get secret noobaa-metrics-auth-secret -n openshift-storage -o jsonpath='{.data.metrics_token}'"
-        jwt_token = base64.b64decode(run_cmd(cmd=token_cmd)).decode()
-        noobaa_core_pod = get_noobaa_core_pod()
+        jwt_token = get_noobaa_metrics_token_from_secret()
 
         # 8. Get the metrics for the bucket replication
+        noobaa_core_pod = get_noobaa_core_pod()
+        metrics_cmd = f"curl -k -H 'Authorization: Bearer {jwt_token}' localhost:8080/metrics/bg_workers"
         metrics_output = noobaa_core_pod.exec_cmd_on_pod(
-            f"curl -k -H 'Authorization: Bearer {jwt_token}' localhost:8080/metrics/bg_workers",
-            out_yaml_format=False,
+            metrics_cmd, out_yaml_format=False
         )
 
         # 9. Verify the metrics, will get on error object in the last cycle
