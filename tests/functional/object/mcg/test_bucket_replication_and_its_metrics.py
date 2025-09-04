@@ -26,9 +26,6 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
-TIMEOUT = 300
-
-
 @mcg
 @red_squad
 @runs_on_provider
@@ -65,7 +62,7 @@ class TestReplicationAndItsMetrics(MCGTest):
         3. Write some objects to the source buckets
         4. Verify the objects were replicated to the target buckets
         5. Get the metrics for the bucket replication
-        6. Verify the metrics from Prometheus
+        6. Verify the bucket replication metrics from Prometheus
         """
         # 1. Create source and target buckets
         bucket_1, bucket_2 = bucket_factory(2, "OC")
@@ -95,7 +92,7 @@ class TestReplicationAndItsMetrics(MCGTest):
         )
         logger.info("All the objects were replicated successfully")
 
-        # # 7. Verify the metrics
+        # 5. Verify the bucket replication metrics from Prometheus
         expected_metrics = {
             "NooBaa_bucket_last_cycle_total_objects_num": 5,
             "NooBaa_bucket_last_cycle_replicated_objects_num": 5,
@@ -138,8 +135,12 @@ class TestReplicationAndItsMetrics(MCGTest):
 
         # 3. Patch the target bucket to change the quota
         quota_str = '{"spec": {"additionalConfig":{"maxObjects": "4"}}}'
-        cmd = f"patch obc {bucket_2.name} -p '{quota_str}' -n {config.ENV_DATA['cluster_namespace']} --type=merge"
-        OCP().exec_oc_cmd(cmd)
+        obc_obj = OCP(
+            kind="obc",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=bucket_2.name,
+        )
+        obc_obj.patch(params=quota_str, format_type="merge")
         logger.info(f"Patched quota to obc {bucket_2.name}")
 
         # Wait a bit for the quota to take effect
@@ -206,3 +207,86 @@ class TestReplicationAndItsMetrics(MCGTest):
                 assert (
                     got_metrics_value == expected_value
                 ), f"Metric {metric} has unexpected value"
+
+    @tier2
+    @polarion_id("OCS-6918")
+    def test_bidirectional_replication_and_its_metrics(
+        self, awscli_pod, mcg_obj, test_directory_setup, bucket_factory, threading_lock
+    ):
+        """
+        1. Create two buckets
+        2. Set bucket replication on both buckets
+        3. Write some objects to each bucket
+        4. Verify the objects were replicated to their targets
+        5. Verify the bucket replication metrics from Prometheus
+        """
+        a_to_b_prefix = "a_to_b"
+        b_to_a_prefix = "b_to_a"
+
+        # 1. Create two buckets
+        bucket_a, bucket_b = bucket_factory(2, "OC")
+
+        # 2. Set bucket replication on both buckets
+        replication_policy = McgReplicationPolicy(
+            destination_bucket=bucket_b.name, prefix=a_to_b_prefix
+        )
+        update_replication_policy(bucket_a.name, replication_policy.to_dict())
+
+        replication_policy = McgReplicationPolicy(
+            destination_bucket=bucket_a.name, prefix=b_to_a_prefix
+        )
+        update_replication_policy(bucket_b.name, replication_policy.to_dict())
+
+        # 3. Write some objects to each bucket
+        test_dir = test_directory_setup.result_dir
+        for bucket in (bucket_a, bucket_b):
+            prefix = a_to_b_prefix if bucket == bucket_a else b_to_a_prefix
+            copy_random_individual_objects(
+                podobj=awscli_pod,
+                target=f"s3://{bucket.name}/{prefix}/",
+                file_dir=test_dir,
+                pattern=f"{prefix}-",
+                s3_obj=mcg_obj,
+                amount=5,
+            )
+
+        # 4. Verify the objects were replicated to their targets
+        for first_bucket, second_bucket, prefix in [
+            (bucket_a.name, bucket_b.name, a_to_b_prefix),
+            (bucket_b.name, bucket_a.name, b_to_a_prefix),
+        ]:
+            wait_for_object_versions_match(
+                mcg_obj,
+                awscli_pod,
+                first_bucket,
+                second_bucket,
+                obj_key=f"{prefix}/{prefix}-",
+            )
+        logger.info("All the objects were replicated successfully")
+
+        # Wait for the metrics to be updated
+        logger.info("Waiting for the metrics to be updated")
+        time.sleep(60)
+
+        # 5. Verify the metrics from Prometheus
+        expected_metrics = {
+            "NooBaa_bucket_last_cycle_total_objects_num": 5,
+            "NooBaa_bucket_last_cycle_replicated_objects_num": 5,
+            "NooBaa_bucket_last_cycle_error_objects_num": 0,
+        }
+        for bucket in (bucket_a, bucket_b):
+            for metric, expected_value in expected_metrics.items():
+                query = f"{metric} {{bucket_name='{bucket.name}'}}"
+                api = PrometheusAPI(threading_lock=threading_lock)
+                resp = api.get("query", payload={"query": query})
+                metrics_output = None
+                if resp.ok:
+                    logger.debug(query)
+                    metrics_output = json.loads(resp.text)
+                    got_metrics_value = int(
+                        metrics_output["data"]["result"][0]["value"][1]
+                    )
+                    logger.info(f"Metrics {metric} : {got_metrics_value}")
+                    assert (
+                        got_metrics_value == expected_value
+                    ), f"Metric {metric} has unexpected value"
