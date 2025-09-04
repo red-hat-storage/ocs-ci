@@ -619,6 +619,7 @@ class ContainerScenarios:
         pod_name=None,
         container_name="",
         pause_seconds=60,
+        instance_count=1,
         wait_duration=300,
     ):
         """Generates container pause scenario YAML.
@@ -630,6 +631,7 @@ class ContainerScenarios:
             pod_name (str, optional): Specific pod name to target.
             container_name (str, optional): Specific container name to pause (default: random).
             pause_seconds (int): Duration to pause the container in seconds (default: 60).
+            instance_count (int): Number of matching pods to act on (default: 1).
             wait_duration (int): Wait duration in seconds (default: 300).
 
         Returns:
@@ -645,6 +647,7 @@ class ContainerScenarios:
             "namespace": namespace,
             "container_name": container_name,
             "pause_seconds": pause_seconds,
+            "instance_count": instance_count,
             "wait_duration": wait_duration,
             **_get_pod_selector_config(pod_name, label_selector),
         }

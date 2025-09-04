@@ -14,4 +14,5 @@
     container_name: ""
     {% endif %}
     pause_seconds: {{ pause_seconds | default(60) }}
+    instance_count: {{ instance_count }}
     wait_duration: {{ wait_duration }}
