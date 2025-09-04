@@ -2870,6 +2870,19 @@ log_file = /var/log/ceph/\$cluster-\$name.log
 
 """
 
+ROOK_CEPH_CONFIG_VALUES_420 = {
+    "global": {
+        "bdev_flock_retry": "20",
+        "bluestore_prefer_deferred_size_hdd": "0",
+        "bluestore_slow_ops_warn_lifetime": "0",
+        "mon_data_avail_warn": "15",
+        "mon_max_pg_per_osd": "1000",
+        "mon_pg_warn_max_object_skew": "0",
+        "mon_target_pg_per_osd": "400",
+    },
+    "osd": {"osd_memory_target_cgroup_limit_ratio": "0.8"},
+}
+
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
