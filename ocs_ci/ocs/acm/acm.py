@@ -600,6 +600,7 @@ def login_to_acm():
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
     page_nav.page_has_loaded(retries=10, sleep_time=5)
+
     locator = ["click-local-cluster", "click-admin-dropdown"]
     expected_text = ["local-cluster", "Administrator"]
     for expected_text, locator in zip(expected_text, locator):
