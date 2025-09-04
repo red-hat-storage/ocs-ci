@@ -294,6 +294,8 @@ class TestPvcExpand(ManageTest):
         for process_running in TimeoutSampler(500, 3, pvc_expand_process.running):
             if process_running:
                 self.run_io_and_verify(2, "during_second_expand")
+            else:
+                break
         log.info(
             "Verified IO result on all pods which ran during the second expansion process."
         )
