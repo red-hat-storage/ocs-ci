@@ -10,11 +10,16 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
     wait_for_replication_destinations_creation,
     wait_for_replication_destinations_deletion,
+    validate_replicationgroupdestinations,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.exceptions import (
+    ReplicationGroupDestinationNotFound,
+    UnexpectedBehaviour,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +95,10 @@ class TestFailover:
             # Verify the creation of ReplicationDestination resources on secondary cluster
             config.switch_to_cluster_by_name(secondary_cluster_name)
             for wl in workloads:
+                validate_rgd = validate_replicationgroupdestinations(
+                    wl.workload_namespace
+                )
+                raise ReplicationGroupDestinationNotFound if not validate_rgd else None
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
@@ -158,9 +167,18 @@ class TestFailover:
             for wl in workloads:
                 # Verify the deletion of ReplicationDestination resources on secondary cluster
                 config.switch_to_cluster_by_name(secondary_cluster_name)
+                validate_rgd = validate_replicationgroupdestinations(
+                    wl.workload_namespace
+                )
+                raise UnexpectedBehaviour if not validate_rgd else None
                 wait_for_replication_destinations_deletion(wl.workload_namespace)
+
                 # Verify the creation of ReplicationDestination resources on primary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
+                validate_rgd = validate_replicationgroupdestinations(
+                    wl.workload_namespace
+                )
+                raise ReplicationGroupDestinationNotFound if not validate_rgd else None
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
