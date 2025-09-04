@@ -174,7 +174,7 @@ def workload_ops(
     def get_fs_config():
         return create_temp_config_file(
             vdbench_filesystem_config(
-                rdpct=0,
+                rdpct=20,  # Changed from 0 to 20% read operations to allow file creation
                 size="10m",
                 depth=4,
                 width=5,
