@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     NotFoundError,
     UnexpectedDeploymentConfiguration,
+    ReplicationGroupSourceNotFound,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -787,6 +788,7 @@ def wait_for_replication_resources_creation(
         TimeoutExpiredError: In case replication resources not created
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     logger.info("Waiting for VRG to be created")
     vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
     sample = TimeoutSampler(
@@ -800,6 +802,9 @@ def wait_for_replication_resources_creation(
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
         resource_kind = constants.REPLICATION_SOURCE
+        if ocs_version >= version.VERSION_4_19:
+            validate_rgs = validate_replicationgroupsources()
+            raise ReplicationGroupSourceNotFound if not validate_rgs else None
         count_function = get_replicationsources_count
     else:
         resource_kind = constants.VOLUME_REPLICATION
@@ -2365,3 +2370,43 @@ def verify_volsync():
             timeout=600,
         )
     config.switch_ctx(restore_index)
+
+
+def validate_replicationgroupsources(namespace):
+    """
+    Gets ReplicationGroupSource resource count in given namespace
+
+    Args:
+        namespace (str): the namespace of the ReplicationSource resources
+
+    Returns:
+         bool: True if ReplicationGroupSource is found, False otherwise
+
+    """
+    rgs_obj = ocp.OCP(kind=constants.REPLICATION_GROUP_SOURCE, namespace=namespace)
+    rgs_items = rgs_obj.get().get("items")
+    if len(rgs_items) == 1:
+        return True
+    else:
+        logging.error(f"ReplicationGroupSource {rgs_items}")
+    return True
+
+
+def validate_replicationgroupdestinations(namespace):
+    """
+    Gets ReplicationGroupDestination resource count in given namespace
+
+    Args:
+        namespace (str): the namespace of the ReplicationGroupDestination resources
+
+    Returns:
+         bool: True, if ReplicationGroupDestination is found, False Otherwise
+
+    """
+    rgd_obj = ocp.OCP(kind=constants.REPLICATION_GROUP_DESTINATION, namespace=namespace)
+    rgd_items = rgd_obj.get().get("items")
+    if len(rgd_items) == 1:
+        return True
+    else:
+        logging.error(f"ReplicationGroupDestination {rgd_items}")
+        return False
