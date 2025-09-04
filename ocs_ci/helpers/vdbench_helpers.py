@@ -159,7 +159,6 @@ def get_default_vdbench_configs():
                     "width": 4,
                     "files": 10,
                     "size": "1g",
-                    "format": "yes",
                 }
             ],
             "workload_definitions": [

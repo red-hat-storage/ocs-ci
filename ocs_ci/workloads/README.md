@@ -139,8 +139,7 @@ storage_definitions:
     depth: 3
     width: 10
     files: 100
-    size: "1g"
-    format: "yes"                     # Format filesystem before testing (required for CephFS)
+    size: "1g"                        # CephFS filesystems are pre-formatted and ready for use
 
 workload_definitions:
   - id: 1

@@ -2283,7 +2283,6 @@ def vdbench_filesystem_config():
                     "width": width,
                     "files": files,
                     "size": size,
-                    "format": "yes",
                 }
             ],
             "workload_definitions": [
