@@ -259,8 +259,8 @@ class TestPvcExpand(ManageTest):
         log.info(
             "Running IO on all pods in different iterations when PVCs are being expanded."
         )
-        for process_running in TimeoutSampler(500, 3, pvc_expand_process.running):
-            if process_running:
+        for process_done in TimeoutSampler(500, 3, pvc_expand_process.done):
+            if not process_done:
                 self.run_io_and_verify(2, "during_expand")
         log.info(
             "Verified IO result on all pods which ran during the expansion process."
