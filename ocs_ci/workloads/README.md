@@ -140,6 +140,7 @@ storage_definitions:
     width: 10
     files: 100
     size: "1g"
+    format: "yes"                     # Format filesystem before testing (required for CephFS)
 
 workload_definitions:
   - id: 1
