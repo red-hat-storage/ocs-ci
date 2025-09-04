@@ -4,6 +4,7 @@ Virtual machine class
 
 import yaml
 import logging
+import secrets
 
 from ocs_ci.helpers.cnv_helpers import (
     create_pvc_using_data_source,
@@ -147,10 +148,19 @@ class VirtualMachine(Virtctl):
         """
         Prepares the VM data.
         """
+        self.password = secrets.token_urlsafe(nbytes=12)
         vm_data = templating.load_yaml(constants.CNV_VM_TEMPLATE_YAML)
         vm_data["metadata"]["name"] = self._vm_name
         vm_data["metadata"]["namespace"] = self.namespace
-
+        vm_data["spec"]["template"]["spec"]["volumes"] = self.password
+        vm_data["spec"]["template"]["spec"]["volumes"][1]["cloudInitNoCloud"][
+            "userData"
+        ] = """
+            #cloud-config
+            user:
+                - name: admin
+            password: {self.password}
+            """
         return vm_data
 
     def _create_namespace_if_not_exists(self):
