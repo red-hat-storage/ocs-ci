@@ -39,6 +39,7 @@ class AssistedInstallerCluster(object):
         high_availability_mode="Full",
         image_type="minimal-iso",
         static_network_config=None,
+        additional_ntp_source=None,
     ):
         """
         Args:
@@ -66,6 +67,8 @@ class AssistedInstallerCluster(object):
                 [{"mac_interface_map": [{"logical_nic_name": "string", "mac_address": "string"}],
                     "network_yaml": "string"},
                     ...]
+            additional_ntp_source: (str): "A comma-separated list of NTP sources (name or IP) going to be added to all
+                the hosts."
 
         """
         self.api = ai.AssistedInstallerAPI()
@@ -120,6 +123,7 @@ class AssistedInstallerCluster(object):
             self.high_availability_mode = high_availability_mode
             self.image_type = image_type
             self.static_network_config = static_network_config
+            self.additional_ntp_source = additional_ntp_source
 
     def load_existing_cluster_configuration(self):
         """
@@ -225,6 +229,8 @@ class AssistedInstallerCluster(object):
             "ssh_public_key": self.ssh_public_key,
             "pull_secret": self.pull_secret,
         }
+        if self.additional_ntp_source:
+            cluster_configuration["additional_ntp_source"] = self.additional_ntp_source
         cl_data = self.api.create_cluster(cluster_configuration)
         self.id = cl_data["id"]
         logger.info(f"Created (defined) new cluster {self.name} (id: {self.id})")
