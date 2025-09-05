@@ -175,10 +175,10 @@ def workload_ops(
         return create_temp_config_file(
             vdbench_filesystem_config(
                 rdpct=20,  # Changed from 0 to 20% read operations to allow file creation
-                size="10m",
+                size="50m",
                 depth=4,
-                width=5,
-                files=10,
+                width=3,
+                files=4,
                 threads=10,
                 elapsed=1200,
                 interval=30,
@@ -206,7 +206,7 @@ def workload_ops(
     }
 
     workloads = []
-    size = 20
+    size = 50
     for interface, cfg in interface_configs.items():
         pvcs = multi_pvc_factory(
             interface=interface,

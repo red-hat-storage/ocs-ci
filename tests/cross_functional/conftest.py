@@ -2035,15 +2035,9 @@ def vdbench_workload_factory(request, project_factory):
     """
     Factory fixture for creating Vdbench workloads with automatic cleanup.
 
-    This fixture provides a factory function that creates VdbenchWorkload instances
-    with proper cleanup handling. It supports various PVC types and access modes.
-
-    Args:
-        request: Pytest request object for finalizer registration
-        project_factory: Factory for creating test projects/namespaces
-
-    Returns:
-        function: Factory function for creating VdbenchWorkload instances
+    This fixture returns a factory function that creates VdbenchWorkload instances
+    from either a vdbench config dict or an existing config file, and registers
+    cleanup on test teardown.
     """
     created_workloads = []
 
@@ -2061,54 +2055,93 @@ def vdbench_workload_factory(request, project_factory):
         Create a VdbenchWorkload instance.
 
         Args:
-            pvc (OCS): PVC object to attach the workload to
-            vdbench_config (dict, optional): Vdbench configuration as dictionary
-            config_file (str, optional): Path to existing Vdbench config file
-            namespace (str, optional): Kubernetes namespace (defaults to PVC namespace)
-            image (str, optional): Container image for Vdbench
-            pvc_access_mode (str): PVC access mode (ReadWriteOnce, ReadWriteMany, etc.)
-            pvc_volume_mode (str): PVC volume mode (Filesystem or Block)
-            auto_start (bool): Whether to automatically start the workload
+            pvc (OCS): PVC object to attach the workload to.
+            vdbench_config (dict, optional): Vdbench config dict in normalized style.
+            config_file (str, optional): Path to an existing Vdbench .cfg file.
+            namespace (str, optional): K8s namespace; defaults to pvc.namespace.
+            image (str, optional): Container image; defaults to constants.VDBENCH_IMAGE if available.
+            pvc_access_mode (str): RWO/RWX/etc (used for validation/logging).
+            pvc_volume_mode (str): constants.VOLUME_MODE_FILESYSTEM or VOLUME_MODE_BLOCK.
+            auto_start (bool): If True, start workload immediately.
 
         Returns:
-            VdbenchWorkload: Configured Vdbench workload instance
-
-        Raises:
-            ValueError: If neither vdbench_config nor config_file is provided
+            VdbenchWorkload
         """
-        # Validate configuration input
-        if not vdbench_config and not config_file:
+        # Validate inputs
+        if vdbench_config is None and config_file is None:
             raise ValueError("Either vdbench_config or config_file must be provided")
 
-        # Create temporary config file if config dict provided
+        # Resolve namespace
+        ns = (
+            namespace
+            or getattr(pvc, "project_namespace", None)
+            or getattr(pvc, "namespace", None)
+        )
+        if not ns:
+            proj = project_factory()
+            ns = proj.namespace
+
+        # Resolve image default
+        if image is None:
+            image = getattr(constants, "VDBENCH_IMAGE", None)
+
+        # Create temporary config file if dict provided
         if vdbench_config and not config_file:
             config_file = create_temp_config_file(vdbench_config)
 
-        # Create workload instance
+        # Instantiate workload
         workload = VdbenchWorkload(
-            pvc=pvc, vdbench_config_file=config_file, namespace=namespace, image=image
+            pvc=pvc,
+            vdbench_config_file=config_file,
+            namespace=ns,
+            image=image,
+            pvc_access_mode=pvc_access_mode,
+            pvc_volume_mode=pvc_volume_mode,
         )
 
-        # Track workload for cleanup
         created_workloads.append(workload)
 
         # Auto-start if requested
         if auto_start:
-            workload.start_workload()
-            logger.info(f"Auto-started Vdbench workload: {workload.deployment_name}")
+            try:
+                workload.start_workload()
+                logger.info(
+                    "Auto-started Vdbench workload: %s", workload.deployment_name
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Failed to auto-start workload %s: %s",
+                    workload.deployment_name,
+                    exc,
+                )
+                raise
 
-        logger.info(f"Created Vdbench workload: {workload.deployment_name}")
+        logger.info(
+            "Created Vdbench workload: %s (ns=%s, mode=%s, access=%s)",
+            workload.deployment_name,
+            ns,
+            pvc_volume_mode,
+            pvc_access_mode,
+        )
         return workload
 
     def finalizer():
         """Clean up all created workloads."""
-        logger.info("Cleaning up Vdbench workloads...")
+        logger.info("Cleaning up %d Vdbench workload(s)...", len(created_workloads))
         for workload in created_workloads:
-            if workload.clenup_workload():
-                logger.info(f"Cleaning up workload: {workload.deployment_name}")
-            else:
+            try:
+                workload.cleanup_workload()
+                logger.info("Cleaned up workload: %s", workload.deployment_name)
+            except AttributeError:
                 logger.warning(
-                    f"Workload {workload.deployment_name} does not support cleanup."
+                    "Workload %s has no cleanup_workload() method.",
+                    getattr(workload, "deployment_name", "<unknown>"),
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Error cleaning up workload %s: %s",
+                    getattr(workload, "deployment_name", "<unknown>"),
+                    exc,
                 )
         created_workloads.clear()
 
@@ -2119,46 +2152,207 @@ def vdbench_workload_factory(request, project_factory):
 @pytest.fixture
 def vdbench_default_config():
     """
-    Factory for default Vdbench configuration.
+    Flexible Vdbench default config factory (direct I/O by default).
 
-    Returns:
-        function: A factory accepting overrides for default config.
+    Supports:
+      - Single or multiple WDs (via `patterns`)
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all WDs in one RD or one RD per WD
+      - Both filesystem and block device support
     """
 
     def _factory(
+        # Storage Definition (can be filesystem or block device)
         lun="/vdbench-data/testfile",
         size="1g",
         threads=1,
-        rdpct=50,
-        seekpct=100,
-        xfersize="4k",
+        open_flags="o_direct",  # direct I/O default
+        # Optional block device parameters
+        sd_align="",
+        sd_offset="",
+        sd_name="sd1",
+        # Optional filesystem parameters (if using FSD instead of SD)
+        use_filesystem=False,  # True -> use FSD, False -> use SD
+        anchor="/vdbench-data/default-fs",
+        depth=2,
+        width=4,
+        files=10,
+        fsd_name="fsd1",
+        # WD patterns (list of dicts). If None, a simple single pattern is used.
+        patterns=None,  # [{'name':'default_test','rdpct':50,'seekpct':100,'xfersize':'4k'}, ...]
+        default_rdpct=50,
+        default_seekpct=100,
+        default_xfersize="4k",
+        default_skew=0,
+        # RD behaviour
         elapsed=60,
         interval=5,
         iorate="max",
+        group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=False,  # True -> add a short format RD before test RDs
+        precreate_elapsed=1,  # seconds for precreate
+        precreate_iorate=0,  # 0 -> formatting only
     ):
-        return {
-            "storage_definitions": [
-                {"id": 1, "lun": lun, "size": size, "threads": threads}
-            ],
-            "workload_definitions": [
+        # ---------- defaults ----------
+        if patterns is None:
+            if use_filesystem:
+                # Simple filesystem pattern for default config
+                patterns = [
+                    {
+                        "name": "default_fs_test",
+                        "fileio": "random",
+                        "rdpct": 50,
+                        "xfersize": "4k",
+                        "threads": threads,
+                        "skew": 0,
+                    }
+                ]
+            else:
+                # Simple block device pattern for default config
+                patterns = [
+                    {
+                        "name": "default_test",
+                        "rdpct": 50,
+                        "seekpct": 100,
+                        "xfersize": "4k",
+                        "skew": 0,
+                    }
+                ]
+
+        # ---------- build storage definition ----------
+        cfg = {
+            "storage_definitions": [],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        if use_filesystem:
+            # Filesystem storage definition (FSD)
+            cfg["storage_definitions"].append(
                 {
-                    "id": 1,
-                    "sd_id": 1,
-                    "rdpct": rdpct,
-                    "seekpct": seekpct,
-                    "xfersize": xfersize,
+                    "id": fsd_name,
+                    "fsd": True,
+                    "anchor": anchor,
+                    "depth": depth,
+                    "width": width,
+                    "files": files,
+                    "size": size,
+                    "reuse": False,
+                    "open_flags": open_flags,
                 }
-            ],
-            "run_definitions": [
+            )
+            storage_id = fsd_name
+            storage_key = "fsd_id"
+        else:
+            # Block device storage definition (SD)
+            cfg["storage_definitions"].append(
                 {
-                    "id": 1,
-                    "wd_id": 1,
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
+                    "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
+                }
+            )
+            storage_id = sd_name
+            storage_key = "sd_id"
+
+        # ---------- build WDs from patterns ----------
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+
+            workload_def = {
+                "id": wd_id,
+                storage_key: storage_id,
+                "rdpct": p.get("rdpct", default_rdpct),
+                "xfersize": p.get("xfersize", default_xfersize),
+                "skew": p.get("skew", default_skew),
+            }
+
+            # Add filesystem-specific or block-specific parameters
+            if use_filesystem:
+                workload_def["fileio"] = p.get("fileio", "random")
+                workload_def["threads"] = p.get("threads", threads)
+                workload_def["fwdrate"] = p.get("fwdrate", "max")
+            else:
+                workload_def["seekpct"] = p.get("seekpct", default_seekpct)
+
+            cfg["workload_definitions"].append(workload_def)
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # ---------- validation ----------
+        if not wd_ids:
+            raise ValueError("No WD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per WD or a single RD referencing all WDs
+        if group_all_wds_in_one_rd:
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "wd_id": ",".join(wd_ids),
+                    "format": "no" if precreate_then_run else "yes",
                     "elapsed": elapsed,
                     "interval": interval,
                     "iorate": iorate,
                 }
-            ],
-        }
+            )
+        else:
+            # One RD per WD (typical for default config)
+            for i, wd_id in enumerate(wd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "wd_id": wd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
 
     return _factory
 
@@ -2166,164 +2360,282 @@ def vdbench_default_config():
 @pytest.fixture
 def vdbench_performance_config():
     """
-    Factory for performance-oriented Vdbench configuration.
+    Flexible Vdbench performance config factory (direct I/O by default).
 
-    Returns:
-        function: A factory accepting performance-specific overrides.
+    Supports:
+      - Multiple performance-oriented WD patterns
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all WDs in one RD or one RD per WD
+      - Both filesystem and block device support
+      - Performance-specific defaults (larger sizes, more threads, longer runs)
     """
 
     def _factory(
-        lun="/vdbench-data/perftest", size="10g", threads=4, workloads=None, runs=None
+        # Storage Definition (can be filesystem or block device)
+        lun="/vdbench-data/perftest",
+        size="10g",
+        threads=4,
+        open_flags="o_direct",  # direct I/O default
+        # Optional block device parameters
+        sd_align="",
+        sd_offset="",
+        sd_name="sd1",
+        # Optional filesystem parameters (if using FSD instead of SD)
+        use_filesystem=False,  # True -> use FSD, False -> use SD
+        anchor="/vdbench-data/perf-fs",
+        depth=3,
+        width=6,
+        files=50,
+        fsd_name="fsd1",
+        # WD patterns (list of dicts). If None, performance-oriented patterns are used.
+        patterns=None,  # [{'name':'perf_read','rdpct':70,'seekpct':100,'xfersize':'64k'}, ...]
+        default_rdpct=70,
+        default_seekpct=100,
+        default_xfersize="64k",
+        default_skew=0,
+        # RD behaviour - performance defaults
+        elapsed=300,  # 5 minutes for performance tests
+        interval=10,  # 10-second reporting intervals
+        iorate="max",  # max performance by default
+        group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=True,  # True -> add a short format RD before test RDs (recommended for perf)
+        precreate_elapsed=30,  # longer precreate for perf tests
+        precreate_iorate=0,  # 0 -> formatting only
     ):
-        if workloads is None:
-            workloads = [
-                {"id": 1, "sd_id": 1, "rdpct": 70, "seekpct": 100, "xfersize": "64k"},
-                {"id": 2, "sd_id": 1, "rdpct": 0, "seekpct": 100, "xfersize": "1m"},
-            ]
-        if runs is None:
-            runs = [
-                {"id": 1, "wd_id": 1, "elapsed": 300, "interval": 10, "iorate": "1000"},
-                {"id": 2, "wd_id": 2, "elapsed": 180, "interval": 10, "iorate": "max"},
-            ]
+        # ---------- performance-oriented defaults ----------
+        if patterns is None:
+            if use_filesystem:
+                # Performance filesystem patterns
+                patterns = [
+                    {
+                        "name": "seq_read_perf",
+                        "fileio": "sequential",
+                        "rdpct": 100,
+                        "xfersize": "1m",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read_perf",
+                        "fileio": "random",
+                        "rdpct": 100,
+                        "xfersize": "64k",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw_perf",
+                        "fileio": "random",
+                        "rdpct": 70,
+                        "xfersize": "64k",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "seq_write_perf",
+                        "fileio": "sequential",
+                        "rdpct": 0,
+                        "xfersize": "1m",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                ]
+            else:
+                # Performance block device patterns
+                patterns = [
+                    {
+                        "name": "seq_read_perf",
+                        "rdpct": 100,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read_perf",
+                        "rdpct": 100,
+                        "seekpct": 100,
+                        "xfersize": "64k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw_perf",
+                        "rdpct": 70,
+                        "seekpct": 100,
+                        "xfersize": "64k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "seq_write_perf",
+                        "rdpct": 0,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                ]
 
-        return {
-            "storage_definitions": [
-                {"id": 1, "lun": lun, "size": size, "threads": threads}
-            ],
-            "workload_definitions": workloads,
-            "run_definitions": runs,
+        # ---------- build storage definition ----------
+        cfg = {
+            "storage_definitions": [],
+            "workload_definitions": [],
+            "run_definitions": [],
         }
 
-    return _factory
-
-
-@pytest.fixture
-def vdbench_block_config():
-    """
-    Factory for block-device-specific Vdbench configuration.
-
-    Returns:
-        function: A factory to customize block device test config.
-    """
-
-    def _factory(
-        lun="/dev/vdbench-device",
-        size="1g",
-        threads=2,
-        rdpct=50,
-        seekpct=100,
-        xfersize="8k",
-        elapsed=120,
-        interval=5,
-        iorate="max",
-        openflags="o_direct",
-    ):
-        return {
-            "storage_definitions": [
+        if use_filesystem:
+            # Filesystem storage definition (FSD)
+            cfg["storage_definitions"].append(
                 {
-                    "id": 1,
-                    "lun": lun,
-                    "size": size,
-                    "threads": threads,
-                    "openflags": openflags,
-                }
-            ],
-            "workload_definitions": [
-                {
-                    "id": 1,
-                    "sd_id": 1,
-                    "rdpct": rdpct,
-                    "seekpct": seekpct,
-                    "xfersize": xfersize,
-                }
-            ],
-            "run_definitions": [
-                {
-                    "id": 1,
-                    "wd_id": 1,
-                    "elapsed": elapsed,
-                    "interval": interval,
-                    "iorate": iorate,
-                }
-            ],
-        }
-
-    return _factory
-
-
-@pytest.fixture
-def vdbench_filesystem_config():
-    """
-    Factory for filesystem-based Vdbench configuration.
-
-    Returns:
-        function: A factory that accepts parameters for fs-based tests.
-    """
-
-    def _factory(
-        anchor="/vdbench-data/fs-test",
-        depth=2,
-        width=4,
-        files=10,
-        size="1g",
-        threads=2,
-        rdpct=50,
-        xfersize="8k",
-        elapsed=120,
-        interval=5,
-        iorate="max",
-    ):
-        return {
-            "storage_definitions": [
-                {
-                    "id": 1,
+                    "id": fsd_name,
                     "fsd": True,
                     "anchor": anchor,
                     "depth": depth,
                     "width": width,
                     "files": files,
                     "size": size,
+                    "reuse": False,
+                    "open_flags": open_flags,
                 }
-            ],
-            "workload_definitions": [
+            )
+            storage_id = fsd_name
+            storage_key = "fsd_id"
+        else:
+            # Block device storage definition (SD)
+            cfg["storage_definitions"].append(
                 {
-                    "id": 1,
-                    "sd_id": 1,
-                    "rdpct": rdpct,
-                    "xfersize": xfersize,
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
                     "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
                 }
-            ],
-            "run_definitions": [
+            )
+            storage_id = sd_name
+            storage_key = "sd_id"
+
+        # ---------- build WDs from patterns ----------
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+
+            workload_def = {
+                "id": wd_id,
+                storage_key: storage_id,
+                "rdpct": p.get("rdpct", default_rdpct),
+                "xfersize": p.get("xfersize", default_xfersize),
+                "skew": p.get("skew", default_skew),
+            }
+
+            # Add filesystem-specific or block-specific parameters
+            if use_filesystem:
+                workload_def["fileio"] = p.get("fileio", "random")
+                workload_def["threads"] = p.get("threads", threads)
+                workload_def["fwdrate"] = p.get("fwdrate", "max")
+            else:
+                workload_def["seekpct"] = p.get("seekpct", default_seekpct)
+
+            cfg["workload_definitions"].append(workload_def)
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
                 {
-                    "id": 1,
-                    "wd_id": 1,
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # ---------- validation ----------
+        if not wd_ids:
+            raise ValueError("No WD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per WD or a single RD referencing all WDs
+        if group_all_wds_in_one_rd:
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "wd_id": ",".join(wd_ids),
+                    "format": "no" if precreate_then_run else "yes",
                     "elapsed": elapsed,
                     "interval": interval,
                     "iorate": iorate,
                 }
-            ],
-        }
+            )
+        else:
+            # One RD per WD
+            for i, wd_id in enumerate(wd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "wd_id": wd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
 
     return _factory
 
 
 @pytest.fixture
-def vdbench_mixed_workload_config():
-    """
-    Factory for mixed read/write workload patterns.
-
-    Returns:
-        function: A factory for creating mixed I/O patterns
-    """
+def vdbench_block_config():
+    """Factory for block-device-specific Vdbench configuration"""
 
     def _factory(
-        patterns=None,
-        lun="/vdbench-data/mixed",
-        size="5g",
+        lun="/dev/vdbench-device",
+        size="1g",
         threads=2,
-        elapsed=300,
-        interval=10,
+        open_flags="o_direct",
+        sd_align="",
+        sd_offset="",
+        sd_name="sd1",
+        patterns=None,
+        default_rdpct=50,
+        default_seekpct=100,
+        default_xfersize="8k",
+        default_skew=0,
+        elapsed=120,
+        interval=5,
+        iorate="max",
+        group_all_wds_in_one_rd=False,
+        precreate_only=False,
+        precreate_then_run=False,
+        precreate_elapsed=1,
+        precreate_iorate=0,
     ):
         if patterns is None:
             patterns = [
@@ -2332,47 +2644,528 @@ def vdbench_mixed_workload_config():
                     "rdpct": 100,
                     "seekpct": 0,
                     "xfersize": "1m",
+                    "skew": 0,
                 },
-                {"name": "random_read", "rdpct": 100, "seekpct": 100, "xfersize": "4k"},
-                {"name": "mixed_rw", "rdpct": 70, "seekpct": 100, "xfersize": "64k"},
+                {
+                    "name": "random_read",
+                    "rdpct": 100,
+                    "seekpct": 100,
+                    "xfersize": "4k",
+                    "skew": 0,
+                },
+                {
+                    "name": "mixed_rw",
+                    "rdpct": 70,
+                    "seekpct": 100,
+                    "xfersize": "64k",
+                    "skew": 0,
+                },
                 {
                     "name": "sequential_write",
                     "rdpct": 0,
                     "seekpct": 0,
                     "xfersize": "1m",
+                    "skew": 0,
                 },
             ]
 
-        workloads = []
-        runs = []
-
-        for i, pattern in enumerate(patterns, 1):
-            workloads.append(
+        cfg = {
+            "storage_definitions": [
                 {
-                    "id": i,
-                    "sd_id": 1,
-                    "rdpct": pattern["rdpct"],
-                    "seekpct": pattern["seekpct"],
-                    "xfersize": pattern["xfersize"],
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
+                    "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
+                }
+            ],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+            cfg["workload_definitions"].append(
+                {
+                    "id": wd_id,
+                    "sd_id": sd_name,
+                    "rdpct": p.get("rdpct", default_rdpct),
+                    "seekpct": p.get("seekpct", default_seekpct),
+                    "xfersize": p.get("xfersize", default_xfersize),
+                    "skew": p.get("skew", default_skew),
                 }
             )
 
-            runs.append(
+        if not wd_ids:
+            raise ValueError("No WD patterns provided")
+
+        for i, wd_id in enumerate(wd_ids, start=1):
+            cfg["run_definitions"].append(
                 {
-                    "id": i,
-                    "wd_id": i,
+                    "id": f"rd{i}",
+                    "wd_id": wd_id,
+                    "format": "yes",
                     "elapsed": elapsed,
                     "interval": interval,
-                    "iorate": "max",
+                    "iorate": iorate,
                 }
             )
 
-        return {
+        return cfg
+
+    return _factory
+
+
+@pytest.fixture
+def vdbench_filesystem_config():
+    """
+    Flexible Vdbench filesystem config factory (direct I/O by default).
+
+    Supports:
+      - Single or multiple FWDs (via `patterns`)
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all FWDs in one RD or one RD per FWD
+    """
+
+    def _factory(
+        # FSD (File System Definition)
+        anchor="/vdbench-data/fs-test",
+        depth=2,
+        width=4,
+        files=10,
+        size="1g",
+        reuse=False,
+        open_flags="o_direct",
+        patterns=None,  # [{'name':'sequential_read','fileio':'sequential','rdpct':100,'xfersize':'1m'}, ...]
+        default_fileio="random",
+        default_rdpct=50,
+        default_xfersize="8k",
+        default_threads=2,
+        default_fwdrate="max",
+        default_skew=0,
+        # RD behaviour
+        elapsed=120,
+        interval=5,
+        iorate="max",
+        group_all_fwds_in_one_rd=False,  # True -> single RD with fwd=fwd1,fwd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=False,  # True -> add a short format RD before test RDs
+        precreate_elapsed=1,  # seconds for precreate
+        precreate_iorate=0,  # 0 -> formatting only
+    ):
+        # ---------- defaults ----------
+        if patterns is None:
+            patterns = [
+                {
+                    "name": "sequential_read",
+                    "fileio": "sequential",
+                    "rdpct": 100,
+                    "xfersize": "1m",
+                    "threads": 2,
+                    "fwdrate": "max",
+                    "skew": 0,
+                },
+                {
+                    "name": "random_read",
+                    "fileio": "random",
+                    "rdpct": 100,
+                    "xfersize": "4k",
+                    "threads": 2,
+                    "fwdrate": "max",
+                    "skew": 0,
+                },
+                {
+                    "name": "mixed_rw",
+                    "fileio": "random",
+                    "rdpct": 70,
+                    "xfersize": "64k",
+                    "threads": 2,
+                    "fwdrate": "max",
+                    "skew": 0,
+                },
+                {
+                    "name": "sequential_write",
+                    "fileio": "sequential",
+                    "rdpct": 0,
+                    "xfersize": "1m",
+                    "threads": 2,
+                    "fwdrate": "max",
+                    "skew": 0,
+                },
+            ]
+
+        # ---------- build FSD ----------
+        cfg = {
             "storage_definitions": [
-                {"id": 1, "lun": lun, "size": size, "threads": threads}
+                {
+                    "id": "fsd1",
+                    "fsd": True,
+                    "anchor": anchor,
+                    "depth": depth,
+                    "width": width,
+                    "files": files,
+                    "size": size,
+                    "reuse": reuse,
+                    "open_flags": open_flags,
+                }
             ],
-            "workload_definitions": workloads,
-            "run_definitions": runs,
+            "workload_definitions": [],
+            "run_definitions": [],
         }
+
+        # ---------- build FWDs from patterns ----------
+        fwd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            fwd_id = f"fwd{i}"
+            fwd_ids.append(fwd_id)
+            cfg["workload_definitions"].append(
+                {
+                    "id": fwd_id,
+                    "fsd_id": "fsd1",
+                    "fileio": p.get("fileio", default_fileio),
+                    "rdpct": p.get("rdpct", default_rdpct),
+                    "xfersize": p.get("xfersize", default_xfersize),
+                    "threads": p.get("threads", default_threads),
+                    "fwdrate": p.get("fwdrate", default_fwdrate),
+                    "skew": p.get("skew", default_skew),
+                }
+            )
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            # Fixed: Check if fwd_ids is not empty before accessing first element
+            if not fwd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any FWD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "fwd_id": fwd_ids[
+                        0
+                    ],  # Use first available fwd instead of hardcoded "fwd1"
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            # Fixed: Check if fwd_ids is not empty before accessing first element
+            if not fwd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any FWD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "fwd_id": fwd_ids[
+                        0
+                    ],  # Use first available fwd instead of hardcoded "fwd1"
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # Fixed: Added validation for empty fwd_ids
+        if not fwd_ids:
+            raise ValueError("No FWD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per FWD or a single RD referencing all FWDs
+        if group_all_fwds_in_one_rd:
+            # In .cfg this becomes: rd=rd1,fwd=fwd1,fwd2,...,format=no
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "fwd_id": ",".join(fwd_ids),
+                    "format": "no" if precreate_then_run else "yes",
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": iorate,
+                }
+            )
+        else:
+            # One RD per FWD
+            for i, fwd_id in enumerate(fwd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "fwd_id": fwd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
+
+    return _factory
+
+
+@pytest.fixture
+def vdbench_mixed_workload_config():
+    """
+    Flexible Vdbench mixed workload config factory (direct I/O by default).
+
+    Supports:
+      - Single or multiple WDs (via `patterns`)
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all WDs in one RD or one RD per WD
+      - Mixed filesystem and block device support
+    """
+
+    def _factory(
+        # Storage Definition (can be filesystem or block device)
+        lun="/vdbench-data/mixed",
+        size="5g",
+        threads=2,
+        open_flags="o_direct",  # direct I/O default
+        # Optional block device parameters
+        sd_align="",  # optional: e.g., "4k"
+        sd_offset="",  # optional: e.g., "0"
+        sd_name="sd1",
+        # Optional filesystem parameters (if using FSD instead of SD)
+        use_filesystem=False,  # True -> use FSD, False -> use SD
+        anchor="/vdbench-data/mixed-fs",
+        depth=2,
+        width=4,
+        files=10,
+        fsd_name="fsd1",
+        # WD patterns (list of dicts). If None, a sensible mixed default is used.
+        patterns=None,  # [{'name':'random_read','rdpct':100,'seekpct':100,'xfersize':'4k','skew':0}, ...]
+        default_rdpct=50,
+        default_seekpct=100,
+        default_xfersize="64k",
+        default_skew=0,
+        # RD behaviour
+        elapsed=300,
+        interval=10,
+        iorate="max",
+        group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=False,  # True -> add a short format RD before test RDs
+        precreate_elapsed=1,  # seconds for precreate
+        precreate_iorate=0,  # 0 -> formatting only
+    ):
+        # ---------- defaults ----------
+        if patterns is None:
+            if use_filesystem:
+                # Filesystem-optimized patterns
+                patterns = [
+                    {
+                        "name": "sequential_read",
+                        "fileio": "sequential",
+                        "rdpct": 100,
+                        "xfersize": "1m",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read",
+                        "fileio": "random",
+                        "rdpct": 100,
+                        "xfersize": "4k",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw",
+                        "fileio": "random",
+                        "rdpct": 70,
+                        "xfersize": "64k",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "sequential_write",
+                        "fileio": "sequential",
+                        "rdpct": 0,
+                        "xfersize": "1m",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                ]
+            else:
+                # Block device-optimized patterns
+                patterns = [
+                    {
+                        "name": "sequential_read",
+                        "rdpct": 100,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read",
+                        "rdpct": 100,
+                        "seekpct": 100,
+                        "xfersize": "4k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw",
+                        "rdpct": 70,
+                        "seekpct": 100,
+                        "xfersize": "64k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "sequential_write",
+                        "rdpct": 0,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                ]
+
+        # ---------- build storage definition ----------
+        cfg = {
+            "storage_definitions": [],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        if use_filesystem:
+            # Filesystem storage definition (FSD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": fsd_name,
+                    "fsd": True,
+                    "anchor": anchor,
+                    "depth": depth,
+                    "width": width,
+                    "files": files,
+                    "size": size,
+                    "reuse": False,
+                    "open_flags": open_flags,
+                }
+            )
+            storage_id = fsd_name
+            storage_key = "fsd_id"
+        else:
+            # Block device storage definition (SD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
+                    "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
+                }
+            )
+            storage_id = sd_name
+            storage_key = "sd_id"
+
+        # ---------- build WDs from patterns ----------
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+
+            workload_def = {
+                "id": wd_id,
+                storage_key: storage_id,
+                "rdpct": p.get("rdpct", default_rdpct),
+                "xfersize": p.get("xfersize", default_xfersize),
+                "skew": p.get("skew", default_skew),
+            }
+
+            # Add filesystem-specific or block-specific parameters
+            if use_filesystem:
+                workload_def["fileio"] = p.get("fileio", "random")
+                workload_def["threads"] = p.get("threads", threads)
+                workload_def["fwdrate"] = p.get("fwdrate", "max")
+            else:
+                workload_def["seekpct"] = p.get("seekpct", default_seekpct)
+
+            cfg["workload_definitions"].append(workload_def)
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            # Fixed: Check if wd_ids is not empty before accessing first element
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],  # Use first available wd instead of hardcoded
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            # Fixed: Check if wd_ids is not empty before accessing first element
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],  # Use first available wd instead of hardcoded
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": 1,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # Fixed: Added validation for empty wd_ids
+        if not wd_ids:
+            raise ValueError("No WD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per WD or a single RD referencing all WDs
+        if group_all_wds_in_one_rd:
+            # In .cfg this becomes: rd=rd1,wd=wd1,wd2,...,format=no
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "wd_id": ",".join(wd_ids),
+                    "format": "no" if precreate_then_run else "yes",
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": iorate,
+                }
+            )
+        else:
+            # One RD per WD
+            for i, wd_id in enumerate(wd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "wd_id": wd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
 
     return _factory
