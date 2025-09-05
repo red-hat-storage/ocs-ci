@@ -764,7 +764,7 @@ def check_vrg_state(state, namespace, resource_name=None):
 
 
 def wait_for_replication_resources_creation(
-    vr_count,
+    count,
     namespace,
     timeout,
     discovered_apps=False,
@@ -775,7 +775,7 @@ def wait_for_replication_resources_creation(
     Wait for replication resources to be created
 
     Args:
-        vr_count (int): Expected number of VR resources or ReplicationSource count
+        count (int): Expected number of VR resources or ReplicationSource count
         namespace (str): the namespace of the VR or ReplicationSource resources
         timeout (int): time in seconds to wait for VR or ReplicationSource resources to be created
             or reach expected state
@@ -787,8 +787,10 @@ def wait_for_replication_resources_creation(
         TimeoutExpiredError: In case replication resources not created
 
     """
-    logger.info("Waiting for VRG to be created")
+    ocs_version = version.get_semantic_ocs_version_from_config()
     vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
+
+    logger.info("Waiting for VRG to be created")
     sample = TimeoutSampler(
         timeout=timeout, sleep=5, func=check_vrg_existence, namespace=vrg_namespace
     )
@@ -802,22 +804,23 @@ def wait_for_replication_resources_creation(
         resource_kind = constants.REPLICATION_SOURCE
         count_function = get_replicationsources_count
     else:
+        # Starting with ODF 4.20, CG behavior is always used
+        # Only 1 VolumeReplication resource is expected per workload.
+        count = 1 if ocs_version >= version.VERSION_4_20 else count
         resource_kind = constants.VOLUME_REPLICATION
         count_function = get_vr_count
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        logger.info(f"Waiting for {vr_count} {resource_kind}s to be created")
+        logger.info(f"Waiting for {count} {resource_kind}s to be created")
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=5,
             func=count_function,
             namespace=namespace,
         )
-        sample.wait_for_func_value(vr_count)
+        sample.wait_for_func_value(count)
 
         if resource_kind == constants.VOLUME_REPLICATION:
-            logger.info(
-                f"Waiting for {vr_count} {resource_kind}s to reach primary state"
-            )
+            logger.info(f"Waiting for {count} {resource_kind}s to reach primary state")
             sample = TimeoutSampler(
                 timeout=timeout,
                 sleep=5,
