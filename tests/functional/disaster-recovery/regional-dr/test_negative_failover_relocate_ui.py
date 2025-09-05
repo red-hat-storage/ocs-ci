@@ -35,7 +35,7 @@ class TestNegativeFailoverRelocate:
     @pytest.mark.polarion_id("OCS-4746")
     def test_failover_to_same_cluster(
         self,
-        setup_acm_ui,
+        setup_acm_ui_and_run_test_via_ui,
         dr_workload,
     ):
         """
@@ -76,7 +76,9 @@ class TestNegativeFailoverRelocate:
         logger.info("Failover negative scenario test via ACM UI passed")
 
     @pytest.mark.polarion_id("OCS-4747")
-    def test_relocate_to_same_cluster(self, setup_acm_ui, dr_workload):
+    def test_relocate_to_same_cluster(
+        self, setup_acm_ui_and_run_test_via_ui, dr_workload
+    ):
         """
         Tests to verify if application relocate to same cluster where it's running is blocked
 

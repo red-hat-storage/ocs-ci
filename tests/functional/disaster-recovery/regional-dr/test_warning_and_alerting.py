@@ -113,7 +113,7 @@ class TestRDRWarningAndAlerting:
     # TODO: Update polarion IDs
     @skipif_ocs_version("<4.18")
     def test_rdr_inconsistent_data_warning_alert(
-        self, action, setup_acm_ui, dr_workload, scale_up_deployment
+        self, action, setup_acm_ui_and_run_test_via_ui, dr_workload, scale_up_deployment
     ):
         """
         Test to verify that "Inconsistent data on target cluster" warning alert is seen on the Failover/Relocate modal
@@ -347,7 +347,7 @@ class TestRDRWarningAndAlerting:
     @polarion_id("OCS-5348")
     @skipif_ocs_version("<4.14")
     def test_rdr_volumesyncronizationdelayalert(
-        self, setup_acm_ui, dr_workload, scale_up_deployment
+        self, setup_acm_ui_and_run_test_via_ui, dr_workload, scale_up_deployment
     ):
         """
         Test to verify that "VolumeSynchronizationDelay" warning and critical level alert is fired on the DR dashboard.

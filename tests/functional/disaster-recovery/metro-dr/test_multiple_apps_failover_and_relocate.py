@@ -64,7 +64,7 @@ class TestMultipleApplicationFailoverAndRelocate:
     )
     def test_application_failover_and_relocate(
         self,
-        setup_acm_ui,
+        setup_acm_ui_and_run_test_via_ui,
         nodes_multicluster,
         workload_type,
         dr_workloads_on_managed_clusters,

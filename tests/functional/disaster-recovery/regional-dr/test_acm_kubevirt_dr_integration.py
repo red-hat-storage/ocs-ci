@@ -2,6 +2,8 @@ import logging
 
 from time import sleep
 
+import pytest
+
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import skipif_ocs_version
@@ -43,7 +45,7 @@ class TestACMKubevirtDRIntergration:
     # TODO: Add Polarion ID when available
     def test_acm_kubevirt_using_shared_protection(
         self,
-        setup_acm_ui,
+        setup_acm_ui_and_run_test_via_ui,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
         node_restart_teardown,
@@ -66,7 +68,6 @@ class TestACMKubevirtDRIntergration:
 
 
         """
-
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]

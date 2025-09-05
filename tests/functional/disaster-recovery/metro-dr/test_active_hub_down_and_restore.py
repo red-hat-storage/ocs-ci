@@ -76,7 +76,7 @@ class TestActiveHubDownAndRestore:
 
     @pytest.mark.polarion_id("OCS-XXXX")
     def test_application_failover_and_relocate(
-        self, setup_acm_ui, nodes_multicluster, dr_workload
+        self, setup_acm_ui_and_run_test_via_ui, nodes_multicluster, dr_workload
     ):
         """
         Tests to verify failover and relocate all appswhen active hub down and restored
