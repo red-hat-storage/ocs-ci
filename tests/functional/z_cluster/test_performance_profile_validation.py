@@ -37,6 +37,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-5646")
 @pytest.mark.polarion_id("OCS-5656")
 @pytest.mark.polarion_id("OCS-5657")
+@ignore_leftovers
 class TestProfileDefaultValuesCheck(ManageTest):
     @pytest.mark.parametrize(
         argnames=["perf_profile"],
@@ -46,7 +47,6 @@ class TestProfileDefaultValuesCheck(ManageTest):
             pytest.param(*["balanced"]),
         ],
     )
-    @ignore_leftovers
     def test_validate_cluster_resource_profile(self, perf_profile):
         """
         Testcase to validate osd, mgr, mon, mds and rgw pod memory and cpu values
@@ -165,7 +165,6 @@ class TestProfileDefaultValuesCheck(ManageTest):
             pytest.param(*["balanced"], marks=pytest.mark.polarion_id("OCS-5644")),
         ],
     )
-    @ignore_leftovers
     def test_change_cluster_resource_profile(self, perf_profile):
         """
         Testcase to validate osd, mgr, mon, mds and rgw pod memory and cpu values
