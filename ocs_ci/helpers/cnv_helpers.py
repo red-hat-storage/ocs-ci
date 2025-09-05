@@ -7,6 +7,8 @@ import base64
 import logging
 import re
 import time
+import secrets
+import string
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -620,3 +622,17 @@ def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
     return "running" in output
+
+
+def generate_password(length=10):
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    while True:
+        pwd = "".join(secrets.choice(alphabet) for _ in range(length))
+        # enforce at least one of each category
+        if (
+            any(c.islower() for c in pwd)
+            and any(c.isupper() for c in pwd)
+            and any(c.isdigit() for c in pwd)
+            and any(c in string.punctuation for c in pwd)
+        ):
+            return pwd
