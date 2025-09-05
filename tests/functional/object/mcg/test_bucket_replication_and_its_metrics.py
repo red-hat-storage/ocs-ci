@@ -1,6 +1,5 @@
 import logging
 import time
-import json
 import pytest
 
 
@@ -17,10 +16,10 @@ from ocs_ci.ocs.bucket_utils import (
     update_replication_policy,
     wait_for_object_versions_match,
     copy_random_individual_objects,
+    get_noobaa_bucket_replication_metrics_in_prometheus,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
-from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
@@ -99,18 +98,12 @@ class TestReplicationAndItsMetrics(MCGTest):
             "NooBaa_bucket_last_cycle_error_objects_num": 0,
         }
         for metric, expected_value in expected_metrics.items():
-            query = f"{metric} {{bucket_name='{bucket_1.name}'}}"
-            api = PrometheusAPI(threading_lock=threading_lock)
-            resp = api.get("query", payload={"query": query})
-            metrics_output = None
-            if resp.ok:
-                logger.debug(query)
-                metrics_output = json.loads(resp.text)
-                got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
-                logger.info(f"Metrics {metric} : {got_metrics_value}")
-                assert (
-                    got_metrics_value == expected_value
-                ), f"Metric {metric} has unexpected value"
+            metric_value = get_noobaa_bucket_replication_metrics_in_prometheus(
+                metric, bucket_1.name, threading_lock
+            )
+            assert (
+                metric_value == expected_value
+            ), f"Metric {metric} has unexpected value. Expected: {expected_value}, Got: {metric_value}"
 
     @tier2
     @polarion_id("OCS-6917")
@@ -195,18 +188,12 @@ class TestReplicationAndItsMetrics(MCGTest):
             "NooBaa_bucket_last_cycle_error_objects_num": 1,
         }
         for metric, expected_value in expected_metrics.items():
-            query = f"{metric} {{bucket_name='{bucket_1.name}'}}"
-            api = PrometheusAPI(threading_lock=threading_lock)
-            resp = api.get("query", payload={"query": query})
-            metrics_output = None
-            if resp.ok:
-                logger.debug(query)
-                metrics_output = json.loads(resp.text)
-                got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
-                logger.info(f"Metrics {metric} : {got_metrics_value}")
-                assert (
-                    got_metrics_value == expected_value
-                ), f"Metric {metric} has unexpected value"
+            metric_value = get_noobaa_bucket_replication_metrics_in_prometheus(
+                metric, bucket_1.name, threading_lock
+            )
+            assert (
+                metric_value == expected_value
+            ), f"Metric {metric} has unexpected value. Expected: {expected_value}, Got: {metric_value}"
 
     @tier2
     @polarion_id("OCS-6918")
@@ -276,17 +263,9 @@ class TestReplicationAndItsMetrics(MCGTest):
         }
         for bucket in (bucket_a, bucket_b):
             for metric, expected_value in expected_metrics.items():
-                query = f"{metric} {{bucket_name='{bucket.name}'}}"
-                api = PrometheusAPI(threading_lock=threading_lock)
-                resp = api.get("query", payload={"query": query})
-                metrics_output = None
-                if resp.ok:
-                    logger.debug(query)
-                    metrics_output = json.loads(resp.text)
-                    got_metrics_value = int(
-                        metrics_output["data"]["result"][0]["value"][1]
-                    )
-                    logger.info(f"Metrics {metric} : {got_metrics_value}")
-                    assert (
-                        got_metrics_value == expected_value
-                    ), f"Metric {metric} has unexpected value"
+                metric_value = get_noobaa_bucket_replication_metrics_in_prometheus(
+                    metric, bucket.name, threading_lock
+                )
+                assert (
+                    metric_value == expected_value
+                ), f"Metric {metric} has unexpected value. Expected: {expected_value}, Got: {metric_value}"
