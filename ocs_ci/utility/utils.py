@@ -1,3 +1,4 @@
+import tempfile
 from datetime import datetime
 from functools import reduce
 import base64
@@ -5934,3 +5935,44 @@ def get_noobaa_cli_config():
         return constants.ODF_CLI_LOCAL_PATH, "noobaa"
     else:
         return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, ""
+
+
+def apply_oadp_workaround(namespace):
+    """
+    Apply the hostpath WA for IBMCloud's
+    https://access.redhat.com/articles/5456281#known-issues-with-cloud-providers-and-hyperscalers-18
+
+    Args:
+        namespace (str): Namespace where oadp is running
+    """
+
+    from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+    from ocs_ci.utility import templating
+
+    oadp_hostpath_map = {
+        "FS_PV_HOSTPATH": "/var/lib/kubelet/pods",
+        "PLUGINS_HOSTPATH": "/var/lib/kubelet/plugins",
+    }
+    csv_list = get_csvs_start_with_prefix("oadp-operator", namespace=namespace)
+    if csv_list:
+        for csv in csv_list:
+            if "oadp-operator" in csv["metadata"]["name"]:
+                oadp_csv_name = csv["metadata"]["name"]
+
+        oadp_csv = CSV(resource_name=oadp_csv_name, namespace=namespace)
+        oadp_csv_dict = oadp_csv.get()
+        path_item = oadp_csv_dict["spec"]["install"]["spec"]["deployments"][0]["spec"][
+            "template"
+        ]["spec"]["containers"][0]["env"]
+
+        for wa_name in path_item:
+            if wa_name["name"] in oadp_hostpath_map:
+                wa_name["value"] = oadp_hostpath_map[wa_name["name"]]
+        oadp_wa_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="oadp_wa", delete=False
+        )
+        templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name)
+        run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
+
+    else:
+        log.error(f"OADP not found in given Namespace {namespace}")
