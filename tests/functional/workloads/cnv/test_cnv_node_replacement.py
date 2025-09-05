@@ -148,6 +148,6 @@ class TestCnvNodeReplace(E2ETest):
         for vm_obj in all_vms:
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
             assert source_csums[vm_obj.name] == new_csum, (
-                f"ERROR: Failed data integrity before replacing device and after replacing the device "
+                f"ERROR: Failed data integrity before replacing node and after replacing the node "
                 f"for VM '{vm_obj.name}'."
             )
