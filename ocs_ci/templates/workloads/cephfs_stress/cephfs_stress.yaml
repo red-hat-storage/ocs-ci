@@ -6,25 +6,25 @@ metadata:
 spec:
   containers:
   - name: smallfileio
-    image: quay.io/ocsci/stress-smallfile:latest
+    image: x/stress-smallfile:latest
     imagePullPolicy: Always
     command: ["python3", "/script/smallfile.py"]
     env:
-      - name: base_dir         # directory used by smallfile to perform file and directory operations (e.g., append, stat, chmod, ls-l, etc.)
+      - name: BASE_DIR         # directory used by smallfile to perform file and directory operations (e.g., append, stat, chmod, ls-l, etc.)
         value: "/mnt"
-      - name: num_files        # number of files to create
+      - name: NUM_FILES        # number of files to create
         value: "100000"
-      - name: files_size       # File size in KB
+      - name: FILES_SIZE       # File size in KB
         value: "1"
-      - name: operations       # File and directory operations to perform, Pass as a comma-separated string
+      - name: OPERATIONS       # File and directory operations to perform, Pass as a comma-separated string
         value: "create,append,rename,stat,chmod,ls-l"
-      - name: base_file_count  # Base file count, to multiply with scaling factor
+      - name: BASE_FILE_COUNT  # Base file count, to multiply with scaling factor
         value: "100000"
       - name: MULTIPLICATION_FACTORS # Dynamic scaling of file creation - base_file_count * MULTIPLICATION_FACTORS
         value: "1,2,3,4,3,2,1"
-      - name: output_dir
+      - name: OUTPUT_DIR
         value: "/mnt/output"
-      - name: threads
+      - name: THREADS
         value: "3"
     volumeMounts:
     - mountPath: /mnt

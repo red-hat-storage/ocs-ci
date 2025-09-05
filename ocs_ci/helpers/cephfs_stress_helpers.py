@@ -39,11 +39,10 @@ def create_cephfs_stress_pod(
     gradually increases load on CephFS in incremental stages.
 
     Args:
-        base_dir (str, optional): Directory used by smallfile to perform file and directory
-        operations (e.g., append, stat, chmod, ls-l, etc.)
+        base_dir (str, optional): Directory used by smallfile to perform file and directory operations
         num_files (str, optional): Total number of files to create
         files_size (str, optional): Size of each file in KB
-        operations (str, optional): File operations to perform (e.g., create, read, delete),
+        operations (str, optional): File operations to perform (e.g., append, stat, chmod, ls-l, etc),
         Pass as a comma-separated string
         base_file_count (str, optional): Base file count, to multiply with scaling factor
         multiplication_factor (str, optional): Dynamic scaling of file creation
@@ -57,39 +56,21 @@ def create_cephfs_stress_pod(
         AssertionError: If the pod creation fails
 
     """
+    env_vars = {
+        "BASE_DIR": base_dir,
+        "NUM_FILES": num_files,
+        "FILES_SIZE": files_size,
+        "OPERATIONS": operations,
+        "BASE_FILE_COUNT": base_file_count,
+        "MULTIPLICATION_FACTOR": multiplication_factor,
+        "THREADS": threads,
+    }
     cephfs_stress_pod_data = templating.load_yaml(CEPHFS_STRESS_YAML)
     namespace = create_cephfs_stress_project(project_name="cephfs-stress-project")
     cephfs_stress_pod_data["metadata"]["namespace"] = namespace
 
-    if base_dir:
-        cephfs_stress_pod_data["spec"]["containers"][0]["env"][0]["value"] = str(
-            base_dir
-        )
-    if num_files:
-        cephfs_stress_pod_data["spec"]["containers"][0]["env"][1]["value"] = str(
-            num_files
-        )
-    if files_size:
-        cephfs_stress_pod_data["spec"]["containers"][0]["env"][2]["value"] = str(
-            files_size
-        )
-    if operations:
-        cephfs_stress_pod_data["spec"]["containers"][0]["env"][3]["value"] = str(
-            operations
-        )
-    if base_file_count:
-        cephfs_stress_pod_data["spec"]["containers"][0]["env"][4]["value"] = str(
-            base_file_count
-        )
-    if multiplication_factor:
-        cephfs_stress_pod_data["spec"]["containers"][0]["env"][5]["value"] = str(
-            multiplication_factor
-        )
-    if threads:
-        cephfs_stress_pod_data["spec"]["containers"][0]["env"][7]["value"] = str(
-            threads
-        )
-
+    logger.info("Set environment variables in the pod template")
+    set_env_vars(cephfs_stress_pod_data, env_vars)
     cephfs_stress_pod_obj = pod.Pod(**cephfs_stress_pod_data)
     logger.info("Creating Cephfs stress pod")
     created_resource = cephfs_stress_pod_obj.create()
@@ -101,3 +82,21 @@ def create_cephfs_stress_pod(
     )
 
     return cephfs_stress_pod_obj
+
+
+def set_env_vars(pod_data, env_vars):
+    """
+    Updates the pod's environment variables in the container spec based on the provided mapping
+
+    Args:
+        pod_data (dict): The pod specification loaded from YAML.
+        env_vars (dict): Dictionary mapping env variable names to their desired values.
+
+    """
+    container_env = pod_data["spec"]["containers"][0].get("env", [])
+    for env in container_env:
+        name = env.get("name")
+        if name in env_vars:
+            value = env_vars[name]
+            if value is not None:
+                env["value"] = str(value)
