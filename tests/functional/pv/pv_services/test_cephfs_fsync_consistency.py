@@ -30,7 +30,7 @@ class TestCephfsFsyncConsistency(ManageTest):
         self.pvc_size = 10
 
         self.pvc_obj = pvc_factory(
-            interface=constants.CEPHFILESYSTEM_SC,
+            sc_name=constants.CEPHFILESYSTEM_SC,
             size=self.pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
@@ -39,7 +39,6 @@ class TestCephfsFsyncConsistency(ManageTest):
         worker_node_names = get_worker_nodes()
 
         pod_obj_client = pod_factory(
-            interface=constants.CEPHBLOCKPOOL,
             pvc=self.pvc_obj,
             status=constants.STATUS_RUNNING,
             pod_name="client",
@@ -47,7 +46,6 @@ class TestCephfsFsyncConsistency(ManageTest):
         )
 
         pod_obj_server = pod_factory(
-            interface=constants.CEPHBLOCKPOOL,
             pvc=self.pvc_obj,
             status=constants.STATUS_RUNNING,
             pod_name="server",
