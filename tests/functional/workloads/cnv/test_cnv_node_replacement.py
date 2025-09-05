@@ -51,27 +51,6 @@ class TestCnvNodeReplace(E2ETest):
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
 
-        # Register the teardown
-        request.addfinalizer(self.teardown)
-
-    def teardown(self):
-        """
-        Teardown operations for the test case.
-        """
-        logger.info("Performing teardown operations...")
-
-        # Start the stopped VM if it is in stopped state
-        if self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED:
-            self.vm_for_stop.start()
-            logger.info(f"VM {self.vm_for_stop.name} started.")
-        # Unpause the paused VM if it is in paused state
-        if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
-            self.vm_for_snap.unpause()
-            logger.info(f"VM {self.vm_for_snap.name} unpaused.")
-        # Start VM if its in different state after node replacement
-        if self.vm_obj_on_replacing_node.printableStatus() != constants.VM_RUNNING:
-            self.vm_for_stop.start()
-
     def test_vms_with_node_replacement(
         self,
         setup_cnv,
