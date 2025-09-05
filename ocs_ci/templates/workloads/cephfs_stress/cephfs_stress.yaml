@@ -6,7 +6,7 @@ metadata:
 spec:
   containers:
   - name: smallfileio
-    image: x/stress-smallfile:latest
+    image: quay.io/ocsci/stress-smallfile:latest
     imagePullPolicy: Always
     command: ["python3", "/script/smallfile.py"]
     env:
