@@ -2187,13 +2187,14 @@ def vdbench_default_config():
         default_skew=0,
         # RD behaviour
         elapsed=60,
-        interval=5,
+        interval=60,
         iorate="max",
         group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
         precreate_only=False,  # True -> emit only a short format run
         precreate_then_run=False,  # True -> add a short format RD before test RDs
-        precreate_elapsed=1,  # seconds for precreate
-        precreate_iorate=0,  # 0 -> formatting only
+        precreate_elapsed=2,  # seconds for precreate (must be >= 2*interval)
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
     ):
         # ---------- defaults ----------
         if patterns is None:
@@ -2298,7 +2299,7 @@ def vdbench_default_config():
                     "wd_id": wd_ids[0],
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )
@@ -2317,7 +2318,7 @@ def vdbench_default_config():
                     "wd_id": wd_ids[0],
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )
@@ -2396,13 +2397,14 @@ def vdbench_performance_config():
         default_skew=0,
         # RD behaviour - performance defaults
         elapsed=300,  # 5 minutes for performance tests
-        interval=10,  # 10-second reporting intervals
+        interval=60,  # 60-second reporting intervals
         iorate="max",  # max performance by default
         group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
         precreate_only=False,  # True -> emit only a short format run
         precreate_then_run=True,  # True -> add a short format RD before test RDs (recommended for perf)
         precreate_elapsed=30,  # longer precreate for perf tests
-        precreate_iorate=0,  # 0 -> formatting only
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
     ):
         # ---------- performance-oriented defaults ----------
         if patterns is None:
@@ -2412,7 +2414,6 @@ def vdbench_performance_config():
                     {
                         "name": "seq_read_perf",
                         "fileio": "sequential",
-                        "rdpct": 100,
                         "xfersize": "1m",
                         "threads": threads,
                         "skew": 0,
@@ -2436,7 +2437,6 @@ def vdbench_performance_config():
                     {
                         "name": "seq_write_perf",
                         "fileio": "sequential",
-                        "rdpct": 0,
                         "xfersize": "1m",
                         "threads": threads,
                         "skew": 0,
@@ -2552,7 +2552,7 @@ def vdbench_performance_config():
                     "wd_id": wd_ids[0],
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )
@@ -2571,7 +2571,7 @@ def vdbench_performance_config():
                     "wd_id": wd_ids[0],
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )
@@ -2629,13 +2629,14 @@ def vdbench_block_config():
         default_xfersize="8k",
         default_skew=0,
         elapsed=120,
-        interval=5,
+        interval=60,
         iorate="max",
         group_all_wds_in_one_rd=False,
         precreate_only=False,
         precreate_then_run=False,
-        precreate_elapsed=1,
-        precreate_iorate=0,
+        precreate_elapsed=2,
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",
     ):
         if patterns is None:
             patterns = [
@@ -2665,6 +2666,13 @@ def vdbench_block_config():
                     "rdpct": 0,
                     "seekpct": 0,
                     "xfersize": "1m",
+                    "skew": 0,
+                },
+                {
+                    "name": "random_write",  # ✅ new pattern
+                    "rdpct": 0,  # 0% reads → all writes
+                    "seekpct": 100,  # random I/O
+                    "xfersize": "4k",  # small-block random writes
                     "skew": 0,
                 },
             ]
@@ -2739,24 +2747,23 @@ def vdbench_filesystem_config():
         width=4,
         files=10,
         size="1g",
-        reuse=False,
         open_flags="o_direct",
-        patterns=None,  # [{'name':'sequential_read','fileio':'sequential','rdpct':100,'xfersize':'1m'}, ...]
+        patterns=None,  # [{'name':'sequential_read','fileio':'sequential','xfersize':'1m'},  ...]
         default_fileio="random",
         default_rdpct=50,
         default_xfersize="8k",
         default_threads=2,
-        default_fwdrate="max",
         default_skew=0,
         # RD behaviour
         elapsed=120,
-        interval=5,
+        interval=60,
         iorate="max",
         group_all_fwds_in_one_rd=False,  # True -> single RD with fwd=fwd1,fwd2,...
         precreate_only=False,  # True -> emit only a short format run
         precreate_then_run=False,  # True -> add a short format RD before test RDs
-        precreate_elapsed=1,  # seconds for precreate
-        precreate_iorate=0,  # 0 -> formatting only
+        precreate_elapsed=2,  # seconds for precreate (must be >= 2*interval)
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
     ):
         # ---------- defaults ----------
         if patterns is None:
@@ -2764,10 +2771,8 @@ def vdbench_filesystem_config():
                 {
                     "name": "sequential_read",
                     "fileio": "sequential",
-                    "rdpct": 100,
                     "xfersize": "1m",
                     "threads": 2,
-                    "fwdrate": "max",
                     "skew": 0,
                 },
                 {
@@ -2776,7 +2781,6 @@ def vdbench_filesystem_config():
                     "rdpct": 100,
                     "xfersize": "4k",
                     "threads": 2,
-                    "fwdrate": "max",
                     "skew": 0,
                 },
                 {
@@ -2785,16 +2789,21 @@ def vdbench_filesystem_config():
                     "rdpct": 70,
                     "xfersize": "64k",
                     "threads": 2,
-                    "fwdrate": "max",
                     "skew": 0,
                 },
                 {
                     "name": "sequential_write",
                     "fileio": "sequential",
-                    "rdpct": 0,
                     "xfersize": "1m",
                     "threads": 2,
-                    "fwdrate": "max",
+                    "skew": 0,
+                },
+                {
+                    "name": "random_write",
+                    "fileio": "random",
+                    "rdpct": 0,
+                    "xfersize": "4k",
+                    "threads": 2,
                     "skew": 0,
                 },
             ]
@@ -2810,7 +2819,6 @@ def vdbench_filesystem_config():
                     "width": width,
                     "files": files,
                     "size": size,
-                    "reuse": reuse,
                     "open_flags": open_flags,
                 }
             ],
@@ -2831,7 +2839,6 @@ def vdbench_filesystem_config():
                     "rdpct": p.get("rdpct", default_rdpct),
                     "xfersize": p.get("xfersize", default_xfersize),
                     "threads": p.get("threads", default_threads),
-                    "fwdrate": p.get("fwdrate", default_fwdrate),
                     "skew": p.get("skew", default_skew),
                 }
             )
@@ -2852,7 +2859,7 @@ def vdbench_filesystem_config():
                     ],  # Use first available fwd instead of hardcoded "fwd1"
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )
@@ -2874,7 +2881,7 @@ def vdbench_filesystem_config():
                     ],  # Use first available fwd instead of hardcoded "fwd1"
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )
@@ -2953,13 +2960,14 @@ def vdbench_mixed_workload_config():
         default_skew=0,
         # RD behaviour
         elapsed=300,
-        interval=10,
+        interval=60,
         iorate="max",
         group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
         precreate_only=False,  # True -> emit only a short format run
         precreate_then_run=False,  # True -> add a short format RD before test RDs
-        precreate_elapsed=1,  # seconds for precreate
-        precreate_iorate=0,  # 0 -> formatting only
+        precreate_elapsed=2,  # seconds for precreate (must be >= 2*interval)
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
     ):
         # ---------- defaults ----------
         if patterns is None:
@@ -2969,7 +2977,6 @@ def vdbench_mixed_workload_config():
                     {
                         "name": "sequential_read",
                         "fileio": "sequential",
-                        "rdpct": 100,
                         "xfersize": "1m",
                         "threads": 2,
                         "skew": 0,
@@ -2993,7 +3000,6 @@ def vdbench_mixed_workload_config():
                     {
                         "name": "sequential_write",
                         "fileio": "sequential",
-                        "rdpct": 0,
                         "xfersize": "1m",
                         "threads": 2,
                         "skew": 0,
@@ -3110,7 +3116,7 @@ def vdbench_mixed_workload_config():
                     "wd_id": wd_ids[0],  # Use first available wd instead of hardcoded
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )
@@ -3130,7 +3136,7 @@ def vdbench_mixed_workload_config():
                     "wd_id": wd_ids[0],  # Use first available wd instead of hardcoded
                     "format": "yes",
                     "elapsed": precreate_elapsed,
-                    "interval": 1,
+                    "interval": precreate_interval,
                     "iorate": precreate_iorate,
                 }
             )

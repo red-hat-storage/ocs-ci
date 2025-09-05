@@ -179,17 +179,44 @@ def workload_ops(
                 width=3,
                 files=4,
                 default_threads=10,
-                elapsed=1200,
-                interval=30,
+                elapsed=600,
+                interval=60,
                 default_rdpct=20,  # Changed from 0 to 20% read operations to allow file creation
                 precreate_then_run=True,
+                precreate_elapsed=120,  # precreate duration (must be >= 2*interval)
+                precreate_interval=60,  # precreate reporting interval - match main interval
+                precreate_iorate="max",  # Ensure valid fwdrate for filesystem precreate
                 anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
+                patterns=[
+                    {
+                        "name": "random_write",
+                        "fileio": "random",
+                        "rdpct": 0,
+                        "xfersize": "4k",
+                        "threads": 2,
+                        "skew": 0,
+                    }
+                ],
             )
         )
 
     def get_blk_config():
         return create_temp_config_file(
-            vdbench_block_config(threads=10, size="10g", elapsed=1200, interval=30)
+            vdbench_block_config(
+                threads=10,
+                size="10g",
+                elapsed=600,
+                interval=60,
+                patterns=[
+                    {
+                        "name": "random_write",
+                        "rdpct": 0,  # 0% reads → all writes
+                        "seekpct": 100,  # random
+                        "xfersize": "4k",  # 4k block size
+                        "skew": 0,
+                    }
+                ],
+            )
         )
 
     interface_configs = {
