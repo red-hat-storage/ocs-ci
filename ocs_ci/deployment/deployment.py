@@ -299,6 +299,16 @@ class Deployment(object):
         csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)
         csv.wait_for_phase("Succeeded", timeout=720)
         logger.info("GitOps Operator Deployment Succeeded")
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        if (
+            config.ENV_DATA.get("acm_version") in ["2.14", "2.13"]
+            and ocp_version <= version.VERSION_4_19
+        ):
+            # Apply W/A for https://issues.redhat.com/browse/ACM-23222
+            run_cmd(
+                "oc adm policy add-role-to-user admin system:serviceaccount:"
+                "openshift-gitops:openshift-gitops-applicationset-controller -n openshift-gitops"
+            )
 
     def do_gitops_deploy(self):
         """
