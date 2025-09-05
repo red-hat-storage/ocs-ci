@@ -59,6 +59,16 @@ class DeploymentUI(PageNavigator):
         Install OCS/ODF Opeartor
         """
         self.navigate_operatorhub_page()
+        if self.ocp_version_semantic >= version.VERSION_4_20 and (
+            self.driver.find_elements(*self.dep_loc["filter_operator_namespace"][::-1])
+        ):
+            self.do_send_keys(
+                self.dep_loc["filter_operator_namespace"], text="openshift-operators"
+            )
+            self.do_click(
+                self.dep_loc["openshift_operators_namespace"], enable_screenshot=True
+            )
+            time.sleep(5)
         self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
         logger.info(f"Choose {self.operator_name} Version")
         if self.operator_name is OCS_OPERATOR:
@@ -71,7 +81,13 @@ class DeploymentUI(PageNavigator):
         )
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
-        self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
+        try:
+            self.do_click(
+                self.dep_loc["click_install_ocs_page"], enable_screenshot=True
+            )
+        except Exception as e:
+            logger.error(f"'click_install_ocs_page' locator non clickable: {e}")
+            logger.error("Unable to install ODF. It could be already installed")
         if self.operator_name is ODF_OPERATOR:
             try:
                 self.navigate_installed_operators_page()
@@ -124,7 +140,16 @@ class DeploymentUI(PageNavigator):
         """
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_19:
+        if ocs_version >= version.VERSION_4_20:
+            logger.info("Navigate to Storage Cluster page")
+            self.nav_odf_default_page().nav_storage_systems_tab()
+            logger.info("Click Configure ODF")
+            self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
+            self.do_click(
+                locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
+            )
+            time.sleep(15)
+        elif ocs_version >= version.VERSION_4_19:
             self.nav_odf_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
             self.do_click(
@@ -318,16 +343,19 @@ class DeploymentUI(PageNavigator):
             )
         else:
             self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
-
-        logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
-        self.do_click(
-            locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
-        )
-        self.do_click(
-            locator=self.dep_loc[self.storage_class],
-            enable_screenshot=True,
-            copy_dom=True,
-        )
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_20:
+            logger.info("Storage class is chosen automatically")
+        else:
+            logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
+            self.do_click(
+                locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
+            )
+            self.do_click(
+                locator=self.dep_loc[self.storage_class],
+                enable_screenshot=True,
+                copy_dom=True,
+            )
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)

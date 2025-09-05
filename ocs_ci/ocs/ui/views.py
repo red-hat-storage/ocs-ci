@@ -47,11 +47,19 @@ login_4_19 = {
 }
 
 deployment = {
-    "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
+    "click_install_ocs": (
+        'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
+        By.CSS_SELECTOR,
+    ),
     "choose_ocs_version": (
         'a[data-test="ocs-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
+    "filter_operator_namespace": (
+        'input[data-test="name-filter-input"]',
+        By.CSS_SELECTOR,
+    ),
+    "openshift_operators_namespace": ("openshift-operators", By.LINK_TEXT),
     "search_operators": ('input[placeholder="Filter by keyword..."]', By.CSS_SELECTOR),
     "operators_tab": ("//button[text()='Operators']", By.XPATH),
     "operatorhub_tab": ("OperatorHub", By.LINK_TEXT),
@@ -101,7 +109,10 @@ deployment = {
         'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
-    "click_install_lso": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
+    "click_install_lso": (
+        'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
+        By.CSS_SELECTOR,
+    ),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
     "choose_local_storage_version_non_ga": (
@@ -113,6 +124,8 @@ deployment = {
         By.CSS_SELECTOR,
     ),
     "enable_nfs": ('input[id="enable-nfs"]', By.CSS_SELECTOR),
+    "configure_odf": ('button[data-test="configure-data-foundation"]', By.CSS_SELECTOR),
+    "setup_storage_cluster": ("#setup-storage-cluster", By.CSS_SELECTOR),
 }
 
 deployment_4_6 = {
@@ -292,6 +305,7 @@ deployment_4_19 = {
     ),
     "storage_system_btn": ("yaml-create", By.ID),
     "click_odf_operator": (
+        '//button[@id="odf-operator-redhat-operators-openshift-marketplace-input"] | '
         '//div[@data-test="odf-operator-redhat-operators-openshift-marketplace"] | '
         '//a[@data-test="odf-operator-redhat-operators-openshift-marketplace"]',
         By.XPATH,
@@ -749,8 +763,12 @@ page_nav = {
     "search_page": ("Search", By.LINK_TEXT),
     "explore_page": ("Explore", By.LINK_TEXT),
     "events_page": ("Events", By.LINK_TEXT),
-    "Operators": ("//button[text()='Operators']", By.XPATH),
+    "operators_or_ecosystem": (
+        "//button[text()='Operators'] | //button[text()='Ecosystem']",
+        By.XPATH,
+    ),
     "operatorhub_page": ("OperatorHub", By.LINK_TEXT),
+    "software_catalog": ("Software Catalog", By.LINK_TEXT),
     "installed_operators_page": ("Installed Operators", By.LINK_TEXT),
     "Storage": ("//button[text()='Storage']", By.XPATH),
     "persistentvolumes_page": ("PersistentVolumes", By.LINK_TEXT),
@@ -1757,9 +1775,10 @@ validation_4_8 = {
 }
 
 validation_4_9 = {
+    # Storage Systems page was renamed to Storage Cluster in 4.20
     "storage_systems": (
-        "a[data-test-id='horizontal-link-Storage Systems']",
-        By.CSS_SELECTOR,
+        "//a[@data-test-id='horizontal-link-Storage Systems'] | //a[text()='Storage cluster'] ",
+        By.XPATH,
     ),
     "ocs-storagecluster-storagesystem-status": (
         "//*[text()= 'Ready']",
