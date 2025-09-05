@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.helpers.helpers import create_resource, remove_port_from_url
 from ocs_ci.utility import version
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
 
@@ -3533,3 +3534,33 @@ def verify_soft_deletion(mcg_obj, awscli_pod, bucket_name, object_key):
         if delete_markers.get("IsLatest"):
             return True
     return False
+
+
+def get_noobaa_bucket_replication_metrics_in_prometheus(
+    metric_name, bucket_name, threading_lock
+):
+    """
+    Query Prometheus for a specific metric and verify its value.
+
+    Args:
+        metric_name (str): The name of the Prometheus metric to query
+        bucket_name (str): The bucket name to filter the metric by
+        threading_lock: Threading lock for PrometheusAPI
+
+    Returns:
+        int: The actual metric value retrieved from Prometheus
+    """
+    query = f"{metric_name} {{bucket_name='{bucket_name}'}}"
+    api = PrometheusAPI(threading_lock=threading_lock)
+    resp = api.get("query", payload={"query": query})
+
+    if resp.ok:
+        logger.debug(query)
+        metrics_output = json.loads(resp.text)
+        got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
+        logger.info(f"Metrics {metric_name} : {got_metrics_value}")
+        return got_metrics_value
+    else:
+        raise Exception(
+            f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+        )
