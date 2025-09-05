@@ -7,6 +7,8 @@ import base64
 import logging
 import re
 import time
+import secrets
+import string
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants, cluster
@@ -676,3 +678,17 @@ def calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4, buffer=0.9):
         cluster_vm_count += vm_count
 
     return cluster_vm_count, per_node_vm_count
+
+
+def generate_password(length=10):
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    while True:
+        pwd = "".join(secrets.choice(alphabet) for _ in range(length))
+        # enforce at least one of each category
+        if (
+            any(c.islower() for c in pwd)
+            and any(c.isupper() for c in pwd)
+            and any(c.isdigit() for c in pwd)
+            and any(c in string.punctuation for c in pwd)
+        ):
+            return pwd
