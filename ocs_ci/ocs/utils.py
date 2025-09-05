@@ -1371,7 +1371,7 @@ def _collect_ocs_logs(
                     f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
                 )
                 log.info("Collecting submariner logs")
-                out = run_cmd(submariner_log_collect)
+                out = run_cmd(submariner_log_collect, timeout=1200)
                 run_cmd(f"chmod -R 777 {submariner_log_path}")
                 os.chdir(cwd)
                 log.info(out)
