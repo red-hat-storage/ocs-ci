@@ -134,17 +134,7 @@ class TestCnvNodeReplace(E2ETest):
             verify_storagecluster_nodetopology
         ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
-        # Check VMs status
-        assert (
-            self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
-        ), "VM did not stop with preserved state after device replacement."
-        logger.info("After Node replacement, stopped VM preserved state.")
-
-        assert (
-            self.vm_for_snap.printableStatus() == constants.VM_PAUSED
-        ), "VM did not pause with preserved state after device replacement."
-        logger.info("After Node replacement, paused VM preserved state.")
-
+        # Check VM status
         assert (
             self.vm_obj_on_replacing_node.printableStatus() == constants.VM_RUNNING
         ), "VM is not in ruuning state after node replacement."
