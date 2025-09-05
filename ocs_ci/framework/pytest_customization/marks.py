@@ -238,6 +238,14 @@ skipif_fips_enabled = pytest.mark.skipif(
     reason="This test cannot run on FIPS enabled cluster",
 )
 
+skipif_fips_enabled_on_ibm_cloud = pytest.mark.skipif(
+    (
+        config.ENV_DATA.get("fips") == "true"
+        and config.ENV_DATA["platform"].lower() == "ibm_cloud"
+    ),
+    reason="This test cannot run on FIPS enabled IBM cluster",
+)
+
 fips_required = pytest.mark.skipif(
     config.ENV_DATA.get("fips") != "true",
     reason="Test runs only on FIPS enabled cluster",

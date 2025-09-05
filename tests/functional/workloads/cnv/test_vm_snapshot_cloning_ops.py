@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads, tier2
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
     cal_md5sum_vm,
@@ -145,7 +145,7 @@ class TestVmSnapshotClone(E2ETest):
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
 
-    @workloads
+    @tier2
     @pytest.mark.parametrize(
         argnames=["pvc_expand_before_snapshot", "pvc_expand_after_restore"],
         argvalues=[
@@ -299,6 +299,7 @@ class TestVmSnapshotClone(E2ETest):
         admin_client,
         vm_clone_fixture,
         vm_snapshot_restore_fixture,
+        flag,
     ):
         """
         Process operations on a given VM including cloning, snapshot restore of cloned VM, and data checksum.
@@ -309,25 +310,50 @@ class TestVmSnapshotClone(E2ETest):
             admin_client (object): The admin client instance.
             vm_clone_fixture (fixture): Pytest fixture used to clone the VM.
             vm_snapshot_restore_fixture (fixture): Pytest fixture used to create and restore VM snapshots.
+            flag(bool): if True - function will create clone VM of restored VM
+                        if False - function will create restore VM from cloned VM.
 
         """
         try:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             log.info(f"{vm_obj.name} Source checksum: {source_csum}")
 
-            log.info(f"Creating clone of VM [{vm_obj.name}]")
-            cloned_vm = vm_clone_fixture(vm_obj, admin_client)
-            run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
+            if not flag:
+                log.info(f"Creating clone of VM [{vm_obj.name}]")
+                cloned_vm = vm_clone_fixture(vm_obj, admin_client)
+                run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
 
-            log.info(f"Creating snapshot of cloned VM [{cloned_vm.name}]")
-            restored_vm = vm_snapshot_restore_fixture(cloned_vm, admin_client)
-            restore_csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
-            assert source_csum == restore_csum, (
-                f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
-                f"and restored {restored_vm.name} cloned from '{vm_obj.name}'"
-            )
-            run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
-            log.info(f"[{vm_obj.name}] VM processing completed successfully.")
+                log.info(f"Creating snapshot of cloned VM [{cloned_vm.name}]")
+                restored_vm = vm_snapshot_restore_fixture(cloned_vm, admin_client)
+                restore_csum = cal_md5sum_vm(
+                    vm_obj=restored_vm, file_path=file_paths[0]
+                )
+                assert source_csum == restore_csum, (
+                    f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
+                    f"and restored {restored_vm.name} cloned from '{vm_obj.name}'"
+                )
+                run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
+                log.info(f"[{vm_obj.name}] VM processing completed successfully.")
+            else:
+                log.info(f"Creating snapshot and restore VM [{vm_obj.name}]")
+                restored_vm = vm_snapshot_restore_fixture(vm_obj, admin_client)
+                restore_csum = cal_md5sum_vm(
+                    vm_obj=restored_vm, file_path=file_paths[0]
+                )
+                assert source_csum == restore_csum, (
+                    f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
+                    f"and restored {restored_vm.name} cloned from '{vm_obj.name}'"
+                )
+
+                log.info(f"Creating clone of restored VM [{restored_vm.name}]")
+                cloned_vm = vm_clone_fixture(restored_vm, admin_client)
+                run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
+                clone_csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
+                assert source_csum == clone_csum, (
+                    f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
+                    f"and clone VM  {cloned_vm.name} restored from '{restored_vm.name}'"
+                )
+
         except Exception as e:
             log.error(f"[{vm_obj.name}] Error during VM processing: {e}", exc_info=True)
             raise
@@ -339,6 +365,7 @@ class TestVmSnapshotClone(E2ETest):
         admin_client,
         vm_clone_fixture,
         vm_snapshot_restore_fixture,
+        flag=None,
     ):
         """
         Process operations on VMs in parallel including cloning, snapshot restore of cloned VM, and data checksum.
@@ -364,6 +391,7 @@ class TestVmSnapshotClone(E2ETest):
                     admin_client,
                     vm_clone_fixture,
                     vm_snapshot_restore_fixture,
+                    flag,
                 ): vm_obj.name
                 for vm_obj in vm_list
             }
@@ -413,4 +441,42 @@ class TestVmSnapshotClone(E2ETest):
             admin_client,
             vm_clone_fixture,
             vm_snapshot_restore_fixture,
+        )
+
+    @pytest.mark.polarion_id("OCS-6321")
+    def test_clone_of_restored_vm(
+        self,
+        setup_cnv,
+        project_factory,
+        multi_cnv_workload,
+        vm_clone_fixture,
+        vm_snapshot_restore_fixture,
+        admin_client,
+    ):
+        """
+        This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
+
+        Test steps:
+        1. Deploy multiple VMs with associated PVCs.
+        2. Write and verify initial data on each VM.
+        3. Create and wait for VM snapshots to complete.
+        4. Add additional data to the VM after snapshot.
+        5. Stop and restore each VM from its snapshot.
+        6. Clone the restored VM and verify the data integrity.
+        7. Write additional data to the cloned VM.
+        """
+
+        proj_obj = project_factory()
+        file_paths = ["/source_file.txt", "/new_file.txt"]
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+        vm_list = vm_objs_def + vm_objs_aggr
+        self.run_parallel_vm_clone_restore(
+            vm_list,
+            file_paths,
+            admin_client,
+            vm_clone_fixture,
+            vm_snapshot_restore_fixture,
+            flag=1,
         )

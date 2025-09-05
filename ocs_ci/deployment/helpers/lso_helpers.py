@@ -30,14 +30,6 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 
-IMAGE_SOURCE_POLICY = ocp.OCP(
-    kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
-)
-OPTIONAL_OPERATOR_CATALOG_SOURCE = ocp.OCP(
-    kind=constants.CATSRC,
-    namespace=constants.MARKETPLACE_NAMESPACE,
-    resource_name="optional-operators",
-)
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +91,10 @@ def setup_local_storage(storageclass):
     lso_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="local_storage_operator", delete=False
     )
-    if not IMAGE_SOURCE_POLICY.is_exist(resource_name=lso_data_yaml.name):
+    image_source_policy = ocp.OCP(
+        kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
+    )
+    if not image_source_policy.is_exist(resource_name=lso_data_yaml.name):
         templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
         with open(lso_data_yaml.name, "r") as f:
             logger.info(f.read())
@@ -265,6 +260,7 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             image = operator["spec"]["image"].split(":")[0]
             ocp_version_image = f"{image}:v{ocp_version}"
             operator["spec"]["image"] = ocp_version_image
+
     optional_operators_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="optional_operators", delete=False
     )
@@ -297,13 +293,18 @@ def create_optional_operators_catalogsource_non_ga(force=False):
     templating.dump_data_to_temp_yaml(
         optional_operators_data, optional_operators_yaml.name
     )
-    if not OPTIONAL_OPERATOR_CATALOG_SOURCE.is_exist():
+    optional_operator_catalog_source = ocp.OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        resource_name="optional-operators",
+    )
+    if not optional_operator_catalog_source.is_exist():
         with open(optional_operators_yaml.name, "r") as f:
             logger.info(f.read())
         logger.info(
             "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
-        run_cmd(f"oc create -f {optional_operators_yaml.name}")
+        run_cmd(f"oc apply -f {optional_operators_yaml.name}")
     wait_for_machineconfigpool_status("all")
 
 

@@ -268,6 +268,7 @@ HOSTED_CONTROL_PLANE_CRD_NAME = "hostedcontrolplanes.hypershift.openshift.io"
 OPERATOR_KIND = "Operator"
 DRIVER = "Driver"
 IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
+IMAGEDIGESTMIRRORSET = "imagedigestmirrorsets.config.openshift.io"
 NOOBAA_ACCOUNT = "NoobaaAccount"
 EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
 ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
@@ -393,15 +394,6 @@ MACHINE_CONFIG_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH,
     "machineconfig_to_enable_nested_virtualization.yaml",
 )
-OCS_STORAGE_CLUSTER_YAML = os.path.join(
-    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
-)
-OCS_STORAGE_CLUSTER_CONVERGED_YAML = os.path.join(
-    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_converged.yaml"
-)
-OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
-    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
-)
 STORAGE_PROFILE_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_profiles.yaml"
 )
@@ -487,7 +479,7 @@ KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
-KAFKA_PODS_LABEL = "strimzi.io/pool-name=kafka"
+KAFKA_PODS_LABEL = "strimzi.io/pool-name=broker"
 KAFKA_KIND_LABEL = "strimzi.io/kind=Kafka"
 
 # ODF monitoring tool
@@ -2429,6 +2421,10 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "odf-multicluster",
 ]
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.19"]
+)
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -2873,6 +2869,19 @@ debug_rbd_mirror = 30
 log_file = /var/log/ceph/\$cluster-\$name.log
 
 """
+
+ROOK_CEPH_CONFIG_VALUES_420 = {
+    "global": {
+        "bdev_flock_retry": "20",
+        "bluestore_prefer_deferred_size_hdd": "0",
+        "bluestore_slow_ops_warn_lifetime": "0",
+        "mon_data_avail_warn": "15",
+        "mon_max_pg_per_osd": "1000",
+        "mon_pg_warn_max_object_skew": "0",
+        "mon_target_pg_per_osd": "400",
+    },
+    "osd": {"osd_memory_target_cgroup_limit_ratio": "0.8"},
+}
 
 
 CEPH_DEBUG_CONFIG_VALUES = """

@@ -1089,16 +1089,24 @@ def storageclass_factory_class(request, secret_factory_class, ceph_pool_factory_
 
 @pytest.fixture(scope="session")
 def storageclass_factory_session(
-    request, secret_factory_session, ceph_pool_factory_session
+    request,
+    secret_factory_session,
+    ceph_pool_factory_session,
 ):
     return storageclass_factory_fixture(
-        request, secret_factory_session, ceph_pool_factory_session
+        request,
+        secret_factory_session,
+        ceph_pool_factory_session,
     )
 
 
 @pytest.fixture(scope="function")
 def storageclass_factory(request, secret_factory, ceph_pool_factory):
-    return storageclass_factory_fixture(request, secret_factory, ceph_pool_factory)
+    return storageclass_factory_fixture(
+        request,
+        secret_factory,
+        ceph_pool_factory,
+    )
 
 
 def storageclass_factory_fixture(
@@ -7803,8 +7811,27 @@ def operator_pods():
     return operator_pods
 
 
+@pytest.fixture(scope="class")
+def multi_cnv_workload_class(request, storageclass_factory_class, cnv_workload_class):
+    """
+    Class scoped fixture to deploy multiple CNV workload
+
+    """
+    return multi_cnv_workload_factory(
+        request, storageclass_factory_class, cnv_workload_class
+    )
+
+
 @pytest.fixture()
 def multi_cnv_workload(request, storageclass_factory, cnv_workload):
+    """
+    Class scoped fixture to deploy multiple CNV workload
+
+    """
+    return multi_cnv_workload_factory(request, storageclass_factory, cnv_workload)
+
+
+def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
     The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
@@ -7918,7 +7945,7 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
                     else:
                         vm_list_default_compr.append(vm_obj)
                 except Exception as e:
-                    log.info(f"Error occurred while creating VM: {e}")
+                    log.error(f"Error occurred while creating VM: {e}")
 
         return (
             vm_list_default_compr,
@@ -9347,6 +9374,7 @@ def benchmark_workload_storageutilization(request):
         is_completed=True,
         numjobs=1,
         iodepth=16,
+        max_servers=20,
     ):
         """
         Setup of benchmark fio
@@ -9363,6 +9391,7 @@ def benchmark_workload_storageutilization(request):
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
             numjobs (int): Number of threads per job
             iodepth (int): I/O queue depth
+            max_servers (int): Maximum number of fio server pods to deploy.
 
         Returns:
             BenchmarkOperatorFIO: The Benchmark operator FIO object
@@ -9373,6 +9402,7 @@ def benchmark_workload_storageutilization(request):
         size = retry(CommandFailed, tries=6, delay=20, backoff=1)(get_file_size)(
             target_percentage
         )
+        log.info(f"Total size = {size}")
         benchmark_obj = BenchmarkOperatorFIO()
         benchmark_obj.setup_benchmark_fio(
             total_size=size,
@@ -9385,6 +9415,7 @@ def benchmark_workload_storageutilization(request):
             use_kustomize_build=use_kustomize_build,
             numjobs=numjobs,
             iodepth=iodepth,
+            max_servers=max_servers,
         )
         benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 
