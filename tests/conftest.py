@@ -5507,7 +5507,10 @@ def setup_ui_fixture(request):
 
 
 @pytest.fixture(scope="session")
-def setup_acm_ui(request):
+def setup_acm_ui_and_run_test_via_ui(request):
+    via_ui = getattr(request, "param", True)
+    if not via_ui:
+        return None
     return setup_acm_ui_fixture(request)
 
 

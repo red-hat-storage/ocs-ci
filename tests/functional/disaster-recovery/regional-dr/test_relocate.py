@@ -30,7 +30,7 @@ class TestRelocate:
     """
 
     @pytest.mark.parametrize(
-        argnames=["pvc_interface", "via_ui"],
+        argnames=["pvc_interface", "setup_acm_ui_and_run_test_via_ui"],
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
@@ -53,15 +53,18 @@ class TestRelocate:
                 marks=pytest.mark.polarion_id("OCS-6862"),
             ),
         ],
+        indirect=["setup_acm_ui_and_run_test_via_ui"],
     )
-    def test_relocate(self, pvc_interface, via_ui, setup_acm_ui, dr_workload):
+    def test_relocate(
+        self, pvc_interface, setup_acm_ui_and_run_test_via_ui, dr_workload
+    ):
         """
         Tests to verify application relocate between managed clusters.
 
         This test will run twice both via CLI and UI
 
         """
-        if via_ui:
+        if setup_acm_ui_and_run_test_via_ui:
             acm_obj = AcmAddClusters()
 
         workloads = dr_workload(
@@ -91,7 +94,7 @@ class TestRelocate:
         sleep(wait_time * 60)
 
         for wl in workloads:
-            if via_ui:
+            if setup_acm_ui_and_run_test_via_ui:
                 logger.info("Start the process of Relocate from ACM UI")
                 config.switch_acm_ctx()
                 dr_submariner_validation_from_ui(acm_obj)
@@ -150,7 +153,7 @@ class TestRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if via_ui:
+        if setup_acm_ui_and_run_test_via_ui:
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE
             )
