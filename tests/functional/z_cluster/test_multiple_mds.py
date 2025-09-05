@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     tier4c,
     skipif_external_mode,
+    skipif_hci_client,
 )
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
@@ -50,6 +51,7 @@ def verify_active_and_standby_mds_count(target_count):
 @brown_squad
 @tier4c
 @skipif_external_mode
+@skipif_hci_client
 class TestMultipleMds:
     """
     Tests for support multiple mds
