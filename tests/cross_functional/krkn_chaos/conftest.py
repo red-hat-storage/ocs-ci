@@ -174,14 +174,15 @@ def workload_ops(
     def get_fs_config():
         return create_temp_config_file(
             vdbench_filesystem_config(
-                rdpct=20,  # Changed from 0 to 20% read operations to allow file creation
                 size="50m",
                 depth=4,
                 width=3,
                 files=4,
-                threads=10,
+                default_threads=10,
                 elapsed=1200,
                 interval=30,
+                default_rdpct=20,  # Changed from 0 to 20% read operations to allow file creation
+                precreate_then_run=True,
                 anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
             )
         )
