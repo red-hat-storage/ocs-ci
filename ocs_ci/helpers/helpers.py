@@ -2320,7 +2320,7 @@ def remove_scc_policy(sa_name, namespace):
         logger.info(out)
 
 
-def craft_s3_command(cmd, mcg_obj=None, api=False):
+def craft_s3_command(cmd, mcg_obj=None, api=False, max_attempts=8):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
@@ -2329,6 +2329,9 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
         mcg_obj: An MCG object containing the MCG S3 connection credentials
         cmd: The AWSCLI command to run
         api: True if the call is for s3api, false if s3
+        max_attempts: The maximum number of AWSCLI retry attempts
+                     max_attempts=8 means a maximum of one minute
+                     additional waiting time in case of failure
 
     Returns:
         str: The crafted command, ready to be executed on the pod
@@ -2340,6 +2343,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
             f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_MAX_ATTEMPTS={max_attempts} "
             f"AWS_DEFAULT_REGION={mcg_obj.region} "
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "

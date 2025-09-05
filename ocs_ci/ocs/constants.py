@@ -308,6 +308,7 @@ SUBSCRIPTION_WITH_ACM = "Subscription.operators.coreos.com"
 
 # Other
 AWSCLI_NAMESPACE = "awscli"
+AWSCLI_DEFAULT_MAX_ATTEMPTS = 4
 SECRET = "Secret"
 TEST = "test"
 NAMESPACE = "Namespace"
