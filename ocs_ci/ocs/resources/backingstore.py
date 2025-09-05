@@ -266,6 +266,8 @@ def backingstore_factory(
         mcg_obj (MCG): MCG object containing data and utils
             related to MCG
         cloud_uls_factory: Factory for underlying storage creation
+        cluster_context (object): context object in which the bucket will be created.
+            Default is provider context.
 
     Returns:
         func: Factory method - each call to this function creates
