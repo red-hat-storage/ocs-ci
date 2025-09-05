@@ -4344,3 +4344,23 @@ def get_ocs_client_operator_controller_manager(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocs_client_operator_controller_manager = get_pods_having_label(label, namespace)
     return [Pod(**pod) for pod in ocs_client_operator_controller_manager]
+
+
+def get_csi_addons_controller_manager_pod():
+    """
+    Get  csi_addons_controller_manager_pod pod
+
+    Returns:
+        list: The schedule precedence value
+    """
+    # from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+
+    pods = get_pods_having_label(
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    if not pods:
+        return []
+
+    return [Pod(**pod) for pod in pods]
