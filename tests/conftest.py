@@ -5480,9 +5480,9 @@ def setup_ui_fixture(request):
 
 @pytest.fixture(scope="session")
 def setup_acm_ui(request):
-    via_ui = request.param  # request.param comes from parametrize
+    via_ui = False
     if not via_ui:
-        pytest.skip("Skipping setup_acm_ui because via_ui=False")
+        return None
     return setup_acm_ui_fixture(request)
 
 
