@@ -2,8 +2,6 @@ import logging
 
 from time import sleep
 
-import pytest
-
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import skipif_ocs_version
