@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../plugin.schema.json
+- id: container_pause_by_name
+  config:
+    namespace: {{ namespace }}
+    {% if pod_name is defined %}
+    pod_name: {{ pod_name }}
+    {% endif %}
+    {% if label_selector is defined %}
+    label_selector: {{ label_selector }}
+    {% endif %}
+    {% if container_name %}
+    container_name: {{ container_name }}
+    {% else %}
+    container_name: ""
+    {% endif %}
+    pause_seconds: {{ pause_seconds | default(60) }}
+    instance_count: {{ instance_count }}
+    wait_duration: {{ wait_duration }}
