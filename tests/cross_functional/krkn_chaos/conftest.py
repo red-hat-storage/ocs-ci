@@ -37,6 +37,21 @@ def krkn_setup():
     """
     log.info("Setting up Krkn chaos tool")
 
+    # Set KUBECONFIG environment variable to prevent krkn_lib from failing during import
+    from ocs_ci.framework import config
+
+    kubeconfig_path = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        config.RUN["kubeconfig_location"],
+    )
+    if os.path.exists(kubeconfig_path):
+        os.environ["KUBECONFIG"] = kubeconfig_path
+        log.info(f"Set KUBECONFIG environment variable to: {kubeconfig_path}")
+    else:
+        log.warning(
+            f"Kubeconfig file not found at {kubeconfig_path}, krkn_lib import may fail"
+        )
+
     # Cleanup if old krkn dir exists
     if os.path.exists(KRKN_DIR):
         log.warning(f"Old Krkn directory found at {KRKN_DIR}, removing it")

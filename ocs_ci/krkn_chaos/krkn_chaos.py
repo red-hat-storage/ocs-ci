@@ -5,6 +5,7 @@ import subprocess
 import time
 import json
 import re
+import yaml
 
 from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -39,10 +40,34 @@ class KrKnRunner:
         except Exception as e:
             log.warning(f"Failed to read config file {self.krkn_config}: {str(e)}")
 
+    def _get_kubeconfig_from_config(self):
+        """Extract kubeconfig_path from the krkn config file."""
+        try:
+            with open(self.krkn_config, "r", encoding="utf-8") as f:
+                config_data = yaml.safe_load(f)
+                kubeconfig_path = config_data.get("kraken", {}).get("kubeconfig_path")
+                if kubeconfig_path:
+                    # Expand user path if needed
+                    return os.path.expanduser(kubeconfig_path)
+        except Exception as e:
+            log.warning(f"Failed to extract kubeconfig path from config: {str(e)}")
+        return None
+
     def _run_krkn_command(self):
         """Internal method to start the Krkn process."""
         # Print config file contents before starting
         self._print_config_file()
+
+        # Set up environment with KUBECONFIG path from the krkn config
+        env = os.environ.copy()
+        kubeconfig_path = self._get_kubeconfig_from_config()
+        if kubeconfig_path:
+            env["KUBECONFIG"] = kubeconfig_path
+            log.info(f"Setting KUBECONFIG environment variable to: {kubeconfig_path}")
+        else:
+            log.warning(
+                "Could not extract kubeconfig_path from krkn config, krkn may fail"
+            )
 
         krkn_cmd = [
             "python3",
@@ -58,6 +83,7 @@ class KrKnRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=env,
             )
             stdout, stderr = self.process.communicate()
             log.info(f"Krkn stdout:\n{stdout}")
