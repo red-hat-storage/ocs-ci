@@ -1,7 +1,8 @@
 import os
-import yaml
 import logging
 from ocs_ci.framework import config
+from ocs_ci.ocs.constants import KRKN_GLOBAL_CONFIG_TEMPLATE
+from ocs_ci.krkn_chaos.krkn_scenario_generator import TemplateWriter
 
 log = logging.getLogger(__name__)
 
@@ -208,8 +209,150 @@ class KrknConfigGenerator:
             ],
         }
 
+    def _prepare_template_variables(self):
+        """Prepare template variables from config_data for Jinja2 template.
+
+        Returns:
+            dict: Template variables for Jinja2 rendering.
+        """
+        template_vars = {}
+
+        # Extract kraken section variables
+        kraken_config = self.config_data.get("kraken", {})
+        template_vars.update(
+            {
+                "kubeconfig_path": kraken_config.get(
+                    "kubeconfig_path", "~/.kube/config"
+                ),
+                "exit_on_failure": kraken_config.get("exit_on_failure", False),
+                "publish_kraken_status": kraken_config.get(
+                    "publish_kraken_status", True
+                ),
+                "signal_state": kraken_config.get("signal_state", "RUN"),
+                "signal_address": kraken_config.get("signal_address", "0.0.0.0"),
+                "port": kraken_config.get("port", 8081),
+                "scenarios": kraken_config.get("chaos_scenarios", []),
+            }
+        )
+
+        # Extract cerberus section variables
+        cerberus_config = self.config_data.get("cerberus", {})
+        template_vars.update(
+            {
+                "cerberus_enabled": cerberus_config.get("cerberus_enabled", False),
+                "cerberus_url": cerberus_config.get("cerberus_url"),
+                "check_applicaton_routes": cerberus_config.get(
+                    "check_applicaton_routes", False
+                ),
+            }
+        )
+
+        # Extract performance monitoring variables
+        perf_config = self.config_data.get("performance_monitoring", {})
+        template_vars.update(
+            {
+                "deploy_dashboards": perf_config.get("deploy_dashboards", False),
+                "performance_repo": perf_config.get(
+                    "repo",
+                    "https://github.com/cloud-bulldozer/performance-dashboards.git",
+                ),
+                "prometheus_url": perf_config.get("prometheus_url"),
+                "prometheus_bearer_token": perf_config.get("prometheus_bearer_token"),
+                "uuid": perf_config.get("uuid"),
+                "enable_alerts": perf_config.get("enable_alerts", False),
+                "enable_metrics": perf_config.get("enable_metrics", False),
+                "alert_profile": perf_config.get("alert_profile", "config/alerts.yaml"),
+                "metrics_profile": perf_config.get(
+                    "metrics_profile", "config/metrics-report.yaml"
+                ),
+                "check_critical_alerts": perf_config.get(
+                    "check_critical_alerts", False
+                ),
+            }
+        )
+
+        # Extract elastic section variables
+        elastic_config = self.config_data.get("elastic", {})
+        template_vars.update(
+            {
+                "enable_elastic": elastic_config.get("enable_elastic", False),
+                "verify_certs": elastic_config.get("verify_certs", False),
+                "elastic_url": elastic_config.get("elastic_url", ""),
+                "elastic_port": elastic_config.get("elastic_port", 32766),
+                "elastic_username": elastic_config.get("username", "elastic"),
+                "elastic_password": elastic_config.get("password", "test"),
+                "metrics_index": elastic_config.get("metrics_index", "krkn-metrics"),
+                "alerts_index": elastic_config.get("alerts_index", "krkn-alerts"),
+                "telemetry_index": elastic_config.get(
+                    "telemetry_index", "krkn-telemetry"
+                ),
+            }
+        )
+
+        # Extract tunings section variables
+        tunings_config = self.config_data.get("tunings", {})
+        template_vars.update(
+            {
+                "wait_duration": tunings_config.get("wait_duration", 60),
+                "iterations": tunings_config.get("iterations", 1),
+                "daemon_mode": tunings_config.get("daemon_mode", False),
+            }
+        )
+
+        # Extract telemetry section variables
+        telemetry_config = self.config_data.get("telemetry", {})
+        template_vars.update(
+            {
+                "telemetry_enabled": telemetry_config.get("enabled", False),
+                "telemetry_api_url": telemetry_config.get(
+                    "api_url",
+                    "https://ulnmf9xv7j.execute-api.us-west-2.amazonaws.com/production",
+                ),
+                "telemetry_username": telemetry_config.get("username", "username"),
+                "telemetry_password": telemetry_config.get("password", "password"),
+                "prometheus_backup": telemetry_config.get("prometheus_backup", True),
+                "prometheus_namespace": telemetry_config.get(
+                    "prometheus_namespace", ""
+                ),
+                "prometheus_container_name": telemetry_config.get(
+                    "prometheus_container_name", ""
+                ),
+                "prometheus_pod_name": telemetry_config.get("prometheus_pod_name", ""),
+                "full_prometheus_backup": telemetry_config.get(
+                    "full_prometheus_backup", False
+                ),
+                "backup_threads": telemetry_config.get("backup_threads", 5),
+                "archive_path": telemetry_config.get("archive_path", "/tmp"),
+                "max_retries": telemetry_config.get("max_retries", 0),
+                "run_tag": telemetry_config.get("run_tag", ""),
+                "archive_size": telemetry_config.get("archive_size", 500000),
+                "telemetry_group": telemetry_config.get("telemetry_group", ""),
+                "logs_backup": telemetry_config.get("logs_backup", True),
+                "logs_filter_patterns": telemetry_config.get(
+                    "logs_filter_patterns",
+                    [
+                        '"(\\\\w{3}\\\\s\\\\d{1,2}\\\\s\\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+).+"',
+                        '"kinit (\\\\d+/\\\\d+/\\\\d+\\\\s\\\\d{2}:\\\\d{2}:\\\\d{2})\\\\s+"',
+                        '"(\\\\d{4}-\\\\d{2}-\\\\d{2}T\\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+Z).+"',
+                    ],
+                ),
+                "oc_cli_path": telemetry_config.get("oc_cli_path", "/usr/bin/oc"),
+                "events_backup": telemetry_config.get("events_backup", True),
+            }
+        )
+
+        # Extract health checks section variables
+        health_checks_config = self.config_data.get("health_checks", {})
+        template_vars.update(
+            {
+                "health_checks": health_checks_config,
+            }
+        )
+
+        return template_vars
+
     def write_to_file(self, location="."):
-        """Writes the configuration dictionary to a YAML file.
+        """Writes the configuration using Jinja2 template to a YAML file.
 
         Args:
             location (str): Directory to save `krkn_global_config.yaml`.
@@ -218,14 +361,16 @@ class KrknConfigGenerator:
             str: Full path of the generated config file.
         """
         self.global_config = os.path.join(location, "krkn_global_config.yaml")
-        with open(self.global_config, "w") as f:
-            yaml.dump(
-                self.config_data,
-                f,
-                sort_keys=False,
-                default_flow_style=False,
-                allow_unicode=True,
-                width=120,
-            )
+
+        # Use Jinja2 template to generate the config
+        template_writer = TemplateWriter(KRKN_GLOBAL_CONFIG_TEMPLATE)
+
+        # Prepare template variables from config_data
+        template_vars = self._prepare_template_variables()
+        template_writer.config = template_vars
+
+        # Write the rendered template to file
+        template_writer.write_to_file(self.global_config)
+
         log.info(f"✅ Krkn config written to: {self.global_config}")
         return self.global_config

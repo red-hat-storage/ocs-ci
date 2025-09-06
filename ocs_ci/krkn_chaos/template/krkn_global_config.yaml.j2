@@ -7,7 +7,7 @@ kraken:
     port: {{ port | default(8081) }}
     chaos_scenarios:
     {% for scenario in scenarios %}
-        - {{ scenario | to_yaml | indent(4).lstrip() }}
+        - {{ scenario }}
     {% endfor %}
 cerberus:
     cerberus_enabled: {{ cerberus_enabled | default(False) }}
