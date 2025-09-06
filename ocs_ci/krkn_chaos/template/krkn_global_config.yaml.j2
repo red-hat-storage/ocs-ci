@@ -6,8 +6,13 @@ kraken:
     signal_address: {{ signal_address | default('0.0.0.0') }}
     port: {{ port | default(8081) }}
     chaos_scenarios:
-    {%- for scenario in scenarios %}
-        - {{ scenario }}
+    {%- for scenario_dict in scenarios %}
+        {%- for scenario_type, scenario_files in scenario_dict.items() %}
+        - {{ scenario_type }}:
+            {%- for scenario_file in scenario_files %}
+            - {{ scenario_file }}
+            {%- endfor %}
+        {%- endfor %}
     {%- endfor %}
 cerberus:
     cerberus_enabled: {{ cerberus_enabled | default(False) }}

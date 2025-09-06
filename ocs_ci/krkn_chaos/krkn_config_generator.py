@@ -209,29 +209,22 @@ class KrknConfigGenerator:
             ],
         }
 
-    def _flatten_scenarios(self, chaos_scenarios):
-        """Flatten the nested chaos_scenarios structure into a flat list of file paths.
+    def _prepare_scenarios_for_krkn(self, chaos_scenarios):
+        """Prepare chaos_scenarios in the format expected by Krkn.
+
+        Krkn expects scenarios as a list of dictionaries where each dictionary
+        has scenario_type as key and list of scenario files as value.
 
         Args:
             chaos_scenarios (list): List of scenario dictionaries like
                                   [{'container_scenarios': ['file1.yaml', 'file2.yaml']}]
 
         Returns:
-            list: Flat list of scenario file paths
+            list: List of dictionaries in Krkn format
         """
-        flattened = []
-        for entry in chaos_scenarios:
-            if isinstance(entry, dict):
-                # Extract all file paths from all categories
-                for category, file_paths in entry.items():
-                    if isinstance(file_paths, list):
-                        flattened.extend(file_paths)
-                    else:
-                        flattened.append(file_paths)
-            else:
-                # If it's already a file path string, add it directly
-                flattened.append(entry)
-        return flattened
+        # The chaos_scenarios are already in the correct format for Krkn
+        # Each entry should be: {'scenario_type': ['file1.yaml', 'file2.yaml']}
+        return chaos_scenarios
 
     def _prepare_template_variables(self):
         """Prepare template variables from config_data for Jinja2 template.
@@ -255,7 +248,7 @@ class KrknConfigGenerator:
                 "signal_state": kraken_config.get("signal_state", "RUN"),
                 "signal_address": kraken_config.get("signal_address", "0.0.0.0"),
                 "port": kraken_config.get("port", 8081),
-                "scenarios": self._flatten_scenarios(
+                "scenarios": self._prepare_scenarios_for_krkn(
                     kraken_config.get("chaos_scenarios", [])
                 ),
             }
