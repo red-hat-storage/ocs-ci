@@ -1,6 +1,5 @@
 import pytest
 import os
-import shutil
 import fauxfactory
 import yaml
 import logging
@@ -47,6 +46,34 @@ def krkn_setup():
     if os.path.exists(kubeconfig_path):
         os.environ["KUBECONFIG"] = kubeconfig_path
         log.info(f"Set KUBECONFIG environment variable to: {kubeconfig_path}")
+
+        # Create symlink or copy kubeconfig to ~/.kube/config for hardcoded references
+        default_kube_dir = os.path.expanduser("~/.kube")
+        default_kubeconfig = os.path.join(default_kube_dir, "config")
+
+        # Create ~/.kube directory if it doesn't exist
+        os.makedirs(default_kube_dir, exist_ok=True)
+
+        # Remove existing ~/.kube/config if it exists
+        if os.path.exists(default_kubeconfig):
+            if os.path.islink(default_kubeconfig):
+                os.unlink(default_kubeconfig)
+                log.info(f"Removed existing symlink: {default_kubeconfig}")
+            else:
+                os.remove(default_kubeconfig)
+                log.info(f"Removed existing file: {default_kubeconfig}")
+
+        # Try to create symlink first, fall back to copy if symlink fails
+        try:
+            os.symlink(kubeconfig_path, default_kubeconfig)
+            log.info(f"Created symlink: {default_kubeconfig} -> {kubeconfig_path}")
+        except (OSError, NotImplementedError) as e:
+            # Symlink might fail on some systems, fall back to copy
+            import shutil
+
+            shutil.copy2(kubeconfig_path, default_kubeconfig)
+            log.info(f"Copied kubeconfig: {kubeconfig_path} -> {default_kubeconfig}")
+            log.info(f"Symlink failed ({e}), used copy instead")
     else:
         log.warning(
             f"Kubeconfig file not found at {kubeconfig_path}, krkn_lib import may fail"
