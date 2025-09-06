@@ -6,6 +6,7 @@ import yaml
 import logging
 from ocs_ci.ocs.constants import (
     KRKN_REPO_URL,
+    KRKN_VERSION,
     KRKN_DIR,
     KRKN_CHAOS_DIR,
     KRKN_CHAOS_SCENARIO_DIR,
@@ -43,10 +44,14 @@ def krkn_setup():
 
     # Clone the Krkn repo
     try:
-        log.info(f"Cloning Krkn from {KRKN_REPO_URL} into {KRKN_DIR}")
-        run_cmd(f"git clone {KRKN_REPO_URL} {KRKN_DIR}")
+        log.info(
+            f"Cloning Krkn from {KRKN_REPO_URL} version {KRKN_VERSION} into {KRKN_DIR}"
+        )
+        run_cmd(
+            f"git clone --branch {KRKN_VERSION} --single-branch {KRKN_REPO_URL} {KRKN_DIR}"
+        )
     except CommandFailed:
-        log.error("Failed to clone Krkn repository")
+        log.error(f"Failed to clone Krkn repository version {KRKN_VERSION}")
         raise
 
     # Fix setup.cfg if needed (kraken → krkn issue)
