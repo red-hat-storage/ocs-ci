@@ -50,8 +50,9 @@ class TestBlockExternalAccess(MCGTest):
     def check_disable_routes(self, disable_routes_val):
         """
         This function tests that the routes are deleted are recreated after deletion correctly according to the value
-        of disable_routes_val parameter. If the parameter value is false, all routes should be recreated after deletion
-        If its value is false, only non_deletable_routes should be recreated and the deletable ones to be deleted completely
+        of disable_routes_val parameter. If the parameter value is false, all routes should be recreated after deletion.
+        If its value is false, only non_deletable_routes should be recreated and the deletable ones
+        should be be deleted completely.
         Args:
             disable_routes_val (bool) Value of the 'disableRoutes' parameter
         """
