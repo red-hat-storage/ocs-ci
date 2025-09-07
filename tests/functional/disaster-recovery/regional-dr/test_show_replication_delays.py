@@ -1,5 +1,4 @@
 import logging
-
 import pytest
 
 from time import sleep
@@ -55,7 +54,7 @@ class TestShowReplicationDelays:
         argvalues=params,
     )
     @skipif_ocs_version("<4.19")
-    def test_rdr_replication_delay(
+    def test_rdr_replication_delays(
         self, setup_acm_ui, dr_workload, scale_up_deployment, pvc_interface
     ):
         """
@@ -64,7 +63,7 @@ class TestShowReplicationDelays:
 
         Healthy: The last group sync time is less than 2X that of the sync interval.
         Warning: The last group sync time is greater than 2X and less than 3X of the sync interval.
-        Critical: The last group sync time is greater than 3X of the sync interval.
+        Critical: The last group sync time is greater than or equal to 3X of the sync interval.
 
         """
 
@@ -147,10 +146,10 @@ class TestShowReplicationDelays:
         # validate the message "warning"
         # on the UI under Application -> DR Status
         logger.info(
-            "Waiting for interval between the sync interval time and 2x of sync interval"
+            "Waiting for interval between more than the sync interval time x and 2x of sync interval"
             " to validate 'warning' state"
         )
-        wait_time = scheduling_interval + 2
+        wait_time = scheduling_interval + 1
         sleep(wait_time * 60)
 
         check_dr_status(
@@ -158,8 +157,7 @@ class TestShowReplicationDelays:
         )
 
         logger.info("Waiting to validate 'critical' state")
-        wait_time = 3 * scheduling_interval
-        sleep(wait_time * 60)
+        sleep(scheduling_interval * 60)
 
         check_dr_status(
             acm_obj, workload_names, rdr_workload, expected_status="critical"
@@ -203,8 +201,10 @@ class TestShowReplicationDelays:
                 expected_status="FailingOver",
             )
 
-        logger.info(f"Waiting for {wait_time} minutes to run IOs post failover")
-        sleep(wait_time * 60)
+        logger.info(
+            f"Waiting for {scheduling_interval} minutes to run IOs post failover"
+        )
+        sleep(scheduling_interval * 60)
         check_dr_status(
             acm_obj, workload_names, rdr_workload, expected_status="healthy"
         )
@@ -216,7 +216,7 @@ class TestShowReplicationDelays:
                 workload_to_move=f"{workload.workload_name}-1",
                 policy_name=workload.dr_policy_name,
                 action=constants.ACTION_RELOCATE,
-                failover_or_preferred_cluster=secondary_cluster_name,
+                failover_or_preferred_cluster=primary_cluster_name,
                 workload_type=workload.workload_type,
             )
             check_dr_status(
@@ -228,10 +228,12 @@ class TestShowReplicationDelays:
                 expected_status="Relocating",
             )
 
-        logger.info(f"Waiting for {wait_time} minutes to run IOs post relocate")
-        sleep(wait_time * 60)
+        logger.info(
+            f"Waiting for {scheduling_interval} minutes to run IOs post relocate"
+        )
+        sleep(scheduling_interval * 60)
         check_dr_status(
-            acm_obj, workload_names, [rdr_workload], expected_status="healthy"
+            acm_obj, workload_names, rdr_workload, expected_status="healthy"
         )
 
 
