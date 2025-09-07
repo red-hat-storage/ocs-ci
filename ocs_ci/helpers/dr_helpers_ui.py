@@ -26,6 +26,7 @@ from ocs_ci.ocs.ui.base_ui import (
 from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -951,25 +952,29 @@ def check_dr_status(
         acm_obj.do_send_keys(acm_loc["search-bar"], text=workload)
         acm_obj.take_screenshot()
 
-        log.info("Verifying DR status on UI...")
-        wait_for_text_result = acm_obj.wait_until_expected_text_is_found(
-            acm_loc["dr-status"], expected_status, timeout=50
-        )
+        if not (expected_status == "FailingOver" or expected_status == "Relocating"):
+            log.info("Verifying DR status on UI...")
+            wait_for_text_result = TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=acm_obj.wait_until_expected_text_is_found,
+                locator=acm_loc["dr-status"],
+                expected_text=expected_status,
+            )
 
-        if not wait_for_text_result:
+            if not wait_for_text_result.wait_for_func_status(result=True):
+                log.info(
+                    f"DR Healthy status is not as expected as {expected_status}"
+                    f" for the application {workload}"
+                )
+                current_status = acm_obj.get_element_text(acm_loc["dr-status"])
+                log.info(f"Current status is {current_status}")
+                raise ResourceWrongStatusException
+
             log.info(
-                f"DR Healthy status is not as expected as {expected_status}"
+                f"DR health status is in expected state --> '{expected_status}' "
                 f" for the application {workload}"
             )
-            current_status = acm_obj.get_element_text(acm_loc["dr-status"])
-            log.info(f"Current status is {current_status}")
-            acm_obj.take_screenshot()
-            raise ResourceWrongStatusException
-
-        log.info(
-            f"DR health status is in expected state --> '{expected_status}' "
-            f" for the application {workload}"
-        )
 
         for _ in range(10):
             try:
@@ -990,8 +995,20 @@ def check_dr_status(
                 acm_loc["cluster_details_in_popover"]
             )
             acm_obj.take_screenshot()
+            current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
             primary_cluster_popover = cluster_details_in_popover.split("\n")[1]
             target_cluster_popover = cluster_details_in_popover.split("\n")[3]
+            current_status = cluster_details_in_popover.split("\n")[5]
+
+            if current_status == expected_status:
+                log.info(
+                    f"DR health status is in expected state --> '{expected_status}' "
+                    f" for the application {workload}"
+                )
+            else:
+                log.error("DR health status is not as expected")
+                acm_obj.take_screenshot()
+                raise UnexpectedBehaviour
 
             if primary_cluster_popover != primary_cluster_name:
                 log.error(
@@ -1006,6 +1023,9 @@ def check_dr_status(
                     f"current Target cluster in popover is {target_cluster_popover}"
                 )
                 raise UnexpectedBehaviour
+            log.info(
+                "Target cluster name and Primary cluster name have been validated successfully"
+            )
 
         expected_status_popover_messages = {
             "healthy": "All volumes are synced",
@@ -1026,5 +1046,5 @@ def check_dr_status(
         log.info(
             f"Expected pop over message "
             f"'{expected_status_popover_messages[expected_status]}' found"
-            f"for the workload {workload}"
+            f" for the workload {workload}"
         )
