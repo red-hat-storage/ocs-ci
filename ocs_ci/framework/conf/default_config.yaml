@@ -384,3 +384,7 @@ MULTICLUSTER:
 PREUPGRADE_CONFIG:
   AUTH: null
   MULTICLUSTER: null
+
+# Workload config
+WORKLOAD:
+  name: null

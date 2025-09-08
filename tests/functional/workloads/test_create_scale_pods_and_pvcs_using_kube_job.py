@@ -19,6 +19,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     orange_squad,
     hci_provider_and_client_required,
+    workload_targets,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -126,6 +127,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
 @orange_squad
 @ignore_leftovers
 @ms_provider_and_consumer_required
+@workload_targets(["consumer-all", "provider"])
 class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
     """
     Test create scale pods and PVCs using a kube job with MS consumers
@@ -177,7 +179,8 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
     @tier1
     def test_create_scale_pods_and_pvcs_with_ms_consumers(
-        self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
+        self,
+        create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers,
     ):
         """
         Test create scale pods and PVCs using a kube job with MS consumers
