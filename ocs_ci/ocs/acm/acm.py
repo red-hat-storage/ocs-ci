@@ -600,12 +600,9 @@ def login_to_acm():
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
     page_nav.page_has_loaded(retries=10, sleep_time=5)
-
-    locator = ["click-local-cluster", "click-admin-dropdown"]
-    expected_text = ["local-cluster", "Administrator"]
-    for expected_text, locator in zip(expected_text, locator):
+    for expected_text in ["local-cluster", "Administrator"]:
         dropdown_found = page_nav.wait_until_expected_text_is_found(
-            locator=page_nav.acm_page_nav[locator],
+            locator=page_nav.acm_page_nav["click-local-cluster"],
             expected_text=expected_text,
             timeout=15,
         )
@@ -619,7 +616,7 @@ def login_to_acm():
             log.warning(f"'{expected_text}' dropdown not found")
     else:
         log.warning(
-            "Neither 'local-cluster' nor 'Administrator' dropdown found, view is expected to be on the ACM console"
+            "Neither 'local-cluster' nor 'Administrator' dropdown found, view is already on ACM console"
         )
 
     if compare_versions(cmp_str):
