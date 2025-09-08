@@ -1,4 +1,6 @@
 import logging
+import pytest
+
 from time import sleep
 
 from ocs_ci.framework.testlib import MCGTest, red_squad, mcg, tier2
@@ -9,10 +11,44 @@ from ocs_ci.framework import config
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope="class")
+def save_all_routes_set(request):
+    """
+    Fetch the ODF route names and store them in a class member
+    """
+    ocp_routes_obj = ocp.OCP(
+        kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    route_items = ocp_routes_obj.get().get("items")
+    request.cls.original_route_names = set(
+        [item["metadata"]["name"] for item in route_items]
+    )
+    logger.info(f"The existing routes are {request.cls.original_route_names}")
+
+    # Get noobaa's routes by using the app=noobaa label:
+    ocp_routes_obj = ocp.OCP(
+        kind=constants.ROUTE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.NOOBAA_APP_LABEL,
+    )
+    route_items = ocp_routes_obj.get().get("items")
+    request.cls.original_noobaa_route_names = set(
+        [item["metadata"]["name"] for item in route_items]
+    )
+    logger.info(
+        f"The existing noobaa routes are {request.cls.original_noobaa_route_names}"
+    )
+
+
 @tier2
 @red_squad
 @mcg
+@pytest.mark.usefixtures("save_all_routes_set")
 class TestBlockExternalAccess(MCGTest):
+    @pytest.fixture(scope="class", autouse=True)
+    def cleanup(self, request):
+        request.addfinalizer(self.delete_multiCloudGateway_section_from_storagecluster)
+
     def test_block_access_from_storagecluster(
         self,
     ):
@@ -52,15 +88,10 @@ class TestBlockExternalAccess(MCGTest):
         This function tests that the routes are deleted are recreated after deletion correctly according to the value
         of disable_routes_val parameter. If the parameter value is false, all routes should be recreated after deletion.
         If its value is false, only non_deletable_routes should be recreated and the deletable ones
-        should be be deleted completely.
+        should be deleted completely.
         Args:
             disable_routes_val (bool) Value of the 'disableRoutes' parameter
         """
-        non_deletable_routes = [
-            "ocs-storagecluster-cephobjectstore",
-            "ocs-storagecluster-cephobjectstore-secure",
-        ]
-        deletable_routes = ["noobaa-mgmt", "s3", "sts"]
         timeout = 60
 
         ocp_routes_obj = ocp.OCP(
@@ -78,24 +109,24 @@ class TestBlockExternalAccess(MCGTest):
 
         ocp_routes_obj.reload_data()
         route_items = ocp_routes_obj.data.get("items")
-        route_names_after_deletion = [item["metadata"]["name"] for item in route_items]
+        route_names_after_deletion = set(
+            [item["metadata"]["name"] for item in route_items]
+        )
         logger.info(f"Routes after deletion {route_names_after_deletion}")
 
         if not disable_routes_val:
-            assert set(original_route_names) == set(
-                route_names_after_deletion
+            assert (
+                self.original_route_names == route_names_after_deletion
             ), "Some of the routes don't exist"
         else:
-            assert set(non_deletable_routes).issubset(
-                set(route_names_after_deletion)
+            non_deletable_route_names = (
+                self.original_route_names - self.original_noobaa_route_names
+            )
+            assert non_deletable_route_names.issubset(
+                route_names_after_deletion
             ), "Some of the predefined routes were deleted"
-            for route in non_deletable_routes:
-                if route in original_route_names:
-                    assert (
-                        route in route_names_after_deletion
-                    ), f"Predefined route {route} was deleted"
-            assert set(deletable_routes).isdisjoint(
-                set(route_names_after_deletion)
+            assert self.original_noobaa_route_names.isdisjoint(
+                route_names_after_deletion
             ), "Some routes were not deleted"
 
     def set_storagecluster_disable_routes_value(self, storagecluster_obj, val):
@@ -158,7 +189,7 @@ class TestBlockExternalAccess(MCGTest):
             disable_routes == val
         ), f"Disable routes is expected to be {val}, is {disable_routes}"
 
-    def delete_multiCLoudGateway_from_storagecluster(self):
+    def delete_multiCloudGateway_section_from_storagecluster(self):
         """
         This method removes 'multiCloudGateway' section from storagecluster configuration if this section exists there
         """
@@ -195,7 +226,7 @@ class TestBlockExternalAccess(MCGTest):
         """
 
         # The test is meaningful only when there is no 'disableRoutes' flag in storagecluster configuration
-        self.delete_multiCLoudGateway_from_storagecluster()
+        self.delete_multiCloudGateway_section_from_storagecluster()
 
         noobaa_obj = ocp.OCP(
             resource_name=constants.NOOBAA_RESOURCE_NAME,
