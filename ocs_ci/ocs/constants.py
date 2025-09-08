@@ -110,6 +110,8 @@ AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
 )
 MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses")
 AUTO_SCALING_DIR = os.path.join(TEMPLATE_DIR, "storage-auto-scaling")
+ODF_PODS = os.path.join(TEMPLATE_DIR, "odf-pods")
+
 
 # Statuses
 STATUS_READY = "Ready"
@@ -3533,3 +3535,9 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# odf pods resources
+ODF_RESOURCES_REQUESTS_AND_LIMITS = os.path.join(
+    ODF_PODS, "odf-resources-requests-and-limits.json"
+)
+POD_NAME_PREFIXES = os.path.join(ODF_PODS, "pod-name-prefixes.json")
