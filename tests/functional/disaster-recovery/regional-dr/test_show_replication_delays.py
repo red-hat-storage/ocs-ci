@@ -192,7 +192,7 @@ class TestShowReplicationDelays:
                 failover_or_preferred_cluster=secondary_cluster_name,
                 workload_type=workload.workload_type,
             )
-            check_dr_status(
+            validate_after_failover = check_dr_status(
                 acm_obj,
                 [workload.workload_name],
                 [workload],
@@ -204,7 +204,8 @@ class TestShowReplicationDelays:
         logger.info(
             f"Waiting for {scheduling_interval} minutes to run IOs post failover"
         )
-        sleep(scheduling_interval * 60)
+        wait_time = 2 * scheduling_interval
+        sleep(wait_time * 60)
         check_dr_status(
             acm_obj, workload_names, rdr_workload, expected_status="healthy"
         )
@@ -219,7 +220,7 @@ class TestShowReplicationDelays:
                 failover_or_preferred_cluster=primary_cluster_name,
                 workload_type=workload.workload_type,
             )
-            check_dr_status(
+            validate_after_relocate = check_dr_status(
                 acm_obj,
                 [workload.workload_name],
                 [workload],
@@ -235,6 +236,14 @@ class TestShowReplicationDelays:
         check_dr_status(
             acm_obj, workload_names, rdr_workload, expected_status="healthy"
         )
+
+        if validate_after_failover or validate_after_relocate:
+            logger.error("Failover or relocate has failed to get expected UI status")
+            logger.error(
+                f"Exception after failover {validate_after_failover}"
+                f" and after relocate {validate_after_relocate}"
+            )
+            pytest.fail("Test failed")
 
 
 def modify_mds_replica_count(replica_count=1):

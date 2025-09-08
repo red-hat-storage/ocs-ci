@@ -990,43 +990,6 @@ def check_dr_status(
         log.info("Validating the message in popover...")
         current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
 
-        if expected_status == "FailingOver" or expected_status == "Relocating":
-            cluster_details_in_popover = acm_obj.get_element_text(
-                acm_loc["cluster_details_in_popover"]
-            )
-            acm_obj.take_screenshot()
-            current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
-            primary_cluster_popover = cluster_details_in_popover.split("\n")[1]
-            target_cluster_popover = cluster_details_in_popover.split("\n")[3]
-            current_status = cluster_details_in_popover.split("\n")[5]
-
-            if current_status == expected_status:
-                log.info(
-                    f"DR health status is in expected state --> '{expected_status}' "
-                    f" for the application {workload}"
-                )
-            else:
-                log.error("DR health status is not as expected")
-                acm_obj.take_screenshot()
-                raise UnexpectedBehaviour
-
-            if primary_cluster_popover != primary_cluster_name:
-                log.error(
-                    f"Primary cluster name is not as expected as {primary_cluster_name} "
-                    f"current Primary cluster in popover is {primary_cluster_popover}"
-                )
-                raise UnexpectedBehaviour
-
-            if target_cluster_popover != target_cluster_name:
-                log.error(
-                    f"Target cluster name is not as expected as {target_cluster_name} "
-                    f"current Target cluster in popover is {target_cluster_popover}"
-                )
-                raise UnexpectedBehaviour
-            log.info(
-                "Target cluster name and Primary cluster name have been validated successfully"
-            )
-
         expected_status_popover_messages = {
             "healthy": "All volumes are synced",
             "warning": "Volumes are syncing slower than usual",
@@ -1034,6 +997,50 @@ def check_dr_status(
             "FailingOver": "Failover in progress",
             "Relocating": "Relocate in progress",
         }
+
+        try:
+            exception = None
+            if expected_status == "FailingOver" or expected_status == "Relocating":
+                cluster_details_in_popover = acm_obj.get_element_text(
+                    acm_loc["cluster_details_in_popover"]
+                )
+                acm_obj.take_screenshot()
+                current_pop_over_text = acm_obj.get_element_text(
+                    acm_loc["popover_text"]
+                )
+                primary_cluster_popover = cluster_details_in_popover.split("\n")[1]
+                target_cluster_popover = cluster_details_in_popover.split("\n")[3]
+                current_status = cluster_details_in_popover.split("\n")[5]
+
+                if current_status == expected_status:
+                    log.info(
+                        f"DR health status is in expected state --> '{expected_status}' "
+                        f" for the application {workload}"
+                    )
+                else:
+                    log.error("DR health status is not as expected")
+                    acm_obj.take_screenshot()
+                    raise UnexpectedBehaviour
+
+                if primary_cluster_popover != primary_cluster_name:
+                    log.error(
+                        f"Primary cluster name is not as expected as {primary_cluster_name} "
+                        f"current Primary cluster in popover is {primary_cluster_popover}"
+                    )
+                    raise UnexpectedBehaviour
+
+                if target_cluster_popover != target_cluster_name:
+                    log.error(
+                        f"Target cluster name is not as expected as {target_cluster_name} "
+                        f"current Target cluster in popover is {target_cluster_popover}"
+                    )
+                    raise UnexpectedBehaviour
+                log.info(
+                    "Target cluster name and Primary cluster name have been validated successfully"
+                )
+        except Exception as e:
+            exception = str(e)
+            return exception
 
         if expected_status_popover_messages[expected_status] != current_pop_over_text:
             log.error(
