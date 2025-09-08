@@ -600,23 +600,28 @@ def login_to_acm():
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
     page_nav.page_has_loaded(retries=10, sleep_time=5)
-    for expected_text in ["local-cluster", "Administrator"]:
-        dropdown_found = page_nav.wait_until_expected_text_is_found(
-            locator=page_nav.acm_page_nav["click-local-cluster"],
-            expected_text=expected_text,
-            timeout=15,
-        )
-        if dropdown_found:
-            log.info(
-                f"'{expected_text}' dropdown found, navigating from OCP to ACM console"
+    locator = ["click-local-cluster", "click-admin-dropdown"]
+    expected_text = ["local-cluster", "Administrator"]
+    for expected_text, locator in zip(expected_text, locator):
+        try:
+            dropdown_found = page_nav.wait_until_expected_text_is_found(
+                locator=page_nav.acm_page_nav[locator],
+                expected_text=expected_text,
+                timeout=15,
             )
-            page_nav.navigate_from_ocp_to_acm_cluster_page(locator=locator)
-            break
-        else:
-            log.warning(f"'{expected_text}' dropdown not found")
+            if dropdown_found:
+                log.info(
+                    f"'{expected_text}' dropdown found, navigating from OCP to ACM console"
+                )
+                page_nav.navigate_from_ocp_to_acm_cluster_page()
+                break
+            else:
+                log.warning(f"'{expected_text}' dropdown not found")
+        except (NoSuchElementException, TimeoutException) as e:
+            log.warning(f"Exception occurred while finding '{expected_text}': {e}")
     else:
         log.warning(
-            "Neither 'local-cluster' nor 'Administrator' dropdown found, view is already on ACM console"
+            "Neither 'local-cluster' nor 'Administrator' dropdown found, view is expected to be on the ACM console"
         )
 
     if compare_versions(cmp_str):
