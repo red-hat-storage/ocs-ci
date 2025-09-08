@@ -2570,7 +2570,6 @@ def update_config_from_s3(
         return None
     except EndpointConnectionError:
         logger.warning("Failed to fetch auth.yaml from ocs-ci-data")
-        return None
 
 
 def delete_cluster_buckets(cluster_name):
