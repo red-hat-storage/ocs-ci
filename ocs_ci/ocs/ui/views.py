@@ -1349,6 +1349,8 @@ acm_configuration_4_20 = {
         "(//h2[normalize-space()='Administrator'])[1]",
         By.XPATH,
     ),
+    "submariner-custom-source": ("//input[@id='source']", By.XPATH),
+    "submariner-custom-channel": ("//input[@id='channel']", By.XPATH),
 }
 
 add_capacity = {

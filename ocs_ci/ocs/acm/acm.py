@@ -293,6 +293,8 @@ class AcmAddClusters(AcmPageNavigator):
             else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
         )
         channel_name = "stable-" + submariner_unreleased_channel
+        log.info("Clear existing Channel (if any)")
+        self.do_clear(self.page_nav["submariner-custom-source"])
         log.info("Send Channel")
         self.do_send_keys(
             self.page_nav["submariner-custom-channel"],
