@@ -30,8 +30,7 @@ class TestCephfsFsyncConsistency(ManageTest):
         self.pvc_size = 10
 
         self.pvc_obj = pvc_factory(
-            interface=constants.CEPHFS_INTERFACE,
-            storageclass=constants.CEPHFILESYSTEM_SC,
+            interface=constants.CEPHFILESYSTEM,
             size=self.pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
