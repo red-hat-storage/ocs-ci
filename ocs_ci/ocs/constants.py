@@ -2422,9 +2422,23 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "odf-multicluster",
 ]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] = (
-    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.19"]
-)
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] = [
+    "ocs-operator",
+    "odf-operator",
+    "mcg-operator",
+    "odf-csi-addons-operator",
+    "ocs-client-operator",
+    "odf-prometheus-operator",
+    "recipe",
+    "rook-ceph-operator",
+    "odr-cluster-operator",
+    "odr-hub-operator",
+    "cephcsi-operator",
+    "odf-dependencies",
+    "odf-multicluster-orchestrator",
+    "cnsa-dependencies",
+    "odf-external-snapshotter-operator",
+]
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
