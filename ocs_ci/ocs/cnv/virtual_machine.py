@@ -12,7 +12,7 @@ from ocs_ci.helpers.cnv_helpers import (
     create_dv,
     clone_dv,
     verifyvolume,
-    generate_password,
+    generate_vm_password,
 )
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import (
@@ -148,7 +148,7 @@ class VirtualMachine(Virtctl):
         """
         Prepares the VM data.
         """
-        self.password = generate_password()
+        self.password = generate_vm_password()
         vm_data = templating.load_yaml(constants.CNV_VM_TEMPLATE_YAML)
         vm_data["metadata"]["name"] = self._vm_name
         vm_data["metadata"]["namespace"] = self.namespace
