@@ -38,7 +38,6 @@ from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.ipam import IPAM
 
-
 log = logging.getLogger(__name__)
 
 
@@ -234,50 +233,29 @@ class AcmPageNavigator(BaseUI):
             )
             raise NoSuchElementException
 
-    def navigate_from_ocp_to_acm_cluster_page(self):
+    def navigate_from_ocp_to_acm_cluster_page(self, locator="click-local-cluster"):
         """
         For ACM version 2.7 and above we need to navigate from OCP
         console to ACM multicluster page
 
         """
 
-        try:
-            if not self.check_element_presence(
-                (
-                    self.acm_page_nav["click-local-cluster"][1],
-                    self.acm_page_nav["click-local-cluster"][0],
-                ),
-                timeout=15,
-            ):
-                log.warning("local-cluster is not found while switching to ACM console")
-                self.take_screenshot()
-            else:
-                log.info("Click on local-cluster")
-                self.do_click(self.acm_page_nav["click-local-cluster"])
-                log.info("Select All Clusters view")
-                self.do_click(self.acm_page_nav["all-clusters-view"])
-                self.take_screenshot()
-        except (NoSuchElementException, TimeoutException) as e:
-            log.exception(
-                f"Exception occurred: {e} while switching to 'All Clusters' view"
-            )
-            if not self.check_element_presence(
-                (
-                    self.acm_page_nav["click-admin-dropdown"][1],
-                    self.acm_page_nav["click-admin-dropdown"][0],
-                ),
-                timeout=15,
-            ):
-                log.error(
-                    "Administrator dropdown is not found, can not switch to ACM console"
-                )
-                self.take_screenshot()
-                raise NoSuchElementException
-            else:
-                log.info("Click on Administrator dropdown")
-                self.do_click(self.acm_page_nav["click-admin-dropdown"])
-                log.info("Select Fleet Management view")
-                self.do_click(self.acm_page_nav["fleet-management-view"])
+        self.check_element_presence(
+            (
+                self.acm_page_nav[locator][1],
+                self.acm_page_nav[locator][0],
+            ),
+            timeout=15,
+        )
+        log.info(f"Click on {locator} from OCP console")
+        self.do_click(self.acm_page_nav[locator])
+        if locator == "click-local-cluster":
+            log.info("Select All Clusters view")
+            self.do_click(self.acm_page_nav["all-clusters-view"])
+        else:
+            log.info("Select Fleet Management view")
+            self.do_click(self.acm_page_nav["fleet-management-view"])
+
         # There is a modal dialog box which appears as soon as we login
         # we need to click on close on that dialog box
         if self.check_element_presence(
