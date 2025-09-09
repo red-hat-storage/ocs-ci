@@ -90,6 +90,22 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 marks=[skipif_ocs_version("<4.19")],
                 id="primary_down-cephfs-recipe",
             ),
+            pytest.param(
+                False,
+                "Mix",
+                1,
+                0,
+                marks=[skipif_ocs_version("<4.19")],
+                id="primary_up-mix-kubeobject",
+            ),
+            pytest.param(
+                True,
+                "Mix",
+                1,
+                0,
+                marks=[skipif_ocs_version("<4.19")],
+                id="primary_down-mix-kubeobject",
+            ),
         ],
     )
     def test_failover_and_relocate_discovered_apps(
@@ -111,7 +127,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         rdr_workload = discovered_apps_dr_workload(
             pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
         )[0]
-
+        is_mix = pvc_interface == "Mix"
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
                 rdr_workload.workload_namespace,
@@ -148,6 +164,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
+        logger.info("Checking for lastGroupSyncTime")
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
         if primary_cluster_down:
             config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
@@ -207,9 +225,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
+            mix_workload=is_mix,
+            mix_workload_data=None if not is_mix else rdr_workload.mix_workload_data,
         )
 
-        if pvc_interface == constants.CEPHFILESYSTEM:
+        if pvc_interface == (constants.CEPHFILESYSTEM or "Mix"):
             config.switch_to_cluster_by_name(secondary_cluster_name)
             dr_helpers.wait_for_replication_destinations_deletion(
                 rdr_workload.workload_namespace
@@ -217,7 +237,12 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             # Verify the creation of ReplicationDestination resources on primary cluster
             config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
             dr_helpers.wait_for_replication_destinations_creation(
-                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+                (
+                    rdr_workload.workload_pvc_count
+                    if not is_mix
+                    else rdr_workload.mix_workload_data
+                ),
+                rdr_workload.workload_namespace,
             )
         # Doing Relocate
         primary_cluster_name_after_failover = (
@@ -249,6 +274,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
+        logger.info("Checking for lastGroupSyncTime")
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
@@ -273,9 +300,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
+            mix_workload=is_mix,
+            mix_workload_data=None if not is_mix else rdr_workload.mix_workload_data,
         )
 
-        if pvc_interface == constants.CEPHFILESYSTEM:
+        if pvc_interface == (constants.CEPHFILESYSTEM or "Mix"):
             config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
             dr_helpers.wait_for_replication_destinations_deletion(
                 rdr_workload.workload_namespace
@@ -283,5 +312,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             # Verify the creation of ReplicationDestination resources on primary cluster
             config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
             dr_helpers.wait_for_replication_destinations_creation(
-                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+                (
+                    rdr_workload.workload_pvc_count
+                    if not is_mix
+                    else rdr_workload.mix_workload_data
+                ),
+                rdr_workload.workload_namespace,
             )

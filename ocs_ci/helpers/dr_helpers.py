@@ -770,6 +770,8 @@ def wait_for_replication_resources_creation(
     discovered_apps=False,
     vrg_name=None,
     skip_vrg_check=False,
+    mix_workload=False,
+    mix_workload_data=None,
 ):
     """
     Wait for replication resources to be created
@@ -782,6 +784,8 @@ def wait_for_replication_resources_creation(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        mix_workload (bool): If true then mix workload
+        mix_workload_data (dict): Contains pvc count for both interfaces
 
     Raises:
         TimeoutExpiredError: In case replication resources not created
@@ -799,16 +803,34 @@ def wait_for_replication_resources_creation(
         logger.error(error_msg)
         raise TimeoutExpiredError(error_msg)
 
+    if mix_workload:
+        resource_map = {
+            "rbd": (constants.VOLUME_REPLICATION, get_vr_count),
+            "cephfs": (constants.REPLICATION_SOURCE, get_replicationsources_count),
+        }
+
+        for key, vr_count in mix_workload_data.items():
+            if key not in resource_map:
+                logger.warning(
+                    f"Unsupported storage type '{key}' in mix_workload. Skipping..."
+                )
+                continue
+
+            resource_kind, count_function = resource_map[key]
+            wait_for_resource_creation_and_state(
+                resource_kind, count_function, namespace, vr_count, timeout
+            )
     # TODO: Improve the parameter for condition
-    if "cephfs" in namespace:
-        resource_kind = constants.REPLICATION_SOURCE
-        count_function = get_replicationsources_count
     else:
-        # Starting with ODF 4.20, CG behavior is always used
-        # Only 1 VolumeReplication resource is expected per workload.
-        count = 1 if ocs_version >= version.VERSION_4_20 else count
-        resource_kind = constants.VOLUME_REPLICATION
-        count_function = get_vr_count
+        if "cephfs" in namespace:
+            resource_kind = constants.REPLICATION_SOURCE
+            count_function = get_replicationsources_count
+        else:
+            # Starting with ODF 4.20, CG behavior is always used
+            # Only 1 VolumeReplication resource is expected per workload.
+            count = 1 if ocs_version >= version.VERSION_4_20 else count
+            resource_kind = constants.VOLUME_REPLICATION
+            count_function = get_vr_count
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         logger.info(f"Waiting for {count} {resource_kind}s to be created")
         sample = TimeoutSampler(
@@ -839,6 +861,46 @@ def wait_for_replication_resources_creation(
             resource_name=vrg_name,
             timeout=timeout,
         )
+
+
+def wait_for_resource_creation_and_state(
+    resource_kind, count_function, namespace, count, timeout
+):
+    """
+    Wait for Resource creation state
+
+    Args:
+        resource_kind (str): Expected number of VR resources or ReplicationSource count
+        count_function (str): If true then deployed workload is discovered_apps
+        namespace (str): the namespace of the VR or ReplicationSource resources
+        count (int): Expected number of VR resources or ReplicationSource count
+        timeout (int): time in seconds to wait for VR or ReplicationSource resources to be created
+            or reach expected state
+
+    """
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        logger.info(f"Waiting for {count} {resource_kind}s to be created")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=count_function,
+            namespace=namespace,
+        )
+        sample.wait_for_func_value(count)
+
+        if resource_kind == constants.VOLUME_REPLICATION:
+            logger.info(f"Waiting for {count} {resource_kind}s to reach primary state")
+            sample = TimeoutSampler(
+                timeout=timeout,
+                sleep=5,
+                func=check_vr_state,
+                state="primary",
+                namespace=namespace,
+            )
+            if not sample.wait_for_func_status(result=True):
+                error_msg = "One or more VR haven't reached expected state primary within the time limit."
+                logger.error(error_msg)
+                raise TimeoutExpiredError(error_msg)
 
 
 def wait_for_replication_resources_deletion(
@@ -936,6 +998,8 @@ def wait_for_all_resources_creation(
     discovered_apps=False,
     vrg_name=None,
     skip_vrg_check=False,
+    mix_workload=False,
+    mix_workload_data=None,
 ):
     """
     Wait for workload and replication resources to be created
@@ -949,6 +1013,9 @@ def wait_for_all_resources_creation(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        mix_workload (bool): If true then mix workload
+        mix_workload_data (dict): Contains pvc count for both interfaces
+
 
 
 
@@ -971,7 +1038,14 @@ def wait_for_all_resources_creation(
     )
     if not skip_replication_resources:
         wait_for_replication_resources_creation(
-            pvc_count, namespace, timeout, discovered_apps, vrg_name, skip_vrg_check
+            pvc_count,
+            namespace,
+            timeout,
+            discovered_apps,
+            vrg_name,
+            skip_vrg_check,
+            mix_workload=mix_workload,
+            mix_workload_data=mix_workload_data,
         )
 
 
@@ -1014,7 +1088,7 @@ def wait_for_all_resources_deletion(
 
     if workload_cleanup or not (
         config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
-        and "cephfs" in namespace
+        and ("cephfs" in namespace or "mix" in namespace)
     ):
         logger.info("Waiting for all PVCs to be deleted")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
@@ -1025,7 +1099,7 @@ def wait_for_all_resources_deletion(
             )
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        if workload_cleanup or "cephfs" not in namespace:
+        if workload_cleanup or not ("cephfs" in namespace or "mix" in namespace):
             logger.info("Waiting for all PVs to be deleted")
             sample = TimeoutSampler(
                 timeout=timeout,

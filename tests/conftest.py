@@ -7436,7 +7436,7 @@ def discovered_apps_dr_workload(request):
         Args:
             kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
             recipe (int): Number if Discovered Apps workload with recipe protection to be created
-            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem' or 'Mix'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             multi_ns (bool): True for Multi Namespace
 
@@ -7455,6 +7455,8 @@ def discovered_apps_dr_workload(request):
             raise UnsupportedWorkloadError("kubeobject count should be more then 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
+        elif pvc_interface == "Mix":
+            workload_key = "dr_workload_discovered_apps_mix"
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
 
         if bool(kubeobject):
@@ -7485,6 +7487,13 @@ def discovered_apps_dr_workload(request):
                         "dr_workload_app_placement_name"
                     ],
                     discovered_apps_multi_ns=multi_ns,
+                    pvc_interface=pvc_interface,
+                    mix_workload_rbd_pvc_count=workload_details.get(
+                        "mix_workload_rbd_pvc_count"
+                    ),
+                    mix_workload_cephfs_pvc_count=workload_details.get(
+                        "mix_workload_cephfs_pvc_count"
+                    ),
                 )
 
                 if multi_ns:
