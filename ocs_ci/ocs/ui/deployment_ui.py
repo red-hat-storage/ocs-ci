@@ -5,6 +5,7 @@ from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STO
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
+from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -68,8 +69,9 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 self.dep_loc["openshift_operators_namespace"], enable_screenshot=True
             )
-            time.sleep(5)
-        self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
+        self.do_send_keys(
+            self.dep_loc["search_operators"], text=self.operator_name, timeout=60
+        )
         logger.info(f"Choose {self.operator_name} Version")
         if self.operator_name is OCS_OPERATOR:
             self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
@@ -81,13 +83,7 @@ class DeploymentUI(PageNavigator):
         )
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
-        try:
-            self.do_click(
-                self.dep_loc["click_install_ocs_page"], enable_screenshot=True
-            )
-        except Exception as e:
-            logger.error(f"'click_install_ocs_page' locator non clickable: {e}")
-            logger.error("Unable to install ODF. It could be already installed")
+        self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator_name is ODF_OPERATOR:
             try:
                 self.navigate_installed_operators_page()
@@ -148,7 +144,6 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
             )
-            time.sleep(15)
         elif ocs_version >= version.VERSION_4_19:
             self.nav_odf_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
@@ -590,6 +585,9 @@ class DeploymentUI(PageNavigator):
             if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
                 add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
-        self.install_ocs_operator()
+        if not csv.get_csvs_start_with_prefix(
+            defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
+        ):
+            self.install_ocs_operator()
         if not config.UPGRADE.get("ui_upgrade"):
             self.install_storage_cluster()
