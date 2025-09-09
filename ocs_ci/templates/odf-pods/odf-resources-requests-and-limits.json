@@ -1,0 +1,878 @@
+{
+  "pod-resources-details": {
+    "ceph-csi-controller-manager": [
+      {
+        "container": "manager",
+        "requests": {
+          "cpu": "10m",
+          "memory": "64Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "128Mi"
+        }
+      }
+    ],
+    "cnpg-controller-manager": [
+      {
+        "container": "manager",
+        "requests": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "100m",
+          "memory": "200Mi"
+        }
+      }
+    ],
+    "csi-addons-controller-manager": [
+      {
+        "container": "manager",
+        "requests": {
+          "cpu": "10m",
+          "memory": "64Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "512Mi"
+        }
+      }
+    ],
+    "noobaa-core-0": [
+      {
+        "container": "core",
+        "requests": {
+          "cpu": "999m",
+          "memory": "4Gi"
+        },
+        "limits": {
+          "cpu": "999m",
+          "memory": "4Gi"
+        }
+      },
+      {
+        "container": "noobaa-log-processor",
+        "requests": {
+          "cpu": "200m",
+          "memory": "500Mi"
+        },
+        "limits": {
+          "cpu": "200m",
+          "memory": "500Mi"
+        }
+      }
+    ],
+    "noobaa-db-pg-cluster-": [
+      {
+        "container": "postgres",
+        "requests": {
+          "cpu": "500m",
+          "memory": "4Gi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "4Gi"
+        }
+      }
+    ],
+    "noobaa-default-backing-store-noobaa-pod-": [
+      {
+        "container": "noobaa-agent",
+        "requests": {
+          "cpu": "100m",
+          "memory": "400Mi"
+        },
+        "limits": {
+          "cpu": "100m",
+          "memory": "400Mi"
+        }
+      }
+    ],
+    "noobaa-endpoint-": [
+      {
+        "container": "endpoint",
+        "requests": {
+          "cpu": "999m",
+          "memory": "2Gi"
+        },
+        "limits": {
+          "cpu": "999m",
+          "memory": "2Gi"
+        }
+      }
+    ],
+    "noobaa-operator-": [
+      {
+        "container": "noobaa-operator",
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "512Mi"
+        }
+      }
+    ],
+    "ocs-client-operator-console-": [
+      {
+        "container": "ocs-client-operator-console",
+        "requests": {
+          "cpu": "10m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "100m",
+          "memory": "512Mi"
+        }
+      }
+    ],
+    "ocs-client-operator-controller-manager-": [
+      {
+        "container": "manager",
+        "requests": {
+          "cpu": "10m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        }
+      }
+    ],
+    "ocs-metrics-exporter-": [
+      {
+        "container": "kube-rbac-proxy-main",
+        "requests": {
+          "cpu": "50m",
+          "memory": "30Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "30Mi"
+        }
+      },
+      {
+        "container": "kube-rbac-proxy-self",
+        "requests": {
+          "cpu": "50m",
+          "memory": "30Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "30Mi"
+        }
+      },
+      {
+        "container": "ocs-metrics-exporter",
+        "requests": {
+          "cpu": "250m",
+          "memory": "512Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "1536Mi"
+        }
+      }
+    ],
+    "ocs-operator-": [
+      {
+        "container": "ocs-operator",
+        "requests": {
+          "cpu": "50m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "512Mi"
+        }
+      }
+    ],
+    "ocs-provider-server-": [
+      {
+        "container": "ocs-provider-api-server",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "odf-console-": [
+      {
+        "container": "odf-console",
+        "requests": {
+          "cpu": "100m",
+          "memory": "512Mi"
+        },
+        "limits": {
+          "cpu": "100m",
+          "memory": "512Mi"
+        }
+      }
+    ],
+    "odf-external-snapshotter-operator-": [
+      {
+        "container": "odf-external-snapshotter-operator",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "odf-operator-controller-manager-": [
+      {
+        "container": "manager",
+        "requests": {
+          "cpu": "200m",
+          "memory": "200Mi"
+        },
+        "limits": {
+          "cpu": "200m",
+          "memory": "300Mi"
+        }
+      }
+    ],
+    "openshift-storage.cephfs.csi.ceph.com-ctrlplugin-": [
+      {
+        "container": "csi-cephfsplugin",
+        "requests": {
+          "cpu": "250m",
+          "memory": "250Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "1Gi"
+        }
+      },
+      {
+        "container": "csi-provisioner",
+        "requests": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "750Mi"
+        }
+      },
+      {
+        "container": "csi-resizer",
+        "requests": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-attacher",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-snapshotter",
+        "requests": {
+          "cpu": "50m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "ex-csi-snapshotter",
+        "requests": {
+          "cpu": "50m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-addons",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "250Mi"
+        }
+      },
+      {
+        "container": "log-rotator",
+        "requests": {
+          "cpu": "10m",
+          "memory": "32Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      }
+    ],
+    "openshift-storage.cephfs.csi.ceph.com-nodeplugin-": [
+      {
+        "container": "csi-cephfsplugin",
+        "requests": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "1536Mi"
+        }
+      },
+      {
+        "container": "driver-registrar",
+        "requests": {
+          "cpu": "10m",
+          "memory": "10Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      },
+      {
+        "container": "log-rotator",
+        "requests": {
+          "cpu": "10m",
+          "memory": "32Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      }
+    ],
+    "openshift-storage.nfs.csi.ceph.com-ctrlplugin-": [
+      {
+        "container": "csi-nfsplugin",
+        "requests": {
+          "cpu": "250m",
+          "memory": "250Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "1Gi"
+        }
+      },
+      {
+        "container": "csi-provisioner",
+        "requests": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "750Mi"
+        }
+      },
+      {
+        "container": "csi-resizer",
+        "requests": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-attacher",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-snapshotter",
+        "requests": {
+          "cpu": "50m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "log-rotator",
+        "requests": {
+          "cpu": "10m",
+          "memory": "32Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      }
+    ],
+    "openshift-storage.nfs.csi.ceph.com-nodeplugin-": [
+      {
+        "container": "csi-nfsplugin",
+        "requests": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "1536Mi"
+        }
+      },
+      {
+        "container": "driver-registrar",
+        "requests": {
+          "cpu": "10m",
+          "memory": "10Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      },
+      {
+        "container": "log-rotator",
+        "requests": {
+          "cpu": "10m",
+          "memory": "32Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      }
+    ],
+    "openshift-storage.rbd.csi.ceph.com-ctrlplugin-": [
+      {
+        "container": "csi-rbdplugin",
+        "requests": {
+          "cpu": "250m",
+          "memory": "250Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "1Gi"
+        }
+      },
+      {
+        "container": "csi-provisioner",
+        "requests": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "750Mi"
+        }
+      },
+      {
+        "container": "csi-resizer",
+        "requests": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-attacher",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-snapshotter",
+        "requests": {
+          "cpu": "50m",
+          "memory": "100Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "csi-addons",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "250Mi"
+        }
+      },
+      {
+        "container": "csi-omap-generator",
+        "requests": {
+          "cpu": "100m",
+          "memory": "125Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "500Mi"
+        }
+      },
+      {
+        "container": "log-rotator",
+        "requests": {
+          "cpu": "10m",
+          "memory": "32Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      }
+    ],
+    "openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons-": [
+      {
+        "container": "csi-addons",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "200m",
+          "memory": "250Mi"
+        }
+      },
+      {
+        "container": "log-rotator",
+        "requests": {
+          "cpu": "10m",
+          "memory": "32Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      }
+    ],
+    "openshift-storage.rbd.csi.ceph.com-nodeplugin-": [
+      {
+        "container": "csi-rbdplugin",
+        "requests": {
+          "cpu": "250m",
+          "memory": "500Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "1536Mi"
+        }
+      },
+      {
+        "container": "driver-registrar",
+        "requests": {
+          "cpu": "10m",
+          "memory": "10Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      },
+      {
+        "container": "log-rotator",
+        "requests": {
+          "cpu": "10m",
+          "memory": "32Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        }
+      }
+    ],
+    "rook-ceph-crashcollector-": [
+      {
+        "container": "ceph-crash",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "100m",
+          "memory": "100Mi"
+        }
+      }
+    ],
+    "rook-ceph-exporter-": [
+      {
+        "container": "ceph-exporter",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "50m",
+          "memory": "128Mi"
+        }
+      }
+    ],
+    "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a": [
+      {
+        "container": "mds",
+        "requests": {
+          "cpu": "2",
+          "memory": "6Gi"
+        },
+        "limits": {
+          "cpu": "2",
+          "memory": "6Gi"
+        }
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b": [
+      {
+        "container": "mds",
+        "requests": {
+          "cpu": "2",
+          "memory": "6Gi"
+        },
+        "limits": {
+          "cpu": "2",
+          "memory": "6Gi"
+        }
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-mgr-a": [
+      {
+        "container": "mgr",
+        "requests": {
+          "cpu": "1",
+          "memory": "1536Mi"
+        },
+        "limits": {
+          "cpu": "2",
+          "memory": "3Gi"
+        }
+      },
+      {
+        "container": "watch-active",
+        "requests": null,
+        "limits": null
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-mgr-b": [
+      {
+        "container": "mgr",
+        "requests": {
+          "cpu": "1",
+          "memory": "1536Mi"
+        },
+        "limits": {
+          "cpu": "2",
+          "memory": "3Gi"
+        }
+      },
+      {
+        "container": "watch-active",
+        "requests": null,
+        "limits": null
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-mon-a": [
+      {
+        "container": "mon",
+        "requests": {
+          "cpu": "1",
+          "memory": "2Gi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "2Gi"
+        }
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-mon-b": [
+      {
+        "container": "mon",
+        "requests": {
+          "cpu": "1",
+          "memory": "2Gi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "2Gi"
+        }
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-mon-c": [
+      {
+        "container": "mon",
+        "requests": {
+          "cpu": "1",
+          "memory": "2Gi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "2Gi"
+        }
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-operator-": [
+      {
+        "container": "rook-ceph-operator",
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "1",
+          "memory": "512Mi"
+        }
+      }
+    ],
+    "rook-ceph-osd-prepare-ocs-deviceset-": [
+        {
+          "container": "provision",
+          "requests": {
+            "cpu": null,
+            "memory": null
+          },
+          "limits": {
+            "cpu": null,
+            "memory": null
+          }
+        }
+    ],
+    "rook-ceph-osd-": [
+      {
+        "container": "osd",
+        "requests": {
+          "cpu": "2",
+          "memory": "5Gi"
+        },
+        "limits": {
+          "cpu": "2",
+          "memory": "5Gi"
+        }
+      },
+      {
+        "container": "log-collector",
+        "requests": {
+          "cpu": "50m",
+          "memory": "50Mi"
+        },
+        "limits": {
+          "cpu": "100m",
+          "memory": "250Mi"
+        }
+      }
+    ],
+    "rook-ceph-rgw-ocs-storagecluster-cephobjectstore-a": [
+      {
+        "container": "rgw",
+        "requests": {
+          "cpu": "2",
+          "memory": "2Gi"
+        },
+        "limits": {
+          "cpu": "2",
+          "memory": "2Gi"
+        }
+      },
+      {
+        "container": "log-collector",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "rook-ceph-tools-": [
+      {
+        "container": "rook-ceph-tools",
+        "requests": {
+          "cpu": "50m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "256Mi"
+        }
+      }
+    ],
+    "storageclient-": [
+      {
+        "container": "heartbeat",
+        "requests": null,
+        "limits": null
+      }
+    ],
+    "ux-backend-server-": [
+      {
+        "container": "ux-backend-server",
+        "requests": {
+          "cpu": "50m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "512Mi"
+        }
+      },
+      {
+        "container": "oauth-proxy",
+        "requests": null,
+        "limits": null
+      }
+    ]
+  }
+}
