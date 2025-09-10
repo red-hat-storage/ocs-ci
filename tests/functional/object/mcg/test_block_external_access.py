@@ -1,4 +1,6 @@
 import logging
+from json import dumps
+
 import pytest
 
 from time import sleep
@@ -7,15 +9,49 @@ from ocs_ci.framework.testlib import MCGTest, red_squad, mcg, tier2
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 
-
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class")
-def save_all_routes_set(request):
+def save_original_state(request):
     """
-    Fetch the ODF route names and store them in a class member
+    Save the ODF route names and original cluster object and noobaa configurations and store them
+    in the class members
     """
+
+    # Save original multiCloudGateway section of storagecluster object configuration
+    storagecluster_obj = ocp.OCP(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    sc_dict = storagecluster_obj.get()
+    logger.info(f"Initial storagecluster configuration is {sc_dict}")
+    request.cls.sc_multiCloudGateway_orig_val = sc_dict.get("spec", {}).get(
+        "multiCloudGateway", None
+    )
+    logger.info(
+        f"Initial sc_dict multiCloudGateway  is {request.cls.sc_multiCloudGateway_orig_val}"
+    )
+
+    # Save original disableRoutes flag in noobaa object configuration
+    noobaa_obj = ocp.OCP(
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.NOOBAA_RESOURCE_NAME,
+    )
+
+    noobaa_dict = noobaa_obj.get()
+    logger.info(f"Initial noobaa configuration is {noobaa_dict}")
+    request.cls.noobaa_disableRoutes_orig_val = noobaa_dict.get("spec", {}).get(
+        "disableRoutes", None
+    )
+    logger.info(
+        f"Initial noobaa disableRoutes  is {request.cls.noobaa_disableRoutes_orig_val}"
+    )
+
+    # Save the original routes
     ocp_routes_obj = ocp.OCP(
         kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
     )
@@ -43,11 +79,54 @@ def save_all_routes_set(request):
 @tier2
 @red_squad
 @mcg
-@pytest.mark.usefixtures("save_all_routes_set")
+@pytest.mark.usefixtures("save_original_state")
 class TestBlockExternalAccess(MCGTest):
     @pytest.fixture(scope="class", autouse=True)
     def cleanup(self, request):
-        request.addfinalizer(self.delete_multiCloudGateway_section_from_storagecluster)
+        def finalizer():
+            """
+            This method restores the original settings of storagecluster and noobaa configurations that
+             may have be changed by the tests
+            """
+            # Restore storagecluster configuration
+            storagecluster_obj = ocp.OCP(
+                resource_name=constants.DEFAULT_CLUSTERNAME,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.STORAGECLUSTER,
+            )
+
+            sc_patch_params = [
+                {
+                    "op": "replace",
+                    "path": "/spec/multiCloudGateway",
+                    "value": self.sc_multiCloudGateway_orig_val,
+                }
+            ]
+            storagecluster_obj.patch(
+                params=dumps(sc_patch_params),
+                format_type="json",
+            )
+
+            # Restore noobaa configuration
+            noobaa_obj = ocp.OCP(
+                resource_name=constants.NOOBAA_RESOURCE_NAME,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.NOOBAA_RESOURCE_NAME,
+            )
+
+            noobaa_patch_params = [
+                {
+                    "op": "replace",
+                    "path": "/spec/disableRoutes",
+                    "value": self.noobaa_disableRoutes_orig_val,
+                }
+            ]
+            noobaa_obj.patch(
+                params=dumps(noobaa_patch_params),
+                format_type="json",
+            )
+
+        request.addfinalizer(finalizer)
 
     def test_block_access_from_storagecluster(
         self,
