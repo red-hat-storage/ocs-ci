@@ -162,14 +162,27 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
     if not last_login or timeout_from_last_login > 570:
         login()
     try:
+        if config.multicluster:
+            set_target_region()
         return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     except CommandFailed as ex:
         if "Please login" in str(ex):
             login()
+            if config.multicluster:
+                set_target_region()
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
         else:
             if not ignore_error:
                 raise
+
+
+def set_target_region():
+    """
+    Set the target region for the IBM Cloud CLI.
+    """
+    region = get_region(config.ENV_DATA["cluster_path"])
+    cmd = f"ibmcloud target -r {region}"
+    run_cmd(cmd)
 
 
 def get_cluster_details(cluster):
@@ -858,27 +871,16 @@ class IBMCloudIPI(object):
         """
         Make sure all nodes are up by the end of the test on IBM Cloud.
         """
-        resource_name = None
+        resource_group_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
         stop_node_list = []
-        cmd = "ibmcloud is ins --all-resource-groups --output json"
-        out = run_ibmcloud_cmd(cmd)
-        all_resource_grp = json.loads(out)
-        cluster_name = config.ENV_DATA["cluster_name"]
-        for resource_name in all_resource_grp:
-            if cluster_name in resource_name["resource_group"]["name"]:
-                resource_name = resource_name["resource_group"]["name"]
-                break
-        assert resource_name, "Resource Not found"
-        cmd = f"ibmcloud is ins --resource-group-name {resource_name} --output json"
+        cmd = (
+            f"ibmcloud is ins --resource-group-name {resource_group_name} --output json"
+        )
         out = run_ibmcloud_cmd(cmd)
         all_instance_output = json.loads(out)
-        for instance_name in all_instance_output:
-            if instance_name["status"] == constants.STATUS_STOPPED:
-                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
-                node_obj_ocs = OCS(**node_obj)
-                stop_node_list.append(node_obj_ocs)
-            if instance_name["status"] == constants.STATUS_STOPPED:
-                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
+        for instance in all_instance_output:
+            if instance["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance["name"]).get()
                 node_obj_ocs = OCS(**node_obj)
                 stop_node_list.append(node_obj_ocs)
         logger.info("Force stopping node which are in stopping state")
