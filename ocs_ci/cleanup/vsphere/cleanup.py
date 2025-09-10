@@ -13,6 +13,7 @@ import os
 import requests
 import yaml
 
+from pyVmomi import vmodl
 from ocs_ci import framework
 from ocs_ci.deployment.vmware import delete_dns_records
 from ocs_ci.framework import config
@@ -85,9 +86,18 @@ def delete_ipi_nodes(vsphere, cluster_name):
 
     vms_ipi = []
     for vm in vms_dc:
-        if cluster_name in vm.name and "generated-zone" not in vm.name:
-            vms_ipi.append(vm)
-            logger.info(vm.name)
+        try:
+            if cluster_name in vm.name and "generated-zone" not in vm.name:
+                vms_ipi.append(vm)
+                logger.info(vm.name)
+        except vmodl.fault.ManagedObjectNotFound as e:
+            if "has already been deleted or has not been completely created" in str(e):
+                logger.warning(
+                    f"Deletion of VM failed because it was already deleted, Exception: {e}"
+                )
+                continue
+            else:
+                raise
     try:
         if vms_ipi:
             vsphere.destroy_vms(vms_ipi, remove_disks=True)
