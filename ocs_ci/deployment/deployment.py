@@ -4141,11 +4141,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
-            self.configure_mirror_peer()
+            # self.configure_mirror_peer()
             rbddops.deploy()
         self.enable_acm_observability()
 
-        self.deploy_dr_policy()
+        # self.deploy_dr_policy()
         if odf_running_version >= version.VERSION_4_19:
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
