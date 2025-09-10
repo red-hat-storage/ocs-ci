@@ -53,8 +53,7 @@ from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
     UnexpectedDeploymentConfiguration,
-    ResourceNotFoundError,
-    CommandFailed,
+    ResourceNotFoundError, CommandFailed,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
@@ -771,7 +770,13 @@ def import_clusters_via_cli(clusters):
         auto_import_secret["metadata"]["namespace"] = cluster[0]
         auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
         auto_import_secret_obj = OCS(**auto_import_secret)
-        auto_import_secret_obj.apply(**auto_import_secret)
+        try:
+            auto_import_secret_obj.apply(**auto_import_secret)
+        except CommandFailed as ex:
+            if 'Error is Error from server (NotFound): secrets "auto-import-secret" not found' in str(ex):
+                continue
+            else:
+                raise
 
         log.info("Wait managedcluster move to Available state")
         time.sleep(60)
