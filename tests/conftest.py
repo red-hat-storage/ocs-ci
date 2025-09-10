@@ -16,6 +16,7 @@ from shutil import copyfile, rmtree
 from functools import partial
 from copy import deepcopy
 from subprocess import CalledProcessError
+from abc import ABC, abstractmethod
 
 import boto3
 from botocore.exceptions import ClientError
@@ -45,6 +46,10 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs.constants import (
+    RECLAIMSPACE_SCHEDULE_ANNOTATION,
+    KEYROTATION_SCHEDULE_ANNOTATION,
+)
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
@@ -202,6 +207,9 @@ from ocs_ci.helpers.helpers import (
     create_network_fence_class,
     wait_for_resource_state,
     storagecluster_independent_check,
+    get_schedule_precedance_value_from_csi_addons_configmap,
+    set_schedule_precedence,
+    get_reclaimspacecronjob_for_pvc,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -10428,3 +10436,507 @@ def distribute_storage_classes_to_all_consumers():
 def disable_debug_logs():
     log.info("Disabling debug logs for the current session")
     logging.disable(logging.DEBUG)
+
+
+@pytest.fixture(scope="session")
+def enable_reclaimspace_on_storageclass():
+    """
+    Enable reclaim space on storage class
+    """
+
+    def factory(sc_obj):
+        """
+        Enable reclaim space annotation on storage class.
+
+        Args:
+            sc_obj: StorageClass object to annotate
+        """
+        sc_obj.annotate("reclaimspace.csiaddons.openshift.io/schedule=@weekly")
+
+    return factory
+
+
+class BaseStorageClassPrecedenceTest(ABC):
+    """
+    Base class for storage class precedence tests.
+    Provides common functionality for ReclaimSpace and KeyRotation tests.
+    """
+
+    # Constants for storage class precedence tests
+    DEFAULT_PVC_SIZE_GIB = 5
+    DEFAULT_TIMEOUT = 300
+    DEFAULT_NUM_PVCS = 2
+    STORAGECLASS_PRECEDENCE = "storageclass"
+
+    def _ensure_pvcs_bound(self, pvcs, timeout=None):
+        """
+        Ensure all provided PVCs reach the Bound state.
+
+        Args:
+            pvcs: List of PVC objects to check
+            timeout: Timeout in seconds for waiting
+
+        Raises:
+            AssertionError: If any PVC fails to reach Bound state
+        """
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
+
+        log.info(
+            f"Waiting for {len(pvcs)} PVCs to reach Bound state (timeout: {timeout}s)"
+        )
+
+        for i, pvc_obj in enumerate(pvcs, 1):
+            log.debug(f"Checking PVC {i}/{len(pvcs)}: {pvc_obj.name}")
+            assert pvc_obj.ocp.wait_for_resource(
+                condition=constants.STATUS_BOUND,
+                resource_name=pvc_obj.name,
+                timeout=timeout,
+            ), f"PVC {pvc_obj.name} did not reach Bound state within {timeout}s"
+
+        log.info(f"All {len(pvcs)} PVCs successfully reached Bound state")
+
+    def _create_pvc_batch(
+        self,
+        multi_pvc_factory,
+        interface,
+        access_modes,
+        size_gib,
+        num_of_pvc,
+        storageclass,
+        project=None,
+        raw_block=False,
+    ):
+        """
+        Create a batch of PVCs with common parameters.
+
+        Args:
+            multi_pvc_factory: Factory function for creating PVCs
+            interface: Storage interface (e.g., CEPHBLOCKPOOL)
+            access_modes: List of access modes
+            size_gib: Size in GiB
+            num_of_pvc: Number of PVCs to create
+            storageclass: StorageClass object
+            project: Project object (optional)
+            raw_block: Whether to use raw block volumes
+
+        Returns:
+            List of created PVC objects
+        """
+        pvc_type = "Block" if raw_block else "Filesystem"
+        log.info(f"Creating {num_of_pvc} RBD {pvc_type} PVCs (size: {size_gib}GiB)")
+
+        factory_kwargs = {
+            "interface": interface,
+            "access_modes": access_modes,
+            "size": size_gib,
+            "num_of_pvc": num_of_pvc,
+            "storageclass": storageclass,
+        }
+
+        if project is not None:
+            factory_kwargs["project"] = project
+
+        return multi_pvc_factory(**factory_kwargs)
+
+    def _create_pods_for_pvcs(
+        self,
+        pod_factory,
+        pvcs,
+        interface,
+        raw_block=False,
+    ):
+        """
+        Create pods for a list of PVCs.
+
+        Args:
+            pod_factory: Factory function for creating pods
+            pvcs: List of PVC objects
+            interface: Storage interface
+            raw_block: Whether PVCs use raw block volumes
+
+        Returns:
+            List of created pod objects
+        """
+        pvc_type = "Block" if raw_block else "Filesystem"
+        log.info(f"Creating {len(pvcs)} pods for RBD {pvc_type} PVCs")
+
+        pods = []
+        for i, pvc_obj in enumerate(pvcs, 1):
+            log.debug(f"Creating pod {i}/{len(pvcs)} for PVC: {pvc_obj.name}")
+
+            pod_kwargs = {
+                "interface": interface,
+                "pvc": pvc_obj,
+                "status": constants.STATUS_RUNNING,
+            }
+
+            if raw_block:
+                pod_kwargs["raw_block_pv"] = True
+
+            pods.append(pod_factory(**pod_kwargs))
+
+        log.info(f"Successfully created {len(pods)} pods")
+        return pods
+
+    def _prepare_pvcs_and_workloads(
+        self,
+        multi_pvc_factory,
+        pod_factory,
+        sc_rbd,
+        size_gib=None,
+        proj_obj=None,
+    ):
+        """
+        Create RBD PVCs (Filesystem and Block) and attach pods to them.
+
+        Args:
+            multi_pvc_factory: Factory to create multiple PVCs
+            pod_factory: Factory to create pods
+            sc_rbd: RBD StorageClass object
+            size_gib: Size of PVCs in GiB
+            proj_obj: Project object (required for encrypted storage)
+        """
+        if size_gib is None:
+            size_gib = self.DEFAULT_PVC_SIZE_GIB
+
+        log.info("Starting PVC and workload preparation")
+
+        # Initialize attributes if they don't exist (for pytest compatibility)
+        if not hasattr(self, "pod_objs"):
+            self.pod_objs = []
+        if not hasattr(self, "rbd_blk_pvcs"):
+            self.rbd_blk_pvcs = []
+
+        self.pod_objs = []
+
+        # Create RBD Filesystem PVCs (RWO)
+        rbd_fs_pvcs = self._create_pvc_batch(
+            multi_pvc_factory=multi_pvc_factory,
+            interface=constants.CEPHBLOCKPOOL,
+            access_modes=[constants.ACCESS_MODE_RWO],
+            size_gib=size_gib,
+            num_of_pvc=self.DEFAULT_NUM_PVCS,
+            storageclass=sc_rbd,
+            project=proj_obj,
+        )
+        self._ensure_pvcs_bound(rbd_fs_pvcs)
+
+        # Create pods for filesystem PVCs
+        fs_pods = self._create_pods_for_pvcs(
+            pod_factory=pod_factory,
+            pvcs=rbd_fs_pvcs,
+            interface=constants.CEPHBLOCKPOOL,
+        )
+        self.pod_objs.extend(fs_pods)
+
+        # Create RBD Block PVCs (RWO)
+        self.rbd_blk_pvcs = self._create_pvc_batch(
+            multi_pvc_factory=multi_pvc_factory,
+            interface=constants.CEPHBLOCKPOOL,
+            access_modes=[f"{constants.ACCESS_MODE_RWO}-Block"],
+            size_gib=size_gib,
+            num_of_pvc=self.DEFAULT_NUM_PVCS,
+            storageclass=sc_rbd,
+            project=proj_obj,
+            raw_block=True,
+        )
+        self._ensure_pvcs_bound(self.rbd_blk_pvcs)
+
+        # Create pods for block PVCs
+        block_pods = self._create_pods_for_pvcs(
+            pod_factory=pod_factory,
+            pvcs=self.rbd_blk_pvcs,
+            interface=constants.CEPHBLOCKPOOL,
+            raw_block=True,
+        )
+        self.pod_objs.extend(block_pods)
+
+        log.info(
+            "Workload preparation completed: RBD-FS=%d, RBD-Block=%d (total pods=%d)",
+            len(rbd_fs_pvcs),
+            len(self.rbd_blk_pvcs),
+            len(self.pod_objs),
+        )
+
+    def _ensure_pods_running(self, timeout=None):
+        """
+        Verify all pods are in Running state.
+
+        Args:
+            timeout: Timeout in seconds for waiting
+
+        Raises:
+            AssertionError: If any pod is not in Running state
+        """
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
+
+        # Initialize pod_objs if it doesn't exist
+        if not hasattr(self, "pod_objs"):
+            self.pod_objs = []
+
+        log.info(f"Verifying {len(self.pod_objs)} pods are in Running state")
+
+        for i, pod in enumerate(self.pod_objs, 1):
+            log.debug(f"Checking pod {i}/{len(self.pod_objs)}: {pod.name}")
+            assert pod.ocp.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=pod.name,
+                timeout=timeout,
+            ), f"Pod {pod.name} is not in Running state within {timeout}s"
+
+        log.info("All pods are running successfully")
+
+    def _annotate_storageclass(self, sc_rbd, annotation_key, schedule):
+        """
+        Annotate StorageClass with schedule.
+
+        Args:
+            sc_rbd: StorageClass object
+            annotation_key: Annotation key
+            schedule: Schedule value
+        """
+        annotation = f"{annotation_key}={schedule}"
+        log.info(f"Annotating StorageClass with: {annotation}")
+        sc_rbd.annotate(annotation)
+
+    def _annotate_pvcs(self, pvcs, annotation_key, schedule):
+        """
+        Annotate PVCs with schedule.
+
+        Args:
+            pvcs: List of PVC objects
+            annotation_key: Annotation key
+            schedule: Schedule value
+        """
+        annotation = f"{annotation_key}={schedule}"
+        log.info(f"Annotating {len(pvcs)} PVCs with: {annotation}")
+
+        for i, pvc_obj in enumerate(pvcs, 1):
+            log.debug(f"Annotating PVC {i}/{len(pvcs)}: {pvc_obj.name}")
+            pvc_obj.annotate(annotation)
+            pvc_obj.reload()
+
+    def _get_schedule_from_resource(self, resource, annotation_key):
+        """
+        Get schedule annotation from a resource.
+
+        Args:
+            resource: Resource object (StorageClass or PVC)
+            annotation_key: Annotation key to look for
+
+        Returns:
+            Schedule value from annotation
+
+        Raises:
+            KeyError: If annotation is not found
+        """
+        resource.reload()
+        try:
+            return resource.data["metadata"]["annotations"][annotation_key]
+        except KeyError:
+            log.error(
+                f"Annotation '{annotation_key}' not found in resource {resource.name}"
+            )
+            raise
+
+    def _wait_for_cronjob_creation(self, pvc_obj, timeout=120):
+        """
+        Wait for CronJob to be created after PVC annotation.
+
+        Args:
+            pvc_obj: PVC object
+            timeout: Timeout in seconds (default: 120)
+
+        Raises:
+            TimeoutExpiredError: If CronJob is not created within timeout
+        """
+        annotation_key = self.get_annotation_key()
+        cronjob_annotation_key = (
+            "reclaimspace.csiaddons.openshift.io/cronjob"
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else "keyrotation.csiaddons.openshift.io/cronjob"
+        )
+
+        log.info(f"Waiting for CronJob creation for PVC: {pvc_obj.name}")
+
+        try:
+            for _ in TimeoutSampler(timeout=timeout, sleep=5, func=lambda: None):
+                pvc_obj.reload()
+                cronjob_name = (
+                    pvc_obj.data.get("metadata", {})
+                    .get("annotations", {})
+                    .get(cronjob_annotation_key)
+                )
+
+                if cronjob_name:
+                    # Verify the CronJob actually exists
+                    cronjob_kind = (
+                        constants.RECLAIMSPACECRONJOB
+                        if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+                        else constants.ENCRYPTIONKEYROTATIONCRONJOB
+                    )
+
+                    try:
+                        cronjob_obj = OCP(
+                            kind=cronjob_kind,
+                            namespace=pvc_obj.namespace,
+                            resource_name=cronjob_name,
+                        )
+                        cronjob_obj.get()  # This will raise an exception if not found
+                        log.info(
+                            f"CronJob '{cronjob_name}' found for PVC '{pvc_obj.name}'"
+                        )
+                        return
+                    except Exception:
+                        log.debug(
+                            f"CronJob '{cronjob_name}' not yet available, continuing to wait..."
+                        )
+
+                log.debug(
+                    f"CronJob annotation not yet present for PVC '{pvc_obj.name}', waiting..."
+                )
+
+        except TimeoutExpiredError:
+            log.error(f"Timeout waiting for CronJob creation for PVC: {pvc_obj.name}")
+            raise
+
+    def _verify_cronjob_schedule(
+        self,
+        pvc_obj,
+        expected_schedule,
+        precedence_type,
+    ):
+        """
+        Verify that a PVC's CronJob has the expected schedule.
+
+        Args:
+            pvc_obj: PVC object
+            expected_schedule: Expected schedule value
+            precedence_type: Type of precedence being tested (for error messages)
+
+        Raises:
+            AssertionError: If schedule doesn't match expected value
+        """
+        log.debug(f"Verifying CronJob schedule for PVC: {pvc_obj.name}")
+
+        # Wait for CronJob to be created after PVC annotation
+        self._wait_for_cronjob_creation(pvc_obj)
+
+        # Use appropriate CronJob function based on annotation key
+        annotation_key = self.get_annotation_key()
+        if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
+            # For KeyRotation tests, use PVKeyrotation helper
+            keyrotation_helper = PVKeyrotation(pvc_obj.storageclass)
+            cronjob = keyrotation_helper.get_keyrotation_cronjob_for_pvc(pvc_obj)
+        else:
+            # For ReclaimSpace tests, use the existing helper
+            cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj)
+
+        actual_schedule = cronjob.data["spec"]["schedule"]
+
+        assert expected_schedule == actual_schedule, (
+            f"PVC {pvc_obj.name} CronJob schedule '{actual_schedule}' "
+            f"does not match expected {precedence_type} schedule '{expected_schedule}'"
+        )
+
+        log.debug(f"✓ PVC {pvc_obj.name} has correct schedule: {actual_schedule}")
+
+    def _verify_precedence_behavior(
+        self,
+        sc_rbd,
+        annotation_key,
+        precedence_type,
+    ):
+        """
+        Verify that PVCs follow the correct precedence behavior.
+
+        Args:
+            sc_rbd: StorageClass object
+            annotation_key: Annotation key for schedules
+            precedence_type: Either 'storageclass' or 'pvc'
+        """
+        # Initialize rbd_blk_pvcs if it doesn't exist
+        if not hasattr(self, "rbd_blk_pvcs"):
+            self.rbd_blk_pvcs = []
+
+        log.info(
+            f"Verifying {precedence_type} precedence behavior for {len(self.rbd_blk_pvcs)} PVCs"
+        )
+
+        # Get StorageClass schedule
+        sc_schedule = self._get_schedule_from_resource(sc_rbd, annotation_key)
+        log.info(f"StorageClass schedule: {sc_schedule}")
+
+        for i, pvc_obj in enumerate(self.rbd_blk_pvcs, 1):
+            log.debug(f"Checking PVC {i}/{len(self.rbd_blk_pvcs)}: {pvc_obj.name}")
+
+            if precedence_type == self.STORAGECLASS_PRECEDENCE:
+                # Should use StorageClass schedule
+                expected_schedule = sc_schedule
+                log.debug(f"PVC {pvc_obj.name} should inherit StorageClass schedule")
+            else:
+                # Should use PVC schedule
+                pvc_schedule = self._get_schedule_from_resource(pvc_obj, annotation_key)
+                expected_schedule = pvc_schedule
+                log.debug(
+                    f"PVC {pvc_obj.name} should use its own schedule: {pvc_schedule}"
+                )
+
+            self._verify_cronjob_schedule(pvc_obj, expected_schedule, precedence_type)
+
+        log.info(f"✓ All PVCs correctly follow {precedence_type} precedence")
+
+    def _ensure_precedence_setting(self, precedence):
+        """
+        Ensure the precedence is set correctly.
+
+        Args:
+            precedence: Desired precedence setting
+        """
+        current_precedence = get_schedule_precedance_value_from_csi_addons_configmap()
+        if current_precedence != precedence:
+            log.info(
+                f"Setting precedence from '{current_precedence}' to '{precedence}'"
+            )
+            set_schedule_precedence(precedence)
+        else:
+            log.info(f"Precedence already set to '{precedence}'")
+
+    @abstractmethod
+    def get_annotation_key(self):
+        """Get the annotation key for this test type."""
+        pass
+
+
+@pytest.fixture
+def reclaimspace_precedence_helper():
+    """
+    Fixture that provides a ReclaimSpace-specific precedence test helper.
+
+    Returns:
+        BaseStorageClassPrecedenceTest: Instance configured for ReclaimSpace tests
+    """
+
+    class ReclaimSpacePrecedenceHelper(BaseStorageClassPrecedenceTest):
+        def get_annotation_key(self):
+            return RECLAIMSPACE_SCHEDULE_ANNOTATION
+
+    return ReclaimSpacePrecedenceHelper()
+
+
+@pytest.fixture
+def keyrotation_precedence_helper():
+    """
+    Fixture that provides a KeyRotation-specific precedence test helper.
+
+    Returns:
+        BaseStorageClassPrecedenceTest: Instance configured for KeyRotation tests
+    """
+
+    class KeyRotationPrecedenceHelper(BaseStorageClassPrecedenceTest):
+        def get_annotation_key(self):
+            return KEYROTATION_SCHEDULE_ANNOTATION
+
+    return KeyRotationPrecedenceHelper()

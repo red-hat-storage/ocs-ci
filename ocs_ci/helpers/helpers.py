@@ -5993,6 +5993,83 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
     return True
 
 
+def set_schedule_precedence(precedence):
+    """
+    Create or update the 'csi-addons-config' ConfigMap with the given
+    schedule-precedence ('storageclass' or 'pvc') and restart the CSI Addons
+    controller manager so the change is picked up.
+
+    Handles both cases: ConfigMap exists / does not exist.
+    Uses valid JSON for merge patch to avoid decoding errors.
+    """
+    import yaml
+
+    if precedence not in ("storageclass", "pvc"):
+        raise ValueError(
+            f"Invalid precedence value: {precedence}. Must be 'storageclass' or 'pvc'."
+        )
+
+    configmap_name = getattr(
+        constants, "CSI_ADDONS_CONFIGMAP_NAME", "csi-addons-config"
+    )
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+
+    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    # Manifest used when CM does not exist
+    cm_manifest = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": configmap_name, "namespace": namespace},
+        "data": {"schedule-precedence": precedence},
+    }
+
+    if cm_ocp.is_exist(configmap_name):
+        # UPDATE PATH: use valid JSON for merge patch (K8s expects JSON here)
+        patch_payload = json.dumps({"data": {"schedule-precedence": precedence}})
+        logger.info(
+            "Patching ConfigMap '%s' in ns '%s' to schedule-precedence=%s",
+            configmap_name,
+            namespace,
+            precedence,
+        )
+        # NOTE: wrap JSON in single quotes so shlex keeps it as one arg
+        cm_ocp.exec_oc_cmd(
+            f"patch configmap {configmap_name} -p '{patch_payload}' --type=merge",
+            out_yaml_format=False,
+        )
+    else:
+        # CREATE PATH: write manifest to temp file and apply
+        logger.info(
+            "Creating ConfigMap '%s' in ns '%s' with schedule-precedence=%s",
+            configmap_name,
+            namespace,
+            precedence,
+        )
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".yaml") as fp:
+            yaml.safe_dump(cm_manifest, fp, sort_keys=False)
+            tmp_path = fp.name
+        try:
+            cm_ocp.exec_oc_cmd(f"apply -f {tmp_path}", out_yaml_format=False)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+    logger.info(
+        "ConfigMap '%s' set to schedule-precedence=%s", configmap_name, precedence
+    )
+
+    # Restart CSI Addons controller manager pods so the new value is read
+    logger.info("Restarting CSI Addons controller manager pods...")
+    pod.restart_pods_having_label(
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=namespace,
+    )
+    logger.info("CSI Addons controller manager pods restarted.")
+
+
 def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
     """
     Verify the suspend state of the ReclaimSpaceCronJob associated with the given PVC.
@@ -6550,3 +6627,64 @@ def get_node_plugin_label(interface):
         elif interface == constants.CEPHBLOCKPOOL:
             label = constants.CSI_RBDPLUGIN_LABEL
     return label
+
+
+def get_schedule_precedance_value_from_csi_addons_configmap(
+    default="storageclass",
+):
+    """
+    Return the schedule precedence from the 'csi-addons-config' ConfigMap.
+
+    If the ConfigMap (or key) doesn't exist, return the default ('storageclass').
+
+    The ConfigMap has the following structure:
+    - name: csi-addons-config
+    - namespace: openshift-storage (or cluster_namespace)
+    - data.schedule-precedence: 'storageclass' or 'pvc'
+
+    Args:
+        default (str): Default value to return if ConfigMap doesn't exist.
+                        Defaults to 'storageclass'.
+
+    Returns:
+        str: The schedule precedence value ('storageclass' or 'pvc').
+    """
+    cm_name = getattr(constants, "CSI_ADDONS_CONFIGMAP_NAME", "csi-addons-config")
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+
+    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    try:
+        if not cm_ocp.is_exist(cm_name):
+            logger.info(
+                "ConfigMap '%s' not found in namespace '%s'; using default '%s'.",
+                cm_name,
+                namespace,
+                default,
+            )
+            return default
+
+        cm = cm_ocp.get(resource_name=cm_name)
+        value = cm.get("data", {}).get("schedule-precedence", "").strip().lower()
+
+        if value in ("storageclass", "pvc"):
+            logger.info("Schedule precedence from ConfigMap: %s", value)
+            return value
+
+        logger.warning(
+            "ConfigMap '%s' has missing/invalid 'schedule-precedence' (got '%s'); using default '%s'.",
+            cm_name,
+            value,
+            default,
+        )
+        return default
+
+    except CommandFailed as e:
+        logger.warning(
+            "Failed to read ConfigMap '%s' in ns '%s' (%s); using default '%s'.",
+            cm_name,
+            namespace,
+            e,
+            default,
+        )
+        return default
