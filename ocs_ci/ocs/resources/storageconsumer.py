@@ -1131,7 +1131,7 @@ def check_storage_classes_on_clients(ready_consumer_names: list[str]):
     log.info(
         "Verify Storage Classes are distributed and available in inventory of a hosted cluster"
     )
-    from ocs_ci.deployment.hosted_cluster import get_autodistributed_storage_classes
+    from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 
     with config.RunWithProviderConfigContextIfAvailable():
 
