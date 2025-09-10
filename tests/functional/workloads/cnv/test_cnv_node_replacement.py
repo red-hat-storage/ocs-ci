@@ -70,13 +70,22 @@ class TestCnvNodeReplace(E2ETest):
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             source_csums[vm_obj.name] = source_csum
 
-        # Choose VMs randomaly
-        (
-            self.vm_for_clone,
-            self.vm_for_stop,
-            self.vm_for_snap,
-            self.vm_obj_on_replacing_node,
-        ) = random.sample(all_vms, 4)
+        # Filter out VMs that do not have ReadWriteOnce access mode
+        eligible_vms = [vm for vm in all_vms if vm.pvc_access_mode != "ReadWriteOnce"]
+
+        # Pick one VM for replacing_node from eligible set
+        self.vm_obj_on_replacing_node = random.choice(eligible_vms)
+
+        # Pick 3 random VMs from the remaining pool
+        remaining_vms = [
+            vm
+            for vm in all_vms
+            if vm != self.vm_obj_on_replacing_node
+            and vm.pvc_access_mode != "ReadWriteOnce"
+        ]
+        self.vm_for_clone, self.vm_for_stop, self.vm_for_snap = random.sample(
+            remaining_vms, 3
+        )
 
         for vm in [self.vm_for_clone, self.vm_for_snap]:
             vm_obj = (
@@ -90,12 +99,21 @@ class TestCnvNodeReplace(E2ETest):
             if vm == self.vm_for_clone:
                 all_vms.append(vm_obj)
 
+        # Find node where VM is running
+        node_name = self.vm_obj_on_replacing_node.get_vmi_instance().node()
+
+        # Stop VM if its not live migratable to avoid drain stuck issue.
+        for vm_obj in all_vms:
+            if (
+                vm_obj != self.vm_obj_on_replacing_node
+                and vm_obj.get_vmi_instance().node() == node_name
+            ):
+                if vm_obj.pvc_access_mode == "ReadWriteOnce" and vm_obj.ready():
+                    vm_obj.stop()
+
         # Keep vms in different states(paused, stoped)
         self.vm_for_stop.stop()
         self.vm_for_snap.pause()
-
-        # Find node where VM is running
-        node_name = self.vm_obj_on_replacing_node.get_vmi_instance().node()
 
         # Replace Node
         delete_and_create_osd_node(node_name)
@@ -121,7 +139,8 @@ class TestCnvNodeReplace(E2ETest):
 
         logger.info("Starting vms")
         self.vm_for_stop.start()
-        self.vm_for_snap.unpause()
+        if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
+            self.vm_for_snap.unpause()
 
         # Perform post node replacement data integrity check
         for vm_obj in all_vms:
