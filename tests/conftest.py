@@ -26,7 +26,7 @@ from collections import namedtuple
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import (
+from ocs_ci.deployment.hub_spoke import (
     hypershift_cluster_factory,
     get_autodistributed_storage_classes,
     skip_if_not_hcp_provider,

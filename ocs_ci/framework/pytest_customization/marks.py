@@ -46,7 +46,7 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
-from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
 
 # tier marks
 

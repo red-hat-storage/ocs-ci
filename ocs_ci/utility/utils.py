@@ -4418,7 +4418,11 @@ def get_system_architecture():
 
 
 def wait_for_machineconfigpool_status(
-    node_type, timeout=1900, skip_tls_verify=False, force_delete_pods=False
+    node_type,
+    timeout=1900,
+    skip_tls_verify=False,
+    force_delete_pods=False,
+    cluster_kubeconfig=None,
 ):
     """
     Check for Machineconfigpool status
@@ -4430,6 +4434,8 @@ def wait_for_machineconfigpool_status(
         timeout (int): Time in seconds to wait
         skip_tls_verify (bool): True if allow skipping TLS verification
         force_delete_pods (bool): if True delete pods stuck at terminating forcefully
+        cluster_kubeconfig (str): Path to kubeconfig file.
+            Important! Does not work with option force_delete_pods=True
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -4449,6 +4455,7 @@ def wait_for_machineconfigpool_status(
             kind=constants.MACHINECONFIGPOOL,
             resource_name=role,
             skip_tls_verify=skip_tls_verify,
+            cluster_kubeconfig=cluster_kubeconfig,
         )
         machine_count = ocp_obj.get()["status"]["machineCount"]
         assert ocp_obj.wait_for_resource(
