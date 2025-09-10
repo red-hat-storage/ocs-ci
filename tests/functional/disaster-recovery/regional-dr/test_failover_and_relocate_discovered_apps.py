@@ -197,8 +197,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 wait_for_nodes_status(
                     [node.name for node in primary_cluster_name_before_failover_nodes]
                 )
-                logger.info("Wait for 180 seconds for pods to stabilize")
-                sleep(180)
                 logger.info(
                     "Wait for all the pods in openshift-storage to be in running state"
                 )
