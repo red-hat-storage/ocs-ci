@@ -119,7 +119,6 @@ class TestShowReplicationDelays:
 
         acm_obj = AcmAddClusters()
         page_nav = ValidationUI()
-        page_nav.refresh_web_console()
 
         config.switch_to_cluster_by_name(primary_cluster_name)
         before_failover_last_group_sync_time = []
