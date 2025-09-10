@@ -13,7 +13,7 @@ from selenium.common.exceptions import (
 )
 
 from ocs_ci.helpers.dr_helpers import get_cluster_set_name
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
@@ -24,12 +24,16 @@ from ocs_ci.ocs.acm.acm_constants import (
 )
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
+    wait_for_pods_by_label_count,
+)
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_primary_cluster_config,
     get_recovery_cluster_config,
+    get_non_acm_and_non_recovery_cluster_config,
 )
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -50,6 +54,7 @@ from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
     UnexpectedDeploymentConfiguration,
     ResourceNotFoundError,
+    CommandFailed,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
@@ -814,6 +819,103 @@ def import_clusters_with_acm():
         )
     else:
         import_clusters_via_cli(clusters)
+
+    if config.ENV_DATA.get("configure_acm_to_import_mce"):
+        discover_hosted_clusters()
+        automate_import_of_hosted_clusters()
+
+
+def discover_hosted_clusters():
+    """
+    After the multicluster engine operator clusters are imported into ACM, enable the hypershift-addon for those managed
+    multicluster engine operator clusters to discover the hosted clusters.
+
+    """
+    addondeploymentconfig = OCP(
+        kind=constants.ADDONDEPLOYMENTCONFIG, namespace=constants.MCE_NAMESPACE
+    )
+    agent_install_namespace = addondeploymentconfig.get(
+        resource_name="addon-ns-config"
+    )["spec"]["agentInstallNamespace"]
+    # Set the agentInstallNamespace namespace of the add-on to open-cluster-management-agent-addon-discovery
+    addondeploymentconfig.patch(
+        resource_name="hypershift-addon-deploy-config",
+        params=f'{{"spec":{{"agentInstallNamespace":"{agent_install_namespace}"}}}}',
+        format_type="merge",
+    )
+    # Disable metrics and HyperShift operator management
+    addondeploymentconfig.patch(
+        resource_name="hypershift-addon-deploy-config",
+        params=(
+            '{"spec":{"customizedVariables":[{"name":"disableMetrics","value": "true"},'
+            '{"name":"disableHOManagement","value": "true"}]}}'
+        ),
+        format_type="merge",
+    )
+
+    # Find the relevant managedcluster names
+    managed_cluster_names = []
+    managed_clusters_in_config = [
+        cluster_config.ENV_DATA["cluster_name"]
+        for cluster_config in get_non_acm_and_non_recovery_cluster_config()
+    ]
+    managed_clusters_info = (
+        OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    )
+    for managed_cluster in managed_clusters_info:
+        if (
+            "agent.open-cluster-management.io/klusterlet-config"
+            in managed_cluster["metadata"].get("annotations", [])
+            and managed_cluster["metadata"]["name"] in managed_clusters_in_config
+        ):
+            managed_cluster_names.append(managed_cluster["metadata"]["name"])
+
+    # Install clusteradm
+    install_clusteradm()
+    # Enable the hypershift-addon for multicluster engine operator
+    run_cmd(
+        cmd=f"clusteradm addon enable --names hypershift-addon --clusters {','.join(managed_cluster_names)}"
+    )
+
+    # Verify that the hypershift-addon is installed in the relevant managed clusters
+    for cluster_name in managed_cluster_names:
+        with config.RunWithConfigContext(
+            config.get_cluster_index_by_name(cluster_name)
+        ):
+            wait_for_pods_by_label_count(
+                label="app=hypershift-addon-agent",
+                expected_count=1,
+                namespace=agent_install_namespace,
+                timeout=600,
+                sleep=20,
+            )
+
+
+def install_clusteradm():
+    try:
+        run_cmd("clusteradm")
+    except CommandFailed:
+        # Install/re0install clusteradm
+        run_cmd(
+            "curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash"
+        )
+
+
+def automate_import_of_hosted_clusters():
+    policy_mce_hcp_autoimport = create_resource(
+        **templating.load_yaml(constants.POLICY_MCE_HCP_AUTOIMPORT_YAML)
+    )
+    policy_mce_hcp_autoimport_placement = create_resource(
+        **templating.load_yaml(constants.POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_YAML)
+    )
+    placement_binding_data = templating.load_yaml(
+        constants.POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_BINDING_YAML
+    )
+    placement_binding_data["placementRef"][
+        "name"
+    ] = policy_mce_hcp_autoimport_placement.name
+    placement_binding_data["subjects"][0]["name"] = policy_mce_hcp_autoimport.name
+    create_resource(**placement_binding_data)
 
 
 def import_recovery_clusters_with_acm():
