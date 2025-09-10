@@ -720,7 +720,7 @@ def import_clusters_via_cli(clusters):
                     klusterletconfig_name = klusterletconfig.get("metadata").get("name")
                     break
             if klusterletconfig_name:
-                managed_cluster["annotations"] = {
+                managed_cluster["metadata"]["annotations"] = {
                     "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
                 }
             else:
