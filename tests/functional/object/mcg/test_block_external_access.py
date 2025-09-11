@@ -242,7 +242,7 @@ class TestBlockExternalAccess(MCGTest):
 
     def set_noobaa_disable_routes_value(self, noobaa_obj, val):
         """
-        This method sets the value of 'disableRoutes' flag of storagecluster_obj to val
+        This method sets the value of 'disableRoutes' flag of noobaa_obj to val
         Args:
             noobaa_obj (obj): Noobaa object on which the value should be set
             val (bool) Value to be set to 'disableRoutes' parameter
