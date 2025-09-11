@@ -858,6 +858,14 @@ acm_page_nav_419 = {
     ),
     "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
     "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
+    "click-admin-dropdown": (
+        "//h2[normalize-space()='Administrator']",
+        By.XPATH,
+    ),
+    "fleet-management-view": (
+        "(//h2[normalize-space()='Fleet Management'])[1]",
+        By.XPATH,
+    ),
 }
 
 acm_page_nav_420 = {
@@ -1367,6 +1375,8 @@ acm_configuration_4_20 = {
         "(//h2[normalize-space()='Administrator'])[1]",
         By.XPATH,
     ),
+    "submariner-custom-source": ("//input[@id='source']", By.XPATH),
+    "submariner-custom-channel": ("//input[@id='channel']", By.XPATH),
 }
 
 add_capacity = {
