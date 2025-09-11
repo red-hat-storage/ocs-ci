@@ -17,6 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 # 1
@@ -87,13 +88,15 @@ class FusionDataFoundationDeployment:
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
             config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
+        ocp_version = f"ocp{get_ocp_version('')}-t"
+        logger.info("OCP version: {ocp_version}")
         logger.info("Updating FusionServiceDefinition")
         params_dict = {
             "spec": {
                 "onboarding": {
                     "serviceOperatorSubscription": {
                         "multiVersionCatSrcDetails": {
-                            "ocp418-t": {
+                            ocp_version: {
                                 "imageDigest": fdf_image_digest,
                                 "registryPath": fdf_registry,
                             }
