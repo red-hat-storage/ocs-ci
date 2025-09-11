@@ -170,7 +170,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         namespace_dict = yaml.safe_load("\n".join(result))
 
         schedule = namespace_dict["metadata"]["annotations"][
-            "reclaimspace.csiaddons.openshift.io/schedule"
+            constants.RECLAIMSPACE_SCHEDULE_ANNOTATION
         ]
         assert (
             schedule == "@weekly"

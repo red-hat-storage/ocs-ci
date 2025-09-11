@@ -23,7 +23,7 @@ class TestDisableReclaimSpaceOperation:
     def setup(self, storageclass_factory, multi_pvc_factory):
         """Setup the test environment by creating StorageClass and PVCs."""
         reclaimspace_annotations = {
-            "reclaimspace.csiaddons.openshift.io/schedule": "* * * * *"
+            constants.RECLAIMSPACE_SCHEDULE_ANNOTATION: "* * * * *"
         }
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL, annotations=reclaimspace_annotations
@@ -41,7 +41,7 @@ class TestDisableReclaimSpaceOperation:
 
         yield
         reset_reclaimspace_annotations = {
-            "reclaimspace.csiaddons.openshift.io/schedule": "@weekly"
+            constants.RECLAIMSPACE_SCHEDULE_ANNOTATION: "@weekly"
         }
 
         self.sc_obj = storageclass_factory(

@@ -34,7 +34,7 @@ def change_registry_backend_to_ocs():
         size="100Gi",
         access_mode=constants.ACCESS_MODE_RWX,
     )
-    helpers.wait_for_resource_state(pv_obj, "Bound")
+    helpers.wait_for_resource_state(pv_obj, "Bound", timeout=300)
     param_cmd = f'[{{"op": "add", "path": "/spec/storage", "value": {{"pvc": {{"claim": "{pv_obj.name}"}}}}}}]'
 
     run_cmd(

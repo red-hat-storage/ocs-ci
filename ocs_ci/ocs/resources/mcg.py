@@ -9,6 +9,7 @@ from time import sleep
 import time
 
 import boto3
+import botocore.config
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
@@ -98,6 +99,13 @@ class MCG:
             # Determine which CLI to use based on version
             self.cli_path, self.command_prefix = get_noobaa_cli_config()
             ocs_version = version.get_semantic_ocs_version_from_config()
+
+            # Initialize ODFCliRunner for OCS >= 4.20
+            self.odf_cli_runner = None
+            if ocs_version >= version.VERSION_4_20:
+                from ocs_ci.helpers.odf_cli import ODFCliRunner
+
+                self.odf_cli_runner = ODFCliRunner()
 
             if (
                 not os.path.isfile(self.cli_path)
@@ -953,18 +961,44 @@ class MCG:
         """
         Executes a NooBaa CLI command through the appropriate CLI binary
 
-        For OCS >= 4.20: Uses odf-cli noobaa <command>
-        For OCS < 4.20: Uses mcg-cli <command>
+        For OCS >= 4.20: Uses odf-cli noobaa <command> via ODFCliRunner
+        For OCS < 4.20: Uses mcg-cli <command> directly
 
         Args:
             cmd (str): The command to run
             namespace (str): The namespace to run the command in
+            use_yes (bool): If True, pipe 'yes' to the command
+            ignore_error (bool): If True, don't raise exception on non-zero exit
+            **kwargs: Additional arguments to pass to exec_cmd
 
         Returns:
-            str: stdout of the command
+            CompletedProcess: Result object with stdout and stderr as decoded strings
 
         """
+        # Use ODFCliRunner for OCS >= 4.20
+        if self.odf_cli_runner:
+            # Pass namespace without -n prefix (run_noobaa will add it)
+            ns = namespace if namespace else self.namespace
 
+            # Mask sensitive data
+            if self.data_to_mask:
+                kwargs.setdefault("secrets", []).extend(self.data_to_mask)
+
+            result = self.odf_cli_runner.run_noobaa(
+                cmd,
+                namespace=ns,
+                use_yes=use_yes,
+                ignore_error=ignore_error,
+                **kwargs,
+            )
+            # Decode stdout/stderr if they're bytes
+            if hasattr(result, "stdout") and isinstance(result.stdout, bytes):
+                result.stdout = result.stdout.decode()
+            if hasattr(result, "stderr") and isinstance(result.stderr, bytes):
+                result.stderr = result.stderr.decode()
+            return result
+
+        # Original implementation for OCS < 4.20
         kubeconfig = config.RUN.get("kubeconfig")
         if kubeconfig:
             kubeconfig = f"--kubeconfig {kubeconfig} "
@@ -1239,12 +1273,22 @@ class MCG:
         self.data_to_mask.extend(flatten_multilevel_dict(admin_credentials))
         self.noobaa_token = self.retrieve_nb_token()
 
+        # Increase boto3's built-in retry configuration to handle transient errors
+        # it uses exponential backoff with a base delay of 0.5 seconds
+        # so with max_attempts=8, backoff is around one minute:
+        # 0.5 * 2^7 = 64
+        retry_cfg = botocore.config.Config(
+            retries={
+                "max_attempts": 8,
+            }
+        )
         self.s3_resource = boto3.resource(
             "s3",
             verify=retrieve_verification_mode(),
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key,
+            config=retry_cfg,
         )
 
         self.s3_client = self.s3_resource.meta.client

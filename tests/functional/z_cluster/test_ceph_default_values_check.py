@@ -100,17 +100,15 @@ class TestCephDefaultValuesCheck(ManageTest):
                 max_pg_per_osd == 600
             ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
 
-    @tier1
-    @runs_on_provider
-    @pytest.mark.skipif(
-        config.DEPLOYMENT.get("ceph_debug"),
-        reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",
-    )
-    def test_validate_ceph_config_values_in_rook_config_override(self):
+    def _validate_config_pre_420(self, ocs_version) -> None:
         """
-        Test case for comparing the cluster's config values of
-        Ceph, set by ceph-config-override configMap, with the static set of configuration saved in ocs-ci
+        Validate ceph config values for OCS versions < 4.20 using ceph-config-override configMap.
 
+        Args:
+            ocs_version: OCS version for determining expected config values.
+
+        Returns:
+            None
         """
         cm_obj = OCP(
             kind="configmap",
@@ -123,7 +121,6 @@ class TestCephDefaultValuesCheck(ManageTest):
             "Validating that the Ceph values, configured by ceph-config-override "
             "confiMap, match the ones stored in ocs-ci"
         )
-        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
 
         if ocs_version == version.VERSION_4_12 or ocs_version == version.VERSION_4_13:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
@@ -152,6 +149,63 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"The expected values are:\n{stored_values}\n"
             f"The cluster's Ceph values are:{config_data}"
         )
+
+    def _validate_config_post_420(self, ocs_version) -> None:
+        """
+        Validate ceph config values for OCS versions >= 4.20 using CephCluster resource.
+
+        Args:
+            ocs_version: OCS version for determining expected config values.
+
+        Returns:
+            None
+        """
+        ceph_cluster_obj = OCP(
+            kind=constants.CEPH_CLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.CEPH_CLUSTER_NAME,
+        )
+        ceph_cluster_data = ceph_cluster_obj.get()
+        ceph_config = ceph_cluster_data["spec"]["cephConfig"]
+
+        log.info(
+            "Validating that the Ceph values, configured in CephCluster spec.cephConfig, "
+            "match the ones stored in ocs-ci"
+        )
+        log.info(f"CephConfig data: {ceph_config}")
+
+        # Get expected values - currently only 4.20+ supported
+        expected_config = constants.ROOK_CEPH_CONFIG_VALUES_420
+
+        log.info(f"OCS version is {ocs_version}")
+        log.info(f"Expected config values: {expected_config}")
+
+        # Direct dictionary comparison
+        assert ceph_config == expected_config, (
+            f"The Ceph config in CephCluster spec.cephConfig "
+            f"is different than the expected. Please inform OCS-QE about this discrepancy. "
+            f"The expected values are:\n{expected_config}\n"
+            f"The cluster's Ceph values are:\n{ceph_config}"
+        )
+
+    @tier1
+    @runs_on_provider
+    @pytest.mark.skipif(
+        config.DEPLOYMENT.get("ceph_debug"),
+        reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",
+    )
+    def test_validate_ceph_config_values_in_rook_config_override(self):
+        """
+        Test case for comparing the cluster's config values of
+        Ceph, set by ceph-config-override configMap, with the static set of configuration saved in ocs-ci
+
+        """
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+
+        if ocs_version >= version.VERSION_4_20:
+            self._validate_config_post_420(ocs_version)
+        else:
+            self._validate_config_pre_420(ocs_version)
 
     @post_ocs_upgrade
     @skipif_external_mode

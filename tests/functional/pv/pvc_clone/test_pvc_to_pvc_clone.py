@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
+    jira,
     provider_mode,
     run_on_all_clients_push_missing_configs,
 )
@@ -164,7 +165,7 @@ class TestClone(ManageTest):
         clone_pod_obj.get_fio_results()
         logger.info(f"IO completed on pod {clone_pod_obj.name}")
 
-    @skipif_ocs_version(">4.19")
+    @jira("DFBUGS-3740")
     @provider_mode
     @acceptance
     @pytest.mark.polarion_id("OCS-5162")
@@ -263,7 +264,7 @@ class TestClone(ManageTest):
         ), f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
-    @skipif_ocs_version(">4.19")
+    @jira("DFBUGS-3740")
     @skipif_hci_provider_and_client
     @pytest.mark.polarion_id("OCS-5444")
     @pytest.mark.polarion_id("OCS-5446")
@@ -392,7 +393,7 @@ class TestClone(ManageTest):
         ), f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {snapshot_restore_pod_obj.name}")
 
-    @skipif_ocs_version(">4.19")
+    @jira("DFBUGS-3740")
     @skipif_hci_provider_and_client
     @pytest.mark.polarion_id("OCS-5445")
     @pytest.mark.polarion_id("OCS-5447")

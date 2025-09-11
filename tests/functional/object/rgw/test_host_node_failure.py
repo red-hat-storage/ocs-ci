@@ -25,7 +25,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
     get_pod_node,
-    get_noobaa_pods,
+    get_noobaa_db_pod,
     wait_for_storage_pods,
 )
 from ocs_ci.utility.utils import ceph_health_check
@@ -75,17 +75,12 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
 
         """
 
-        # Get nooba pods
-        noobaa_pod_obj = get_noobaa_pods()
+        # Get noobaa pods
+        noobaa_pod_obj = get_noobaa_db_pod()
 
         # Get the node where noobaa-db hosted
         noobaa_pod_node = None
-        for noobaa_pod in noobaa_pod_obj:
-            if noobaa_pod.name in [
-                constants.NB_DB_NAME_46_AND_BELOW,
-                constants.NB_DB_NAME_47_AND_ABOVE,
-            ]:
-                noobaa_pod_node = get_pod_node(noobaa_pod)
+        noobaa_pod_node = get_pod_node(noobaa_pod_obj)
         if noobaa_pod_node is None:
             assert False, "Could not find the NooBaa DB pod"
 

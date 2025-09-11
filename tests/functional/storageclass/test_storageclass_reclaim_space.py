@@ -54,7 +54,7 @@ class TestStorageClassReclamespace:
 
         # Storegeclass ReclaimSpace annotations.
         reclaimspace_annotations = {
-            "reclaimspace.csiaddons.openshift.io/schedule": "*/3 * * * *"
+            constants.RECLAIMSPACE_SCHEDULE_ANNOTATION: "*/3 * * * *"
         }
 
         # Creating StorageClass with reclaimspace annotations.

@@ -63,7 +63,7 @@ class PVKeyrotationTestBase:
 
         # Key rotation annotations
         keyrotation_annotations = {
-            "keyrotation.csiaddons.openshift.io/schedule": "* * * * *"
+            constants.KEYROTATION_SCHEDULE_ANNOTATION: "* * * * *"
         }
 
         # Create an encryption-enabled storage class

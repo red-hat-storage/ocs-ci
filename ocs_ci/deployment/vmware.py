@@ -20,6 +20,7 @@ import yaml
 import re
 import shutil
 
+from pyVmomi import vmodl
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -379,14 +380,22 @@ class VSPHEREBASE(Deployment):
         Post destroy checks on cluster
         """
         pool = config.ENV_DATA["cluster_name"]
-        if self.vsphere.is_resource_pool_exist(pool, self.datacenter, self.cluster):
+        try:
+            rp_exists = self.vsphere.is_resource_pool_exist(
+                pool, self.datacenter, self.cluster
+            )
+        except vmodl.fault.ManagedObjectNotFound as e:
+            if "has already been deleted or has not been completely created" in str(e):
+                rp_exists = False
+            else:
+                raise
+        if rp_exists:
             logger.warning(f"Resource pool {pool} exists even after destroying cluster")
             self.vsphere.destroy_pool(pool, self.datacenter, self.cluster)
         else:
             logger.info(
                 f"Resource pool {pool} does not exist in " f"cluster {self.cluster}"
             )
-
         # destroy the folder in templates
         template_folder = get_infra_id(self.cluster_path)
         self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)

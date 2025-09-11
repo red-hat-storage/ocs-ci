@@ -401,6 +401,10 @@ class BucketNotificationsManager:
                     event_dict = parsed_event["Records"][0]
                     events.append(event_dict)
         logger.info(events)
+
+        # Filter out the irrelevant TestEvent which helps NooBaa check the connection
+        events = [event for event in events if "TestEvent" not in str(event)]
+
         return events
 
     def cleanup(self):

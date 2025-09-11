@@ -230,6 +230,7 @@ CATSRC = "catsrc"
 VOLUME_REPLICATION = "VolumeReplication"
 VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
+RECLAIMSPACEJOBS = "reclaimspacejobs"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
 # Deprecated in favour of StorageClaim starting from 4.16
@@ -273,6 +274,8 @@ NOOBAA_ACCOUNT = "NoobaaAccount"
 EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
 ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
+RECLAIMSPACE_SCHEDULE_ANNOTATION = "reclaimspace.csiaddons.openshift.io/schedule"
+KEYROTATION_SCHEDULE_ANNOTATION = "keyrotation.csiaddons.openshift.io/schedule"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
 # ClientProfileSpec defines the desired state of Ceph CSI
@@ -308,6 +311,7 @@ SUBSCRIPTION_WITH_ACM = "Subscription.operators.coreos.com"
 
 # Other
 AWSCLI_NAMESPACE = "awscli"
+AWSCLI_DEFAULT_MAX_ATTEMPTS = 4
 SECRET = "Secret"
 TEST = "test"
 NAMESPACE = "Namespace"
@@ -393,15 +397,6 @@ CLIENT_PROFILE_PATH = os.path.join(
 MACHINE_CONFIG_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH,
     "machineconfig_to_enable_nested_virtualization.yaml",
-)
-OCS_STORAGE_CLUSTER_YAML = os.path.join(
-    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
-)
-OCS_STORAGE_CLUSTER_CONVERGED_YAML = os.path.join(
-    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_converged.yaml"
-)
-OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
-    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
 )
 STORAGE_PROFILE_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_profiles.yaml"
@@ -2430,6 +2425,24 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "odf-multicluster",
 ]
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] = [
+    "ocs-operator",
+    "odf-operator",
+    "mcg-operator",
+    "odf-csi-addons-operator",
+    "ocs-client-operator",
+    "odf-prometheus-operator",
+    "recipe",
+    "rook-ceph-operator",
+    "odr-cluster-operator",
+    "odr-hub-operator",
+    "cephcsi-operator",
+    "odf-dependencies",
+    "odf-multicluster-orchestrator",
+    "cnsa-dependencies",
+    "odf-external-snapshotter-operator",
+]
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -2874,6 +2887,19 @@ debug_rbd_mirror = 30
 log_file = /var/log/ceph/\$cluster-\$name.log
 
 """
+
+ROOK_CEPH_CONFIG_VALUES_420 = {
+    "global": {
+        "bdev_flock_retry": "20",
+        "bluestore_prefer_deferred_size_hdd": "0",
+        "bluestore_slow_ops_warn_lifetime": "0",
+        "mon_data_avail_warn": "15",
+        "mon_max_pg_per_osd": "1000",
+        "mon_pg_warn_max_object_skew": "0",
+        "mon_target_pg_per_osd": "400",
+    },
+    "osd": {"osd_memory_target_cgroup_limit_ratio": "0.8"},
+}
 
 
 CEPH_DEBUG_CONFIG_VALUES = """
@@ -3534,7 +3560,11 @@ MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
 
+
 # ODF Grafana repo
 ODF_GRAFANA_REPO = "https://github.com/redhat-performance/odf-grafana"
 ODF_GRAFANA_PATH = "/tmp/odf-grafana"
 GRAFANA_NAMESPACE = "perfscale"
+
+CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
+

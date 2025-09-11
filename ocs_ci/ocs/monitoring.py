@@ -70,8 +70,9 @@ def create_configmap_cluster_monitoring_pod(sc_name=None, telemeter_server_url=N
     )
     config_map_exists = False
     if (
-        (ibm_cloud_platform and version_4_16_onwards) or azure_platform
-    ) and config.ENV_DATA["deployment_type"] == "managed":
+        ((ibm_cloud_platform and version_4_16_onwards) or azure_platform)
+        and config.ENV_DATA["deployment_type"] == "managed"
+    ) or config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
         try:
             assert ocp.get(resource_name="cluster-monitoring-config")
             logger.info(
