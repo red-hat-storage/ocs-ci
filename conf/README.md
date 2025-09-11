@@ -382,6 +382,8 @@ higher priority).
 * `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 * `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
+* `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
+* `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
 
 #### UPGRADE
 
