@@ -559,8 +559,11 @@ class DataFoundationTabBar(PageNavigator):
     def nav_storage_systems_tab(self):
         """
         Navigate to Storage Systems tab. Accessible from any Data Foundation tabs
+        Renamed to Storage Cluster in 4.20
         """
-        logger.info("Navigate to Data Foundation - Storage Systems")
+        logger.info(
+            "Navigate to Storage Systems or Storage Cluster page depending on version"
+        )
         self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=2)
 

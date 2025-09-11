@@ -51,6 +51,8 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+            self.storage_class = "ibmc-vpc-block-10iops-tier"
         self.page_has_loaded(30, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
@@ -183,14 +185,22 @@ class PageNavigator(BaseUI):
 
     def navigate_operatorhub_page(self):
         """
-        Navigate to OperatorHub Page
+        Navigate to OperatorHub Page, renamed to Software Catalog in version 4.20
 
         """
-        logger.info("Navigate to OperatorHub Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
-        self.do_click(
-            locator=self.page_nav["operatorhub_page"], enable_screenshot=False
+        logger.info("Navigate to OperatorHub Page or Software Catalog")
+        self.choose_expanded_mode(
+            mode=True, locator=self.page_nav["operators_or_ecosystem"]
         )
+        if self.ocp_version_semantic <= version.VERSION_4_19:
+            self.do_click(
+                locator=self.page_nav["operatorhub_page"], enable_screenshot=False
+            )
+        else:
+            self.do_click(
+                locator=self.page_nav["software_catalog"], enable_screenshot=True
+            )
+            logger.info("Navigated to Software Catalog")
 
     def navigate_installed_operators_page(self):
         """
@@ -198,7 +208,9 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Installed Operators Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.choose_expanded_mode(
+            mode=True, locator=self.page_nav["operators_or_ecosystem"]
+        )
         self.page_has_loaded(retries=25, sleep_time=1)
         logger.info("Click on Installed Operators Page")
         self.do_click(
