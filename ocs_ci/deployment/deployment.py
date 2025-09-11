@@ -93,7 +93,6 @@ from ocs_ci.ocs.node import (
     get_all_nodes,
     get_node_objs,
     get_nodes,
-    get_node_ip_addresses,
     get_node_internal_ip,
 )
 from ocs_ci.ocs.ocp import OCP
