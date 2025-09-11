@@ -156,10 +156,10 @@ class TestBlockExternalAccess(MCGTest):
 
         self.check_disable_routes(False)
 
-        self.set_storagecluster_disable_routes_value(storagecluster_obj, True)
+        self.set_disable_routes_value(storagecluster_obj, True, True)
         self.check_disable_routes(True)
 
-        self.set_storagecluster_disable_routes_value(storagecluster_obj, False)
+        self.set_disable_routes_value(storagecluster_obj, True, False)
         self.check_disable_routes(False)
 
     def check_disable_routes(self, disable_routes_val):
@@ -208,11 +208,12 @@ class TestBlockExternalAccess(MCGTest):
                 route_names_after_deletion
             ), "Some routes were not deleted"
 
-    def set_storagecluster_disable_routes_value(self, storagecluster_obj, val):
+    def set_disable_routes_value(self, ocp_obj, is_storage_cluster, val):
         """
-        This method sets the value of 'disableRoutes' flag of storagecluster_obj to val
+        This method sets the value of 'disableRoutes' flag of the storagecluster or noobaa object  to val
         Args:
-            storagecluster_obj (obj): Storage cluster on which the value should be set
+            ocp_obj (obj): Storage cluster or noobaa object on which the value should be set
+            is_storage_cluster (bool): True if the ocp_obj is storagecluster and False if it is noobaa object
             val (bool) Value to be set to 'disableRoutes' parameter
         """
         if not isinstance(val, bool):
@@ -220,49 +221,27 @@ class TestBlockExternalAccess(MCGTest):
 
         param_value = str(val).lower()
         disable_routes_param = (
-            f'{{"spec": {{"multiCloudGateway": {{"disableRoutes": {param_value} }}}}}}'
+            (
+                f'{{"spec": {{"multiCloudGateway": {{"disableRoutes": {param_value} }}}}}}'
+            )
+            if is_storage_cluster
+            else f'{{"spec": {{"disableRoutes": {param_value} }}}}'
         )
 
-        storagecluster_obj.patch(
+        ocp_obj.patch(
             params=disable_routes_param,
             format_type="merge",
         )
 
         # validate that the configuration really changed
-        sc_dict = storagecluster_obj.get()
-        logger.info(f"Updated configuration is {sc_dict}")
+        obj_dict = ocp_obj.get()
+        logger.info(f"Updated configuration is {obj_dict}")
 
         disable_routes = (
-            sc_dict.get("spec", {}).get("multiCloudGateway", {}).get("disableRoutes")
+            (obj_dict.get("spec", {}).get("multiCloudGateway", {}).get("disableRoutes"))
+            if is_storage_cluster
+            else obj_dict.get("spec", {}).get("disableRoutes")
         )
-
-        assert (
-            disable_routes == val
-        ), f"Disable routes is expected to be {val}, is {disable_routes}"
-
-    def set_noobaa_disable_routes_value(self, noobaa_obj, val):
-        """
-        This method sets the value of 'disableRoutes' flag of noobaa_obj to val
-        Args:
-            noobaa_obj (obj): Noobaa object on which the value should be set
-            val (bool) Value to be set to 'disableRoutes' parameter
-        """
-        if not isinstance(val, bool):
-            raise TypeError("val argument should be boolean")
-
-        param_value = str(val).lower()
-        disable_routes_param = f'{{"spec": {{"disableRoutes": {param_value} }}}}'
-
-        noobaa_obj.patch(
-            params=disable_routes_param,
-            format_type="merge",
-        )
-
-        # validate that the configuration really changed
-        noobaa_dict = noobaa_obj.get()
-        logger.info(f"Updated configuration is {noobaa_dict}")
-
-        disable_routes = noobaa_dict.get("spec", {}).get("disableRoutes")
 
         assert (
             disable_routes == val
@@ -272,7 +251,6 @@ class TestBlockExternalAccess(MCGTest):
         """
         This method removes 'multiCloudGateway' section from storagecluster configuration if this section exists there
         """
-
         storagecluster_obj = ocp.OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -324,8 +302,8 @@ class TestBlockExternalAccess(MCGTest):
 
         self.check_disable_routes(False)
 
-        self.set_noobaa_disable_routes_value(noobaa_obj, True)
+        self.set_disable_routes_value(noobaa_obj, False, True)
         self.check_disable_routes(True)
 
-        self.set_noobaa_disable_routes_value(noobaa_obj, False)
+        self.set_disable_routes_value(noobaa_obj, False, False)
         self.check_disable_routes(False)
