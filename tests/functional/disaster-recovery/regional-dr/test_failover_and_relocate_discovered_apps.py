@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 @rdr
-@acceptance
 @turquoise_squad
 @skipif_ocs_version("<4.16")
 class TestFailoverAndRelocateWithDiscoveredApps:
@@ -41,8 +40,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
-                marks=tier1,
-                id="primary_up-rbd-recipe-resourcelabel",
+                marks=[tier1, acceptance],
+                id="primary_up-rbd",
             ),
             pytest.param(
                 True,
@@ -51,7 +50,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 marks=tier4,
-                id="primary_down-rbd-recipe-resourcelabel",
+                id="primary_down-rbd",
             ),
             pytest.param(
                 False,
@@ -77,8 +76,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
-                marks=[skipif_ocs_version("<4.19"), tier1],
-                id="primary_up-cephfs-recipe-resourcelabel",
+                marks=[skipif_ocs_version("<4.19"), tier1, acceptance],
+                id="primary_up-cephfs",
             ),
             pytest.param(
                 True,
@@ -87,7 +86,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 marks=[skipif_ocs_version("<4.19"), tier4],
-                id="primary_down-cephfs-recipe-resourcelabel",
+                id="primary_down-cephfs",
             ),
             pytest.param(
                 False,
@@ -251,14 +250,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 resource_name=rdr_workload.discovered_apps_placement_name,
             )
 
-            scheduling_interval = dr_helpers.get_scheduling_interval(
-                rdr_workload.workload_namespace,
-                discovered_apps=True,
-                resource_name=rdr_workload.discovered_apps_placement_name,
-            )
-
             logger.info("Running Relocate Steps")
-            wait_time = 2 * scheduling_interval  # Time in minutes
             logger.info(f"Waiting for {wait_time} minutes to run IOs")
             sleep(wait_time * 60)
 
