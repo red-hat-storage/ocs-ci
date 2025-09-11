@@ -28,6 +28,7 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
@@ -92,6 +93,8 @@ from ocs_ci.ocs.node import (
     get_all_nodes,
     get_node_objs,
     get_nodes,
+    get_node_ip_addresses,
+    get_node_internal_ip,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import machineconfig
@@ -1851,10 +1854,19 @@ class Deployment(object):
             version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
             and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
         ):
+            if get_provider_service_type() != "NodePort":
+                cluster_address = config.ENV_DATA["cluster_name"]
+                cluster_address_port = "50051"
+            else:
+                cluster_address = get_node_internal_ip(
+                    get_node_objs(get_worker_nodes()[0])[0]
+                )
+                cluster_address_port = "31659"
+
             api_server_exported_address_annotation = {
                 "ocs.openshift.io/api-server-exported-address": (
-                    f'{config.ENV_DATA["cluster_name"]}.'
-                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
+                    f"{cluster_address}."
+                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:{cluster_address_port}"
                 )
             }
             merge_dict(
@@ -4234,7 +4246,13 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         odf_running_version = version.get_semantic_ocs_version_from_config()
         if odf_running_version >= version.VERSION_4_19:
             # create service exporter
-            create_service_exporter()
+            config.switch_to_cluster_by_name()
+            for cluster in get_non_acm_cluster_config():
+                index = cluster.MULTICLUSTER["multicluster_index"]
+                config.switch_ctx(index)
+                if get_provider_service_type() != "NodePort":
+                    create_service_exporter()
+                    break
 
         # RBD specific dr deployment
         if self.rbd:
