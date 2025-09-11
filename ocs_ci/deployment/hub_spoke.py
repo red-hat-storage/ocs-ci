@@ -662,7 +662,7 @@ class ExternalClients:
             if not kubeconfig_path or not os.path.exists(kubeconfig_path):
                 raise FileNotFoundError(
                     f"Kubeconfig file for cluster '{cluster_name}' not found at path: {kubeconfig_path}, provided via "
-                    f"'ENV_DATA.clusters.{cluster_name}.spoke_cluster_path'"
+                    f"'ENV_DATA.clusters.{cluster_name}.cluster_path'"
                 )
             self.kubeconfig_paths.append(kubeconfig_path)
             logger.info(
@@ -1189,10 +1189,8 @@ class SpokeOCP(ABC):
         self.name = name
         self.timeout_check_resources_exist_sec = 6
 
-        # when hosted_cluster_path will be dropped from config(s), we will use only spoke_cluster_path
-        cluster_path_key = (
-            "spoke_cluster_path" if self.is_external else "hosted_cluster_path"
-        )
+        # when hosted_cluster_path will be dropped from config(s), we will use only cluster_path
+        cluster_path_key = "cluster_path" if self.is_external else "hosted_cluster_path"
 
         cluster_info = config.ENV_DATA.get("clusters", {}).get(self.name)
         if cluster_info:

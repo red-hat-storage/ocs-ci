@@ -4422,7 +4422,7 @@ def wait_for_machineconfigpool_status(
     timeout=1900,
     skip_tls_verify=False,
     force_delete_pods=False,
-    cluster_kubeconfig=None,
+    cluster_kubeconfig="",
 ):
     """
     Check for Machineconfigpool status
