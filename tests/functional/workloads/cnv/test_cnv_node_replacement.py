@@ -110,6 +110,7 @@ class TestCnvNodeReplace(E2ETest):
             ):
                 if vm_rwo.pvc_access_mode == "ReadWriteOnce" and vm_rwo.ready():
                     vm_rwo.stop()
+                    break
 
         # Keep vms in different states(paused, stoped)
         self.vm_for_stop.stop()
