@@ -16,7 +16,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
     check_dr_status,
 )
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.utils import (
     get_primary_cluster_config,
     get_non_acm_cluster_config,
@@ -118,7 +117,6 @@ class TestShowReplicationDelays:
         )
 
         acm_obj = AcmAddClusters()
-        page_nav = ValidationUI()
 
         config.switch_to_cluster_by_name(primary_cluster_name)
         before_failover_last_group_sync_time = []
