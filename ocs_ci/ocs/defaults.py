@@ -182,7 +182,7 @@ IBM_CLOUD_REGIONS = {"us-south", "us-east"}
 HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 2
 HYPERSHIFT_MEMORY_DEFAULT = "12Gi"
 HYPERSHIFT_CPU_CORES_DEFAULT = 6
-HOSTED_ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"
+ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"
 
 # Custom Ingress SSL certificate, key and CA certificate related defaults
 INGRESS_SSL_CERT = os.path.join(constants.DATA_DIR, "ingress-cert.crt")
