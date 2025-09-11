@@ -103,13 +103,13 @@ class TestCnvNodeReplace(E2ETest):
         node_name = self.vm_obj_on_replacing_node.get_vmi_instance().node()
 
         # Stop VM if its not live migratable to avoid drain stuck issue.
-        for vm_obj in all_vms:
+        for vm_rwo in all_vms:
             if (
-                vm_obj != self.vm_obj_on_replacing_node
-                and vm_obj.get_vmi_instance().node() == node_name
+                vm_rwo != self.vm_obj_on_replacing_node
+                and vm_rwo.get_vmi_instance().node() == node_name
             ):
-                if vm_obj.pvc_access_mode == "ReadWriteOnce" and vm_obj.ready():
-                    vm_obj.stop()
+                if vm_rwo.pvc_access_mode == "ReadWriteOnce" and vm_rwo.ready():
+                    vm_rwo.stop()
 
         # Keep vms in different states(paused, stoped)
         self.vm_for_stop.stop()
@@ -139,6 +139,7 @@ class TestCnvNodeReplace(E2ETest):
 
         logger.info("Starting vms")
         self.vm_for_stop.start()
+        vm_rwo.start()
         if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
             self.vm_for_snap.unpause()
 
