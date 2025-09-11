@@ -117,17 +117,18 @@ class Initializer(object):
         """
         Initialize the logging config.
         """
-        log_dir = os.path.expanduser(config.RUN.get("log_dir"))
+        base_log_dir = os.path.expanduser(config.RUN.get("log_dir"))
         log_level = config.RUN.get("log_level", "INFO")
-        log_name = f"{self.log_basename}_{self.run_id}"
+        sub_log_dir_name = f"{self.log_basename}-{self.run_id}"
+        sub_log_dir = os.path.join(base_log_dir, sub_log_dir_name)
         log_formatter = logging.Formatter(constants.LOG_FORMAT)
         root_logger = logging.getLogger()
         root_logger.setLevel(log_level)
 
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        if not os.path.exists(sub_log_dir):
+            os.makedirs(sub_log_dir)
 
-        log_file = os.path.join(log_dir, f"{log_name}.log")
+        log_file = os.path.join(sub_log_dir, "logs")
 
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(log_formatter)
@@ -164,14 +165,13 @@ class Initializer(object):
         # General properties
         props = {}
         props["run_id"] = config.RUN.get("run_id")
-        props["cluster_path"] = config.ENV_DATA.get("cluster_path")
-        props["logs_dir"] = config.RUN.get("log_dir")
+        props["cluster_path"] = config.RUN.get("cluster_dir_full_path")
+        props["logs_url"] = config.RUN.get("logs_url")
         props["ocp_version"] = get_running_ocp_version(
             kubeconfig=config.RUN["kubeconfig"]
         )
 
         # ReportPortal properties
-        props["rp_launch_name"] = reporting.get_rp_launch_name()
         props["rp_launch_description"] = reporting.get_rp_launch_description()
         props["rp_launch_url"] = config.REPORTING.get("rp_launch_url")
         attributes = reporting.get_rp_launch_attributes()
@@ -339,6 +339,9 @@ def add_post_deployment_props(test_suite: TestSuite):
         value = config.DEPLOYMENT.get(key)
         if value:
             test_suite.add_property(key, value)
+
+    # ReportPortal
+    test_suite.add_property("rp_launch_name", reporting.get_rp_launch_name())
 
 
 class TestCaseWithProps(TestCase):
