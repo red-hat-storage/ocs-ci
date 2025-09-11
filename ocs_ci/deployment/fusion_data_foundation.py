@@ -19,7 +19,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
-
+# 1
 
 class FusionDataFoundationDeployment:
     def __init__(self):
@@ -32,9 +32,10 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
-            self.create_image_tag_mirror_set()
+            # self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
+
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         # self.setup_storage()
