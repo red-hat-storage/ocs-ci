@@ -3567,4 +3567,3 @@ ODF_GRAFANA_PATH = "/tmp/odf-grafana"
 GRAFANA_NAMESPACE = "perfscale"
 
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
-
