@@ -109,7 +109,7 @@ setup(
         # new version of marshmallow 4.0.0 seems to be broken, failing with error:
         # TypeError: __init__() got an unexpected keyword argument 'default'
         "marshmallow==3.26.1",
-        "zope.event==5.0",
+        "zope.event==6.0",
     ],
     entry_points={
         "console_scripts": [
