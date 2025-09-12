@@ -45,7 +45,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
 
     labels_map = {
         constants.NOOBAA_CORE_STATEFULSET: constants.NOOBAA_CORE_POD_LABEL,
-        constants.NOOBAA_DB_STATEFULSET: constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        constants.NOOBAA_DB_STATEFULSET: constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
         constants.NOOBAA_OPERATOR_DEPLOYMENT: constants.NOOBAA_OPERATOR_POD_LABEL,
     }
 
