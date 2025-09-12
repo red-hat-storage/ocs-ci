@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class TestLBSubnetConfig(MCGTest):
 
     @tier2
-    @polarion_id("OCS-4716")
+    @polarion_id("OCS-4715")
     def test_lb_subnet_config(self, awscli_pod):
         """
         Test whether MCG's load balancer subnet config allows connections
