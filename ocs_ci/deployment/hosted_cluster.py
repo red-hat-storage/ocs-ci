@@ -576,9 +576,7 @@ class HostedClients(HyperShiftBase):
 
         """
         version_exists = (
-            config.ENV_DATA.get("clusters")
-            .get(cluster_name)
-            .get("hosted_odf_version", False)
+            config.ENV_DATA.get("clusters").get(cluster_name).get("odf_version", False)
         )
 
         return version_exists
@@ -755,7 +753,7 @@ class HostedClients(HyperShiftBase):
         for name in cluster_names:
             path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
                 "clusters", {}
-            ).setdefault(name, {}).get("hosted_cluster_path")
+            ).setdefault(name, {}).get("cluster_path")
             self.kubeconfig_paths.append(
                 self.download_hosted_cluster_kubeconfig(name, path, from_hcp=from_hcp)
             )
@@ -812,7 +810,7 @@ class HypershiftHostedOCP(
         self.name = name
         if config.ENV_DATA.get("clusters", {}).get(self.name):
             cluster_path = (
-                config.ENV_DATA["clusters"].get(self.name).get("hosted_cluster_path")
+                config.ENV_DATA["clusters"].get(self.name).get("cluster_path")
             )
             self.cluster_kubeconfig = os.path.expanduser(
                 os.path.join(cluster_path, "auth", "kubeconfig")
@@ -1632,11 +1630,11 @@ class HostedODF(HypershiftHostedOCP):
             constants.PROVIDER_MODE_CATALOGSOURCE
         )
 
-        if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
+        if not config.ENV_DATA.get("clusters").get(self.name).get("odf_version"):
             if not reapply:
                 raise ValueError(
                     "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
-                    "in the 'hosted_odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
+                    "in the 'odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
                 )
 
         if odf_version_tag:
@@ -1644,12 +1642,12 @@ class HostedODF(HypershiftHostedOCP):
             odf_version = odf_version_tag
         else:
             odf_version = (
-                config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+                config.ENV_DATA.get("clusters").get(self.name).get("odf_version")
             )
         odf_registry = (
             config.ENV_DATA.get("clusters")
             .get(self.name)
-            .get("hosted_odf_registry", defaults.HOSTED_ODF_REGISTRY_DEFAULT)
+            .get("odf_registry", defaults.ODF_REGISTRY_DEFAULT)
         )
 
         logger.info(
@@ -1733,16 +1731,14 @@ class HostedODF(HypershiftHostedOCP):
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
-        hosted_odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        odf_version = config.ENV_DATA.get("clusters").get(self.name).get("odf_version")
+        if any(tag in odf_version for tag in ["latest", "stable"]):
+            odf_version = odf_version.split("-")[-1]
 
-        version_semantic = version.get_semantic_version(hosted_odf_version)
+        version_semantic = version.get_semantic_version(odf_version)
 
-        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
-        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+        odf_version = f"{version_semantic.major}.{version_semantic.minor}"
+        subscription_data["spec"]["channel"] = f"stable-{str(odf_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription", delete=False
@@ -2073,12 +2069,12 @@ def hypershift_cluster_factory(
             # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
             cluster_path = create_cluster_dir(cluster_name)
             hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
-                "hosted_cluster_path": cluster_path,
+                "cluster_path": cluster_path,
                 "ocp_version": ocp_version,
                 "cpu_cores_per_hosted_cluster": 8,
                 "memory_per_hosted_cluster": "12Gi",
-                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
-                "hosted_odf_version": odf_version,
+                "odf_registry": defaults.ODF_REGISTRY_DEFAULT,
+                "odf_version": odf_version,
                 "setup_storage_client": setup_storage_client,
                 "nodepool_replicas": nodepool_replicas,
             }
