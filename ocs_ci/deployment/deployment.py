@@ -3648,7 +3648,7 @@ class MultiClusterDROperatorsDeploy(object):
         )
         dr_hub_csv.wait_for_phase("Succeeded")
 
-    def deploy_dr_policy(self):
+    def deploy_dr_policy(self, flatten=False):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
         # Update DR cluster name and s3profile name
@@ -3672,11 +3672,22 @@ class MultiClusterDROperatorsDeploy(object):
             dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
             dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
 
-        dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="dr_policy_hub_", delete=False
-        )
+        if flatten:
+            dr_policy_hub_data["metadata"]["name"] = "flattening-odr-policy-rdr"
+            dr_policy_hub_data["spec"]["replicationClassSelector"]["matchLabels"] = {
+                "replication.storage.openshift.io/flatten-mode": "force"
+            }
+            dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="dr_policy_hub_flatten_", delete=False
+            )
+        else:
+            dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="dr_policy_hub_", delete=False
+            )
+
         templating.dump_data_to_temp_yaml(dr_policy_hub_data, dr_policy_hub_yaml.name)
         self.dr_policy_name = dr_policy_hub_data["metadata"]["name"]
+
         run_cmd(f"oc create -f {dr_policy_hub_yaml.name}")
         # Check the status of DRPolicy and wait for 'Reason' field to be set to 'Succeeded'
         dr_policy_resource = ocp.OCP(
@@ -3693,6 +3704,14 @@ class MultiClusterDROperatorsDeploy(object):
         )
         if not sample.wait_for_func_status(True):
             raise TimeoutExpiredError("DR Policy failed to reach Succeeded state")
+
+    def delete_drpolicy(self):
+        dr_policy_resource = ocp.OCP(
+            kind="DRPolicy",
+            # resource_name=self.dr_policy_name,
+            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+        )
+        dr_policy_resource.delete()
 
     def enable_cluster_backup(self):
         """
