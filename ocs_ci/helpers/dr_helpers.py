@@ -21,7 +21,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
-from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes, get_node_objs
 from ocs_ci.ocs.utils import (
@@ -407,7 +406,7 @@ def check_mirroring_status_ok(
 
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
-    health_keys = ["daemon_health", "health", "image_health"]
+    health_keys = ["daemon_health", "health", "image_health", "group_health"]
     for key in health_keys:
         expected_value = "OK"
         current_value = mirroring_status.get(key)
@@ -562,6 +561,40 @@ def check_mirroring_status_for_custom_pool(
     return False
 
 
+def is_cg_enabled():
+    """
+    Check if Consistency Group feature is enabled via environment variable
+
+    Returns:
+        bool: True if CG is enabled, False otherwise
+
+    """
+    return config.ENV_DATA.get("cg_enabled", True)
+
+
+def get_resource_count(kind, namespace=None):
+    """
+    Gets resource count in given namespace for specified resource kind
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.REPLICATION_SOURCE, etc.)
+        namespace (str): the namespace of the resources
+
+    Returns:
+        int: Resource count
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+    resource_items = resource_obj.get().get("items")
+    if kind == constants.PV:
+        resource_items = [
+            item
+            for item in resource_items
+            if item.get("spec").get("claimRef", {}).get("namespace") == namespace
+        ]
+    return len(resource_items)
+
+
 def get_pv_count(namespace):
     """
     Gets PV resource count in the given namespace
@@ -573,13 +606,7 @@ def get_pv_count(namespace):
          int: PV resource count
 
     """
-    all_pvs = get_all_pvs()["items"]
-    workload_pvs = [
-        pv
-        for pv in all_pvs
-        if pv.get("spec").get("claimRef", {}).get("namespace") == namespace
-    ]
-    return len(workload_pvs)
+    return get_resource_count(constants.PV, namespace)
 
 
 def get_vr_count(namespace):
@@ -593,41 +620,143 @@ def get_vr_count(namespace):
          int: VR resource count
 
     """
-    vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace)
-    vr_items = vr_obj.get().get("items")
-    return len(vr_items)
+    return get_resource_count(constants.VOLUME_REPLICATION, namespace)
 
 
-def get_replicationsources_count(namespace):
+def check_resource_existence(kind, namespace, resource_name=""):
     """
-    Gets ReplicationSource resource count in given namespace
+    Check if resource exists in the given namespace
 
     Args:
-        namespace (str): the namespace of the ReplicationSource resources
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION_GROUP, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resource
+        resource_name (str): Name of resource
 
     Returns:
-         int: ReplicationSource resource count
+        bool: True if resource exists, False otherwise
 
     """
-    rs_obj = ocp.OCP(kind=constants.REPLICATION_SOURCE, namespace=namespace)
-    rs_items = rs_obj.get().get("items")
-    return len(rs_items)
+    resource_list = []
+
+    try:
+        resource_list = (
+            ocp.OCP(
+                kind=kind,
+                namespace=namespace,
+                resource_name=resource_name,
+            )
+            .get()
+            .get("items")
+        )
+    except Exception as e:
+        if "Error from server (NotFound)" in str(e):
+            logger.info(f"{kind} {resource_name} not found in namespace {namespace}.")
+        else:
+            logger.warning(f"Exception raised when fetching {kind}: {e}")
+
+    return len(resource_list) > 0
 
 
-def get_replicationdestinations_count(namespace):
+def check_vrg_existence(namespace, vrg_name=""):
     """
-    Gets ReplicationDestination resource count in given namespace
+    Check if VRG resource exists in the given namespace
 
     Args:
-        namespace (str): the namespace of the ReplicationDestination resources
+        namespace (str): the namespace of the VRG resource
+        vrg_name (str): Name of VRG
 
     Returns:
-         int: ReplicationDestination resource count
+        bool: True if VRG exists, False otherwise
 
     """
-    rd_obj = ocp.OCP(kind=constants.REPLICATIONDESTINATION, namespace=namespace)
-    rd_items = rd_obj.get().get("items")
-    return len(rd_items)
+    return check_resource_existence(
+        kind=constants.VOLUME_REPLICATION_GROUP,
+        namespace=namespace,
+        resource_name=vrg_name,
+    )
+
+
+def check_replication_resource_state(kind, state, namespace, resource_name=""):
+    """
+    Check if replication resources in the given namespace are in expected state
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_REPLICATION_GROUP, etc.)
+        state (str): The resource state to check for (e.g. 'primary', 'secondary')
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+
+    Returns:
+        bool: True if resources are in expected state or were deleted, False otherwise
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+
+    if resource_name:
+        resource_list = resource_obj.get(resource_name=resource_name)
+        resource_list_index = resource_list
+    else:
+        resource_list = resource_obj.get().get("items")
+        resource_list_index = resource_list[0] if resource_list else None
+
+    # Handle deletion case
+    if len(resource_list) == 0 and state.lower() == "secondary":
+        if kind == constants.VOLUME_REPLICATION_GROUP:
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version <= version.VERSION_4_17:
+                logger.info(f"{kind} resource not found, skipping state check")
+                return True
+            else:
+                logger.info(f"{kind} resource not found")
+                return False
+        else:
+            logger.info(f"{kind} resource not found, skipping state check")
+            return True
+
+    if kind == constants.VOLUME_REPLICATION:
+        # Handle multiple VR resources
+        state_mismatch = []
+        for resource in resource_list:
+            resource_name = resource["metadata"]["name"]
+            desired_state = resource["spec"]["replicationState"]
+            current_state = resource["status"]["state"]
+            logger.info(
+                f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
+            )
+
+            if not (
+                state.lower() == desired_state.lower()
+                and state.lower() == current_state.lower()
+            ):
+                state_mismatch.append(resource_name)
+
+        if not state_mismatch:
+            logger.info(
+                f"All {len(resource_list)} {kind} are in expected state {state}"
+            )
+            return True
+        else:
+            logger.warning(
+                f"Following {len(state_mismatch)} {kind} are not in expected state {state}: {state_mismatch}"
+            )
+            return False
+    else:
+        # Handle single resource
+        resource_name = resource_list_index["metadata"]["name"]
+        desired_state = resource_list_index["spec"]["replicationState"]
+        current_state = resource_list_index["status"]["state"]
+        logger.info(
+            f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
+        )
+
+        if (
+            state.lower() == desired_state.lower()
+            and state.lower() == current_state.lower()
+        ):
+            return True
+        else:
+            logger.warning(f"{kind} is not in expected state {state}")
+            return False
 
 
 def check_vr_state(state, namespace):
@@ -642,78 +771,14 @@ def check_vr_state(state, namespace):
         bool: True if all VRs are in expected state or were deleted, False otherwise
 
     """
-    vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace)
-    vr_list = vr_obj.get().get("items")
-
-    # Skip state check if resource was deleted
-    if len(vr_list) == 0 and state.lower() == "secondary":
-        logger.info("VR resources not found, skipping state check")
-        return True
-
-    vr_state_mismatch = []
-    for vr in vr_list:
-        vr_name = vr["metadata"]["name"]
-        desired_state = vr["spec"]["replicationState"]
-        current_state = vr["status"]["state"]
-        logger.info(
-            f"VR: {vr_name} desired state is {desired_state}, current state is {current_state}"
-        )
-
-        if not (
-            state.lower() == desired_state.lower()
-            and state.lower() == current_state.lower()
-        ):
-            vr_state_mismatch.append(vr_name)
-
-    if not vr_state_mismatch:
-        logger.info(f"All {len(vr_list)} VR are in expected state {state}")
-        return True
-    else:
-        logger.warning(
-            f"Following {len(vr_state_mismatch)} VR are not in expected state {state}: {vr_state_mismatch}"
-        )
-        return False
+    return check_replication_resource_state(
+        kind=constants.VOLUME_REPLICATION,
+        state=state,
+        namespace=namespace,
+    )
 
 
-def check_vrg_existence(namespace, vrg_name=""):
-    """
-    Check if VRG resource exists in the given namespace
-
-    Args:
-        namespace (str): the namespace of the VRG resource
-        vrg_name (str): Name of VRG
-
-    """
-    vrg_list = []
-    try:
-
-        vrg_list = (
-            ocp.OCP(
-                kind=constants.VOLUME_REPLICATION_GROUP,
-                namespace=namespace,
-                resource_name=vrg_name,
-            )
-            .get()
-            .get("items")
-        )
-    except Exception as e:
-        if (
-            f'Error from server (NotFound): volumereplicationgroups.ramendr.openshift.io "{vrg_name}" not found'
-            in str(e)
-        ):
-            logger.info(f"VRG {vrg_name} not found in namespace {namespace}.")
-        else:
-            logger.warning(
-                f"Exception raised when fetching Volume Replication Group: {e}"
-            )
-
-    if len(vrg_list) > 0:
-        return True
-    else:
-        return False
-
-
-def check_vrg_state(state, namespace, resource_name=None):
+def check_vrg_state(state, namespace, resource_name=""):
     """
     Check if VRG in the given namespace is in expected state
 
@@ -726,41 +791,135 @@ def check_vrg_state(state, namespace, resource_name=None):
         bool: True if VRG is in expected state or was deleted, False otherwise
 
     """
-
-    vrg_obj = ocp.OCP(
+    return check_replication_resource_state(
         kind=constants.VOLUME_REPLICATION_GROUP,
+        state=state,
+        namespace=namespace,
+        resource_name=resource_name,
+    )
+
+
+def check_vgr_state(state, namespace, resource_name=""):
+    """
+    Check if VGR in the given namespace is in expected state
+
+    Args:
+        state (str): The VGR state to check for (e.g. 'primary', 'secondary')
+        namespace (str): the namespace of the VGR resources
+        resource_name (str): Name of VGR resource
+
+    Returns:
+        bool: True if VGR is in expected state or was deleted, False otherwise
+
+    """
+    return check_replication_resource_state(
+        kind=constants.VOLUME_GROUP_REPLICATION,
+        state=state,
+        namespace=namespace,
+        resource_name=resource_name,
+    )
+
+
+def wait_for_resource_existence(
+    kind, namespace, resource_name="", timeout=900, wait_for_existence=True
+):
+    """
+    Wait for resources to exist or not exist
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION_GROUP, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resource
+        resource_name (str): Name of resource
+        timeout (int): Time in seconds to wait
+        wait_for_existence (bool): True to wait for existence, False to wait for deletion
+
+    Raises:
+        TimeoutExpiredError: If expected resource state not reached
+
+    """
+    if wait_for_existence:
+        logger.info(f"Waiting for {kind} {resource_name} to exist")
+        expected_result = True
+        error_msg = f"{kind} {resource_name} not created within the time limit."
+    else:
+        logger.info(f"Waiting for {kind} {resource_name} to be deleted")
+        expected_result = False
+        error_msg = f"{kind} {resource_name} not deleted within the time limit."
+
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=check_resource_existence,
+        kind=kind,
+        namespace=namespace,
+        resource_name=resource_name,
+    )
+    if not sample.wait_for_func_status(result=expected_result):
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
+
+
+def wait_for_resource_count(kind, namespace, expected_count=1, timeout=900):
+    """
+    Wait for resources to reach expected count
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.REPLICATION_SOURCE, etc.)
+        namespace (str): The namespace of the resources
+        expected_count (int): Expected number of resources
+        timeout (int): Time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: If expected number of resources not reached
+
+    """
+    if expected_count == 0:
+        logger.info(f"Waiting for all {kind} to be deleted")
+    else:
+        logger.info(f"Waiting for {expected_count} {kind} to be created")
+
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=get_resource_count,
+        kind=kind,
         namespace=namespace,
     )
-    if resource_name:
-        vrg_list = vrg_obj.get(resource_name=resource_name)
-        vrg_list_index = vrg_list
-    else:
-        vrg_list = vrg_obj.get().get("items")
-        vrg_list_index = vrg_list[0]
+    sample.wait_for_func_value(expected_count)
 
-    # Skip state check if resource was deleted
-    if len(vrg_list) == 0 and state.lower() == "secondary":
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version <= version.VERSION_4_17:
-            logger.info("VRG resource not found, skipping state check")
-            return True
-        else:
-            logger.info("VRG resource not found")
-            return False
-    vrg_name = vrg_list_index["metadata"]["name"]
-    desired_state = vrg_list_index["spec"]["replicationState"]
-    current_state = vrg_list_index["status"]["state"]
-    logger.info(
-        f"VRG: {vrg_name} desired state is {desired_state}, current state is {current_state}"
+
+def wait_for_resource_state(kind, state, namespace, resource_name="", timeout=900):
+    """
+    Wait for resources to reach expected count
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.REPLICATION_SOURCE, etc.)
+        state (str): The resource state to check for (e.g. 'primary', 'secondary')
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+        timeout (int): Time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: If expected number of resources not reached
+
+    """
+    count = get_resource_count(kind, namespace)
+    logger.info(f"Waiting for {count} {kind} to reach {state} state")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=check_replication_resource_state,
+        kind=kind,
+        state=state,
+        namespace=namespace,
+        resource_name=resource_name,
     )
-    if (
-        state.lower() == desired_state.lower()
-        and state.lower() == current_state.lower()
-    ):
-        return True
-    else:
-        logger.warning(f"VRG is not in expected state {state}")
-        return False
+    if not sample.wait_for_func_status(result=True):
+        error_msg = (
+            f"{kind} did not reach expected {state} state within the time limit."
+        )
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
 
 
 def wait_for_replication_resources_creation(
@@ -768,7 +927,7 @@ def wait_for_replication_resources_creation(
     namespace,
     timeout,
     discovered_apps=False,
-    vrg_name=None,
+    vrg_name="",
     skip_vrg_check=False,
 ):
     """
@@ -787,7 +946,6 @@ def wait_for_replication_resources_creation(
         TimeoutExpiredError: In case replication resources not created
 
     """
-    ocs_version = version.get_semantic_ocs_version_from_config()
     vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
 
     logger.info("Waiting for VRG to be created")
@@ -799,43 +957,54 @@ def wait_for_replication_resources_creation(
         logger.error(error_msg)
         raise TimeoutExpiredError(error_msg)
 
+    # Check VGR if Consistency Group is enabled
+    if "cephfs" not in namespace and is_cg_enabled():
+        wait_for_resource_existence(
+            kind=constants.VOLUME_GROUP_REPLICATION,
+            namespace=namespace,
+            timeout=timeout,
+            wait_for_existence=True,
+        )
+
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
         resource_kind = constants.REPLICATION_SOURCE
-        count_function = get_replicationsources_count
     else:
-        # Starting with ODF 4.20, CG behavior is always used
-        # Only 1 VolumeReplication resource is expected per workload.
-        count = 1 if ocs_version >= version.VERSION_4_20 else count
+        # Only 1 VolumeReplication resource is expected per workload when CG is enabled.
+        if is_cg_enabled():
+            count = 1
         resource_kind = constants.VOLUME_REPLICATION
-        count_function = get_vr_count
+
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        logger.info(f"Waiting for {count} {resource_kind}s to be created")
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=count_function,
+        wait_for_resource_count(
+            kind=resource_kind,
             namespace=namespace,
+            expected_count=count,
+            timeout=timeout,
         )
-        sample.wait_for_func_value(count)
 
         if resource_kind == constants.VOLUME_REPLICATION:
-            logger.info(f"Waiting for {count} {resource_kind}s to reach primary state")
-            sample = TimeoutSampler(
-                timeout=timeout,
-                sleep=5,
-                func=check_vr_state,
+            logger.info(f"Waiting for {count} {resource_kind} to reach primary state")
+            wait_for_resource_state(
+                kind=resource_kind,
                 state="primary",
                 namespace=namespace,
+                timeout=timeout,
             )
-            if not sample.wait_for_func_status(result=True):
-                error_msg = "One or more VR haven't reached expected state primary within the time limit."
-                logger.error(error_msg)
-                raise TimeoutExpiredError(error_msg)
+
+        if is_cg_enabled():
+            wait_for_resource_state(
+                kind=constants.VOLUME_GROUP_REPLICATION,
+                state="primary",
+                namespace=namespace,
+                timeout=timeout,
+            )
+
     if not skip_vrg_check:
-        wait_for_vrg_state(
-            vrg_state="primary",
-            vrg_namespace=vrg_namespace,
+        wait_for_resource_state(
+            kind=constants.VOLUME_REPLICATION_GROUP,
+            state="primary",
+            namespace=vrg_namespace,
             resource_name=vrg_name,
             timeout=timeout,
         )
@@ -846,7 +1015,7 @@ def wait_for_replication_resources_deletion(
     timeout,
     check_state=True,
     discovered_apps=False,
-    vrg_name=None,
+    vrg_name="",
     skip_vrg_check=False,
 ):
     """
@@ -865,66 +1034,71 @@ def wait_for_replication_resources_deletion(
         TimeoutExpiredError: In case replication resources not deleted
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
         resource_kind = constants.REPLICATION_SOURCE
-        count_function = get_replicationsources_count
     else:
         resource_kind = constants.VOLUME_REPLICATION
-        count_function = get_vr_count
 
     if check_state:
         if resource_kind == constants.VOLUME_REPLICATION:
-            logger.info("Waiting for all VRs to reach secondary state")
-            sample = TimeoutSampler(
-                timeout=timeout,
-                sleep=5,
-                func=check_vr_state,
+            logger.info(f"Waiting for {resource_kind} to reach secondary state")
+            wait_for_resource_state(
+                kind=resource_kind,
                 state="secondary",
                 namespace=namespace,
+                timeout=timeout,
             )
-            if not sample.wait_for_func_status(result=True):
-                error_msg = "One or more VR haven't reached expected state secondary within the time limit."
-                logger.error(error_msg)
-                raise TimeoutExpiredError(error_msg)
+
+            if is_cg_enabled():
+                wait_for_resource_state(
+                    kind=constants.VOLUME_GROUP_REPLICATION,
+                    state="secondary",
+                    namespace=namespace,
+                    timeout=timeout,
+                )
 
         if not skip_vrg_check:
-            wait_for_vrg_state(
-                vrg_state="secondary",
-                vrg_namespace=vrg_namespace,
+            wait_for_resource_state(
+                kind=constants.VOLUME_REPLICATION_GROUP,
+                state="secondary",
+                namespace=vrg_namespace,
                 resource_name=vrg_name,
                 timeout=timeout,
             )
 
-    ocs_version = version.get_semantic_ocs_version_from_config()
     if (
         not check_state
         or (ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace)
         and not skip_vrg_check
     ):
-        logger.info("Waiting for VRG to be deleted")
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=check_vrg_existence,
+        wait_for_resource_existence(
+            kind=constants.VOLUME_REPLICATION_GROUP,
             namespace=vrg_namespace,
-            vrg_name=vrg_name,
+            resource_name=vrg_name,
+            timeout=timeout,
+            wait_for_existence=False,
         )
-        if not sample.wait_for_func_status(result=False):
-            error_msg = "VRG resource not deleted"
-            logger.info(error_msg)
-            raise TimeoutExpiredError(error_msg)
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr" and not skip_vrg_check:
         logger.info(f"Waiting for all {resource_kind} to be deleted")
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=count_function,
+        wait_for_resource_count(
+            kind=resource_kind,
             namespace=namespace,
+            expected_count=0,
+            timeout=timeout,
         )
-        sample.wait_for_func_value(0)
+
+        # Check VGR deletion if Consistency Group is enabled
+        if is_cg_enabled():
+            wait_for_resource_existence(
+                kind=constants.VOLUME_GROUP_REPLICATION,
+                namespace=namespace,
+                timeout=timeout,
+                wait_for_existence=False,
+            )
 
 
 def wait_for_all_resources_creation(
@@ -949,7 +1123,6 @@ def wait_for_all_resources_creation(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
-
 
 
     """
@@ -1027,13 +1200,12 @@ def wait_for_all_resources_deletion(
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         if workload_cleanup or "cephfs" not in namespace:
             logger.info("Waiting for all PVs to be deleted")
-            sample = TimeoutSampler(
-                timeout=timeout,
-                sleep=5,
-                func=get_pv_count,
+            wait_for_resource_count(
+                kind=constants.PV,
                 namespace=namespace,
+                expected_count=0,
+                timeout=timeout,
             )
-            sample.wait_for_func_value(0)
 
 
 def wait_for_cnv_workload(
@@ -1072,17 +1244,12 @@ def wait_for_replication_destinations_creation(rep_dest_count, namespace, timeou
         TimeoutExpiredError: If expected number of ReplicationDestination resources not created
 
     """
-
-    logger.info(
-        f"Waiting for {rep_dest_count} {constants.REPLICATIONDESTINATION} to be created"
-    )
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=get_replicationdestinations_count,
+    wait_for_resource_count(
+        kind=constants.REPLICATIONDESTINATION,
         namespace=namespace,
+        expected_count=rep_dest_count,
+        timeout=timeout,
     )
-    sample.wait_for_func_value(rep_dest_count)
 
 
 def wait_for_replication_destinations_deletion(namespace, timeout=900):
@@ -1097,15 +1264,12 @@ def wait_for_replication_destinations_deletion(namespace, timeout=900):
         TimeoutExpiredError: If expected number of ReplicationDestination resources not deleted
 
     """
-
-    logger.info(f"Waiting for all {constants.REPLICATIONDESTINATION} to be deleted")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=get_replicationdestinations_count,
+    wait_for_resource_count(
+        kind=constants.REPLICATIONDESTINATION,
         namespace=namespace,
+        expected_count=0,
+        timeout=timeout,
     )
-    sample.wait_for_func_value(0)
 
 
 def get_backend_volumes_for_pvcs(namespace):
