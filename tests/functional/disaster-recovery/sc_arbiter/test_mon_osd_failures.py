@@ -147,7 +147,7 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
 @turquoise_squad
 @stretchcluster_required
 @pytest.mark.usefixtures("setup_cnv_workload")
-@pytest.mark.usefixtures("setup_logwriter_workloads")
+# @pytest.mark.usefixtures("setup_logwriter_workloads")
 class TestMonAndOSDFailures:
     """
     Here we test the Mon and OSD failures while CephFS & RBD
