@@ -8,6 +8,7 @@ import time
 import traceback
 import subprocess
 import shlex
+import threading
 from subprocess import TimeoutExpired
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -55,6 +56,9 @@ from ocs_ci.utility.version import (
 
 
 log = logging.getLogger(__name__)
+
+
+subctl_lock = threading.Lock()
 
 
 def create_ceph_nodes(cluster_conf, inventory, osp_cred, run_id, instances_name=None):
@@ -1297,15 +1301,16 @@ def _collect_ocs_logs(
             if not cluster_config.ENV_DATA.get(
                 "import_clusters_to_acm", False
             ) or cluster_config.ENV_DATA.get("submariner_source", ""):
-                try:
-                    run_cmd("subctl")
-                except (CommandFailed, FileNotFoundError):
-                    log.debug("subctl binary not found, downloading now...")
-                    # Importing here to avoid circular import error
-                    from ocs_ci.deployment.acm import Submariner
+                with subctl_lock:
+                    try:
+                        run_cmd("subctl")
+                    except (CommandFailed, FileNotFoundError):
+                        log.debug("subctl binary not found, downloading now...")
+                        # Importing here to avoid circular import error
+                        from ocs_ci.deployment.acm import Submariner
 
-                    submariner = Submariner()
-                    submariner.download_binary()
+                        submariner = Submariner()
+                        submariner.download_binary()
 
                 submariner_log_path = os.path.join(
                     log_dir_path,
