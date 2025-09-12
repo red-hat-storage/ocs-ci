@@ -101,13 +101,16 @@ def patch_metadata(enable=True):
 def enable_metadata(config_map_obj, pod_obj):
     """
     Enable CSI_ENABLE_METADATA through configmap or patch depending on OCS version.
+    Enhanced version with improved retry logic and better error handling.
 
     Returns:
         str: Cluster name if found, else None.
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
+    log.info(f"Enabling metadata for OCS version: {ocs_version}")
 
     if ocs_version < version.VERSION_4_19:
+        # Legacy configmap approach for OCS < 4.19
         assert config_map_obj.patch(
             resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
             params='{"data":{"CSI_ENABLE_METADATA": "true"}}',
@@ -125,35 +128,66 @@ def enable_metadata(config_map_obj, pod_obj):
             ), f"Pods with selector {selector} are not running"
 
     else:
+        # Newer patch-based approach for OCS >= 4.19
+        log.info("Using patch-based metadata enable for OCS >= 4.19")
         patch_metadata(enable=True)
 
-    @retry(AssertionError, tries=3, delay=15, backoff=1)
+    # Enhanced verification with longer timeout for OCS >= 4.19
+    retry_attempts = 5 if ocs_version >= version.VERSION_4_19 else 3
+    retry_delay = 30 if ocs_version >= version.VERSION_4_19 else 15
+
+    @retry(AssertionError, tries=retry_attempts, delay=retry_delay, backoff=1)
     def _retry_check_metadata_enabled(pod_obj):
-        assert check_setmetadata_availability(pod_obj), "Metadata not enabled"
+        if not check_setmetadata_availability(pod_obj):
+            if ocs_version >= version.VERSION_4_19:
+                log.warning("Metadata not yet enabled after patch, retrying...")
+            raise AssertionError("Metadata not enabled")
         return True
 
     _retry_check_metadata_enabled(pod_obj)
+    log.info("Metadata successfully enabled and verified")
 
-    cephfs_pods = pod.get_cephfsplugin_provisioner_pods(
-        cephfsplugin_provisioner_label=(get_provisioner_label(constants.CEPHFILESYSTEM))
-    )
-    args = pod_obj.exec_oc_cmd(
-        f"get pod {cephfs_pods[0].name} --output jsonpath='{{.spec.containers[].args}}'"
-    )
-    for arg in args:
-        if "--clustername" in arg:
-            log.info(f"Cluster name parameter: {arg}")
-            return arg.split("=", 1)[-1]
-    return None
+    # Get cluster name from CephFS provisioner pod
+    try:
+        cephfs_pods = pod.get_cephfsplugin_provisioner_pods(
+            cephfsplugin_provisioner_label=(
+                get_provisioner_label(constants.CEPHFILESYSTEM)
+            )
+        )
+        if not cephfs_pods:
+            log.warning(
+                "No CephFS provisioner pods found, cannot retrieve cluster name"
+            )
+            return None
+
+        args = pod_obj.exec_oc_cmd(
+            f"get pod {cephfs_pods[0].name} --output jsonpath='{{.spec.containers[].args}}'"
+        )
+        for arg in args:
+            if "--clustername" in arg:
+                cluster_name = arg.split("=", 1)[-1]
+                log.info(f"Retrieved cluster name: {cluster_name}")
+                return cluster_name
+
+        log.warning("No clustername parameter found in provisioner pod args")
+        return None
+
+    except Exception as e:
+        log.error(f"Failed to retrieve cluster name: {e}")
+        return None
 
 
 def disable_metadata(config_map_obj, pod_obj):
     """
     Disable CSI_ENABLE_METADATA via configmap or patch.
+    Enhanced version that ensures metadata is properly disabled by restarting
+    provisioner pods if necessary.
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
+    log.info(f"Disabling metadata for OCS version: {ocs_version}")
 
     if ocs_version < version.VERSION_4_19:
+        # Legacy configmap approach for OCS < 4.19
         assert config_map_obj.patch(
             resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
             params='{"data":{"CSI_ENABLE_METADATA": "false"}}',
@@ -170,14 +204,79 @@ def disable_metadata(config_map_obj, pod_obj):
                 timeout=60,
             ), f"Pods with selector {selector} are not running"
     else:
+        # Newer patch-based approach for OCS >= 4.19
+        log.info("Using patch-based metadata disable for OCS >= 4.19")
         patch_metadata(enable=False)
 
-    @retry(AssertionError, tries=3, delay=15, backoff=1)
-    def _retry_check_metadata_disabled(pod_obj):
-        assert not check_setmetadata_availability(pod_obj), "Metadata still enabled"
+    # Enhanced verification with pod restart logic for OCS >= 4.19
+    @retry(AssertionError, tries=5, delay=30, backoff=1)
+    def _retry_check_metadata_disabled_with_restart(pod_obj):
+        """
+        Enhanced metadata disable verification that restarts pods if needed.
+        """
+        if check_setmetadata_availability(pod_obj):
+            if ocs_version >= version.VERSION_4_19:
+                log.warning(
+                    "Metadata still enabled after patch, forcing provisioner pod restart"
+                )
+                _force_provisioner_pod_restart(pod_obj)
+                # Wait for pods to restart and stabilize
+                import time
+
+                time.sleep(60)
+            else:
+                raise AssertionError("Metadata still enabled after configmap update")
+
+        # Final verification
+        assert not check_setmetadata_availability(
+            pod_obj
+        ), "Metadata still enabled after restart"
         return True
 
-    _retry_check_metadata_disabled(pod_obj)
+    def _force_provisioner_pod_restart(pod_obj):
+        """
+        Force restart of provisioner pods to ensure metadata disable takes effect.
+        """
+        log.info("Forcing restart of provisioner pods to apply metadata disable")
+
+        provisioner_selectors = [
+            get_provisioner_label(constants.CEPHFILESYSTEM),
+            get_provisioner_label(constants.CEPHBLOCKPOOL),
+        ]
+
+        for selector in provisioner_selectors:
+            log.info(f"Restarting pods with selector: {selector}")
+
+            # Get current provisioner pods
+            try:
+                provisioner_pods = pod_obj.get(selector=selector)["items"]
+                log.info(f"Found {len(provisioner_pods)} provisioner pods to restart")
+
+                # Delete existing pods to force restart
+                for pod_info in provisioner_pods:
+                    pod_name = pod_info["metadata"]["name"]
+                    log.info(f"Deleting provisioner pod: {pod_name}")
+                    try:
+                        pod_obj.delete(resource_name=pod_name)
+                    except Exception as e:
+                        log.warning(f"Failed to delete pod {pod_name}: {e}")
+
+                # Wait for new pods to be running
+                log.info(f"Waiting for new pods with selector {selector} to be running")
+                assert pod_obj.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=selector,
+                    timeout=180,  # Increased timeout for pod restart
+                ), f"New pods with selector {selector} are not running after restart"
+
+                log.info(f"Successfully restarted pods with selector: {selector}")
+
+            except Exception as e:
+                log.error(f"Failed to restart pods with selector {selector}: {e}")
+                raise
+
+    _retry_check_metadata_disabled_with_restart(pod_obj)
+    log.info("Metadata successfully disabled and verified")
 
 
 def available_subvolumes(sc_name, toolbox_pod, fs):
