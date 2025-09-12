@@ -6,6 +6,8 @@ Performance is measured by collecting clone creation/deletion speed.
 import logging
 import pytest
 import statistics
+import time
+import calendar
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import grey_squad
@@ -359,6 +361,16 @@ class TestPVCClonePerformance(PASTest):
             "test_time", {"start": test_start_time, "end": test_end_time}
         )
         full_results.add_key("total_clone_number", self.number_of_clones)
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
+
         # Write the test results into the ES server
         if full_results.es_write():
             res_link = full_results.results_link()
@@ -503,6 +515,16 @@ class TestPVCClonePerformance(PASTest):
         full_results.add_key(
             "test_time", {"start": test_start_time, "end": test_end_time}
         )
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
+
         full_results.add_key("clones_number", self.number_of_clones)
         full_results.add_key("files_number", files_written)
         full_results.all_results = results_times
