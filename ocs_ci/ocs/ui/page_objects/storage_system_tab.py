@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationTabBar,
     CreateResourceForm,
 )
+from ocs_ci.utility import version
 
 
 class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
@@ -100,15 +101,18 @@ class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
         Initial page - Data Foundation / Storage Systems tab
         Navigate to StorageSystem details
 
+        In 4.20 replaced with Storage Cluster page
+
         """
         if not config.DEPLOYMENT.get("external_mode"):
-            logger.info(
-                "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
-            )
-            self.do_click(
-                self.validation_loc["ocs-storagecluster-storagesystem"],
-                enable_screenshot=True,
-            )
+            if self.ocp_version_semantic <= version.VERSION_4_20:
+                logger.info(
+                    "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
+                )
+                self.do_click(
+                    self.validation_loc["ocs-storagecluster-storagesystem"],
+                    enable_screenshot=True,
+                )
         else:
             logger.info(
                 "Click on 'ocs-external-storagecluster-storagesystem' link "
