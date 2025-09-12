@@ -105,7 +105,8 @@ class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
 
         """
         if not config.DEPLOYMENT.get("external_mode"):
-            if self.ocp_version_semantic <= version.VERSION_4_20:
+            # no need to click in version 4.20
+            if self.ocp_version_semantic <= version.VERSION_4_19:
                 logger.info(
                     "Click on 'ocs-storagecluster-storagesystem' link from Storage Systems page"
                 )
