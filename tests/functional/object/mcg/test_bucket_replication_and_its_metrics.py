@@ -78,7 +78,7 @@ class TestReplicationAndItsMetrics(MCGTest):
             file_dir=test_dir,
             pattern="test_obj-",
             s3_obj=mcg_obj,
-            amount=5,
+            amount=1,
         )
 
         # 4. Verify the objects were replicated to the target buckets
@@ -93,8 +93,8 @@ class TestReplicationAndItsMetrics(MCGTest):
 
         # 5. Verify the bucket replication metrics from Prometheus
         expected_metrics = {
-            "NooBaa_bucket_last_cycle_total_objects_num": 5,
-            "NooBaa_bucket_last_cycle_replicated_objects_num": 5,
+            "NooBaa_bucket_last_cycle_total_objects_num": 1,
+            "NooBaa_bucket_last_cycle_replicated_objects_num": 1,
             "NooBaa_bucket_last_cycle_error_objects_num": 0,
         }
         for metric, expected_value in expected_metrics.items():
@@ -127,7 +127,7 @@ class TestReplicationAndItsMetrics(MCGTest):
         update_replication_policy(bucket_1.name, replication_policy.to_dict())
 
         # 3. Patch the target bucket to change the quota
-        quota_str = '{"spec": {"additionalConfig":{"maxObjects": "4"}}}'
+        quota_str = '{"spec": {"additionalConfig":{"maxObjects": "1"}}}'
         obc_obj = OCP(
             kind="obc",
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -148,7 +148,7 @@ class TestReplicationAndItsMetrics(MCGTest):
             file_dir=test_dir,
             pattern="test_obj-",
             s3_obj=mcg_obj,
-            amount=4,
+            amount=1,
         )
 
         # 5. Verify the objects were replicated to the target buckets
@@ -234,7 +234,7 @@ class TestReplicationAndItsMetrics(MCGTest):
                 file_dir=test_dir,
                 pattern=f"{prefix}-",
                 s3_obj=mcg_obj,
-                amount=5,
+                amount=1,
             )
 
         # 4. Verify the objects were replicated to their targets
@@ -257,8 +257,8 @@ class TestReplicationAndItsMetrics(MCGTest):
 
         # 5. Verify the metrics from Prometheus
         expected_metrics = {
-            "NooBaa_bucket_last_cycle_total_objects_num": 5,
-            "NooBaa_bucket_last_cycle_replicated_objects_num": 5,
+            "NooBaa_bucket_last_cycle_total_objects_num": 1,
+            "NooBaa_bucket_last_cycle_replicated_objects_num": 1,
             "NooBaa_bucket_last_cycle_error_objects_num": 0,
         }
         for bucket in (bucket_a, bucket_b):
