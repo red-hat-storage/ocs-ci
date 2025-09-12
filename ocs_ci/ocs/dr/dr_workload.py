@@ -1909,3 +1909,137 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 )
                 run_cmd(f"oc delete project {self.workload_namespace}")
                 log.info(f"Project {self.workload_namespace} deleted successfully")
+
+
+class BusyboxDiscoveredAppsPerformance(DRWorkload):
+    """
+    Class handling everything related to busybox workload for Discovered/Imperative Apps
+
+    """
+
+    def __init__(self, **kwargs):
+        workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        log.info(f"Repo used: {workload_repo_url}")
+        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        self.workload_type = kwargs.get("workload_type", constants.DISCOVERED_APPS)
+        self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.workload_pod_count = kwargs.get("workload_pod_count")
+        self.workload_pvc_count = kwargs.get("workload_pvc_count")
+        self.dr_policy_name = kwargs.get(
+            "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
+        ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
+        self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster") or (
+            get_primary_cluster_config().ENV_DATA["cluster_name"]
+        )
+        self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
+        self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+        self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
+        self.kubeobject_capture_interval_int = generate_kubeobject_capture_interval()
+        self.kubeobject_capture_interval = f"{self.kubeobject_capture_interval_int}m"
+        self.discovered_apps_pvc_selector_key = kwargs.get(
+            "discovered_apps_pvc_selector_key"
+        )
+        self.discovered_apps_pvc_selector_value = kwargs.get(
+            "discovered_apps_pvc_selector_value"
+        )
+
+    def create_placement(self, placement_name=None):
+        """
+        Create placement CR for discovered Apps
+
+        Args:
+            placement_name (str): Name for placement
+
+        """
+
+        placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
+        placement_yaml_data["metadata"]["name"] = (
+            placement_name or self.discovered_apps_placement_name + "-placement-1"
+        )
+        placement_yaml_data["metadata"].setdefault("annotations", {})
+        placement_yaml_data["metadata"]["annotations"][
+            "cluster.open-cluster-management.io/experimental-scheduling-disable"
+        ] = "true"
+        placement_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        placement_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(placement_yaml_data, placement_yaml.name)
+        log.info(f"Creating Placement for workload {self.workload_name}")
+        run_cmd(f"oc create -f {placement_yaml.name}")
+
+    def create_drpc(
+        self,
+        drpc_name=None,
+        placement_name=None,
+        protected_namespaces=None,
+        pvc_selector_key=None,
+        pvc_selector_value=None,
+        pod_selector_key=None,
+        pod_selector_value=None,
+    ):
+        """
+        Create DRPC for discovered Apps
+
+        Args:
+            drpc_name (str): Name for drpc
+            placement_name (str): Name for placement
+            protected_namespaces (list): List of namespaces to protect
+            pvc_selector_key (str): Key for pvc selector
+            pvc_selector_value (str): Value for pvc selector
+
+        """
+        drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
+        drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
+        drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")
+        drpc_yaml_data["spec"].setdefault("protectedNamespaces", []).append(
+            self.workload_namespace
+        )
+        del drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"]
+
+        log.info(self.discovered_apps_pvc_selector_key)
+        drpc_yaml_data["metadata"]["name"] = (
+            drpc_name or self.discovered_apps_placement_name
+        )
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        drpc_yaml_data["spec"]["placementRef"]["name"] = (
+            placement_name or self.discovered_apps_placement_name + "-placement-1"
+        )
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        log.info(drcp_data_yaml.name)
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["key"] = (
+            pvc_selector_key or self.discovered_apps_pvc_selector_key
+        )
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["operator"] = "In"
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][0] = (
+            pvc_selector_value or self.discovered_apps_pvc_selector_value
+        )
+        if protected_namespaces:
+            drpc_yaml_data["spec"]["protectedNamespaces"] = protected_namespaces
+        else:
+            drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
+        drpc_yaml_data["spec"]["kubeObjectProtection"][
+            "captureInterval"
+        ] = self.kubeobject_capture_interval
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["key"] = pod_selector_key
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["operator"] = "In"
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["values"][0] = pod_selector_value
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        log.info("Creating DRPC")
+        run_cmd(f"oc create -f {drcp_data_yaml.name}")
