@@ -1,0 +1,8 @@
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: loki-bucket-rgw
+  namespace: openshift-logging
+spec:
+  generateBucketName: loki-bucket-rgw
+  storageClassName: ocs-storagecluster-ceph-rgw

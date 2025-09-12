@@ -318,7 +318,7 @@ def create_pod(
     if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
-        pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
+        # pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
         if deployment:
