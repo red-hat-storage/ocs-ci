@@ -1,4 +1,6 @@
 import logging
+from time import sleep
+
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
@@ -18,7 +20,7 @@ from ocs_ci.framework.testlib import (
     skipif_upgraded_from,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.framework import config
+from ocs_ci.framework import config, config_safe_thread_pool_task
 
 log = logging.getLogger(__name__)
 
@@ -86,14 +88,18 @@ class TestPvcExpand(ManageTest):
             pvc_info = pvc_obj.get()
             setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])
 
-    def expand_and_verify(self, pvc_size_new):
+    def expand_and_verify(self, pvc_size_new, start_delay=0):
         """
         Modify size of PVC and verify the change
 
         Args:
             pvc_size_new (int): Size of PVC(in Gb) to expand
+            start_delay (int): Time in seconds to wait before starting the expansion process
 
         """
+        # Wait some time before starting PVC expansion if needed
+        sleep(start_delay)
+
         for pvc_obj in self.pvcs_cephfs + self.pvcs_rbd:
             log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
             pvc_obj.resize_pvc(pvc_size_new, True)
@@ -238,19 +244,64 @@ class TestPvcExpand(ManageTest):
 
         # Run IO and verify
         log.info("Starting pre-expand IO on all pods.")
-        self.run_io_and_verify(9, "pre_expand")
+        self.run_io_and_verify(7, "pre_expand")
         log.info("Verified pre-expand IO result on pods.")
 
-        log.info("Expanding all PVCs.")
-        self.expand_and_verify(pvc_size_expanded_1)
+        log.info("Expanding all PVCs after 3 seconds. The delay is to start IOs.")
+        pvc_expand_process = executor.submit(
+            config_safe_thread_pool_task,
+            config.cur_index,
+            self.expand_and_verify,
+            pvc_size_new=pvc_size_expanded_1,
+            start_delay=3,
+        )
+
+        log.info(
+            "Running IO on all pods in different iterations when PVCs are being expanded."
+        )
+        for process_running in TimeoutSampler(500, 3, pvc_expand_process.running):
+            if process_running:
+                self.run_io_and_verify(2, "during_expand")
+            else:
+                break
+        log.info(
+            "Verified IO result on all pods which ran during the expansion process."
+        )
+
+        # Get PVC expansion result
+        pvc_expand_process.result()
 
         # Run IO and verify
         log.info("Starting post-expand IO on all pods.")
-        self.run_io_and_verify(8, "post_expand")
+        self.run_io_and_verify(6, "post_expand")
         log.info("Verified post-expand IO result on pods.")
 
-        log.info("Expanding all PVCs for the second time.")
+        log.info(
+            "Expanding all PVCs for the second time after 3 seconds. The delay is to start IOs."
+        )
+        pvc_expand_process = executor.submit(
+            config_safe_thread_pool_task,
+            config.cur_index,
+            self.expand_and_verify,
+            pvc_size_new=pvc_size_expanded_2,
+            start_delay=3,
+        )
         self.expand_and_verify(pvc_size_expanded_2)
+
+        log.info(
+            "Running IO on all pods in different iterations when PVCs are being expanded second time."
+        )
+        for process_running in TimeoutSampler(500, 3, pvc_expand_process.running):
+            if process_running:
+                self.run_io_and_verify(2, "during_second_expand")
+            else:
+                break
+        log.info(
+            "Verified IO result on all pods which ran during the second expansion process."
+        )
+
+        # Get PVC expansion result
+        pvc_expand_process.result()
 
         # Run IO and verify
         log.info("Starting post-second-expand IO on all pods.")
