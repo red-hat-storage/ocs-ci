@@ -176,7 +176,7 @@ from ocs_ci.utility.multicluster import (
     get_multicluster_upgrade_parametrizer,
     MultiClusterUpgradeParametrize,
 )
-from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
+
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_default_if_keyval_empty,
@@ -234,6 +234,9 @@ from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
+from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
 log = logging.getLogger(__name__)
 
@@ -3779,7 +3782,8 @@ def install_logging(request):
     rosa_hcp_depl = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 
     def finalizer():
-        uninstall_cluster_logging()
+        # uninstall_cluster_logging()
+        pass
 
     request.addfinalizer(finalizer)
 
@@ -3795,69 +3799,125 @@ def install_logging(request):
     log.info("Configuring Openshift-logging")
 
     # Gets OCP version to align logging version to OCP version
-    ocp_version = version.get_semantic_ocp_version_from_config()
-
-    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
+    package_manifest = PackageManifest(
+        resource_name="cluster-logging",
+        selector="catalog=redhat-operators",
+    )
+    logging_channel = package_manifest.get_default_channel()
 
     # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(
         yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
-
-    # Creates an operator-group for elasticsearch
-    assert ocp_logging_obj.create_elasticsearch_operator_group(
+    # Creates an operator-group for lokistack
+    assert ocp_logging_obj.create_lokistack_operator_group(
         yaml_file=constants.EO_OG_YAML,
         resource_name="openshift-operators-redhat",
         skip_resource_exists=rosa_hcp_depl,
     )
-
-    # Set RBAC policy on the project
-    assert ocp_logging_obj.set_rbac(
-        yaml_file=constants.EO_RBAC_YAML, resource_name="prometheus-k8s"
-    )
-
-    # Creates subscription for elastic-search operator
-    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    # Creates subscription for lokistack operator
+    subscription_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SUB_YAML)
     subscription_yaml["spec"]["channel"] = logging_channel
     helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_elasticsearch_subscription()
-
-    # Checks for Elasticsearch operator
-    elastic_search_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
-    )
-    elastic_search_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
-    )
+    assert ocp_logging_obj.get_lokistack_subscription()
 
     # Creates a namespace openshift-logging
     ocp_logging_obj.create_namespace(
         yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
+    # Create RGW obc
+    assert ocp_logging_obj.create_obc(
+        yaml_file=constants.LOKI_OPERATOR_OBC_YAML,
+        resource_name=constants.OBJECT_BUCKET_CLAIM,
+        skip_resource_exists=rosa_hcp_depl,
+    )
+    # Creating secret
+    sample = TimeoutSampler(
+        timeout=180,
+        sleep=20,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
+            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_HOST}}'"
+        ),
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to get configmap")
+
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    bucket_name = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
+
+    access_key_cmd = (
+        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
+        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_ACCESS_KEY_ID}}'"
+    )
+    access_key = exec_cmd(access_key_cmd)
+    decoded1 = base64.b64decode(access_key.stdout).decode("utf-8")
+
+    secret_key_cmd = (
+        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
+        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_SECRET_ACCESS_KEY}}'"
+    )
+    secret_key = exec_cmd(secret_key_cmd)
+    decoded2 = base64.b64decode(secret_key.stdout).decode("utf-8")
+
+    secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
+    secret_yaml["stringData"]["access_key_id"] = decoded1
+    secret_yaml["stringData"]["access_key_secret"] = decoded2
+    secret_yaml["stringData"]["bucketnames"] = bucket_name["data"]["BUCKET_NAME"]
+    helpers.create_resource(**secret_yaml)
+    assert ocp_logging_obj.get_secret_to_lokistack()
+
+    # creates lokistack
+    # sleeping for few seconds to avoid following error
+    # Internal error occurred: failed calling webhook
+    time.sleep(10)
+    ocp_logging_obj.create_lokistack(
+        yaml_file=constants.LOKISTACK_YAML, skip_resource_exists=rosa_hcp_depl
+    )
+    log.info("Loki operator is installed successfuly")
 
     # Creates an operator-group for cluster-logging
-    assert ocp_logging_obj.create_clusterlogging_operator_group(
+    ocp_logging_obj.create_clusterlogging_operator_group(
         yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
     )
-
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
     cl_subscription["spec"]["channel"] = logging_channel
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
-    # Creates instance in namespace openshift-logging
-    cluster_logging_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    # creates a service account to be used by the log collector
+    ocp_logging_obj.setup_sa_permissions()
+
+    # Creates ClusterLogForwarder
+    ocp_logging_obj.create_clusterlogforwarder(
+        yaml_file=constants.CLF_YAML, skip_resource_exists=rosa_hcp_depl
     )
-    cluster_logging_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
+    log.info("Openshift Logging operator is installed successfully")
+
+    # Creates namespace for openshift-cluster-observability-operator
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
-    if cluster_logging_operator:
-        log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-        ocp_logging_obj.create_instance()
-    else:
-        log.error("The cluster logging operator pod is not created")
+    # Creates OperatorGroup for openshift-cluster-observability-operator
+    ocp_logging_obj.create_clusterobservability_operator_group(
+        yaml_file=constants.CO_OG_YAML,
+        resource_name=constants.CLUSTER_OBSERVABILITY_OPERATOR,
+        skip_resource_exists=rosa_hcp_depl,
+    )
+    # Creates subscription for openshift-cluster-observability-operator
+    co_subscription_yaml = templating.load_yaml(constants.CO_SUB_YAML)
+    helpers.create_resource(**co_subscription_yaml)
+    assert ocp_logging_obj.get_cluster_observability_subscription()
+
+    # Creates UI Plugin for openshift-cluster-observability-operator
+    ocp_logging_obj.create_UI_Plugin(
+        yaml_file=constants.CO_UI_PLUGIN_YAML, resource_name="logging"
+    )
+    log.info("Cluster Observability operator is installed successfully with UIPlugin")
 
 
 @pytest.fixture

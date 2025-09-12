@@ -1,22 +1,22 @@
 """
 This module deploys the openshift-logging on the cluster
-EFK stack
+lokistack stack
 """
 
 import logging
-import json
+import time
+import base64
 
-from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.node import get_all_nodes
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
-from ocs_ci.utility import templating, version
-from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.utility.retry import retry
+from ocs_ci.utility import templating
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.ocs.ocp import OCP
-
+from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def create_namespace(yaml_file, skip_resource_exists=False):
     """
     Creation of namespace "openshift-operators-redhat"
-    for Elasticsearch-operator and "openshift-logging"
+    for lokistack-operator and "openshift-logging"
     for ClusterLogging-operator
 
     Args:
@@ -50,11 +50,11 @@ def create_namespace(yaml_file, skip_resource_exists=False):
     logger.info("Successfully created Namespace")
 
 
-def create_elasticsearch_operator_group(
+def create_lokistack_operator_group(
     yaml_file, resource_name, skip_resource_exists=False
 ):
     """
-    Creation of operator-group for Elastic-search operator
+    Creation of operator-group for lokitsack operator
 
     Args:
         yaml_file (str): Path to yaml file to create operator group for
@@ -69,7 +69,7 @@ def create_elasticsearch_operator_group(
 
     Example::
 
-        create_elasticsearch_operator_group(
+        create_lokistack_operator_group(
             constants.EO_OG_YAML, 'openshift-operators-redhat'
         )
 
@@ -89,91 +89,12 @@ def create_elasticsearch_operator_group(
         else:
             raise
     try:
-        es_operator_group.get(resource_name, out_yaml_format=True)
+        es_operator_group.get(out_yaml_format=True)
         logger.info("The Operator group is created successfully")
     except CommandFailed:
         logger.error("The resource is not found")
         return False
     return True
-
-
-def set_rbac(yaml_file, resource_name, skip_resource_exists=False):
-    """
-    Setting Role Based Access Control to grant Prometheus
-    permission to access the openshift-operators-redhat namespace
-
-    Args:
-        yaml_file (str): Path to yaml file to create RBAC
-            (ROLE BASED ACCESS CONTROL)
-        resource_name (str): Name of the resource for which we give RBAC
-            permissions
-        skip_resource_exists: Skip the resource creation if it already exists
-    Returns:
-        bool: True if RBAC is set successfully,
-            false otherwise
-
-    Example:
-        set_rbac(constants.EO_RBAC_YAML, 'prometheus-k8s')
-
-    """
-
-    rbac_role = ocp.OCP(
-        kind=constants.ROLE, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
-    )
-    rbac_rolebinding = ocp.OCP(
-        kind=constants.ROLEBINDING,
-        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
-    )
-
-    try:
-        rbac_role.create(yaml_file=yaml_file, out_yaml_format=False)
-    except CommandFailed as e:
-        if "AlreadyExists" in str(e) and skip_resource_exists:
-            logger.warning("RBAC role already exists")
-            return True
-        else:
-            raise
-    try:
-        rbac_role.get(resource_name, out_yaml_format=True)
-        rbac_rolebinding.get(resource_name, out_yaml_format=True)
-        logger.info("Setting RBAC is successful")
-    except CommandFailed:
-        logger.error("RBAC is not set")
-        return False
-    return True
-
-
-def get_elasticsearch_subscription():
-    """
-    Creation of Subscription for the namespace
-    to subscribe a Namespace to an Operator.
-
-    Args:
-        yaml_file (str): Path to yaml file to create subscription for
-            a namespace
-        resource_name (str): Name of the subscription
-
-    Returns:
-        bool: Subscription exists or not
-
-    Example:
-        create_elasticsearch_subscription(constants.EO_SUB_YAML)
-
-    """
-
-    es_subscription = ocp.OCP(
-        kind=constants.SUBSCRIPTION,
-        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
-    )
-    es_sub_info = es_subscription.get(out_yaml_format=True)
-    es_sub = es_subscription.check_resource_existence(
-        resource_name=constants.ELASTICSEARCH_SUBSCRIPTION,
-        should_exist=True,
-        timeout=200,
-    )
-    if es_sub:
-        logger.info(es_sub_info)
-    return bool(es_sub)
 
 
 def create_clusterlogging_operator_group(yaml_file, skip_resource_exists=False):
@@ -247,117 +168,333 @@ def get_clusterlogging_subscription():
     return bool(logging_sub)
 
 
-def create_instance_in_clusterlogging():
+def get_lokistack_subscription():
     """
-    Creation of instance for clusterlogging that creates PVCs,
-    ElasticSearch, curator fluentd and kibana pods and checks for all
-    the pods and PVCs
+    Creation of subscription for lokistack to subscribe
+    a namespace to an operator
 
     Args:
-        sc_name (str): Storage class name to create PVCs
+        resource_name (str): Name of the subscription
 
     Returns:
-        dict: Contains all detailed information of the
-            instance such as pods that got created, its resources and limits
-            values, storage class and size details etc.
+        bool: Subscription exists or not
+
+    """
+    lo_subscription = ocp.OCP(
+        kind=constants.SUBSCRIPTION,
+        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
+    )
+    lo_sub_info = lo_subscription.get(out_yaml_format=True)
+    lo_sub = lo_subscription.check_resource_existence(
+        resource_name=constants.LOKISTACK_SUBSCRIPTION,
+        should_exist=True,
+        timeout=200,
+    )
+    if lo_sub:
+        logger.info(lo_sub_info)
+    return bool(lo_sub)
+
+
+def create_obc(yaml_file, resource_name, skip_resource_exists=False):
+    """
+    Creation of OBC for providing s3 object storage  for lokistack.
+
+    Args:
+        yaml_file (str): Path to yaml file to create obc the namespace
+        resource_name (str): Name of the obc
+
+    Returns:
+        bool: for obc created successfully
+    """
+
+    obc_obj = ocp.OCP(
+        kind=constants.OBC, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    try:
+        obc_obj.create(yaml_file=yaml_file)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            logger.warning("obc already exists")
+            return True
+        else:
+            raise
+    try:
+        obc_obj.get(resource_name, out_yaml_format=True)
+        logger.info("OBC is created successfully")
+    except Exception as e:
+        logger.error(f"The resource is not found failed with error: {e}")
+        return False
+    return True
+
+
+def get_secret_to_lokistack():
+    """
+    check if secret is created successfully that will contains endpoint and
+    credential details for s3 bucket used by lokistack
+
+
+    Args:
+        resource_name (str): Name of the secret
+
+    return:
+    bool : for secret created
 
     """
 
-    nodes_in_cluster = len(get_all_nodes())
-    inst_data = templating.load_yaml(constants.CL_INSTANCE_YAML)
-    es_node_count = inst_data["spec"]["logStore"]["elasticsearch"]["nodeCount"]
-    if helpers.storagecluster_independent_check():
-        inst_data["spec"]["logStore"]["elasticsearch"]["storage"][
-            "storageClassName"
-        ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
-    helpers.create_resource(wait=False, **inst_data)
-    oc = ocp.OCP("v1", "ClusterLogging", "openshift-logging")
-    logging_instance = oc.get(resource_name="instance", out_yaml_format="True")
-    if logging_instance:
-        logger.info("Successfully created instance for cluster-logging")
-        logger.debug(logging_instance)
-    else:
-        logger.error("Instance for clusterlogging is not created properly")
+    lo_secret = ocp.OCP(
+        kind=constants.SECRET, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    ls_secret_info = lo_secret.get(out_yaml_format=True)
+    ls_secret = lo_secret.check_resource_existence(
+        resource_name=constants.LOKISTACK_SECRET,
+        timeout=120,
+        should_exist=True,
+    )
+    if ls_secret:
+        logger.info(ls_secret_info)
+    return bool(ls_secret)
 
+
+@retry(CommandFailed, tries=5, delay=60, backoff=2)
+def create_lokistack(yaml_file, skip_resource_exists=False):
+    """
+    creates lokistack (logging store)
+    for storing logs from nodes and application containers
+
+    Args:
+        yaml_file (str): path to where lokistack yaml exists
+
+    """
+
+    lokistack_obj = ocp.OCP(
+        kind=constants.LOKISTACK, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    try:
+        lokistack_obj.create(yaml_file=yaml_file)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            logger.warning("obc already exists")
+            return True
+        else:
+            raise
+
+    # verification of installation of lokistack from loki pods running
     pod_obj = ocp.OCP(
         kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
     pod_status = pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        resource_count=2 + es_node_count + nodes_in_cluster,
+        resource_count=9,
         timeout=800,
         sleep=20,
     )
     assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")
+
+
+def setup_sa_permissions():
+    """
+    Assign the necessary permissions to the service account for the
+    collector to be able to collect and forward logs
+
+    the collector is provided permissions to collect logs from
+    infrastructure application and audit logs.
+    """
+
+    sa_name = "loki-reader"
+    exec_cmd(f"oc create sa {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}")
+
+    sample = TimeoutSampler(
+        timeout=60,
+        sleep=10,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc adm policy add-cluster-role-to-user logging-collector-logs-writer"
+            f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+        ),
+        expected_output_lst='clusterrole.rbac.authorization.k8s.io/logging-collector-logs-writer added: "loki-reader" ',
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to add role to user")
+
+    applogs_per_cmd = (
+        f"oc adm policy add-cluster-role-to-user collect-application-logs"
+        f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+    )
+    exec_cmd(applogs_per_cmd)
+
+    infralogs_per_cmd = (
+        f"oc adm policy add-cluster-role-to-user collect-infrastructure-logs"
+        f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+    )
+    exec_cmd(infralogs_per_cmd)
+
+    audit_per_cmd = (
+        f"oc adm policy add-cluster-role-to-user collect-audit-logs"
+        f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+    )
+    exec_cmd(audit_per_cmd)
+
+    exec_cmd(
+        '/bin/bash -c "TOKEN=$(oc create token loki-reader -n openshift-logging)" '
+    )
+
+    cmd = (
+        "oc -n openshift-logging create secret generic secret-to-lokistack"
+        " --from-literal=token=$TOKEN  --from-literal=ca-bundle.crt='$(oc -n openshift-logging"
+        " get cm logging-loki-gateway-ca-bundle -o json | jq  "
+        ".data."
+        "service-ca.crt"
+        " -r )' "
+    )
+    exec_cmd(cmd)
+
+
+def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
+    """
+    Create a ClusterLogForwarder CR to collect logs from nodes and
+    application containers
+
+    yaml_file: path tp where yaml for clusterlogforwader exists
+
+    verify successfull installation of cfr by checking required no of pods and pvc
+    running in project
+    """
+    clf_obj = ocp.OCP(
+        kind=constants.CLUSTER_LOG_FORWADER,
+        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+    )
+    try:
+        clf_obj.create(yaml_file=yaml_file)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            logger.warning("clusterlogforwader already exists")
+            return True
+        else:
+            raise
+
+    pod_obj = ocp.OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    # verification of ClusterLogForwarder installation
+    pod_status = pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        resource_count=16,
+        timeout=800,
+        sleep=20,
+    )
+    assert pod_status, "Required no of pods are not in Running state."
+    logger.info("All pods are in Running state")
+
     pvc_obj = ocp.OCP(
         kind=constants.PVC, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
     pvc_status = pvc_obj.wait_for_resource(
         condition=constants.STATUS_BOUND,
-        resource_count=es_node_count,
+        resource_count=6,
         timeout=150,
         sleep=5,
     )
     assert pvc_status, "PVCs are not in bound state."
     logger.info("PVCs are Bound")
-    return logging_instance
 
 
-@retry((CommandFailed, UnexpectedBehaviour), tries=5, delay=60, backoff=2)
-def check_health_of_clusterlogging():
+def create_clusterobservability_operator_group(
+    yaml_file, resource_name, skip_resource_exists=False
+):
     """
-    * Checks for ElasticSearch, curator, fluentd and kibana pods in
-        openshift-logging namespace
-    * And check for the health of cluster logging, If status is green then the
-        cluster is healthy,if status is red then health is bad
+    Creation of operator-group for cluster obervability operator
+    Args:
+        yaml_file (str): Path to yaml file to create operator group for
+        resource_name (str): Name of the operator group to create for
+        skip_resource_exists: Skip the resource creation if it already exists
 
     Returns:
-        list: Gives all the pods that are present in the namespace
-
+        bool: True if operator group  is created
+            successfully, false otherwise
     """
-
-    pod_list = []
-    pods = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
-    logger.info("Pods that are created by the instance")
-    for pod in pods:
-        pod_list.append(pod.name)
-    logger.info(pod_list)
-    elasticsearch_pod = [pod for pod in pod_list if pod.startswith("elasticsearch")]
-    pod_obj = get_pod_obj(
-        name=elasticsearch_pod[0], namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    co_operator_group = ocp.OCP(
+        kind=constants.OPERATOR_GROUP,
+        namespace=constants.OPENSHIFT_CLUSTER_OBSERVABILITY_OPERATOR,
     )
-    status_check = pod_obj.exec_cmd_on_pod(
-        command="es_util --query=_cluster/health?pretty", out_yaml_format=False
+    try:
+        co_operator_group.create(yaml_file=yaml_file)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            logger.warning("Operator group already exists")
+            return True
+        else:
+            raise
+
+    try:
+        co_operator_group.get(resource_name, out_yaml_format=True)
+        logger.info("The Operator group is created successfully")
+    except CommandFailed:
+        logger.error("The resource is not found")
+        return False
+    return True
+
+
+def get_cluster_observability_subscription():
+    """
+    Creation of subscription for cluster obervability operator
+    Args:
+        resource_name (str): Name of the subscription
+
+    Returns:
+        bool: True if subscription is created
+            successfully, false otherwise
+
+    """
+    co_subscription = ocp.OCP(
+        kind=constants.SUBSCRIPTION,
+        namespace=constants.OPENSHIFT_CLUSTER_OBSERVABILITY_OPERATOR,
     )
-    logger.info(status_check)
-    status_check = json.loads(status_check)
-    if status_check["status"] == "green":
-        logger.info("Cluster logging is in Healthy state & Ready to use")
-    else:
-        logger.error("Cluster logging is in Bad state")
-        raise UnexpectedBehaviour
-    return pod_list
+    co_subscription_info = co_subscription.get(out_yaml_format=True)
+    co_sub = co_subscription.check_resource_existence(
+        resource_name=constants.CLUSTER_OBSERVABILITY_SUBSCRIPTION,
+        timeout=120,
+        should_exist=True,
+    )
+    if co_sub:
+        logger.info(co_subscription_info)
+    return bool(co_sub)
 
 
-@retry(CommandFailed, tries=5, delay=10, backoff=2)
-def create_instance():
+@retry(CommandFailed, tries=5, delay=60, backoff=2)
+def create_UI_Plugin(yaml_file, resource_name):
     """
-    The function is used to create instance for
-    cluster-logging
+    Creates UI-Plugin for cluster obervability operator
+
+    Args:
+        yaml_file: path to yaml file to create UIPlugin
+        resource_name: name of the UIPlugin
+
+    Returns:
+        bool: True if plugin is created
+            successfully, false otherwise
     """
 
-    # Create instance
-    assert create_instance_in_clusterlogging()
+    uiplugin_obj = ocp.OCP(
+        kind=constants.UIPLUGIN,
+        namespace=constants.OPENSHIFT_CLUSTER_OBSERVABILITY_OPERATOR,
+    )
+    try:
+        uiplugin_obj.create(yaml_file=yaml_file)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e):
+            logger.warning("UIPlugin already exists")
+            return True
+        else:
+            raise
 
-    # Check the health of the cluster-logging
-    assert check_health_of_clusterlogging()
-
-    csv_obj = CSV(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
-
-    # Get the CSV installed
-    get_csv = csv_obj.get(out_yaml_format=False)
-    logger.info(f"The installed CSV is {get_csv}")
+    try:
+        uiplugin_obj.get(resource_name, out_yaml_format=True)
+        logger.info("The uiplugin is created successfully")
+    except CommandFailed:
+        logger.error("The resource is not found")
+        return False
+    return True
 
 
 def install_logging():
@@ -374,37 +511,83 @@ def install_logging():
     logger.info("Configuring Openshift-logging")
 
     # Gets OCP version to align logging version to OCP version
-    ocp_version = version.get_semantic_ocp_version_from_config()
-
-    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
+    package_manifest = PackageManifest(
+        resource_name="cluster-logging",
+        selector="catalog=redhat-operators",
+    )
+    logging_channel = package_manifest.get_default_channel()
 
     # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
 
-    # Creates an operator-group for elasticsearch
-    assert ocp_logging_obj.create_elasticsearch_operator_group(
+    # Creates an operator-group for lokistack
+    assert ocp_logging_obj.create_lokistack_operator_group(
         yaml_file=constants.EO_OG_YAML,
         resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
-
-    # Set RBAC policy on the project
-    assert ocp_logging_obj.set_rbac(
-        yaml_file=constants.EO_RBAC_YAML, resource_name="prometheus-k8s"
-    )
-
-    # Creates subscription for elastic-search operator
-    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    # Creates subscription for lokistack operator
+    subscription_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SUB_YAML)
     subscription_yaml["spec"]["channel"] = logging_channel
     helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_elasticsearch_subscription()
+    assert ocp_logging_obj.get_lokistack_subscription()
 
     # Creates a namespace openshift-logging
     ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
 
-    # Creates an operator-group for cluster-logging
-    assert ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML
+    # Create RGW obc
+    assert ocp_logging_obj.create_obc(
+        yaml_file=constants.LOKI_OPERATOR_OBC_YAML,
+        resource_name=constants.OBJECT_BUCKET_CLAIM,
     )
+    # Creating secret
+    sample = TimeoutSampler(
+        timeout=180,
+        sleep=20,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
+            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_HOST}}'"
+        ),
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to get configmap")
+
+    bucket_name_cmd = (
+        f"oc get -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+        f" configmap {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_NAME}}'"
+    )
+    bucket_name = exec_cmd(bucket_name_cmd)
+
+    access_key_cmd = (
+        f"oc get -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+        f" secret {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_ACCESS_KEY_ID}}'"
+    )
+    access_key = exec_cmd(access_key_cmd)
+    decoded1 = base64.b64decode(access_key.stdout).decode("utf-8")
+
+    secret_key_cmd = (
+        f"oc get -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+        f" secret {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_SECRET_ACCESS_KEY}}'"
+    )
+    secret_key = exec_cmd(secret_key_cmd)
+    decoded2 = base64.b64decode(secret_key.stdout).decode("utf-8")
+
+    secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
+    secret_yaml["stringData"]["access_key_id"] = decoded1
+    secret_yaml["stringData"]["access_key_secret"] = decoded2
+    secret_yaml["stringData"]["bucketnames"] = bucket_name.stdout.decode("utf-8")
+    helpers.create_resource(**secret_yaml)
+    assert ocp_logging_obj.get_secret_to_lokistack()
+
+    # creates lokistack
+    # sleeping for few seconds to avoid following error
+    # Internal error occurred: failed calling webhook
+    time.sleep(10)
+    ocp_logging_obj.create_lokistack(yaml_file=constants.LOKISTACK_YAML)
+    logger.info("Loki operator is installed successfuly")
+
+    # Creates an operator-group for cluster-logging
+    ocp_logging_obj.create_clusterlogging_operator_group(yaml_file=constants.CL_OG_YAML)
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
@@ -412,9 +595,27 @@ def install_logging():
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
-    # Creates instance in namespace openshift-logging
-    cluster_logging_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    # creates a service account to be used by the log collector
+    ocp_logging_obj.setup_sa_permissions()
+
+    # Creates ClusterLogForwarder
+    ocp_logging_obj.create_clusterlogforwarder(yaml_file=constants.CLF_YAML)
+    logger.info("Openshift Logging operator is installed successfully")
+
+    # Creates namespace for openshift-cluster-observability-operator
+    ocp_logging_obj.create_namespace(yaml_file=constants.CO_NAMESPACE_YAML)
+
+    # Creates OperatorGroup for openshift-cluster-observability-operator
+    ocp_logging_obj.create_clusterobservability_operator_group(
+        yaml_file=constants.CO_OG_YAML,
+        resource_name=constants.CLUSTER_OBSERVABILITY_OPERATOR,
     )
-    logger.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-    ocp_logging_obj.create_instance()
+    # Creates subscription for openshift-cluster-observability-operator
+    co_subscription_yaml = templating.load_yaml(constants.CO_SUB_YAML)
+    helpers.create_resource(**co_subscription_yaml)
+    assert ocp_logging_obj.get_cluster_observability_subscription()
+
+    # Creates UI Plugin for openshift-cluster-observability-operator
+    ocp_logging_obj.create_UI_Plugin(
+        yaml_file=constants.CO_UI_PLUGIN_YAML, resource_name="logging"
+    )
