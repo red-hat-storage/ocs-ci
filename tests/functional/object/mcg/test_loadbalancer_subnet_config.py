@@ -1,5 +1,6 @@
 import json
 import logging
+from time import sleep
 
 import pytest
 
@@ -8,24 +9,24 @@ from ocs_ci.framework.pytest_customization.marks import (
     aws_platform_required,
     polarion_id,
     tier2,
+    mcg,
     red_squad,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import mcg
 from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
 
-@aws_platform_required
 @mcg
 @red_squad
+@aws_platform_required
 class TestLBSubnetConfig(MCGTest):
 
     @tier2
-    @polarion_id("OCS-4715")
+    @polarion_id("OCS-4716")
     def test_lb_subnet_config(self, awscli_pod):
         """
         Test whether MCG's load balancer subnet config allows connections
@@ -56,14 +57,12 @@ class TestLBSubnetConfig(MCGTest):
         port = 443  # This is the default port for the load balancer
 
         # 1. Test local connection to the load balancer
-        local_can_connect = self.test_connectivity(exec_cmd, lb_host_name, port)
+        local_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=None)
         assert local_can_connect, "Local host failed to connect to the load balancer"
         logger.info("Local host can connect to the load balancer")
 
         # 2. Test connectivity from the awscli pod to the load balancer
-        pod_can_connect = self.test_connectivity(
-            awscli_pod.exec_cmd_on_pod, lb_host_name, port
-        )
+        pod_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=awscli_pod)
         assert pod_can_connect, "Pod failed to connect to the load balancer"
         logger.info("Pod can connect to the load balancer")
 
@@ -79,18 +78,17 @@ class TestLBSubnetConfig(MCGTest):
         ).get("s3") == [
             source_subnet
         ], "Patch to load balancer subnet config was reconciled"
+        sleep(10)  # Wait a bit for the change to take effect
 
         # 4. Verify that the pod is no longer able to connect to the load balancer
-        pod_can_connect = self.test_connectivity(
-            awscli_pod.exec_cmd_on_pod, lb_host_name, port
-        )
+        pod_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=awscli_pod)
         assert (
             not pod_can_connect
         ), "Pod should no longer be able to connect to the load balancer"
         logger.info("Pod couldn't connect to the load balancer as expected")
 
         # 5. Verify that local connection to the load balancer is still available
-        local_can_connect = self.test_connectivity(exec_cmd, lb_host_name, port)
+        local_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=None)
         assert local_can_connect, "Local host failed to connect to the load balancer"
         logger.info("Local host can still connect to the load balancer")
 
@@ -98,41 +96,41 @@ class TestLBSubnetConfig(MCGTest):
         self.revert_lb_subnet_config()
 
         # 7. Verify that the pod is able to connect to the load balancer
-        pod_can_connect = self.test_connectivity(
-            awscli_pod.exec_cmd_on_pod, lb_host_name, port
-        )
+        pod_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=awscli_pod)
         assert pod_can_connect, "Pod failed to connect to the load balancer"
         logger.info("Pod can connect again to the load balancer after revert")
 
         # 8. Verify that local connection to the load balancer is still available
-        local_can_connect = self.test_connectivity(exec_cmd, lb_host_name, port)
+        local_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=None)
         assert local_can_connect, "Local host failed to connect to the load balancer"
         logger.info("Local host can still connect to the load balancer after revert")
 
-    def test_connectivity(self, exec_cmd_func, host, port):
+    def test_connectivity(self, host, port, pod_obj=None):
         """
-        Use netcat (nc) with a timeout to test connectivity to a given host and port.
+        Test connectivity to a given host and port.
 
         Args:
-            exec_cmd_func (function): Function to execute a shell command.
+            pod_obj (Pod|None): Pod object to execute the command on.
+            If None, the command will be executed on the local host.
+
             host (str): Host to test.
             port (int): Port to test.
 
         Returns:
             bool: True if connectivity is successful, False otherwise.
         """
-        try:
-            response = exec_cmd_func(f"timeout 10 nc -z {host} {port}")
+        if pod_obj:
+            try:
+                pod_obj.exec_cmd_on_pod(f"timeout 10 nc -z {host} {port}")
+                return True
+            except CommandFailed:
+                return False
+        else:
+            # Local host connectivity
 
-            # exec_cmd_on_pod raises CommandFailed on failure,
-            # exec_cmd returns an object with a non-zero returncode on failure.
-            # raising CommandFailed on both ensures a consistent behavior between the two.
-            if response and response.returncode != 0:
-                raise CommandFailed
-        except CommandFailed:
-            return False
-
-        return True
+            # Our jenkins agents don't have netcat, so we use curl to test connectivity
+            response = exec_cmd(f"curl -sk https://{host}:{port}")
+            return response.returncode == 0
 
     def revert_lb_subnet_config(self):
         """
@@ -155,6 +153,7 @@ class TestLBSubnetConfig(MCGTest):
             )
             is None
         ), "Patch to load balancer subnet config was reverted"
+        sleep(10)  # Wait a bit for the change to take effect
 
     @pytest.fixture(scope="class", autouse=True)
     def cleanup(self, request):
