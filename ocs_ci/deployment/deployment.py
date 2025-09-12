@@ -3544,10 +3544,10 @@ class MultiClusterDROperatorsDeploy(object):
             index += 1
 
         # Use unique cluster name to easily identify the managed clusters
-        pirror_peer_name = "mirrorpeer"
+        mirror_peer_name = "mirrorpeer"
         for cluster_info in mirror_peer_data["spec"]["items"]:
-            pirror_peer_name = pirror_peer_name + "-" + cluster_info["clusterName"]
-        mirror_peer_data["metadata"]["name"] = pirror_peer_name
+            mirror_peer_name = mirror_peer_name + "-" + cluster_info["clusterName"]
+        mirror_peer_data["metadata"]["name"] = mirror_peer_name
 
         templating.dump_data_to_temp_yaml(mirror_peer_data, mirror_peer_yaml.name)
         # Current CTX: ACM
