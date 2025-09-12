@@ -7476,7 +7476,7 @@ def discovered_apps_dr_workload(request):
         multi_ns_list = []
         # TODO: When cephfs is ready
         if multi_ns and kubeobject <= 1:
-            raise UnsupportedWorkloadError("kubeobject count should be more then 2")
+            raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
@@ -7551,10 +7551,12 @@ def discovered_apps_dr_workload(request):
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
-                    workload_namespace=workload_details["workload_namespace"],
+                    workload_namespace=workload_details["workload_namespace"]
+                    + "-recipe-ns",
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
-                    ],
+                    ]
+                    + "-recipe",
                     discovered_apps_pvc_selector_key=workload_details[
                         "dr_workload_app_pvc_selector_key"
                     ],
