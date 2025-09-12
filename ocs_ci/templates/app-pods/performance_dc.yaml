@@ -5,6 +5,9 @@ metadata:
   labels:
     app: perfpod
 spec:
+  selector:
+    matchLabels:
+      name: perfpod
   template:
     metadata:
       labels:

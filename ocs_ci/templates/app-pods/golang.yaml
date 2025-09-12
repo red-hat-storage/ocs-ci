@@ -5,6 +5,9 @@ metadata:
   labels:
     app: hsbenchpod
 spec:
+  selector:
+    matchLabels:
+      app: hsbenchpod
   template:
     metadata:
       labels:

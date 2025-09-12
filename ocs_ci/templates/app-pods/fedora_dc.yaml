@@ -5,6 +5,9 @@ metadata:
   labels:
     app: fedorapod
 spec:
+  selector:
+    matchLabels:
+      name: fedorapod
   template:
     metadata:
       labels:
