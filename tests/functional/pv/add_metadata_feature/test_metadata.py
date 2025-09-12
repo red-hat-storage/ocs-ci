@@ -2,6 +2,7 @@ import pytest
 import logging
 
 from ocs_ci.utility import metadata_utils
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
@@ -496,10 +497,31 @@ class TestMetadata(ManageTest):
             namespace=self.project_name,
         )
         # Disable metadata flag
+        log.info("Disabling metadata flag and waiting for change to propagate...")
         metadata_utils.disable_metadata(
             self.config_map_obj,
             self.pod_obj,
         )
+
+        # Additional verification to ensure metadata disable has fully propagated
+        # This is especially important for OCS 4.19+ with patch-based approach
+
+        @retry(AssertionError, tries=10, delay=5, backoff=1)
+        def _verify_metadata_fully_disabled():
+            """
+            Verify that metadata is fully disabled by checking provisioner pods.
+            This ensures that any new volume operations will not have metadata.
+            """
+            if metadata_utils.check_setmetadata_availability(self.pod_obj):
+                log.warning("Metadata still appears to be enabled, retrying...")
+                raise AssertionError("Metadata disable not yet fully propagated")
+            log.info(
+                "✅ Metadata disable operation verified - proceeding with clone creation"
+            )
+            return True
+
+        _verify_metadata_fully_disabled()
+
         available_subvolumes = updated_subvolumes
         # Clone the PVC
         clone_pvc_obj = pvc_clone_factory(pvc_obj=pvc_obj, timeout=600)
@@ -513,10 +535,24 @@ class TestMetadata(ManageTest):
             sc_name, fs, self.toolbox, created_subvolume
         )
         # metadata details unavailable for cloned PVC
+        log.info(f"Checking metadata for cloned PVC: {metadata}")
         if metadata == {} or metadata is None:
-            pass
+            log.info(
+                "✅ PASS: No metadata found for cloned PVC (as expected after disabling metadata)"
+            )
         else:
-            raise AssertionError
+            log.error(
+                f"❌ FAIL: Metadata still present for cloned PVC after disabling flag: {metadata}"
+            )
+            log.error(
+                "This indicates that the metadata disable operation did not take effect properly"
+            )
+            log.error(
+                "Possible causes: 1) Provisioner pods not restarted, 2) Timing issue, 3) Clone inheriting metadata"
+            )
+            raise AssertionError(
+                f"Metadata should be empty for cloned PVC but got: {metadata}"
+            )
         # Create a volume snapshot
         available_subvolumes = updated_subvolumes
         snap_obj = snapshot_factory(clone_pvc_obj, wait=True)
