@@ -45,6 +45,7 @@ def ui_deployment_conditions():
         constants.AZURE_PLATFORM,
         constants.GCP_PLATFORM,
         constants.BAREMETAL_PLATFORM,
+        constants.IBMCLOUD_PLATFORM,
     ):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
