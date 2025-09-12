@@ -7938,7 +7938,6 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
                     access_mode=vm_config["access_mode"],
                     storageclass=storageclass,
                     pvc_size="30Gi",
-                    source_url=constants.CNV_FEDORA_SOURCE,
                     namespace=namespace,
                 )
 
