@@ -290,6 +290,7 @@ NETWORK_FENCE = "NetworkFence"
 STORAGE_AUTO_SCALER = "StorageAutoScaler"
 INTERNAL_STORAGE_CONSUMER_NAME = "internal"
 CEPH_DRIVER_CSI = "drivers.csi.ceph.io"
+ADDONDEPLOYMENTCONFIG = "AddOnDeploymentConfig"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -3110,6 +3111,15 @@ ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
 ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
 ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
+)
+POLICY_MCE_HCP_AUTOIMPORT_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "policy_mce_hcp_autoimport.yaml"
+)
+POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "policy_mce_hcp_autoimport_placement.yaml"
+)
+POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_BINDING_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "policy_mce_hcp_autoimport_placement_binding.yaml"
 )
 ACM_OPERATOR_SUBSCRIPTION = "acm-operator-subscription"
 
