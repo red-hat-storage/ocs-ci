@@ -8,16 +8,20 @@ from ocs_ci.framework.pytest_customization.marks import (
     aws_platform_required,
     polarion_id,
     tier2,
+    red_squad,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import mcg
 from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
 
 @aws_platform_required
+@mcg
+@red_squad
 class TestLBSubnetConfig(MCGTest):
 
     @tier2
