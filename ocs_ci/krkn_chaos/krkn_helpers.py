@@ -64,23 +64,54 @@ class ContainerComponentConfig:
             }
 
 
-def detect_component_instances(component_label, component_name):
-    """Detect available pod instances for a component."""
+def detect_component_instances(
+    component_label, component_name, with_selector=False, fallback_on_error=False
+):
+    """
+    Detect available pod instances for a component.
+
+    Args:
+        component_label (str): Label selector for the component (e.g., "app=rook-ceph-mon")
+        component_name (str): Name of the component for logging
+        with_selector (bool): If True, also return pod_selector dictionary
+        fallback_on_error (bool): If True, return fallback values on error instead of raising
+
+    Returns:
+        tuple: (instance_count, pod_names) or (instance_count, pod_names, pod_selector)
+               if with_selector=True
+    """
     from ocs_ci.ocs.resources.pod import get_pods_having_label
+    from ocs_ci.ocs import constants
+
+    # Parse label to create pod_selector dictionary
+    label_parts = component_label.split("=")
+    pod_selector = {label_parts[0]: label_parts[1]}
 
     try:
         available_pods = get_pods_having_label(
-            label=component_label, namespace="openshift-storage"
+            label=component_label, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         instance_count = len(available_pods)
         pod_names = [pod["metadata"]["name"] for pod in available_pods]
 
         log.info(f"✅ Found {instance_count} {component_name} instances: {pod_names}")
-        return instance_count, pod_names
+
+        if with_selector:
+            return instance_count, pod_names, pod_selector
+        else:
+            return instance_count, pod_names
 
     except Exception as e:
         log.error(f"Failed to detect available instances for {component_name}: {e}")
-        raise
+
+        if fallback_on_error:
+            log.warning(f"Using fallback instance_count=1 for {component_name}")
+            if with_selector:
+                return 1, [], pod_selector
+            else:
+                return 1, []
+        else:
+            raise
 
 
 def create_basic_container_scenarios(scenario_dir, namespace, label_selector, settings):

@@ -43,8 +43,8 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     validate_chaos_execution,
     validate_strength_test_results,
     handle_workload_validation_failure,
+    detect_component_instances,
 )
-from ocs_ci.ocs.resources.pod import get_pods_having_label
 
 log = logging.getLogger(__name__)
 
@@ -92,35 +92,6 @@ class TestKrKnApplicationOutageScenarios:
     """
     Test suite for Krkn application outage chaos scenarios
     """
-
-    def _detect_component_instances(self, component_label, component_name):
-        """
-        Detect available instances for a component.
-
-        Returns:
-            tuple: (instance_count, pod_names, pod_selector)
-        """
-        openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
-        label_parts = component_label.split("=")
-        pod_selector = {label_parts[0]: label_parts[1]}
-
-        try:
-            available_pods = get_pods_having_label(
-                label=component_label, namespace=openshift_storage_ns
-            )
-            instance_count = len(available_pods)
-            # available_pods is a list of dictionaries, not Pod objects
-            pod_names = [pod["metadata"]["name"] for pod in available_pods]
-
-            log.info(
-                f"Detected {instance_count} available instances for {component_name}: {pod_names}"
-            )
-            return instance_count, pod_names, pod_selector
-
-        except Exception as e:
-            log.error(f"Failed to detect available instances for {component_name}: {e}")
-            log.warning(f"Using fallback instance_count=1 for {component_name}")
-            return 1, [], pod_selector
 
     def _create_basic_scenarios(self, scenario_dir, duration, namespace, pod_selector):
         """Create basic application outage scenarios."""
@@ -313,8 +284,11 @@ class TestKrKnApplicationOutageScenarios:
         log.info(f"🎯 Starting application outage test for {component_name}")
 
         # 1. Detect component instances and configuration
-        instance_count, pod_names, pod_selector = self._detect_component_instances(
-            ceph_component_label, component_name
+        instance_count, pod_names, pod_selector = detect_component_instances(
+            ceph_component_label,
+            component_name,
+            with_selector=True,
+            fallback_on_error=True,
         )
 
         # 2. Get duration settings based on component criticality
