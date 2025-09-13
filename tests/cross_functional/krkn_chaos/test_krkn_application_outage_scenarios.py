@@ -522,8 +522,13 @@ class TestKrKnApplicationOutageScenarios:
         }
 
         ceph_component_label = component_labels[target_component]
-        label_parts = ceph_component_label.split("=")
-        pod_selector = {label_parts[0]: label_parts[1]}
+        # Use helper function to get pod_selector (we don't need instance detection here)
+        _, _, pod_selector = detect_component_instances(
+            ceph_component_label,
+            target_component,
+            with_selector=True,
+            fallback_on_error=True,
+        )
 
         base_duration = 120
         max_duration = base_duration * duration_multiplier
