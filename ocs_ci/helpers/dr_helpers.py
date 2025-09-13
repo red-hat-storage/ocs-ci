@@ -1398,7 +1398,8 @@ def get_all_drpolicy():
     for drpolicy in drpolicy_list:
 
         if all(
-            mngcls in drpolicy["spec"]["drClusters"] for mngcls in current_managed_clusters_list
+            mngcls in drpolicy["spec"]["drClusters"]
+            for mngcls in current_managed_clusters_list
         ):
             return_drpolicy_list.append(drpolicy)
     return return_drpolicy_list
