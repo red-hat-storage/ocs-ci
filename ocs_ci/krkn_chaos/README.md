@@ -20,6 +20,17 @@ The Krkn chaos testing framework allows you to inject various types of chaos int
 - **Enhanced Safety Controls**: Component-aware testing with critical vs resilient component handling
 - **Advanced Logging**: Comprehensive logging with emojis and detailed scenario analysis
 
+### 🔧 Critical Bug Fixes (September 2025)
+- **NetworkPolicy Configuration Fix**: Resolved 400 Bad Request error in application outage scenarios
+  - Fixed Jinja2 template to properly format `block` parameter as YAML list instead of boolean
+  - Template now correctly generates `block: [Ingress, Egress]` instead of `block: true`
+  - Eliminates "cannot unmarshal bool into Go struct field NetworkPolicySpec.spec.policyTypes" error
+- **Dynamic Instance Detection**: Added support for automatic pod instance detection using `get_pods_having_label()`
+- **Pod Name Extraction Fix**: Corrected pod name access from `pod.name` to `pod["metadata"]["name"]` for dictionary objects
+- **VDBENCH Performance Enhancement**: Increased thread count from 10 to 32 for both block and CephFS workloads
+  - Provides more intensive I/O stress testing during chaos scenarios
+  - Better simulates real-world high-load conditions
+
 ## 🏗️ Extreme Strength Testing
 
 ### Test Types and Intensity Levels
@@ -27,14 +38,21 @@ The Krkn chaos testing framework allows you to inject various types of chaos int
 #### 1. Application Outage Scenarios
 **Location**: `tests/cross_functional/krkn_chaos/test_krkn_application_outage_scenarios.py`
 
+**Supported Components**:
+- **Ceph Components**: MON, MGR, MDS, OSD, RGW
+- **CSI Plugins**: CephFS Node Plugin, RBD Node Plugin, CephFS Controller Plugin, RBD Controller Plugin
+- **Rook Operator**: Rook Ceph Operator pods
+
 **Basic Test**: `test_run_krkn_application_outage_scenarios`
 - 🎯 Primary Outage, 🔥 Extended Outage, ⚡ Rapid-Fire Outage, 💥 Stress Test Outage
-- **Critical Components** (MON, MGR, MDS): 4 scenarios with conservative settings
-- **Resilient Components** (OSD, RGW): 9 scenarios with high-intensity testing
+- **Critical Components** (MON, MGR, MDS, CSI Controllers, Rook Operator): 4 scenarios with conservative settings
+- **Resilient Components** (OSD, RGW, CSI Node Plugins): 9 scenarios with high-intensity testing
+- **Dynamic Instance Detection**: Automatically detects all available pod instances for each component
 
 **Extreme Test**: `test_krkn_application_strength_testing`
 - **OSD Extreme**: 6x duration multiplier, 13+ scenarios
 - **RGW High**: 4x duration multiplier, conservative approach
+- **CSI Node Plugin Extreme**: High-intensity testing with multiple scenarios
 - **OSD Ultimate**: 8x duration multiplier, maximum stress
 - **Patterns**: Cascading, Rapid-Fire, Wave, Endurance, Recovery Stress
 
@@ -77,8 +95,8 @@ The Krkn chaos testing framework allows you to inject various types of chaos int
 ### Safety Controls
 
 #### Component-Aware Testing
-- **Critical Components** (MON, MGR, MDS): Conservative settings, shorter durations, fewer scenarios
-- **Resilient Components** (OSD, RGW): Aggressive testing, longer durations, more scenarios
+- **Critical Components** (MON, MGR, MDS, CSI Controllers, Rook Operator): Conservative settings, shorter durations, fewer scenarios
+- **Resilient Components** (OSD, RGW, CSI Node Plugins): Aggressive testing, longer durations, more scenarios
 - **Master Nodes**: Resource-limited testing to prevent cluster instability
 - **Worker Nodes**: Full apocalyptic testing with maximum resource exhaustion
 
@@ -400,6 +418,46 @@ Enable debug logging for detailed information:
 import logging
 logging.getLogger('ocs_ci.krkn_chaos').setLevel(logging.DEBUG)
 ```
+
+## 🔧 Troubleshooting
+
+### NetworkPolicy Configuration Errors
+
+**Problem**: Application outage scenarios fail with 400 Bad Request error:
+```
+NetworkPolicy in version "v1" cannot be handled as a NetworkPolicy:
+json: cannot unmarshal bool into Go struct field NetworkPolicySpec.spec.policyTypes
+```
+
+**Solution**: This error was fixed in September 2025. Ensure you have the latest version with:
+- Fixed Jinja2 template in `ocs_ci/krkn_chaos/template/scenarios/openshift/app_outage.yml.j2`
+- Template correctly formats `block` parameter as YAML list: `[Ingress, Egress]`
+- No `block=True` boolean parameters in test scenarios
+
+**Verification**: Check generated YAML contains:
+```yaml
+application_outage:
+  block:
+    - Ingress
+    - Egress
+```
+
+### Pod Detection Issues
+
+**Problem**: Tests fail with `'dict' object has no attribute 'name'` error.
+
+**Solution**: Fixed pod name extraction from `get_pods_having_label()` return values:
+- Use `pod["metadata"]["name"]` instead of `pod.name`
+- Function returns list of dictionaries, not Pod objects
+
+### Dynamic Instance Detection
+
+**Problem**: Tests use fixed instance counts instead of detecting available pods.
+
+**Solution**: Updated tests to use dynamic detection:
+- `_detect_component_instances()` method automatically counts available pods
+- Tests adapt to varying cluster sizes and configurations
+- No need to manually specify instance counts
 
 ## Contributing
 
