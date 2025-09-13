@@ -387,31 +387,6 @@ class TestKrKnApplicationOutageScenarios:
             f"🎉 Application outage test for {component_name} completed successfully"
         )
 
-    @pytest.mark.parametrize(
-        "target_component,stress_level,duration_multiplier",
-        [
-            ("osd", "extreme", 6),  # OSDs can handle extreme stress
-            ("rgw", "high", 4),  # RGWs are resilient but more conservative
-            ("osd", "ultimate", 8),  # Ultimate OSD stress test
-            ("cephfs-nodeplugin", "high", 4),  # Node plugins are resilient like RGWs
-            ("rbd-nodeplugin", "high", 4),  # Node plugins are resilient like RGWs
-            (
-                "cephfs-nodeplugin",
-                "extreme",
-                6,
-            ),  # Node plugins can handle extreme stress
-            ("rbd-nodeplugin", "extreme", 6),  # Node plugins can handle extreme stress
-        ],
-        ids=[
-            "osd-extreme-stress",
-            "rgw-high-stress",
-            "osd-ultimate-stress",
-            "cephfs-nodeplugin-high-stress",
-            "rbd-nodeplugin-high-stress",
-            "cephfs-nodeplugin-extreme-stress",
-            "rbd-nodeplugin-extreme-stress",
-        ],
-    )
     def _create_strength_testing_scenarios(
         self, scenario_dir, base_duration, max_duration, namespace, pod_selector
     ):
@@ -524,6 +499,31 @@ class TestKrKnApplicationOutageScenarios:
 
         return strength_score
 
+    @pytest.mark.parametrize(
+        "target_component,stress_level,duration_multiplier",
+        [
+            ("osd", "extreme", 6),  # OSDs can handle extreme stress
+            ("rgw", "high", 4),  # RGWs are resilient but more conservative
+            ("osd", "ultimate", 8),  # Ultimate OSD stress test
+            ("cephfs-nodeplugin", "high", 4),  # Node plugins are resilient like RGWs
+            ("rbd-nodeplugin", "high", 4),  # Node plugins are resilient like RGWs
+            (
+                "cephfs-nodeplugin",
+                "extreme",
+                6,
+            ),  # Node plugins can handle extreme stress
+            ("rbd-nodeplugin", "extreme", 6),  # Node plugins can handle extreme stress
+        ],
+        ids=[
+            "osd-extreme-stress",
+            "rgw-high-stress",
+            "osd-ultimate-stress",
+            "cephfs-nodeplugin-high-stress",
+            "rbd-nodeplugin-high-stress",
+            "cephfs-nodeplugin-extreme-stress",
+            "rbd-nodeplugin-extreme-stress",
+        ],
+    )
     def test_krkn_application_strength_testing(
         self,
         krkn_setup,
