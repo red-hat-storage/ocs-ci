@@ -117,68 +117,50 @@ class TestKrKnContainerChaosScenarios:
     def _create_basic_container_scenarios(
         self, scenario_dir, namespace, label_selector, settings
     ):
-        """Create basic container chaos scenarios."""
+        """Create high-impact container chaos scenarios only."""
         return [
-            # 🎯 PRIMARY KILL: Standard container kill scenario
+            # 🔥 AGGRESSIVE KILL: Maximum disruption container termination
             ContainerScenarios.container_kill(
                 scenario_dir,
                 namespace=namespace,
                 label_selector=label_selector,
                 instance_count=settings["instance_count"],
-                kill_signal=settings["kill_signal"],
-                wait_duration=settings["wait_duration"],
+                kill_signal="SIGKILL",  # Always SIGKILL for maximum impact
+                wait_duration=240,  # Short wait for rapid chaos
             ),
-            # 🔥 AGGRESSIVE KILL: Rapid container termination
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=namespace,
-                label_selector=label_selector,
-                instance_count=settings["instance_count"],
-                kill_signal="SIGKILL",  # Always SIGKILL for aggressive scenario
-                wait_duration=settings["wait_duration"] - 120,
-            ),
-            # ⏸️ PRIMARY PAUSE: Standard container pause scenario
+            # 💥 HIGH-IMPACT PAUSE: Significant container suspension
             ContainerScenarios.container_pause(
                 scenario_dir,
                 namespace=namespace,
                 label_selector=label_selector,
-                instance_count=max(1, settings["instance_count"] // 2),
-                pause_seconds=settings["pause_duration"],
-                wait_duration=settings["wait_duration"],
-            ),
-            # 💥 EXTENDED PAUSE: Longer container suspension
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=namespace,
-                label_selector=label_selector,
-                instance_count=max(1, settings["instance_count"] // 2),
-                pause_seconds=settings["pause_duration"] * 2,
-                wait_duration=settings["wait_duration"] + 240,
+                instance_count=settings["instance_count"],  # Target all instances
+                pause_seconds=settings["pause_duration"] * 2,  # Double pause for impact
+                wait_duration=300,  # Moderate wait for recovery
             ),
         ]
 
     def _create_high_intensity_scenarios(
         self, scenario_dir, namespace, label_selector, settings
     ):
-        """Create high-intensity scenarios for resilient components."""
+        """Create maximum chaos scenarios for resilient components only."""
         return [
-            # ⚡ RAPID-FIRE KILL: Quick successive container kills
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=namespace,
-                label_selector=label_selector,
-                instance_count=settings["instance_count"],
-                kill_signal=settings["kill_signal"],
-                wait_duration=300,
-            ),
-            # 🌪️ CHAOS STORM: Maximum intensity container chaos
+            # 🌪️ CHAOS STORM: Rapid successive kills with minimal recovery
             ContainerScenarios.container_kill(
                 scenario_dir,
                 namespace=namespace,
                 label_selector=label_selector,
                 instance_count=settings["instance_count"],
                 kill_signal="SIGKILL",
-                wait_duration=240,
+                wait_duration=120,  # Very short wait for maximum chaos
+            ),
+            # 💀 EXTREME PAUSE: Long disruption to test ultimate resilience
+            ContainerScenarios.container_pause(
+                scenario_dir,
+                namespace=namespace,
+                label_selector=label_selector,
+                instance_count=settings["instance_count"],
+                pause_seconds=settings["pause_duration"] * 3,  # Triple pause duration
+                wait_duration=180,  # Short wait for continuous pressure
             ),
         ]
 
@@ -352,58 +334,10 @@ class TestKrKnContainerChaosScenarios:
         # Determine if this is a critical component for safety controls
         is_critical = component_name in ["mon", "mgr", "mds"]
 
-        scenarios = [
-            # 🎯 PRIMARY KILL: Standard container kill scenario
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=settings["instance_count"],
-                container_name=container_name,
-                kill_signal=settings["kill_signal"],
-                wait_duration=600,
-            ),
-            # 🔥 AGGRESSIVE KILL: Rapid container termination
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=settings["instance_count"],
-                container_name=container_name,
-                kill_signal="SIGKILL",  # Always use SIGKILL for aggressive scenario
-                wait_duration=400,  # Shorter wait for rapid succession
-            ),
-            # ⏸️ PRIMARY PAUSE: Standard container pause scenario
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=max(1, settings["instance_count"] // 2),
-                container_name=container_name,
-                pause_seconds=settings["pause_duration"],
-                wait_duration=480,
-            ),
-            # 💥 EXTENDED PAUSE: Longer container suspension
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=max(1, settings["instance_count"] // 2),
-                container_name=container_name,
-                pause_seconds=settings["pause_duration"] * 2,  # 2x longer pause
-                wait_duration=720,  # Extended wait for recovery
-            ),
-            # ⚡ RAPID-FIRE KILL: Quick successive container kills
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=max(1, settings["instance_count"] // 2),
-                container_name=container_name,
-                kill_signal=settings["kill_signal"],
-                wait_duration=300,  # Shorter wait for rapid-fire
-            ),
-        ]
+        # 🎭 SCENARIO GENERATION: Create component-appropriate chaos scenarios
+        scenarios = self._create_basic_container_scenarios(
+            scenario_dir, openshift_storage_ns, ceph_component_label, settings
+        )
 
         # Add high-intensity scenarios for non-critical components
         if not is_critical:
@@ -460,8 +394,7 @@ class TestKrKnContainerChaosScenarios:
             ]
             scenarios.extend(additional_scenarios)
             log.info(
-                f"Added {len(additional_scenarios)} high-intensity container scenarios for {component_name} "
-                "(safe for non-critical components)"
+                f"💪 Added {len(additional_scenarios)} maximum chaos scenarios for resilient component"
             )
 
         log.info(
@@ -726,167 +659,27 @@ class TestKrKnContainerChaosScenarios:
             f"Maximum wait duration: {max_wait_duration}s, Maximum pause: {max_pause_duration}s"
         )
 
-        # 🏗️ CONTAINER STRENGTH TESTING SCENARIO PATTERNS
+        # 🏗️ HIGH-IMPACT STRENGTH TESTING SCENARIOS ONLY
         scenarios = [
-            # 🎯 BASELINE: Standard kill and pause for comparison
+            # 🔥 MAXIMUM KILL: Ultimate container termination stress
             ContainerScenarios.container_kill(
                 scenario_dir,
                 namespace=openshift_storage_ns,
                 label_selector=ceph_component_label,
-                instance_count=2,
+                instance_count=settings["instance_count"],  # Use all target instances
                 container_name=container_name,
-                kill_signal="SIGTERM",
-                wait_duration=base_wait_duration,
+                kill_signal="SIGKILL",  # Always SIGKILL for maximum impact
+                wait_duration=120,  # Very short wait for extreme stress
             ),
+            # 💀 EXTREME PAUSE: Maximum disruption pause scenario
             ContainerScenarios.container_pause(
                 scenario_dir,
                 namespace=openshift_storage_ns,
                 label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                pause_seconds=base_pause_duration,
-                wait_duration=base_wait_duration,
-            ),
-            # 🔄 CASCADING KILL PATTERN: Progressive kill escalation
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                kill_signal="SIGTERM",  # Start gentle
-                wait_duration=base_wait_duration,
-            ),
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=2,
-                container_name=container_name,
-                kill_signal="SIGKILL",  # Escalate to aggressive
-                wait_duration=base_wait_duration * 2,
-            ),
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=3,
-                container_name=container_name,
-                kill_signal="SIGKILL",  # Maximum intensity
-                wait_duration=max_wait_duration,
-            ),
-            # ⚡ RAPID-FIRE KILL PATTERN: Quick successive container kills
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                kill_signal="SIGKILL",
-                wait_duration=base_wait_duration // 3,  # Quick burst 1
-            ),
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=2,
-                container_name=container_name,
-                kill_signal="SIGKILL",
-                wait_duration=base_wait_duration // 3,  # Quick burst 2
-            ),
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                kill_signal="SIGKILL",
-                wait_duration=base_wait_duration // 3,  # Quick burst 3
-            ),
-            # 🌊 PAUSE WAVE PATTERN: Alternating pause intensity
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                pause_seconds=base_pause_duration // 2,  # Short pause
-                wait_duration=base_wait_duration,
-            ),
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=2,
-                container_name=container_name,
-                pause_seconds=max_pause_duration,  # Long pause
-                wait_duration=max_wait_duration,
-            ),
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                pause_seconds=base_pause_duration,  # Medium pause
-                wait_duration=base_wait_duration,
-            ),
-            # 💀 ENDURANCE PATTERN: Ultimate sustained container stress
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
+                instance_count=settings["instance_count"],  # Use all target instances
                 container_name=container_name,
                 pause_seconds=max_pause_duration,  # Maximum pause duration
-                wait_duration=max_wait_duration * 2,  # Extended recovery time
-            ),
-            # 🔥 MIXED CHAOS PATTERN: Alternating kills and pauses
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                kill_signal="SIGKILL",
-                wait_duration=base_wait_duration,
-            ),
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=2,
-                container_name=container_name,
-                pause_seconds=base_pause_duration * 2,
-                wait_duration=base_wait_duration * 2,
-            ),
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=2,
-                container_name=container_name,
-                kill_signal="SIGTERM",
-                wait_duration=base_wait_duration,
-            ),
-            # 🚨 RECOVERY STRESS: Test recovery under pressure
-            ContainerScenarios.container_pause(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                pause_seconds=base_pause_duration * 3,  # Long pause
-                wait_duration=base_wait_duration * 2,
-            ),
-            ContainerScenarios.container_kill(
-                scenario_dir,
-                namespace=openshift_storage_ns,
-                label_selector=ceph_component_label,
-                instance_count=1,
-                container_name=container_name,
-                kill_signal="SIGKILL",  # Quick kill during recovery
-                wait_duration=base_wait_duration // 2,
+                wait_duration=180,  # Short wait for continuous stress
             ),
         ]
 
