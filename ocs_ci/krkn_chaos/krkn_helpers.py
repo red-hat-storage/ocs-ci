@@ -543,6 +543,41 @@ def assert_no_failing_scenarios(failing_scenarios, component_name, test_type="ch
         assert False, error_msg
 
 
+def detect_instances_or_skip(ceph_component_label, component_name):
+    """
+    Detect component instances or skip test if none found.
+
+    Args:
+        ceph_component_label (str): Label selector for the component
+        component_name (str): Name of the component for logging
+
+    Returns:
+        tuple: (instance_count, pod_names) if instances found
+
+    Raises:
+        pytest.skip: If no instances found
+        Exception: If detection fails
+    """
+    import pytest
+
+    log.info(f"🔍 Detecting available instances for {component_name}")
+
+    try:
+        instance_count, pod_names = detect_component_instances(
+            ceph_component_label, component_name
+        )
+
+        if instance_count == 0:
+            pytest.skip(
+                f"No {component_name} pods found with label {ceph_component_label}"
+            )
+
+        return instance_count, pod_names
+
+    except Exception as e:
+        handle_krkn_command_failure(e, component_name, "instance detection")
+
+
 def krkn_scenarios_list():
     """
     Load the hog_scenarios YAML configuration into a Python dictionary.

@@ -33,7 +33,6 @@ from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.krkn_chaos.krkn_helpers import (
     ContainerComponentConfig,
-    detect_component_instances,
     create_basic_container_scenarios,
     check_ceph_crashes,
     evaluate_chaos_success_rate,
@@ -43,6 +42,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     handle_workload_validation_failure,
     analyze_chaos_results,
     analyze_strength_test_results,
+    detect_instances_or_skip,
 )
 
 log = logging.getLogger(__name__)
@@ -113,21 +113,10 @@ class TestKrKnContainerChaosScenarios:
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        # 🔍 DYNAMIC INSTANCE DETECTION: Get all available pod instances
-        log.info(f"🔍 Detecting available instances for {component_name}")
-
-        try:
-            instance_count, pod_names = detect_component_instances(
-                ceph_component_label, component_name
-            )
-
-            if instance_count == 0:
-                pytest.skip(
-                    f"No {component_name} pods found with label {ceph_component_label}"
-                )
-
-        except Exception as e:
-            handle_krkn_command_failure(e, component_name, "instance detection")
+        # 🔍 DYNAMIC INSTANCE DETECTION: Get all available pod instances - one-liner
+        instance_count, pod_names = detect_instances_or_skip(
+            ceph_component_label, component_name
+        )
 
         # 🧠 INTELLIGENT CONFIGURATION: Get component-specific settings with dynamic count
         settings = ContainerComponentConfig.get_component_settings(
@@ -360,22 +349,10 @@ class TestKrKnContainerChaosScenarios:
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
         # 🔍 DYNAMIC INSTANCE DETECTION: Get all available pod instances
-        log.info(
-            f"🔍 Detecting available instances for {component_name} strength testing"
+        # Detect instances or skip test - one-liner helper function
+        instance_count, pod_names = detect_instances_or_skip(
+            ceph_component_label, component_name
         )
-
-        try:
-            instance_count, pod_names = detect_component_instances(
-                ceph_component_label, component_name
-            )
-
-            if instance_count == 0:
-                pytest.skip(
-                    f"No {component_name} pods found with label {ceph_component_label}"
-                )
-
-        except Exception as e:
-            handle_krkn_command_failure(e, component_name, "instance detection")
 
         # 🧠 INTELLIGENT CONFIGURATION: Get component-specific settings with dynamic count
         settings = ContainerComponentConfig.get_component_settings(
@@ -562,33 +539,15 @@ class TestKrKnContainerChaosScenarios:
         from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
         from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
         from ocs_ci.krkn_chaos.krkn_scenario_generator import ContainerScenarios
-        from ocs_ci.ocs.resources.pod import get_pods_having_label
         from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = "openshift-storage"
 
-        # 🔍 DYNAMIC INSTANCE DETECTION: Get all available pod instances
-        log.info(f"🔍 Detecting available instances for {component_name}")
-
-        try:
-            available_pods = get_pods_having_label(
-                label=ceph_component_label, namespace=openshift_storage_ns
-            )
-            instance_count = len(available_pods)
-            pod_names = [pod["metadata"]["name"] for pod in available_pods]
-
-            log.info(
-                f"✅ Found {instance_count} {component_name} instances: {pod_names}"
-            )
-
-            if instance_count == 0:
-                pytest.skip(
-                    f"No {component_name} pods found with label {ceph_component_label}"
-                )
-
-        except Exception as e:
-            handle_krkn_command_failure(e, component_name, "instance detection")
+        # 🔍 DYNAMIC INSTANCE DETECTION: Get all available pod instances - one-liner
+        instance_count, pod_names = detect_instances_or_skip(
+            ceph_component_label, component_name
+        )
 
         # 🎯 COMPONENT-AWARE CONFIGURATION: Adjust chaos intensity based on criticality
         is_critical = component_name in [
