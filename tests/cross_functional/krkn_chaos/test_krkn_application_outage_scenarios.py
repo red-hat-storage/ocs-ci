@@ -104,7 +104,8 @@ class TestKrKnApplicationOutageScenarios:
                 label=component_label, namespace=openshift_storage_ns
             )
             instance_count = len(available_pods)
-            pod_names = [pod.name for pod in available_pods]
+            # available_pods is a list of dictionaries, not Pod objects
+            pod_names = [pod["metadata"]["name"] for pod in available_pods]
 
             log.info(
                 f"Detected {instance_count} available instances for {component_name}: {pod_names}"
@@ -132,7 +133,6 @@ class TestKrKnApplicationOutageScenarios:
                 duration=duration * 2,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
             # ⚡ RAPID-FIRE OUTAGE: Quick successive failures
             ApplicationOutageScenarios.application_outage(
@@ -147,7 +147,6 @@ class TestKrKnApplicationOutageScenarios:
                 duration=duration * 3,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
         ]
 
@@ -175,7 +174,6 @@ class TestKrKnApplicationOutageScenarios:
                 duration=duration * 5,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
             # 🚨 BURST PATTERN: Alternating short/long outages
             ApplicationOutageScenarios.application_outage(
@@ -189,7 +187,6 @@ class TestKrKnApplicationOutageScenarios:
                 duration=duration * 2,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
         ]
 
@@ -439,14 +436,12 @@ class TestKrKnApplicationOutageScenarios:
                 duration=base_duration * 2,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
             ApplicationOutageScenarios.application_outage(
                 scenario_dir,
                 duration=max_duration,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
             # ⚡ RAPID-FIRE PATTERN: Quick successive hits
             *[
@@ -470,7 +465,6 @@ class TestKrKnApplicationOutageScenarios:
                 duration=base_duration * 3,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
             ApplicationOutageScenarios.application_outage(
                 scenario_dir,
@@ -484,7 +478,6 @@ class TestKrKnApplicationOutageScenarios:
                 duration=max_duration,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
             # 🔥 RECOVERY STRESS: Test recovery under pressure
             ApplicationOutageScenarios.application_outage(
@@ -492,7 +485,6 @@ class TestKrKnApplicationOutageScenarios:
                 duration=base_duration * 2,
                 namespace=namespace,
                 pod_selector=pod_selector,
-                block=True,
             ),
             ApplicationOutageScenarios.application_outage(
                 scenario_dir,
