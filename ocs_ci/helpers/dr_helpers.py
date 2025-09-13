@@ -1371,10 +1371,22 @@ def get_all_drpolicy():
         list: List of all DRPolicy
 
     """
+    return_drpolicy_list = []
     config.switch_acm_ctx()
+    acm_hub_name = config.current_cluster_name()
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
-    return drpolicy_list
+    current_managed_clusters_list = [
+        cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
+    ]
+    current_managed_clusters_list.remove(acm_hub_name)
+    for drpolicy in drpolicy_list:
+
+        if all(
+            mngcls in drpolicy["spec"]["drClusters"] for mngcls in current_managed_clusters_list
+        ):
+            return_drpolicy_list.append(drpolicy)
+    return return_drpolicy_list
 
 
 @retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
