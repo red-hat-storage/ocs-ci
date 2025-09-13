@@ -44,6 +44,42 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label
 log = logging.getLogger(__name__)
 
 
+class ComponentConfig:
+    """Configuration class for managing component-specific chaos testing settings."""
+
+    CRITICAL_COMPONENTS = [
+        "mon",
+        "mgr",
+        "mds",
+        "cephfs-ctrlplugin",
+        "rbd-ctrlplugin",
+        "rook-operator",
+    ]
+
+    RESILIENT_COMPONENTS = ["osd", "rgw", "cephfs-nodeplugin", "rbd-nodeplugin"]
+
+    @classmethod
+    def is_critical(cls, component_name):
+        """Check if a component is critical and requires conservative settings."""
+        return component_name in cls.CRITICAL_COMPONENTS
+
+    @classmethod
+    def get_duration_settings(cls, component_name, instance_count):
+        """Get duration and wait_duration based on component criticality and instance count."""
+        if cls.is_critical(component_name):
+            duration = 60  # Conservative for critical components
+            wait_duration = 30
+
+            # Extra conservative for single-instance critical components
+            if component_name in ["mon", "rook-operator"] and instance_count == 1:
+                duration = min(duration, 45)
+
+            return duration, wait_duration
+        else:
+            # Standard settings for resilient components
+            return 120, 60
+
+
 @green_squad
 @chaos
 @polarion_id("OCS-1236")
@@ -51,6 +87,177 @@ class TestKrKnApplicationOutageScenarios:
     """
     Test suite for Krkn application outage chaos scenarios
     """
+
+    def _detect_component_instances(self, component_label, component_name):
+        """
+        Detect available instances for a component.
+
+        Returns:
+            tuple: (instance_count, pod_names, pod_selector)
+        """
+        openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
+        label_parts = component_label.split("=")
+        pod_selector = {label_parts[0]: label_parts[1]}
+
+        try:
+            available_pods = get_pods_having_label(
+                label=component_label, namespace=openshift_storage_ns
+            )
+            instance_count = len(available_pods)
+            pod_names = [pod.name for pod in available_pods]
+
+            log.info(
+                f"Detected {instance_count} available instances for {component_name}: {pod_names}"
+            )
+            return instance_count, pod_names, pod_selector
+
+        except Exception as e:
+            log.error(f"Failed to detect available instances for {component_name}: {e}")
+            log.warning(f"Using fallback instance_count=1 for {component_name}")
+            return 1, [], pod_selector
+
+    def _create_basic_scenarios(self, scenario_dir, duration, namespace, pod_selector):
+        """Create basic application outage scenarios."""
+        return [
+            # 🎯 PRIMARY OUTAGE: Standard application outage scenario
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            # 🔥 EXTENDED OUTAGE: Prolonged application failure test
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration * 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+            # ⚡ RAPID-FIRE OUTAGE: Quick successive failures
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration // 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            # 💥 STRESS TEST OUTAGE: Maximum duration for resilience testing
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration * 3,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+        ]
+
+    def _create_high_intensity_scenarios(
+        self, scenario_dir, duration, namespace, pod_selector
+    ):
+        """Create high-intensity scenarios for resilient components."""
+        return [
+            # 🌪️ CHAOS STORM: Multiple rapid outages
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration // 3,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration // 3,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            # 💀 ENDURANCE TEST: Ultra-long outage for maximum resilience testing
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration * 5,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+            # 🚨 BURST PATTERN: Alternating short/long outages
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration // 4,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=duration * 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+        ]
+
+    def _execute_chaos_scenarios(self, config, component_name):
+        """Execute Krkn chaos scenarios and return results."""
+        krkn = KrKnRunner(config.global_config)
+        try:
+            log.info(
+                f"🚀 Starting application outage chaos injection for {component_name}"
+            )
+            krkn.run_async()
+            krkn.wait_for_completion(check_interval=60)
+            log.info(
+                f"✅ Application outage chaos injection completed for {component_name}"
+            )
+            return krkn.get_chaos_data()
+        except CommandFailed as e:
+            log.error(f"Krkn command failed for {component_name}: {str(e)}")
+            raise
+
+    def _analyze_chaos_results(self, chaos_data, component_name):
+        """Analyze and validate chaos run results."""
+        total_scenarios = len(chaos_data["telemetry"]["scenarios"])
+        failing_scenarios = [
+            scenario
+            for scenario in chaos_data["telemetry"]["scenarios"]
+            if scenario["affected_pods"]["error"] is not None
+        ]
+        successful_scenarios = total_scenarios - len(failing_scenarios)
+
+        log.info(f"📊 Chaos Results for {component_name}:")
+        log.info(f"   • Total scenarios: {total_scenarios}")
+        log.info(f"   • Successful: {successful_scenarios}")
+        log.info(f"   • Failed: {len(failing_scenarios)}")
+
+        if failing_scenarios:
+            log.warning(f"⚠️  Failed scenarios for {component_name}:")
+            for scenario in failing_scenarios:
+                log.warning(
+                    f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
+                )
+
+        # Validation logic
+        if total_scenarios == 0:
+            pytest.fail("No scenarios were executed - framework failure")
+        elif successful_scenarios == 0:
+            pytest.fail(
+                f"All {total_scenarios} scenarios failed - configuration/environment issue"
+            )
+        else:
+            log.info(
+                f"✅ Test passed: {successful_scenarios} scenarios executed successfully"
+            )
+
+    def _check_ceph_health(self, component_name):
+        """Check for Ceph crashes after chaos injection."""
+        log.info("🔍 Checking for Ceph crashes after chaos injection...")
+        try:
+            ceph_status_tool = CephStatusTool()
+            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
+            assert not ceph_crashes_found, (
+                f"Ceph crashes detected after application outage chaos for {component_name}. "
+                f"This indicates that the chaos injection may have caused Ceph daemon failures."
+            )
+            log.info("✅ No Ceph crashes detected - cluster is stable")
+        except Exception as e:
+            log.error(f"Failed to check for Ceph crashes: {e}")
+            log.warning("Unable to verify Ceph crash status - continuing with test")
 
     @pytest.mark.parametrize(
         "ceph_component_label,component_name",
@@ -106,9 +313,8 @@ class TestKrKnApplicationOutageScenarios:
         Test application outage scenarios for different Rook Ceph components.
 
         This test validates application resilience by injecting outages into ALL available
-        instances of different Ceph components (OSD, MGR, MON, MDS, RGW, CSI plugins, Rook operator)
-        and verifying that the storage system can handle these disruptions gracefully while running
-        VDBENCH workloads.
+        instances of different Ceph components and verifying that the storage system
+        can handle these disruptions gracefully while running VDBENCH workloads.
 
         Args:
             krkn_setup: Krkn setup fixture
@@ -116,258 +322,73 @@ class TestKrKnApplicationOutageScenarios:
             workload_ops: WorkloadOps fixture that provides pre-configured VDBENCH workloads
             ceph_component_label: Parameterized Ceph component app label
             component_name: Human-readable component name for logging
-
-        Note:
-            Application outage scenarios affect ALL pods matching the pod_selector.
-            The test dynamically detects the number of available instances and applies
-            appropriate chaos scenarios based on component criticality.
         """
-        scenario_dir = krkn_scenario_directory
-        openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
+        log.info(f"🎯 Starting application outage test for {component_name}")
 
-        # Parse the component label to extract the app selector
-        # e.g., "app=rook-ceph-osd" -> {"app": "rook-ceph-osd"}
-        label_parts = ceph_component_label.split("=")
-        pod_selector = {label_parts[0]: label_parts[1]}
-
-        # Dynamically detect available instances for this component
-        try:
-            available_pods = get_pods_having_label(
-                label=ceph_component_label, namespace=openshift_storage_ns
-            )
-            instance_count = len(available_pods)
-            pod_names = [pod.name for pod in available_pods]
-
-            log.info(
-                f"Starting Krkn application outage test for {component_name} component"
-            )
-            log.info(f"Detected {instance_count} available instances: {pod_names}")
-            log.info(
-                f"Using pod selector: {pod_selector} (affects all {instance_count} matching pods)"
-            )
-        except Exception as e:
-            log.error(f"Failed to detect available instances for {component_name}: {e}")
-            # Fallback to assuming at least 1 instance exists
-            instance_count = 1
-            log.warning(f"Using fallback instance_count=1 for {component_name}")
-
-        log.info(
-            f"Creating application outage scenarios for {component_name} component"
+        # 1. Detect component instances and configuration
+        instance_count, pod_names, pod_selector = self._detect_component_instances(
+            ceph_component_label, component_name
         )
 
-        # Configure scenario parameters based on component criticality and instance count
-        critical_components = [
-            "mon",
-            "mgr",
-            "mds",
-            "cephfs-ctrlplugin",
-            "rbd-ctrlplugin",
-            "rook-operator",
-        ]
-        if component_name in critical_components:
-            # Conservative settings for critical components
-            duration = 60  # Shorter duration for critical components
-            wait_duration = 30
-            log.info(
-                f"Using conservative settings for critical {component_name} component "
-                f"({instance_count} instances detected)"
-            )
-        else:
-            # Standard settings for less critical components (OSDs, RGWs, node plugins)
-            duration = 120
-            wait_duration = 60
-            log.info(
-                f"Using standard settings for {component_name} component "
-                f"({instance_count} instances detected)"
-            )
-
-        # Additional safety check for single-instance critical components
-        if component_name in ["mon", "rook-operator"] and instance_count == 1:
-            duration = min(duration, 45)  # Even more conservative for single instances
-            log.warning(
-                f"Single instance detected for critical {component_name} - "
-                f"using extra conservative duration: {duration}s"
-            )
-
-        scenarios = [
-            # 🎯 PRIMARY OUTAGE: Standard application outage scenario
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=duration,
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            # 🔥 EXTENDED OUTAGE: Prolonged application failure test
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=duration * 2,  # 2x longer duration
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-                block=True,  # Block until completion for sustained stress
-            ),
-            # ⚡ RAPID-FIRE OUTAGE: Quick successive failures
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=duration // 2,  # Shorter but rapid
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            # 💥 STRESS TEST OUTAGE: Maximum duration for resilience testing
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=duration * 3,  # 3x longer for ultimate stress
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-                block=True,  # Ensure completion for stress validation
-            ),
-        ]
-
-        # Add additional high-intensity scenarios for non-critical components
-        if component_name not in critical_components:
-            # These scenarios are only safe for less critical components (OSD, RGW, node plugins)
-            log.info(
-                f"Adding high-intensity scenarios for non-critical {component_name} component "
-                f"with {instance_count} instances"
-            )
-            additional_scenarios = [
-                # 🌪️ CHAOS STORM: Multiple rapid outages
-                ApplicationOutageScenarios.application_outage(
-                    scenario_dir,
-                    duration=duration // 3,  # Very short duration
-                    namespace=openshift_storage_ns,
-                    pod_selector=pod_selector,
-                ),
-                ApplicationOutageScenarios.application_outage(
-                    scenario_dir,
-                    duration=duration // 3,  # Another rapid burst
-                    namespace=openshift_storage_ns,
-                    pod_selector=pod_selector,
-                ),
-                # 💀 ENDURANCE TEST: Ultra-long outage for maximum resilience testing
-                ApplicationOutageScenarios.application_outage(
-                    scenario_dir,
-                    duration=duration * 5,  # 5x longer - ultimate endurance
-                    namespace=openshift_storage_ns,
-                    pod_selector=pod_selector,
-                    block=True,
-                ),
-                # 🚨 BURST PATTERN: Alternating short/long outages
-                ApplicationOutageScenarios.application_outage(
-                    scenario_dir,
-                    duration=duration // 4,  # Quick burst
-                    namespace=openshift_storage_ns,
-                    pod_selector=pod_selector,
-                ),
-                ApplicationOutageScenarios.application_outage(
-                    scenario_dir,
-                    duration=duration * 2,  # Followed by sustained outage
-                    namespace=openshift_storage_ns,
-                    pod_selector=pod_selector,
-                    block=True,
-                ),
-            ]
-            scenarios.extend(additional_scenarios)
-            log.info(
-                f"Added {len(additional_scenarios)} high-intensity scenarios for {component_name} "
-                f"(safe for non-critical components with {instance_count} instances)"
-            )
-
-        log.info(
-            f"Generated {len(scenarios)} application outage scenarios for {component_name}"
+        # 2. Get duration settings based on component criticality
+        duration, wait_duration = ComponentConfig.get_duration_settings(
+            component_name, instance_count
         )
 
-        # Generate Krkn configuration
+        log.info(
+            f"⚙️  Configuration: duration={duration}s, wait={wait_duration}s, instances={instance_count}"
+        )
+        if ComponentConfig.is_critical(component_name):
+            log.info(
+                f"🛡️  Using conservative settings for critical {component_name} component"
+            )
+
+        # 3. Create chaos scenarios
+        scenarios = self._create_basic_scenarios(
+            krkn_scenario_directory,
+            duration,
+            constants.OPENSHIFT_STORAGE_NAMESPACE,
+            pod_selector,
+        )
+
+        # Add high-intensity scenarios for resilient components
+        if not ComponentConfig.is_critical(component_name):
+            high_intensity_scenarios = self._create_high_intensity_scenarios(
+                krkn_scenario_directory,
+                duration,
+                constants.OPENSHIFT_STORAGE_NAMESPACE,
+                pod_selector,
+            )
+            scenarios.extend(high_intensity_scenarios)
+            log.info(
+                f"💪 Added {len(high_intensity_scenarios)} high-intensity scenarios for resilient component"
+            )
+
+        log.info(f"📋 Generated {len(scenarios)} total scenarios for {component_name}")
+
+        # 4. Configure and execute Krkn
         config = KrknConfigGenerator()
         for scenario in scenarios:
             config.add_scenario("application_outages_scenarios", scenario)
         config.set_tunings(wait_duration=wait_duration, iterations=1)
-        config.write_to_file(location=scenario_dir)
-        log.info("Krkn configuration file written successfully")
+        config.write_to_file(location=krkn_scenario_directory)
 
-        # Execute Krkn chaos scenarios
-        krkn = KrKnRunner(config.global_config)
-        try:
-            log.info(
-                f"Starting application outage chaos injection for {component_name}"
-            )
-            krkn.run_async()
-            krkn.wait_for_completion(check_interval=60)
-            log.info(
-                f"Application outage chaos injection completed successfully for {component_name}"
-            )
-        except CommandFailed as e:
-            log.error(f"Krkn command failed for {component_name}: {str(e)}")
-            pytest.fail(f"Krkn command failed for {component_name}: {str(e)}")
+        chaos_data = self._execute_chaos_scenarios(config, component_name)
 
-        # Validate workloads and cleanup
+        # 5. Validate workloads
         try:
             workload_ops.validate_and_cleanup()
+            log.info("✅ Workloads validated and cleaned up successfully")
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(
-                f"Workload validation/cleanup issue for {component_name}: {str(e)}"
-            )
+            log.warning(f"⚠️  Workload validation/cleanup issue: {str(e)}")
 
-        # Analyze chaos run results
-        log.info("Analyzing chaos run results")
-        chaos_run_output = krkn.get_chaos_data()
-
-        total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
-        failing_scenarios = [
-            scenario
-            for scenario in chaos_run_output["telemetry"]["scenarios"]
-            if scenario["affected_pods"]["error"] is not None
-        ]
-        successful_scenarios = total_scenarios - len(failing_scenarios)
+        # 6. Analyze results and check system health
+        self._analyze_chaos_results(chaos_data, component_name)
+        self._check_ceph_health(component_name)
 
         log.info(
-            f"Chaos run summary: {successful_scenarios}/{total_scenarios} scenarios succeeded"
+            f"🎉 Application outage test for {component_name} completed successfully"
         )
-
-        if failing_scenarios:
-            log.warning(
-                f"Some application outage scenarios failed for {component_name}:"
-                f"{len(failing_scenarios)} out of {total_scenarios}"
-            )
-            for scenario in failing_scenarios:
-                log.warning(
-                    f"Failed scenario: {scenario['scenario']} - Error: {scenario['affected_pods']['error']}"
-                )
-
-        # Only fail the test if ALL scenarios failed (indicates framework issue)
-        # or if no scenarios were executed at all
-        if total_scenarios == 0:
-            pytest.fail(
-                "No scenarios were executed - this indicates a framework failure"
-            )
-        elif successful_scenarios == 0:
-            pytest.fail(
-                f"All {total_scenarios} scenarios failed - this may indicate a configuration or environment issue"
-            )
-        else:
-            log.info(
-                f"Test passed: {successful_scenarios} scenarios executed successfully, chaos injection working properly"
-            )
-
-        # Check for Ceph crashes after chaos injection
-        log.info(
-            "Checking for Ceph crashes after application outage chaos injection..."
-        )
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after application outage chaos for {component_name}. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info(
-                "No Ceph crashes detected - cluster is stable after application outage chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            # Don't fail the test if we can't check for crashes, but log the issue
-            log.warning("Unable to verify Ceph crash status - continuing with test")
-
-        log.info(f"Application outage test for {component_name} completed successfully")
 
     @pytest.mark.parametrize(
         "target_component,stress_level,duration_multiplier",
@@ -394,6 +415,123 @@ class TestKrKnApplicationOutageScenarios:
             "rbd-nodeplugin-extreme-stress",
         ],
     )
+    def _create_strength_testing_scenarios(
+        self, scenario_dir, base_duration, max_duration, namespace, pod_selector
+    ):
+        """Create comprehensive strength testing scenarios with various patterns."""
+        return [
+            # 🎯 BASELINE: Standard outage for comparison
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            # 🔄 CASCADING PATTERN: Progressive failure escalation
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration * 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=max_duration,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+            # ⚡ RAPID-FIRE PATTERN: Quick successive hits
+            *[
+                ApplicationOutageScenarios.application_outage(
+                    scenario_dir,
+                    duration=base_duration // 4,
+                    namespace=namespace,
+                    pod_selector=pod_selector,
+                )
+                for _ in range(3)
+            ],
+            # 🌊 WAVE PATTERN: Alternating intensity
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration // 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration * 3,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration // 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+            # 💀 ENDURANCE PATTERN: Ultimate sustained stress
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=max_duration,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+            # 🔥 RECOVERY STRESS: Test recovery under pressure
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration * 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+                block=True,
+            ),
+            ApplicationOutageScenarios.application_outage(
+                scenario_dir,
+                duration=base_duration // 2,
+                namespace=namespace,
+                pod_selector=pod_selector,
+            ),
+        ]
+
+    def _analyze_strength_results(self, chaos_data, target_component, stress_level):
+        """Analyze strength testing results and return strength score."""
+        total_scenarios = len(chaos_data["telemetry"]["scenarios"])
+        failing_scenarios = [
+            scenario
+            for scenario in chaos_data["telemetry"]["scenarios"]
+            if scenario["affected_pods"]["error"] is not None
+        ]
+        successful_scenarios = total_scenarios - len(failing_scenarios)
+        strength_score = (
+            (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+        )
+
+        log.info(
+            f"🏆 STRENGTH TESTING RESULTS for {target_component} ({stress_level}):"
+        )
+        log.info(f"   • Scenarios executed: {total_scenarios}")
+        log.info(f"   • Successful scenarios: {successful_scenarios}")
+        log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
+        log.info(f"   • Strength Score: {strength_score:.1f}%")
+
+        if failing_scenarios:
+            log.warning("⚠️  Some strength testing scenarios failed:")
+            for scenario in failing_scenarios:
+                log.warning(
+                    f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
+                )
+
+        return strength_score
+
     def test_krkn_application_strength_testing(
         self,
         krkn_setup,
@@ -407,27 +545,19 @@ class TestKrKnApplicationOutageScenarios:
         Extreme application strength testing with multi-pattern chaos scenarios.
 
         This test pushes application resilience to the limits with various chaos patterns:
-        - Cascading failures
-        - Sustained outages
-        - Rapid-fire disruptions
-        - Recovery stress testing
+        - Cascading failures, Sustained outages, Rapid-fire disruptions, Recovery stress testing
+
         Args:
-            krkn_setup: Krkn setup fixture
-            krkn_scenario_directory: Directory for scenario configuration files
-            workload_ops: WorkloadOps fixture for VDBENCH workloads
-            target_component: Component to target (osd, rgw)
+            target_component: Component to target (osd, rgw, cephfs-nodeplugin, rbd-nodeplugin)
             stress_level: Level of stress testing (high, extreme, ultimate)
             duration_multiplier: Multiplier for base duration
         """
         log.info(
-            f"Starting EXTREME application strength testing for {target_component} "
-            f"with {stress_level} stress level (multiplier: {duration_multiplier}x)"
+            f"🚀 Starting {stress_level.upper()} strength testing for {target_component} "
+            f"(multiplier: {duration_multiplier}x)"
         )
 
-        scenario_dir = krkn_scenario_directory
-        openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
-
-        # Map component to label
+        # Component mapping and configuration
         component_labels = {
             "osd": OSD_APP_LABEL,
             "rgw": RGW_APP_LABEL,
@@ -439,226 +569,61 @@ class TestKrKnApplicationOutageScenarios:
         label_parts = ceph_component_label.split("=")
         pod_selector = {label_parts[0]: label_parts[1]}
 
-        # Base duration scaled by stress level
         base_duration = 120
         max_duration = base_duration * duration_multiplier
 
-        log.info(
-            f"Creating {stress_level} strength testing scenarios for {target_component}"
-        )
-        log.info(f"Maximum duration: {max_duration}s, Base: {base_duration}s")
+        log.info(f"⚙️  Configuration: base={base_duration}s, max={max_duration}s")
 
-        # 🏗️ STRENGTH TESTING SCENARIO PATTERNS
-        scenarios = [
-            # 🎯 BASELINE: Standard outage for comparison
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration,
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            # 🔄 CASCADING PATTERN: Progressive failure escalation
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration,  # Start normal
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration * 2,  # Escalate
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-                block=True,
-            ),
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=max_duration,  # Peak stress
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-                block=True,
-            ),
-            # ⚡ RAPID-FIRE PATTERN: Quick successive hits
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration // 4,  # Quick burst 1
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration // 4,  # Quick burst 2
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration // 4,  # Quick burst 3
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            # 🌊 WAVE PATTERN: Alternating intensity
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration // 2,  # Low wave
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration * 3,  # High wave
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-                block=True,
-            ),
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration // 2,  # Low wave
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-            # 💀 ENDURANCE PATTERN: Ultimate sustained stress
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=max_duration,  # Maximum duration
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-                block=True,
-            ),
-            # 🔥 RECOVERY STRESS: Test recovery under pressure
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration * 2,  # Sustained outage
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-                block=True,
-            ),
-            ApplicationOutageScenarios.application_outage(
-                scenario_dir,
-                duration=base_duration // 2,  # Quick follow-up during recovery
-                namespace=openshift_storage_ns,
-                pod_selector=pod_selector,
-            ),
-        ]
-
-        log.info(
-            f"Generated {len(scenarios)} strength testing scenarios for {target_component} "
-            f"({stress_level} level)"
+        # Create strength testing scenarios
+        scenarios = self._create_strength_testing_scenarios(
+            krkn_scenario_directory,
+            base_duration,
+            max_duration,
+            constants.OPENSHIFT_STORAGE_NAMESPACE,
+            pod_selector,
         )
 
-        # Generate Krkn configuration with extended wait times for strength testing
+        log.info(f"📋 Generated {len(scenarios)} strength testing scenarios")
+
+        # Configure and execute
         config = KrknConfigGenerator()
         for scenario in scenarios:
             config.add_scenario("application_outages_scenarios", scenario)
 
-        # Longer wait duration for strength testing
         extended_wait = 90 if stress_level == "ultimate" else 60
         config.set_tunings(wait_duration=extended_wait, iterations=1)
-        config.write_to_file(location=scenario_dir)
+        config.write_to_file(location=krkn_scenario_directory)
 
-        log.info(
-            f"Krkn strength testing configuration written (wait_duration={extended_wait}s)"
+        chaos_data = self._execute_chaos_scenarios(
+            config, f"{target_component} ({stress_level})"
         )
-
-        # Execute Krkn chaos scenarios
-        krkn = KrKnRunner(config.global_config)
-        try:
-            log.info(
-                f"🚀 Starting {stress_level} application strength testing for {target_component}"
-            )
-            krkn.run_async()
-            krkn.wait_for_completion(check_interval=60)
-            log.info(
-                f"✅ Application strength testing completed for {target_component} ({stress_level} level)"
-            )
-        except CommandFailed as e:
-            log.error(f"Krkn strength testing failed for {target_component}: {str(e)}")
-            pytest.fail(
-                f"Krkn strength testing failed for {target_component}: {str(e)}"
-            )
 
         # Enhanced validation for strength testing
         try:
             workload_ops.validate_and_cleanup()
-            log.info(
-                "💪 Workloads survived strength testing - application resilience confirmed!"
-            )
+            log.info("💪 Workloads survived strength testing - resilience confirmed!")
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.error(
-                f"Workload failure during {stress_level} strength testing: {str(e)}"
-            )
-            # For strength testing, workload issues are more critical
             pytest.fail(
-                f"Application failed strength testing - workloads could not survive {stress_level} "
-                f"stress level for {target_component}: {str(e)}"
+                f"Workloads failed {stress_level} strength testing for {target_component}: {str(e)}"
             )
 
-        # Analyze strength testing results
-        log.info("📊 Analyzing strength testing results...")
-        chaos_run_output = krkn.get_chaos_data()
-
-        total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
-        failing_scenarios = [
-            scenario
-            for scenario in chaos_run_output["telemetry"]["scenarios"]
-            if scenario["affected_pods"]["error"] is not None
-        ]
-        successful_scenarios = total_scenarios - len(failing_scenarios)
-
-        # Calculate strength score
-        strength_score = (
-            (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+        # Analyze results with strength-specific criteria
+        strength_score = self._analyze_strength_results(
+            chaos_data, target_component, stress_level
         )
 
-        log.info(
-            f"🏆 STRENGTH TESTING RESULTS for {target_component} ({stress_level}):"
-        )
-        log.info(f"   • Scenarios executed: {total_scenarios}")
-        log.info(f"   • Successful scenarios: {successful_scenarios}")
-        log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
-        log.info(f"   • Strength Score: {strength_score:.1f}%")
-
-        # Enhanced failure analysis for strength testing
-        if failing_scenarios:
-            log.warning("⚠️  Some strength testing scenarios failed:")
-            for scenario in failing_scenarios:
-                log.warning(
-                    f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
-                )
-
-        # Strength testing success criteria (more lenient than basic tests)
         min_success_rate = 60  # 60% success rate for extreme stress testing
-
-        if total_scenarios == 0:
+        if len(chaos_data["telemetry"]["scenarios"]) == 0:
             pytest.fail("No strength testing scenarios executed - framework failure")
         elif strength_score < min_success_rate:
             pytest.fail(
-                f"Application strength insufficient: {strength_score:.1f}% success rate "
-                f"(minimum {min_success_rate}% required for {stress_level} testing)"
-            )
-        else:
-            log.info(
-                f"🎉 STRENGTH TEST PASSED: {target_component} demonstrated {strength_score:.1f}% "
-                f"resilience under {stress_level} stress conditions!"
+                f"Insufficient strength: {strength_score:.1f}% < {min_success_rate}% required"
             )
 
-        # Final Ceph health check after extreme testing
-        log.info("🔍 Final Ceph health check after strength testing...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after {stress_level} strength testing for {target_component}. "
-                f"Application may not be resilient enough for this stress level."
-            )
-            log.info("✅ No Ceph crashes - cluster survived strength testing!")
-        except Exception as e:
-            log.error(f"Failed to check Ceph health after strength testing: {e}")
-            log.warning(
-                "Unable to verify final Ceph health - test results may be incomplete"
-            )
+        # Final health check
+        self._check_ceph_health(f"{target_component} strength testing")
 
         log.info(
-            f"🏁 Application strength testing for {target_component} completed successfully "
-            f"({stress_level} level, {strength_score:.1f}% strength score)"
+            f"🎉 STRENGTH TEST PASSED: {target_component} achieved {strength_score:.1f}% "
+            f"resilience under {stress_level} stress!"
         )
