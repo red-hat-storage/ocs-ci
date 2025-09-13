@@ -25,6 +25,8 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     validate_strength_test_results,
     handle_krkn_command_failure,
     handle_workload_validation_failure,
+    analyze_chaos_results,
+    analyze_strength_test_results,
 )
 
 log = logging.getLogger(__name__)
@@ -299,30 +301,12 @@ class TestKrKnHogScenarios:
                 f"Workload validation/cleanup issue during hog scenarios on {node_type} nodes: {str(e)}"
             )
 
-        # Analyze chaos run results
-        log.info("Analyzing chaos run results")
-        chaos_run_output = krkn.get_chaos_data()
-
-        total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
-        failing_scenarios = [
-            scenario
-            for scenario in chaos_run_output["telemetry"]["scenarios"]
-            if scenario["affected_pods"]["error"] is not None
-        ]
-        successful_scenarios = total_scenarios - len(failing_scenarios)
-
-        log.info(
-            f"Chaos run summary: {successful_scenarios}/{total_scenarios} scenarios succeeded"
+        # Analyze chaos run results using helper function
+        results = analyze_chaos_results(
+            krkn, f"{node_type} nodes", "hog scenarios chaos"
         )
-
-        if failing_scenarios:
-            log.warning(
-                f"Some hog scenarios failed on {node_type} nodes: {len(failing_scenarios)} out of {total_scenarios}"
-            )
-            for scenario in failing_scenarios:
-                log.warning(
-                    f"Failed scenario: {scenario['scenario']} - Error: {scenario['affected_pods']['error']}"
-                )
+        total_scenarios = results["total_scenarios"]
+        successful_scenarios = results["successful_scenarios"]
 
         # Validate chaos execution results
         validate_chaos_execution(
@@ -652,36 +636,12 @@ class TestKrKnHogScenarios:
                 e, "cluster", f"{stress_level} strength testing"
             )
 
-        # Analyze extreme cluster strength testing results
-        log.info("📊 Analyzing extreme cluster strength testing results...")
-        chaos_run_output = krkn.get_chaos_data()
-
-        total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
-        failing_scenarios = [
-            scenario
-            for scenario in chaos_run_output["telemetry"]["scenarios"]
-            if scenario["affected_pods"]["error"] is not None
-        ]
-        successful_scenarios = total_scenarios - len(failing_scenarios)
-
-        # Calculate extreme cluster strength score
-        strength_score = (
-            (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+        # Analyze extreme cluster strength testing results using helper function
+        results = analyze_strength_test_results(
+            krkn, "cluster", stress_level, "cluster strength testing"
         )
-
-        log.info(f"🏆 {stress_level.upper()} CLUSTER STRENGTH RESULTS:")
-        log.info(f"   🎯 Scenarios executed: {total_scenarios}")
-        log.info(f"   ✅ Successful scenarios: {successful_scenarios}")
-        log.info(f"   ❌ Failed scenarios: {len(failing_scenarios)}")
-        log.info(f"   💪 Cluster Strength Score: {strength_score:.1f}%")
-
-        # Enhanced failure analysis for extreme testing
-        if failing_scenarios:
-            log.warning(f"⚠️  Some {stress_level} scenarios failed:")
-            for scenario in failing_scenarios:
-                log.warning(
-                    f"   💥 {scenario['scenario']}: {scenario['affected_pods']['error']}"
-                )
+        total_scenarios = results["total_scenarios"]
+        strength_score = results["strength_score"]
 
         # Extreme cluster strength testing success criteria (very lenient due to extreme nature)
         min_success_rates = {

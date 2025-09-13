@@ -139,35 +139,6 @@ def execute_container_chaos(config):
     return krkn.get_chaos_data()
 
 
-def analyze_chaos_results(chaos_data, component_label):
-    """Analyze chaos run results and return success metrics."""
-    total_scenarios = len(chaos_data["telemetry"]["scenarios"])
-    failing_scenarios = [
-        scenario
-        for scenario in chaos_data["telemetry"]["scenarios"]
-        if scenario["affected_pods"]["error"] is not None
-    ]
-    successful_scenarios = total_scenarios - len(failing_scenarios)
-    success_rate = (
-        (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
-    )
-
-    log.info(f"🏆 CONTAINER CHAOS RESULTS for {component_label}:")
-    log.info(f"   • Total scenarios executed: {total_scenarios}")
-    log.info(f"   • Successful scenarios: {successful_scenarios}")
-    log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
-    log.info(f"   • Success rate: {success_rate:.1f}%")
-
-    if failing_scenarios:
-        log.warning("⚠️  Some container chaos scenarios failed:")
-        for scenario in failing_scenarios:
-            log.warning(
-                f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
-            )
-
-    return success_rate, failing_scenarios
-
-
 def check_ceph_health(component_label):
     """Check for Ceph crashes after chaos injection."""
     try:
@@ -399,6 +370,177 @@ def handle_workload_validation_failure(error, component_name, test_type="chaos")
     )
     log.error(f"💥 Workload validation failure during {test_type}: {str(error)}")
     pytest.fail(error_msg)
+
+
+def analyze_chaos_results(
+    krkn, component_name, test_type="chaos", detailed_logging=True
+):
+    """
+    Analyze chaos test results and return comprehensive metrics.
+
+    Args:
+        krkn: KrKn runner instance with chaos data
+        component_name (str): Name of the component being tested
+        test_type (str): Type of test for logging context
+        detailed_logging (bool): Whether to log detailed scenario analysis
+
+    Returns:
+        dict: Analysis results containing:
+            - total_scenarios (int): Total number of scenarios executed
+            - successful_scenarios (int): Number of successful scenarios
+            - failing_scenarios (list): List of failed scenarios
+            - success_rate (float): Success rate percentage
+            - chaos_data (dict): Raw chaos data from krkn
+    """
+    log.info(f"📊 Analyzing {test_type} results for {component_name}")
+
+    # Get chaos data
+    chaos_run_output = krkn.get_chaos_data()
+
+    # Calculate metrics
+    total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
+    failing_scenarios = [
+        scenario
+        for scenario in chaos_run_output["telemetry"]["scenarios"]
+        if scenario.get("affected_pods", {}).get("error") is not None
+    ]
+    successful_scenarios = total_scenarios - len(failing_scenarios)
+    success_rate = (
+        (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+    )
+
+    # Log summary
+    log.info(f"🏆 {test_type.upper()} RESULTS for {component_name}:")
+    log.info(f"   • Total scenarios executed: {total_scenarios}")
+    log.info(f"   • Successful scenarios: {successful_scenarios}")
+    log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
+    log.info(f"   • Success rate: {success_rate:.1f}%")
+
+    # Log failed scenarios if any
+    if failing_scenarios:
+        log.warning(f"⚠️  Some {test_type} scenarios failed:")
+        for scenario in failing_scenarios:
+            scenario_name = scenario.get("scenario", "Unknown").split("/")[-1]
+            error = scenario.get("affected_pods", {}).get("error")
+            log.warning(f"   • {scenario_name}: {error}")
+
+    # Detailed logging if requested
+    if detailed_logging and total_scenarios > 0:
+        log.info(f"📋 Detailed scenario analysis for {component_name}:")
+        for i, scenario in enumerate(chaos_run_output["telemetry"]["scenarios"], 1):
+            scenario_name = scenario.get("scenario", "Unknown").split("/")[-1]
+            exit_status = scenario.get("exit_status", "Unknown")
+            affected_pods = scenario.get("affected_pods", {})
+            recovered = len(affected_pods.get("recovered", []))
+            unrecovered = len(affected_pods.get("unrecovered", []))
+            error = affected_pods.get("error")
+
+            status_emoji = "✅" if error is None else "❌"
+            log.info(
+                f"   {status_emoji} Scenario {i}: {scenario_name} "
+                f"(Exit: {exit_status}, Recovered: {recovered}, Unrecovered: {unrecovered})"
+            )
+            if error:
+                log.info(f"      Error: {error}")
+
+    return {
+        "total_scenarios": total_scenarios,
+        "successful_scenarios": successful_scenarios,
+        "failing_scenarios": failing_scenarios,
+        "success_rate": success_rate,
+        "chaos_data": chaos_run_output,
+    }
+
+
+def analyze_strength_test_results(
+    krkn, component_name, stress_level, test_type="strength testing"
+):
+    """
+    Analyze strength test results with specialized metrics and logging.
+
+    Args:
+        krkn: KrKn runner instance with chaos data
+        component_name (str): Name of the component being tested
+        stress_level (str): Level of stress testing (e.g., "extreme", "high")
+        test_type (str): Type of test for logging context
+
+    Returns:
+        dict: Analysis results containing:
+            - total_scenarios (int): Total number of scenarios executed
+            - successful_scenarios (int): Number of successful scenarios
+            - failing_scenarios (list): List of failed scenarios
+            - strength_score (float): Strength score percentage
+            - chaos_data (dict): Raw chaos data from krkn
+    """
+    log.info(f"📊 Analyzing {stress_level} {test_type} results for {component_name}")
+
+    # Get chaos data
+    chaos_run_output = krkn.get_chaos_data()
+
+    # Calculate metrics
+    total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
+    failing_scenarios = [
+        scenario
+        for scenario in chaos_run_output["telemetry"]["scenarios"]
+        if scenario.get("affected_pods", {}).get("error") is not None
+    ]
+    successful_scenarios = total_scenarios - len(failing_scenarios)
+    strength_score = (
+        (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+    )
+
+    # Log strength test specific results
+    log.info(
+        f"🏆 {stress_level.upper()} {test_type.upper()} RESULTS for {component_name}:"
+    )
+    log.info(f"   • Total scenarios executed: {total_scenarios}")
+    log.info(f"   • Successful scenarios: {successful_scenarios}")
+    log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
+    log.info(f"   • Strength score: {strength_score:.1f}%")
+    log.info(f"   • Stress level: {stress_level.upper()}")
+
+    # Log failed scenarios with strength test context
+    if failing_scenarios:
+        log.warning(f"⚠️  Some {stress_level} {test_type} scenarios failed:")
+        for scenario in failing_scenarios:
+            scenario_name = scenario.get("scenario", "Unknown").split("/")[-1]
+            error = scenario.get("affected_pods", {}).get("error")
+            log.warning(f"   • {scenario_name}: {error}")
+
+    return {
+        "total_scenarios": total_scenarios,
+        "successful_scenarios": successful_scenarios,
+        "failing_scenarios": failing_scenarios,
+        "strength_score": strength_score,
+        "chaos_data": chaos_run_output,
+    }
+
+
+def assert_no_failing_scenarios(failing_scenarios, component_name, test_type="chaos"):
+    """
+    Assert that no scenarios failed and provide detailed error information.
+
+    Args:
+        failing_scenarios (list): List of failed scenarios
+        component_name (str): Name of the component being tested
+        test_type (str): Type of test for error messages
+
+    Raises:
+        AssertionError: If any scenarios failed
+    """
+    if failing_scenarios:
+        error_details = []
+        for scenario in failing_scenarios:
+            scenario_name = scenario.get("scenario", "Unknown").split("/")[-1]
+            error = scenario.get("affected_pods", {}).get("error")
+            error_details.append(f"{scenario_name}: {error}")
+
+        error_msg = (
+            f"{test_type.title()} scenarios failed for {component_name} "
+            f"with errors: {'; '.join(error_details)}"
+        )
+
+        assert False, error_msg
 
 
 def krkn_scenarios_list():

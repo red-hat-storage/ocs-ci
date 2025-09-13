@@ -41,6 +41,8 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     validate_strength_test_results,
     handle_krkn_command_failure,
     handle_workload_validation_failure,
+    analyze_chaos_results,
+    analyze_strength_test_results,
 )
 
 log = logging.getLogger(__name__)
@@ -258,60 +260,12 @@ class TestKrKnContainerChaosScenarios:
                 f"Workload validation/cleanup issue for {ceph_component_label}: {str(e)}"
             )
 
-        # Analyze chaos run results
-        log.info("Analyzing chaos run results")
-        chaos_run_output = krkn.get_chaos_data()
+        # Analyze chaos run results using helper function
+        results = analyze_chaos_results(krkn, ceph_component_label, "container chaos")
+        total_scenarios = results["total_scenarios"]
+        successful_scenarios = results["successful_scenarios"]
 
-        total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
-        failing_scenarios = [
-            scenario
-            for scenario in chaos_run_output["telemetry"]["scenarios"]
-            if scenario.get("affected_pods", {}).get("error") is not None
-        ]
-        successful_scenarios = total_scenarios - len(failing_scenarios)
-
-        log.info(
-            f"Chaos run summary: {successful_scenarios}/{total_scenarios} scenarios succeeded"
-        )
-
-        # Log detailed scenario analysis
-        for i, scenario in enumerate(chaos_run_output["telemetry"]["scenarios"], 1):
-            scenario_name = scenario.get("scenario", "Unknown").split("/")[-1]
-            exit_status = scenario.get("exit_status", "Unknown")
-            affected_pods = scenario.get("affected_pods", {})
-            recovered = len(affected_pods.get("recovered", []))
-            unrecovered = len(affected_pods.get("unrecovered", []))
-            error = affected_pods.get("error")
-
-            # Extract container name from parameters if available
-            parameters = scenario.get("parameters", [])
-            target_container = "Unknown"
-            if parameters and len(parameters) > 0:
-                config = parameters[0].get("config", {})
-                target_container = config.get("container_name", "Random")
-                if not target_container:
-                    target_container = "Random"
-
-            log.info(f"Scenario {i}: {scenario_name}")
-            log.info(f"  Exit Status: {exit_status}")
-            log.info(f"  Target Container: {target_container}")
-            log.info(
-                f"  Affected Pods: {recovered} recovered, {unrecovered} unrecovered"
-            )
-            if error:
-                log.warning(f"  Error: {error}")
-            else:
-                log.info("  No errors detected")
-
-        if failing_scenarios:
-            log.warning(
-                f"Some container scenarios failed for {ceph_component_label}: "
-                f"{len(failing_scenarios)} out of {total_scenarios}"
-            )
-            for scenario in failing_scenarios:
-                log.warning(
-                    f"Failed scenario: {scenario['scenario']} - Error: {scenario.get('affected_pods', {}).get('error')}"
-                )
+        # Additional logging handled by analyze_chaos_results helper
 
         # Validate chaos execution results
         validate_chaos_execution(
@@ -534,38 +488,12 @@ class TestKrKnContainerChaosScenarios:
                 e, component_name, f"{stress_level} container strength testing"
             )
 
-        # Analyze container strength testing results
-        log.info("📊 Analyzing container strength testing results...")
-        chaos_run_output = krkn.get_chaos_data()
-
-        total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
-        failing_scenarios = [
-            scenario
-            for scenario in chaos_run_output["telemetry"]["scenarios"]
-            if scenario.get("affected_pods", {}).get("error") is not None
-        ]
-        successful_scenarios = total_scenarios - len(failing_scenarios)
-
-        # Calculate container strength score
-        strength_score = (
-            (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+        # Analyze container strength testing results using helper function
+        results = analyze_strength_test_results(
+            krkn, component_name, stress_level, "container strength testing"
         )
-
-        log.info(
-            f"🏆 CONTAINER STRENGTH TESTING RESULTS for {component_name} ({stress_level}):"
-        )
-        log.info(f"   • Scenarios executed: {total_scenarios}")
-        log.info(f"   • Successful scenarios: {successful_scenarios}")
-        log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
-        log.info(f"   • Container Strength Score: {strength_score:.1f}%")
-
-        # Enhanced failure analysis for container strength testing
-        if failing_scenarios:
-            log.warning("⚠️  Some container strength testing scenarios failed:")
-            for scenario in failing_scenarios:
-                scenario_name = scenario.get("scenario", "Unknown").split("/")[-1]
-                error = scenario.get("affected_pods", {}).get("error")
-                log.warning(f"   • {scenario_name}: {error}")
+        total_scenarios = results["total_scenarios"]
+        strength_score = results["strength_score"]
 
         # Container strength testing success criteria (more lenient than basic tests)
         # Validate strength test results
@@ -809,37 +737,15 @@ class TestKrKnContainerChaosScenarios:
                 f"Workload validation/cleanup issue for {component_name}: {str(e)}"
             )
 
-        # 📊 RESULTS ANALYSIS: Analyze chaos run results
-        log.info("📊 Analyzing container chaos results")
-        chaos_run_output = krkn.get_chaos_data()
-
-        total_scenarios = len(chaos_run_output["telemetry"]["scenarios"])
-        failing_scenarios = [
-            scenario
-            for scenario in chaos_run_output["telemetry"]["scenarios"]
-            if scenario["affected_pods"]["error"] is not None
-        ]
-        successful_scenarios = total_scenarios - len(failing_scenarios)
-        success_rate = (
-            (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+        # 📊 RESULTS ANALYSIS: Analyze chaos run results using helper function
+        results = analyze_chaos_results(
+            krkn, component_name, "container chaos", detailed_logging=False
         )
+        success_rate = results["success_rate"]
 
-        log.info(
-            f"🏆 CONTAINER CHAOS RESULTS for {component_name} (ALL {instance_count} instances):"
-        )
-        log.info(f"   • Total scenarios executed: {total_scenarios}")
-        log.info(f"   • Successful scenarios: {successful_scenarios}")
-        log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
-        log.info(f"   • Success rate: {success_rate:.1f}%")
+        # Additional context logging for maximum chaos test
         log.info(f"   • Instances tested: {target_instances}/{instance_count}")
         log.info(f"   • Component type: {'CRITICAL' if is_critical else 'RESILIENT'}")
-
-        if failing_scenarios:
-            log.warning("⚠️  Some container chaos scenarios failed:")
-            for scenario in failing_scenarios:
-                log.warning(
-                    f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
-                )
 
         # 🎯 SUCCESS CRITERIA: Evaluate success rate against thresholds
         evaluate_chaos_success_rate(
