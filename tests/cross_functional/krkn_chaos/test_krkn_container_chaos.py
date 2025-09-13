@@ -36,77 +36,215 @@ from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 log = logging.getLogger(__name__)
 
 
+class ContainerComponentConfig:
+    """Configuration helper for container chaos testing with component-aware settings."""
+
+    CRITICAL_COMPONENTS = [
+        "mon",
+        "mgr",
+        "mds",
+        "cephfs-ctrlplugin",
+        "rbd-ctrlplugin",
+        "rook-operator",
+    ]
+    RESILIENT_COMPONENTS = ["osd", "rgw", "cephfs-nodeplugin", "rbd-nodeplugin"]
+
+    @classmethod
+    def is_critical(cls, component_name):
+        """Check if component is critical and needs conservative chaos settings."""
+        return component_name in cls.CRITICAL_COMPONENTS
+
+    @classmethod
+    def get_component_settings(cls, component_name, instance_count=None):
+        """Get component-specific chaos settings based on criticality."""
+        if cls.is_critical(component_name):
+            return {
+                "kill_signal": "SIGTERM",
+                "pause_duration": 45 if component_name == "rook-operator" else 60,
+                "instance_count": 1,
+                "wait_duration": 600,
+                "approach": "CONSERVATIVE",
+            }
+        else:
+            return {
+                "kill_signal": "SIGKILL",
+                "pause_duration": 90,
+                "instance_count": instance_count or 2,
+                "wait_duration": 480,
+                "approach": "AGGRESSIVE",
+            }
+
+
 @green_squad
 @chaos
 @polarion_id("OCS-1240")
 class TestKrKnContainerChaosScenarios:
     """
-    Test suite for Krkn container chaos scenarios
+    Test suite for Krkn container chaos scenarios with organized helper methods.
     """
 
+    def _detect_component_instances(self, component_label, component_name):
+        """Detect available pod instances for a component."""
+        from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+        try:
+            available_pods = get_pods_having_label(
+                label=component_label, namespace="openshift-storage"
+            )
+            instance_count = len(available_pods)
+            pod_names = [pod["metadata"]["name"] for pod in available_pods]
+
+            log.info(
+                f"✅ Found {instance_count} {component_name} instances: {pod_names}"
+            )
+            return instance_count, pod_names
+
+        except Exception as e:
+            log.error(f"Failed to detect available instances for {component_name}: {e}")
+            raise
+
+    def _create_basic_container_scenarios(
+        self, scenario_dir, namespace, label_selector, settings
+    ):
+        """Create basic container chaos scenarios."""
+        return [
+            # 🎯 PRIMARY KILL: Standard container kill scenario
+            ContainerScenarios.container_kill(
+                scenario_dir,
+                namespace=namespace,
+                label_selector=label_selector,
+                instance_count=settings["instance_count"],
+                kill_signal=settings["kill_signal"],
+                wait_duration=settings["wait_duration"],
+            ),
+            # 🔥 AGGRESSIVE KILL: Rapid container termination
+            ContainerScenarios.container_kill(
+                scenario_dir,
+                namespace=namespace,
+                label_selector=label_selector,
+                instance_count=settings["instance_count"],
+                kill_signal="SIGKILL",  # Always SIGKILL for aggressive scenario
+                wait_duration=settings["wait_duration"] - 120,
+            ),
+            # ⏸️ PRIMARY PAUSE: Standard container pause scenario
+            ContainerScenarios.container_pause(
+                scenario_dir,
+                namespace=namespace,
+                label_selector=label_selector,
+                instance_count=max(1, settings["instance_count"] // 2),
+                pause_seconds=settings["pause_duration"],
+                wait_duration=settings["wait_duration"],
+            ),
+            # 💥 EXTENDED PAUSE: Longer container suspension
+            ContainerScenarios.container_pause(
+                scenario_dir,
+                namespace=namespace,
+                label_selector=label_selector,
+                instance_count=max(1, settings["instance_count"] // 2),
+                pause_seconds=settings["pause_duration"] * 2,
+                wait_duration=settings["wait_duration"] + 240,
+            ),
+        ]
+
+    def _create_high_intensity_scenarios(
+        self, scenario_dir, namespace, label_selector, settings
+    ):
+        """Create high-intensity scenarios for resilient components."""
+        return [
+            # ⚡ RAPID-FIRE KILL: Quick successive container kills
+            ContainerScenarios.container_kill(
+                scenario_dir,
+                namespace=namespace,
+                label_selector=label_selector,
+                instance_count=settings["instance_count"],
+                kill_signal=settings["kill_signal"],
+                wait_duration=300,
+            ),
+            # 🌪️ CHAOS STORM: Maximum intensity container chaos
+            ContainerScenarios.container_kill(
+                scenario_dir,
+                namespace=namespace,
+                label_selector=label_selector,
+                instance_count=settings["instance_count"],
+                kill_signal="SIGKILL",
+                wait_duration=240,
+            ),
+        ]
+
+    def _execute_container_chaos(self, config, component_label):
+        """Execute Krkn container chaos scenarios and return results."""
+        krkn = KrKnRunner(config.global_config)
+        krkn.run_async()
+        krkn.wait_for_completion(check_interval=60)
+        return krkn.get_chaos_data()
+
+    def _analyze_chaos_results(self, chaos_data, component_label):
+        """Analyze chaos run results and return success metrics."""
+        total_scenarios = len(chaos_data["telemetry"]["scenarios"])
+        failing_scenarios = [
+            scenario
+            for scenario in chaos_data["telemetry"]["scenarios"]
+            if scenario["affected_pods"]["error"] is not None
+        ]
+        successful_scenarios = total_scenarios - len(failing_scenarios)
+        success_rate = (
+            (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+        )
+
+        log.info(f"🏆 CONTAINER CHAOS RESULTS for {component_label}:")
+        log.info(f"   • Total scenarios executed: {total_scenarios}")
+        log.info(f"   • Successful scenarios: {successful_scenarios}")
+        log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
+        log.info(f"   • Success rate: {success_rate:.1f}%")
+
+        if failing_scenarios:
+            log.warning("⚠️  Some container chaos scenarios failed:")
+            for scenario in failing_scenarios:
+                log.warning(
+                    f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
+                )
+
+        return success_rate, failing_scenarios
+
+    def _check_ceph_health(self, component_label):
+        """Check for Ceph crashes after chaos injection."""
+        try:
+            ceph_status_tool = CephStatusTool()
+            ceph_crashes = ceph_status_tool.get_ceph_crashes()
+            if ceph_crashes:
+                log.warning(
+                    f"⚠️  Ceph crashes detected after {component_label} container chaos:"
+                )
+                for crash in ceph_crashes:
+                    log.warning(f"   • {crash}")
+            else:
+                log.info(
+                    f"✅ NO CEPH CRASHES - {component_label} container chaos successful!"
+                )
+        except Exception as e:
+            log.warning(
+                f"Unable to verify Ceph health after {component_label} chaos: {e}"
+            )
+
     @pytest.mark.parametrize(
-        "ceph_component_label,instance_count,kill_signal,pause_duration",
+        "ceph_component_label,component_name",
         [
-            (
-                OSD_APP_LABEL,
-                2,
-                "SIGKILL",
-                90,
-            ),  # OSDs can handle container restarts
-            (
-                MGR_APP_LABEL,
-                1,
-                "SIGTERM",
-                60,
-            ),  # MGR with graceful termination
-            (
-                MON_APP_LABEL,
-                1,
-                "SIGTERM",
-                45,
-            ),  # MON with minimal disruption (critical component)
-            (
-                MDS_APP_LABEL,
-                1,
-                "SIGTERM",
-                60,
-            ),  # MDS with moderate disruption
-            (
-                RGW_APP_LABEL,
-                2,
-                "SIGKILL",
-                90,
-            ),  # RGW can handle aggressive container restarts
+            (OSD_APP_LABEL, "osd"),  # OSDs can handle container restarts
+            (MGR_APP_LABEL, "mgr"),  # Critical: active/standby pair - conservative
+            (MON_APP_LABEL, "mon"),  # Critical: NEVER >1 (breaks quorum)
+            (MDS_APP_LABEL, "mds"),  # Critical: usually 1-2 active - conservative
+            (RGW_APP_LABEL, "rgw"),  # HA design: multiple gateways expected
             (
                 CEPHFS_NODEPLUGIN_LABEL,
-                2,
-                "SIGKILL",
-                90,
-            ),  # CephFS node plugins are resilient
-            (
-                RBD_NODEPLUGIN_LABEL,
-                2,
-                "SIGKILL",
-                90,
-            ),  # RBD node plugins are resilient
+                "cephfs-nodeplugin",
+            ),  # Node plugins are resilient
+            (RBD_NODEPLUGIN_LABEL, "rbd-nodeplugin"),  # Node plugins are resilient
             (
                 CEPHFS_CTRLPLUGIN_LABEL,
-                1,
-                "SIGTERM",
-                60,
-            ),  # CephFS controller plugin - critical
-            (
-                RBD_CTRLPLUGIN_LABEL,
-                1,
-                "SIGTERM",
-                60,
-            ),  # RBD controller plugin - critical
-            (
-                ROOK_OPERATOR_PODS,
-                1,
-                "SIGTERM",
-                45,
-            ),  # Rook operator - critical component
+                "cephfs-ctrlplugin",
+            ),  # Critical: controller plugins
+            (RBD_CTRLPLUGIN_LABEL, "rbd-ctrlplugin"),  # Critical: controller plugins
+            (ROOK_OPERATOR_PODS, "rook-operator"),  # Critical: cluster operator
         ],
         ids=[
             "osd-container-chaos",
@@ -127,9 +265,7 @@ class TestKrKnContainerChaosScenarios:
         krkn_scenario_directory,
         workload_ops,
         ceph_component_label,
-        instance_count,
-        kill_signal,
-        pause_duration,
+        component_name,
     ):
         """
         Test container chaos scenarios using Krkn container kill and pause templates.
@@ -150,10 +286,13 @@ class TestKrKnContainerChaosScenarios:
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
+        # Get component-specific settings
+        settings = ContainerComponentConfig.get_component_settings(component_name)
+
         log.info(
-            f"Testing container chaos for Ceph component: {ceph_component_label} "
-            f"with instance_count={instance_count}, kill_signal={kill_signal}, "
-            f"pause_duration={pause_duration}s"
+            f"Testing container chaos for {component_name} component: {ceph_component_label} "
+            f"with instance_count={settings['instance_count']}, kill_signal={settings['kill_signal']}, "
+            f"pause_duration={settings['pause_duration']}s"
         )
 
         # Map Ceph component labels to their container names
@@ -185,9 +324,9 @@ class TestKrKnContainerChaosScenarios:
                 scenario_dir,
                 namespace=openshift_storage_ns,
                 label_selector=ceph_component_label,
-                instance_count=instance_count,
+                instance_count=settings["instance_count"],
                 container_name=container_name,
-                kill_signal=kill_signal,
+                kill_signal=settings["kill_signal"],
                 wait_duration=600,
             ),
             # 🔥 AGGRESSIVE KILL: Rapid container termination
@@ -195,7 +334,7 @@ class TestKrKnContainerChaosScenarios:
                 scenario_dir,
                 namespace=openshift_storage_ns,
                 label_selector=ceph_component_label,
-                instance_count=instance_count,
+                instance_count=settings["instance_count"],
                 container_name=container_name,
                 kill_signal="SIGKILL",  # Always use SIGKILL for aggressive scenario
                 wait_duration=400,  # Shorter wait for rapid succession
@@ -205,9 +344,9 @@ class TestKrKnContainerChaosScenarios:
                 scenario_dir,
                 namespace=openshift_storage_ns,
                 label_selector=ceph_component_label,
-                instance_count=max(1, instance_count // 2),
+                instance_count=max(1, settings["instance_count"] // 2),
                 container_name=container_name,
-                pause_seconds=pause_duration,
+                pause_seconds=settings["pause_duration"],
                 wait_duration=480,
             ),
             # 💥 EXTENDED PAUSE: Longer container suspension
@@ -215,9 +354,9 @@ class TestKrKnContainerChaosScenarios:
                 scenario_dir,
                 namespace=openshift_storage_ns,
                 label_selector=ceph_component_label,
-                instance_count=max(1, instance_count // 2),
+                instance_count=max(1, settings["instance_count"] // 2),
                 container_name=container_name,
-                pause_seconds=pause_duration * 2,  # 2x longer pause
+                pause_seconds=settings["pause_duration"] * 2,  # 2x longer pause
                 wait_duration=720,  # Extended wait for recovery
             ),
             # ⚡ RAPID-FIRE KILL: Quick successive container kills
@@ -225,9 +364,9 @@ class TestKrKnContainerChaosScenarios:
                 scenario_dir,
                 namespace=openshift_storage_ns,
                 label_selector=ceph_component_label,
-                instance_count=max(1, instance_count // 2),
+                instance_count=max(1, settings["instance_count"] // 2),
                 container_name=container_name,
-                kill_signal=kill_signal,
+                kill_signal=settings["kill_signal"],
                 wait_duration=300,  # Shorter wait for rapid-fire
             ),
         ]
@@ -241,7 +380,7 @@ class TestKrKnContainerChaosScenarios:
                     scenario_dir,
                     namespace=openshift_storage_ns,
                     label_selector=ceph_component_label,
-                    instance_count=instance_count,
+                    instance_count=settings["instance_count"],
                     container_name=container_name,
                     kill_signal="SIGKILL",
                     wait_duration=200,  # Very short wait
@@ -250,7 +389,7 @@ class TestKrKnContainerChaosScenarios:
                     scenario_dir,
                     namespace=openshift_storage_ns,
                     label_selector=ceph_component_label,
-                    instance_count=max(1, instance_count // 2),
+                    instance_count=max(1, settings["instance_count"] // 2),
                     container_name=container_name,
                     kill_signal="SIGKILL",
                     wait_duration=250,  # Another rapid burst
@@ -262,7 +401,7 @@ class TestKrKnContainerChaosScenarios:
                     label_selector=ceph_component_label,
                     instance_count=1,  # Conservative instance count for long pause
                     container_name=container_name,
-                    pause_seconds=pause_duration * 4,  # 4x longer pause
+                    pause_seconds=settings["pause_duration"] * 4,  # 4x longer pause
                     wait_duration=1200,  # Extended recovery time
                 ),
                 # 🚨 MIXED CHAOS: Alternating kill and pause
@@ -270,7 +409,7 @@ class TestKrKnContainerChaosScenarios:
                     scenario_dir,
                     namespace=openshift_storage_ns,
                     label_selector=ceph_component_label,
-                    instance_count=max(1, instance_count // 2),
+                    instance_count=max(1, settings["instance_count"] // 2),
                     container_name=container_name,
                     kill_signal="SIGTERM",
                     wait_duration=300,
@@ -281,7 +420,7 @@ class TestKrKnContainerChaosScenarios:
                     label_selector=ceph_component_label,
                     instance_count=1,
                     container_name=container_name,
-                    pause_seconds=pause_duration * 3,
+                    pause_seconds=settings["pause_duration"] * 3,
                     wait_duration=600,
                 ),
             ]
