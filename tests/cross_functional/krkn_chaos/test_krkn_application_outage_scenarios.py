@@ -8,6 +8,11 @@ It includes tests for:
 - Ceph Manager (MGR) application outages
 - Ceph Object Storage Daemon (OSD) application outages
 - Ceph RADOS Gateway (RGW) application outages
+- CephFS CSI Node Plugin application outages
+- RBD CSI Node Plugin application outages
+- CephFS CSI Controller Plugin application outages
+- RBD CSI Controller Plugin application outages
+- Rook Operator application outages
 
 The tests create VDBENCH workloads and inject application failures to validate system resilience.
 """
@@ -22,6 +27,11 @@ from ocs_ci.ocs.constants import (
     MGR_APP_LABEL,
     OSD_APP_LABEL,
     RGW_APP_LABEL,
+    CEPHFS_NODEPLUGIN_LABEL,
+    RBD_NODEPLUGIN_LABEL,
+    CEPHFS_CTRLPLUGIN_LABEL,
+    RBD_CTRLPLUGIN_LABEL,
+    ROOK_OPERATOR_PODS,
 )
 from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, polarion_id
 from ocs_ci.krkn_chaos.krkn_scenario_generator import ApplicationOutageScenarios
@@ -29,6 +39,7 @@ from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.ocs.resources.pod import get_pods_having_label
 
 log = logging.getLogger(__name__)
 
@@ -42,15 +53,46 @@ class TestKrKnApplicationOutageScenarios:
     """
 
     @pytest.mark.parametrize(
-        "ceph_component_label,instance_count,component_name",
+        "ceph_component_label,component_name",
         [
-            (OSD_APP_LABEL, 2, "osd"),  # OSDs can handle multiple failures
-            (MGR_APP_LABEL, 1, "mgr"),  # Critical: active/standby pair - conservative
-            (MON_APP_LABEL, 1, "mon"),  # Critical: NEVER >1 (breaks quorum)
-            (MDS_APP_LABEL, 1, "mds"),  # Critical: usually 1-2 active - conservative
-            (RGW_APP_LABEL, 2, "rgw"),  # HA design: multiple gateways expected
+            (OSD_APP_LABEL, "osd"),  # OSDs can handle multiple failures
+            (MGR_APP_LABEL, "mgr"),  # Critical: active/standby pair - conservative
+            (MON_APP_LABEL, "mon"),  # Critical: NEVER >1 (breaks quorum)
+            (MDS_APP_LABEL, "mds"),  # Critical: usually 1-2 active - conservative
+            (RGW_APP_LABEL, "rgw"),  # HA design: multiple gateways expected
+            (
+                CEPHFS_NODEPLUGIN_LABEL,
+                "cephfs-nodeplugin",
+            ),  # Node plugins: one per node, can handle multiple
+            (
+                RBD_NODEPLUGIN_LABEL,
+                "rbd-nodeplugin",
+            ),  # Node plugins: one per node, can handle multiple
+            (
+                CEPHFS_CTRLPLUGIN_LABEL,
+                "cephfs-ctrlplugin",
+            ),  # Controller plugins: typically 1-2 replicas
+            (
+                RBD_CTRLPLUGIN_LABEL,
+                "rbd-ctrlplugin",
+            ),  # Controller plugins: typically 1-2 replicas
+            (
+                ROOK_OPERATOR_PODS,
+                "rook-operator",
+            ),  # Critical: single operator instance - very conservative
         ],
-        ids=["osd-2pods", "mgr-1pod", "mon-1pod", "mds-1pod", "rgw-2pods"],
+        ids=[
+            "osd-all-instances",
+            "mgr-all-instances",
+            "mon-all-instances",
+            "mds-all-instances",
+            "rgw-all-instances",
+            "cephfs-nodeplugin-all-instances",
+            "rbd-nodeplugin-all-instances",
+            "cephfs-ctrlplugin-all-instances",
+            "rbd-ctrlplugin-all-instances",
+            "rook-operator-all-instances",
+        ],
     )
     def test_run_krkn_application_outage_scenarios(
         self,
@@ -58,34 +100,28 @@ class TestKrKnApplicationOutageScenarios:
         krkn_scenario_directory,
         workload_ops,
         ceph_component_label,
-        instance_count,
         component_name,
     ):
         """
         Test application outage scenarios for different Rook Ceph components.
 
-        This test validates application resilience by injecting outages into different
-        Ceph components (OSD, MGR, MON, MDS, RGW) and verifying that the storage system
-        can handle these disruptions gracefully while running VDBENCH workloads.
+        This test validates application resilience by injecting outages into ALL available
+        instances of different Ceph components (OSD, MGR, MON, MDS, RGW, CSI plugins, Rook operator)
+        and verifying that the storage system can handle these disruptions gracefully while running
+        VDBENCH workloads.
 
         Args:
             krkn_setup: Krkn setup fixture
             krkn_scenario_directory: Directory for scenario configuration files
             workload_ops: WorkloadOps fixture that provides pre-configured VDBENCH workloads
             ceph_component_label: Parameterized Ceph component app label
-            instance_count: Expected impact level (used for test documentation and IDs)
             component_name: Human-readable component name for logging
 
         Note:
-            Application outage scenarios affect ALL pods matching the pod_selector,
-            not a specific instance_count. The instance_count parameter is used
-            for test documentation and determining conservative vs standard settings.
+            Application outage scenarios affect ALL pods matching the pod_selector.
+            The test dynamically detects the number of available instances and applies
+            appropriate chaos scenarios based on component criticality.
         """
-        log.info(
-            f"Starting Krkn application outage test for {component_name} component "
-            f"with instance_count={instance_count}"
-        )
-
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
@@ -94,24 +130,64 @@ class TestKrKnApplicationOutageScenarios:
         label_parts = ceph_component_label.split("=")
         pod_selector = {label_parts[0]: label_parts[1]}
 
+        # Dynamically detect available instances for this component
+        try:
+            available_pods = get_pods_having_label(
+                label=ceph_component_label, namespace=openshift_storage_ns
+            )
+            instance_count = len(available_pods)
+            pod_names = [pod.name for pod in available_pods]
+
+            log.info(
+                f"Starting Krkn application outage test for {component_name} component"
+            )
+            log.info(f"Detected {instance_count} available instances: {pod_names}")
+            log.info(
+                f"Using pod selector: {pod_selector} (affects all {instance_count} matching pods)"
+            )
+        except Exception as e:
+            log.error(f"Failed to detect available instances for {component_name}: {e}")
+            # Fallback to assuming at least 1 instance exists
+            instance_count = 1
+            log.warning(f"Using fallback instance_count=1 for {component_name}")
+
         log.info(
             f"Creating application outage scenarios for {component_name} component"
         )
-        log.info(f"Using pod selector: {pod_selector} (affects all matching pods)")
 
-        # Configure scenario parameters based on component criticality
-        if component_name in ["mon", "mgr", "mds"]:
+        # Configure scenario parameters based on component criticality and instance count
+        critical_components = [
+            "mon",
+            "mgr",
+            "mds",
+            "cephfs-ctrlplugin",
+            "rbd-ctrlplugin",
+            "rook-operator",
+        ]
+        if component_name in critical_components:
             # Conservative settings for critical components
             duration = 60  # Shorter duration for critical components
             wait_duration = 30
             log.info(
-                f"Using conservative settings for critical {component_name} component"
+                f"Using conservative settings for critical {component_name} component "
+                f"({instance_count} instances detected)"
             )
         else:
-            # Standard settings for less critical components
+            # Standard settings for less critical components (OSDs, RGWs, node plugins)
             duration = 120
             wait_duration = 60
-            log.info(f"Using standard settings for {component_name} component")
+            log.info(
+                f"Using standard settings for {component_name} component "
+                f"({instance_count} instances detected)"
+            )
+
+        # Additional safety check for single-instance critical components
+        if component_name in ["mon", "rook-operator"] and instance_count == 1:
+            duration = min(duration, 45)  # Even more conservative for single instances
+            log.warning(
+                f"Single instance detected for critical {component_name} - "
+                f"using extra conservative duration: {duration}s"
+            )
 
         scenarios = [
             # 🎯 PRIMARY OUTAGE: Standard application outage scenario
@@ -147,8 +223,12 @@ class TestKrKnApplicationOutageScenarios:
         ]
 
         # Add additional high-intensity scenarios for non-critical components
-        if component_name not in ["mon", "mgr", "mds"]:
-            # These scenarios are only safe for less critical components (OSD, RGW)
+        if component_name not in critical_components:
+            # These scenarios are only safe for less critical components (OSD, RGW, node plugins)
+            log.info(
+                f"Adding high-intensity scenarios for non-critical {component_name} component "
+                f"with {instance_count} instances"
+            )
             additional_scenarios = [
                 # 🌪️ CHAOS STORM: Multiple rapid outages
                 ApplicationOutageScenarios.application_outage(
@@ -189,7 +269,7 @@ class TestKrKnApplicationOutageScenarios:
             scenarios.extend(additional_scenarios)
             log.info(
                 f"Added {len(additional_scenarios)} high-intensity scenarios for {component_name} "
-                "(safe for non-critical components)"
+                f"(safe for non-critical components with {instance_count} instances)"
             )
 
         log.info(
@@ -295,8 +375,24 @@ class TestKrKnApplicationOutageScenarios:
             ("osd", "extreme", 6),  # OSDs can handle extreme stress
             ("rgw", "high", 4),  # RGWs are resilient but more conservative
             ("osd", "ultimate", 8),  # Ultimate OSD stress test
+            ("cephfs-nodeplugin", "high", 4),  # Node plugins are resilient like RGWs
+            ("rbd-nodeplugin", "high", 4),  # Node plugins are resilient like RGWs
+            (
+                "cephfs-nodeplugin",
+                "extreme",
+                6,
+            ),  # Node plugins can handle extreme stress
+            ("rbd-nodeplugin", "extreme", 6),  # Node plugins can handle extreme stress
         ],
-        ids=["osd-extreme-stress", "rgw-high-stress", "osd-ultimate-stress"],
+        ids=[
+            "osd-extreme-stress",
+            "rgw-high-stress",
+            "osd-ultimate-stress",
+            "cephfs-nodeplugin-high-stress",
+            "rbd-nodeplugin-high-stress",
+            "cephfs-nodeplugin-extreme-stress",
+            "rbd-nodeplugin-extreme-stress",
+        ],
     )
     def test_krkn_application_strength_testing(
         self,
@@ -335,6 +431,8 @@ class TestKrKnApplicationOutageScenarios:
         component_labels = {
             "osd": OSD_APP_LABEL,
             "rgw": RGW_APP_LABEL,
+            "cephfs-nodeplugin": CEPHFS_NODEPLUGIN_LABEL,
+            "rbd-nodeplugin": RBD_NODEPLUGIN_LABEL,
         }
 
         ceph_component_label = component_labels[target_component]
