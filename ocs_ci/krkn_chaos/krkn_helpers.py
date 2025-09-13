@@ -7,8 +7,184 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.krkn_chaos.krkn_scenario_generator import ContainerScenarios
+from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 
 log = logging.getLogger(__name__)
+
+
+class ContainerComponentConfig:
+    """Configuration helper for container chaos testing with component-aware settings."""
+
+    CRITICAL_COMPONENTS = [
+        "mon",
+        "mgr",
+        "mds",
+        "cephfs-ctrlplugin",
+        "rbd-ctrlplugin",
+        "rook-operator",
+    ]
+    RESILIENT_COMPONENTS = ["osd", "rgw", "cephfs-nodeplugin", "rbd-nodeplugin"]
+
+    @classmethod
+    def is_critical(cls, component_name):
+        """Check if component is critical and needs conservative chaos settings."""
+        return component_name in cls.CRITICAL_COMPONENTS
+
+    @classmethod
+    def get_component_settings(cls, component_name, available_instances=None):
+        """Get component-specific chaos settings based on criticality and available instances."""
+        if cls.is_critical(component_name):
+            # Critical components: Conservative approach - never target more than 1 instance
+            target_instances = min(1, available_instances) if available_instances else 1
+            return {
+                "kill_signal": "SIGTERM",
+                "pause_duration": 45 if component_name == "rook-operator" else 60,
+                "instance_count": target_instances,
+                "wait_duration": 600,
+                "approach": "CONSERVATIVE",
+            }
+        else:
+            # Resilient components: Aggressive approach - can target multiple instances
+            if available_instances:
+                # For resilient components, target up to 2/3 of available instances, minimum 1
+                target_instances = max(
+                    1, min(available_instances, (available_instances * 2) // 3)
+                )
+            else:
+                target_instances = 2  # Default fallback
+
+            return {
+                "kill_signal": "SIGKILL",
+                "pause_duration": 90,
+                "instance_count": target_instances,
+                "wait_duration": 480,
+                "approach": "AGGRESSIVE",
+            }
+
+
+def detect_component_instances(component_label, component_name):
+    """Detect available pod instances for a component."""
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    try:
+        available_pods = get_pods_having_label(
+            label=component_label, namespace="openshift-storage"
+        )
+        instance_count = len(available_pods)
+        pod_names = [pod["metadata"]["name"] for pod in available_pods]
+
+        log.info(f"✅ Found {instance_count} {component_name} instances: {pod_names}")
+        return instance_count, pod_names
+
+    except Exception as e:
+        log.error(f"Failed to detect available instances for {component_name}: {e}")
+        raise
+
+
+def create_basic_container_scenarios(scenario_dir, namespace, label_selector, settings):
+    """Create high-impact container chaos scenarios only."""
+    return [
+        # 🔥 AGGRESSIVE KILL: Maximum disruption container termination
+        ContainerScenarios.container_kill(
+            scenario_dir,
+            namespace=namespace,
+            label_selector=label_selector,
+            instance_count=settings["instance_count"],
+            kill_signal="SIGKILL",  # Always SIGKILL for maximum impact
+            wait_duration=240,  # Short wait for rapid chaos
+        ),
+        # 💥 HIGH-IMPACT PAUSE: Significant container suspension
+        ContainerScenarios.container_pause(
+            scenario_dir,
+            namespace=namespace,
+            label_selector=label_selector,
+            instance_count=settings["instance_count"],  # Target all instances
+            pause_seconds=settings["pause_duration"] * 2,  # Double pause for impact
+            wait_duration=300,  # Moderate wait for recovery
+        ),
+    ]
+
+
+def create_high_intensity_scenarios(scenario_dir, namespace, label_selector, settings):
+    """Create maximum chaos scenarios for resilient components only."""
+    return [
+        # 🌪️ CHAOS STORM: Rapid successive kills with minimal recovery
+        ContainerScenarios.container_kill(
+            scenario_dir,
+            namespace=namespace,
+            label_selector=label_selector,
+            instance_count=settings["instance_count"],
+            kill_signal="SIGKILL",
+            wait_duration=120,  # Very short wait for maximum chaos
+        ),
+        # 💀 EXTREME PAUSE: Long disruption to test ultimate resilience
+        ContainerScenarios.container_pause(
+            scenario_dir,
+            namespace=namespace,
+            label_selector=label_selector,
+            instance_count=settings["instance_count"],
+            pause_seconds=settings["pause_duration"] * 3,  # Triple pause duration
+            wait_duration=180,  # Short wait for continuous pressure
+        ),
+    ]
+
+
+def execute_container_chaos(config):
+    """Execute Krkn container chaos scenarios and return results."""
+    krkn = KrKnRunner(config.global_config)
+    krkn.run_async()
+    krkn.wait_for_completion(check_interval=60)
+    return krkn.get_chaos_data()
+
+
+def analyze_chaos_results(chaos_data, component_label):
+    """Analyze chaos run results and return success metrics."""
+    total_scenarios = len(chaos_data["telemetry"]["scenarios"])
+    failing_scenarios = [
+        scenario
+        for scenario in chaos_data["telemetry"]["scenarios"]
+        if scenario["affected_pods"]["error"] is not None
+    ]
+    successful_scenarios = total_scenarios - len(failing_scenarios)
+    success_rate = (
+        (successful_scenarios / total_scenarios) * 100 if total_scenarios > 0 else 0
+    )
+
+    log.info(f"🏆 CONTAINER CHAOS RESULTS for {component_label}:")
+    log.info(f"   • Total scenarios executed: {total_scenarios}")
+    log.info(f"   • Successful scenarios: {successful_scenarios}")
+    log.info(f"   • Failed scenarios: {len(failing_scenarios)}")
+    log.info(f"   • Success rate: {success_rate:.1f}%")
+
+    if failing_scenarios:
+        log.warning("⚠️  Some container chaos scenarios failed:")
+        for scenario in failing_scenarios:
+            log.warning(
+                f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
+            )
+
+    return success_rate, failing_scenarios
+
+
+def check_ceph_health(component_label):
+    """Check for Ceph crashes after chaos injection."""
+    try:
+        ceph_status_tool = CephStatusTool()
+        ceph_crashes = ceph_status_tool.get_ceph_crashes()
+        if ceph_crashes:
+            log.warning(
+                f"⚠️  Ceph crashes detected after {component_label} container chaos:"
+            )
+            for crash in ceph_crashes:
+                log.warning(f"   • {crash}")
+        else:
+            log.info(
+                f"✅ NO CEPH CRASHES - {component_label} container chaos successful!"
+            )
+    except Exception as e:
+        log.warning(f"Unable to verify Ceph health after {component_label} chaos: {e}")
 
 
 def krkn_scenarios_list():
