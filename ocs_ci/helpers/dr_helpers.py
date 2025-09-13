@@ -808,7 +808,6 @@ def wait_for_replication_resources_creation(
             "rbd": (constants.VOLUME_REPLICATION, get_vr_count),
             "cephfs": (constants.REPLICATION_SOURCE, get_replicationsources_count),
         }
-
         for key, vr_count in mix_workload_data.items():
             if key not in resource_map:
                 logger.warning(
@@ -817,6 +816,12 @@ def wait_for_replication_resources_creation(
                 continue
 
             resource_kind, count_function = resource_map[key]
+            vr_count = (
+                1
+                if ocs_version >= version.VERSION_4_20
+                and not resource_kind == constants.REPLICATION_SOURCE
+                else vr_count
+            )
             wait_for_resource_creation_and_state(
                 resource_kind, count_function, namespace, vr_count, timeout
             )
@@ -831,29 +836,9 @@ def wait_for_replication_resources_creation(
             count = 1 if ocs_version >= version.VERSION_4_20 else count
             resource_kind = constants.VOLUME_REPLICATION
             count_function = get_vr_count
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        logger.info(f"Waiting for {count} {resource_kind}s to be created")
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=count_function,
-            namespace=namespace,
+        wait_for_resource_creation_and_state(
+            resource_kind, count_function, namespace, count, timeout
         )
-        sample.wait_for_func_value(count)
-
-        if resource_kind == constants.VOLUME_REPLICATION:
-            logger.info(f"Waiting for {count} {resource_kind}s to reach primary state")
-            sample = TimeoutSampler(
-                timeout=timeout,
-                sleep=5,
-                func=check_vr_state,
-                state="primary",
-                namespace=namespace,
-            )
-            if not sample.wait_for_func_status(result=True):
-                error_msg = "One or more VR haven't reached expected state primary within the time limit."
-                logger.error(error_msg)
-                raise TimeoutExpiredError(error_msg)
     if not skip_vrg_check:
         wait_for_vrg_state(
             vrg_state="primary",

@@ -164,7 +164,7 @@ ENV_DATA:
 
   dr_workload_discovered_apps_mix: [
     { name: "busybox-dict-1-mix", workload_dir: "rdr/busybox/mix-workload/workloads/app-busybox-1",
-      pod_count: 6, pvc_count: 6,
+      pod_count: 10, pvc_count: 10,
       dr_workload_app_pod_selector_key: "workloadpattern",
       dr_workload_app_pod_selector_value: "simple_io",
       dr_workload_app_pvc_selector_key: "appname",
