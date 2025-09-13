@@ -35,7 +35,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     ContainerComponentConfig,
     detect_component_instances,
     create_basic_container_scenarios,
-    assert_no_ceph_crashes,
+    check_ceph_crashes,
 )
 
 log = logging.getLogger(__name__)
@@ -328,7 +328,7 @@ class TestKrKnContainerChaosScenarios:
             )
 
         # Check for Ceph crashes after chaos injection
-        assert_no_ceph_crashes(ceph_component_label, "container chaos")
+        assert check_ceph_crashes(ceph_component_label, "container chaos")
 
         log.info(
             f"Container chaos test for {ceph_component_label} completed successfully"
@@ -605,7 +605,7 @@ class TestKrKnContainerChaosScenarios:
             )
 
         # Final Ceph health check after container strength testing
-        assert_no_ceph_crashes(
+        assert check_ceph_crashes(
             component_name, f"{stress_level} container strength testing"
         )
 

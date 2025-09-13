@@ -26,7 +26,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import NetworkOutageScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.krkn_chaos.krkn_helpers import assert_no_ceph_crashes
+from ocs_ci.krkn_chaos.krkn_helpers import check_ceph_crashes
 from ocs_ci.krkn_chaos.krkn_helpers import (
     get_default_network_interfaces,
     get_ceph_service_ports,
@@ -250,7 +250,7 @@ class TestKrKnNetworkChaosScenarios:
         ), f"Network outage scenarios failed for {ceph_component_label} with pod errors: {failing_scenarios}"
 
         # Check for Ceph crashes after network outage chaos injection
-        assert_no_ceph_crashes(ceph_component_label, "network outage chaos")
+        assert check_ceph_crashes(ceph_component_label, "network outage chaos")
 
         log.info(
             f"Network outage test for {ceph_component_label} completed successfully"
@@ -484,7 +484,7 @@ class TestKrKnNetworkChaosScenarios:
         ), f"Network chaos scenarios failed for {ceph_component_label} with pod errors: {failing_scenarios}"
 
         # Check for Ceph crashes after network chaos injection
-        assert_no_ceph_crashes(ceph_component_label, "network chaos")
+        assert check_ceph_crashes(ceph_component_label, "network chaos")
 
         log.info(
             f"Network chaos test for {ceph_component_label} completed successfully"
@@ -733,7 +733,7 @@ class TestKrKnNetworkChaosScenarios:
         ), f"Network ingress chaos scenarios failed for {node_type} nodes with errors: {failing_scenarios}"
 
         # Check for Ceph crashes after network ingress chaos injection
-        assert_no_ceph_crashes(f"{node_type} nodes", "network ingress chaos")
+        assert check_ceph_crashes(f"{node_type} nodes", "network ingress chaos")
 
         log.info(
             f"Network ingress chaos test for {node_type} nodes completed successfully"
@@ -1048,7 +1048,7 @@ class TestKrKnNetworkChaosScenarios:
         )
 
         # Check for Ceph crashes after pod traffic shaping chaos injection
-        assert_no_ceph_crashes(
+        assert check_ceph_crashes(
             ceph_component_label, f"pod {traffic_direction} shaping chaos"
         )
 
@@ -1339,7 +1339,7 @@ class TestKrKnNetworkChaosScenarios:
             log.warning(f"Workload validation issue for OSD port test: {str(e)}")
 
         # Check Ceph cluster health after OSD port chaos
-        assert_no_ceph_crashes("OSD ports", "OSD port chaos")
+        assert check_ceph_crashes("OSD ports", "OSD port chaos")
 
         # Analyze chaos run results
         chaos_run_output = krkn.get_chaos_data()
@@ -1502,6 +1502,6 @@ class TestKrKnNetworkChaosScenarios:
         ), f"Interface-specific network chaos scenarios failed with errors: {failing_scenarios}"
 
         # Check Ceph cluster health after interface chaos
-        assert_no_ceph_crashes("network interfaces", "interface chaos")
+        assert check_ceph_crashes("network interfaces", "interface chaos")
 
         log.info("Interface-specific network chaos test completed successfully")

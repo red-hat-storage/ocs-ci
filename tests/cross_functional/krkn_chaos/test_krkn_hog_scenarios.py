@@ -19,7 +19,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import HogScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.krkn_chaos.krkn_helpers import assert_no_ceph_crashes
+from ocs_ci.krkn_chaos.krkn_helpers import check_ceph_crashes
 
 log = logging.getLogger(__name__)
 
@@ -339,7 +339,7 @@ class TestKrKnHogScenarios:
             )
 
         # Check for Ceph crashes after hog scenarios chaos injection
-        assert_no_ceph_crashes(f"{node_type} nodes", "hog scenarios chaos")
+        assert check_ceph_crashes(f"{node_type} nodes", "hog scenarios chaos")
 
         log.info(
             f"Hog scenarios chaos test completed successfully on {node_type} nodes"
@@ -721,7 +721,7 @@ class TestKrKnHogScenarios:
             )
 
         # Final Ceph health check after cluster strength testing
-        assert_no_ceph_crashes("cluster", f"{stress_level} cluster strength testing")
+        assert check_ceph_crashes("cluster", f"{stress_level} cluster strength testing")
 
         log.info(
             f"🏁 {stress_level.upper()} cluster strength testing completed successfully - "

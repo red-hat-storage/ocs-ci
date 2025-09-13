@@ -187,6 +187,44 @@ def check_ceph_health(component_label):
         log.warning(f"Unable to verify Ceph health after {component_label} chaos: {e}")
 
 
+def check_ceph_crashes(component_label, chaos_type="chaos"):
+    """
+    Check for Ceph crashes after chaos injection and return boolean result.
+
+    Args:
+        component_label (str): Component label for logging context
+        chaos_type (str): Type of chaos performed (e.g., "container chaos", "network chaos")
+
+    Returns:
+        bool: True if no crashes detected, False if crashes found
+
+    Raises:
+        Exception: If unable to check for crashes (non-crash related errors)
+    """
+    log.info(f"🔍 Checking for Ceph crashes after {chaos_type} injection...")
+    try:
+        ceph_status_tool = CephStatusTool()
+        ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
+
+        if ceph_crashes_found:
+            log.error(
+                f"❌ Ceph crashes detected after {chaos_type} for {component_label}. "
+                f"This indicates that the chaos injection may have caused Ceph daemon failures."
+            )
+            return False
+        else:
+            log.info(
+                f"✅ No Ceph crashes detected - cluster is stable after {chaos_type}"
+            )
+            return True
+
+    except Exception as e:
+        log.error(f"Failed to check for Ceph crashes: {e}")
+        log.warning("Unable to verify Ceph crash status - continuing with test")
+        # Re-raise the exception so the test can decide how to handle it
+        raise
+
+
 def assert_no_ceph_crashes(component_label, chaos_type="chaos"):
     """
     Assert that no Ceph crashes occurred after chaos injection.
