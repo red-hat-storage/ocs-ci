@@ -55,21 +55,32 @@ class ContainerComponentConfig:
         return component_name in cls.CRITICAL_COMPONENTS
 
     @classmethod
-    def get_component_settings(cls, component_name, instance_count=None):
-        """Get component-specific chaos settings based on criticality."""
+    def get_component_settings(cls, component_name, available_instances=None):
+        """Get component-specific chaos settings based on criticality and available instances."""
         if cls.is_critical(component_name):
+            # Critical components: Conservative approach - never target more than 1 instance
+            target_instances = min(1, available_instances) if available_instances else 1
             return {
                 "kill_signal": "SIGTERM",
                 "pause_duration": 45 if component_name == "rook-operator" else 60,
-                "instance_count": 1,
+                "instance_count": target_instances,
                 "wait_duration": 600,
                 "approach": "CONSERVATIVE",
             }
         else:
+            # Resilient components: Aggressive approach - can target multiple instances
+            if available_instances:
+                # For resilient components, target up to 2/3 of available instances, minimum 1
+                target_instances = max(
+                    1, min(available_instances, (available_instances * 2) // 3)
+                )
+            else:
+                target_instances = 2  # Default fallback
+
             return {
                 "kill_signal": "SIGKILL",
                 "pause_duration": 90,
-                "instance_count": instance_count or 2,
+                "instance_count": target_instances,
                 "wait_duration": 480,
                 "approach": "AGGRESSIVE",
             }
@@ -268,32 +279,56 @@ class TestKrKnContainerChaosScenarios:
         component_name,
     ):
         """
-        Test container chaos scenarios using Krkn container kill and pause templates.
+        Container chaos testing with dynamic instance detection and component-aware settings.
 
         This test validates container-level resilience by killing and pausing containers
-        in different Ceph component pods and verifying that the system can handle
-        these container-level disruptions gracefully.
+        in different ODF component pods using intelligent component-aware configurations.
 
-        Args:
-            krkn_setup: Krkn setup fixture
-            krkn_scenario_directory: Directory for scenario files
-            workload_ops: Workload operations fixture
-            ceph_component_label: Parameterized Ceph component label
-            instance_count: Number of pods to target for chaos injection
-            kill_signal: Signal to use for container kill (SIGKILL/SIGTERM)
-            pause_duration: Duration in seconds to pause containers
+        Components tested:
+        - Ceph Components: MON, MGR, MDS, OSD, RGW
+        - CSI Plugins: CephFS/RBD Node & Controller Plugins
+        - Rook Operator: All operator pods
+
+        The test automatically detects available instances and adapts chaos intensity
+        based on component criticality.
         """
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        # Get component-specific settings
-        settings = ContainerComponentConfig.get_component_settings(component_name)
+        # 🔍 DYNAMIC INSTANCE DETECTION: Get all available pod instances
+        log.info(f"🔍 Detecting available instances for {component_name}")
 
-        log.info(
-            f"Testing container chaos for {component_name} component: {ceph_component_label} "
-            f"with instance_count={settings['instance_count']}, kill_signal={settings['kill_signal']}, "
-            f"pause_duration={settings['pause_duration']}s"
+        try:
+            instance_count, pod_names = self._detect_component_instances(
+                ceph_component_label, component_name
+            )
+
+            if instance_count == 0:
+                pytest.skip(
+                    f"No {component_name} pods found with label {ceph_component_label}"
+                )
+
+        except Exception as e:
+            log.error(f"Failed to detect available instances for {component_name}: {e}")
+            pytest.fail(
+                f"Failed to detect available instances for {component_name}: {e}"
+            )
+
+        # 🧠 INTELLIGENT CONFIGURATION: Get component-specific settings with dynamic count
+        settings = ContainerComponentConfig.get_component_settings(
+            component_name, instance_count
         )
+        is_critical = ContainerComponentConfig.is_critical(component_name)
+
+        log.info(f"🎯 Testing container chaos for {component_name}")
+        log.info("📊 Component Configuration:")
+        log.info(f"   • Component: {component_name}")
+        log.info(f"   • Available instances: {instance_count}")
+        log.info(f"   • Target instances: {settings['instance_count']}")
+        log.info(f"   • Criticality: {'CRITICAL' if is_critical else 'RESILIENT'}")
+        log.info(f"   • Approach: {settings['approach']}")
+        log.info(f"   • Kill signal: {settings['kill_signal']}")
+        log.info(f"   • Pause duration: {settings['pause_duration']}s")
 
         # Map Ceph component labels to their container names
         container_name_mapping = {
@@ -552,20 +587,57 @@ class TestKrKnContainerChaosScenarios:
         )
 
     @pytest.mark.parametrize(
-        "target_component,stress_level,duration_multiplier,pause_multiplier",
+        "ceph_component_label,component_name,stress_level,duration_multiplier,pause_multiplier",
         [
-            ("osd", "extreme", 3, 4),  # OSDs can handle extreme container stress
-            ("rgw", "high", 2, 3),  # RGWs are resilient but more conservative
-            ("osd", "ultimate", 5, 6),  # Ultimate OSD container stress test
-            ("cephfs-nodeplugin", "high", 2, 3),  # CephFS node plugins are resilient
-            ("rbd-nodeplugin", "high", 2, 3),  # RBD node plugins are resilient
             (
+                OSD_APP_LABEL,
+                "osd",
+                "extreme",
+                3,
+                4,
+            ),  # OSDs can handle extreme container stress
+            (
+                RGW_APP_LABEL,
+                "rgw",
+                "high",
+                2,
+                3,
+            ),  # RGWs are resilient but more conservative
+            (
+                OSD_APP_LABEL,
+                "osd",
+                "ultimate",
+                5,
+                6,
+            ),  # Ultimate OSD container stress test
+            (
+                CEPHFS_NODEPLUGIN_LABEL,
+                "cephfs-nodeplugin",
+                "high",
+                2,
+                3,
+            ),  # CephFS node plugins are resilient
+            (
+                RBD_NODEPLUGIN_LABEL,
+                "rbd-nodeplugin",
+                "high",
+                2,
+                3,
+            ),  # RBD node plugins are resilient
+            (
+                CEPHFS_NODEPLUGIN_LABEL,
                 "cephfs-nodeplugin",
                 "extreme",
                 3,
                 4,
             ),  # CephFS node plugins extreme stress
-            ("rbd-nodeplugin", "extreme", 3, 4),  # RBD node plugins extreme stress
+            (
+                RBD_NODEPLUGIN_LABEL,
+                "rbd-nodeplugin",
+                "extreme",
+                3,
+                4,
+            ),  # RBD node plugins extreme stress
         ],
         ids=[
             "osd-extreme-container-stress",
@@ -582,7 +654,8 @@ class TestKrKnContainerChaosScenarios:
         krkn_setup,
         krkn_scenario_directory,
         workload_ops,
-        target_component,
+        ceph_component_label,
+        component_name,
         stress_level,
         duration_multiplier,
         pause_multiplier,
@@ -601,32 +674,69 @@ class TestKrKnContainerChaosScenarios:
             krkn_setup: Krkn setup fixture
             krkn_scenario_directory: Directory for scenario configuration files
             workload_ops: WorkloadOps fixture for VDBENCH workloads
-            target_component: Component to target (osd, rgw)
+            component_name: Component to target (osd, rgw)
             stress_level: Level of stress testing (high, extreme, ultimate)
             duration_multiplier: Multiplier for wait durations
             pause_multiplier: Multiplier for pause durations
         """
         log.info(
-            f"Starting EXTREME container strength testing for {target_component} "
+            f"Starting EXTREME container strength testing for {component_name} "
             f"with {stress_level} stress level (duration: {duration_multiplier}x, pause: {pause_multiplier}x)"
         )
 
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        # Map component to label and container name
-        component_labels = {
-            "osd": OSD_APP_LABEL,
-            "rgw": RGW_APP_LABEL,
-        }
+        # 🔍 DYNAMIC INSTANCE DETECTION: Get all available pod instances
+        log.info(
+            f"🔍 Detecting available instances for {component_name} strength testing"
+        )
 
+        try:
+            instance_count, pod_names = self._detect_component_instances(
+                ceph_component_label, component_name
+            )
+
+            if instance_count == 0:
+                pytest.skip(
+                    f"No {component_name} pods found with label {ceph_component_label}"
+                )
+
+        except Exception as e:
+            log.error(f"Failed to detect available instances for {component_name}: {e}")
+            pytest.fail(
+                f"Failed to detect available instances for {component_name}: {e}"
+            )
+
+        # 🧠 INTELLIGENT CONFIGURATION: Get component-specific settings with dynamic count
+        settings = ContainerComponentConfig.get_component_settings(
+            component_name, instance_count
+        )
+        is_critical = ContainerComponentConfig.is_critical(component_name)
+
+        log.info("💪 Strength Testing Configuration:")
+        log.info(f"   • Component: {component_name}")
+        log.info(f"   • Available instances: {instance_count}")
+        log.info(f"   • Target instances: {settings['instance_count']}")
+        log.info(f"   • Criticality: {'CRITICAL' if is_critical else 'RESILIENT'}")
+        log.info(f"   • Stress level: {stress_level}")
+        log.info(f"   • Duration multiplier: {duration_multiplier}x")
+        log.info(f"   • Pause multiplier: {pause_multiplier}x")
+
+        # Map component names to container names for Ceph components
         container_name_mapping = {
             "osd": "osd",
+            "mgr": "mgr",
+            "mon": "mon",
+            "mds": "mds",
             "rgw": "rgw",
+            "cephfs-nodeplugin": "",  # CSI plugins don't need container name
+            "rbd-nodeplugin": "",
+            "cephfs-ctrlplugin": "",
+            "rbd-ctrlplugin": "",
+            "rook-operator": "",
         }
-
-        ceph_component_label = component_labels[target_component]
-        container_name = container_name_mapping[target_component]
+        container_name = container_name_mapping.get(component_name, "")
 
         # Base parameters scaled by stress level
         base_wait_duration = 300
@@ -635,7 +745,7 @@ class TestKrKnContainerChaosScenarios:
         max_pause_duration = base_pause_duration * pause_multiplier
 
         log.info(
-            f"Creating {stress_level} container strength testing scenarios for {target_component}"
+            f"Creating {stress_level} container strength testing scenarios for {component_name}"
         )
         log.info(
             f"Maximum wait duration: {max_wait_duration}s, Maximum pause: {max_pause_duration}s"
@@ -806,7 +916,7 @@ class TestKrKnContainerChaosScenarios:
         ]
 
         log.info(
-            f"Generated {len(scenarios)} container strength testing scenarios for {target_component} "
+            f"Generated {len(scenarios)} container strength testing scenarios for {component_name} "
             f"({stress_level} level)"
         )
 
@@ -828,19 +938,19 @@ class TestKrKnContainerChaosScenarios:
         krkn = KrKnRunner(config.global_config)
         try:
             log.info(
-                f"🚀 Starting {stress_level} container strength testing for {target_component}"
+                f"🚀 Starting {stress_level} container strength testing for {component_name}"
             )
             krkn.run_async()
             krkn.wait_for_completion(check_interval=60)
             log.info(
-                f"✅ Container strength testing completed for {target_component} ({stress_level} level)"
+                f"✅ Container strength testing completed for {component_name} ({stress_level} level)"
             )
         except CommandFailed as e:
             log.error(
-                f"Krkn container strength testing failed for {target_component}: {str(e)}"
+                f"Krkn container strength testing failed for {component_name}: {str(e)}"
             )
             pytest.fail(
-                f"Krkn container strength testing failed for {target_component}: {str(e)}"
+                f"Krkn container strength testing failed for {component_name}: {str(e)}"
             )
 
         # Enhanced validation for strength testing
@@ -856,7 +966,7 @@ class TestKrKnContainerChaosScenarios:
             # For strength testing, workload issues are more critical
             pytest.fail(
                 f"Container strength testing failed - workloads could not survive {stress_level} "
-                f"stress level for {target_component}: {str(e)}"
+                f"stress level for {component_name}: {str(e)}"
             )
 
         # Analyze container strength testing results
@@ -877,7 +987,7 @@ class TestKrKnContainerChaosScenarios:
         )
 
         log.info(
-            f"🏆 CONTAINER STRENGTH TESTING RESULTS for {target_component} ({stress_level}):"
+            f"🏆 CONTAINER STRENGTH TESTING RESULTS for {component_name} ({stress_level}):"
         )
         log.info(f"   • Scenarios executed: {total_scenarios}")
         log.info(f"   • Successful scenarios: {successful_scenarios}")
@@ -906,7 +1016,7 @@ class TestKrKnContainerChaosScenarios:
             )
         else:
             log.info(
-                f"🎉 CONTAINER STRENGTH TEST PASSED: {target_component} demonstrated {strength_score:.1f}% "
+                f"🎉 CONTAINER STRENGTH TEST PASSED: {component_name} demonstrated {strength_score:.1f}% "
                 f"resilience under {stress_level} container stress conditions!"
             )
 
@@ -916,7 +1026,7 @@ class TestKrKnContainerChaosScenarios:
             ceph_status_tool = CephStatusTool()
             ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
             assert not ceph_crashes_found, (
-                f"Ceph crashes detected after {stress_level} container strength testing for {target_component}. "
+                f"Ceph crashes detected after {stress_level} container strength testing for {component_name}. "
                 f"Container resilience may not be sufficient for this stress level."
             )
             log.info(
@@ -931,7 +1041,7 @@ class TestKrKnContainerChaosScenarios:
             )
 
         log.info(
-            f"🏁 Container strength testing for {target_component} completed successfully "
+            f"🏁 Container strength testing for {component_name} completed successfully "
             f"({stress_level} level, {strength_score:.1f}% container strength score)"
         )
 
