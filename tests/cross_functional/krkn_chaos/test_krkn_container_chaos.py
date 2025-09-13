@@ -43,6 +43,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     analyze_chaos_results,
     analyze_strength_test_results,
     detect_instances_or_skip,
+    get_chaos_parameters,
 )
 
 log = logging.getLogger(__name__)
@@ -555,24 +556,12 @@ class TestKrKnContainerChaosScenarios:
             "rook-operator",
         ]
 
-        if is_critical:
-            # 🛡️ CONSERVATIVE APPROACH: Critical components get gentler treatment
-            kill_signal = "SIGTERM"  # Graceful termination
-            pause_duration = 45  # Shorter pause
-            target_instances = min(1, instance_count)  # Never more than 1 for critical
-            wait_duration = 600  # Longer recovery time
-            log.info(
-                f"🛡️ Using CONSERVATIVE settings for critical component {component_name}"
-            )
-        else:
-            # 💥 AGGRESSIVE APPROACH: Resilient components get full chaos
-            kill_signal = "SIGKILL"  # Immediate termination
-            pause_duration = 90  # Longer pause
-            target_instances = instance_count  # ALL instances for resilient components
-            wait_duration = 480  # Standard recovery time
-            log.info(
-                f"💥 Using AGGRESSIVE settings for resilient component {component_name}"
-            )
+        # 🎯 GET CHAOS PARAMETERS: Use centralized helper function
+        chaos_params = get_chaos_parameters(component_name, instance_count, is_critical)
+        kill_signal = chaos_params["kill_signal"]
+        pause_duration = chaos_params["pause_duration"]
+        target_instances = chaos_params["target_instances"]
+        wait_duration = chaos_params["wait_duration"]
 
         log.info("📊 Chaos Configuration:")
         log.info(f"   • Total instances available: {instance_count}")

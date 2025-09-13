@@ -578,6 +578,66 @@ def detect_instances_or_skip(ceph_component_label, component_name):
         handle_krkn_command_failure(e, component_name, "instance detection")
 
 
+def get_chaos_parameters(component_name, instance_count, is_critical=False):
+    """
+    Get chaos parameters based on component criticality and instance count.
+
+    This function centralizes the logic for determining chaos settings,
+    providing conservative parameters for critical components and aggressive
+    parameters for resilient components.
+
+    Args:
+        component_name (str): Name of the component for logging
+        instance_count (int): Total number of available instances
+        is_critical (bool): Whether the component is critical (default: False)
+
+    Returns:
+        dict: Dictionary containing chaos parameters:
+            - kill_signal (str): Signal to use for container kill
+            - pause_duration (int): Duration in seconds for container pause
+            - target_instances (int): Number of instances to target
+            - wait_duration (int): Recovery wait time in seconds
+            - approach (str): Description of the approach used
+    """
+    if is_critical:
+        # 🛡️ CONSERVATIVE APPROACH: Critical components get gentler treatment
+        parameters = {
+            "kill_signal": "SIGTERM",  # Graceful termination
+            "pause_duration": 45,  # Shorter pause
+            "target_instances": min(
+                1, instance_count
+            ),  # Never more than 1 for critical
+            "wait_duration": 600,  # Longer recovery time
+            "approach": "CONSERVATIVE",
+        }
+        log.info(
+            f"🛡️ Using CONSERVATIVE settings for critical component {component_name}"
+        )
+    else:
+        # 💥 AGGRESSIVE APPROACH: Resilient components get full chaos
+        parameters = {
+            "kill_signal": "SIGKILL",  # Immediate termination
+            "pause_duration": 90,  # Longer pause
+            "target_instances": instance_count,  # ALL instances for resilient components
+            "wait_duration": 480,  # Standard recovery time
+            "approach": "AGGRESSIVE",
+        }
+        log.info(
+            f"💥 Using AGGRESSIVE settings for resilient component {component_name}"
+        )
+
+    log.info(f"📋 Chaos Parameters for {component_name}:")
+    log.info(f"   • Kill Signal: {parameters['kill_signal']}")
+    log.info(f"   • Pause Duration: {parameters['pause_duration']}s")
+    log.info(
+        f"   • Target Instances: {parameters['target_instances']}/{instance_count}"
+    )
+    log.info(f"   • Wait Duration: {parameters['wait_duration']}s")
+    log.info(f"   • Approach: {parameters['approach']}")
+
+    return parameters
+
+
 def krkn_scenarios_list():
     """
     Load the hog_scenarios YAML configuration into a Python dictionary.
