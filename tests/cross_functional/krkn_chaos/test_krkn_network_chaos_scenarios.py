@@ -26,7 +26,10 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import NetworkOutageScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.krkn_chaos.krkn_helpers import check_ceph_crashes
+from ocs_ci.krkn_chaos.krkn_helpers import (
+    check_ceph_crashes,
+    handle_krkn_command_failure,
+)
 from ocs_ci.krkn_chaos.krkn_helpers import (
     get_default_network_interfaces,
     get_ceph_service_ports,
@@ -221,8 +224,7 @@ class TestKrKnNetworkChaosScenarios:
             krkn.wait_for_completion(check_interval=60)
             log.info(f"Network chaos test completed for {ceph_component_label}")
         except CommandFailed as e:
-            log.error(f"Krkn command failed for {ceph_component_label}: {str(e)}")
-            pytest.fail(f"Krkn command failed for {ceph_component_label}: {str(e)}")
+            handle_krkn_command_failure(e, ceph_component_label, "network chaos")
 
         # Validate workloads and cleanup
         try:
@@ -455,8 +457,7 @@ class TestKrKnNetworkChaosScenarios:
             krkn.wait_for_completion(check_interval=60)
             log.info(f"Network chaos test completed for {ceph_component_label}")
         except CommandFailed as e:
-            log.error(f"Krkn command failed for {ceph_component_label}: {str(e)}")
-            pytest.fail(f"Krkn command failed for {ceph_component_label}: {str(e)}")
+            handle_krkn_command_failure(e, ceph_component_label, "network chaos")
 
         # Validate workloads and cleanup
         try:
@@ -1018,8 +1019,7 @@ class TestKrKnNetworkChaosScenarios:
                 f"Pod {traffic_direction} shaping test completed for {ceph_component_label}"
             )
         except CommandFailed as e:
-            log.error(f"Krkn command failed for {ceph_component_label}: {str(e)}")
-            pytest.fail(f"Krkn command failed for {ceph_component_label}: {str(e)}")
+            handle_krkn_command_failure(e, ceph_component_label, "network chaos")
 
         # Validate workloads and cleanup
         try:

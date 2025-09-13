@@ -19,7 +19,13 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import HogScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.krkn_chaos.krkn_helpers import check_ceph_crashes
+from ocs_ci.krkn_chaos.krkn_helpers import (
+    check_ceph_crashes,
+    validate_chaos_execution,
+    validate_strength_test_results,
+    handle_krkn_command_failure,
+    handle_workload_validation_failure,
+)
 
 log = logging.getLogger(__name__)
 
@@ -283,12 +289,7 @@ class TestKrKnHogScenarios:
                 f"Hog scenarios chaos injection completed successfully on {node_type} nodes"
             )
         except CommandFailed as e:
-            log.error(
-                f"Krkn command failed during hog scenarios on {node_type} nodes: {str(e)}"
-            )
-            pytest.fail(
-                f"Krkn command failed during hog scenarios on {node_type} nodes: {str(e)}"
-            )
+            handle_krkn_command_failure(e, f"{node_type} nodes", "hog scenarios chaos")
 
         # Validate workloads and cleanup
         try:
@@ -323,20 +324,13 @@ class TestKrKnHogScenarios:
                     f"Failed scenario: {scenario['scenario']} - Error: {scenario['affected_pods']['error']}"
                 )
 
-        # Only fail the test if ALL scenarios failed (indicates framework issue)
-        # or if no scenarios were executed at all
-        if total_scenarios == 0:
-            pytest.fail(
-                "No scenarios were executed - this indicates a framework failure"
-            )
-        elif successful_scenarios == 0:
-            pytest.fail(
-                f"All {total_scenarios} scenarios failed - this may indicate a configuration or environment issue"
-            )
-        else:
-            log.info(
-                f"Test passed: {successful_scenarios} scenarios executed successfully, chaos injection working properly"
-            )
+        # Validate chaos execution results
+        validate_chaos_execution(
+            total_scenarios,
+            successful_scenarios,
+            f"{node_type} nodes",
+            "hog scenarios chaos",
+        )
 
         # Check for Ceph crashes after hog scenarios chaos injection
         assert check_ceph_crashes(f"{node_type} nodes", "hog scenarios chaos")
@@ -642,11 +636,8 @@ class TestKrKnHogScenarios:
                 f"CLUSTER SURVIVED THE APOCALYPSE!"
             )
         except CommandFailed as e:
-            log.error(
-                f"💥 {stress_level.upper()} cluster strength testing failed: {str(e)}"
-            )
-            pytest.fail(
-                f"{stress_level.upper()} cluster strength testing failed: {str(e)}"
+            handle_krkn_command_failure(
+                e, "cluster", f"{stress_level} strength testing"
             )
 
         # Enhanced validation for extreme strength testing
@@ -657,13 +648,8 @@ class TestKrKnHogScenarios:
                 f"CLUSTER STRENGTH CONFIRMED!"
             )
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.error(
-                f"💀 Workload failure during {stress_level} cluster strength testing: {str(e)}"
-            )
-            # For extreme testing, workload issues are critical
-            pytest.fail(
-                f"Cluster failed {stress_level} strength testing - "
-                f"workloads could not survive extreme resource exhaustion: {str(e)}"
+            handle_workload_validation_failure(
+                e, "cluster", f"{stress_level} strength testing"
             )
 
         # Analyze extreme cluster strength testing results
@@ -705,20 +691,10 @@ class TestKrKnHogScenarios:
         }
         min_success_rate = min_success_rates.get(stress_level, 50)
 
-        if total_scenarios == 0:
-            pytest.fail(
-                f"No {stress_level} cluster strength testing scenarios executed - framework failure"
-            )
-        elif strength_score < min_success_rate:
-            pytest.fail(
-                f"Cluster strength insufficient for {stress_level} testing: {strength_score:.1f}% success rate "
-                f"(minimum {min_success_rate}% required)"
-            )
-        else:
-            log.info(
-                f"🎉 {stress_level.upper()} CLUSTER STRENGTH TEST PASSED! "
-                f"Cluster demonstrated {strength_score:.1f}% resilience under {stress_level} conditions!"
-            )
+        # Validate strength test results
+        validate_strength_test_results(
+            strength_score, total_scenarios, "cluster", stress_level, min_success_rate
+        )
 
         # Final Ceph health check after cluster strength testing
         assert check_ceph_crashes("cluster", f"{stress_level} cluster strength testing")

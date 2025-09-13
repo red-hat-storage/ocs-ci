@@ -255,6 +255,152 @@ def assert_no_ceph_crashes(component_label, chaos_type="chaos"):
             log.warning("Unable to verify Ceph crash status - continuing with test")
 
 
+def evaluate_chaos_success_rate(
+    success_rate, component_name, test_type="chaos", is_critical=False
+):
+    """
+    Evaluate chaos test success rate against thresholds and log results.
+
+    Args:
+        success_rate (float): Actual success rate percentage
+        component_name (str): Name of the component being tested
+        test_type (str): Type of test (e.g., "chaos", "strength testing")
+        is_critical (bool): Whether the component is critical (higher threshold)
+
+    Returns:
+        bool: True if success rate meets threshold, False otherwise
+    """
+    # Define thresholds based on component criticality
+    expected_success_rate = 80 if is_critical else 70
+
+    if success_rate >= expected_success_rate:
+        log.info(f"🎉 {test_type.upper()} TEST PASSED for {component_name}!")
+        log.info(
+            f"✅ Success rate {success_rate:.1f}% meets threshold {expected_success_rate}%"
+        )
+        return True
+    else:
+        log.warning(
+            f"⚠️  {test_type} test below expected threshold for {component_name}"
+        )
+        log.warning(
+            f"📊 Success rate {success_rate:.1f}% < threshold {expected_success_rate}%"
+        )
+        return False
+
+
+def validate_chaos_execution(
+    total_scenarios, successful_scenarios, component_name, test_type="chaos"
+):
+    """
+    Validate chaos test execution and fail test if critical issues detected.
+
+    Args:
+        total_scenarios (int): Total number of scenarios executed
+        successful_scenarios (int): Number of successful scenarios
+        component_name (str): Name of the component being tested
+        test_type (str): Type of test for error messages
+
+    Raises:
+        pytest.fail: If no scenarios executed or all scenarios failed
+    """
+    import pytest
+
+    if total_scenarios == 0:
+        pytest.fail(
+            f"No {test_type} scenarios were executed for {component_name} - "
+            "this indicates a framework failure"
+        )
+    elif successful_scenarios == 0:
+        pytest.fail(
+            f"All {total_scenarios} {test_type} scenarios failed for {component_name} - "
+            "this may indicate a configuration or environment issue"
+        )
+    else:
+        log.info(
+            f"✅ {test_type} execution validated: {successful_scenarios}/{total_scenarios} "
+            f"scenarios successful for {component_name}"
+        )
+
+
+def validate_strength_test_results(
+    strength_score, total_scenarios, component_name, stress_level, min_success_rate=65
+):
+    """
+    Validate strength test results and fail if insufficient resilience.
+
+    Args:
+        strength_score (float): Calculated strength score percentage
+        total_scenarios (int): Total number of scenarios executed
+        component_name (str): Name of the component being tested
+        stress_level (str): Level of stress testing (e.g., "extreme", "high")
+        min_success_rate (float): Minimum required success rate
+
+    Raises:
+        pytest.fail: If no scenarios executed or strength score below threshold
+    """
+    import pytest
+
+    if total_scenarios == 0:
+        pytest.fail(
+            f"No {stress_level} strength testing scenarios executed for {component_name} - "
+            "framework failure"
+        )
+    elif strength_score < min_success_rate:
+        pytest.fail(
+            f"{component_name} strength insufficient for {stress_level} testing: "
+            f"{strength_score:.1f}% success rate (minimum {min_success_rate}% required)"
+        )
+    else:
+        log.info(
+            f"🎉 {stress_level.upper()} STRENGTH TEST PASSED! "
+            f"{component_name} demonstrated {strength_score:.1f}% resilience under "
+            f"{stress_level} conditions!"
+        )
+
+
+def handle_krkn_command_failure(error, component_name, test_type="chaos"):
+    """
+    Handle Krkn command failures with consistent error reporting and test failure.
+
+    Args:
+        error (Exception): The exception that occurred
+        component_name (str): Name of the component being tested
+        test_type (str): Type of test for error messages
+
+    Raises:
+        pytest.fail: Always fails the test with formatted error message
+    """
+    import pytest
+
+    error_msg = (
+        f"Krkn command failed during {test_type} for {component_name}: {str(error)}"
+    )
+    log.error(error_msg)
+    pytest.fail(error_msg)
+
+
+def handle_workload_validation_failure(error, component_name, test_type="chaos"):
+    """
+    Handle workload validation failures with consistent error reporting.
+
+    Args:
+        error (Exception): The exception that occurred
+        component_name (str): Name of the component being tested
+        test_type (str): Type of test for error messages
+
+    Raises:
+        pytest.fail: Always fails the test with formatted error message
+    """
+    import pytest
+
+    error_msg = (
+        f"Workloads failed {test_type} testing for {component_name}: {str(error)}"
+    )
+    log.error(f"💥 Workload validation failure during {test_type}: {str(error)}")
+    pytest.fail(error_msg)
+
+
 def krkn_scenarios_list():
     """
     Load the hog_scenarios YAML configuration into a Python dictionary.

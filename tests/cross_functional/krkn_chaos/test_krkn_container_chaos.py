@@ -36,6 +36,11 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     detect_component_instances,
     create_basic_container_scenarios,
     check_ceph_crashes,
+    evaluate_chaos_success_rate,
+    validate_chaos_execution,
+    validate_strength_test_results,
+    handle_krkn_command_failure,
+    handle_workload_validation_failure,
 )
 
 log = logging.getLogger(__name__)
@@ -120,10 +125,7 @@ class TestKrKnContainerChaosScenarios:
                 )
 
         except Exception as e:
-            log.error(f"Failed to detect available instances for {component_name}: {e}")
-            pytest.fail(
-                f"Failed to detect available instances for {component_name}: {e}"
-            )
+            handle_krkn_command_failure(e, component_name, "instance detection")
 
         # 🧠 INTELLIGENT CONFIGURATION: Get component-specific settings with dynamic count
         settings = ContainerComponentConfig.get_component_settings(
@@ -246,8 +248,7 @@ class TestKrKnContainerChaosScenarios:
             krkn.wait_for_completion(check_interval=60)
             log.info(f"Container chaos test completed for {ceph_component_label}")
         except CommandFailed as e:
-            log.error(f"Krkn command failed for {ceph_component_label}: {str(e)}")
-            pytest.fail(f"Krkn command failed for {ceph_component_label}: {str(e)}")
+            handle_krkn_command_failure(e, ceph_component_label, "container chaos")
 
         # Validate workloads and cleanup
         try:
@@ -312,20 +313,13 @@ class TestKrKnContainerChaosScenarios:
                     f"Failed scenario: {scenario['scenario']} - Error: {scenario.get('affected_pods', {}).get('error')}"
                 )
 
-        # Only fail the test if ALL scenarios failed (indicates framework issue)
-        # or if no scenarios were executed at all
-        if total_scenarios == 0:
-            pytest.fail(
-                "No scenarios were executed - this indicates a framework failure"
-            )
-        elif successful_scenarios == 0:
-            pytest.fail(
-                f"All {total_scenarios} scenarios failed - this may indicate a configuration or environment issue"
-            )
-        else:
-            log.info(
-                f"Test passed: {successful_scenarios} scenarios executed successfully, chaos injection working properly"
-            )
+        # Validate chaos execution results
+        validate_chaos_execution(
+            total_scenarios,
+            successful_scenarios,
+            ceph_component_label,
+            "container chaos",
+        )
 
         # Check for Ceph crashes after chaos injection
         assert check_ceph_crashes(ceph_component_label, "container chaos")
@@ -427,10 +421,7 @@ class TestKrKnContainerChaosScenarios:
                 )
 
         except Exception as e:
-            log.error(f"Failed to detect available instances for {component_name}: {e}")
-            pytest.fail(
-                f"Failed to detect available instances for {component_name}: {e}"
-            )
+            handle_krkn_command_failure(e, component_name, "instance detection")
 
         # 🧠 INTELLIGENT CONFIGURATION: Get component-specific settings with dynamic count
         settings = ContainerComponentConfig.get_component_settings(
@@ -530,12 +521,7 @@ class TestKrKnContainerChaosScenarios:
                 f"✅ Container strength testing completed for {component_name} ({stress_level} level)"
             )
         except CommandFailed as e:
-            log.error(
-                f"Krkn container strength testing failed for {component_name}: {str(e)}"
-            )
-            pytest.fail(
-                f"Krkn container strength testing failed for {component_name}: {str(e)}"
-            )
+            handle_krkn_command_failure(e, component_name, "container strength testing")
 
         # Enhanced validation for strength testing
         try:
@@ -544,13 +530,8 @@ class TestKrKnContainerChaosScenarios:
                 "💪 Workloads survived container strength testing - container resilience confirmed!"
             )
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.error(
-                f"Workload failure during {stress_level} container strength testing: {str(e)}"
-            )
-            # For strength testing, workload issues are more critical
-            pytest.fail(
-                f"Container strength testing failed - workloads could not survive {stress_level} "
-                f"stress level for {component_name}: {str(e)}"
+            handle_workload_validation_failure(
+                e, component_name, f"{stress_level} container strength testing"
             )
 
         # Analyze container strength testing results
@@ -587,22 +568,14 @@ class TestKrKnContainerChaosScenarios:
                 log.warning(f"   • {scenario_name}: {error}")
 
         # Container strength testing success criteria (more lenient than basic tests)
-        min_success_rate = 65  # 65% success rate for extreme container stress testing
-
-        if total_scenarios == 0:
-            pytest.fail(
-                "No container strength testing scenarios executed - framework failure"
-            )
-        elif strength_score < min_success_rate:
-            pytest.fail(
-                f"Container strength insufficient: {strength_score:.1f}% success rate "
-                f"(minimum {min_success_rate}% required for {stress_level} testing)"
-            )
-        else:
-            log.info(
-                f"🎉 CONTAINER STRENGTH TEST PASSED: {component_name} demonstrated {strength_score:.1f}% "
-                f"resilience under {stress_level} container stress conditions!"
-            )
+        # Validate strength test results
+        validate_strength_test_results(
+            strength_score,
+            total_scenarios,
+            component_name,
+            stress_level,
+            min_success_rate=65,
+        )
 
         # Final Ceph health check after container strength testing
         assert check_ceph_crashes(
@@ -687,10 +660,7 @@ class TestKrKnContainerChaosScenarios:
                 )
 
         except Exception as e:
-            log.error(f"Failed to detect available instances for {component_name}: {e}")
-            pytest.fail(
-                f"Failed to detect available instances for {component_name}: {e}"
-            )
+            handle_krkn_command_failure(e, component_name, "instance detection")
 
         # 🎯 COMPONENT-AWARE CONFIGURATION: Adjust chaos intensity based on criticality
         is_critical = component_name in [
@@ -829,12 +799,7 @@ class TestKrKnContainerChaosScenarios:
                 f"✅ Container chaos injection completed successfully for {component_name}"
             )
         except CommandFailed as e:
-            log.error(
-                f"Krkn command failed during container chaos for {component_name}: {str(e)}"
-            )
-            pytest.fail(
-                f"Krkn command failed during container chaos for {component_name}: {str(e)}"
-            )
+            handle_krkn_command_failure(e, component_name, "container chaos")
 
         # 🔍 WORKLOAD VALIDATION: Validate workloads and cleanup
         try:
@@ -876,23 +841,10 @@ class TestKrKnContainerChaosScenarios:
                     f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
                 )
 
-        # 🎯 SUCCESS CRITERIA: Define success thresholds based on component type
-        expected_success_rate = (
-            80 if is_critical else 70
-        )  # Higher bar for critical components
-
-        if success_rate >= expected_success_rate:
-            log.info(f"🎉 CONTAINER CHAOS TEST PASSED for {component_name}!")
-            log.info(
-                f"✅ Success rate {success_rate:.1f}% meets threshold {expected_success_rate}%"
-            )
-        else:
-            log.warning(
-                f"⚠️  Container chaos test below expected threshold for {component_name}"
-            )
-            log.warning(
-                f"📊 Success rate {success_rate:.1f}% < threshold {expected_success_rate}%"
-            )
+        # 🎯 SUCCESS CRITERIA: Evaluate success rate against thresholds
+        evaluate_chaos_success_rate(
+            success_rate, component_name, "container chaos", is_critical
+        )
 
         log.info(
             f"🏁 Container chaos test for ALL {component_name} instances completed successfully"

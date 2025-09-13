@@ -38,7 +38,12 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import ApplicationOutageScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.krkn_chaos.krkn_helpers import check_ceph_crashes
+from ocs_ci.krkn_chaos.krkn_helpers import (
+    check_ceph_crashes,
+    validate_chaos_execution,
+    validate_strength_test_results,
+    handle_workload_validation_failure,
+)
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 
 log = logging.getLogger(__name__)
@@ -229,17 +234,13 @@ class TestKrKnApplicationOutageScenarios:
                     f"   • {scenario['scenario']}: {scenario['affected_pods']['error']}"
                 )
 
-        # Validation logic
-        if total_scenarios == 0:
-            pytest.fail("No scenarios were executed - framework failure")
-        elif successful_scenarios == 0:
-            pytest.fail(
-                f"All {total_scenarios} scenarios failed - configuration/environment issue"
-            )
-        else:
-            log.info(
-                f"✅ Test passed: {successful_scenarios} scenarios executed successfully"
-            )
+        # Validate chaos execution results
+        validate_chaos_execution(
+            total_scenarios,
+            successful_scenarios,
+            component_name,
+            "application outage chaos",
+        )
 
     def _check_ceph_health(self, component_name):
         """Check for Ceph crashes after chaos injection."""
@@ -584,8 +585,8 @@ class TestKrKnApplicationOutageScenarios:
             workload_ops.validate_and_cleanup()
             log.info("💪 Workloads survived strength testing - resilience confirmed!")
         except (UnexpectedBehaviour, CommandFailed) as e:
-            pytest.fail(
-                f"Workloads failed {stress_level} strength testing for {target_component}: {str(e)}"
+            handle_workload_validation_failure(
+                e, target_component, f"{stress_level} strength testing"
             )
 
         # Analyze results with strength-specific criteria
@@ -593,13 +594,14 @@ class TestKrKnApplicationOutageScenarios:
             chaos_data, target_component, stress_level
         )
 
-        min_success_rate = 60  # 60% success rate for extreme stress testing
-        if len(chaos_data["telemetry"]["scenarios"]) == 0:
-            pytest.fail("No strength testing scenarios executed - framework failure")
-        elif strength_score < min_success_rate:
-            pytest.fail(
-                f"Insufficient strength: {strength_score:.1f}% < {min_success_rate}% required"
-            )
+        # Validate strength test results
+        validate_strength_test_results(
+            strength_score,
+            len(chaos_data["telemetry"]["scenarios"]),
+            target_component,
+            stress_level,
+            min_success_rate=60,
+        )
 
         # Final health check
         self._check_ceph_health(f"{target_component} strength testing")
