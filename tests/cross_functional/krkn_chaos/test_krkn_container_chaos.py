@@ -137,11 +137,19 @@ class TestKrKnContainerChaosScenarios:
 
         # Map Ceph component labels to their container names
         container_name_mapping = {
+            # Traditional Ceph components
             "app=rook-ceph-osd": "osd",
             "app=rook-ceph-mon": "mon",
             "app=rook-ceph-mgr": "mgr",
             "app=rook-ceph-mds": "mds",
             "app=rook-ceph-rgw": "rgw",
+            # CSI Plugin components (empty = target random container)
+            "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin": "",
+            "app=openshift-storage.rbd.csi.ceph.com-nodeplugin": "",
+            "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin": "",
+            "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin": "",
+            # Rook Operator (empty = target random container)
+            "app.kubernetes.io/created-by=rook-ceph-operator": "",
         }
 
         # Get the specific container name for this Ceph component
