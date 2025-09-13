@@ -536,10 +536,6 @@ class TestKrKnContainerChaosScenarios:
         Critical components (MON, MGR, MDS, Controllers, Rook) are excluded as they
         are already covered by the main test with appropriate safety controls.
         """
-        from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
-        from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
-        from ocs_ci.krkn_chaos.krkn_scenario_generator import ContainerScenarios
-        from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = "openshift-storage"

@@ -19,6 +19,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.helpers.vdbench_helpers import create_temp_config_file
 from ocs_ci.ocs.utils import label_pod_security_admission
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.krkn_chaos.krkn_workload_verification import WorkloadOpsWithVerification
 
 log = logging.getLogger(__name__)
 
@@ -258,10 +259,6 @@ def workload_ops(
         log.info(f"  - {len(vm_list_default_compr)} VMs with default compression")
         log.info(f"  - {len(vm_list_agg_compr)} VMs with aggressive compression")
 
-        from ocs_ci.krkn_chaos.krkn_workload_verification import (
-            WorkloadOpsWithVerification,
-        )
-
         ops = WorkloadOpsWithVerification(
             proj_obj, all_vms, "CNV_WORKLOAD", None  # No verification config for CNV
         )
@@ -353,10 +350,6 @@ def workload_ops(
                 )
                 wl.start_workload()
                 workloads.append(wl)
-
-        from ocs_ci.krkn_chaos.krkn_workload_verification import (
-            WorkloadOpsWithVerification,
-        )
 
         ops = WorkloadOpsWithVerification(proj_obj, workloads, "VDBENCH", None)
 

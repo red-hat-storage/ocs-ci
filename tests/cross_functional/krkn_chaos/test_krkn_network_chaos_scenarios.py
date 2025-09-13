@@ -1380,8 +1380,6 @@ class TestKrKnNetworkChaosScenarios:
         log.info("Testing interface-specific network chaos with detected interfaces")
 
         # Get actual network interfaces from the cluster
-        from ocs_ci.krkn_chaos.krkn_helpers import get_default_network_interfaces
-
         worker_interfaces = get_default_network_interfaces(node_type="worker")
         log.info(f"Detected worker node interfaces: {worker_interfaces}")
 
