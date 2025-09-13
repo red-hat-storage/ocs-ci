@@ -279,18 +279,17 @@ class TestKrKnContainerChaosScenarios:
         component_name,
     ):
         """
-        Container chaos testing with dynamic instance detection and component-aware settings.
+        Comprehensive container chaos testing with intelligent safety controls.
 
-        This test validates container-level resilience by killing and pausing containers
-        in different ODF component pods using intelligent component-aware configurations.
+        This test provides comprehensive coverage of all ODF components with intelligent
+        component-aware configurations that ensure cluster stability while testing resilience.
 
-        Components tested:
-        - Ceph Components: MON, MGR, MDS, OSD, RGW
-        - CSI Plugins: CephFS/RBD Node & Controller Plugins
-        - Rook Operator: All operator pods
+        Components tested (with safety controls):
+        - Critical Components: MON, MGR, MDS, CSI Controllers, Rook Operator (conservative chaos)
+        - Resilient Components: OSD, RGW, CSI Node Plugins (moderate chaos)
 
-        The test automatically detects available instances and adapts chaos intensity
-        based on component criticality.
+        The test automatically detects available instances and applies appropriate chaos
+        intensity based on component criticality to maintain cluster health.
         """
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -592,10 +591,10 @@ class TestKrKnContainerChaosScenarios:
             (
                 OSD_APP_LABEL,
                 "osd",
-                "extreme",
-                3,
-                4,
-            ),  # OSDs can handle extreme container stress
+                "ultimate",
+                5,
+                6,
+            ),  # Ultimate OSD container stress test - highest intensity
             (
                 RGW_APP_LABEL,
                 "rgw",
@@ -604,47 +603,23 @@ class TestKrKnContainerChaosScenarios:
                 3,
             ),  # RGWs are resilient but more conservative
             (
-                OSD_APP_LABEL,
-                "osd",
-                "ultimate",
-                5,
-                6,
-            ),  # Ultimate OSD container stress test
-            (
-                CEPHFS_NODEPLUGIN_LABEL,
-                "cephfs-nodeplugin",
-                "high",
-                2,
-                3,
-            ),  # CephFS node plugins are resilient
-            (
-                RBD_NODEPLUGIN_LABEL,
-                "rbd-nodeplugin",
-                "high",
-                2,
-                3,
-            ),  # RBD node plugins are resilient
-            (
                 CEPHFS_NODEPLUGIN_LABEL,
                 "cephfs-nodeplugin",
                 "extreme",
                 3,
                 4,
-            ),  # CephFS node plugins extreme stress
+            ),  # CephFS node plugins - consolidated extreme stress
             (
                 RBD_NODEPLUGIN_LABEL,
                 "rbd-nodeplugin",
                 "extreme",
                 3,
                 4,
-            ),  # RBD node plugins extreme stress
+            ),  # RBD node plugins - consolidated extreme stress
         ],
         ids=[
-            "osd-extreme-container-stress",
-            "rgw-high-container-stress",
             "osd-ultimate-container-stress",
-            "cephfs-nodeplugin-high-container-stress",
-            "rbd-nodeplugin-high-container-stress",
+            "rgw-high-container-stress",
             "cephfs-nodeplugin-extreme-container-stress",
             "rbd-nodeplugin-extreme-container-stress",
         ],
@@ -1048,37 +1023,25 @@ class TestKrKnContainerChaosScenarios:
     @pytest.mark.parametrize(
         "ceph_component_label,component_name",
         [
-            (OSD_APP_LABEL, "osd"),  # OSDs can handle multiple failures
-            (MGR_APP_LABEL, "mgr"),  # Critical: active/standby pair - conservative
-            (MON_APP_LABEL, "mon"),  # Critical: NEVER >1 (breaks quorum)
-            (MDS_APP_LABEL, "mds"),  # Critical: usually 1-2 active - conservative
-            (RGW_APP_LABEL, "rgw"),  # HA design: multiple gateways expected
+            (
+                OSD_APP_LABEL,
+                "osd",
+            ),  # OSDs can handle multiple failures - unique all-instances logic
+            (RGW_APP_LABEL, "rgw"),  # RGW with maximum chaos intensity
             (
                 CEPHFS_NODEPLUGIN_LABEL,
                 "cephfs-nodeplugin",
-            ),  # Node plugins are resilient
-            (RBD_NODEPLUGIN_LABEL, "rbd-nodeplugin"),  # Node plugins are resilient
-            (
-                CEPHFS_CTRLPLUGIN_LABEL,
-                "cephfs-ctrlplugin",
-            ),  # Critical: controller plugins
-            (RBD_CTRLPLUGIN_LABEL, "rbd-ctrlplugin"),  # Critical: controller plugins
-            (ROOK_OPERATOR_PODS, "rook-operator"),  # Critical: cluster operator
+            ),  # Node plugins - most resilient
+            (RBD_NODEPLUGIN_LABEL, "rbd-nodeplugin"),  # Node plugins - most resilient
         ],
         ids=[
-            "osd-all-instances",
-            "mgr-all-instances",
-            "mon-all-instances",
-            "mds-all-instances",
-            "rgw-all-instances",
-            "cephfs-nodeplugin-all-instances",
-            "rbd-nodeplugin-all-instances",
-            "cephfs-ctrlplugin-all-instances",
-            "rbd-ctrlplugin-all-instances",
-            "rook-operator-all-instances",
+            "osd-maximum-chaos",
+            "rgw-maximum-chaos",
+            "cephfs-nodeplugin-maximum-chaos",
+            "rbd-nodeplugin-maximum-chaos",
         ],
     )
-    def test_krkn_container_chaos_all_instances(
+    def test_krkn_container_maximum_chaos(
         self,
         krkn_setup,
         krkn_scenario_directory,
@@ -1087,18 +1050,19 @@ class TestKrKnContainerChaosScenarios:
         component_name,
     ):
         """
-        Container chaos testing targeting ALL available instances of each component.
+        Maximum intensity container chaos testing for most resilient components.
 
-        This test dynamically detects all available pod instances for each component
-        and applies container chaos (kill/pause) scenarios to test maximum resilience.
+        This test focuses on the most resilient components (OSD, RGW, Node Plugins)
+        and applies maximum chaos intensity to test their ultimate resilience limits.
+        Unlike the main test, this targets ALL available instances with aggressive scenarios.
 
-        Components tested:
-        - Ceph Components: MON, MGR, MDS, OSD, RGW (all instances)
-        - CSI Plugins: CephFS/RBD Node & Controller Plugins (all instances)
-        - Rook Operator: All operator pods
+        Components tested (maximum chaos):
+        - OSD: All instances with maximum disruption patterns
+        - RGW: All instances with high-intensity chaos
+        - CSI Node Plugins: All instances with extreme chaos patterns
 
-        The test adapts to cluster size and applies appropriate chaos intensity
-        based on component criticality.
+        Critical components (MON, MGR, MDS, Controllers, Rook) are excluded as they
+        are already covered by the main test with appropriate safety controls.
         """
         from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
         from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
