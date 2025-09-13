@@ -276,7 +276,7 @@ def workload_ops(
                     depth=5,
                     width=3,
                     files=5,
-                    default_threads=32,
+                    default_threads=64,
                     elapsed=1200,
                     default_rdpct=0,  # All writes
                     precreate_then_run=True,
@@ -288,14 +288,14 @@ def workload_ops(
                             "name": "random_write",
                             "rdpct": 0,
                             "xfersize": "1m",
-                            "threads": 32,
+                            "threads": 64,
                             "fwdrate": "max",
                         },
                         {
                             "name": "verify_data_integrity",
                             "rdpct": 100,
                             "xfersize": "1m",
-                            "threads": 32,
+                            "threads": 64,
                             "fwdrate": "max",
                             "forx": "verify",  # VDBENCH verification mode
                         },
@@ -306,7 +306,7 @@ def workload_ops(
         def get_blk_config():
             return create_temp_config_file(
                 vdbench_block_config(
-                    threads=32,
+                    threads=64,
                     size="20g",
                     elapsed=6000,
                     interval=120,
