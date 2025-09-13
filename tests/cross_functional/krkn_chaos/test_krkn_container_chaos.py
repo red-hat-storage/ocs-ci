@@ -77,6 +77,36 @@ class TestKrKnContainerChaosScenarios:
                 "SIGKILL",
                 90,
             ),  # RGW can handle aggressive container restarts
+            (
+                CEPHFS_NODEPLUGIN_LABEL,
+                2,
+                "SIGKILL",
+                90,
+            ),  # CephFS node plugins are resilient
+            (
+                RBD_NODEPLUGIN_LABEL,
+                2,
+                "SIGKILL",
+                90,
+            ),  # RBD node plugins are resilient
+            (
+                CEPHFS_CTRLPLUGIN_LABEL,
+                1,
+                "SIGTERM",
+                60,
+            ),  # CephFS controller plugin - critical
+            (
+                RBD_CTRLPLUGIN_LABEL,
+                1,
+                "SIGTERM",
+                60,
+            ),  # RBD controller plugin - critical
+            (
+                ROOK_OPERATOR_PODS,
+                1,
+                "SIGTERM",
+                45,
+            ),  # Rook operator - critical component
         ],
         ids=[
             "osd-container-chaos",
@@ -84,6 +114,11 @@ class TestKrKnContainerChaosScenarios:
             "mon-container-chaos",
             "mds-container-chaos",
             "rgw-container-chaos",
+            "cephfs-nodeplugin-container-chaos",
+            "rbd-nodeplugin-container-chaos",
+            "cephfs-ctrlplugin-container-chaos",
+            "rbd-ctrlplugin-container-chaos",
+            "rook-operator-container-chaos",
         ],
     )
     def test_krkn_container_chaos(
@@ -383,11 +418,24 @@ class TestKrKnContainerChaosScenarios:
             ("osd", "extreme", 3, 4),  # OSDs can handle extreme container stress
             ("rgw", "high", 2, 3),  # RGWs are resilient but more conservative
             ("osd", "ultimate", 5, 6),  # Ultimate OSD container stress test
+            ("cephfs-nodeplugin", "high", 2, 3),  # CephFS node plugins are resilient
+            ("rbd-nodeplugin", "high", 2, 3),  # RBD node plugins are resilient
+            (
+                "cephfs-nodeplugin",
+                "extreme",
+                3,
+                4,
+            ),  # CephFS node plugins extreme stress
+            ("rbd-nodeplugin", "extreme", 3, 4),  # RBD node plugins extreme stress
         ],
         ids=[
             "osd-extreme-container-stress",
             "rgw-high-container-stress",
             "osd-ultimate-container-stress",
+            "cephfs-nodeplugin-high-container-stress",
+            "rbd-nodeplugin-high-container-stress",
+            "cephfs-nodeplugin-extreme-container-stress",
+            "rbd-nodeplugin-extreme-container-stress",
         ],
     )
     def test_krkn_container_strength_testing(
