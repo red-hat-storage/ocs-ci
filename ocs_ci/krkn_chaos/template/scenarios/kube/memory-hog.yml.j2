@@ -1,0 +1,17 @@
+duration: {{ duration | default(60) }}
+workers: {{ workers | default("''") }}  # Leave it empty for node CPU auto-detection
+hog-type: {{ hog_type | default("memory") }}
+image: {{ image | default("quay.io/krkn-chaos/krkn-hog") }}
+namespace: {{ namespace | default("default") }}
+memory-vm-bytes: {{ memory_vm_bytes | default("90%") }}
+{% if node_name %}
+node-name: "{{ node_name }}"  # Uncomment to target a specific node by name
+{% endif %}
+{% if node_selector %}
+node-selector: "{{ node_selector }}"
+{% endif %}
+number-of-nodes: {{ number_of_nodes | default("''") }}
+taints:
+{% for taint in taints | default([]) %}
+  - "{{ taint }}"
+{% endfor %}

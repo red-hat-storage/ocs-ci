@@ -1,0 +1,28 @@
+# This file contains the parameters required for Krkn chaos testing
+# Configure which workload type to use during chaos testing
+
+ENV_DATA:
+  # Workload type to use for chaos testing
+  # Supported values:
+  #   - VDBENCH: Traditional VDBENCH workloads on CephFS and RBD (default)
+  #   - CNV_WORKLOAD: CNV-based virtual machine workloads with FIO inside VMs
+  #   - FIO: FIO-based workloads (future support)
+  workload: "VDBENCH"
+
+  # Enable/disable post-chaos data verification (default: true)
+  # When enabled, runs VDBENCH forx=verify after chaos scenarios complete
+  # to detect data corruption. Only applicable for VDBENCH workloads.
+  # CNV_WORKLOAD and other workload types skip verification automatically.
+  enable_verification: true
+
+  # Additional workload-specific configuration can be added here
+  # For example:
+  # vdbench_config:
+  #   threads: 10
+  #   size: "10g"
+  #   elapsed: 600
+  #   verification_threads: 5
+  #   verification_timeout: 600
+  # cnv_config:
+  #   vm_count: 4
+  #   encrypted: false
