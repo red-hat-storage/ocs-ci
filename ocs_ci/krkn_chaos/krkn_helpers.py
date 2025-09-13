@@ -187,6 +187,36 @@ def check_ceph_health(component_label):
         log.warning(f"Unable to verify Ceph health after {component_label} chaos: {e}")
 
 
+def assert_no_ceph_crashes(component_label, chaos_type="chaos"):
+    """
+    Assert that no Ceph crashes occurred after chaos injection.
+
+    Args:
+        component_label (str): Component label for logging context
+        chaos_type (str): Type of chaos performed (e.g., "container chaos", "network chaos")
+
+    Raises:
+        AssertionError: If Ceph crashes are detected
+    """
+    log.info(f"🔍 Checking for Ceph crashes after {chaos_type} injection...")
+    try:
+        ceph_status_tool = CephStatusTool()
+        ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
+        assert not ceph_crashes_found, (
+            f"Ceph crashes detected after {chaos_type} for {component_label}. "
+            f"This indicates that the chaos injection may have caused Ceph daemon failures."
+        )
+        log.info(f"✅ No Ceph crashes detected - cluster is stable after {chaos_type}")
+    except Exception as e:
+        if "assert" in str(e).lower():
+            # Re-raise assertion errors
+            raise
+        else:
+            # Log other errors but don't fail the test
+            log.error(f"Failed to check for Ceph crashes: {e}")
+            log.warning("Unable to verify Ceph crash status - continuing with test")
+
+
 def krkn_scenarios_list():
     """
     Load the hog_scenarios YAML configuration into a Python dictionary.

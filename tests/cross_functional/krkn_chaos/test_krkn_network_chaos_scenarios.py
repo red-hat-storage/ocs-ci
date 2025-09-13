@@ -26,7 +26,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import NetworkOutageScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.krkn_chaos.krkn_helpers import assert_no_ceph_crashes
 from ocs_ci.krkn_chaos.krkn_helpers import (
     get_default_network_interfaces,
     get_ceph_service_ports,
@@ -249,22 +249,8 @@ class TestKrKnNetworkChaosScenarios:
             not failing_scenarios
         ), f"Network outage scenarios failed for {ceph_component_label} with pod errors: {failing_scenarios}"
 
-        # Check for Ceph crashes after chaos injection
-        log.info("Checking for Ceph crashes after network outage chaos injection...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after network outage chaos for {ceph_component_label}. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info(
-                "No Ceph crashes detected - cluster is stable after network outage chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            # Don't fail the test if we can't check for crashes, but log the issue
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        # Check for Ceph crashes after network outage chaos injection
+        assert_no_ceph_crashes(ceph_component_label, "network outage chaos")
 
         log.info(
             f"Network outage test for {ceph_component_label} completed successfully"
@@ -497,20 +483,8 @@ class TestKrKnNetworkChaosScenarios:
             not failing_scenarios
         ), f"Network chaos scenarios failed for {ceph_component_label} with pod errors: {failing_scenarios}"
 
-        # Check for Ceph crashes after chaos injection
-        log.info("Checking for Ceph crashes after network chaos injection...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after network chaos for {ceph_component_label}. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info("No Ceph crashes detected - cluster is stable after network chaos")
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            # Don't fail the test if we can't check for crashes, but log the issue
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        # Check for Ceph crashes after network chaos injection
+        assert_no_ceph_crashes(ceph_component_label, "network chaos")
 
         log.info(
             f"Network chaos test for {ceph_component_label} completed successfully"
@@ -758,22 +732,8 @@ class TestKrKnNetworkChaosScenarios:
             not failing_scenarios
         ), f"Network ingress chaos scenarios failed for {node_type} nodes with errors: {failing_scenarios}"
 
-        # Check for Ceph crashes after chaos injection
-        log.info("Checking for Ceph crashes after network ingress chaos injection...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after network ingress chaos for {node_type} nodes. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info(
-                "No Ceph crashes detected - cluster is stable after network ingress chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            # Don't fail the test if we can't check for crashes, but log the issue
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        # Check for Ceph crashes after network ingress chaos injection
+        assert_no_ceph_crashes(f"{node_type} nodes", "network ingress chaos")
 
         log.info(
             f"Network ingress chaos test for {node_type} nodes completed successfully"
@@ -1087,24 +1047,10 @@ class TestKrKnNetworkChaosScenarios:
             f"with pod errors: {failing_scenarios}"
         )
 
-        # Check for Ceph crashes after chaos injection
-        log.info(
-            f"Checking for Ceph crashes after pod {traffic_direction} shaping chaos injection..."
+        # Check for Ceph crashes after pod traffic shaping chaos injection
+        assert_no_ceph_crashes(
+            ceph_component_label, f"pod {traffic_direction} shaping chaos"
         )
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after pod {traffic_direction} shaping chaos for {ceph_component_label}. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info(
-                f"No Ceph crashes detected - cluster is stable after pod {traffic_direction} shaping chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            # Don't fail the test if we can't check for crashes, but log the issue
-            log.warning("Unable to verify Ceph crash status - continuing with test")
 
         log.info(
             f"Pod {traffic_direction} shaping test for {ceph_component_label} completed successfully"
@@ -1392,21 +1338,8 @@ class TestKrKnNetworkChaosScenarios:
         except (UnexpectedBehaviour, CommandFailed) as e:
             log.warning(f"Workload validation issue for OSD port test: {str(e)}")
 
-        # Check for Ceph health after OSD port chaos
-        log.info("Checking Ceph cluster health after OSD port chaos...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                "Ceph crashes detected after OSD port chaos. "
-                "This indicates that the port disruption may have caused OSD failures."
-            )
-            log.info(
-                "No Ceph crashes detected - cluster is stable after OSD port chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        # Check Ceph cluster health after OSD port chaos
+        assert_no_ceph_crashes("OSD ports", "OSD port chaos")
 
         # Analyze chaos run results
         chaos_run_output = krkn.get_chaos_data()
@@ -1568,20 +1501,7 @@ class TestKrKnNetworkChaosScenarios:
             not failing_scenarios
         ), f"Interface-specific network chaos scenarios failed with errors: {failing_scenarios}"
 
-        # Check for Ceph health after interface chaos
-        log.info("Checking Ceph cluster health after interface chaos...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                "Ceph crashes detected after interface chaos. "
-                "This indicates that the network impairment may have caused daemon failures."
-            )
-            log.info(
-                "No Ceph crashes detected - cluster is stable after interface chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        # Check Ceph cluster health after interface chaos
+        assert_no_ceph_crashes("network interfaces", "interface chaos")
 
         log.info("Interface-specific network chaos test completed successfully")

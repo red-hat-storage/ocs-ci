@@ -31,11 +31,11 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import ContainerScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 from ocs_ci.krkn_chaos.krkn_helpers import (
     ContainerComponentConfig,
     detect_component_instances,
     create_basic_container_scenarios,
+    assert_no_ceph_crashes,
 )
 
 log = logging.getLogger(__name__)
@@ -328,21 +328,7 @@ class TestKrKnContainerChaosScenarios:
             )
 
         # Check for Ceph crashes after chaos injection
-        log.info("Checking for Ceph crashes after container chaos injection...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after container chaos for {ceph_component_label}. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info(
-                "No Ceph crashes detected - cluster is stable after container chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            # Don't fail the test if we can't check for crashes, but log the issue
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        assert_no_ceph_crashes(ceph_component_label, "container chaos")
 
         log.info(
             f"Container chaos test for {ceph_component_label} completed successfully"
@@ -618,25 +604,10 @@ class TestKrKnContainerChaosScenarios:
                 f"resilience under {stress_level} container stress conditions!"
             )
 
-        # Final Ceph health check after extreme container testing
-        log.info("🔍 Final Ceph health check after container strength testing...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after {stress_level} container strength testing for {component_name}. "
-                f"Container resilience may not be sufficient for this stress level."
-            )
-            log.info(
-                "✅ No Ceph crashes - cluster survived container strength testing!"
-            )
-        except Exception as e:
-            log.error(
-                f"Failed to check Ceph health after container strength testing: {e}"
-            )
-            log.warning(
-                "Unable to verify final Ceph health - test results may be incomplete"
-            )
+        # Final Ceph health check after container strength testing
+        assert_no_ceph_crashes(
+            component_name, f"{stress_level} container strength testing"
+        )
 
         log.info(
             f"🏁 Container strength testing for {component_name} completed successfully "

@@ -38,7 +38,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import ApplicationOutageScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.krkn_chaos.krkn_helpers import assert_no_ceph_crashes
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 
 log = logging.getLogger(__name__)
@@ -243,18 +243,7 @@ class TestKrKnApplicationOutageScenarios:
 
     def _check_ceph_health(self, component_name):
         """Check for Ceph crashes after chaos injection."""
-        log.info("🔍 Checking for Ceph crashes after chaos injection...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after application outage chaos for {component_name}. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info("✅ No Ceph crashes detected - cluster is stable")
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        assert_no_ceph_crashes(component_name, "application outage chaos")
 
     @pytest.mark.parametrize(
         "ceph_component_label,component_name",

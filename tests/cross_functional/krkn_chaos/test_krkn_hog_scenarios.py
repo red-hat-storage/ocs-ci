@@ -19,7 +19,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import HogScenarios
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.krkn_chaos.krkn_helpers import assert_no_ceph_crashes
 
 log = logging.getLogger(__name__)
 
@@ -338,22 +338,8 @@ class TestKrKnHogScenarios:
                 f"Test passed: {successful_scenarios} scenarios executed successfully, chaos injection working properly"
             )
 
-        # Check for Ceph crashes after chaos injection
-        log.info("Checking for Ceph crashes after hog scenarios chaos injection...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after hog scenarios chaos on {node_type} nodes. "
-                f"This indicates that the chaos injection may have caused Ceph daemon failures."
-            )
-            log.info(
-                "No Ceph crashes detected - cluster is stable after hog scenarios chaos"
-            )
-        except Exception as e:
-            log.error(f"Failed to check for Ceph crashes: {e}")
-            # Don't fail the test if we can't check for crashes, but log the issue
-            log.warning("Unable to verify Ceph crash status - continuing with test")
+        # Check for Ceph crashes after hog scenarios chaos injection
+        assert_no_ceph_crashes(f"{node_type} nodes", "hog scenarios chaos")
 
         log.info(
             f"Hog scenarios chaos test completed successfully on {node_type} nodes"
@@ -734,25 +720,8 @@ class TestKrKnHogScenarios:
                 f"Cluster demonstrated {strength_score:.1f}% resilience under {stress_level} conditions!"
             )
 
-        # Final Ceph health check after extreme cluster testing
-        log.info(f"🔍 Final Ceph health check after {stress_level} cluster testing...")
-        try:
-            ceph_status_tool = CephStatusTool()
-            ceph_crashes_found = ceph_status_tool.check_ceph_crashes()
-            assert not ceph_crashes_found, (
-                f"Ceph crashes detected after {stress_level} cluster strength testing. "
-                f"Cluster may not be resilient enough for this level of resource exhaustion."
-            )
-            log.info(
-                f"✅ NO CEPH CRASHES - CLUSTER SURVIVED {stress_level.upper()} RESOURCE APOCALYPSE!"
-            )
-        except Exception as e:
-            log.error(
-                f"Failed to check Ceph health after {stress_level} cluster testing: {e}"
-            )
-            log.warning(
-                "Unable to verify final Ceph health - test results may be incomplete"
-            )
+        # Final Ceph health check after cluster strength testing
+        assert_no_ceph_crashes("cluster", f"{stress_level} cluster strength testing")
 
         log.info(
             f"🏁 {stress_level.upper()} cluster strength testing completed successfully - "
