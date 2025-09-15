@@ -216,6 +216,7 @@ deployment_4_11 = {
 
 deployment_4_12 = {
     "standard_csi_sc": ("standard-csi-link", By.ID),
+    "ibmc-vpc-block-10iops-tier": ("ibmc-vpc-block-10iops-tier-link", By.ID),
 }
 
 deployment_4_15 = {
