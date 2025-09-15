@@ -9,7 +9,6 @@ from ocs_ci.helpers.cnv_helpers import (
     verifyvolume,
     verify_hotplug,
 )
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -28,7 +27,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
     def test_vm_hotpl_snap_clone(
         self,
         setup_cnv,
-        pv_encryption_kms_setup_factory,
         storageclass_factory,
         project_factory,
         cnv_workload,
@@ -46,28 +44,16 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         6. Attach clones to opposite VMs and verify disk operation
         7. Unplug the disks and verify detachment
         """
-        # Setup csi-kms-connection-details configmap
-        log.info("Setting up csi-kms-connection-details configmap")
-        kms = pv_encryption_kms_setup_factory(kv_version="v2")
-        log.info("csi-kms-connection-details setup successful")
 
         # Create an encryption enabled storageclass for RBD
         sc_obj_def = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
-            encrypted=True,
-            encryption_kms_id=kms.kmsid,
             new_rbd_pool=True,
             mapOptions="krbd:rxbounce",
             mounter="rbd",
         )
 
-        # Create ceph-csi-kms-token in the tenant namespace
         proj_obj = project_factory()
-        kms.vault_path_token = kms.generate_vault_token()
-        kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
-        pvk_obj = PVKeyrotation(sc_obj_def)
-        pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
-
         file_paths = ["/source_file.txt", "/new_file.txt"]
 
         # Create a PVC-based VM (VM1)
@@ -80,6 +66,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         # Create the PVC for VM1
         pvc_obj = pvc_factory(
             project=proj_obj,
+            pvc_name="hotplug-pvc",
             storageclass=sc_obj_def,
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
@@ -97,6 +84,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         # Create the PVC for VM2
         dvt_obj = pvc_factory(
             project=proj_obj,
+            pvc_name="hotplug-dvt",
             storageclass=sc_obj_def,
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
@@ -151,8 +139,8 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
 
         # Create PVC clones and attach them to opposite VMs
-        clone_obj_pvc = pvc_clone_factory(pvc_obj)
-        clone_obj_dvt = pvc_clone_factory(dvt_obj)
+        clone_obj_pvc = pvc_clone_factory(pvc_obj, clone_name=f"clone-{pvc_obj.name}")
+        clone_obj_dvt = pvc_clone_factory(dvt_obj, clone_name=f"clone-{dvt_obj.name}")
         log.info(
             f"Clones of PVCs {pvc_obj.name}:{clone_obj_pvc.name} and "
             f"{dvt_obj.name}:{clone_obj_dvt.name} created!"
