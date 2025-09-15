@@ -33,8 +33,10 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
-            # self.create_image_tag_mirror_set()
+            self.create_image_tag_mirror_set()
+            wait_for_machineconfigpool_status(node_type="all")
             self.create_image_digest_mirror_set()
+            wait_for_machineconfigpool_status(node_type="all")
             self.setup_fdf_pre_release_deployment()
 
         self.create_fdf_service_cr()
@@ -46,8 +48,9 @@ class FusionDataFoundationDeployment:
         Create ImageTagMirrorSet.
         """
         logger.info("Creating FDF ImageTagMirrorSet")
+        # wait_for_machineconfigpool_status(node_type="all")
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_IMAGE_TAG_MIRROR_SET}"
+            f"oc --kubeconfig {self.kubeconfig} apply -f {constants.FDF_IMAGE_TAG_MIRROR_SET}"
         )
 
     def create_image_digest_mirror_set(self):
@@ -56,9 +59,14 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set()
+        # update the metadata.name += tag
+        # connect boris
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {image_digest_mirror_set}"
+            f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}"
+        
         )
+        #  sleep for 1 minute for mcp to be triggered
+        #  wait for mcp
         os.remove(image_digest_mirror_set)
 
     def create_fdf_service_cr(self):
@@ -88,7 +96,7 @@ class FusionDataFoundationDeployment:
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
             config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
-        ocp_version = f"ocp{get_ocp_version('')}-t"
+        ocp_version = f"ocp{get_running_ocp_version(self.kubeconfig, '')}-t"
         logger.info("OCP version: {ocp_version}")
         logger.info("Updating FusionServiceDefinition")
         params_dict = {
@@ -96,7 +104,7 @@ class FusionDataFoundationDeployment:
                 "onboarding": {
                     "serviceOperatorSubscription": {
                         "multiVersionCatSrcDetails": {
-                            ocp_version: {
+                         ocp_version: {
                                 "imageDigest": fdf_image_digest,
                                 "registryPath": fdf_registry,
                             }
@@ -246,6 +254,7 @@ def extract_image_digest_mirror_set():
         f"{pull_secret} {fdf_registry}/{fdf_catalog_name}:{fdf_image_tag} --confirm --path /{filename}:./"
     )
     run_cmd(cmd)
+    #  change the metdata 
     return filename
 
 
