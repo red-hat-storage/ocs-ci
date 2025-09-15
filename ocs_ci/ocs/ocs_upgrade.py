@@ -32,6 +32,7 @@ from ocs_ci.ocs.defaults import (
     MUST_GATHER_UPSTREAM_TAG,
     OCS_OPERATOR_NAME,
 )
+from ocs_ci.ocs.md_blow import MdBlow
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -783,6 +784,16 @@ def run_ocs_upgrade(
         log.info(f"Disconnected upgrade - new image: {upgrade_ocs.ocs_registry_image}")
 
     with CephHealthMonitor(ceph_cluster):
+        # Optional: fill NooBaa DB to a threshold before starting the upgrade
+        if config.UPGRADE.get("fill_nb_db_before_upgrade"):
+            pct = int(config.UPGRADE.get("fill_nb_db_pct", 70))
+            log.info(f"Pre-upgrade step: filling NooBaa DB up to {pct}% using MdBlow")
+            md_blow = MdBlow()
+            md_blow.increase_core_pod_cpu_memory()  # Speeds up the process
+            md_blow.upload_obj_using_md_blow(threshold_pct=pct)
+            md_blow.decrease_core_pod_cpu_memory()  # Restores the original values
+            log.info(f"NooBaa DB filled up to {pct}%")
+
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
         live_deployment = config.DEPLOYMENT["live_deployment"]
