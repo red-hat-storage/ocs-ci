@@ -21,6 +21,7 @@ from ocs_ci.ocs.constants import (
     STORAGECLUSTER,
     STATUS_READY,
     REPLICA1_STORAGECLASS,
+    PVC,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -201,6 +202,94 @@ def purge_replica1_osd() -> None:
     delete_osd_removal_job()
 
 
+def sequential_remove_replica1_osds() -> dict:
+    """
+    Sequentially remove OSDs associated with replica-1 for safer cluster operation.
+    Removes OSDs one by one with cluster health validation between removals.
+
+    Returns:
+        dict: Summary of removal operation with counts and any failures
+    """
+    log.info("Starting sequential removal of replica-1 OSDs")
+
+    # Get all replica-1 OSDs and deployments
+    replica1_osds = get_replica_1_osds()
+    deployments_name = get_replica1_osd_deployment()
+
+    if not replica1_osds:
+        log.warning("No replica-1 OSDs found – skipping sequential OSD removal")
+        return {"removed": 0, "failed": 0, "skipped": 0}
+
+    log.info(f"Found {len(replica1_osds)} replica-1 OSDs to remove sequentially")
+    log.info(f"OSD deployments: {deployments_name}")
+    log.info(f"OSD names and IDs: {replica1_osds}")
+
+    removal_summary = {"removed": 0, "failed": 0, "skipped": 0, "failures": []}
+
+    # Create deployment lookup for scaling
+    deployment_obj = OCP(
+        kind=DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+
+    # Remove OSDs one by one
+    for osd_name, osd_id in replica1_osds.items():
+        try:
+            log.info(f"Starting removal of OSD {osd_name} (ID: {osd_id})")
+
+            # Find and scale down the specific deployment for this OSD
+            osd_deployment = None
+            for deployment in deployments_name:
+                if osd_name in deployment or osd_id in deployment:
+                    osd_deployment = deployment
+                    break
+
+            if osd_deployment:
+                log.info(f"Scaling down deployment {osd_deployment} for OSD {osd_name}")
+                deployment_obj.exec_oc_cmd(
+                    f"scale deployment {osd_deployment} --replicas=0"
+                )
+                log.info(f"Deployment {osd_deployment} scaled down")
+            else:
+                log.warning(
+                    f"Could not find deployment for OSD {osd_name}, continuing with removal"
+                )
+
+            # Remove single OSD using removal job
+            log.info(f"Running OSD removal job for OSD {osd_id}")
+            run_osd_removal_job(osd_ids=[osd_id])
+
+            # Verify removal completed
+            verify_osd_removal_job_completed_successfully("1")  # Single OSD
+
+            # Clean up removal job
+            delete_osd_removal_job()
+
+            # Wait for cluster stabilization
+            log.info(
+                f"OSD {osd_name} removed successfully, waiting for cluster stabilization"
+            )
+            sleep(30)  # Brief pause between removals
+
+            removal_summary["removed"] += 1
+            log.info(
+                f"Successfully removed OSD {osd_name} ({removal_summary['removed']}/{len(replica1_osds)})"
+            )
+
+        except Exception as e:
+            log.error(f"Failed to remove OSD {osd_name}: {e}")
+            removal_summary["failed"] += 1
+            removal_summary["failures"].append({"osd": osd_name, "error": str(e)})
+            # Continue with next OSD even if this one fails
+
+    # Final summary
+    log.info(f"Sequential OSD removal completed: {removal_summary}")
+
+    if removal_summary["failed"] > 0:
+        log.warning(f"Some OSDs failed to remove: {removal_summary['failures']}")
+
+    return removal_summary
+
+
 def delete_replica1_cephblockpools_cr(cbp_object: OCP):
     """
     Delete only the CephBlockPool CRs that belong to the
@@ -317,3 +406,72 @@ def get_osd_pgs_used() -> dict:
     log.info(f"Placement Groups Used per OSD: {pgs_used}")
 
     return pgs_used
+
+
+def get_pvcs_using_storageclass(
+    storageclass_name: str, namespace: str = None
+) -> list[dict]:
+    """
+    Find all PVCs using a specific StorageClass
+
+    Args:
+        storageclass_name (str): Name of the StorageClass to search for
+        namespace (str): Namespace to search in. If None, searches all namespaces
+
+    Returns:
+        list[dict]: List of PVC information dictionaries containing name, namespace,
+                   storageclass, status, and size
+
+    Raises:
+        ValueError: If storageclass_name is empty or None
+        CommandFailed: If OCP API call fails
+    """
+    if not storageclass_name or not storageclass_name.strip():
+        raise ValueError("storageclass_name cannot be empty or None")
+
+    log.info(
+        f"Searching for PVCs using StorageClass '{storageclass_name}' in namespace: {namespace or 'all'}"
+    )
+
+    try:
+        ocp_obj = OCP(kind=PVC, namespace=namespace)
+        all_pvcs = ocp_obj.get()
+
+        if not all_pvcs or "items" not in all_pvcs:
+            log.info("No PVCs found in the cluster")
+            return []
+
+        matching_pvcs = []
+        for pvc in all_pvcs["items"]:
+            pvc_spec = pvc.get("spec", {})
+            pvc_metadata = pvc.get("metadata", {})
+            pvc_status = pvc.get("status", {})
+
+            if pvc_spec.get("storageClassName") == storageclass_name:
+                pvc_info = {
+                    "name": pvc_metadata.get("name", "unknown"),
+                    "namespace": pvc_metadata.get("namespace", "unknown"),
+                    "storageclass": pvc_spec.get("storageClassName"),
+                    "status": pvc_status.get("phase", "unknown"),
+                    "size": pvc_spec.get("resources", {})
+                    .get("requests", {})
+                    .get("storage", "unknown"),
+                }
+                matching_pvcs.append(pvc_info)
+                log.info(
+                    f"Found PVC: {pvc_info['name']} in namespace {pvc_info['namespace']}"
+                )
+
+        log.info(
+            f"Found {len(matching_pvcs)} PVCs using StorageClass '{storageclass_name}'"
+        )
+        return matching_pvcs
+
+    except CommandFailed as e:
+        log.error(f"Failed to get PVCs: {e}")
+        raise
+    except Exception as e:
+        log.error(f"Unexpected error while searching for PVCs: {e}")
+        raise CommandFailed(
+            f"Failed to search for PVCs using StorageClass '{storageclass_name}': {e}"
+        )
