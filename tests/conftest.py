@@ -1390,6 +1390,7 @@ def pvc_factory_fixture(request, project_factory):
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
+        pvc_name=None,
         project=None,
         storageclass=None,
         size=None,
@@ -1452,6 +1453,7 @@ def pvc_factory_fixture(request, project_factory):
 
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
+                pvc_name=pvc_name,
                 namespace=project.namespace,
                 size=pvc_size,
                 do_reload=False,
