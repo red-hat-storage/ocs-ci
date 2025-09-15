@@ -17,7 +17,10 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.utility.utils import (
+    get_ocp_version,
+    wait_for_machineconfigpool_status
+) 
 
 logger = logging.getLogger(__name__)
 # 1
@@ -34,8 +37,10 @@ class FusionDataFoundationDeployment:
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
+            time.sleep(60)
             wait_for_machineconfigpool_status(node_type="all")
             self.create_image_digest_mirror_set()
+            time.sleep(60)
             wait_for_machineconfigpool_status(node_type="all")
             self.setup_fdf_pre_release_deployment()
 
@@ -44,14 +49,24 @@ class FusionDataFoundationDeployment:
         # self.setup_storage()
 
     def create_image_tag_mirror_set(self):
-        """
-        Create ImageTagMirrorSet.
-        """
-        logger.info("Creating FDF ImageTagMirrorSet")
-        # wait_for_machineconfigpool_status(node_type="all")
-        run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f {constants.FDF_IMAGE_TAG_MIRROR_SET}"
-        )
+    """
+    Create or update ImageTagMirrorSet.
+    """
+    logger.info("Creating or Updating FDF ImageTagMirrorSet")
+
+    imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
+    resource_name = "isf-fdf" 
+
+    # Check if resource exists
+    cmd_check = f"oc --kubeconfig {self.kubeconfig} get imagetagmirrorset {resource_name}"
+    exists = run_cmd(cmd_check, ignore_error=True)
+
+    if exists:
+        logger.info("ImageTagMirrorSet exists applying changes")
+        run_cmd(f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}")
+    else:
+        logger.info("ImageTagMirrorSet not found creating with save-config")
+        run_cmd(f"oc --kubeconfig {self.kubeconfig} create --save-config -f {imagetag_file}")
 
     def create_image_digest_mirror_set(self):
         """
@@ -59,12 +74,24 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set()
+        resource_name = "df-repo" 
+
+        cmd_check = f"oc --kubeconfig {self.kubeconfig} get imagedigestmirrorset {resource_name}"
+        exists = run_cmd(cmd_check, ignore_error=True)
+
+        if exists:
+            logger.info("ImageDigestMirrorSet exists applying changes")
+            run_cmd(f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}")
+        else:
+            logger.info("ImageDigestMirrorSet not found creating with save-config")
+            run_cmd(f"oc --kubeconfig {self.kubeconfig} create --save-config -f {image_digest_mirror_set}")
+            
         # update the metadata.name += tag
         # connect boris
-        run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}"
+        # run_cmd(
+        #     f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}"
         
-        )
+        # )
         #  sleep for 1 minute for mcp to be triggered
         #  wait for mcp
         os.remove(image_digest_mirror_set)
