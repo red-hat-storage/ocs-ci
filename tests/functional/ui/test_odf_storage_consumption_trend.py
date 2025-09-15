@@ -84,7 +84,7 @@ class TestConsumptionTrendUI(ManageTest):
         """
         block_and_file_page = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
             .nav_block_and_file()
@@ -120,7 +120,7 @@ class TestConsumptionTrendUI(ManageTest):
         validation_ui_obj = ValidationUI()
         block_and_file_page = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
             .nav_block_and_file()
@@ -156,7 +156,7 @@ class TestConsumptionTrendUI(ManageTest):
         validation_ui_obj = ValidationUI()
         block_and_file_page = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
             .nav_block_and_file()
@@ -193,7 +193,7 @@ class TestConsumptionTrendUI(ManageTest):
         """
         block_and_file_page = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
             .nav_block_and_file()
@@ -245,7 +245,7 @@ class TestConsumptionTrendUI(ManageTest):
         validation_ui_obj = ValidationUI()
         block_and_file_page = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
             .nav_block_and_file()
@@ -307,7 +307,7 @@ class TestConsumptionTrendUI(ManageTest):
         """
         block_and_file_page = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
             .nav_block_and_file()

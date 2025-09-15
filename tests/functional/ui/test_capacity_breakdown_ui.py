@@ -231,7 +231,7 @@ class TestCapacityBreakdownUI(ManageTest):
 
         storage_system_details = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )

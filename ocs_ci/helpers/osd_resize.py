@@ -469,7 +469,7 @@ def check_storage_size_is_reflected_in_ui():
     """
     block_and_file = (
         PageNavigator()
-        .nav_odf_default_page()
+        .nav_storage_cluster_default_page()
         .nav_storage_systems_tab()
         .nav_storagecluster_storagesystem_details()
         .nav_block_and_file()

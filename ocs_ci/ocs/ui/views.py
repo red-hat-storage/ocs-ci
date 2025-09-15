@@ -784,6 +784,7 @@ page_nav = {
         By.XPATH,
     ),
     "object_storage": ("//a[normalize-space()='Object Storage']", By.XPATH),
+    "storage_consumers": ("//a[normalize-space()='Storage Consumers']", By.XPATH),
     "observe": ("//button[text()='Observe']", By.XPATH),
     "alerting_page": ("Alerting", By.LINK_TEXT),
     "metrics_page": ("Metrics", By.LINK_TEXT),
@@ -820,6 +821,11 @@ page_nav_4_10 = {
 page_nav_4_14 = {
     "object_storage_page": ("Object Storage", By.LINK_TEXT),
     "storageclients_page": ("Storage Clients", By.LINK_TEXT),
+}
+
+page_nav_4_20 = {
+    "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
+    "storage_cluster": ("Storage cluster", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -1533,6 +1539,10 @@ block_pool = {
         "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
         By.XPATH,
     ),
+    "status_text_in_pool": (
+        "//div[contains(@class, '-c-card__body')]//span[@data-test='status-text']",
+        By.XPATH,
+    ),
 }
 
 storageclass = {
@@ -1812,7 +1822,11 @@ validation_4_9 = {
     "object": ("a[data-test-id='horizontal-link-Object']", By.CSS_SELECTOR),
     "blockpools": ("a[data-test-id='horizontal-link-BlockPools']", By.CSS_SELECTOR),
     "ocs-storagecluster-cephblockpool-status": (
-        "//*[text()= 'Ready']",
+        "//a[text()='ocs-storagecluster-cephblockpool']/../following-sibling::*//span[@data-test='status-text']",
+        By.XPATH,
+    ),
+    "ocs-storagecluster-cephfilesystem-data0-status": (
+        "//td[text()='ocs-storagecluster-cephfilesystem-data0']/..//*[@data-test='status-text']",
         By.XPATH,
     ),
     "ocs-storagecluster-cephblockpool": (
@@ -1903,7 +1917,8 @@ validation_4_9 = {
     ),
     "performance-card": (
         "//div[@class='pf-v5-c-card__title' and contains(text(), 'Performance')] | "
-        "//div[@class='pf-c-card__title' and contains(text(), 'Performance')]",
+        "//div[@class='pf-c-card__title' and contains(text(), 'Performance')] |"
+        "//div[contains(@class,'c-card__title-text') and contains(text(), 'Performance')]",
         By.XPATH,
     ),
     "backingstore": ("//a[normalize-space()='Backing Store']", By.XPATH),
@@ -2080,6 +2095,38 @@ validation_4_18 = {
             ),
         },
     }
+}
+validation_4_20 = {
+    "block-and-file-tab-active": (
+        "//button[@data-test='horizontal-link-Block and File' and @aria-selected='true']",
+        By.XPATH,
+    ),
+    "block-and-file-tab": ("//span[contains(.,'Block and File')]", By.XPATH),
+    "object-tab": ("//button[@data-test='horizontal-link-Object']", By.XPATH),
+    "storage-pools-tab": (
+        "//button[@data-test='horizontal-link-Storage pools']",
+        By.XPATH,
+    ),
+    "topology_tab": ("//button[@data-test='horizontal-link-Topology']", By.XPATH),
+    "storage-pool-storage-cluster-status-from-card": (
+        "//div[@data-test='Storage Cluster-health-item-icon']"
+        "//span[contains(@class,'-c-icon__content')]//*[name()='svg']",
+        By.XPATH,
+    ),
+    # Data Resiliency
+    "storage-pool-data-resiliency-status-from-card": (
+        "//div[@data-test='Data Resiliency-health-item-icon']"
+        "//span[contains(@class,'-c-icon__content')]//*[name()='svg']",
+        By.XPATH,
+    ),
+    "storage-pools-breadcrumb-link": (
+        "//a[normalize-space()='Storage pools']",
+        By.XPATH,
+    ),
+    "breadcrumb-storage-pools": (
+        "//a[contains(@class, '-c-breadcrumb__link') and text()='Storage pools']",
+        By.XPATH,
+    ),
 }
 
 topology = {
@@ -2379,10 +2426,26 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),  # Input field for bucket name confirmation
 }
+locate_aws_regions = {
+    "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
+}
+locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}
+data_foundation_overview = {
+    "view_storage_link": ("//a[contains(text(),'View storage')]", By.XPATH),
+    "view_buckets_link": ("//a[contains(text(),'View buckets')]", By.XPATH),
+    "used_capacity_legend": (
+        "//*[name()='text' and @id='legend-labels-0']//*[name()='tspan' and contains(text(), 'Used:')]",
+        By.XPATH,
+    ),
+    "available_capacity_legend": (
+        "//*[name()='text' and @id='legend-labels-1']//*[name()='tspan' and contains(text(), 'Available:')]",
+        By.XPATH,
+    ),
+}
 locators = {
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
-        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "deployment": {
@@ -2432,6 +2495,7 @@ locators = {
             **validation_4_14,
             **validation_4_17,
             **validation_4_18,
+            **validation_4_20,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
@@ -2440,6 +2504,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
+        "data_foundation_overview": data_foundation_overview,
     },
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -2919,9 +2984,3 @@ def locators_for_current_ocp_version():
             f"Locators for latest defined version of OCP: {latest_version} will be used!"
         )
         return locators[latest_version]
-
-
-locate_aws_regions = {
-    "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
-}
-locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}

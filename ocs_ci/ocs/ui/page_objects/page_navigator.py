@@ -82,22 +82,36 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
 
-    def nav_odf_default_page(self):
+    def nav_storage_data_foundation_overview_page(self):
+        """
+        Navigate to OpenShift Data Foundation Overview page
+
+        Returns:
+            DataFoundationOverview: StorageCluster page object
+        """
+        self.navigate_storage()
+        self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+
+        from ocs_ci.ocs.ui.page_objects.df_overview import DataFoundationOverview
+
+        return DataFoundationOverview()
+
+    def nav_storage_cluster_default_page(self):
         """
         Navigate to OpenShift Data Foundation default page
         Default Data foundation page is Overview at ODF 4.13
         """
 
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+        self.do_click(locator=self.page_nav["storage_cluster"], timeout=90)
         self.page_has_loaded(retries=15)
+        logger.info(f"Default page is {self.driver.title}")
+
         logger.info("Successfully navigated to ODF tab under Storage section")
 
-        from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
+        from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
 
-        default_tab = OverviewTab()
-        logger.info(f"Default page is {self.driver.title}")
-        return default_tab
+        return StorageClusterPage()
 
     def nav_object_storage(self):
         """
@@ -379,11 +393,11 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to block pools page")
         storage_system_details = (
-            self.nav_odf_default_page()
+            self.nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )
-        storage_system_details.nav_ceph_blockpool()
+        storage_system_details.nav_pools()
         logger.info("Now at Block pool page")
 
     def select_namespace(self, project_name):

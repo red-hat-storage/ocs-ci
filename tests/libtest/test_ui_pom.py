@@ -20,7 +20,7 @@ def test_raw_capacity(setup_ui_session):
     """
     block_and_file = (
         PageNavigator()
-        .nav_odf_default_page()
+        .nav_storage_cluster_default_page()
         .nav_storage_systems_tab()
         .nav_storagecluster_storagesystem_details()
         .nav_block_and_file()

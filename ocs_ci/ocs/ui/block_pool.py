@@ -500,3 +500,21 @@ class BlockPoolUI(PageNavigator):
         else:
             # Use regular rounding for other cases
             return round(number)
+
+    def validate_performance_card_header_present(self) -> bool:
+        """
+        Validate Performance Card is present on Overview page
+
+        Returns:
+            bool: True if present, False otherwise
+        """
+        is_present = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["performance-card"],
+            expected_text="Performance",
+            timeout=15,
+        )
+        if not is_present:
+            logger.warning(
+                "Performance Card not found on OpenShift Data Foundation Overview page"
+            )
+        return is_present

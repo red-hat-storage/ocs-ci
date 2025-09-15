@@ -520,6 +520,8 @@ CONSOLE_CONFIG = "console.v1.operator.openshift.io/cluster"
 
 # Default pools
 DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
+DEFAULT_CEPHFS_DATA_POOL = "ocs-storagecluster-cephfilesystem-data0"
+
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"

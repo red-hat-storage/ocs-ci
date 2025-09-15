@@ -235,10 +235,10 @@ class TestDeleteRbdPool(ManageTest):
         )
         blocking_pool_tab = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
-            .nav_ceph_blockpool()
+            .nav_pools()
         )
         assert not blocking_pool_tab.delete_block_pool(
             cbp_name, cannot_be_deleted=True

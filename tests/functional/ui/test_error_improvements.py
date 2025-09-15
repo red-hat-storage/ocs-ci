@@ -130,10 +130,10 @@ class TestErrorMessageImprovements(ManageTest):
 
         blocking_pool_tab = (
             PageNavigator()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
-            .nav_ceph_blockpool()
+            .nav_pools()
         )
 
         blocking_pool_tab.check_edit_labels(block_pool_obj.name)
@@ -157,7 +157,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
         storage_systems_tab = (
-            PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
+            PageNavigator().nav_storage_cluster_default_page().nav_storage_systems_tab()
         )
         storage_systems_tab.proceed_resource_creation()
         storage_systems_tab.fill_backing_storage_form(

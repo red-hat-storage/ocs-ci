@@ -66,10 +66,7 @@ class TestUserInterfaceValidation(object):
                 raise ValueError("GET request initiated by kube-probe does not exist")
 
         validation_ui_obj = ValidationUI()
-        if ocs_version >= version.VERSION_4_9:
-            validation_ui_obj.odf_overview_ui()
-        else:
-            validation_ui_obj.verification_ui()
+        validation_ui_obj.odf_overview_ui()
 
     @ui
     @runs_on_provider
@@ -111,7 +108,7 @@ class TestUserInterfaceValidation(object):
 
         storage_system_details = (
             ValidationUI()
-            .nav_odf_default_page()
+            .nav_storage_cluster_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )
