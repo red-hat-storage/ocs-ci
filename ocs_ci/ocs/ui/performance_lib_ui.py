@@ -50,7 +50,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
 
         # Try grafana login prompt
         try:
-            wait = WebDriverWait(driver, 30)
+            wait = WebDriverWait(driver, 60)
 
             wait.until(ec.presence_of_element_located((By.NAME, "user")))
 
