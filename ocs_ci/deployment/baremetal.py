@@ -656,17 +656,25 @@ class BAREMETALUPI(BAREMETALBASE):
             approve_pending_csr()
 
             self.test_cluster()
-            logger.info("Performing Disk cleanup")
-            ocp_obj = ocp.OCP()
-            policy = constants.PSA_BASELINE
-            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
-                policy = constants.PSA_PRIVILEGED
-            ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS, policy=policy)
-            time.sleep(10)
-            workers = get_nodes(node_type="worker")
-            for worker in workers:
-                clean_disk(worker)
-            ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing Disk cleanup")
+                ocp_obj = ocp.OCP()
+                policy = constants.PSA_BASELINE
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    >= version.VERSION_4_12
+                ):
+                    policy = constants.PSA_PRIVILEGED
+                ocp_obj.new_project(
+                    project_name=constants.BM_DEBUG_NODE_NS, policy=policy
+                )
+                time.sleep(10)
+                workers = get_nodes(node_type="worker")
+                for worker in workers:
+                    clean_disk(worker)
+                ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         def create_config(self):
             """
