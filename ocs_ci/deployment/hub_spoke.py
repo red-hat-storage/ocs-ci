@@ -1085,6 +1085,13 @@ class HostedClients(HyperShiftBase):
 
         """
         cluster_names = list(config.ENV_DATA.get("clusters").keys())
+        cluster_names = [
+            name
+            for name in cluster_names
+            if config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+            == "hci_client"
+        ]
+
         if not cluster_names:
             cluster_names = get_hosted_cluster_names()
         futures = []
@@ -1131,6 +1138,13 @@ class HostedClients(HyperShiftBase):
             if cluster_names_paths_dict
             else list(config.ENV_DATA.get("clusters", {}).keys())
         )
+        # filter out non-hosted clusters
+        cluster_names = [
+            name
+            for name in cluster_names
+            if config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+            == "hci_client"
+        ]
 
         for name in cluster_names:
             path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
