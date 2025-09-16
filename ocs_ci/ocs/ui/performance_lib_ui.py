@@ -91,7 +91,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             )
         )
         time_range_selector.click()
-        logger.info(f"lkst{last_duration}")
+        logger.info(f"Test duration {last_duration}")
         time.sleep(5)
         '''
         last_duration_option = wait.until(
