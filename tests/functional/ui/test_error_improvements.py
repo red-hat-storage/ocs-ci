@@ -128,13 +128,7 @@ class TestErrorMessageImprovements(ManageTest):
 
         block_pool_obj = cephblockpool_factory_ui_class()
 
-        blocking_pool_tab = (
-            PageNavigator()
-            .nav_storage_cluster_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_pools()
-        )
+        blocking_pool_tab = PageNavigator().navigate_storage_pools_page()
 
         blocking_pool_tab.check_edit_labels(block_pool_obj.name)
 
@@ -146,8 +140,10 @@ class TestErrorMessageImprovements(ManageTest):
     @flaky(max_runs=2)
     @external_mode_required
     @skipif_hci_provider_or_client
-    def test_storage_class_creation_rules(self, setup_ui_class):
+    def deprecated_storage_class_creation_rules(self, setup_ui_class):
         """
+        ! StorageSystem removed from management-console starting from ODF 4.20
+
         Test to verify error rules for the name when creating a new storage class.
         external_mode_required deco added. Starting from ODF 4.16 this form is available for External mode only,
         where still no clusters StorageSystem was created. Rules are:

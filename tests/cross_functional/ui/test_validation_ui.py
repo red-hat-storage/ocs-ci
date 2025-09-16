@@ -45,7 +45,7 @@ class TestUserInterfaceValidation(object):
 
 
         Args:
-            setup_ui_class: login function on conftest file
+            setup_ui_class_factory: login function on conftest file
 
         """
         setup_ui_class_factory()
@@ -74,12 +74,14 @@ class TestUserInterfaceValidation(object):
     @polarion_id("OCS-4642")
     @skipif_ocs_version("<4.9")
     @skipif_ui_not_support("validation")
-    def test_odf_storagesystems_ui(self, setup_ui_class_factory):
+    def deprecated_test_odf_storagesystems_ui(self, setup_ui_class_factory):
         """
+        ! StorageSystem removed from management-console starting from ODF 4.20
+
         Validate User Interface for ODF Storage Systems Tab for ODF 4.9
 
         Args:
-            setup_ui_class: login function on conftest file
+            setup_ui_class_factory: login function on conftest file
 
         """
         setup_ui_class_factory()

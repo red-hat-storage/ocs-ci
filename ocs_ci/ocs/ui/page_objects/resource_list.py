@@ -1,9 +1,7 @@
-from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.searchbar import SearchBar
 from ocs_ci.ocs.ui.base_ui import logger
 from ocs_ci.utility import version
-from ocs_ci.utility.retry import retry
 
 
 class ResourceList(SearchBar):
@@ -25,14 +23,18 @@ class ResourceList(SearchBar):
         self.select_search_by("name")
         self.do_clear(self.generic_locators["searchbar_input"])
         self.search(resource_name)
-        retry(TimeoutException, tries=3, delay=2, backoff=1)(self.do_click)(
-            format_locator(
-                self.generic_locators["resource_link"],
-                resource_name,
-                resource_name,
-                resource_name,
-                resource_name,
-            ),
+
+        loc = format_locator(
+            self.generic_locators["resource_link"],
+            resource_name,
+            resource_name,
+            resource_name,
+            resource_name,
+        )
+
+        self.wait_for_element_to_be_visible(loc)
+        self.do_click(
+            loc,
             enable_screenshot=True,
         )
 

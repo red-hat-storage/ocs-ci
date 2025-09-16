@@ -81,13 +81,8 @@ class TestEncryptionConfigurationDashboard:
         """
 
         # Navigate to the block and file page
-        block_and_file_page = (
-            PageNavigator()
-            .nav_storage_cluster_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
 
         # Retrieve encryption summary from the dashboard
         encryption_summary = block_and_file_page.get_block_file_encryption_summary()

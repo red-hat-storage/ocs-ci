@@ -138,8 +138,8 @@ class DeploymentUI(PageNavigator):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_20:
             logger.info("Navigate to Storage Cluster page")
-            # TODO: doublecheck if this navigation is correct
-            self.nav_storage_cluster_default_page().nav_storage_systems_tab()
+
+            self.nav_storage_cluster_default_page()
             logger.info("Click Configure ODF")
             self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
             self.do_click(

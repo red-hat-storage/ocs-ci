@@ -386,19 +386,14 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
         self.do_click(locator=self.page_nav["Pods"], enable_screenshot=False)
 
-    def navigate_block_pool_page(self):
+    def navigate_storage_pools_page(self):
         """
-        Navigate to block pools page
+        Navigate to storage pools page
 
         """
         logger.info("Navigate to block pools page")
-        storage_system_details = (
-            self.nav_storage_cluster_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-        )
-        storage_system_details.nav_pools()
-        logger.info("Now at Block pool page")
+
+        return self.nav_storage_cluster_default_page().nav_storage_pools_tab()
 
     def select_namespace(self, project_name):
         """
