@@ -310,3 +310,5 @@ def get_selector_for_ocs_operator():
         return constants.OPERATOR_INTERNAL_SELECTOR
     except CommandFailed:
         log.info("Catalog source not found!")
+    # TODO: we might need to limit this to ODF only as FDF might come from different source
+    return constants.REDHAT_OPERATOR_SELECTOR

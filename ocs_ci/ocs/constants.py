@@ -1521,6 +1521,7 @@ OSBS_BOUNDLE_IMAGE = "registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pend
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
+REDHAT_OPERATOR_SELECTOR = "catalog=redhat-operators"
 OPERATOR_CS_QUAY_API_QUERY = (
     "https://quay.io/api/v1/repository/rhceph-dev/{image}/"
     "tag/?onlyActiveTags=true&limit={tag_limit}&page={page}"
