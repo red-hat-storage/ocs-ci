@@ -270,7 +270,7 @@ def create_mce_catsrc():
     mce_konflux_catsrc_yaml_data = templating.load_yaml(
         constants.MCE_CATALOGSOURCE_YAML
     )
-    if config.ENV_DATA.get("mce_unreleased_image", False):
+    if not config.ENV_DATA.get("mce_unreleased_image"):
         mce_image_tag = get_acm_mce_build_tag(
             constants.MCE_CATSRC_IMAGE, config.ENV_DATA.get("mce_version")
         )

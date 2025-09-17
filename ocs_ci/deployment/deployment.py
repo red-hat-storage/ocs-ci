@@ -2956,7 +2956,7 @@ class Deployment(object):
         acm_konflux_catsrc_yaml_data = templating.load_yaml(
             constants.ACM_CATALOGSOURCE_YAML
         )
-        if config.ENV_DATA.get("acm_unreleased_image", False):
+        if not config.ENV_DATA.get("acm_unreleased_image"):
             acm_image_tag = get_acm_mce_build_tag(
                 constants.ACM_CATSRC_IMAGE, config.ENV_DATA.get("acm_version")
             )
