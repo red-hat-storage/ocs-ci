@@ -38,8 +38,6 @@ class FusionDataFoundationDeployment:
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
-            time.sleep(60)
-            wait_for_machineconfigpool_status(node_type="all")
             self.create_image_digest_mirror_set()
             time.sleep(60)
             wait_for_machineconfigpool_status(node_type="all")
