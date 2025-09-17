@@ -8,6 +8,8 @@ from ocs_ci.framework.testlib import (
     brown_squad,
     ManageTest,
     tier1,
+    skipif_ocs_version,
+    skipif_hci_client,
 )
 from ocs_ci.framework.logger_helper import log_step
 
@@ -15,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
+@skipif_ocs_version("<4.19")
+@skipif_hci_client
 class TestStorageSystem(ManageTest):
     """
     Verify the ceph full thresholds storagecluster parameters move to cephcluster
