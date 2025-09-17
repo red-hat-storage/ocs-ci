@@ -98,125 +98,149 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
 
         # Hotplug disks and perform I/O operations
         for i, (vm_obj, pvc) in enumerate(vms_pvc):
-            # Verify disks before hotplugging
-            before_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-            log.info(f"Disks before hotplug on VM {vm_obj.name}:\n{before_disks}")
-            before_disks_hotplug.append(before_disks)
+            try:
+                # Verify disks before hotplugging
+                before_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+                log.info(f"Disks before hotplug on VM {vm_obj.name}:\n{before_disks}")
+                before_disks_hotplug.append(before_disks)
 
-            # Hotplug the PVC volume to the VM
-            log.info(f"Hotplugging PVC {pvc.name} to VM {vm_obj.name}")
-            vm_obj.addvolume(volume_name=pvc.name)
+                # Hotplug the PVC volume to the VM
+                log.info(f"Hotplugging PVC {pvc.name} to VM {vm_obj.name}")
+                vm_obj.addvolume(volume_name=pvc.name)
 
-            # Wait for the disk to be hotplugged successfully
+                # Wait for the disk to be hotplugged successfully
+                sample = TimeoutSampler(
+                    timeout=600,
+                    sleep=5,
+                    func=verify_hotplug,
+                    vm_obj=vm_obj,
+                    disks_before_hotplug=before_disks,
+                )
+                sample.wait_for_func_value(value=True)
+                log.info(f"Hotplugged PVC {pvc.name} to VM {vm_obj.name}")
+
+                # Run I/O operation
+                log.info(f"Running I/O operation on VM {vm_obj.name}")
+                source_csum = run_dd_io(
+                    vm_obj=vm_obj, file_path=file_paths[0], verify=True
+                )
+
+                # Reboot the VM
+                log.info(f"Rebooting VM {vm_obj.name}")
+                vm_obj.restart()
+                log.info(f"Reboot Success for VM: {vm_obj.name}")
+
+                # Verify disk is still attached after reboot
+                assert verifyvolume(
+                    vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
+                ), f"Unable to find volume {pvc.name} mounted on VM: {vm_obj.name}"
+
+                # Verify data persistence by checking MD5 checksum
+                new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
+                assert (
+                    source_csum == new_csum
+                ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
+            except Exception as e:
+                log.error(
+                    f"An error occurred during hotplugging and I/O operations on VM {vm_obj.name}: {str(e)}"
+                )
+                raise
+
+        # Create PVC clones and attach them to opposite VMs
+        try:
+            clone_obj_pvc = pvc_clone_factory(
+                pvc_obj, clone_name=f"clone-{pvc_obj.name}"
+            )
+            clone_obj_dvt = pvc_clone_factory(
+                dvt_obj, clone_name=f"clone-{dvt_obj.name}"
+            )
+            log.info(
+                f"Clones of PVCs {pvc_obj.name}:{clone_obj_pvc.name} and "
+                f"{dvt_obj.name}:{clone_obj_dvt.name} created!"
+            )
+
+            # Attach clones to the opposite VMs
+            log.info(f"Attaching clone of {dvt_obj.name} to VM {vm_obj_pvc.name}")
+            before_disks_pvc = vm_obj_pvc.run_ssh_cmd(
+                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
+            )
+            log.info(
+                f"Disks before clone hotplug on VM {vm_obj_pvc.name}:\n{before_disks_pvc}"
+            )
+            vm_obj_pvc.addvolume(
+                volume_name=clone_obj_dvt.name, persist=False, verify=False
+            )
             sample = TimeoutSampler(
                 timeout=600,
                 sleep=5,
                 func=verify_hotplug,
-                vm_obj=vm_obj,
-                disks_before_hotplug=before_disks,
+                vm_obj=vm_obj_pvc,
+                disks_before_hqotplug=before_disks_pvc,
             )
             sample.wait_for_func_value(value=True)
-            log.info(f"Hotplugged PVC {pvc.name} to VM {vm_obj.name}")
 
-            # Run I/O operation
-            log.info(f"Running I/O operation on VM {vm_obj.name}")
-            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            log.info(f"Attaching clone of {pvc_obj.name} to VM {vm_obj_dvt.name}")
+            before_disks_dvt = vm_obj_dvt.run_ssh_cmd(
+                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
+            )
+            log.info(
+                f"Disks before clone hotplug on VM {vm_obj_dvt.name}:\n{before_disks_dvt}"
+            )
+            vm_obj_dvt.addvolume(
+                volume_name=clone_obj_pvc.name, persist=False, verify=False
+            )
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=5,
+                func=verify_hotplug,
+                vm_obj=vm_obj_dvt,
+                disks_before_hotplug=before_disks_dvt,
+            )
+            sample.wait_for_func_value(value=True)
 
-            # Reboot the VM
-            log.info(f"Rebooting VM {vm_obj.name}")
-            vm_obj.restart()
-            log.info(f"Reboot Success for VM: {vm_obj.name}")
+            log.info(f"Running I/O operation {clone_obj_pvc.name}")
+            run_dd_io(vm_obj=vm_obj_pvc, file_path=file_paths[1])
 
-            # Verify disk is still attached after reboot
-            assert verifyvolume(
-                vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
-            ), f"Unable to find volume {pvc.name} mounted on VM: {vm_obj.name}"
+            log.info(f"Running I/O operation {clone_obj_dvt.name}")
+            run_dd_io(vm_obj=vm_obj_dvt, file_path=file_paths[1])
 
-            # Verify data persistence by checking MD5 checksum
-            new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
-            assert (
-                source_csum == new_csum
-            ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
+            # Unplug cloned disks and verify detachment
+            log.info(f"Unplugging clone of {dvt_obj.name} from VM {vm_obj_pvc.name}")
+            before_disks_pvc_rm = vm_obj_pvc.run_ssh_cmd(
+                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
+            )
+            log.info(
+                f"Disks before unplugging from VM {vm_obj_pvc.name}:\n{before_disks_pvc_rm}"
+            )
+            vm_obj_pvc.removevolume(volume_name=clone_obj_dvt.name, verify=False)
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=5,
+                func=verify_hotplug,
+                vm_obj=vm_obj_pvc,
+                disks_before_hotplug=before_disks_pvc_rm,
+            )
+            sample.wait_for_func_value(value=True)
 
-        # Create PVC clones and attach them to opposite VMs
-        clone_obj_pvc = pvc_clone_factory(pvc_obj, clone_name=f"clone-{pvc_obj.name}")
-        clone_obj_dvt = pvc_clone_factory(dvt_obj, clone_name=f"clone-{dvt_obj.name}")
-        log.info(
-            f"Clones of PVCs {pvc_obj.name}:{clone_obj_pvc.name} and "
-            f"{dvt_obj.name}:{clone_obj_dvt.name} created!"
-        )
-
-        # Attach clones to the opposite VMs
-        log.info(f"Attaching clone of {dvt_obj.name} to VM {vm_obj_pvc.name}")
-        before_disks_pvc = vm_obj_pvc.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-        log.info(
-            f"Disks before clone hotplug on VM {vm_obj_pvc.name}:\n{before_disks_pvc}"
-        )
-        vm_obj_pvc.addvolume(
-            volume_name=clone_obj_dvt.name, persist=False, verify=False
-        )
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=5,
-            func=verify_hotplug,
-            vm_obj=vm_obj_pvc,
-            disks_before_hotplug=before_disks_pvc,
-        )
-        sample.wait_for_func_value(value=True)
-
-        log.info(f"Attaching clone of {pvc_obj.name} to VM {vm_obj_dvt.name}")
-        before_disks_dvt = vm_obj_dvt.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-        log.info(
-            f"Disks before clone hotplug on VM {vm_obj_dvt.name}:\n{before_disks_dvt}"
-        )
-        vm_obj_dvt.addvolume(
-            volume_name=clone_obj_pvc.name, persist=False, verify=False
-        )
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=5,
-            func=verify_hotplug,
-            vm_obj=vm_obj_dvt,
-            disks_before_hotplug=before_disks_dvt,
-        )
-        sample.wait_for_func_value(value=True)
-
-        log.info(f"Running I/O operation {clone_obj_pvc.name}")
-        run_dd_io(vm_obj=vm_obj_pvc, file_path=file_paths[1])
-
-        log.info(f"Running I/O operation {clone_obj_dvt.name}")
-        run_dd_io(vm_obj=vm_obj_dvt, file_path=file_paths[1])
-
-        # Unplug cloned disks and verify detachment
-        log.info(f"Unplugging clone of {dvt_obj.name} from VM {vm_obj_pvc.name}")
-        before_disks_pvc_rm = vm_obj_pvc.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-        log.info(
-            f"Disks before unplugging from VM {vm_obj_pvc.name}:\n{before_disks_pvc_rm}"
-        )
-        vm_obj_pvc.removevolume(volume_name=clone_obj_dvt.name, verify=False)
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=5,
-            func=verify_hotplug,
-            vm_obj=vm_obj_pvc,
-            disks_before_hotplug=before_disks_pvc_rm,
-        )
-        sample.wait_for_func_value(value=True)
-
-        log.info(f"Unplugging clone of {pvc_obj.name} from VM {vm_obj_dvt.name}")
-        before_disks_dvt_rm = vm_obj_dvt.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-        log.info(
-            f"Disks before unplugging from VM {vm_obj_dvt.name}:\n{before_disks_dvt_rm}"
-        )
-        vm_obj_dvt.removevolume(volume_name=clone_obj_pvc.name, verify=False)
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=5,
-            func=verify_hotplug,
-            vm_obj=vm_obj_dvt,
-            disks_before_hotplug=before_disks_dvt_rm,
-        )
-        sample.wait_for_func_value(value=True)
+            log.info(f"Unplugging clone of {pvc_obj.name} from VM {vm_obj_dvt.name}")
+            before_disks_dvt_rm = vm_obj_dvt.run_ssh_cmd(
+                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
+            )
+            log.info(
+                f"Disks before unplugging from VM {vm_obj_dvt.name}:\n{before_disks_dvt_rm}"
+            )
+            vm_obj_dvt.removevolume(volume_name=clone_obj_pvc.name, verify=False)
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=5,
+                func=verify_hotplug,
+                vm_obj=vm_obj_dvt,
+                disks_before_hotplug=before_disks_dvt_rm,
+            )
+            sample.wait_for_func_value(value=True)
+        except Exception as e:
+            log.error(f"An error occurred during PVC cloning and hotplugging: {str(e)}")
+            raise
 
         # Stop the VMs after the test
         log.info(f"Stopping VM {vm_obj_pvc.name}")
