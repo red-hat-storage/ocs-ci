@@ -1379,7 +1379,9 @@ def get_all_drpolicy():
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     for cluster_name in config.clusters:
         if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
-            current_managed_clusters_list.append(cluster_name.ENV_DATA.get("cluster_name"))
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
 
     current_managed_clusters_list.remove(acm_hub_name)
     for drpolicy in drpolicy_list:
@@ -2482,7 +2484,9 @@ def get_cluster_set_name(switch_ctx=None):
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
     for cluster_name in config.clusters:
         if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
-            current_managed_clusters_list.append(cluster_name.ENV_DATA.get("cluster_name"))
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
 
     # ignore local-cluster here
     for i in managed_clusters:
