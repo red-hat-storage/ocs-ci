@@ -125,8 +125,8 @@ class FusionDataFoundationDeployment:
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
             config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
-        ocp_version = f"ocp{get_running_ocp_version(self.kubeconfig, '')}-t"
-        logger.info("OCP version: {ocp_version}")
+        ocp_version = f"ocp{get_running_ocp_version('')}-t"
+        logger.info(f"OCP version: {ocp_version}")
         logger.info("Updating FusionServiceDefinition")
         params_dict = {
             "spec": {
