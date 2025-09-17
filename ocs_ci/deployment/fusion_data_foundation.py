@@ -17,6 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
+import time
 from ocs_ci.utility.utils import (
     get_ocp_version,
     wait_for_machineconfigpool_status
