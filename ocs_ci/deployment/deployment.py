@@ -184,6 +184,7 @@ from ocs_ci.utility.utils import (
     get_oadp_version,
     ceph_health_check_multi_storagecluster_external,
     get_acm_version,
+    get_acm_mce_build_tag,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2955,11 +2956,12 @@ class Deployment(object):
         acm_konflux_catsrc_yaml_data = templating.load_yaml(
             constants.ACM_CATALOGSOURCE_YAML
         )
-
-        acm_image_tag = (
-            config.ENV_DATA.get("acm_unreleased_image")
-            or f"latest-{config.ENV_DATA.get('acm_version')}"
-        )
+        if config.ENV_DATA.get("acm_unreleased_image", False):
+            acm_image_tag = get_acm_mce_build_tag(
+                constants.ACM_CATSRC_IMAGE, config.ENV_DATA.get("acm_version")
+            )
+        else:
+            acm_image_tag = config.ENV_DATA.get("acm_unreleased_image")
         acm_konflux_catsrc_yaml_data["spec"][
             "image"
         ] = f"{constants.ACM_CATSRC_IMAGE}:{acm_image_tag}"
