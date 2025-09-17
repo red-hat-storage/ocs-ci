@@ -144,7 +144,13 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
         self.pv_keyrotation_obj.set_keyrotation_state_by_annotation(True)
         log.info("Key rotation re-enabled globally via storage class annotation.")
 
-        # Verify key rotation cronjobs are recreated
+        # Wait for key rotation cronjobs to be recreated and active
+        assert self.pv_keyrotation_obj.wait_for_keyrotation_cronjobs_recreation(
+            self.pvc_objs
+        ), "Failed to recreate key rotation cronjobs after re-enabling."
+        log.info("Key rotation cronjobs successfully recreated and active.")
+
+        # Verify key rotation cronjobs are recreated and keys are rotated
         assert self.pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(
             self.pvc_objs
         ), "Failed to re-enable PV key rotation."
