@@ -911,7 +911,7 @@ class SeleniumDriver(WebDriver):
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
             driver = webdriver.Chrome(
-                ChromeDriverManager(
+                executable_path=ChromeDriverManager(
                     chrome_type=chrome_browser_type, driver_version="135.0.7049.42"
                 ).install(),
                 options=chrome_options,
