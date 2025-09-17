@@ -26,6 +26,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     nfs_outcluster_test_platform_required,
     skipif_external_mode,
+    skipif_hci_client,
 )
 
 from ocs_ci.ocs.resources import pod, ocs
@@ -89,7 +90,10 @@ class TestNfsEnable(ManageTest):
     """
 
     @pytest.fixture(scope="class", autouse=True)
-    def setup_teardown(self, request):
+    def setup_teardown(
+        self,
+        request,
+    ):
         """
         Setup-Teardown for the class
 
@@ -137,6 +141,7 @@ class TestNfsEnable(ManageTest):
         self.pvc_obj = ocp.OCP(kind=constants.PVC, namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
+        self.nfs_sc_copy = "ocs-storagecluster-ceph-nfs-copy"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
         self.retain_nfs_sc_name = "ocs-storagecluster-ceph-nfs-retain"
         platform = config.ENV_DATA.get("platform", "").lower()
@@ -156,42 +161,65 @@ class TestNfsEnable(ManageTest):
 
         # Enable nfs feature
         log.info("----Enable nfs----")
-        nfs_ganesha_pod_name = nfs_utils.nfs_enable(
-            self.storage_cluster_obj,
-            self.config_map_obj,
-            self.pod_obj,
-            self.namespace,
-        )
-
         if (
-            platform == constants.AWS_PLATFORM
-            or platform == constants.IBMCLOUD_PLATFORM
-            or platform == constants.HCI_BAREMETAL
+            config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+            == constants.HCI_CLIENT
         ):
-            # Create loadbalancer service for nfs
-            self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
-                self.storage_cluster_obj,
+            nfs_ganesha_pod, self.hostname_add = nfs_utils.nfs_access_for_clients(
+                self.nfs_sc
             )
-        yield
 
-        log.info("-----Teardown-----")
-        # Disable nfs feature
-        nfs_utils.nfs_disable(
-            self.storage_cluster_obj,
-            self.config_map_obj,
-            self.pod_obj,
-            self.sc,
-            nfs_ganesha_pod_name,
-        )
-        if (
-            platform == constants.AWS_PLATFORM
-            or platform == constants.IBMCLOUD_PLATFORM
-            or platform == constants.HCI_BAREMETAL
-        ):
-            # Delete ocs nfs Service
-            nfs_utils.delete_nfs_load_balancer_service(
-                self.storage_cluster_obj,
+            # Create a duplicate sc of nfs-sc and update the server details with hostname_add
+            _ = nfs_utils.create_nfs_sc(
+                sc_name_to_create=self.nfs_sc_copy,
+                sc_name_to_copy=self.nfs_sc,
+                server=self.hostname_add,
             )
+            self.nfs_sc = self.nfs_sc_copy
+            yield
+            # Disable nfs feature
+            nfs_utils.disable_nfs_service_from_provider(self.sc, nfs_ganesha_pod)
+            # Delete nfs sc created
+            self.sc_obj.delete(resource_name=self.nfs_sc_copy)
+
+        else:
+            nfs_ganesha_pod_name = nfs_utils.nfs_enable(
+                self.storage_cluster_obj,
+                self.config_map_obj,
+                self.pod_obj,
+                self.namespace,
+            )
+
+            if (
+                platform == constants.AWS_PLATFORM
+                or platform == constants.IBMCLOUD_PLATFORM
+                or platform == constants.HCI_BAREMETAL
+            ):
+                # Create loadbalancer service for nfs
+                self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
+                    self.storage_cluster_obj,
+                )
+
+            yield
+
+            log.info("-----Teardown-----")
+            # Disable nfs feature
+            nfs_utils.nfs_disable(
+                self.storage_cluster_obj,
+                self.config_map_obj,
+                self.pod_obj,
+                self.sc,
+                nfs_ganesha_pod_name,
+            )
+            if (
+                platform == constants.AWS_PLATFORM
+                or platform == constants.IBMCLOUD_PLATFORM
+                or platform == constants.HCI_BAREMETAL
+            ):
+                # Delete ocs nfs Service
+                nfs_utils.delete_nfs_load_balancer_service(
+                    self.storage_cluster_obj,
+                )
 
     def teardown(self):
         """
@@ -264,6 +292,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4269")
+    @skipif_hci_client
     def test_nfs_feature_enable(
         self,
     ):
@@ -1046,6 +1075,7 @@ class TestNfsEnable(ManageTest):
 
     @tier4c
     @polarion_id("OCS-4284")
+    @skipif_hci_client
     def test_respin_of_nfs_plugin_pods_for_incluster_consumer(
         self,
         pod_factory,
@@ -1301,6 +1331,7 @@ class TestNfsEnable(ManageTest):
 
     @tier4c
     @polarion_id("OCS-4294")
+    @skipif_hci_client
     def test_respin_of_cephfs_plugin_provisioner_pods_for_incluster_consumer(
         self,
         pod_factory,
@@ -1406,6 +1437,7 @@ class TestNfsEnable(ManageTest):
 
     @tier2
     @polarion_id("OCS-6193")
+    @skipif_hci_client
     def test_nfs_pvc_subvolume_deletion(
         self,
         pod_factory,
@@ -1428,7 +1460,9 @@ class TestNfsEnable(ManageTest):
         # checking subvolume before retain nfs pvc creation
         from pathlib import Path
 
-        self.retain_nfs_sc = nfs_utils.create_nfs_sc_retain(self.retain_nfs_sc_name)
+        self.retain_nfs_sc = nfs_utils.create_nfs_sc(
+            sc_name_to_create=self.retain_nfs_sc_name, retain_reclaim_policy=True
+        )
         if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
             helpers.retrieve_cli_binary(cli_type="odf")
         output = run_cmd(cmd="odf-cli subvolume ls")
