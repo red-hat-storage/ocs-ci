@@ -177,8 +177,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 else:
                     node_type = constants.RHCOS
                 node_conf = {"stack_name": common_nodes[0]}
+                print(f"node_conf: {node_conf}")
                 new_ocs_node_names = add_new_node_and_label_upi(
-                    node_type, 1, node_conf=node_conf
+                    node_type, 1, mark_for_ocs_label=True
                 )
         except ValueError as e:
             log.error(f"Unsupported deployment type: {e}")
@@ -271,10 +272,11 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                         add_new_nodes_and_label_after_node_failure_ipi(
                             self.machineset_name
                         )
+                else:
+                    log.info("Wait for node count to be equal to original count")
+                    wait_for_node_count_to_reach_status(node_count=initial_node_count)
+                    log.info("Node count matched")
 
-            log.info("Wait for node count to be equal to original count")
-            wait_for_node_count_to_reach_status(node_count=initial_node_count)
-            log.info("Node count matched")
             ceph_health_check()
 
             if deployment_type == "ipi":
