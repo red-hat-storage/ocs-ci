@@ -3,14 +3,15 @@ import logging
 from time import sleep
 
 import pytest
+import requests
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     aws_platform_required,
-    polarion_id,
-    tier2,
     mcg,
+    polarion_id,
     red_squad,
+    tier2,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -57,7 +58,7 @@ class TestLBSubnetConfig(MCGTest):
         port = 443  # This is the default port for the load balancer
 
         # 1. Test local connection to the load balancer
-        local_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=None)
+        local_can_connect = self.test_connectivity(lb_host_name, port)
         assert local_can_connect, "Local host failed to connect to the load balancer"
         logger.info("Local host can connect to the load balancer")
 
@@ -88,7 +89,7 @@ class TestLBSubnetConfig(MCGTest):
         logger.info("Pod couldn't connect to the load balancer as expected")
 
         # 5. Verify that local connection to the load balancer is still available
-        local_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=None)
+        local_can_connect = self.test_connectivity(lb_host_name, port)
         assert local_can_connect, "Local host failed to connect to the load balancer"
         logger.info("Local host can still connect to the load balancer")
 
@@ -101,7 +102,7 @@ class TestLBSubnetConfig(MCGTest):
         logger.info("Pod can connect again to the load balancer after revert")
 
         # 8. Verify that local connection to the load balancer is still available
-        local_can_connect = self.test_connectivity(lb_host_name, port, pod_obj=None)
+        local_can_connect = self.test_connectivity(lb_host_name, port)
         assert local_can_connect, "Local host failed to connect to the load balancer"
         logger.info("Local host can still connect to the load balancer after revert")
 
@@ -119,18 +120,18 @@ class TestLBSubnetConfig(MCGTest):
         Returns:
             bool: True if connectivity is successful, False otherwise.
         """
-        if pod_obj:
-            try:
+        timeout = 10  # setting timeouts prevents unsuccessful connections from hanging for too long
+        try:
+            if pod_obj:  # Test pod connectivity via netcat
                 pod_obj.exec_cmd_on_pod(f"timeout 10 nc -z {host} {port}")
-                return True
-            except CommandFailed:
-                return False
-        else:
-            # Local host connectivity
 
-            # Our jenkins agents don't have netcat, so we use curl to test connectivity
-            response = exec_cmd(f"curl -sk https://{host}:{port}")
-            return response.returncode == 0
+            else:  # Test local host connectivity via an HTTPS request
+                requests.get(f"https://{host}:{port}", verify=False, timeout=timeout)
+
+            # If we get here, no exception was raised, so a connection was established
+            return True
+        except (CommandFailed, requests.exceptions.Timeout):
+            return False
 
     def revert_lb_subnet_config(self):
         """
