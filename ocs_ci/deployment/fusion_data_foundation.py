@@ -49,24 +49,24 @@ class FusionDataFoundationDeployment:
         # self.setup_storage()
 
     def create_image_tag_mirror_set(self):
-    """
-    Create or update ImageTagMirrorSet.
-    """
-    logger.info("Creating or Updating FDF ImageTagMirrorSet")
+        """
+        Create or update ImageTagMirrorSet.
+        """
+        logger.info("Creating or Updating FDF ImageTagMirrorSet")
 
-    imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
-    resource_name = "isf-fdf" 
+        imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
+        resource_name = "isf-fdf" 
 
-    # Check if resource exists
-    cmd_check = f"oc --kubeconfig {self.kubeconfig} get imagetagmirrorset {resource_name}"
-    exists = run_cmd(cmd_check, ignore_error=True)
+        # Check if resource exists
+        cmd_check = f"oc --kubeconfig {self.kubeconfig} get imagetagmirrorset {resource_name}"
+        exists = run_cmd(cmd_check, ignore_error=True)
 
-    if exists:
-        logger.info("ImageTagMirrorSet exists applying changes")
-        run_cmd(f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}")
-    else:
-        logger.info("ImageTagMirrorSet not found creating with save-config")
-        run_cmd(f"oc --kubeconfig {self.kubeconfig} create --save-config -f {imagetag_file}")
+        if exists:
+            logger.info("ImageTagMirrorSet exists applying changes")
+            run_cmd(f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}")
+        else:
+            logger.info("ImageTagMirrorSet not found creating with save-config")
+            run_cmd(f"oc --kubeconfig {self.kubeconfig} create --save-config -f {imagetag_file}")
 
     def create_image_digest_mirror_set(self):
         """
