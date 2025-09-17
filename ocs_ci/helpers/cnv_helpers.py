@@ -9,7 +9,7 @@ import re
 import time
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, cluster
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -620,3 +620,21 @@ def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
     return "running" in output
+
+
+def compute_vm_count_from_storage_capacity():
+    """
+    Computes the number of VMs to create based on available storage capacity.
+
+    This function calculates the number of VMs to create by determining the usable storage
+    capacity after accounting for used storage and then dividing it by the VM size (30 GiB).
+
+    Returns:
+        int: The computed number of VMs to create.
+    """
+    total_used_in_gibibytes, _ = cluster.get_used_and_total_capacity_in_gibibytes()
+    ceph_obj = cluster.CephCluster()
+    total_capacity_in_gibibytes = ceph_obj.get_ceph_capacity()
+    usable_capacity = (0.75 * total_capacity_in_gibibytes) - total_used_in_gibibytes
+    vm_count = int(usable_capacity / 30)  # 30 gib is size of 1 vm
+    return vm_count
