@@ -745,7 +745,7 @@ class NetworkPortHelper(BaseScenarioHelper):
             # Get network interfaces from the first node (assuming homogeneous cluster)
             node_name = nodes[0]
             cmd = (
-                f"oc debug node/{node_name} -- chroot /host bash -c "
+                f"debug node/{node_name} -- chroot /host bash -c "
                 f'"ip -o link show | awk -F\\": \\" \'{{print $2}}\' | grep -v lo"'
             )
 
