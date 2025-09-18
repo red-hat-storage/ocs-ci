@@ -7,7 +7,6 @@ from zipfile import ZipFile
 import pytest
 from flaky import flaky
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
