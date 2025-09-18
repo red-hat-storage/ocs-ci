@@ -3279,10 +3279,7 @@ class RBDDRDeployOps(object):
     """
 
     def deploy(self):
-        # TODO: Skip this check for now in client clusters.
-        #  This should be enhanced to get details from the provider cluster
-        if config.hci_client_exist():
-            self.configure_rbd()
+        self.configure_rbd()
 
     @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
