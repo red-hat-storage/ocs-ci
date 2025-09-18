@@ -24,7 +24,7 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     create_cluster_dir,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
-from ocs_ci.framework.logger_helper import log_step
+from ocs_ci.framework.logger_helper import log_step, reset_current_module_log_steps
 from ocs_ci.framework import config as ocsci_config, Config, config
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
@@ -655,6 +655,7 @@ class ExternalClients:
             return []
 
         # stage 1
+        reset_current_module_log_steps()
         log_step("Verify kubeconfig files for all external clusters")
         for cluster_name in cluster_names_all:
 
@@ -1328,7 +1329,7 @@ class ExternalOCP(SpokeOCP, Deployment):
         random_node_name = random_node.get("metadata", {}).get("name")
         cmd = f"ping -c 10 {ip_address} | tail -1 | awk -F'/' '{{print $5}}'"
         latency_str = ocp_node_obj.exec_oc_debug_cmd(
-            node=random_node_name, timeout=20, cmd_list=[cmd]
+            node=random_node_name, timeout=60, cmd_list=[cmd]
         )
         try:
             latency = float(latency_str)
