@@ -30,12 +30,12 @@ def pre_upgrade_monitoring_pvc():
 
 @pre_ocp_upgrade
 @magenta_squad
-def test_monitoring_before_ocp_upgrade():
+def test_monitoring_before_ocp_upgrade(pre_upgrade_monitoring_pvc):
     """
     Test monitoring before ocp upgrade
 
     """
-    assert pre_upgrade_monitoring_pvc
+    assert pre_upgrade_monitoring_pvc, "No monitoring PVCs found before upgrade"
     assert prometheus_health_check(), "Prometheus health is degraded"
 
 
