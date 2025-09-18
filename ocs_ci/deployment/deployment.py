@@ -3698,7 +3698,20 @@ class MultiClusterDROperatorsDeploy(object):
         # Fill in for the rest of the non-acm clusters
         # index 0 is filled by primary
         index = 1
-        for cluster in get_non_acm_cluster_config():
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
+        # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
+        # in multiclient configuration and provider cluster contexts will also be present.
+        if dr_cluster_relations:
+            dr_cluster_names = dr_cluster_relations[0]
+            cluster_configs = [
+                cluster
+                for cluster in config.clusters
+                if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+            ]
+        else:
+            cluster_configs = get_non_acm_cluster_config()
+        for cluster in cluster_configs:
             if (
                 cluster.ENV_DATA["cluster_name"]
                 == get_primary_cluster_config().ENV_DATA["cluster_name"]
