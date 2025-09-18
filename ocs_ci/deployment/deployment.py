@@ -786,7 +786,6 @@ class Deployment(object):
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
-        self.do_deploy_odf_provider_mode()
         self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
