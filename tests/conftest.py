@@ -20,7 +20,7 @@ import pytest
 from collections import namedtuple
 
 from ocs_ci.deployment import factory as dep_factory
-from ocs_ci.framework import config as ocsci_config
+from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
