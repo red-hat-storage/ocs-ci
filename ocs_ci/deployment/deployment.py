@@ -338,7 +338,9 @@ class Deployment(object):
             run_cmd(f"oc apply -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
-            cluster_set = config.ENV_DATA.get("cluster_set") or get_cluster_set_name()
+            cluster_set = (
+                config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+            )
 
             managed_clusters = (
                 ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
@@ -346,8 +348,8 @@ class Deployment(object):
             managedclustersetbinding_obj = templating.load_yaml(
                 constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
             )
-            managedclustersetbinding_obj["metadata"]["name"] = cluster_set[0]
-            managedclustersetbinding_obj["spec"]["clusterSet"] = cluster_set[0]
+            managedclustersetbinding_obj["metadata"]["name"] = cluster_set
+            managedclustersetbinding_obj["spec"]["clusterSet"] = cluster_set
             managedclustersetbinding = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="managedcluster_setbinding", delete=False
             )
