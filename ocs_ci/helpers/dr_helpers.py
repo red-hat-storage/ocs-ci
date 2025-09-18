@@ -2368,19 +2368,12 @@ def verify_volsync():
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
     for cluster in managed_clusters:
-        if cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
-            with config.RunWithConfigContext(
-                cluster.MULTICLUSTER["multicluster_index"]
-            ):
-                index = config.get_provider_index()
-        else:
-            index = cluster.MULTICLUSTER["multicluster_index"]
+        index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         logger.info(
             f"Verifying volsync pod in namespace {constants.VOLSYNC_SYSTEM_NAMESPACE}"
         )
         pod = ocp.OCP(kind=constants.POD, namespace=constants.VOLSYNC_SYSTEM_NAMESPACE)
-        # TODO: Check whether volsync pod is created for each RDR pair of client clusters
         assert pod.wait_for_resource(
             condition="Running",
             selector=constants.VOLSYNC_LABEL,
