@@ -3608,7 +3608,11 @@ class MultiClusterDROperatorsDeploy(object):
         # on all participating clusters except HUB
         # We will switch config ctx to Participating clusters
         for cluster in config.clusters:
-            if is_acm_cluster(cluster) or is_recovery_cluster(cluster):
+            if (
+                is_acm_cluster(cluster)
+                or is_recovery_cluster(cluster)
+                or cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
+            ):
                 continue
             else:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
