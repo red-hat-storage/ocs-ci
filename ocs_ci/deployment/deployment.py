@@ -370,6 +370,19 @@ class Deployment(object):
                 "Create clusterrolebinding on both the managed clusters, needed "
                 "for appset pull model gitops deployment"
             )
+
+            # Find the DR clusters under test
+            dr_cluster_names = []
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            for cluster_relation in dr_cluster_relations:
+                dr_cluster_names.extend(cluster_relation)
+            if dr_cluster_names:
+                managed_clusters = [
+                    cluster
+                    for cluster in managed_clusters
+                    if cluster["metadata"]["name"] in dr_cluster_names
+                ]
+            # TODO: Iterate over dr_cluster_names when dr_cluster_names becomes a mandatory config parameter
             for cluster in managed_clusters:
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
                     config.switch_to_cluster_by_name(cluster["metadata"]["name"])
