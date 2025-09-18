@@ -22,6 +22,7 @@ By default this will deploy the latest supported GA version of Fusion.
 
 For pre-release versions of Fusion, you can use the same command with an additional config for the version you wish to install.
 
+To install previous GA versions, use the appropriate GA config file present in [fusion_version](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/fusion_version)
 ```
 deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf ocs_ci/framework/conf/fusion_version/fusion-2.8.yaml
 ```
