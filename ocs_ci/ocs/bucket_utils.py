@@ -473,6 +473,32 @@ def copy_random_individual_objects(
         logger.info(f"Copied {src_obj}")
 
 
+def sync_random_objects(
+    podobj, file_dir, target, amount, pattern="test-obj-", s3_obj=None, **kwargs
+):
+    """
+    Generates random objects and then syncs them to a bucket
+
+    Args:
+        podobj: Pod object used to perform the operation
+        file_dir: file directory name where the generated objects are placed
+        target: target bucket name
+        amount: number of objects to generate
+        pattern: pattern to follow for objects naming
+        s3_obj: MCG/OBC object
+
+    Returns:
+        list: A list of the generated objects' names
+    """
+    logger.info(f"Generating {amount} random objects in {file_dir}")
+    podobj.exec_cmd_on_pod(f"mkdir -p {file_dir}")
+    object_files = write_random_objects_in_pod(
+        podobj, pattern=pattern, file_dir=file_dir, amount=amount
+    )
+    sync_object_directory(podobj, file_dir, target, s3_obj, **kwargs)
+    return object_files
+
+
 def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=False):
     """
     Performs upload operation using java s3 pod
@@ -1814,7 +1840,9 @@ def compare_directory(
     return all(comparisons)
 
 
-def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
+def s3_copy_object(
+    s3_obj, bucketname, source, object_key, metadata=None, metadata_directive=""
+):
     """
     Boto3 client based copy object
 
@@ -1824,6 +1852,7 @@ def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
         source (str): Source object key. eg: '<bucket>/<key>
         object_key (str): Unique object Identifier for copied object
         metadata (dict): Metadata to be updated with the object
+        metadata_directive (str): Metadata directive to be used. Defaults to an empty string.
 
     Returns:
         dict : Copy object response
@@ -1833,7 +1862,11 @@ def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
     metadata = {} if metadata is None else metadata
 
     return s3_obj.s3_client.copy_object(
-        Bucket=bucketname, CopySource=source, Key=object_key, Metadata=metadata
+        Bucket=bucketname,
+        CopySource=source,
+        Key=object_key,
+        Metadata=metadata,
+        MetadataDirective=metadata_directive,
     )
 
 
