@@ -134,6 +134,8 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     )
     if get_semantic_ocs_version_from_config() >= VERSION_4_9:
         operator_name = defaults.ODF_OPERATOR_NAME
+    elif config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+        operator_name = defaults.ODF_CLIENT_OPERATOR
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
     for item in csvs.get()["items"]:
