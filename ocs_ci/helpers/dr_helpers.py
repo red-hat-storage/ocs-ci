@@ -2293,11 +2293,11 @@ def validate_storage_cluster_peer_state():
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
     for cluster in managed_clusters:
-        if (
-            config.ENV_DATA["platform"].lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        ):
-            index = config.get_provider_index()
+        if cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+            with config.RunWithConfigContext(
+                cluster.MULTICLUSTER["multicluster_index"]
+            ):
+                index = config.get_provider_index()
         else:
             index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
@@ -2368,11 +2368,11 @@ def verify_volsync():
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
     for cluster in managed_clusters:
-        if (
-            config.ENV_DATA["platform"].lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        ):
-            index = config.get_provider_index()
+        if cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+            with config.RunWithConfigContext(
+                cluster.MULTICLUSTER["multicluster_index"]
+            ):
+                index = config.get_provider_index()
         else:
             index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)

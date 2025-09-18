@@ -3340,8 +3340,16 @@ class RBDDRDeployOps(object):
                 )
 
         for cluster in get_non_acm_and_non_recovery_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            if cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+                with config.RunWithConfigContext(
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ):
+                    context_to_switch = config.get_provider_index()
+            else:
+                context_to_switch = cluster.MULTICLUSTER["multicluster_index"]
+            config.switch_ctx(context_to_switch)
             _get_mirror_pod_count()
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             self.validate_csi_sidecar()
 
         # Reset CTX back to ACM
@@ -3709,6 +3717,9 @@ class MultiClusterDROperatorsDeploy(object):
                 for cluster in config.clusters
                 if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
             ]
+            dr_policy_hub_data["metadata"]["name"] = dr_policy_hub_data["metadata"][
+                "name"
+            ] + "-".join(dr_cluster_names)
         else:
             cluster_configs = get_non_acm_cluster_config()
         for cluster in cluster_configs:
