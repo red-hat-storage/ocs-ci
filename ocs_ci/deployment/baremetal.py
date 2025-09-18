@@ -29,6 +29,9 @@ from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
+from ocs_ci.utility.deployment import (
+    add_mc_partitioned_disk_on_workers_to_ocp_deployment,
+)
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -322,6 +325,8 @@ class BAREMETALUPI(BAREMETALBASE):
             self.create_manifest()
             # create chrony resource
             add_chrony_to_ocp_deployment()
+            if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+                add_mc_partitioned_disk_on_workers_to_ocp_deployment()
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
