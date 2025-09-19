@@ -147,6 +147,10 @@ from ocs_ci.utility.deployment import (
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.networking import (
+    add_data_replication_separation_to_cluster_data,
+    label_worker_nodes_with_mon_ip,
+)
 from ocs_ci.utility import (
     templating,
     ibmcloud,
@@ -765,6 +769,8 @@ class Deployment(object):
             from ocs_ci.deployment.hosted_cluster import enable_nested_virtualization
 
             enable_nested_virtualization()
+        if config.DEPLOYMENT.get("enable_data_separation_replication"):
+            label_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
@@ -1777,6 +1783,9 @@ class Deployment(object):
 
         # Enable in-transit encryption.
         cluster_data = add_in_transit_encryption_to_cluster_data(cluster_data)
+
+        # Enable data replication separation
+        cluster_data = add_data_replication_separation_to_cluster_data(cluster_data)
 
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
