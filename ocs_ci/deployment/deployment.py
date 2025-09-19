@@ -682,7 +682,7 @@ class Deployment(object):
         """
         if config.ENV_DATA.get("clusters", False) and (
             not config.ENV_DATA["skip_ocs_deployment"]
-            or config.DEPLOYMENT.get("deploy_hosted_clusters")
+            or config.DEPLOYMENT.get("deploy_spoke_clusters")
         ):
             # imported locally due to a circular dependency
             from ocs_ci.deployment.hosted_cluster import HostedClients

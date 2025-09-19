@@ -157,7 +157,7 @@ version.
 * `sts_enabled` - Enable STS deployment functionality.
 * `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
-* `deploy_hosted_clusters` - Deploy hosted clusters.
+* `deploy_spoke_clusters` - Deploy spoke clusters.
 * `ssh_jump_host` - dict containing configuration for SSH jump host
     * `host` - hostname or IP address of the SSH Jump host
     * `user` - username for the ssh connection to the SSH jump host
@@ -354,13 +354,13 @@ higher priority).
 * `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
-      * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
+      * `cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
       * `ocp_version` - OCP version of the hosted cluster in form x.y or x.y.z (e.g. "4.15.13" or "4.17")
       * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster (default: 6)
       * `memory_per_hosted_cluster` - amount of memory per hosted cluster (default: 12Gi)
       * `nodepool_replicas` - number of replicas of nodepool for each cluster (default: 2)
-      * `hosted_odf_registry` - registry for hosted ODF (default: quay.io/rhceph-dev/ocs-registry)
-      * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+      * `odf_registry` - registry for ODF image (default: quay.io/rhceph-dev/ocs-registry)
+      * `odf_version` - version of ODF to be deployed on clusters, representation of a registry tag
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
       * `storage_quota` - storage quota for the hosted cluster
       * `provider_cluster_name` - Name of the provider cluster if storageclient is required/present in the hosted cluster. This is optional and useful when there are more than one provider cluster in the config, provider mode RDR for example

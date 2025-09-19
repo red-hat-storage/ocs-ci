@@ -740,21 +740,21 @@ class HyperShiftBase:
                 return True
 
     def download_hosted_cluster_kubeconfig(
-        self, name: str, hosted_cluster_path: str, from_hcp: bool = True
+        self, name: str, cluster_path: str, from_hcp: bool = True
     ):
         """
         Download HyperShift hosted cluster kubeconfig
 
         Args:
             name (str): name of the cluster
-            hosted_cluster_path (str): path to create auth_path folder and download kubeconfig there
+            cluster_path (str): path to create auth_path folder and download kubeconfig there
             from_hcp (bool): if True, use hcp binary to download kubeconfig, otherwise use ocp secret
 
         Returns:
             str: path to the downloaded kubeconfig, None if failed
 
         """
-        path_abs = os.path.expanduser(hosted_cluster_path)
+        path_abs = os.path.expanduser(cluster_path)
         auth_path = os.path.join(path_abs, "auth")
         os.makedirs(auth_path, exist_ok=True)
         kubeconfig_path = os.path.join(auth_path, "kubeconfig")
