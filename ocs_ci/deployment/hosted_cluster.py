@@ -869,7 +869,7 @@ class HypershiftHostedOCP(
         disable_default_sources = (
             config.ENV_DATA["clusters"]
             .get(self.name)
-            .get("disable_default_sources", False)
+            .get("disable_default_sources", True)
         )
         return self.create_kubevirt_ocp_cluster(
             name=self.name,
