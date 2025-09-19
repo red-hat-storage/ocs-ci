@@ -261,3 +261,22 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
             wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
 
     return idms_file_dest_location
+
+
+def add_mc_partitioned_disk_on_workers_to_ocp_deployment():
+    """
+    Add Machine Config for partitioned disk on worker nodes to OCP deployment
+    """
+    role = "worker"
+    logger.info(f"Creating and Adding Partitioned disk MC file for {role}")
+    with open(constants.PARTITIONED_DISK_MC) as file_stream:
+        chrony_template_obj = yaml.safe_load(file_stream)
+
+    chrony_template_str = yaml.safe_dump(chrony_template_obj)
+    chrony_file = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        "openshift",
+        "98-osd-partition-worker.yaml",
+    )
+    with open(chrony_file, "w") as f:
+        f.write(chrony_template_str)
