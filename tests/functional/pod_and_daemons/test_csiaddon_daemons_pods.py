@@ -174,6 +174,7 @@ class TestCSIADDonDaemonset(ManageTest):
                 f"node {csi_pod_running_nodes_name} which is not a worker node"
             )
             csi_pod_running_nodes_name.append(csi_pod_running_node_name)
+            logger.info(f" {csi_addon_pods} : {pod_obj}, {dir(csi_addon_pods)}")
 
         pod_missed_node = set(worker_nodes_names) - set(csi_pod_running_nodes_name)
         assert (
