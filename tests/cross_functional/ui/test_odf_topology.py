@@ -129,7 +129,9 @@ class TestODFTopology(object):
             pod_dict_path=constants.NGINX_POD_YAML,
         )
         teardown_factory(pod_obj)
-        topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
+        topology_tab = (
+            PageNavigator().nav_storage_cluster_default_page().nav_topology_tab()
+        )
 
         topology_deviation = topology_tab.validate_topology_configuration()
 
@@ -160,7 +162,9 @@ class TestODFTopology(object):
 
         node_details_cli = get_node_details_cli(random_node_name)
 
-        topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
+        topology_tab = (
+            PageNavigator().nav_storage_cluster_default_page().nav_topology_tab()
+        )
         topology_tab.nodes_view.read_presented_topology()
 
         topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
@@ -214,7 +218,9 @@ class TestODFTopology(object):
         9. Concatenate details from CLI and from UI and find differences
         """
         log_step("Open Management console, login and navigate to ODF topology tab")
-        topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
+        topology_tab = (
+            PageNavigator().nav_storage_cluster_default_page().nav_topology_tab()
+        )
 
         log_step("Get random node and deployment")
         node_names = get_node_names()
@@ -331,7 +337,9 @@ class TestODFTopology(object):
         logger.info(f"wait {min_wait_for_update}min to get UI updated with alert")
         time.sleep(min_wait_for_update * 60)
 
-        topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
+        topology_tab = (
+            PageNavigator().nav_storage_cluster_default_page().nav_topology_tab()
+        )
         topology_tab.nodes_view.read_presented_topology()
 
         test_checks["cluster_in_danger_state_check_pass"] = (

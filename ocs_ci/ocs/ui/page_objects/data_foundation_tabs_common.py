@@ -556,43 +556,45 @@ class DataFoundationTabBar(PageNavigator):
     def __init__(self):
         super().__init__()
 
-    def nav_storage_systems_tab(self):
+    def nav_block_and_file_tab(self):
         """
-        Navigate to Storage Systems tab. Accessible from any Data Foundation tabs
-        Renamed to Storage Cluster in 4.20
+        Navigate to Block and File tab. Accessible from any Data Foundation tabs
         """
-        logger.info(
-            "Navigate to Storage Systems or Storage Cluster page depending on version"
-        )
-        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=2)
+        self.do_click(self.validation_loc["block-and-file-tab"], enable_screenshot=True)
+        self.page_has_loaded()
 
-        from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
+        from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 
-        return StorageSystemTab()
+        return BlockAndFile()
 
-    def nav_overview_tab(self):
+    def nav_storage_pools_tab(self):
         """
-        Navigate to Overview tab. Accessible from any Data Foundation tabs
+        Navigate to Storage Pools tab. Accessible from any Data Foundation tabs
         """
-        logger.info("Navigate to Data Foundation - Overview")
+        self.do_click(self.validation_loc["storage-pools-tab"], enable_screenshot=True)
+        self.page_has_loaded()
 
-        # check if 'Overview' element is present and active, if not click on 'Overview' tab
-        if not self.get_elements(self.validation_loc["odf-overview-tab-active"]):
-            self.do_click(
-                locator=self.validation_loc["odf-overview"], enable_screenshot=True
-            )
+        from ocs_ci.ocs.ui.page_objects.block_pools import StoragePools
 
-        from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
+        return StoragePools()
 
-        return OverviewTab()
+    def nav_object_tab(self):
+        """
+        Navigate to Object tab. Accessible from any Data Foundation tabs
+        """
+        self.do_click(self.validation_loc["object-tab"], enable_screenshot=True)
+        self.page_has_loaded()
+
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
+
+        return ObjectStorage()
 
     # noinspection PyUnreachableCode
     def nav_topology_tab(self):
         """
         Navigate to ODF Topology tab. Accessible from any Data Foundation tabs
         """
-        self.do_click(self.validation_loc["topology_tab"])
+        self.do_click(self.validation_loc["topology_tab"], enable_screenshot=True)
         self.page_has_loaded()
 
         from ocs_ci.ocs.ui.page_objects.odf_topology_tab import TopologyTab
@@ -602,13 +604,13 @@ class DataFoundationTabBar(PageNavigator):
 
 class DataFoundationDefaultTab(DataFoundationTabBar):
     """
-    Default Foundation default Tab: TopologyTab | OverviewTab
+    Default Foundation default Tab: OverviewTab
     """
 
     def __init__(self):
         DataFoundationTabBar.__init__(self)
 
-    def is_overview_tab(self):
+    def is_block_and_file_tab(self):
         """
         Check if the current tab is Overview tab
 
@@ -616,5 +618,6 @@ class DataFoundationDefaultTab(DataFoundationTabBar):
             bool: True if the current tab is Overview tab, False otherwise
         """
         return (
-            len(self.get_elements(self.validation_loc["odf-overview-tab-active"])) == 1
+            len(self.get_elements(self.validation_loc["block-and-file-tab-active"]))
+            == 1
         )

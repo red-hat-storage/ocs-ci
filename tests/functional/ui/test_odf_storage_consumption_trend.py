@@ -82,13 +82,8 @@ class TestConsumptionTrendUI(ManageTest):
             2. Verify the text information on the widget
 
         """
-        block_and_file_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
 
         collected_tpl_of_days_and_avg = (
             block_and_file_page.odf_storagesystems_consumption_trend()
@@ -118,13 +113,9 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
-        block_and_file_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
+
         est_days = block_and_file_page.get_est_days_from_ui()
         average = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
@@ -154,13 +145,9 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
-        block_and_file_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
+
         average = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Average: {average}")
         days_avg_tpl = validation_ui_obj.calculate_est_days_and_average_manually()
@@ -191,13 +178,9 @@ class TestConsumptionTrendUI(ManageTest):
             4. Should show close to the values before deleting the prometheus pod
 
         """
-        block_and_file_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
+
         logger.info("Get the value of 'Estimated days until full' from UI")
         est_days_before = block_and_file_page.get_est_days_from_ui()
         logger.info(
@@ -243,13 +226,9 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
-        block_and_file_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
+
         (
             active_mgr_deployment_name_before_failover,
             active_mgr_pod_before_failover,
@@ -305,13 +284,9 @@ class TestConsumptionTrendUI(ManageTest):
         4. 'Estimated days until full' value in the UI, should increase after OSD resize.
 
         """
-        block_and_file_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
+
         logger.info("Get the value of 'Estimated days until full' from UI")
         est_days_before = block_and_file_page.get_est_days_from_ui()
         logger.info("Performing OSD resize")

@@ -2,8 +2,6 @@ import logging
 import math
 import pytest
 import time
-import warnings
-
 import pandas as pd
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
@@ -12,16 +10,18 @@ from ocs_ci.ocs.cluster import (
     get_age_of_cluster_in_days,
 )
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
-from ocs_ci.ocs.ui.page_objects.backing_store_tab import BackingStoreTab
-from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
-from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
+from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.storage_cluster import StorageCluster
-from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+    NoSuchElementException,
+    StaleElementReferenceException,
+    ElementClickInterceptedException,
+    InvalidSessionIdException,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -277,150 +277,118 @@ class ValidationUI(PageNavigator):
         self,
     ):
         """
-        Method to verify changes and validate elements on ODF Overview tab for ODF 4.9
+        Method to verify changes and validate elements on ODF Storage and Data Foundation web pages
 
         Steps:
         1. Validate ODF console plugin is enabled, if not enable it
-        2. Navigate to ODF Default first tab
-        3. Verify if Overview tab is active
-        4. Ensure used raw capacity string in System Capacity card
-        5. Verify if Storage System popup works
-        6. Ensure that Block and File status, on Storage System popup is Ready
-        7. Navigate to Storage System details via Storage System popup
-        8. Verify only one Block Pool present on Storage System details page - optional. No BlockPools in External mode
-        9. Navigate Storage System via breadcrumb
-        10. Verify if Overview tab is active
-        11. Verify if System Capacity Card is present
-        12. Navigate to Storage System details via System Capacity Card - optional. Card not presented in External mode
-        13. Verify if Storage System details breadcrumb is present - optional. If step 11 was performed
-        14. Navigate to ODF Overview tab via tab bar - optional. If step 11 was performed
-        15. Verify if Performance Card is present and link works
-        16. Navigate to Storage System details via Performance Card
-        17. Verify if Storage System details breadcrumb is present and link works
-        18. Navigate ODF Backing store tab via Object Storage tab or PageNavigator
-        19. Verify if Backing Store is present and link to Backing Store resource works
-        20. Navigate to Backing Store tab via breadcrumb
-        21. Navigate to Bucket class tab
-        22. Navigate to the default Bucket Class details via Bucket Class tab
-        23. Verify the status of a default Bucket Class
-        24. Navigate to Bucket class via breadcrumb
-        25. Navigate to Namespace Store tab via Bucket Class tab
-        26. Navigate to ODF Overview tab via tab bar
+        2. Navigate to Data Foundation page via PageNavigator and Data Foundation
+        3. Validate if legend for Available vs Used capacity is present
+        4. Verify if Overview tab is active
+        5. Ensure used raw capacity string in System Capacity card
+        6. Verify if Block and File tab is active
+        7. Verify all tabs are working
+        8. Validate content of Storage Cluster / Block and File tab
+        9. Verify CephBlockPool status is Ready
+        10. Verify cephfs data pool status is Ready
+        11. Navigate to default cephblockpool using searching filter
+        12. Verify if Performance Card is present
+        13. Navigate to ODF Backing store tab via Object Storage tab or PageNavigator
+        14. Verify if Backing Store is present and link to Backing Store resource works
+        15. Navigate to Backing Store tab via breadcrumb
+        16. Navigate to Bucket class tab
+        17. Navigate to the default Bucket Class details via Bucket Class tab
+        18. Verify the status of a default bucket class
+        19. Navigate to Bucket class via breadcrumb
+        20. Navigate to Namespace Store tab via Bucket Class tab, verify if it works
+        21. Navigate to ODF Storage Cluster via Page navigator
+        22. Verify if Overview tab is active
+        23. Process results
         """
         res_dict = {}
 
         log_step("Validate ODF console plugin is enabled, if not enable it")
         self.odf_console_plugin_check()
 
-        log_step("Navigate to ODF Default first tab")
-        odf_overview_tab = self.nav_odf_default_page().nav_overview_tab()
+        log_step(
+            "Navigate to Data Foundation page via PageNavigator and Data Foundation"
+        )
+        overview_page = self.nav_storage_data_foundation_overview_page()
+
+        log_step("Validate if legend for Available vs Used capacity is present")
+        overview_page.available_vs_used_capacity_present()
 
         log_step("Verify if Overview tab is active")
+        storage_cluster_page = overview_page.navigate_to_view_storage()
         res_dict["overview_tab_is_active_1"] = (
-            odf_overview_tab.validate_overview_tab_active()
+            storage_cluster_page.validate_block_and_file_tab_active()
         )
 
         log_step("Ensure used raw capacity string in System Capacity card")
         res_dict["system_raw_capacity_check_bz_2185042"] = self.check_element_text(
-            "System raw capacity"
+            "Raw capacity"
         )
 
-        log_step("Verify if Storage System popup works")
-        res_dict["storage_system_status_popup_present"] = (
-            odf_overview_tab.wait_storagesystem_popup()
+        log_step("Verify if Block and File tab is active")
+        storage_cluster_page.validate_block_and_file_tab_active()
+
+        log_step("Verify all tabs are working")
+        try:
+            storage_cluster_page.nav_object_tab()
+            storage_cluster_page.nav_storage_pools_tab()
+            storage_cluster_page.nav_topology_tab()
+        except (
+            TimeoutException,
+            WebDriverException,
+            NoSuchElementException,
+            StaleElementReferenceException,
+            ElementClickInterceptedException,
+            InvalidSessionIdException,
+        ):
+            logger.error("One of the tabs is not working")
+            res_dict["storage_cluster_tabs_work"] = False
+        res_dict["storage_cluster_tabs_work"] = True
+
+        log_step("Validate content of Storage Cluster / Block and File tab")
+        block_and_file_tab = storage_cluster_page.nav_block_and_file_tab()
+        res_dict["block_and_file_utilization_good"] = (
+            block_and_file_tab.verify_utilization_is_good()
         )
-        odf_overview_tab.open_storage_popup_from_status_card()
+        res_dict["block_and_file_resiliency_ok"] = block_and_file_tab.resiliency_ok()
 
-        log_step("Ensure that Block and File status, on Storage System popup is Ready")
-        is_block_and_file_healthy = odf_overview_tab.validate_block_and_file_ready()
+        storage_pools_tab = storage_cluster_page.nav_storage_pools_tab()
 
-        if not is_block_and_file_healthy:
-            logger.critical("Block and File service is unhealthy, not a test failure")
-            pytest.skip("Block and File service is unhealthy, not a test failure")
+        log_step("Verify CephBlockPool status is Ready")
+        storage_pools_tab.verify_cephblockpool_status()
 
-        log_step("Navigate to Storage System details via Storage System popup")
-        storage_system_details_page = (
-            odf_overview_tab.nav_storage_system_details_from_storage_status_popup()
+        log_step("Verify cephfs data pool status is Ready")
+        storage_pools_tab.verify_cephfs_status()
+
+        log_step("Navigate to default cephblockpool using searching filter")
+        ceph_block_pool_page = storage_pools_tab.navigate_to_block_pool(
+            constants.DEFAULT_CEPHBLOCKPOOL
         )
+        res_dict["storage_cluster_healthy"] = ceph_block_pool_page.block_pool_ready()
 
-        if not config.DEPLOYMENT["external_mode"]:
-            log_step(
-                "Verify only one Block Pool present on Storage System details page"
-            )
-            res_dict["blockpools_tabs_bz_2096513"] = (
-                storage_system_details_page.check_only_one_block_pools_tab()
-            )
-
-        log_step("Navigate Storage System via breadcrumb")
-        storage_systems_tab = (
-            storage_system_details_page.nav_storage_systems_via_breadcrumb()
-        )
-
-        log_step("Verify if Overview tab is active")
-        odf_overview_tab = storage_systems_tab.nav_overview_tab()
-
-        log_step("Verify if System Capacity Card is present")
-        res_dict["system_capacity_card_present"] = (
-            odf_overview_tab.validate_system_capacity_card_present()
-        )
-
-        if not config.DEPLOYMENT["external_mode"]:
-            log_step("Navigate to Storage System details via System Capacity Card")
-            storage_system_details_page = (
-                odf_overview_tab.nav_storage_system_details_via_system_capacity_card()
-            )
-
-            log_step(
-                "Verify if Storage System details breadcrumb is present and link works"
-            )
-            res_dict["storagesystem-details-via-system-capacity-card-link-works"] = (
-                storage_system_details_page.is_storage_system_details_breadcrumb_present()
-            )
-
-            storage_systems_tab = (
-                storage_system_details_page.nav_storage_systems_via_breadcrumb()
-            )
-
-            log_step("Navigate to ODF Overview tab via tab bar")
-            odf_overview_tab = storage_systems_tab.nav_overview_tab()
-
-        log_step("Verify if Performance Card is present and link works")
+        log_step("Verify if Performance Card is present")
+        # BlockPoolUI is not a POM class, but helper class
+        block_pool_helper = BlockPoolUI()
         res_dict["performance_card_header_present"] = (
-            odf_overview_tab.validate_performance_card_header_present()
+            block_pool_helper.validate_performance_card_header_present()
         )
 
-        log_step("Navigate to Storage System details via Performance Card")
-        storage_system_details_page = (
-            odf_overview_tab.nav_storage_systems_details_via_performance_card()
-        )
-
-        log_step(
-            "Verify if Storage System details breadcrumb is present and link works"
-        )
-        res_dict["storagesystem-details-via-performance-card-link-works"] = (
-            storage_system_details_page.is_storage_system_details_breadcrumb_present()
-        )
-
-        storage_system_details_page.nav_storage_systems_via_breadcrumb()
+        ceph_block_pool_page.navigate_storage_pools_via_breadcrumb()
+        res_dict["block_pool_navigation_works"] = True
 
         log_step(
             "Navigate ODF Backing store tab via Object Storage tab or PageNavigator"
         )
-        # Starting from ODF 4.13 Object Storage is implemented as a separate page
-        if self.ocp_version_semantic <= version.VERSION_4_13:
-            logger.info("Click on Backing Store")
-            self.do_click((self.validation_loc["backingstore"]))
-            backing_store_tab = BackingStoreTab()
-            backing_store_tab.nav_to_backing_store(
-                constants.DEFAULT_NOOBAA_BACKINGSTORE
-            )
-        else:
-            backing_store_tab = (
-                StorageSystemDetails().nav_object_storage().nav_backing_store_tab()
-            )
-            backing_store_tab.nav_to_backing_store(
-                constants.DEFAULT_NOOBAA_BACKINGSTORE
-            )
+        buckets_tab = (
+            PageNavigator()
+            .nav_storage_data_foundation_overview_page()
+            .navigate_to_view_buckets()
+        )
+        backing_store_tab = buckets_tab.nav_backing_store_tab()
+        backing_store_tab.nav_to_backing_store(constants.DEFAULT_NOOBAA_BACKINGSTORE)
 
         log_step(
             "Verify if Backing Store is present and link to Backing Store resource works"
@@ -449,36 +417,22 @@ class ValidationUI(PageNavigator):
         log_step(
             "Navigate to Namespace Store tab via Bucket Class tab, verify if it works"
         )
-        if self.ocp_version_semantic <= version.VERSION_4_13:
-            logger.info("Click on Namespace Store")
-            self.do_click(
-                (self.validation_loc["namespace-store"]), enable_screenshot=True
-            )
-            namespace_store_tab = NameSpaceStoreTab()
-        else:
-            namespace_store_tab = bucket_class_tab.nav_namespace_store_tab()
+
+        namespace_store_tab = bucket_class_tab.nav_namespace_store_tab()
         res_dict["namespace_store_tab_works"] = (
             namespace_store_tab.is_namespace_store_tab_active()
         )
 
-        log_step("Navigate to ODF Overview tab via tab bar")
-        # Starting from ODF 4.13 Object Storage is implemented as a separate page and navigate via Overview tab
-        # is not possible
-        if self.ocp_version_semantic <= version.VERSION_4_13:
-            self.do_click(
-                locator=self.validation_loc["odf-overview"], enable_screenshot=True
-            )
-            odf_overview_tab = OverviewTab()
-        else:
-            odf_overview_tab = (
-                namespace_store_tab.nav_odf_default_page().nav_overview_tab()
-            )
+        log_step("Navigate to ODF Storage Cluster via Page navigator")
+
+        storage_cluster_page = PageNavigator().nav_storage_cluster_default_page()
 
         res_dict["overview_tab_is_active_2"] = (
-            odf_overview_tab.validate_overview_tab_active()
+            storage_cluster_page.validate_block_and_file_tab_active()
         )
         logger.info("Navigated back to ODF tab under Storage. Check results below:")
 
+        log_step("Process results")
         res_pd = pd.DataFrame.from_dict(res_dict, orient="index", columns=["check"])
         logger.info(res_pd.to_markdown(headers="keys", index=True, tablefmt="grid"))
 
@@ -497,7 +451,7 @@ class ValidationUI(PageNavigator):
         """
         self.odf_console_plugin_check()
         storage_systems_page = (
-            PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
+            PageNavigator().nav_storage_cluster_default_page().nav_storage_systems_tab()
         )
         storage_system_details = (
             storage_systems_page.nav_storagecluster_storagesystem_details()
@@ -563,56 +517,6 @@ class ValidationUI(PageNavigator):
             res = False
         return res
 
-    def validate_storage_cluster_ui(self):
-        """
-
-        Function to validate Storage Cluster on UI for ODF 4.9 and above
-
-        """
-        if self.ocp_version_semantic >= version.VERSION_4_9:
-            self.navigate_installed_operators_page()
-            logger.info("Search and select storage cluster namespace")
-            self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
-            logger.info(
-                "Click on Storage System under Provided APIs on Installed Operators Page"
-            )
-            self.do_click(self.validation_loc["storage-system-on-installed-operators"])
-            logger.info(
-                "Click on 'ocs-storagecluster-storagesystem' on Operator details page"
-            )
-            self.do_click(
-                self.validation_loc["ocs-storagecluster-storgesystem"],
-                enable_screenshot=True,
-            )
-            logger.info("Click on Resources")
-            self.do_click(self.validation_loc["resources-tab"], enable_screenshot=True)
-            logger.info("Checking Storage Cluster status on CLI")
-            storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-            storage_cluster = StorageCluster(
-                resource_name=storage_cluster_name,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )
-            assert storage_cluster.check_phase("Ready")
-            logger.info("Storage Cluster Status Check on UI")
-            storage_cluster_status_check = self.wait_until_expected_text_is_found(
-                locator=self.validation_loc["storage_cluster_readiness"],
-                expected_text="Ready",
-                timeout=600,
-            )
-            assert (
-                storage_cluster_status_check
-            ), "Storage Cluster Status reported on UI is not 'Ready'"
-            logger.info(
-                "Storage Cluster Status reported on UI is 'Ready', verification successful"
-            )
-            logger.info("Click on 'ocs-storagecluster'")
-            self.do_click(
-                self.validation_loc["ocs-storagecluster"], enable_screenshot=True
-            )
-            logger.info("Test passed!")
-        else:
-            warnings.warn("Not supported for OCP version less than 4.9")
-
     def validate_unprivileged_access(self):
         """
         Function to verify the unprivileged users can't access ODF dashbaord
@@ -620,7 +524,7 @@ class ValidationUI(PageNavigator):
 
         self.select_administrator_user()
         try:
-            self.nav_odf_default_page()
+            self.nav_storage_cluster_default_page()
         except TimeoutException:
             logger.info(
                 "As expected, ODF dashboard is not available for the unprivileged user"

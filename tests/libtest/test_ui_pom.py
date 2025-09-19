@@ -18,13 +18,9 @@ def test_raw_capacity(setup_ui_session):
     """
     Test to verify the used capacity of the cluster can be parsed and compared to the available capacity
     """
-    block_and_file = (
-        PageNavigator()
-        .nav_odf_default_page()
-        .nav_storage_systems_tab()
-        .nav_storagecluster_storagesystem_details()
-        .nav_block_and_file()
-    )
+    block_and_file = PageNavigator().nav_storage_cluster_default_page()
+    block_and_file.validate_block_and_file_tab_active()
+
     used, available = block_and_file.get_raw_capacity_card_values()
     used_bytes = human_to_bytes_ui(used)
     logger.info(f"Used capacity: {used_bytes}")

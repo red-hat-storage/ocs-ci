@@ -36,7 +36,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         pool_name = create_unique_resource_name("test", "rbd-pool")
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click(self.bp_loc["create_block_pool"])
         if pool_type_block and self.ocs_version_semantic >= version.VERSION_4_17:
             self.do_click(self.bp_loc["pool_type_block"])
@@ -72,7 +72,7 @@ class BlockPoolUI(PageNavigator):
             bool: True if pool is in the list of pools page, otherwise False
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.page_has_loaded()
         pool_existence = self.wait_until_expected_text_is_found(
             (f"a[data-test={pool_name}]", By.CSS_SELECTOR), pool_name, 5
@@ -92,7 +92,7 @@ class BlockPoolUI(PageNavigator):
 
         """
 
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.page_has_loaded()
         self.do_click((f"{pool_name}", By.LINK_TEXT))
         self.do_click(self.bp_loc["actions_inside_pool"])
@@ -112,7 +112,7 @@ class BlockPoolUI(PageNavigator):
             compression (bool): True if enable compression. False otherwise.
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.page_has_loaded()
         self.do_click([f"{pool_name}", By.LINK_TEXT])
         self.do_click(self.bp_loc["actions_inside_pool"])
@@ -185,7 +185,7 @@ class BlockPoolUI(PageNavigator):
             str: status of the pool
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         pool_status = self.get_element_text(self.validation_loc["blockpool_status"])
         logger.info(f"Pool name {pool_name} current status is {pool_status}")
@@ -202,7 +202,7 @@ class BlockPoolUI(PageNavigator):
             str: Volume type of pool if set otherwise
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         pool_volume_type = self.get_element_text(self.bp_loc["block_pool_volume_type"])
         logger.info(f"Pool name {pool_name} existence is {pool_volume_type}")
@@ -219,7 +219,7 @@ class BlockPoolUI(PageNavigator):
             int: Number of replicas for the pool
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         block_pool_replica = self.get_element_text(self.bp_loc["block_pool_replica"])
         logger.info(f"Pool name {pool_name} existence is {block_pool_replica}")
@@ -236,7 +236,7 @@ class BlockPoolUI(PageNavigator):
             str: The total used capacity of the blockpool
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         block_pool_used_capacity = self.get_element_text(
             self.bp_loc["block_pool_used_capacity"]
@@ -257,7 +257,7 @@ class BlockPoolUI(PageNavigator):
             str: The total available capacity of blockpool
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         blockpool_avail_capacity = self.get_element_text(
             self.bp_loc["blockpool_avail_capacity"]
@@ -276,7 +276,7 @@ class BlockPoolUI(PageNavigator):
             bool: True if pool is in the Enabled, otherwise False
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         blockpool_compression_status = self.get_element_text(
             self.bp_loc["blockpool_compression_status"]
@@ -299,7 +299,7 @@ class BlockPoolUI(PageNavigator):
             str: Compression ratio of blockpool
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         blockpool_compression_ratio = self.get_element_text(
             self.bp_loc["blockpool_compression_ratio"]
@@ -320,7 +320,7 @@ class BlockPoolUI(PageNavigator):
             str: percentage of incoming compressible data
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         blockpool_compression_eligibility = self.get_element_text(
             self.bp_loc["blockpool_compression_eligibility"]
@@ -341,7 +341,7 @@ class BlockPoolUI(PageNavigator):
             str: The total savings gained from compression for this pool, including replicas
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         blockpool_compression_savings = self.get_element_text(
             self.bp_loc["blockpool_compression_savings"]
@@ -361,7 +361,7 @@ class BlockPoolUI(PageNavigator):
         Return:
             int: The total number of storage classes attached to the pool.
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         time.sleep(10)
         storage_class_attached = self.get_element_text(
@@ -474,7 +474,7 @@ class BlockPoolUI(PageNavigator):
             True (bool): Successfull selection of the blockpool
 
         """
-        self.navigate_block_pool_page()
+        self.navigate_storage_pools_page()
         self.page_has_loaded()
         self.do_click(
             locator=format_locator(self.generic_locators["blockpool_name"], pool_name)
@@ -500,3 +500,21 @@ class BlockPoolUI(PageNavigator):
         else:
             # Use regular rounding for other cases
             return round(number)
+
+    def validate_performance_card_header_present(self) -> bool:
+        """
+        Validate Performance Card is present on Overview page
+
+        Returns:
+            bool: True if present, False otherwise
+        """
+        is_present = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["performance-card"],
+            expected_text="Performance",
+            timeout=15,
+        )
+        if not is_present:
+            logger.warning(
+                "Performance Card not found on OpenShift Data Foundation Overview page"
+            )
+        return is_present
