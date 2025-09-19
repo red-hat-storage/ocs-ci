@@ -13,6 +13,8 @@ port 9200, this test can not be running in your host.
 import json
 
 import logging
+import time
+import calendar
 
 # 3ed party modules
 import os.path
@@ -663,6 +665,15 @@ class TestSmallFileWorkload(PASTest):
         full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
 
         if self.main_es:
             full_results.es = self.main_es
