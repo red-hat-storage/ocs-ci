@@ -39,12 +39,10 @@ def label_worker_nodes_with_mon_ip():
         network_data = (
             config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
         )
-        label_cmd = [
-            (
-                f"label nodes {worker} "
-                f"network.rook.io/mon-ip: \"{network_data['private_ip']}\" --overwrite"
-            )
-        ]
+        label_cmd = (
+            f"label nodes {worker} "
+            f"network.rook.io/mon-ip={network_data['private_ip']} --overwrite"
+        )
 
         nodes_obj.exec_oc_cmd(command=label_cmd)
 
