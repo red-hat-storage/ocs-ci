@@ -131,9 +131,9 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     # Import ocp here to avoid circular dependency issue
     from ocs_ci.ocs import ocp
 
-    if config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
-        context_to_switch = config.get_provider_index()
-        config.switch_ctx(context_to_switch)
+    # if config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+    #     context_to_switch = config.get_provider_index()
+    #     config.switch_ctx(context_to_switch)
     csvs = ocp.OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
     )
