@@ -17,6 +17,11 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
+import time
+from ocs_ci.utility.utils import (
+    wait_for_machineconfigpool_status,
+    get_running_ocp_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,28 +40,56 @@ class FusionDataFoundationDeployment:
             self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
+
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.setup_storage()
 
     def create_image_tag_mirror_set(self):
         """
-        Create ImageTagMirrorSet.
+        Create or update ImageTagMirrorSet.
         """
-        logger.info("Creating FDF ImageTagMirrorSet")
-        run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_IMAGE_TAG_MIRROR_SET}"
+        logger.info("Creating or Updating FDF ImageTagMirrorSet")
+
+        imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
+        resource_name = "isf-fdf"
+
+        cmd_check = (
+            f"oc --kubeconfig {self.kubeconfig} get imagetagmirrorset {resource_name}"
         )
+        exists = run_cmd(cmd_check, ignore_error=True)
+
+        if exists:
+            logger.info("ImageTagMirrorSet exists applying changes")
+            run_cmd(f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}")
+        else:
+            logger.info("ImageTagMirrorSet not found creating with save-config")
+            run_cmd(
+                f"oc --kubeconfig {self.kubeconfig} create --save-config -f {imagetag_file}"
+            )
 
     def create_image_digest_mirror_set(self):
         """
-        Create ImageDigestMirrorSet.
+        Create or update ImageTagMirrorSet.
         """
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set()
-        run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {image_digest_mirror_set}"
-        )
+        resource_name = "df-repo"
+
+        cmd_check = f"oc --kubeconfig {self.kubeconfig} get imagedigestmirrorset {resource_name}"
+        exists = run_cmd(cmd_check, ignore_error=True)
+
+        if exists:
+            logger.info("ImageDigestMirrorSet exists applying changes")
+            run_cmd(
+                f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}"
+            )
+        else:
+            logger.info("ImageDigestMirrorSet not found creating with save-config")
+            run_cmd(
+                f"oc --kubeconfig {self.kubeconfig} create --save-config -f {image_digest_mirror_set}"
+            )
+
         os.remove(image_digest_mirror_set)
 
     def create_fdf_service_cr(self):
@@ -72,6 +105,9 @@ class FusionDataFoundationDeployment:
         """
         Perform steps to prepare for a Pre-release deployment of FDF.
         """
+        time.sleep(60)
+        wait_for_machineconfigpool_status(node_type="all")
+
         fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
         fdf_catalog_name = defaults.FUSION_CATALOG_NAME
         fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
@@ -86,13 +122,15 @@ class FusionDataFoundationDeployment:
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
             config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
+        ocp_version = f"ocp{get_running_ocp_version().replace('.', '')}-t"
+        logger.info(f"OCP version: {ocp_version}")
         logger.info("Updating FusionServiceDefinition")
         params_dict = {
             "spec": {
                 "onboarding": {
                     "serviceOperatorSubscription": {
                         "multiVersionCatSrcDetails": {
-                            "ocp418-t": {
+                            ocp_version: {
                                 "imageDigest": fdf_image_digest,
                                 "registryPath": fdf_registry,
                             }
