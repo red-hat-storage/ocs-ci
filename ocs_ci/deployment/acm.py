@@ -135,8 +135,11 @@ class Submariner(object):
             else:
                 cluster_configs = get_non_acm_cluster_config()
             for cluster in cluster_configs:
-                if is_hosted_cluster(cluster.ENV_DATA["cluster_name"]):
-                    continue
+                with config.RunWithConfigContext(
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ):
+                    if is_hosted_cluster(cluster.ENV_DATA["cluster_name"]):
+                        continue
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_acm_brew_idms()
             config.switch_ctx(old_ctx)
