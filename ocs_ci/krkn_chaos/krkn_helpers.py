@@ -750,13 +750,32 @@ class NetworkPortHelper(BaseScenarioHelper):
             )
 
             result = ocp.OCP().exec_oc_cmd(cmd, out_yaml_format=False)
-            interfaces = [
+            all_interfaces = [
                 iface.strip() for iface in result.split("\n") if iface.strip()
             ]
 
+            # Filter out ephemeral virtual interfaces that may disappear
+            # These typically have patterns like: xxxxx@ifX, xxxxx@ens3, etc.
+            import re
+
+            stable_interfaces = []
+            for iface in all_interfaces:
+                # Skip interfaces with @ symbol (virtual/ephemeral interfaces)
+                if "@" in iface:
+                    self.log.debug(f"Skipping ephemeral interface: {iface}")
+                    continue
+                # Skip interfaces that are clearly virtual/temporary
+                if re.match(r"^[a-f0-9]{15}@", iface):
+                    self.log.debug(f"Skipping virtual interface: {iface}")
+                    continue
+                stable_interfaces.append(iface)
+
+            interfaces = stable_interfaces
+
             self.log.info(
-                f"Found network interfaces on {node_type} nodes: {interfaces}"
+                f"Found stable network interfaces on {node_type} nodes: {interfaces}"
             )
+            self.log.debug(f"Filtered out ephemeral interfaces from: {all_interfaces}")
             return interfaces
 
         except Exception as e:
