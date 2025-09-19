@@ -16,6 +16,7 @@ import semantic_version
 import platform
 import tarfile
 
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
@@ -134,6 +135,8 @@ class Submariner(object):
             else:
                 cluster_configs = get_non_acm_cluster_config()
             for cluster in cluster_configs:
+                if is_hosted_cluster(cluster.ENV_DATA["cluster_name"]):
+                    continue
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_acm_brew_idms()
             config.switch_ctx(old_ctx)
