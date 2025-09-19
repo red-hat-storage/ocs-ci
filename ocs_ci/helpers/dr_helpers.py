@@ -2302,7 +2302,6 @@ def validate_storage_cluster_peer_state():
             index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         logger.info("Validating Storage Cluster Peer status")
-        # TODO: Check whether storageclusterpeer is created for each RDR pair of client clusters
         sample = TimeoutSampler(
             timeout=300,
             sleep=5,

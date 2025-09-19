@@ -14,6 +14,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ def get_semantic_ocp_running_version(separator=None):
     return get_semantic_version(get_running_ocp_version(separator), True)
 
 
+@switch_to_orig_index_at_last
 def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     """
     Returns semantic OCS Version from the CSV (ODF if version >= 4.9, OCS otherwise)
@@ -129,15 +131,19 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     # Import ocp here to avoid circular dependency issue
     from ocs_ci.ocs import ocp
 
-    csvs = ocp.OCP(
-        namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
-    )
     if config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
-        operator_name = defaults.ODF_CLIENT_OPERATOR
-    elif get_semantic_ocs_version_from_config() >= VERSION_4_9:
+        context_to_switch = config.get_provider_index()
+    else:
+        context_to_switch = config.MULTICLUSTER["multicluster_index"]
+    if get_semantic_ocs_version_from_config() >= VERSION_4_9:
         operator_name = defaults.ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
+
+    config.switch_ctx(context_to_switch)
+    csvs = ocp.OCP(
+        namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
+    )
     for item in csvs.get()["items"]:
         if item["metadata"]["name"].startswith(operator_name):
             return get_semantic_version(
