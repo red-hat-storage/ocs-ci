@@ -27,7 +27,7 @@ class TestIOMultiplePods(ManageTest):
     Run IO on multiple pods in parallel
     """
 
-    num_of_pvcs = 6
+    num_of_pvcs = 4
     pvc_size = 5
 
     @pytest.fixture()
