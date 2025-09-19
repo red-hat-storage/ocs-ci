@@ -133,17 +133,14 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
 
     if config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
         context_to_switch = config.get_provider_index()
-    else:
-        context_to_switch = config.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(context_to_switch)
+    csvs = ocp.OCP(
+        namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
+    )
     if get_semantic_ocs_version_from_config() >= VERSION_4_9:
         operator_name = defaults.ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
-
-    config.switch_ctx(context_to_switch)
-    csvs = ocp.OCP(
-        namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
-    )
     for item in csvs.get()["items"]:
         if item["metadata"]["name"].startswith(operator_name):
             return get_semantic_version(
