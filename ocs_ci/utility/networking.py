@@ -26,7 +26,8 @@ def label_worker_nodes_with_mon_ip():
             "Labeling nodes with mon ip is not implemented for current platform"
         )
 
-    nodes = OCP(kind="node").get().get("items", [])
+    nodes_obj = OCP(kind="node")
+    nodes = nodes_obj.get().get("items", [])
     worker_nodes = [
         node["metadata"]["name"]
         for node in nodes
@@ -45,7 +46,7 @@ def label_worker_nodes_with_mon_ip():
             )
         ]
 
-        nodes.exec_oc_cmd(command=label_cmd)
+        nodes_obj.exec_oc_cmd(command=label_cmd)
 
 
 def add_data_replication_separation_to_cluster_data(cluster_data):
