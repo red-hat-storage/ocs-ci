@@ -622,6 +622,105 @@ class NetworkScenarioHelper(BaseScenarioHelper):
             test_duration=test_duration,
         )
 
+    def create_pod_egress_shaping(
+        self,
+        label_selector=None,
+        pod_name=None,
+        network_params=None,
+        execution_type="parallel",
+        instance_count=1,
+        test_duration=None,
+    ):
+        """Create pod egress shaping scenario."""
+        test_duration = test_duration or self.DEFAULT_TEST_DURATION
+
+        return NetworkOutageScenarios.pod_egress_shaping(
+            self.scenario_dir,
+            namespace=self.namespace,
+            label_selector=label_selector,
+            pod_name=pod_name,
+            network_params=network_params,
+            execution_type=execution_type,
+            instance_count=instance_count,
+            wait_duration=self.DEFAULT_WAIT_DURATION,
+            test_duration=test_duration,
+        )
+
+    def create_pod_ingress_shaping(
+        self,
+        label_selector=None,
+        pod_name=None,
+        network_params=None,
+        execution_type="parallel",
+        instance_count=1,
+        test_duration=None,
+    ):
+        """Create pod ingress shaping scenario."""
+        test_duration = test_duration or self.DEFAULT_TEST_DURATION
+
+        return NetworkOutageScenarios.pod_ingress_shaping(
+            self.scenario_dir,
+            namespace=self.namespace,
+            label_selector=label_selector,
+            pod_name=pod_name,
+            network_params=network_params,
+            execution_type=execution_type,
+            instance_count=instance_count,
+            wait_duration=self.DEFAULT_WAIT_DURATION,
+            test_duration=test_duration,
+        )
+
+    def extract_component_name(self, label_selector):
+        """
+        Extract component name from a Kubernetes label selector.
+
+        Args:
+            label_selector (str): Kubernetes label selector (e.g., "app=rook-ceph-osd")
+
+        Returns:
+            str: Extracted component name (e.g., "osd")
+        """
+        if not label_selector or "=" not in label_selector:
+            return "unknown"
+
+        # Extract the value part after '='
+        app_value = label_selector.split("=", 1)[1]
+
+        # Extract component name from rook-ceph-* pattern
+        if app_value.startswith("rook-ceph-"):
+            component = app_value.replace("rook-ceph-", "")
+            # Handle special cases like "osd-prepare" -> "osd"
+            if component.startswith("osd"):
+                return "osd"
+            return component
+
+        # For other patterns, return the app value or a simplified version
+        return app_value.lower()
+
+    def is_critical_component(self, component_name):
+        """
+        Determine if a Ceph component should receive conservative chaos testing.
+
+        In chaos engineering, ALL components should be tested under chaotic conditions
+        to discover weaknesses and improve system resilience. This method always returns
+        False to ensure all components receive the same level of chaos testing intensity.
+
+        Args:
+            component_name (str): Component name (e.g., "mon", "mgr", "osd")
+
+        Returns:
+            bool: Always False - all components should experience full chaos testing
+        """
+        # In true chaos engineering spirit, no component is exempt from chaos!
+        # All components (mon, mgr, mds, osd, rgw, tools, etc.) should be tested
+        # under chaotic conditions to validate system resilience and discover
+        # potential failure modes.
+
+        self.log.debug(
+            f"Component '{component_name}' will receive full chaos testing intensity"
+        )
+        return False
+
 
 # ============================================================================
 # HOG SCENARIO HELPER CLASS
