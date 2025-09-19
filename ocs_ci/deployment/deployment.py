@@ -80,6 +80,10 @@ from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.netsplit import get_netsplit_mc
+from ocs_ci.deployment.networking import (
+    add_data_replication_separation_to_cluster_data,
+    label_worker_nodes_with_mon_ip,
+)
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -765,6 +769,8 @@ class Deployment(object):
             from ocs_ci.deployment.hosted_cluster import enable_nested_virtualization
 
             enable_nested_virtualization()
+        if config.DEPLOYMENT.get("enable_data_separation_replication"):
+            label_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
@@ -1777,6 +1783,9 @@ class Deployment(object):
 
         # Enable in-transit encryption.
         cluster_data = add_in_transit_encryption_to_cluster_data(cluster_data)
+
+        # Enable data replication separation
+        cluster_data = add_data_replication_separation_to_cluster_data(cluster_data)
 
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
