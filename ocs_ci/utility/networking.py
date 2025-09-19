@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-def label_worker_nodes_with_mon_ip(self):
+def label_worker_nodes_with_mon_ip():
     """
     Label worker nodes with label 'network.rook.io/mon-ip: <IPAddress>'
     """
