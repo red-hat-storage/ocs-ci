@@ -1683,6 +1683,25 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             vm_name=self.vm_name, namespace=self.workload_namespace
         )
 
+    def deploy_workload_flattening(self):
+        """
+
+        Deployment specific to CNV workload for Discovered/Imperative Apps
+
+        """
+        self.manage_dr_vm_secrets()
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        self.workload_path = self.target_clone_dir + "/" + self.workload_dir
+        run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
+        self.check_pod_pvc_status(skip_replication_resources=True)
+        config.switch_acm_ctx()
+        self.create_placement()
+        self.create_dprc()
+        self.verify_workload_deployment()
+        self.vm_obj = VirtualMachine(
+            vm_name=self.vm_name, namespace=self.workload_namespace
+        )
+
     def _deploy_prereqs(self):
         """
         Perform prerequisites
@@ -1860,6 +1879,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
+    def delete_workload(self, delete_project=True):
     def delete_workload(
         self, shared_drpc_protection=False, skip_resource_deletion_verification=False
     ):
@@ -1907,5 +1927,15 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                     discovered_apps=True,
                     workload_cleanup=True,
                 )
-                run_cmd(f"oc delete project {self.workload_namespace}")
-                log.info(f"Project {self.workload_namespace} deleted successfully")
+                if delete_project:
+                run_cmd(f"oc delete project {self.workload_namespace}")log.info(f"Project {self.workload_namespace} deleted successfully")
+
+
+def modify_pod_pvc_name():
+    import importlib
+
+    rdr_cnv = importlib.import_module(
+        "tests.functional.disaster-recovery.regional-dr.test_rbd_cnv_cloned_snapshot_volumes.py"
+    )
+    rdr_cnv_obj = rdr_cnv.TestCNVClonedSnapshotVolumesWithDiscoveredApps()
+    _ = rdr_cnv_obj.clone_snapshot_workload_pvcs()
