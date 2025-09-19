@@ -68,7 +68,7 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
             config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker_nodes[0])
         )
         ip_network = ipaddress.IPv4Network(
-            f"{network_data['private_ip']}/{network_data['public_prefix_length']}", strict=False
+            f"{network_data['private_ip']}/{network_data['private_prefix_length']}", strict=False
         )
         str_network = f"{ip_network.network_address}/{ip_network.prefixlen}"
         logger.info("Configuring data replication separation for the storage cluster")
