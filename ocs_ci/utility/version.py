@@ -15,7 +15,6 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs import constants
 
-# from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +115,6 @@ def get_semantic_ocp_running_version(separator=None):
     return get_semantic_version(get_running_ocp_version(separator), True)
 
 
-# @switch_to_orig_index_at_last
 def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     """
     Returns semantic OCS Version from the CSV (ODF if version >= 4.9, OCS otherwise)
@@ -132,9 +130,9 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     # Import ocp here to avoid circular dependency issue
     from ocs_ci.ocs import ocp
 
-    # if config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
-    #     context_to_switch = config.get_provider_index()
-    #     config.switch_ctx(context_to_switch)
+    if config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+        context_to_switch = config.get_provider_index()
+        config.switch_ctx(context_to_switch)
     csvs = ocp.OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
     )
