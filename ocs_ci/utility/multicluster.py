@@ -18,7 +18,11 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.ocs.constants import MDR_ROLES, RDR_ROLES, ACM_RANK, MANAGED_CLUSTER_RANK
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, wait_for_machineconfigpool_status
+from ocs_ci.utility.utils import (
+    run_cmd,
+    wait_for_machineconfigpool_status,
+    get_acm_mce_build_tag,
+)
 
 log = logging.getLogger(__name__)
 
@@ -266,11 +270,13 @@ def create_mce_catsrc():
     mce_konflux_catsrc_yaml_data = templating.load_yaml(
         constants.MCE_CATALOGSOURCE_YAML
     )
+    if not config.ENV_DATA.get("mce_unreleased_image"):
+        mce_image_tag = get_acm_mce_build_tag(
+            constants.MCE_CATSRC_IMAGE, config.ENV_DATA.get("mce_version")
+        )
+    else:
+        mce_image_tag = config.ENV_DATA.get("mce_unreleased_image")
 
-    mce_image_tag = (
-        config.ENV_DATA.get("mce_unreleased_image")
-        or f"latest-{config.ENV_DATA.get('mce_version')}"
-    )
     mce_konflux_catsrc_yaml_data["spec"][
         "image"
     ] = f"{constants.MCE_CATSRC_IMAGE}:{mce_image_tag}"
