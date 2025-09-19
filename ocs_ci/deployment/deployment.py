@@ -80,10 +80,6 @@ from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.netsplit import get_netsplit_mc
-from ocs_ci.deployment.networking import (
-    add_data_replication_separation_to_cluster_data,
-    label_worker_nodes_with_mon_ip,
-)
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -151,6 +147,10 @@ from ocs_ci.utility.deployment import (
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.networking import (
+    add_data_replication_separation_to_cluster_data,
+    label_worker_nodes_with_mon_ip,
+)
 from ocs_ci.utility import (
     templating,
     ibmcloud,

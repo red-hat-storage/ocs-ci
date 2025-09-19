@@ -36,10 +36,9 @@ def label_worker_nodes_with_mon_ip(self):
         network_data = (
             config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
         )
-        label = f"network.rook.io/mon-ip: {network_data}"
         label_cmd = [
             (
-                f"label nodes {workers} "
+                f"label nodes {worker} "
                 f"network.rook.io/mon-ip: \"{network_data['private_ip']}\" --overwrite"
             )
         ]
@@ -59,6 +58,7 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
         dict: updated storage storage cluster yaml
     """
     if config.ENV_DATA.get("enable_data_separation_replication"):
+        nodes = OCP(kind="node").get().get("items", [])
         worker_nodes = [
             node
             for node in nodes
