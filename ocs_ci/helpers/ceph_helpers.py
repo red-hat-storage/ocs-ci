@@ -1,6 +1,10 @@
-from ocs_ci.ocs.cluster import logger, get_percent_used_capacity
+from ocs_ci.ocs.cluster import (
+    logger,
+    get_percent_used_capacity,
+    get_ceph_config_property,
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 
 
 def wait_for_percent_used_capacity_reached(
@@ -41,3 +45,38 @@ def wait_for_percent_used_capacity_reached(
             f"Failed to reach the expected percent used capacity {expected_used_capacity}% "
             f"in the given timeout {timeout}"
         ) from ex
+
+
+def update_mon_target_pg(new_value):
+    """
+    Update mon_target_pg_per_osd to new_value
+
+    Args:
+        new value of mon_target_pg_per_osd
+
+    Returns:
+        True: if the value was changed successfully
+        False: otherwise
+    """
+    patch_path = (
+        f'{{"spec": {{"managedResources": '
+        f'{{"cephCluster"": {{"cephConfig": {{"global": '
+        f'{{"mon_target_pg_per_osd": {new_value}}}}}}}}}}}}}'
+    )
+    patch_cmd = (
+        "oc patch storagecluster ocs-storagecluster -n "
+        f"openshift-storage --type merge --patch '{patch_path}'"
+    )
+    cmd_res = exec_cmd(patch_cmd)
+    if cmd_res.returncode != 0:
+        logger.error(f"Failed to patch storagecluster. Error: {cmd_res.stderr}")
+        return False
+    mon_target_pg = get_ceph_config_property("mon", "mon_target_pg_per_osd")
+    if mon_target_pg == new_value:
+        logger.info(f"mon_target_pg_per_osd successfully changed to {new_value}")
+        return True
+    else:
+        logger.info(
+            f"mon_target_pg_per_osd should be {new_value}, but it is {mon_target_pg}"
+        )
+        return False
