@@ -14,7 +14,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
 )
 from ocs_ci.ocs import constants
-
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +115,7 @@ def get_semantic_ocp_running_version(separator=None):
     return get_semantic_version(get_running_ocp_version(separator), True)
 
 
+@switch_to_orig_index_at_last
 def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     """
     Returns semantic OCS Version from the CSV (ODF if version >= 4.9, OCS otherwise)
