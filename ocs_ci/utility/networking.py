@@ -28,11 +28,13 @@ def label_worker_nodes_with_mon_ip():
 
     nodes = OCP(kind="node").get().get("items", [])
     worker_nodes = [
-        node for node in nodes if constants.WORKER_LABEL in node["metadata"]["labels"]
+        node["metadata"]["name"]
+        for node in nodes
+        if constants.WORKER_LABEL in node["metadata"]["labels"]
     ]
     if not worker_nodes:
         raise UnavailableResourceException("No worker node found!")
-    for worker in worker_nodes.keys():
+    for worker in worker_nodes:
         network_data = (
             config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
         )
@@ -60,7 +62,7 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     if config.ENV_DATA.get("enable_data_separation_replication"):
         nodes = OCP(kind="node").get().get("items", [])
         worker_nodes = [
-            node
+            node["metadata"]["name"]
             for node in nodes
             if constants.WORKER_LABEL in node["metadata"]["labels"]
         ]
