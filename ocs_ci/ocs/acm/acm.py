@@ -190,7 +190,9 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on Create cluster set")
         self.do_click(self.page_nav["create-cluster-set"])
         global cluster_set_name
-        cluster_set_name = create_unique_resource_name("submariner", "clusterset")
+        cluster_set_name = config.ENV_DATA.get(
+            "cluster_set"
+        ) or create_unique_resource_name("submariner", "clusterset")
         log.info(f"Send Cluster set name '{cluster_set_name}'")
         self.do_send_keys(self.page_nav["cluster-set-name"], text=cluster_set_name)
         log.info("Click on Create")
@@ -319,7 +321,9 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
-        cluster_set_name = get_cluster_set_name()[0]
+        cluster_set_name = (
+            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+        )
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
