@@ -6060,21 +6060,19 @@ def apply_oadp_workaround(namespace):
     csv_list = get_csvs_start_with_prefix("oadp-operator", namespace=namespace)
     try:
         oadp_csv_name = csv_list[0]["metadata"]["name"]
+        oadp_csv = CSV(resource_name=oadp_csv_name, namespace=namespace)
+        oadp_csv_dict = oadp_csv.get()
+        path_item = oadp_csv_dict["spec"]["install"]["spec"]["deployments"][0]["spec"][
+            "template"
+        ]["spec"]["containers"][0]["env"]
+
+        for wa_name in path_item:
+            if wa_name["name"] in oadp_hostpath_map:
+                wa_name["value"] = oadp_hostpath_map[wa_name["name"]]
+        oadp_wa_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="oadp_wa", delete=False
+        )
+        templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name)
+        run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
     except IndexError:
         log.error(f"OADP not found in given Namespace {namespace}")
-        return False
-
-    oadp_csv = CSV(resource_name=oadp_csv_name, namespace=namespace)
-    oadp_csv_dict = oadp_csv.get()
-    path_item = oadp_csv_dict["spec"]["install"]["spec"]["deployments"][0]["spec"][
-        "template"
-    ]["spec"]["containers"][0]["env"]
-
-    for wa_name in path_item:
-        if wa_name["name"] in oadp_hostpath_map:
-            wa_name["value"] = oadp_hostpath_map[wa_name["name"]]
-    oadp_wa_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="oadp_wa", delete=False
-    )
-    templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name)
-    run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
