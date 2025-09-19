@@ -30,33 +30,39 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
 
-    def create_bucket_ui(self, method: str) -> ObjectStorage:
+    def create_bucket_ui(self, method: str, return_name: bool = False):
         """
         Creates a bucket via UI using specified method.
 
         Args:
             method (str): Creation method, either 'obc' or 's3'.
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
 
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             ValueError: If method is not 'obc' or 's3'.
         """
         self.do_click(self.bucket_tab["create_bucket_button"])
         if method == "obc":
-            return self.create_bucket_via_obc()
+            return self.create_bucket_via_obc(return_name)
         elif method == "s3":
-            return self.create_bucket_via_s3()
+            return self.create_bucket_via_s3(return_name)
         else:
             raise ValueError(f"Invalid method: {method}")
 
-    def create_bucket_via_obc(self) -> ObjectStorage:
+    def create_bucket_via_obc(self, return_name: bool = False):
         """
         Creates bucket via OBC with improved dropdown handling.
 
+        Args:
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
+
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -89,14 +95,21 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["submit_button_obc"])
 
         logger.info("Waiting for OBC to be created")
+
+        if return_name:
+            return ObjectStorage(), name_generator
         return ObjectStorage()
 
-    def create_bucket_via_s3(self) -> ObjectStorage:
+    def create_bucket_via_s3(self, return_name: bool = False):
         """
         Creates bucket via S3 method.
 
+        Args:
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
+
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -106,6 +119,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["create_bucket_button_s3"])
         self.do_send_keys(self.bucket_tab["s3_bucket_name_input"], name_generator)
         self.do_click(self.bucket_tab["submit_button_obc"])
+
+        if return_name:
+            return ObjectStorage(), name_generator
         return ObjectStorage()
 
     def create_folder_in_bucket(
