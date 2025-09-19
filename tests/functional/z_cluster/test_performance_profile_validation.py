@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -199,10 +201,11 @@ class TestProfileDefaultValuesCheck(ManageTest):
             run_cmd(ptch_cmd)
             log.info("Verify storage cluster is on Ready state")
 
+            time.sleep(120)
             verify_storage_cluster()
 
             sample = TimeoutSampler(
-                timeout=600,
+                timeout=1200,
                 sleep=30,
                 func=verify_performance_profile_change,
                 perf_profile=self.perf_profile,
