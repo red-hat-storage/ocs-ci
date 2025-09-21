@@ -1772,6 +1772,7 @@ def service_account_factory_fixture(request):
         """
         Delete the service account
         """
+        _switch_context_helper(request)
         for instance in instances:
             original_cluster = None
             if instance.ocp.cluster_context:
@@ -1869,6 +1870,8 @@ def deployment_pod_factory(request, pvc_factory, service_account_factory):
         """
         Delete dc pods
         """
+        _switch_context_helper(request)
+
         for instance in instances:
             delete_deployment_pods(instance)
 
