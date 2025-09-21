@@ -2904,7 +2904,8 @@ ROOK_CEPH_CONFIG_VALUES_420 = {
         "mon_data_avail_warn": "15",
         "mon_max_pg_per_osd": "1000",
         "mon_pg_warn_max_object_skew": "0",
-        "mon_target_pg_per_osd": "400",
+        "mon_target_pg_per_osd": "200",
+        "rbd_default_pool": "ocs-storagecluster-cephblockpool",
     },
     "osd": {"osd_memory_target_cgroup_limit_ratio": "0.8"},
 }
