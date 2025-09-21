@@ -38,7 +38,7 @@ class StorageClusterPage(
 
     def nav_cephblockpool_verify_statusready(self):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details
+        Initial page - Data Foundation / Storage pools / block pool page
         Navigate to ocs-storagecluster-cephblockpool
         Verify cephblockpool status is 'Ready'
 
@@ -62,11 +62,11 @@ class StorageClusterPage(
 
     def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Initial page - Data Foundation / Storage Cluster / Storage pools / ocs-storagecluster-cephblockpool
         Get compression status from storagesystem details and ocs-storagecluster-cephblockpool
 
         Returns:
-            tuple: String representation of 'Compression status' from StorageSystem details page and
+            tuple: String representation of 'Compression status' from the block pool page
             String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
 
         """

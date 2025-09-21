@@ -16,12 +16,12 @@ class DataFoundationOverview(PageNavigator):
 
     def navigate_to_view_storage(self):
         """
-        Navigate to Storage Systems page via View Storage link.
+        Navigate to Storage Cluster page via View Storage link.
 
         Returns:
             StorageCluster: StorageCluster page object
         """
-        logger.info("Navigate to Storage Systems page via View Storage link")
+        logger.info("Navigate to Storage Cluster page via View Storage link")
         self.do_click(
             self.data_foundation_overview["view_storage_link"], enable_screenshot=True
         )

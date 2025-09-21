@@ -53,7 +53,7 @@ class BlockAndFile(PageNavigator):
 
     def select_requested_capacity_dropdown(self, dropdown_val: str):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Initial page - Data Foundation / Storage Cluster / Block and File
         Select the requested capacity from the dropdown
 
         Args:
@@ -79,7 +79,7 @@ class BlockAndFile(PageNavigator):
 
     def read_capacity_breakdown(self):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Initial page - Data Foundation / Storage Cluster / Storage pools / ocs-storagecluster-cephblockpool
         Read the capacity breakdown from the table
 
         Returns:
@@ -110,7 +110,7 @@ class BlockAndFile(PageNavigator):
 
     def check_pvc_to_namespace_ui_card(self, namespace, check_name: str):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Initial page - Data Foundation / Storage Cluster / Storage pools / ocs-storagecluster-cephblockpool
 
         Method to check that the pvc's from the UI are the same as the expected pvc's.
         For each pvc, initially added, filled and saved in PvcCapacityDeploymentList the method checks
@@ -168,7 +168,7 @@ class BlockAndFile(PageNavigator):
 
     def get_raw_capacity_card_values(self):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Initial page - Data Foundation / Storage Cluster / Block and File
         Get the raw capacity card values
 
         Returns:
