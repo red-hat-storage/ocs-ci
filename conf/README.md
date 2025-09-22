@@ -426,6 +426,9 @@ Scenarios that use this data include MDR and RDR deployments.
 * `acm_cluster` - True if the cluster is an ACM hub cluster, otherwise False.
 * `primary_cluster` - True if the cluster is the primary cluster, otherwise False.
 * `active_acm_cluster` - True if the cluster is the active ACM hub cluster, False if passive.
+* `dr_cluster_relations` - List specifying each pair of RDR clusters
+   - ["cluster1", "cluster2"]
+   - ["cluster3", "cluster4"]
 
 ##### ibmcloud
 

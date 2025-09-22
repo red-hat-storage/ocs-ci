@@ -129,6 +129,10 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
     # Import ocp here to avoid circular dependency issue
     from ocs_ci.ocs import ocp
 
+    initial_index = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+    if config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+        context_to_switch = config.get_provider_index()
+        config.switch_ctx(context_to_switch)
     csvs = ocp.OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="", resource_name="csv"
     )
@@ -138,6 +142,7 @@ def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):
         operator_name = defaults.OCS_OPERATOR_NAME
     for item in csvs.get()["items"]:
         if item["metadata"]["name"].startswith(operator_name):
+            config.switch_ctx(initial_index)
             return get_semantic_version(
                 item["spec"]["version"], only_major_minor, ignore_pre_release
             )
