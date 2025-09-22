@@ -170,11 +170,24 @@ class AcmAddClusters(AcmPageNavigator):
 
         cluster_env = get_clusters_env()
         primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
-        secondary_index = [
-            s.MULTICLUSTER["multicluster_index"]
-            for s in get_non_acm_cluster_config()
-            if s.MULTICLUSTER["multicluster_index"] != primary_index
-        ][0]
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            # dr_cluster_relations is a list containing cluster pairs list
+            dr_cluster_names = dr_cluster_relations[0]
+            primary_name = config.get_cluster_name_by_index(primary_index)
+            secondary_index = config.get_cluster_index_by_name(
+                [
+                    cluster_name
+                    for cluster_name in dr_cluster_names
+                    if cluster_name != primary_name
+                ][0]
+            )
+        else:
+            secondary_index = [
+                s.MULTICLUSTER["multicluster_index"]
+                for s in get_non_acm_cluster_config()
+                if s.MULTICLUSTER["multicluster_index"] != primary_index
+            ][0]
         # submariner catalogsource creation
         if config.ENV_DATA.get("submariner_release_type") == "unreleased":
             self.create_submariner_downstream_unreleased_catalogsource()
@@ -492,7 +505,17 @@ class AcmAddClusters(AcmPageNavigator):
             submariner_downstream_unreleased, submariner_data_yaml.name
         )
         old_ctx = config.cur_index
-        for cluster in get_non_acm_cluster_config():
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            dr_cluster_names = dr_cluster_relations[0]
+            cluster_configs = [
+                cluster
+                for cluster in config.clusters
+                if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+            ]
+        else:
+            cluster_configs = get_non_acm_cluster_config()
+        for cluster in cluster_configs:
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
         config.switch_ctx(old_ctx)

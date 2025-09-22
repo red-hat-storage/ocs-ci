@@ -16,6 +16,7 @@ import semantic_version
 import platform
 import tarfile
 
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
@@ -120,7 +121,25 @@ class Submariner(object):
         acm_obj = AcmAddClusters()
         if self.submariner_release_type == "unreleased":
             old_ctx = config.cur_index
-            for cluster in get_non_acm_cluster_config():
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
+            # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
+            # in multiclient configuration and provider cluster contexts will also be present.
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                cluster_configs = [
+                    cluster
+                    for cluster in config.clusters
+                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+                ]
+            else:
+                cluster_configs = get_non_acm_cluster_config()
+            for cluster in cluster_configs:
+                with config.RunWithConfigContext(
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ):
+                    if is_hosted_cluster(cluster.ENV_DATA["cluster_name"]):
+                        continue
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_acm_brew_idms()
             config.switch_ctx(old_ctx)
