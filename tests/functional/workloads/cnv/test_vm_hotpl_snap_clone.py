@@ -17,12 +17,42 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @workloads
-@pytest.mark.polarion_id("OCS-")
+@pytest.mark.polarion_id("OCS-7299")
 class TestVmHotPlugUnplugSnapClone(E2ETest):
     """
     Test case for snapshot and clones
     with hotplug/unplug
     """
+
+    def hotplug_and_run_io(
+        self, vm_obj, pvc, file_paths, before_disks, cross_pvc=False
+    ):
+
+        # Hotplug the PVC volume to the VM
+        log.info(f"Hotplugging PVC {pvc.name} to VM {vm_obj.name}")
+        vm_obj.addvolume(volume_name=pvc.name)
+        # Wait for the disk to be hotplugged successfully
+        sample = TimeoutSampler(
+            timeout=600,
+            sleep=5,
+            func=verify_hotplug,
+            vm_obj=vm_obj,
+            disks_before_hotplug=before_disks,
+        )
+        sample.wait_for_func_value(value=True)
+        log.info(f"Hotplugged PVC {pvc.name} to VM {vm_obj.name}")
+
+        if not cross_pvc:
+            # Run I/O operation
+            log.info(f"Running I/O operation on VM {vm_obj.name}")
+            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            return source_csum
+        else:
+            log.info(f"Running I/O operation {pvc.name}")
+            run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
+
+    def unplug_disks_and_verify(self, vm_obj, pvc):
+        vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
 
     def test_vm_hotpl_snap_clone(
         self,
@@ -94,35 +124,20 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
 
         # List of VM-PVC pairs for hotplug testing
         vms_pvc = [(vm_obj_pvc, pvc_obj), (vm_obj_dvt, dvt_obj)]
-        before_disks_hotplug = []
 
         # Hotplug disks and perform I/O operations
         for i, (vm_obj, pvc) in enumerate(vms_pvc):
             try:
                 # Verify disks before hotplugging
-                before_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-                log.info(f"Disks before hotplug on VM {vm_obj.name}:\n{before_disks}")
-                before_disks_hotplug.append(before_disks)
-
-                # Hotplug the PVC volume to the VM
-                log.info(f"Hotplugging PVC {pvc.name} to VM {vm_obj.name}")
-                vm_obj.addvolume(volume_name=pvc.name)
-
-                # Wait for the disk to be hotplugged successfully
-                sample = TimeoutSampler(
-                    timeout=600,
-                    sleep=5,
-                    func=verify_hotplug,
-                    vm_obj=vm_obj,
-                    disks_before_hotplug=before_disks,
+                disks_before_hotplug = vm_obj.run_ssh_cmd(
+                    "lsblk -o NAME,SIZE,MOUNTPOINT -P"
                 )
-                sample.wait_for_func_value(value=True)
-                log.info(f"Hotplugged PVC {pvc.name} to VM {vm_obj.name}")
+                log.info(
+                    f"Disks before hotplug on VM {vm_obj.name}:\n{disks_before_hotplug}"
+                )
 
-                # Run I/O operation
-                log.info(f"Running I/O operation on VM {vm_obj.name}")
-                source_csum = run_dd_io(
-                    vm_obj=vm_obj, file_path=file_paths[0], verify=True
+                source_csum = self.hotplug_and_run_io(
+                    vm_obj, pvc, file_paths, disks_before_hotplug
                 )
 
                 # Reboot the VM
@@ -167,17 +182,10 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             log.info(
                 f"Disks before clone hotplug on VM {vm_obj_pvc.name}:\n{before_disks_pvc}"
             )
-            vm_obj_pvc.addvolume(
-                volume_name=clone_obj_dvt.name, persist=False, verify=False
+
+            self.hotplug_and_run_io(
+                vm_obj_pvc, clone_obj_dvt, file_paths, before_disks_pvc, cross_pvc=True
             )
-            sample = TimeoutSampler(
-                timeout=600,
-                sleep=5,
-                func=verify_hotplug,
-                vm_obj=vm_obj_pvc,
-                disks_before_hqotplug=before_disks_pvc,
-            )
-            sample.wait_for_func_value(value=True)
 
             log.info(f"Attaching clone of {pvc_obj.name} to VM {vm_obj_dvt.name}")
             before_disks_dvt = vm_obj_dvt.run_ssh_cmd(
@@ -186,24 +194,16 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             log.info(
                 f"Disks before clone hotplug on VM {vm_obj_dvt.name}:\n{before_disks_dvt}"
             )
-            vm_obj_dvt.addvolume(
-                volume_name=clone_obj_pvc.name, persist=False, verify=False
+
+            self.hotplug_and_run_io(
+                vm_obj_dvt, clone_obj_pvc, file_paths, before_disks_dvt, cross_pvc=True
             )
-            sample = TimeoutSampler(
-                timeout=600,
-                sleep=5,
-                func=verify_hotplug,
-                vm_obj=vm_obj_dvt,
-                disks_before_hotplug=before_disks_dvt,
-            )
-            sample.wait_for_func_value(value=True)
 
-            log.info(f"Running I/O operation {clone_obj_pvc.name}")
-            run_dd_io(vm_obj=vm_obj_pvc, file_path=file_paths[1])
+        except Exception as e:
+            log.error(f"An error occurred during PVC cloning and hotplugging: {str(e)}")
+            raise
 
-            log.info(f"Running I/O operation {clone_obj_dvt.name}")
-            run_dd_io(vm_obj=vm_obj_dvt, file_path=file_paths[1])
-
+        try:
             # Unplug cloned disks and verify detachment
             log.info(f"Unplugging clone of {dvt_obj.name} from VM {vm_obj_pvc.name}")
             before_disks_pvc_rm = vm_obj_pvc.run_ssh_cmd(
@@ -212,15 +212,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             log.info(
                 f"Disks before unplugging from VM {vm_obj_pvc.name}:\n{before_disks_pvc_rm}"
             )
-            vm_obj_pvc.removevolume(volume_name=clone_obj_dvt.name, verify=False)
-            sample = TimeoutSampler(
-                timeout=600,
-                sleep=5,
-                func=verify_hotplug,
-                vm_obj=vm_obj_pvc,
-                disks_before_hotplug=before_disks_pvc_rm,
-            )
-            sample.wait_for_func_value(value=True)
+            self.unplug_disks_and_verify(vm_obj_pvc, clone_obj_dvt)
 
             log.info(f"Unplugging clone of {pvc_obj.name} from VM {vm_obj_dvt.name}")
             before_disks_dvt_rm = vm_obj_dvt.run_ssh_cmd(
@@ -229,22 +221,11 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             log.info(
                 f"Disks before unplugging from VM {vm_obj_dvt.name}:\n{before_disks_dvt_rm}"
             )
-            vm_obj_dvt.removevolume(volume_name=clone_obj_pvc.name, verify=False)
-            sample = TimeoutSampler(
-                timeout=600,
-                sleep=5,
-                func=verify_hotplug,
-                vm_obj=vm_obj_dvt,
-                disks_before_hotplug=before_disks_dvt_rm,
-            )
-            sample.wait_for_func_value(value=True)
+            self.unplug_disks_and_verify(vm_obj_dvt, clone_obj_pvc)
+
+            # Unplug normal disks and verify detachment
+            for i, (vm_obj, pvc) in enumerate(vms_pvc):
+                self.unplug_disks_and_verify(vm_obj, pvc)
         except Exception as e:
-            log.error(f"An error occurred during PVC cloning and hotplugging: {str(e)}")
+            log.error(f"An error occurred during PVC Unplugging: {str(e)}")
             raise
-
-        # Stop the VMs after the test
-        log.info(f"Stopping VM {vm_obj_pvc.name}")
-        vm_obj_pvc.stop()
-
-        log.info(f"Stopping VM {vm_obj_dvt.name}")
-        vm_obj_dvt.stop()

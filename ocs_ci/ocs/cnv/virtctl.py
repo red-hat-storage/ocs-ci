@@ -51,7 +51,7 @@ class Virtctl(object):
 
         return run_cmd(command)
 
-    def remove_volume(self, vm_name, volume_name):
+    def remove_volume(self, vm_name, volume_name, persist=False):
         """
         Remove a volume from a VM.
 
@@ -65,6 +65,7 @@ class Virtctl(object):
         """
         command = (
             f"{self.base_command} removevolume {vm_name} --volume-name={volume_name}"
+            + (" --persist" if persist else "")
         )
         return run_cmd(command)
 

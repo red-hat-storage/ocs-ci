@@ -494,7 +494,7 @@ class VirtualMachine(Virtctl):
             )
             sample.wait_for_func_value(value=True)
 
-    def removevolume(self, volume_name, verify=True):
+    def removevolume(self, volume_name, persist=False, verify=True):
         """
         Remove a volume from a VM
 
@@ -507,7 +507,9 @@ class VirtualMachine(Virtctl):
 
         """
         logger.info(f"Removing {volume_name} from {self._vm_name}")
-        self.remove_volume(vm_name=self._vm_name, volume_name=volume_name)
+        self.remove_volume(
+            vm_name=self._vm_name, persist=persist, volume_name=volume_name
+        )
         if verify:
             sample = TimeoutSampler(
                 timeout=600,
