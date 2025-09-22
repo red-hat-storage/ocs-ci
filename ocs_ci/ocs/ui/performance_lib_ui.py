@@ -61,14 +61,17 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
 
         except TimeoutException:
-            print("Can not find login page, May have already been logged in")
-        #  Locate PerfScale
-        expand_button = wait.until(
-            ec.element_to_be_clickable(
-                (By.XPATH, "//button[@aria-label='Expand folder PerfScale']")
+            logger.info("Can not find login page, May have already been logged in")
+        try:
+            #  Locate PerfScale
+            expand_button = wait.until(
+                ec.element_to_be_clickable(
+                    (By.XPATH, "//button[@aria-label='Expand folder PerfScale']")
+                )
             )
-        )
-        expand_button.click()
+            expand_button.click()
+        except TimeoutException:
+            logger.error("Dashboard not found. Login may have failed.")
 
         # Wait for the link to become clickable
         perfscale_link = wait.until(
@@ -238,6 +241,9 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
             )
         )
         previous.click()
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
 
     finally:
         driver.quit()
