@@ -4,7 +4,6 @@ lokistack stack
 """
 
 import logging
-import time
 import base64
 
 from ocs_ci.ocs import constants, ocp
@@ -17,6 +16,8 @@ from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.node import get_all_nodes
+from ocs_ci.framework import config as config
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def create_lokistack_operator_group(
         skip_resource_exists: Skip the resource creation if it already exists
 
     Returns:
-        bool: True if operator group for elastic search is created
+        bool: True if operator group for lokistack is created
             successfully, false otherwise
 
     Example::
@@ -141,13 +142,8 @@ def get_clusterlogging_subscription():
     Creation of subscription for clusterlogging to subscribe
     a namespace to an operator
 
-    Args:
-        yaml_file (str): Path to yaml file to create subscription for
-            the namespace
-        resource_name (str): Name of the subscription
-
     Returns:
-        bool: Subscription exists or not
+        bool: True if subscription exists
 
     Example:
         cl_create_subscription(yaml_file=constants.CL_SUB_YAML)
@@ -173,9 +169,6 @@ def get_lokistack_subscription():
     Creation of subscription for lokistack to subscribe
     a namespace to an operator
 
-    Args:
-        resource_name (str): Name of the subscription
-
     Returns:
         bool: Subscription exists or not
 
@@ -192,39 +185,33 @@ def get_lokistack_subscription():
     )
     if lo_sub:
         logger.info(lo_sub_info)
+    else:
+        logger.info("Creation of subscription for lokistack failed")
     return bool(lo_sub)
 
 
-def create_obc(yaml_file, resource_name, skip_resource_exists=False):
+def get_obc():
     """
-    Creation of OBC for providing s3 object storage  for lokistack.
+    Checking for successful creation of OBC for providing s3 object storage for lokistack.
 
-    Args:
-        yaml_file (str): Path to yaml file to create obc the namespace
-        resource_name (str): Name of the obc
+    Returns: Bool if obc created
 
-    Returns:
-        bool: for obc created successfully
     """
 
     obc_obj = ocp.OCP(
         kind=constants.OBC, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    try:
-        obc_obj.create(yaml_file=yaml_file)
-    except CommandFailed as e:
-        if "AlreadyExists" in str(e) and skip_resource_exists:
-            logger.warning("obc already exists")
-            return True
-        else:
-            raise
-    try:
-        obc_obj.get(resource_name, out_yaml_format=True)
-        logger.info("OBC is created successfully")
-    except Exception as e:
-        logger.error(f"The resource is not found failed with error: {e}")
-        return False
-    return True
+
+    obc_info = obc_obj.get(out_yaml_format=True)
+    obc = obc_obj.check_resource_existence(
+        resource_name=constants.OBJECT_BUCKET_CLAIM,
+        should_exist=True,
+        timeout=200,
+    )
+    logger.info("OBC is created successfully")
+    if obc:
+        logger.info(obc_info)
+    return bool(obc)
 
 
 def get_secret_to_lokistack():
@@ -232,26 +219,20 @@ def get_secret_to_lokistack():
     check if secret is created successfully that will contains endpoint and
     credential details for s3 bucket used by lokistack
 
-
-    Args:
-        resource_name (str): Name of the secret
-
     return:
-    bool : for secret created
+        bool : True if secret created successfully
 
     """
 
     lo_secret = ocp.OCP(
         kind=constants.SECRET, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    ls_secret_info = lo_secret.get(out_yaml_format=True)
+    lo_secret.get(out_yaml_format=True)
     ls_secret = lo_secret.check_resource_existence(
         resource_name=constants.LOKISTACK_SECRET,
         timeout=120,
         should_exist=True,
     )
-    if ls_secret:
-        logger.info(ls_secret_info)
     return bool(ls_secret)
 
 
@@ -263,6 +244,7 @@ def create_lokistack(yaml_file, skip_resource_exists=False):
 
     Args:
         yaml_file (str): path to where lokistack yaml exists
+        skip_resource_exists: Skip the resource creation if it already exists
 
     """
 
@@ -353,12 +335,13 @@ def setup_sa_permissions():
 def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     """
     Create a ClusterLogForwarder CR to collect logs from nodes and
-    application containers
+    application containers and verifies  verify successfull installation of cfr by
+    checking required no of pods and pvc running in project
 
-    yaml_file: path tp where yaml for clusterlogforwader exists
+    Args:
+        yaml_file: path tp where yaml for clusterlogforwader exists
+        skip_resource_exists: Skip the resource creation if it already exists
 
-    verify successfull installation of cfr by checking required no of pods and pvc
-    running in project
     """
     clf_obj = ocp.OCP(
         kind=constants.CLUSTER_LOG_FORWADER,
@@ -377,9 +360,10 @@ def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
         kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
     # verification of ClusterLogForwarder installation
+    nodes_in_cluster = len(get_all_nodes())
     pod_status = pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        resource_count=16,
+        resource_count=10 + nodes_in_cluster,
         timeout=800,
         sleep=20,
     )
@@ -437,9 +421,7 @@ def create_clusterobservability_operator_group(
 
 def get_cluster_observability_subscription():
     """
-    Creation of subscription for cluster obervability operator
-    Args:
-        resource_name (str): Name of the subscription
+    Fetches subscription for cluster obervability operator
 
     Returns:
         bool: True if subscription is created
@@ -535,10 +517,18 @@ def install_logging():
     ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
 
     # Create RGW obc
-    assert ocp_logging_obj.create_obc(
-        yaml_file=constants.LOKI_OPERATOR_OBC_YAML,
-        resource_name=constants.OBJECT_BUCKET_CLAIM,
-    )
+    obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
+
+    if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+        obc_yaml["spec"]["storageClassName"] = "ocs-storagecluster-ceph-rgw"
+    elif config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+        obc_yaml["spec"]["storageClassName"] = "openshift-storage.noobaa.io"
+    else:
+        logger.info("Supported platforms for test execution are vsphere and ibmcloud")
+    helpers.create_resource(**obc_yaml)
+
+    ocp_logging_obj.get_obc()
+
     # Creating secret
     sample = TimeoutSampler(
         timeout=180,
@@ -546,17 +536,16 @@ def install_logging():
         func=run_cmd_verify_cli_output,
         cmd=(
             f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
-            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_HOST}}'"
+            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
         ),
     )
     if not sample.wait_for_func_status(result=True):
         raise Exception("Failed to get configmap")
 
-    bucket_name_cmd = (
-        f"oc get -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
-        f" configmap {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_NAME}}'"
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    bucket_name = exec_cmd(bucket_name_cmd)
+    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
 
     access_key_cmd = (
         f"oc get -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
@@ -575,14 +564,13 @@ def install_logging():
     secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
     secret_yaml["stringData"]["access_key_id"] = decoded1
     secret_yaml["stringData"]["access_key_secret"] = decoded2
-    secret_yaml["stringData"]["bucketnames"] = bucket_name.stdout.decode("utf-8")
+    secret_yaml["stringData"]["bucketnames"] = cm_dict["data"]["BUCKET_NAME"]
+    endpoint = cm_dict["data"]["BUCKET_HOST"]
+    secret_yaml["stringData"]["endoint"] = f"https://{endpoint}:80"
     helpers.create_resource(**secret_yaml)
     assert ocp_logging_obj.get_secret_to_lokistack()
 
     # creates lokistack
-    # sleeping for few seconds to avoid following error
-    # Internal error occurred: failed calling webhook
-    time.sleep(10)
     ocp_logging_obj.create_lokistack(yaml_file=constants.LOKISTACK_YAML)
     logger.info("Loki operator is installed successfuly")
 
