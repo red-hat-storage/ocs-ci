@@ -3826,11 +3826,19 @@ def install_logging(request):
         yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
     # Create RGW obc
-    assert ocp_logging_obj.create_obc(
-        yaml_file=constants.LOKI_OPERATOR_OBC_YAML,
-        resource_name=constants.OBJECT_BUCKET_CLAIM,
-        skip_resource_exists=rosa_hcp_depl,
-    )
+
+    obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
+    log.info(config.ENV_DATA.get("platform"))
+    if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
+        obc_yaml["spec"]["storageClassName"] = "ocs-storagecluster-ceph-rgw"
+    elif config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM:
+        obc_yaml["spec"]["storageClassName"] = "openshift-storage.noobaa.io"
+    else:
+        log.info("Supported platforms for test execution are vsphere and ibmcloud")
+    helpers.create_resource(**obc_yaml)
+
+    ocp_logging_obj.get_obc()
+
     # Creating secret
     sample = TimeoutSampler(
         timeout=180,
@@ -3838,7 +3846,7 @@ def install_logging(request):
         func=run_cmd_verify_cli_output,
         cmd=(
             f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
-            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_HOST}}'"
+            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
         ),
     )
     if not sample.wait_for_func_status(result=True):
@@ -3847,7 +3855,7 @@ def install_logging(request):
     configmap_obj = ocp.OCP(
         kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    bucket_name = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
+    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
 
     access_key_cmd = (
         f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
@@ -3866,14 +3874,15 @@ def install_logging(request):
     secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
     secret_yaml["stringData"]["access_key_id"] = decoded1
     secret_yaml["stringData"]["access_key_secret"] = decoded2
-    secret_yaml["stringData"]["bucketnames"] = bucket_name["data"]["BUCKET_NAME"]
+    secret_yaml["stringData"]["bucketnames"] = cm_dict["data"]["BUCKET_NAME"]
+    endpoint = cm_dict["data"]["BUCKET_HOST"]
+    secret_yaml["stringData"]["endpoint"] = f"https://{endpoint}:80"
     helpers.create_resource(**secret_yaml)
     assert ocp_logging_obj.get_secret_to_lokistack()
 
     # creates lokistack
     # sleeping for few seconds to avoid following error
     # Internal error occurred: failed calling webhook
-    time.sleep(10)
     ocp_logging_obj.create_lokistack(
         yaml_file=constants.LOKISTACK_YAML, skip_resource_exists=rosa_hcp_depl
     )

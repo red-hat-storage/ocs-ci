@@ -5,4 +5,4 @@ metadata:
   namespace: openshift-logging
 spec:
   generateBucketName: loki-bucket-rgw
-  storageClassName: ocs-storagecluster-ceph-rgw
+  storageClassName: "STORAGECLASS_PLACEHOLDER"

@@ -79,6 +79,13 @@ class Testopenshiftloggingonocs(E2ETest):
         """
         assign necessary permissions (full access) to service account
         and generate token
+
+        Args:
+            project: test namespace to verify logging
+
+        Returns:
+               lokistack_route
+               decoded token
         """
         sa_name = "loki-reader2"
         sa_cmd = f"oc create sa {sa_name} -n {project}"
@@ -100,10 +107,10 @@ class Testopenshiftloggingonocs(E2ETest):
         return lokistack_route, token.stdout.decode("utf-8")
 
     @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
-    def validate_project_exists(self, project):
+    def validate_project_exists_in_logs(self, project):
         """
         This function checks whether the new project exists in the
-        lokistack stack
+        lokistack stack by fetching the project logs
 
         Args:
             project (str): The project
@@ -126,7 +133,7 @@ class Testopenshiftloggingonocs(E2ETest):
         assert (
             curl_output["data"]["result"][0]["stream"]["openshift_log_type"]
             == "application"
-        ), "not able to fetch logs"
+        ), "not able to access project in logs"
 
     @pytest.mark.polarion_id("OCS-657")
     @tier1
