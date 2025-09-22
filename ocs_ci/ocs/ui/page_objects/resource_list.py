@@ -23,14 +23,18 @@ class ResourceList(SearchBar):
         self.select_search_by("name")
         self.do_clear(self.generic_locators["searchbar_input"])
         self.search(resource_name)
+
+        loc = format_locator(
+            self.generic_locators["resource_link"],
+            resource_name,
+            resource_name,
+            resource_name,
+            resource_name,
+        )
+
+        self.wait_for_element_to_be_visible(loc)
         self.do_click(
-            format_locator(
-                self.generic_locators["resource_link"],
-                resource_name,
-                resource_name,
-                resource_name,
-                resource_name,
-            ),
+            loc,
             enable_screenshot=True,
         )
 

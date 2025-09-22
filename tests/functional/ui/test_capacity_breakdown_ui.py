@@ -229,13 +229,8 @@ class TestCapacityBreakdownUI(ManageTest):
         )
         time.sleep(180)
 
-        storage_system_details = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-        )
-        block_and_file = storage_system_details.nav_block_and_file()
+        block_and_file = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file.validate_block_and_file_tab_active()
 
         res = block_and_file.check_pvc_to_namespace_ui_card(
             namespace, "check_PVCs_and_depl_created"

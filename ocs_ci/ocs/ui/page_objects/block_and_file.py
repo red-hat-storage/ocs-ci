@@ -3,18 +3,18 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
-from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
 from ocs_ci.utility.utils import TimeoutSampler
 
 
-class BlockAndFile(StorageSystemDetails):
+class BlockAndFile(PageNavigator):
     def __init__(self):
-        StorageSystemDetails.__init__(self)
+        super().__init__()
 
     def select_capacity_resource(self, resource_name: str, namespace_name: str = None):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Initial page - Storage / Storage cluster / Block and File
         Select the capacity resource from the dropdown
 
         Args:
@@ -29,7 +29,7 @@ class BlockAndFile(StorageSystemDetails):
 
     def select_namespace_for_pvcs(self, namespace_name: str):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Initial page - Storage / Storage cluster / Block and File tab
         Select the namespace for PVs from the dropdown
 
         Args:
@@ -53,7 +53,7 @@ class BlockAndFile(StorageSystemDetails):
 
     def select_requested_capacity_dropdown(self, dropdown_val: str):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Initial page - Data Foundation / Storage Cluster / Block and File
         Select the requested capacity from the dropdown
 
         Args:
@@ -79,7 +79,7 @@ class BlockAndFile(StorageSystemDetails):
 
     def read_capacity_breakdown(self):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Initial page - Data Foundation / Storage Cluster / Storage pools / ocs-storagecluster-cephblockpool
         Read the capacity breakdown from the table
 
         Returns:
@@ -110,7 +110,7 @@ class BlockAndFile(StorageSystemDetails):
 
     def check_pvc_to_namespace_ui_card(self, namespace, check_name: str):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Initial page - Data Foundation / Storage Cluster / Storage pools / ocs-storagecluster-cephblockpool
 
         Method to check that the pvc's from the UI are the same as the expected pvc's.
         For each pvc, initially added, filled and saved in PvcCapacityDeploymentList the method checks
@@ -168,7 +168,7 @@ class BlockAndFile(StorageSystemDetails):
 
     def get_raw_capacity_card_values(self):
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Initial page - Data Foundation / Storage Cluster / Block and File
         Get the raw capacity card values
 
         Returns:
@@ -259,3 +259,53 @@ class BlockAndFile(StorageSystemDetails):
         )
         logger.info(f"'Average of storage consumption per day' from the UI : {average}")
         return average
+
+    def verify_utilization_is_good(self):
+        """
+        Verify that the utilization status is 'Good' on the Block and File page
+
+        Returns:
+            bool: True if the utilization status is 'Good', False otherwise
+
+        """
+        logger.info("Verify that the utilization status is 'Good'")
+
+        return self.check_element_text(
+            "Storage pool utilization"
+        ) and self.check_element_text("Utilization is good!")
+
+    def get_storage_cluster_status(self):
+        """
+        Verify status of the Storage Cluster on ceph blockpool page, reading from the Status Card
+
+        Returns:
+            bool: True if status is Healthy, False otherwise
+
+        """
+        parent_element_loc = self.validation_loc[
+            "storage-pool-storage-cluster-status-from-card"
+        ]
+        self.wait_for_element_to_be_visible(parent_element_loc)
+        healthy_loc = (
+            f"{parent_element_loc[0]}//*[text()='Healthy']",
+            parent_element_loc[1],
+        )
+        return len(self.get_elements(healthy_loc)) > 0
+
+    def resiliency_ok(self):
+        """
+        Verify resiliency status of the Storage Cluster on ceph blockpool pag is Healthy, reading from the Status Card
+
+        Returns:
+            bool: True if status is Healthy, False otherwise
+
+        """
+        parent_element_loc = self.validation_loc[
+            "storage-pool-data-resiliency-status-from-card"
+        ]
+        self.wait_for_element_to_be_visible(parent_element_loc)
+        healthy_loc = (
+            f"{parent_element_loc[0]}//*[text()='Healthy']",
+            parent_element_loc[1],
+        )
+        return len(self.get_elements(healthy_loc)) > 0
