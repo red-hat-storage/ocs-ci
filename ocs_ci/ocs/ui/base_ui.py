@@ -1000,18 +1000,59 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
             login_loc["continue_button"], 60
         )
         continue_login_el.click()
-        password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
-        password_el.send_keys(password)
-        click_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
-        click_login_el.click()
-        login_2fa_input_el = wait_for_element_to_be_clickable(
-            login_loc["login_2fa_input"], 60
-        )
-        login_2fa_input_el.send_keys(generate_otp_token(otp_secret))
-        click_2fa_verify_el = wait_for_element_to_be_clickable(
-            login_loc["login_2fa_verify"], 60
-        )
-        click_2fa_verify_el.click()
+        try:
+            WebDriverWait(driver, 10).until(
+                ec.title_contains(login_loc["w3id_page_title"])
+            )
+            w3login_page = True
+        except TimeoutException:
+            w3login_page = False
+        if w3login_page:
+            wait_for_element_to_be_clickable(login_loc["w3id_credentials_signin"], 60)
+            w3id_credentials_btn = driver.find_element(
+                by=login_loc["w3id_credentials_signin"][1],
+                value=login_loc["w3id_credentials_signin"][0],
+            )
+            w3id_credentials_btn.click()
+            username_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_username"], 60
+            )
+            username_el.send_keys(username)
+            password_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_password"], 60
+            )
+            password_el.send_keys(password)
+            w3id_singin_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_singin"], 60
+            )
+            w3id_singin_el.click()
+            w3id_2fa_otp_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_2fa"], 60
+            )
+            w3id_2fa_otp_el.click()
+            w3id_2fa_otp_input_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_2fa_otp_input"], 60
+            )
+            w3id_2fa_otp_input_el.send_keys(generate_otp_token(otp_secret))
+            w3id_2fa_otp_sumbit_btn = wait_for_element_to_be_clickable(
+                login_loc["w3id_2fa_otp_sumbit_btn"], 60
+            )
+            w3id_2fa_otp_sumbit_btn.click()
+        else:
+            password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
+            password_el.send_keys(password)
+            click_login_el = wait_for_element_to_be_clickable(
+                login_loc["click_login"], 60
+            )
+            click_login_el.click()
+            login_2fa_input_el = wait_for_element_to_be_clickable(
+                login_loc["login_2fa_input"], 60
+            )
+            login_2fa_input_el.send_keys(generate_otp_token(otp_secret))
+            login_2fa_submit_btn = wait_for_element_to_be_clickable(
+                login_loc["w3id_2fa_otp_sumbit_btn"], 60
+            )
+            login_2fa_submit_btn.click()
         return driver
 
     try:
