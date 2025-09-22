@@ -1481,6 +1481,20 @@ def validate_num_of_pgs(expected_pgs: dict[str, int]) -> bool:
     return True
 
 
+def get_total_num_of_pgs():
+    """
+    Get the total number of pgs in all pools
+    """
+    ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
+    pools_df = parse_ceph_df_pools(ceph_df_output)
+    pools_dict = ceph_details_df_to_dict(pools_df)
+    total_pgs = 0
+    for pool in pools_dict:
+        total_pgs += int(pools_dict[pool][["PGS"]])
+    logger.info(f"Total number of pgs: {total_pgs}")
+    return total_pgs
+
+
 def get_ceph_pool_property(pool_name, prop):
     """
     The fuction preform ceph osd pool get on a specific property.
@@ -1500,6 +1514,53 @@ def get_ceph_pool_property(pool_name, prop):
             return ceph_pool_prop_output[prop]
     except CommandFailed as err:
         logger.info(f"there was an error with the command {err}")
+        return None
+
+
+def get_ceph_config_property(entity, prop):
+    """
+    The function gets ceph config property value
+    for the given entity (mon, mgr etc) in the ceph config
+
+    Args:
+        entity (str): The entity
+        prop (str): The property
+    Returns:
+        (str) property value or None if there is no such property
+    """
+    ceph_cmd = f"ceph config get {entity} {prop}"
+    ct_pod = pod.get_ceph_tools_pod()
+    try:
+        out = ct_pod.exec_ceph_cmd(ceph_cmd)
+        return out
+    except CommandFailed as err:
+        logger.info(f"there was an error with the command: {err}")
+        return None
+
+
+def get_autoscale_status_property(pool_name, prop):
+    """
+    Get the value of the pool's property from 'ceph osd pool autoscale-status'
+
+    Args:
+        pool_name (str): name of the pool
+        prop (str): the property
+
+    Returns:
+        (str) Value of the property or None there is no such pool
+    """
+    ceph_cmd = "ceph osd pool autoscale-status -f json"
+    ct_pod = pod.get_ceph_tools_pod()
+    try:
+        pools = ct_pod.exec_ceph_cmd(ceph_cmd)[0]
+        for pool in pools:
+            if pool["pool_name"] == pool_name:
+                logger.info(f"Pool {pool_name} has {prop}: {pool[prop]}")
+                return pool[prop]
+        logger.info(f"Pool {pool_name} not found")
+        return None
+    except CommandFailed as err:
+        logger.info(f"there was an error with the command: {err}")
         return None
 
 
@@ -3909,6 +3970,28 @@ def adjust_active_mds_count_storagecluster(target_count):
         raise ActiveMdsValueNotMatch(
             f"Failed to change the active count to {target_count} within timeout."
         )
+
+
+def change_pool_target_size_ratio(pool_name, new_ratio):
+    """
+    Change target size ratio of the pool to the new value
+
+    Args:
+        pool_name (str): name of the pool
+        new_ratio (int): the new value of target size ratio
+    """
+    if pool_name == constants.DEFAULT_CEPHBLOCKPOOL:
+        patch_command = constants.CHANGE_DEFAULT_CEPHBLOCKPOOL_TARGET_RATIO.format(
+            new_ratio=new_ratio
+        )
+    elif pool_name == constants.DEFAULT_CEPHFS_POOL:
+        patch_command = constants.CHANGE_DEFAULT_CEPHFS_POOL_TARGET_RATIO.format(
+            new_ratio=new_ratio
+        )
+    try:
+        run_cmd(patch_command)
+    except CommandFailed as err:
+        logger.info(f"there was an error with the command {err}")
 
 
 def get_active_mds_pod_objs():
