@@ -892,6 +892,10 @@ def discover_hosted_clusters():
 
 
 def install_clusteradm():
+    """
+    Install clusteradm CLI
+
+    """
     try:
         run_cmd("clusteradm")
     except CommandFailed:
@@ -902,6 +906,10 @@ def install_clusteradm():
 
 
 def automate_import_of_hosted_clusters():
+    """
+    Enable automatic import of hosted clusters that are created on the imported multicluster engine clusters
+
+    """
     policy_mce_hcp_autoimport = create_resource(
         **templating.load_yaml(constants.POLICY_MCE_HCP_AUTOIMPORT_YAML)
     )
