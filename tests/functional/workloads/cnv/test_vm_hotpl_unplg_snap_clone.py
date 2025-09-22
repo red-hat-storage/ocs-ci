@@ -54,7 +54,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
     def unplug_disks_and_verify(self, vm_obj, pvc):
         vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
 
-    def test_vm_hotpl_snap_clone(
+    def test_vm_hotpl_unplg_snap_clone(
         self,
         setup_cnv,
         storageclass_factory,
