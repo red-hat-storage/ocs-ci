@@ -23,8 +23,6 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
     password (str): grafana password
 
     """
-    driver = SeleniumDriver()
-
     if test_duration == 0:
         logger.error("The test duration value cannont be zero")
     elif test_duration > 0 and test_duration < 301:
@@ -46,6 +44,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
     else:
         logger.error(f"The test duration value {test_duration} is invalid")
     try:
+        driver = SeleniumDriver()
         driver.get(url)
 
         # Try grafana login prompt
@@ -246,4 +245,4 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         logger.error(f"Unexpected error: {e}")
 
     finally:
-        driver.quit()
+        driver.close()
