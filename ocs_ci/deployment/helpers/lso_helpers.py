@@ -496,9 +496,9 @@ def cleanup_nodes_for_lso_install():
         out = run_cmd(cmd)
         logger.info(out)
         logger.info(f"Mount data cleared from node, {node}")
-        for node_obj in node_objs:
-            clean_disk(node_obj)
-        logger.info("All nodes are wiped")
+    for node_obj in node_objs:
+        clean_disk(node_obj)
+    logger.info("All nodes are wiped")
 
 
 def catalog_source_created(catalogsource_name, namespace=None):
