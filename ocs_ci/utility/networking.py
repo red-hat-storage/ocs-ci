@@ -58,7 +58,7 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     Returns:
         dict: updated storage storage cluster yaml
     """
-    if config.ENV_DATA.get("enable_data_separation_replication"):
+    if config.DEPLOYMENT.get("enable_data_separation_replication"):
         nodes = OCP(kind="node").get().get("items", [])
         worker_nodes = [
             node["metadata"]["name"]
@@ -82,4 +82,4 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
             cluster_data["spec"]["network"]["addressRanges"]["public"] = []
 
         cluster_data["spec"]["network"]["addressRanges"]["public"] = [str_network]
-        return cluster_data
+    return cluster_data
