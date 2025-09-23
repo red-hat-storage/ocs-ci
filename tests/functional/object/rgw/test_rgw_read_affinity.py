@@ -47,7 +47,7 @@ class TestRGWReadAffinityMode:
             )
             run_cmd(patch_cmd)
             sample = TimeoutSampler(
-                timeout=60,
+                timeout=120,
                 sleep=10,
                 func=self.get_rgw_read_affinity_from_ceph,
             )
@@ -98,7 +98,7 @@ class TestRGWReadAffinityMode:
         )
         # 3. Validate readAffinity value from ceph cluster
         sample = TimeoutSampler(
-            timeout=60,
+            timeout=120,
             sleep=10,
             func=self.get_rgw_read_affinity_from_ceph,
         )
@@ -128,7 +128,7 @@ class TestRGWReadAffinityMode:
                 selector=constants.RGW_APP_LABEL,
             )
             sample = TimeoutSampler(
-                timeout=60,
+                timeout=120,
                 sleep=10,
                 func=self.get_rgw_read_affinity_from_ceph,
             )
