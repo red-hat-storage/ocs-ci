@@ -2293,7 +2293,7 @@ def validate_storage_cluster_peer_state():
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
     for cluster in managed_clusters:
-        if cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+        if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
             with config.RunWithConfigContext(
                 cluster.MULTICLUSTER["multicluster_index"]
             ):
