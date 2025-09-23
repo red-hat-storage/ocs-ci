@@ -26,14 +26,14 @@ logger = logging.getLogger(__name__)
 @acceptance
 @tier1
 @turquoise_squad
-class TestFailoverAfterMultiplePodFailure:
+class TestFailoverAfterMultiplePodsFailure:
     """
-    Test Failover action via CLI after random pod failure on the primary managed cluster which is done by scaling down
-    various deployments in namespaces "openshift-storage" and "submariner-operator".
+    Test Failover action via CLI after multiple pods failure on the primary managed cluster which is done by
+    scaling down various deployments in namespaces "openshift-storage" and "submariner-operator".
 
     """
 
-    def test_failover_after_multiple_pod_failure(
+    def test_failover_after_multiple_pods_failure(
         self,
         dr_workload,
         scale_deployments,
@@ -96,7 +96,7 @@ class TestFailoverAfterMultiplePodFailure:
         time.sleep(120)
 
         # Failover action via CLI
-        logger.info("Failover workloads after pod failure")
+        logger.info("Failover workloads after pods failure")
         failover_results = []
         with ThreadPoolExecutor() as executor:
             for wl in rdr_workload:
@@ -133,6 +133,9 @@ class TestFailoverAfterMultiplePodFailure:
         scale_deployments("up")
         wait_for_pods_to_be_running(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, timeout=420, sleep=30
+        )
+        wait_for_pods_to_be_running(
+            namespace=constants.SUBMARINER_OPERATOR_NAMESPACE, timeout=420, sleep=30
         )
         ceph_health_check()
 
