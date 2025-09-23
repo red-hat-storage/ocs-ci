@@ -37,70 +37,75 @@ class TestFailoverAndRelocate:
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHBLOCKPOOL,
-            False,  # via_ui = False
+            False,  # setup_acm_ui_and_run_test_via_ui = False
             marks=pytest.mark.polarion_id("OCS-4430"),
             id="primary_up-rbd-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
-            False,  # via_ui = False
+            False,  # setup_acm_ui_and_run_test_via_ui = False
             marks=pytest.mark.polarion_id("OCS-4427"),
             id="primary_down-rbd-cli",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
-            False,  # via_ui = False
+            False,  # setup_acm_ui_and_run_test_via_ui = False
             marks=pytest.mark.polarion_id("OCS-4730"),
             id="primary_up-cephfs-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
-            False,  # via_ui = False
+            False,  # setup_acm_ui_and_run_test_via_ui = False
             marks=pytest.mark.polarion_id("OCS-4727"),
             id="primary_down-cephfs-cli",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHBLOCKPOOL,
-            True,  # via_ui = True
+            True,  # setup_acm_ui_and_run_test_via_ui = True
             marks=pytest.mark.polarion_id("OCS-6861"),
             id="primary_up-rbd-ui",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
-            True,  # via_ui = True
+            True,  # setup_acm_ui_and_run_test_via_ui = True
             marks=pytest.mark.polarion_id("OCS-4743"),
             id="primary_down-rbd-ui",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
-            True,  # via_ui = True
+            True,  # setup_acm_ui_and_run_test_via_ui = True
             marks=pytest.mark.polarion_id("OCS-6860"),
             id="primary_up-cephfs-ui",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
-            True,  # via_ui = True
+            True,  # setup_acm_ui_and_run_test_via_ui = True
             marks=pytest.mark.polarion_id("OCS-6859"),
             id="primary_down-cephfs-ui",
         ),
     ]
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
+        argnames=[
+            "primary_cluster_down",
+            "pvc_interface",
+            "setup_acm_ui_and_run_test_via_ui",
+        ],
+        argvalues=params,
+        indirect=["setup_acm_ui_and_run_test_via_ui"],
     )
     def test_failover_and_relocate(
         self,
         primary_cluster_down,
         pvc_interface,
-        via_ui,
-        setup_acm_ui,
+        setup_acm_ui_and_run_test_via_ui,
         dr_workload,
         nodes_multicluster,
         node_restart_teardown,
@@ -112,7 +117,7 @@ class TestFailoverAndRelocate:
         This test will run twice both via CLI and UI
 
         """
-        if via_ui:
+        if setup_acm_ui_and_run_test_via_ui:
             acm_obj = AcmAddClusters()
 
         workloads = dr_workload(
@@ -157,7 +162,7 @@ class TestFailoverAndRelocate:
             )
         logger.info("Verified lastGroupSyncTime before failover.")
 
-        if via_ui:
+        if setup_acm_ui_and_run_test_via_ui:
             logger.info("Start the process of Failover from ACM UI")
             config.switch_acm_ctx()
             dr_submariner_validation_from_ui(acm_obj)
@@ -169,18 +174,18 @@ class TestFailoverAndRelocate:
             nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
 
             # Verify if cluster is marked unavailable on ACM console
-            if via_ui:
+            if setup_acm_ui_and_run_test_via_ui:
                 config.switch_acm_ctx()
                 check_cluster_status_on_acm_console(
                     acm_obj,
                     down_cluster_name=primary_cluster_name,
                     expected_text="Unknown",
                 )
-        elif via_ui:
+        elif setup_acm_ui_and_run_test_via_ui:
             check_cluster_status_on_acm_console(acm_obj)
 
         for wl in workloads:
-            if via_ui:
+            if setup_acm_ui_and_run_test_via_ui:
                 # Failover via ACM UI
                 failover_relocate_ui(
                     acm_obj,
@@ -254,7 +259,7 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if via_ui:
+        if setup_acm_ui_and_run_test_via_ui:
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(acm_obj)
 
@@ -274,7 +279,7 @@ class TestFailoverAndRelocate:
 
         # Relocate action
         for wl in workloads:
-            if via_ui:
+            if setup_acm_ui_and_run_test_via_ui:
                 logger.info("Start the process of Relocate from ACM UI")
                 check_cluster_status_on_acm_console(acm_obj)
                 dr_submariner_validation_from_ui(acm_obj)
@@ -332,7 +337,7 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if via_ui:
+        if setup_acm_ui_and_run_test_via_ui:
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE
