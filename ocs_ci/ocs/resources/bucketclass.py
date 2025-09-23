@@ -46,7 +46,11 @@ class BucketClass:
 
 
 def bucket_class_factory(
-    request, mcg_obj, backingstore_factory, namespace_store_factory
+    request,
+    mcg_obj,
+    backingstore_factory,
+    namespace_store_factory,
+    cluster_context=config.RunWithProviderConfigContextIfAvailable,
 ):
     """
     Create a bucket class factory. Calling this fixture creates a new custom bucket class.
@@ -56,6 +60,8 @@ def bucket_class_factory(
         request (object): Pytest built-in fixture
         mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
         backingstore_factory: Factory for backing store creation
+        cluster_context (object): context object in which the bucket will be created.
+            Default is provider context.
 
     """
     interfaces = ["oc", "cli"]
@@ -103,148 +109,155 @@ def bucket_class_factory(
             BucketClass: A Bucket Class object.
 
         """
-        if "interface" in bucket_class_dict:
-            interface = bucket_class_dict["interface"]
-            if interface.lower() not in interfaces:
-                raise RuntimeError(
-                    f"Invalid interface type received: {interface}. "
-                    f'available types: {", ".join(interfaces)}'
-                )
-        else:
-            interface = "OC"
-
-        if "timeout" in bucket_class_dict:
-            timeout = bucket_class_dict["timeout"]
-        else:
-            timeout = 600
-
-        namespace_policy = {}
-        backingstores = None
-        namespacestores = None
-        placement_policy = None
-
-        if "namespace_policy_dict" in bucket_class_dict:
-            if "namespacestore_dict" in bucket_class_dict["namespace_policy_dict"]:
-                nss_dict = bucket_class_dict["namespace_policy_dict"][
-                    "namespacestore_dict"
-                ]
-                namespacestores = namespace_store_factory(interface, nss_dict)
-                namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
-                    "type"
-                ]
-                if namespace_policy["type"] == "Cache":
-                    namespace_policy["cache"] = {
-                        "hubResource": namespacestores[0].name,
-                        "caching": {
-                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
-                        },
-                    }
-                else:
-                    namespace_policy["read_resources"] = [
-                        nss.name for nss in namespacestores
-                    ]
-                    namespace_policy["write_resource"] = namespacestores[0].name
-            elif "namespacestores" in bucket_class_dict["namespace_policy_dict"]:
-                namespacestores = bucket_class_dict["namespace_policy_dict"][
-                    "namespacestores"
-                ]
-                namespace_policy["type"] = bucket_class_dict["namespace_policy_dict"][
-                    "type"
-                ]
-                if namespace_policy["type"] == "Cache":
-                    namespace_policy["cache"] = {
-                        "hubResource": namespacestores[0].name,
-                        "caching": {
-                            "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
-                        },
-                    }
-                else:
-                    namespace_policy["read_resources"] = [
-                        nss.name for nss in namespacestores
-                    ]
-                    namespace_policy["write_resource"] = namespacestores[0].name
-
-        elif "backingstore_dict" in bucket_class_dict:
-            try:
-                backingstores = [
-                    backingstore
-                    for backingstore in backingstore_factory(
-                        interface,
-                        bucket_class_dict["backingstore_dict"],
-                        timeout=timeout,
+        with cluster_context():
+            if "interface" in bucket_class_dict:
+                interface = bucket_class_dict["interface"]
+                if interface.lower() not in interfaces:
+                    raise RuntimeError(
+                        f"Invalid interface type received: {interface}. "
+                        f'available types: {", ".join(interfaces)}'
                     )
-                ]
-            except TimeoutExpiredError:
-                log.info(f"Backingstore was not created after {timeout} secs")
-                raise
-        else:
-            backingstores = [
-                BackingStore(constants.DEFAULT_NOOBAA_BACKINGSTORE, method="oc")
-            ]
+            else:
+                interface = "OC"
 
-        if "placement_policy" in bucket_class_dict:
-            placement_policy = bucket_class_dict["placement_policy"]
-        else:
-            placement_policy = "Spread"
+            if "timeout" in bucket_class_dict:
+                timeout = bucket_class_dict["timeout"]
+            else:
+                timeout = 600
 
-        if "replication_policy" in bucket_class_dict:
-            replication_policy_tuple = bucket_class_dict["replication_policy"]
-            replication_policy = [
-                {
-                    "rule_id": replication_policy_tuple[0],
-                    "destination_bucket": replication_policy_tuple[1],
-                    "filter": {
-                        "prefix": (
-                            replication_policy_tuple[2]
-                            if replication_policy_tuple[2] is not None
-                            else ""
+            namespace_policy = {}
+            backingstores = None
+            namespacestores = None
+            placement_policy = None
+
+            if "namespace_policy_dict" in bucket_class_dict:
+                if "namespacestore_dict" in bucket_class_dict["namespace_policy_dict"]:
+                    nss_dict = bucket_class_dict["namespace_policy_dict"][
+                        "namespacestore_dict"
+                    ]
+                    namespacestores = namespace_store_factory(interface, nss_dict)
+                    namespace_policy["type"] = bucket_class_dict[
+                        "namespace_policy_dict"
+                    ]["type"]
+                    if namespace_policy["type"] == "Cache":
+                        namespace_policy["cache"] = {
+                            "hubResource": namespacestores[0].name,
+                            "caching": {
+                                "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
+                            },
+                        }
+                    else:
+                        namespace_policy["read_resources"] = [
+                            nss.name for nss in namespacestores
+                        ]
+                        namespace_policy["write_resource"] = namespacestores[0].name
+                elif "namespacestores" in bucket_class_dict["namespace_policy_dict"]:
+                    namespacestores = bucket_class_dict["namespace_policy_dict"][
+                        "namespacestores"
+                    ]
+                    namespace_policy["type"] = bucket_class_dict[
+                        "namespace_policy_dict"
+                    ]["type"]
+                    if namespace_policy["type"] == "Cache":
+                        namespace_policy["cache"] = {
+                            "hubResource": namespacestores[0].name,
+                            "caching": {
+                                "ttl": bucket_class_dict["namespace_policy_dict"]["ttl"]
+                            },
+                        }
+                    else:
+                        namespace_policy["read_resources"] = [
+                            nss.name for nss in namespacestores
+                        ]
+                        namespace_policy["write_resource"] = namespacestores[0].name
+
+            elif "backingstore_dict" in bucket_class_dict:
+                try:
+                    backingstores = [
+                        backingstore
+                        for backingstore in backingstore_factory(
+                            interface,
+                            bucket_class_dict["backingstore_dict"],
+                            timeout=timeout,
                         )
-                    },
-                }
-            ]
-        else:
-            replication_policy = None
+                    ]
+                except TimeoutExpiredError:
+                    log.info(f"Backingstore was not created after {timeout} secs")
+                    raise
+            else:
+                backingstores = [
+                    BackingStore(constants.DEFAULT_NOOBAA_BACKINGSTORE, method="oc")
+                ]
 
-        bucket_class_name = create_unique_resource_name(
-            resource_description="bucketclass", resource_type=interface.lower()
-        )
-        if interface.lower() == "oc":
-            mcg_obj.oc_create_bucketclass(
+            if "placement_policy" in bucket_class_dict:
+                placement_policy = bucket_class_dict["placement_policy"]
+            else:
+                placement_policy = "Spread"
+
+            if "replication_policy" in bucket_class_dict:
+                replication_policy_tuple = bucket_class_dict["replication_policy"]
+                replication_policy = [
+                    {
+                        "rule_id": replication_policy_tuple[0],
+                        "destination_bucket": replication_policy_tuple[1],
+                        "filter": {
+                            "prefix": (
+                                replication_policy_tuple[2]
+                                if replication_policy_tuple[2] is not None
+                                else ""
+                            )
+                        },
+                    }
+                ]
+            else:
+                replication_policy = None
+
+            bucket_class_name = create_unique_resource_name(
+                resource_description="bucketclass", resource_type=interface.lower()
+            )
+            if interface.lower() == "oc":
+                mcg_obj.oc_create_bucketclass(
+                    bucket_class_name,
+                    backingstores,
+                    placement_policy,
+                    namespace_policy,
+                    replication_policy,
+                )
+            elif interface.lower() == "cli" and backingstores:
+                mcg_obj.cli_create_bucketclass_over_backingstores(
+                    bucket_class_name,
+                    backingstores,
+                    placement_policy,
+                    replication_policy,
+                )
+            else:
+                mcg_obj.cli_create_bucketclass_over_namespacestores(
+                    bucket_class_name, namespacestores, namespace_policy
+                )
+
+            bucket_class_object = BucketClass(
                 bucket_class_name,
                 backingstores,
+                namespacestores,
                 placement_policy,
-                namespace_policy,
                 replication_policy,
+                namespace_policy,
             )
-        elif interface.lower() == "cli" and backingstores:
-            mcg_obj.cli_create_bucketclass_over_backingstores(
-                bucket_class_name, backingstores, placement_policy, replication_policy
-            )
-        else:
-            mcg_obj.cli_create_bucketclass_over_namespacestores(
-                bucket_class_name, namespacestores, namespace_policy
-            )
-
-        bucket_class_object = BucketClass(
-            bucket_class_name,
-            backingstores,
-            namespacestores,
-            placement_policy,
-            replication_policy,
-            namespace_policy,
-        )
-        created_bucket_classes.append(bucket_class_object)
+            created_bucket_classes.append(bucket_class_object)
         return bucket_class_object
 
     def bucket_class_cleanup():
-        for bucket_class in created_bucket_classes:
-            try:
-                bucket_class.delete()
-            except CommandFailed as e:
-                if "NotFound" in str(e):
-                    log.warning(f"{bucket_class.name} could not be found in cleanup")
-                else:
-                    raise
+        with cluster_context():
+            for bucket_class in created_bucket_classes:
+                try:
+                    bucket_class.delete()
+                except CommandFailed as e:
+                    if "NotFound" in str(e):
+                        log.warning(
+                            f"{bucket_class.name} could not be found in cleanup"
+                        )
+                    else:
+                        raise
 
     request.addfinalizer(bucket_class_cleanup)
 
