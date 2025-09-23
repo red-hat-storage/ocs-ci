@@ -85,17 +85,23 @@ class Initializer(object):
 
         config.REPORTING["report_path"] = args.report
 
-        if self.deployment_type == "fusion" and args.fusion_version:
-            base_dir = os.path.join(constants.FRAMEWORK_CONF_DIR, "fusion_version")
-            version_file = f"fusion-{args.fusion_version}.yaml"
-            cfg_file = os.path.join(base_dir, version_file)
-            load_config([cfg_file])
+        if self.deployment_type == "fusion":
+            if args.fusion_version:
+                base_dir = os.path.join(constants.FRAMEWORK_CONF_DIR, "fusion_version")
+                version_file = f"fusion-{args.fusion_version}.yaml"
+                cfg_file = os.path.join(base_dir, version_file)
+                load_config([cfg_file])
+            if args.fusion_image_tag:
+                config.DEPLOYMENT["fusion_pre_release_image"] = args.fusion_image_tag
 
-        if self.deployment_type == "fdf" and args.fdf_version:
-            base_dir = os.path.join(constants.FRAMEWORK_CONF_DIR, "fdf_version")
-            version_file = f"fdf-{args.fdf_version}.yaml"
-            cfg_file = os.path.join(base_dir, version_file)
-            load_config([cfg_file])
+        if self.deployment_type == "fdf":
+            if args.fdf_version:
+                base_dir = os.path.join(constants.FRAMEWORK_CONF_DIR, "fdf_version")
+                version_file = f"fdf-{args.fdf_version}.yaml"
+                cfg_file = os.path.join(base_dir, version_file)
+                load_config([cfg_file])
+            if args.fdf_image_tag:
+                config.DEPLOYMENT["fdf_image_tag"] = args.fdf_image_tag
 
     def init_cli(self, args: list) -> list:
         """
@@ -126,10 +132,18 @@ class Initializer(object):
             parser.add_argument(
                 "--fusion-version", default=None, help="Version of Fusion to install"
             )
+            parser.add_argument(
+                "--fusion-image-tag",
+                default=None,
+                help="Image tag of Fusion to install",
+            )
         # FDF specific args
         elif self.deployment_type == "fdf":
             parser.add_argument(
                 "--fdf-version", default=None, help="Version of FDF to install"
+            )
+            parser.add_argument(
+                "--fdf-image-tag", default=None, help="Image tag of FDF to install"
             )
 
         parsed_args, _ = parser.parse_known_args(args)
