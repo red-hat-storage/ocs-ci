@@ -3,8 +3,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
-from ocs_ci.framework.testlib import acceptance, tier1
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad, tier2
+from ocs_ci.framework.testlib import acceptance
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
     get_current_primary_cluster_name,
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 @rdr
 @acceptance
-@tier1
+@tier2
 @turquoise_squad
 class TestFailoverAfterMultiplePodsFailure:
     """
