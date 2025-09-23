@@ -149,7 +149,7 @@ from ocs_ci.utility.deployment import (
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.networking import (
     add_data_replication_separation_to_cluster_data,
-    label_worker_nodes_with_mon_ip,
+    annotate_worker_nodes_with_mon_ip,
 )
 from ocs_ci.utility import (
     templating,
@@ -770,7 +770,7 @@ class Deployment(object):
 
             enable_nested_virtualization()
         if config.DEPLOYMENT.get("enable_data_separation_replication"):
-            label_worker_nodes_with_mon_ip()
+            annotate_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
