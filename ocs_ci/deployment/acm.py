@@ -135,7 +135,7 @@ class Submariner(object):
                 cluster_configs = get_non_acm_cluster_config()
             for cluster in cluster_configs:
                 # TODO: Skip if hosted cluster only
-                if cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+                if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
                     continue
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_acm_brew_idms()
