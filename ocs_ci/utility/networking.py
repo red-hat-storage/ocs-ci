@@ -17,13 +17,13 @@ from ocs_ci.ocs.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-def label_worker_nodes_with_mon_ip():
+def annotate_worker_nodes_with_mon_ip():
     """
-    Label worker nodes with label 'network.rook.io/mon-ip: <IPAddress>'
+    Annotate worker nodes with annotation 'network.rook.io/mon-ip: <IPAddress>'
     """
     if not config.ENV_DATA["platform"].lower() in constants.BAREMETAL_PLATFORMS:
         raise DeploymentPlatformNotSupported(
-            "Labeling nodes with mon ip is not implemented for current platform"
+            "Annotating nodes with mon ip is not implemented for current platform"
         )
 
     nodes_obj = OCP(kind="node")
@@ -39,12 +39,12 @@ def label_worker_nodes_with_mon_ip():
         network_data = (
             config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
         )
-        label_cmd = (
-            f"label nodes {worker} "
+        annotate_cmd = (
+            f"annotate node {worker} "
             f"network.rook.io/mon-ip={network_data['private_ip']} --overwrite"
         )
 
-        nodes_obj.exec_oc_cmd(command=label_cmd)
+        nodes_obj.exec_oc_cmd(command=annotate_cmd)
 
 
 def add_data_replication_separation_to_cluster_data(cluster_data):
