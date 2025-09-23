@@ -3355,7 +3355,7 @@ class RBDDRDeployOps(object):
                 )
 
         for cluster in get_non_acm_and_non_recovery_cluster_config():
-            if cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT:
+            if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
                 with config.RunWithConfigContext(
                     cluster.MULTICLUSTER["multicluster_index"]
                 ):
@@ -3631,7 +3631,7 @@ class MultiClusterDROperatorsDeploy(object):
             if (
                 is_acm_cluster(cluster)
                 or is_recovery_cluster(cluster)
-                or cluster.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
+                or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
             ):
                 continue
             else:
