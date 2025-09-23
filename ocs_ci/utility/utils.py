@@ -5939,3 +5939,30 @@ def get_noobaa_cli_config():
         return constants.ODF_CLI_LOCAL_PATH, "noobaa"
     else:
         return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, ""
+
+
+def get_acm_mce_build_tag(quay_path, version):
+    """
+    Get Downstream tag from ACM/MCE latest tags
+
+    Args:
+        quay_path (str): quay image path for acm/mce builds
+        version (str): Version of acm/mce
+
+    Return:
+        str: ACM/MCE associated tag
+    """
+    pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
+    cmd = (
+        "skopeo inspect --no-tags --format '{{ index .Labels \"konflux.additional-tags\" }}' "
+        f"docker://{quay_path}:latest-{version} --authfile {pull_secret} --override-os "
+        "linux --override-arch amd64 --override-os linux"
+    )
+    downstream_tag_search = "DOWNSTREAM"
+    catalog_data = run_cmd(cmd)
+    catalog_data_list = catalog_data.split(",")
+    downstream_tag = [
+        val.strip() for val in catalog_data_list if downstream_tag_search in val
+    ]
+
+    return downstream_tag[0]
