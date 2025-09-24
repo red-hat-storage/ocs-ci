@@ -24,9 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 @rdr
-@turquoise_squad
-@acceptance
 @tier1
+@turquoise_squad
 class TestFailoverAndRelocate:
     """
     Test Failover and Relocate actions via CLI and UI
@@ -38,28 +37,28 @@ class TestFailoverAndRelocate:
             False,  # primary_cluster_down = False
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
-            marks=pytest.mark.polarion_id("OCS-4430"),
+            marks=[acceptance, pytest.mark.polarion_id("OCS-4430")],
             id="primary_up-rbd-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
-            marks=pytest.mark.polarion_id("OCS-4427"),
+            marks=[acceptance, pytest.mark.polarion_id("OCS-4427")],
             id="primary_down-rbd-cli",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
-            marks=pytest.mark.polarion_id("OCS-4730"),
+            marks=[acceptance, pytest.mark.polarion_id("OCS-4730")],
             id="primary_up-cephfs-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
-            marks=pytest.mark.polarion_id("OCS-4727"),
+            marks=[acceptance, pytest.mark.polarion_id("OCS-4727")],
             id="primary_down-cephfs-cli",
         ),
         pytest.param(
