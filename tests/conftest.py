@@ -238,7 +238,11 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
-from ocs_ci.helpers.cnv_helpers import run_fio, compute_vm_count_from_storage_capacity
+from ocs_ci.helpers.cnv_helpers import (
+    run_fio,
+    compute_vm_count_from_storage_capacity,
+    calculate_vm_cnt_cpu_ram,
+)
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -8265,11 +8269,17 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
 
         if vm_count:
-            vm_cnt = compute_vm_count_from_storage_capacity()
-            if vm_cnt > len(vm_configs["cnv_vm_configs"]):
+            vm_cnt_by_storage = compute_vm_count_from_storage_capacity()
+            vm_cnt_by_cpu_ram, _ = calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4)
+            provisionable_vms = min(vm_cnt_by_storage, vm_cnt_by_cpu_ram)
+            log.info(
+                f"\nCluster can safely host {provisionable_vms}"
+                f"VMs(1 CPU + 4GiB RAM + 30GiB rootdisks each) on worker nodes:"
+            )
+            if provisionable_vms > len(vm_configs["cnv_vm_configs"]):
                 with ThreadPoolExecutor() as executor:
                     futures = {}
-                    for i in range(vm_cnt):
+                    for i in range(provisionable_vms):
                         # Cycle through configs
                         vm_config = vm_configs["cnv_vm_configs"][
                             i % len(vm_configs["cnv_vm_configs"])
