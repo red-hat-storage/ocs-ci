@@ -262,49 +262,6 @@ def create_agent_service_config():
     logger.info("Created AgentServiceConfig.")
 
 
-def create_host_inventory():
-    """
-    Create InfraEnv resource for host inventory
-
-    """
-    # Create InfraEnv
-    template_yaml = os.path.join(
-        constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
-    )
-    infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
-    ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
-    with open(ssh_pub_file_path, "r") as ssh_key:
-        ssh_pub_key = ssh_key.read().strip()
-    # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
-    #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
-    for data in infra_env_data:
-        if data["kind"] == constants.INFRA_ENV:
-            data["spec"]["sshAuthorizedKey"] = ssh_pub_key
-            infra_env_namespace = data["metadata"]["namespace"]
-            # Create project
-            helpers.create_project(project_name=infra_env_namespace)
-            # Create new secret in the namespace using the existing secret
-            secret_obj = OCP(
-                kind=constants.SECRET,
-                resource_name="pull-secret",
-                namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
-            )
-            secret_info = secret_obj.get()
-            secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
-            secret_data["data"][".dockerconfigjson"] = secret_info["data"][
-                ".dockerconfigjson"
-            ]
-            secret_data["metadata"]["namespace"] = infra_env_namespace
-            secret_data["metadata"]["name"] = "pull-secret"
-            secret_manifest = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="pull_secret", delete=False
-            )
-            templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
-            exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
-        helpers.create_resource(**data)
-    logger.info("Created InfraEnv.")
-
-
 def get_onboarding_token_from_secret(secret_name):
     """
     Get onboarding token from the secret
