@@ -29,7 +29,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(self, pvc_factory):
         """
-        Create a PVC and 199 clones
+        Create a PVC and 200 clones
 
         Args:
             pvc_factory: A fixture to create new pvc
@@ -50,7 +50,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
         clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
         namespace = self.pvc_obj.namespace
         self.cloned_obj_list = []
-        for i in range(199):
+        for i in range(200):
             cloned_obj = pvc.create_pvc_clone(
                 sc_name, parent_pvc, clone_yaml, namespace
             )
@@ -79,7 +79,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
             element="a", expected_text="HighRBDCloneSnapshotCount"
         ), "Clones alert present on Alerting page. Expected to be absent"
 
-    def test_alert_200_clones(self, setup_ui_class):
+    def test_alert_201_clones(self, setup_ui_class):
         """
         Test that there is an alert in the UI when limit of 200 clones is reached"""
         new_clone = pvc.create_pvc_clone(
@@ -89,7 +89,7 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
             self.pvc_obj.namespace,
         )
         self.cloned_obj_list.append(new_clone)
-        wait_time = 300
+        wait_time = 600
         log.info(f"Waiting for {wait_time} seconds for alert to appear")
         time.sleep(wait_time)
         alert_ui_obj = PageNavigator()
@@ -101,7 +101,8 @@ class TestAlertWhenTooManyClonesCreated(ManageTest):
 
     def test_alert_clones_and_snapshot(self, setup_ui_class, teardown_factory):
         """
-        Test that there is an alert in the UI when limit of 199 clones + 1 snapshot is reached
+        Test that there is an alert in the UI when limit of
+        200 clones + 1 snapshot is reached
         Also test that alert disappears after clone deletion
         """
         snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
