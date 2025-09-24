@@ -43,7 +43,7 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-        self.setup_storage()
+        # self.setup_storage()
 
     def create_image_tag_mirror_set(self):
         """
