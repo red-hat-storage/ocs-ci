@@ -900,13 +900,15 @@ class HyperShiftBase:
         logger.info(f"Created InfraEnv {infra_env_name}.")
         return infra_env
 
-    def boot_machines_for_agent(self):
+    def boot_machines_for_agent(self, infra_env_namespace):
         """
         Boot the bare metal machines
 
+        Args:
+            infra_env_namespace: Namespace where the InfraEnv for the hosted cluster is present
         """
         pass
-        # infraenv = OCP(kind=constants.INFRA_ENV).get()[0]
+        # infraenv = OCP(kind=constants.INFRA_ENV, namespace=infra_env_namespace).get()[0]
         # ipxescript = infraenv.get("status").get("bootArtifacts").get("ipxeScript")
         # initrd = infraenv.get("status").get("bootArtifacts").get("initrd")
         # kernel = infraenv.get("status").get("bootArtifacts").get("kernel")
