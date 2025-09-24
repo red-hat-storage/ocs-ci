@@ -425,7 +425,7 @@ def backingstore_factory(
         with cluster_context():
             for backingstore in created_backingstores:
                 try:
-                    backingstore.delete()
+                    backingstore.delete(timeout=240)
                 except CommandFailed as e:
                     if "not found" in str(e).lower():
                         log.warning(
