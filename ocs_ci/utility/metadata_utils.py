@@ -147,39 +147,6 @@ def enable_metadata(config_map_obj, pod_obj):
     return None
 
 
-def disable_metadata(config_map_obj, pod_obj):
-    """
-    Disable CSI_ENABLE_METADATA via configmap or patch.
-    """
-    ocs_version = version.get_semantic_ocs_version_from_config()
-
-    if ocs_version < version.VERSION_4_19:
-        assert config_map_obj.patch(
-            resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-            params='{"data":{"CSI_ENABLE_METADATA": "false"}}',
-        ), "Failed to patch rook-ceph-operator-config"
-
-        for selector in [
-            get_provisioner_label(constants.CEPHFILESYSTEM),
-            get_provisioner_label(constants.CEPHBLOCKPOOL),
-        ]:
-            assert pod_obj.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=selector,
-                dont_allow_other_resources=True,
-                timeout=60,
-            ), f"Pods with selector {selector} are not running"
-    else:
-        patch_metadata(enable=False)
-
-    @retry(AssertionError, tries=3, delay=15, backoff=1)
-    def _retry_check_metadata_disabled(pod_obj):
-        assert not check_setmetadata_availability(pod_obj), "Metadata still enabled"
-        return True
-
-    _retry_check_metadata_disabled(pod_obj)
-
-
 def available_subvolumes(sc_name, toolbox_pod, fs):
     """
     To fetch available subvolumes for cephfs or rbd
