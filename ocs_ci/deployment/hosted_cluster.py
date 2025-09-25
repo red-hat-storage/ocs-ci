@@ -871,16 +871,26 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("disable_default_sources", False)
         )
-        return self.create_kubevirt_ocp_cluster(
-            name=self.name,
-            nodepool_replicas=nodepool_replicas,
-            cpu_cores=cpu_cores_per_hosted_cluster,
-            memory=memory_per_hosted_cluster,
-            ocp_version=ocp_version,
-            cp_availability_policy=cp_availability_policy,
-            infra_availability_policy=infra_availability_policy,
-            disable_default_sources=disable_default_sources,
-        )
+        if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
+            return self.create_agent_ocp_cluster(
+                name=self.name,
+                nodepool_replicas=nodepool_replicas,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+            )
+        else:
+            return self.create_kubevirt_ocp_cluster(
+                name=self.name,
+                nodepool_replicas=nodepool_replicas,
+                cpu_cores=cpu_cores_per_hosted_cluster,
+                memory=memory_per_hosted_cluster,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+            )
 
     def deploy_dependencies(
         self,
