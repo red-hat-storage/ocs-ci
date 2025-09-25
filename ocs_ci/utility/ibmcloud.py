@@ -41,12 +41,14 @@ logger = logging.getLogger(name=__file__)
 ibm_config = config.AUTH.get("ibmcloud", {})
 
 
-def login(region=None):
+def login(region=None, resource_group=None):
     """
     Login to IBM Cloud cluster
 
     Args:
         region (str): region to log in, if not specified it will use one from config
+        resource_group (str): resource group to log in, if not specified it will use one from config
+            or nothing if not defined
     """
     api_key = ibm_config["api_key"]
     login_cmd = f"ibmcloud login --apikey {api_key}"
@@ -60,6 +62,14 @@ def login(region=None):
         region = config.ENV_DATA.get("region")
     if region:
         login_cmd += f" -r {region}"
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if not resource_group and ibm_cloud_managed:
+        resource_group = config.ENV_DATA.get("resource_group")
+    if resource_group:
+        login_cmd += f" -g {resource_group}"
     logger.info("Logging to IBM cloud")
     run_cmd(login_cmd, secrets=[api_key])
     logger.info("Successfully logged in to IBM cloud")
@@ -108,6 +118,12 @@ def get_region(cluster_path):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file) as f:
         metadata = json.load(f)
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        return metadata["region"]
     return metadata["ibmcloud"]["region"]
 
 
@@ -125,6 +141,12 @@ def get_resource_group_name(cluster_path):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file) as f:
         metadata = json.load(f)
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        return metadata["resourceGroupName"]
     return metadata["ibmcloud"]["resourceGroupName"]
 
 
