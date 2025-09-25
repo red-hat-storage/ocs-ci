@@ -177,19 +177,24 @@ def delete_replica_1_sc() -> None:
             raise CommandFailed(f"Failed to delete storage class: {str(e)}")
 
 
-def purge_replica1_osd():
+def purge_replica1_osd() -> None:
     """
     Purge OSDs associated with replica1
         1. scale down its deployments to 0
-        2. use OSD removal template
+        2. use OSD removal template (if OSDs are found)
 
     """
     deployments_name = get_replica1_osd_deployment()
     log.info(f"Deployments Name: {deployments_name}")
     scaledown_deployment(deployments_name)
     replica1_osds = get_replica_1_osds()
-    log.info(f"OSDS : {replica1_osds.keys()}")
-    log.info(f"OSD IDs: {replica1_osds.values()}")
+    log.info(f"Found replica-1 OSDs: {replica1_osds}")
+    log.info(f"OSD IDs: {list(replica1_osds.values())}")
+
+    if not replica1_osds:
+        log.warning("No replica-1 OSDs found – skipping OSD removal job")
+        return
+
     run_osd_removal_job(osd_ids=replica1_osds.values())
     verify_osd_removal_job_completed_successfully("4")
     sleep(120)
