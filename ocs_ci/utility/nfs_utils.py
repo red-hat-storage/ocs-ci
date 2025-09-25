@@ -14,7 +14,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
-from ocs_ci.deployment.hosted_cluster import get_autodistributed_storage_classes
+from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 
 log = logging.getLogger(__name__)
 

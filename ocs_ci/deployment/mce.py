@@ -293,7 +293,7 @@ class MCEInstaller(object):
         self.wait_mce_resources()
 
         # avoid circular dependency with hosted cluster
-        from ocs_ci.deployment.hosted_cluster import (
+        from ocs_ci.deployment.hub_spoke import (
             apply_hosted_cluster_mirrors_max_items_wa,
             apply_hosted_control_plane_mirrors_max_items_wa,
         )
