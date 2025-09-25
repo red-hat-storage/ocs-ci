@@ -8200,13 +8200,15 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
 
     """
 
-    def factory(namespace=None, encrypted=False, vm_count=False):
+    def factory(namespace=None, encrypted=False, use_cluster_capacity=False):
         """
         Args:
             namespace (str, optional): The namespace to create the vm on.
-            vm_count (bool): If True, the function will create VMs based on available storage capacity.
-                             If False, it will create VMs equal to the number of configurations defined
-                             in `cnv_vm_workload.yaml`.
+            use_cluster_capacity (bool):
+                If True, VM count will be calculated dynamically based on available
+                worker node CPU, RAM, and storage capacity in the cluster.
+                If False, VM count will be fixed and equal to the number of
+                configurations defined in `cnv_vm_workload.yaml`.
 
         Returns:
             tuple: tuple containing:
@@ -8268,7 +8270,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
         # Load VM configs from cnv_vm_workload yaml
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
 
-        if vm_count:
+        if use_cluster_capacity:
             vm_cnt_by_storage = compute_vm_count_from_storage_capacity()
             vm_cnt_by_cpu_ram, _ = calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4)
             provisionable_vms = min(vm_cnt_by_storage, vm_cnt_by_cpu_ram)
