@@ -9,6 +9,8 @@ import ocs_ci.ocs.exceptions as ex
 import statistics
 import tempfile
 import yaml
+import time
+import calendar
 
 from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
@@ -380,6 +382,16 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
+
         if self.full_results.es_write():
             res_link = self.full_results.results_link()
             log.info(f"The Result can be found at : {res_link}")
@@ -565,6 +577,15 @@ class TestPVCCreationDeletionPerformance(PASTest):
         self.full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
 
         if self.full_results.es_write():
             res_link = self.full_results.results_link()
