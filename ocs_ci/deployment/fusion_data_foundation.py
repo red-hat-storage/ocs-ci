@@ -30,6 +30,7 @@ class FusionDataFoundationDeployment:
     def __init__(self):
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
         self.kubeconfig = config.RUN["kubeconfig"]
+        self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
 
     def deploy(self):
         """
@@ -184,17 +185,40 @@ class FusionDataFoundationDeployment:
         )
         run_patch_cmd(cmd)
 
-    @staticmethod
-    def create_odfcluster():
+    def create_odfcluster(self):
         """
         Create OdfCluster CR
         """
 
         logger.info("Creating OdfCluster CR")
-        storageclass = get_storageclass()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
+
+        if self.lso_enabled:
+            additional_keys = ["localVolumeSetSpec", "storageClient"]
+            for key in additional_keys:
+                if key not in odfcluster_data["spec"]:
+                    odfcluster_data["spec"][key] = {}
+            storageclass = constants.FDF_LSO_STORAGECLASS
+            device_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+            device_set_count = config.DEPLOYMENT.get(
+                "local_storage_storagedeviceset_count", len(worker_nodes)
+            )
+            odfcluster_data["spec"]["localVolumeSetSpec"]["deviceTypes"] = [
+                "disk",
+                "part",
+            ]
+            odfcluster_data["spec"]["localVolumeSetSpec"]["diskType"] = "SSD"
+            odfcluster_data["spec"]["localVolumeSetSpec"]["size"] = device_size
+            odfcluster_data["spec"]["deviceSets"][0]["capacity"] = "0"
+            odfcluster_data["spec"]["deviceSets"][0]["count"] = device_set_count
+            odfcluster_data["spec"]["deviceSets"][0][
+                "name"
+            ] = constants.FDF_LSO_DEVICE_SET_NAME
+            odfcluster_data["spec"]["taintNode"] = True
+        else:
+            storageclass = get_storageclass()
 
         odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
