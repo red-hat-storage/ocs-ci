@@ -27,26 +27,49 @@ spec:
   - failOn: any-error
     name: backup
     sequence:
-    - hook: deployment-check/stateReady
+    - hook: exec-check/busy
+    - hook: backup/check-replicas
     - group: PLACEHOLDER
   - failOn: any-error
     name: restore
     sequence:
     - group: PLACEHOLDER
-    - hook: deployment-check/stateReady
+    - hook: restore/check-replicas
+    - hook: exec-check/busy
   hooks:
-  - name: deployment-check
-    type: check
-    namespace: PLACEHOLDER
-    selectResource: deployment
+  - name: exec-check
     nameSelector: PLACEHOLDER
-    timeout: 800
+    namespace: PLACEHOLDER
+    selectResource: pod
+    type: exec
+    ops:
+    - command: >
+        ["/bin/sh", "-c", "ls"]
+      name: busy
+      inverseOp: busy-inv-same
+    - command: >
+        ["/bin/sh", "-c", "ls -lrt"]
+      name: busy-inv-same
+  - chks:
+    - condition: '{$.spec.replicas} == {$.status.readyReplicas}'
+      name: check-replicas
+    name: backup
+    nameSelector: PLACEHOLDER
+    namespace: PLACEHOLDER
     onError: fail
-    chks:
-    - name: stateReady
-      timeout: 900
-      onError: fail
-      condition: "{$.spec.replicas} == {$.status.readyReplicas}"
+    selectResource: deployment
+    timeout: 300
+    type: check
+  - chks:
+    - condition: '{$.spec.replicas} == {$.status.readyReplicas}'
+      name: check-replicas
+    name: restore
+    nameSelector: PLACEHOLDER
+    namespace: PLACEHOLDER
+    onError: fail
+    selectResource: deployment
+    timeout: 300
+    type: check
   volumes:
     includedNamespaces:
     - PLACEHOLDER
