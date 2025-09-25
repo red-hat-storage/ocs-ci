@@ -1332,6 +1332,18 @@ class BusyboxDiscoveredApps(DRWorkload):
                 recipe_yaml_data["spec"]["hooks"][0][
                     "nameSelector"
                 ] = self.discovered_apps_name_selector_value
+                recipe_yaml_data["spec"]["hooks"][1][
+                    "namespace"
+                ] = self.workload_namespace
+                recipe_yaml_data["spec"]["hooks"][1][
+                    "nameSelector"
+                ] = self.discovered_apps_name_selector_value
+                recipe_yaml_data["spec"]["hooks"][2][
+                    "namespace"
+                ] = self.workload_namespace
+                recipe_yaml_data["spec"]["hooks"][2][
+                    "nameSelector"
+                ] = self.discovered_apps_name_selector_value
 
             if "volumes" in recipe_yaml_data["spec"]:
                 recipe_yaml_data["spec"]["volumes"]["includedNamespaces"] = [
@@ -1480,6 +1492,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
             "namespace"
         ] = self.workload_namespace
+        drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
         log.info("Creating DRPC")
         run_cmd(f"oc create -f {drpc_data_yaml.name}")
