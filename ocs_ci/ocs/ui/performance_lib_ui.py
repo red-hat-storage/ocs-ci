@@ -245,4 +245,8 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         logger.error(f"Unexpected error: {e}")
 
     finally:
-        driver.close()
+        driver.delete_all_cookies()
+        driver.execute_script(
+            "window.localStorage.clear(); window.sessionStorage.clear();"
+        )
+        driver.get("about:blank")
