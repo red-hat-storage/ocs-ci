@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.framework.testlib import ManageTest, tier1, green_squad, polarion_id
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import exec_cmd
 from ocs_ci.ocs.node import get_worker_nodes
 
 
@@ -17,7 +18,13 @@ class TestCephfsFsyncConsistency(ManageTest):
 
     """
 
-    def test_cephfs_fsync_consistency(self, project_factory, pvc_factory, pod_factory):
+    def test_cephfs_fsync_consistency(
+        self,
+        project_factory,
+        pvc_factory,
+        service_account_factory,
+        deployment_pod_factory,
+    ):
         """
         Procedure:
             1.Set Up Shared Storage: Create a PVC with sc=cephfs and mode=RWX.
@@ -29,8 +36,11 @@ class TestCephfsFsyncConsistency(ManageTest):
 
         self.pvc_size = 10
 
+        project_obj = project_factory()
+
         self.pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
+            project=project_obj,
             size=self.pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
@@ -38,39 +48,42 @@ class TestCephfsFsyncConsistency(ManageTest):
 
         worker_node_names = get_worker_nodes()
 
-        pod_obj_client = pod_factory(
+        pod_obj_client = deployment_pod_factory(
             pvc=self.pvc_obj,
-            status=constants.STATUS_RUNNING,
-            pod_name="client",
             node_name=worker_node_names[0],
         )
 
-        pod_obj_server = pod_factory(
+        pod_obj_server = deployment_pod_factory(
             pvc=self.pvc_obj,
-            status=constants.STATUS_RUNNING,
-            pod_name="server",
             node_name=worker_node_names[1],
         )
 
-        command_client = (
-            "bash -c "
-            + '"for i in {1..2500}; do '
-            + "echo "
-            + "'Test sync '"
-            + "  >> /var/lib/www/html/shared_file.html"
-            + " && sync; "
-            + 'done"'
+        # Copy write_to_file inside the client pod
+        exec_cmd(
+            cmd=f"oc cp {constants.WRITE_TO_FILE_USING_FSYNC} {pod_obj_client.name}:/tmp"
         )
+
+        command_client = "python3 /tmp/write_to_file.py"
         pod_obj_client.exec_cmd_on_pod(
-            command=command_client,
-            out_yaml_format=False,
+            command=command_client, out_yaml_format=False, timeout=1800
         )
-        command_server = "bash -c " + '"cat ' + ' /var/lib/www/html/shared_file.html"'
+
+        command = "cat /mnt/shared_filed.html"
         server_read_output = pod_obj_server.exec_cmd_on_pod(
-            command=command_server,
+            command=command,
             out_yaml_format=False,
         )
-        count = server_read_output.count("Test sync")
+
+        count = server_read_output.count("Test fsync")
+        assert (
+            count == 2500
+        ), f"Expected 2500 occurrences of 'Test sync', but found {count}"
+
+        client_read_output = pod_obj_server.exec_cmd_on_pod(
+            command=command,
+            out_yaml_format=False,
+        )
+        count = client_read_output.count("Test fsync")
         assert (
             count == 2500
         ), f"Expected 2500 occurrences of 'Test sync', but found {count}"

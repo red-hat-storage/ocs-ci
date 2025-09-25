@@ -3231,6 +3231,9 @@ ACTION_RELOCATE = "Relocate"
 STAGE_0_NAMESPACE = "ever-running-project"
 
 FSYNC = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/fsync.py")
+WRITE_TO_FILE_USING_FSYNC = os.path.join(
+    TEMPLATE_WORKLOAD_DIR, "helper_scripts/write_to_file.py"
+)
 
 # Sno and lvmo constants
 SNO_NODE_NAME = "sno-edge-0"
