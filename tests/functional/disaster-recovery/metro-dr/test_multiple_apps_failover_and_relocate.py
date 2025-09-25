@@ -17,6 +17,7 @@ from ocs_ci.helpers.dr_helpers import (
     get_current_secondary_cluster_name,
     wait_for_all_resources_creation,
     gracefully_reboot_ocp_nodes,
+    verify_cluster_data_protected_status,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
@@ -98,7 +99,19 @@ class TestMultipleApplicationFailoverAndRelocate:
             namespace=primary_instances[0].workload_namespace,
             workload_type=workload_type,
         )
-        time.sleep(120)
+
+        # Verify that the cluster dataProtected is True and peerReady is True
+        verify_cluster_data_protected_status(
+            workload_type=workload_type,
+            namespace=self.namespace,
+        )
+
+        wait_time = 120
+        logger.info(
+            f"Wait for {wait_time} seconds before starting Failover of application"
+        )
+        time.sleep(wait_time)
+
         # Fence the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
 
