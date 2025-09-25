@@ -75,7 +75,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 pods if not running on selected nodes, else False
             project_factory: A fixture to create new project
             multi_pvc_factory: A fixture create a set of new PVCs
-            dc_pod_factory: A fixture to create deploymentconfig pods
+            deployment_pod_factory: A fixture to create deploymentconfig pods
 
         Returns:
             tuple: containing the params used in test cases
