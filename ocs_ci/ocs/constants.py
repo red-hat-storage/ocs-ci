@@ -3502,6 +3502,8 @@ ISF_CATALOG_SOURCE_NAME = "isf-catalog"
 ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
 FDF_IMAGE_DIGEST_MIRROR_SET_FILENAME = "idms.yaml"
 FDF_SERVICE_NAME = "odfmanager"
+FDF_LSO_STORAGECLASS = "ibm-spectrum-fusion-local"
+FDF_LSO_DEVICE_SET_NAME = "ocs-deviceset-ibm-spectrum-fusion-local"
 
 CREATE = "create"
 EDIT = "edit"
