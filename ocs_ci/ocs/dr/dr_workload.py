@@ -336,182 +336,182 @@ class BusyBox(DRWorkload):
             run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
         self.verify_workload_deployment()
 
-    # def deploy_workloads_on_managed_clusters(
-    #     self, primary_cluster=True, secondary_cluster=False
-    # ):
-    #     """
-    #     Deployment specific to busybox workload on both primary and secondary clusters
-    #
-    #     Args:
-    #         primary_cluster(bool) : True if apps needs to be deployed on primary cluster
-    #         secondary_cluster(bool) : True if apps needs to be deployed on secondary cluster
-    #
-    #     """
-    #     self._deploy_prereqs()
-    #
-    #     # By default, it deploys apps on primary cluster if not set to false
-    #     clusters = [self.preferred_primary_cluster] if primary_cluster else []
-    #     if secondary_cluster:
-    #         clusters.append(self.preferred_secondary_cluster)
-    #
-    #     for cluster in clusters:
-    #         # load workload-repo namespace.yaml
-    #         workload_ns_yaml_data = templating.load_yaml(self.namespace_yaml_file)
-    #         workload_ns_yaml_data["metadata"]["name"] = (
-    #             helpers.create_unique_resource_name(
-    #                 resource_type="namespace", resource_description="busybox-workloads"
-    #             )
-    #         )
-    #         self.workload_namespace = workload_ns_yaml_data["metadata"]["name"]
-    #         templating.dump_data_to_temp_yaml(
-    #             workload_ns_yaml_data, self.namespace_yaml_file
-    #         )
-    #
-    #         # load drpc.yaml
-    #         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
-    #         drpc_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
-    #             resource_type="drpc", resource_description="busybox"
-    #         )
-    #         drpc_yaml_data["spec"]["preferredCluster"] = cluster
-    #         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
-    #         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
-    #
-    #         if self.is_placement:
-    #             # load placement.yaml
-    #             clusterset_name = (
-    #                 config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
-    #             )
-    #             placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
-    #             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
-    #                 "labelSelector"
-    #             ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
-    #             placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
-    #             self.sub_placement_name = placement_yaml_data["metadata"]["name"]
-    #             templating.dump_data_to_temp_yaml(
-    #                 placement_yaml_data, self.placement_yaml_file
-    #             )
-    #             managed_clusterset_binding_yaml_data = templating.load_yaml(
-    #                 self.managed_clusterset_binding_file
-    #             )
-    #             managed_clusterset_binding_yaml_data["metadata"][
-    #                 "namespace"
-    #             ] = self.workload_namespace
-    #             managed_clusterset_binding_yaml_data["metadata"][
-    #                 "name"
-    #             ] = clusterset_name
-    #             managed_clusterset_binding_yaml_data["spec"][
-    #                 "clusterSet"
-    #             ] = clusterset_name
-    #             templating.dump_data_to_temp_yaml(
-    #                 managed_clusterset_binding_yaml_data,
-    #                 self.managed_clusterset_binding_file,
-    #             )
-    #             if placement_yaml_data["kind"] == "Placement":
-    #                 drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
-    #                 drpc_yaml_data["metadata"][
-    #                     "name"
-    #                 ] = f"{self.sub_placement_name}-drpc"
-    #                 drpc_yaml_data["spec"][
-    #                     "preferredCluster"
-    #                 ] = self.preferred_primary_cluster
-    #                 drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
-    #                 drpc_yaml_data["spec"]["placementRef"][
-    #                     "name"
-    #                 ] = self.sub_placement_name
-    #
-    #                 drpc_yaml_data["metadata"]["namespace"] = self.workload_namespace
-    #                 drpc_yaml_data["spec"]["placementRef"][
-    #                     "namespace"
-    #                 ] = self.workload_namespace
-    #                 drpc_yaml_data["spec"]["pvcSelector"][
-    #                     "matchLabels"
-    #                 ] = self.workload_pvc_selector
-    #                 del drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"]
-    #                 del drpc_yaml_data["spec"]["kubeObjectProtection"]
-    #                 self.drpc_data_yaml = tempfile.NamedTemporaryFile(
-    #                     mode="w+", prefix="drpc", delete=False
-    #                 )
-    #                 templating.dump_data_to_temp_yaml(
-    #                     drpc_yaml_data, self.drpc_data_yaml.name
-    #                 )
-    #
-    #         # load channel.yaml
-    #         channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
-    #         channel_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
-    #             resource_type="channel", resource_description="ramen-gitops"
-    #         )
-    #         channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
-    #         templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
-    #
-    #         # load git-repo namespace.yaml
-    #         git_ns_yaml_data = templating.load_yaml(self.git_repo_namespace_yaml_file)
-    #         git_ns_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
-    #             resource_type="namespace", resource_description="ramen-busybox"
-    #         )
-    #         templating.dump_data_to_temp_yaml(
-    #             git_ns_yaml_data, self.git_repo_namespace_yaml_file
-    #         )
-    #
-    #         # load subscription.yaml
-    #         subscription_yaml_data = templating.load_yaml(self.subscription_yaml_file)
-    #         subscription_yaml_data["metadata"]["name"] = (
-    #             helpers.create_unique_resource_name(
-    #                 resource_type="subscription", resource_description="busybox"
-    #             )
-    #         )
-    #         subscription_yaml_data["spec"]["channel"] = (
-    #             git_ns_yaml_data["metadata"]["name"]
-    #             + "/"
-    #             + channel_yaml_data["metadata"]["name"]
-    #         )
-    #         subscription_yaml_data["spec"]["placement"]["placementRef"]["name"] = (
-    #             placement_yaml_data["metadata"]["name"]
-    #         )
-    #         templating.dump_data_to_temp_yaml(
-    #             subscription_yaml_data, self.subscription_yaml_file
-    #         )
-    #
-    #         # load app yaml
-    #         app_yaml_data = templating.load_yaml(self.app_yaml_file)
-    #         app_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
-    #             resource_type="app", resource_description="busybox"
-    #         )
-    #         templating.dump_data_to_temp_yaml(app_yaml_data, self.app_yaml_file)
-    #
-    #         self.app_name = app_yaml_data["metadata"]["name"]
-    #
-    #         # load workload kustomization.yaml
-    #         workload_kustomization_yaml_data = templating.load_yaml(
-    #             self.workload_kustomization_yaml_file
-    #         )
-    #         workload_kustomization_yaml_data["namespace"] = workload_ns_yaml_data[
-    #             "metadata"
-    #         ]["name"]
-    #         templating.dump_data_to_temp_yaml(
-    #             workload_kustomization_yaml_data, self.workload_kustomization_yaml_file
-    #         )
-    #
-    #         # load git repo kustomization.yaml
-    #         git_kustomization_yaml_data = templating.load_yaml(
-    #             self.git_repo_kustomization_yaml_file
-    #         )
-    #         git_kustomization_yaml_data["namespace"] = git_ns_yaml_data["metadata"][
-    #             "name"
-    #         ]
-    #         templating.dump_data_to_temp_yaml(
-    #             git_kustomization_yaml_data, self.git_repo_kustomization_yaml_file
-    #         )
-    #
-    #         # Create the resources on Hub cluster
-    #         config.switch_acm_ctx()
-    #         run_cmd(f"oc create -k {self.workload_subscription_dir}")
-    #         run_cmd(
-    #             f"oc create -k {self.workload_subscription_dir}/{self.workload_name}"
-    #         )
-    #         if self.is_placement:
-    #             self.add_annotation_to_placement()
-    #             run_cmd(f"oc create -f {self.drpc_data_yaml.name}")
-    #         self.verify_workload_deployment(cluster)
+    def deploy_workloads_on_managed_clusters(
+        self, primary_cluster=True, secondary_cluster=False
+    ):
+        """
+        Deployment specific to busybox workload on both primary and secondary clusters
+
+        Args:
+            primary_cluster(bool) : True if apps needs to be deployed on primary cluster
+            secondary_cluster(bool) : True if apps needs to be deployed on secondary cluster
+
+        """
+        self._deploy_prereqs()
+
+        # By default, it deploys apps on primary cluster if not set to false
+        clusters = [self.preferred_primary_cluster] if primary_cluster else []
+        if secondary_cluster:
+            clusters.append(self.preferred_secondary_cluster)
+
+        for cluster in clusters:
+            # load workload-repo namespace.yaml
+            workload_ns_yaml_data = templating.load_yaml(self.namespace_yaml_file)
+            workload_ns_yaml_data["metadata"]["name"] = (
+                helpers.create_unique_resource_name(
+                    resource_type="namespace", resource_description="busybox-workloads"
+                )
+            )
+            self.workload_namespace = workload_ns_yaml_data["metadata"]["name"]
+            templating.dump_data_to_temp_yaml(
+                workload_ns_yaml_data, self.namespace_yaml_file
+            )
+
+            # load drpc.yaml
+            drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
+            drpc_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="drpc", resource_description="busybox"
+            )
+            drpc_yaml_data["spec"]["preferredCluster"] = cluster
+            drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+            templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
+
+            if self.is_placement:
+                # load placement.yaml
+                clusterset_name = (
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                )
+                placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
+                placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
+                    "labelSelector"
+                ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
+                self.sub_placement_name = placement_yaml_data["metadata"]["name"]
+                templating.dump_data_to_temp_yaml(
+                    placement_yaml_data, self.placement_yaml_file
+                )
+                managed_clusterset_binding_yaml_data = templating.load_yaml(
+                    self.managed_clusterset_binding_file
+                )
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "name"
+                ] = clusterset_name
+                managed_clusterset_binding_yaml_data["spec"][
+                    "clusterSet"
+                ] = clusterset_name
+                templating.dump_data_to_temp_yaml(
+                    managed_clusterset_binding_yaml_data,
+                    self.managed_clusterset_binding_file,
+                )
+                if placement_yaml_data["kind"] == "Placement":
+                    drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
+                    drpc_yaml_data["metadata"][
+                        "name"
+                    ] = f"{self.sub_placement_name}-drpc"
+                    drpc_yaml_data["spec"][
+                        "preferredCluster"
+                    ] = self.preferred_primary_cluster
+                    drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+                    drpc_yaml_data["spec"]["placementRef"][
+                        "name"
+                    ] = self.sub_placement_name
+
+                    drpc_yaml_data["metadata"]["namespace"] = self.workload_namespace
+                    drpc_yaml_data["spec"]["placementRef"][
+                        "namespace"
+                    ] = self.workload_namespace
+                    drpc_yaml_data["spec"]["pvcSelector"][
+                        "matchLabels"
+                    ] = self.workload_pvc_selector
+                    del drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"]
+                    del drpc_yaml_data["spec"]["kubeObjectProtection"]
+                    self.drpc_data_yaml = tempfile.NamedTemporaryFile(
+                        mode="w+", prefix="drpc", delete=False
+                    )
+                    templating.dump_data_to_temp_yaml(
+                        drpc_yaml_data, self.drpc_data_yaml.name
+                    )
+
+            # load channel.yaml
+            channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
+            channel_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="channel", resource_description="ramen-gitops"
+            )
+            channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
+            templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
+
+            # load git-repo namespace.yaml
+            git_ns_yaml_data = templating.load_yaml(self.git_repo_namespace_yaml_file)
+            git_ns_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="namespace", resource_description="ramen-busybox"
+            )
+            templating.dump_data_to_temp_yaml(
+                git_ns_yaml_data, self.git_repo_namespace_yaml_file
+            )
+
+            # load subscription.yaml
+            subscription_yaml_data = templating.load_yaml(self.subscription_yaml_file)
+            subscription_yaml_data["metadata"]["name"] = (
+                helpers.create_unique_resource_name(
+                    resource_type="subscription", resource_description="busybox"
+                )
+            )
+            subscription_yaml_data["spec"]["channel"] = (
+                git_ns_yaml_data["metadata"]["name"]
+                + "/"
+                + channel_yaml_data["metadata"]["name"]
+            )
+            subscription_yaml_data["spec"]["placement"]["placementRef"]["name"] = (
+                placement_yaml_data["metadata"]["name"]
+            )
+            templating.dump_data_to_temp_yaml(
+                subscription_yaml_data, self.subscription_yaml_file
+            )
+
+            # load app yaml
+            app_yaml_data = templating.load_yaml(self.app_yaml_file)
+            app_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="app", resource_description="busybox"
+            )
+            templating.dump_data_to_temp_yaml(app_yaml_data, self.app_yaml_file)
+
+            self.app_name = app_yaml_data["metadata"]["name"]
+
+            # load workload kustomization.yaml
+            workload_kustomization_yaml_data = templating.load_yaml(
+                self.workload_kustomization_yaml_file
+            )
+            workload_kustomization_yaml_data["namespace"] = workload_ns_yaml_data[
+                "metadata"
+            ]["name"]
+            templating.dump_data_to_temp_yaml(
+                workload_kustomization_yaml_data, self.workload_kustomization_yaml_file
+            )
+
+            # load git repo kustomization.yaml
+            git_kustomization_yaml_data = templating.load_yaml(
+                self.git_repo_kustomization_yaml_file
+            )
+            git_kustomization_yaml_data["namespace"] = git_ns_yaml_data["metadata"][
+                "name"
+            ]
+            templating.dump_data_to_temp_yaml(
+                git_kustomization_yaml_data, self.git_repo_kustomization_yaml_file
+            )
+
+            # Create the resources on Hub cluster
+            config.switch_acm_ctx()
+            run_cmd(f"oc create -k {self.workload_subscription_dir}")
+            run_cmd(
+                f"oc create -k {self.workload_subscription_dir}/{self.workload_name}"
+            )
+            if self.is_placement:
+                self.add_annotation_to_placement()
+                run_cmd(f"oc create -f {self.drpc_data_yaml.name}")
+            self.verify_workload_deployment(cluster)
 
     def _deploy_prereqs(self):
         """
