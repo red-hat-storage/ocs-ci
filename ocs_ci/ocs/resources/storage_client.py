@@ -477,7 +477,7 @@ class StorageClient:
         storage_clients = PageNavigator().nav_to_storageclients_page()
         onboarding_token = storage_clients.generate_client_onboarding_ticket()
 
-        # Create ODF subscription for storage-client
+        # Create ODF subscription for storage client
         self.odf_installation_on_client()
         self.create_storage_client(
             storage_provider_endpoint=storage_provider_endpoint,
