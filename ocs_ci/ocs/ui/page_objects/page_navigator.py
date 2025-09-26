@@ -113,20 +113,6 @@ class PageNavigator(BaseUI):
 
         return StorageClusterPage()
 
-    def nav_object_storage(self):
-        """
-        Navigate to Object Storage Page
-
-        Returns:
-            ObjectService: ObjectService page object
-        """
-        self.navigate_storage()
-        self.do_click(locator=self.page_nav["object_storage"], timeout=90)
-
-        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
-
-        return ObjectStorage()
-
     def nav_object_storage_page(self):
         """
         Navigate to Object Storage page
@@ -336,7 +322,7 @@ class PageNavigator(BaseUI):
 
         """
 
-        return self.nav_object_storage().nav_buckets_tab()
+        return self.nav_object_storage_page().nav_buckets_tab()
 
     def navigate_object_bucket_claims_page(self):
         """
@@ -344,7 +330,7 @@ class PageNavigator(BaseUI):
 
         """
 
-        return self.nav_object_storage().nav_object_buckets_claims_tab()
+        return self.nav_object_storage_page().nav_object_buckets_claims_tab()
 
     def navigate_alerting_page(self):
         """
