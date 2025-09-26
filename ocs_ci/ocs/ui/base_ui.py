@@ -1038,18 +1038,27 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
                 login_loc["w3id_singin"], 60
             )
             w3id_singin_el.click()
-            w3id_2fa_otp_el = wait_for_element_to_be_clickable(
-                login_loc["w3id_2fa"], 60
-            )
-            w3id_2fa_otp_el.click()
-            w3id_2fa_otp_input_el = wait_for_element_to_be_clickable(
-                login_loc["w3id_2fa_otp_input"], 60
-            )
-            w3id_2fa_otp_input_el.send_keys(generate_otp_token(otp_secret))
-            w3id_2fa_otp_sumbit_btn = wait_for_element_to_be_clickable(
-                login_loc["w3id_2fa_otp_sumbit_btn"], 60
-            )
-            w3id_2fa_otp_sumbit_btn.click()
+            time.sleep(5)
+            try:
+                WebDriverWait(driver, 10).until(
+                    ec.title_contains(login_loc["w3id_page_title"])
+                )
+                w3id_2fa_otp_el = wait_for_element_to_be_clickable(
+                    login_loc["w3id_2fa"], 60
+                )
+                w3id_2fa_otp_el.click()
+                w3id_2fa_otp_input_el = wait_for_element_to_be_clickable(
+                    login_loc["w3id_2fa_otp_input"], 60
+                )
+                w3id_2fa_otp_input_el.send_keys(generate_otp_token(otp_secret))
+                w3id_2fa_otp_sumbit_btn = wait_for_element_to_be_clickable(
+                    login_loc["w3id_2fa_otp_sumbit_btn"], 60
+                )
+                w3id_2fa_otp_sumbit_btn.click()
+            except TimeoutException:
+                # Sometimes the 2fa is not required, so we need to pass this
+                pass
+
         else:
             password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
             password_el.send_keys(password)
