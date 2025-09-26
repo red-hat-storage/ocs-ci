@@ -1770,6 +1770,14 @@ validation = {
         "::button[@role='option'] | //h2[.='Administrator']/ancestor::button[@class='pf-v5-c-menu__item']",
         By.XPATH,
     ),
+    "storage-pools-tab": (
+        "button[data-test='horizontal-link-Storage pools']",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-tab-active": (
+        "button[data-test='horizontal-link-Block and File'][aria-selected='true']",
+        By.CSS_SELECTOR,
+    ),
 }
 
 validation_4_7 = {
