@@ -108,12 +108,7 @@ class TestUserInterfaceValidation(object):
         """
         setup_ui_class_factory()
 
-        storage_system_details = (
-            ValidationUI()
-            .nav_storage_cluster_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-        )
+        storage_system_details = ValidationUI().nav_storage_cluster_default_page()
         storage_system_details.nav_cephblockpool_verify_statusready()
 
         compression_statuses = (

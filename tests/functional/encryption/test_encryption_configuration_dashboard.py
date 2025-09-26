@@ -9,6 +9,9 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
+    DataFoundationTabBar,
+)
 
 
 @green_squad
@@ -137,13 +140,7 @@ class TestEncryptionConfigurationDashboard:
             3. verify encryption data with the nooba and storagecluster spec.
         """
         # Navigate to the Object Storage page
-        object_details_page = (
-            PageNavigator()
-            .nav_storage_cluster_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_details_object()
-        )
+        object_details_page = DataFoundationTabBar().nav_object_tab()
 
         encryption_summary = object_details_page.get_object_encryption_summary()
         log.info(f"Encryption Summary from page : {encryption_summary}")
