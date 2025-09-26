@@ -1,9 +1,11 @@
 from ocs_ci.ocs.ui.helpers_ui import logger
 from ocs_ci.ocs.constants import ENCRYPTION_DASHBOARD_CONTEXT_MAP
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
+    DataFoundationTabBar,
+)
 
 
-class EncryptionModule(PageNavigator):
+class EncryptionModule(DataFoundationTabBar):
     def _get_encryption_summary(self, context_key):
         """
         Generic method to collect encryption summary based on the context.
