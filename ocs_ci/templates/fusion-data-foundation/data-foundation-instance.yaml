@@ -15,7 +15,7 @@ spec:
     value: Fusion
   - name: backingStorageType
     provided: true
-    value: Dynamic
+    value: Local
   - name: autoUpgrade
     provided: false
     value: "false"
