@@ -49,8 +49,8 @@ logger = logging.getLogger(__name__)
 
 
 @tier4a
-@turquoise_squad
 @dr_hub_recovery
+@turquoise_squad
 @pytest.mark.order("last")
 class TestSiteFailureRecoveryAndFailover:
     """
@@ -59,13 +59,15 @@ class TestSiteFailureRecoveryAndFailover:
     running on the down managed cluster to the secondary managed cluster.
     """
 
-    def test_site_failure_and_failover(self, dr_workload, nodes_multicluster):
+    def test_site_failure_and_failover(
+        self, dr_workload, discovered_apps_dr_workload, nodes_multicluster
+    ):
         """
         Test to verify failover of all workloads after site-failure where the active hub along with
         the primary managed cluster is down
         """
 
-        # Deploy Subscription and Appset based application of both RBD and CephFS SC
+        # Deploy Subscription, Appset and discovered applications of both RBD and CephFS SC
         rdr_workload = dr_workload(
             num_of_subscription=1,
             num_of_appset=1,
@@ -78,6 +80,16 @@ class TestSiteFailureRecoveryAndFailover:
             pvc_interface=constants.CEPHFILESYSTEM,
             switch_ctx=get_passive_acm_index(),
         )
+        discovered_workload = discovered_apps_dr_workload(
+            kubeobject=1,
+            recipe=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
+        )
+        discovered_apps_dr_workload(
+            kubeobject=1,
+            recipe=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
         drpc_objs = []
         for wl in rdr_workload:
             if wl.workload_type == constants.SUBSCRIPTION:
@@ -89,7 +101,10 @@ class TestSiteFailureRecoveryAndFailover:
                         resource_name=f"{wl.appset_placement_name}-drpc",
                     )
                 )
-
+        for wl in discovered_workload:
+            drpc_objs.append(
+                DRPC(namespace="openshift-dr-ops", resource_name=wl.workload_namespace)
+            )
         primary_cluster_name = get_current_primary_cluster_name(
             rdr_workload[0].workload_namespace
         )
@@ -100,6 +115,11 @@ class TestSiteFailureRecoveryAndFailover:
         # Verify the creation of ReplicationDestination resources on secondary cluster in case of CephFS
         config.switch_to_cluster_by_name(secondary_cluster_name)
         for wl in rdr_workload:
+            if wl.pvc_interface == constants.CEPHFILESYSTEM:
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+        for wl in discovered_workload:
             if wl.pvc_interface == constants.CEPHFILESYSTEM:
                 dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
@@ -214,23 +234,52 @@ class TestSiteFailureRecoveryAndFailover:
                             if wl.workload_type != constants.SUBSCRIPTION
                             else None
                         ),
+                    )
+                )
+            for wl in discovered_workload:
+                failover_results.append(
+                    executor.submit(
+                        dr_helpers.failover(
+                            failover_cluster=secondary_cluster_name,
+                            namespace=wl.workload_namespace,
+                            discovered_apps=True,
+                            workload_placement_name=wl.discovered_apps_placement_name,
+                            old_primary=primary_cluster_name,
+                        ),
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
-                time.sleep(5)
-
+                dr_helpers.do_discovered_apps_cleanup(
+                    drpc_name=wl.discovered_apps_placement_name,
+                    old_primary=primary_cluster_name,
+                    workload_namespace=wl.workload_namespace,
+                    workload_dir=wl.workload_dir,
+                    vrg_name=wl.discovered_apps_placement_name,
+                )
         # Wait for failover results
         for fl in failover_results:
             fl.result()
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        for wl in rdr_workload:
+        for wl in [*rdr_workload, *discovered_workload]:
+            is_discovered = wl in discovered_workload
             wait_for_all_resources_creation(
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                discovered_apps=is_discovered,
             )
+            if is_discovered and wl.pvc_interface == constants.CEPHFILESYSTEM:
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+                # Verify the creation of ReplicationDestination resources on primary cluster
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
 
         config.switch_ctx(get_passive_acm_index())
         drpc_cmd = run_cmd("oc get drpc -o wide -A")
@@ -314,10 +363,10 @@ class TestSiteFailureRecoveryAndFailover:
         config.switch_to_cluster_by_name(primary_cluster_name)
 
         # Verify application are deleted from old cluster
-        for wl in rdr_workload:
+        for wl in [*rdr_workload, *discovered_workload]:
             wait_for_all_resources_deletion(wl.workload_namespace, timeout=1800)
 
-        for wl in rdr_workload:
+        for wl in [*rdr_workload, *discovered_workload]:
             if wl.pvc_interface == constants.CEPHFILESYSTEM:
                 # Verify the deletion of ReplicationDestination resources on secondary cluster
                 config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -334,7 +383,7 @@ class TestSiteFailureRecoveryAndFailover:
             replaying_images=sum(
                 [
                     wl.workload_pvc_count
-                    for wl in rdr_workload
+                    for wl in [*rdr_workload, *discovered_workload]
                     if wl.pvc_interface == constants.CEPHBLOCKPOOL
                 ]
             )
@@ -367,12 +416,33 @@ class TestSiteFailureRecoveryAndFailover:
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
-                time.sleep(5)
+            for wl in discovered_workload:
+                relocate_results.append(
+                    executor.submit(
+                        dr_helpers.relocate(
+                            preferred_cluster=primary_cluster_name,
+                            namespace=wl.workload_namespace,
+                            workload_placement_name=wl.discovered_apps_placement_name,
+                            discovered_apps=True,
+                            old_primary=secondary_cluster_name,
+                            workload_instance=wl,
+                        ),
+                        switch_ctx=get_passive_acm_index(),
+                    )
+                )
+
+                logger.info("Doing Cleanup Operations")
+                dr_helpers.do_discovered_apps_cleanup(
+                    drpc_name=wl.discovered_apps_placement_name,
+                    old_primary=secondary_cluster_name,
+                    workload_namespace=wl.workload_namespace,
+                    workload_dir=wl.workload_dir,
+                    vrg_name=wl.discovered_apps_placement_name,
+                )
 
         # Wait for relocate results
         for rl in relocate_results:
             rl.result()
-
         config.switch_ctx(get_passive_acm_index())
         drpc_cmd = run_cmd("oc get drpc -o wide -A")
         logger.info("DRPC output from new hub cluster after relocate")
@@ -380,14 +450,20 @@ class TestSiteFailureRecoveryAndFailover:
 
         # Verify resources creation on preferredCluster
         config.switch_to_cluster_by_name(primary_cluster_name)
-        for wl in rdr_workload:
+        for wl in [*rdr_workload, *discovered_workload]:
             wait_for_all_resources_creation(
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                discovered_apps=(wl in discovered_workload),
+                vrg_name=(
+                    wl.discovered_apps_placement_name
+                    if wl in discovered_workload
+                    else None
+                ),
             )
 
-        for wl in rdr_workload:
+        for wl in [*rdr_workload, *discovered_workload]:
             if wl.pvc_interface == constants.CEPHFILESYSTEM:
                 # Verify the deletion of ReplicationDestination resources on primary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
@@ -404,7 +480,7 @@ class TestSiteFailureRecoveryAndFailover:
             replaying_images=sum(
                 [
                     wl.workload_pvc_count
-                    for wl in rdr_workload
+                    for wl in [*rdr_workload, *discovered_workload]
                     if wl.pvc_interface == constants.CEPHBLOCKPOOL
                 ]
             )
@@ -412,7 +488,7 @@ class TestSiteFailureRecoveryAndFailover:
 
         # Verify resources deletion from previous primary or current secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        for wl in rdr_workload:
+        for wl in [*rdr_workload, *discovered_workload]:
             wait_for_all_resources_deletion(wl.workload_namespace)
 
         logger.info("Relocate successful")
