@@ -820,7 +820,7 @@ page_nav_4_10 = {
 }
 
 page_nav_4_14 = {
-    "object_storage_page": ("Object Storage", By.LINK_TEXT),
+    "object_storage_page": ("Object storage", By.LINK_TEXT),
     "storageclients_page": ("Storage Clients", By.LINK_TEXT),
 }
 
