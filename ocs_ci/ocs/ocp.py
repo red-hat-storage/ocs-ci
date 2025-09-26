@@ -1004,6 +1004,7 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
+    @retry(IndexError, tries=4, delay=20, backoff=1)
     def get_resource(self, resource_name, column, retry=0, wait=3, selector=None):
         """
         Get a column value for a resource based on:
