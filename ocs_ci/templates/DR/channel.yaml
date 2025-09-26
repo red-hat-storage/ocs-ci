@@ -1,0 +1,8 @@
+apiVersion: apps.open-cluster-management.io/v1
+kind: Channel
+metadata:
+  name: ramen-gitops
+  namespace: sub-workload-45cf739321d7
+spec:
+  pathname: https://github.com/red-hat-storage/ocs-workloads.git
+  type: GitHub

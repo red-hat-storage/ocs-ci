@@ -1,4 +1,5 @@
 ENV_DATA:
+  deploy_via_git: True
   cg_enabled: False
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
   dr_workload_repo_branch: "master"
@@ -25,11 +26,13 @@ ENV_DATA:
   dr_workload_appset_rbd: [
     { name: "appset-busybox-1", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-1.yaml",
       dr_workload_app_placement_name: "busybox-1-placement",
-      dr_workload_app_pvc_selector: {'appname': 'busybox_app1'}, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app1'}, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-1"
     },
     { name: "appset-busybox-2", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-2.yaml",
       dr_workload_app_placement_name: "busybox-2-placement",
-      dr_workload_app_pvc_selector: {'appname': 'busybox_app2'}, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app2'}, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-1"
     },
     { name: "appset-busybox-3", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-3.yaml",
       dr_workload_app_placement_name: "busybox-3-placement",
@@ -165,7 +168,8 @@ ENV_DATA:
   dr_workload_subscription_placement_rbd: [
     { name: "busybox-1", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-1",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app1" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app1" },
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-1",
     },
     { name: "busybox-2", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-2",
       pod_count: 10, pvc_count: 10, is_placement: True,
