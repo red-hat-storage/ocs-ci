@@ -1772,6 +1772,14 @@ validation = {
         "button[data-test='horizontal-link-Block and File'][aria-selected='true']",
         By.CSS_SELECTOR,
     ),
+    "object-tab": (
+        "button[data-test='horizontal-link-Object']",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-tab": (
+        "button[data-test='horizontal-link-Block and File']",
+        By.CSS_SELECTOR,
+    ),
 }
 
 validation_4_7 = {
