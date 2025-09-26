@@ -108,7 +108,7 @@ class BusyBox(DRWorkload):
         self.is_placement = workload_details.get("is_placement")
         if self.is_placement:
 
-            if not config.ENV_DATA.get("deploy_via_git"):
+            if not config.ENV_DATA.get("deploy_via_cli"):
                 self.placement_yaml_file = os.path.join(
                     self.workload_subscription_dir, self.workload_name, "placement.yaml"
                 )
@@ -118,12 +118,15 @@ class BusyBox(DRWorkload):
                     "managedclustersetbinding.yaml",
                 )
             else:
-                self.placement_yaml_file = os.path.join(constants.PLACEMENT_SUBSCRIPTION_PATH)
-                self.managed_clusterset_binding_file = os.path.join(constants.MANAGEDCLUSTER_SETBINDING_PATH)
+                self.placement_yaml_file = os.path.join(
+                    constants.PLACEMENT_SUBSCRIPTION_PATH
+                )
+                self.managed_clusterset_binding_file = os.path.join(
+                    constants.MANAGEDCLUSTER_SETBINDING_PATH
+                )
             self.workload_pvc_selector = workload_details.get(
                 "dr_workload_app_pvc_selector"
             )
-
 
         self.git_repo_kustomization_yaml_file = os.path.join(
             self.workload_subscription_dir, "kustomization.yaml"
@@ -131,7 +134,7 @@ class BusyBox(DRWorkload):
         self.git_repo_namespace_yaml_file = os.path.join(
             self.workload_subscription_dir, "namespace.yaml"
         )
-        if not config.ENV_DATA.get("deploy_via_git"):
+        if not config.ENV_DATA.get("deploy_via_cli"):
             self.drpc_yaml_file = os.path.join(
                 self.workload_subscription_dir, self.workload_name, "drpc.yaml"
             )
@@ -142,8 +145,12 @@ class BusyBox(DRWorkload):
             self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
             self.channel_yaml_file = os.path.join(constants.CHANNEL_PATH)
             self.subscription_app_file = os.path.join(constants.SUBSCRIPTION_APP_PATH)
-            self.subscription_workload_file = os.path.join(constants.SUBSCRIPTION_WORKLOAD_TEMPLATE_PATH)
-            self.subscription_namespace_file = os.path.join(constants.SUBSCRIPTION_NAMESPACE_TEMPLATE_PATH)
+            self.subscription_workload_file = os.path.join(
+                constants.SUBSCRIPTION_WORKLOAD_TEMPLATE_PATH
+            )
+            self.subscription_namespace_file = os.path.join(
+                constants.SUBSCRIPTION_NAMESPACE_TEMPLATE_PATH
+            )
 
         self.app_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "app.yaml"
@@ -166,11 +173,13 @@ class BusyBox(DRWorkload):
         Deployment specific to busybox workload
         """
 
-        if not config.ENV_DATA.get("deploy_via_git"):
+        if not config.ENV_DATA.get("deploy_via_cli"):
             self.workload_namespace = self._get_workload_namespace()
             self._deploy_prereqs()
         else:
-            self.workload_namespace = create_unique_resource_name("workload", "sub")[:25]
+            self.workload_namespace = create_unique_resource_name("workload", "sub")[
+                :25
+            ]
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
@@ -178,7 +187,9 @@ class BusyBox(DRWorkload):
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
         if self.is_placement:
             # load placement.yaml
-            self.sub_placement_name = create_unique_resource_name("placement", "sub")[:25]
+            self.sub_placement_name = create_unique_resource_name("placement", "sub")[
+                :25
+            ]
             clusterset_name = (
                 config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
             )
@@ -188,8 +199,10 @@ class BusyBox(DRWorkload):
                 "labelSelector"
             ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
             placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
-            if config.ENV_DATA.get("deploy_via_git"):
-                self.sub_placement_name = create_unique_resource_name("placement", "sub")[:25]
+            if config.ENV_DATA.get("deploy_via_cli"):
+                self.sub_placement_name = create_unique_resource_name(
+                    "placement", "sub"
+                )[:25]
                 placement_yaml_data["metadata"]["name"] = self.sub_placement_name
                 placement_yaml_data["metadata"]["namespace"] = self.workload_namespace
             else:
@@ -200,8 +213,10 @@ class BusyBox(DRWorkload):
             )
             managed_clusterset_binding_yaml_data["metadata"]["name"] = clusterset_name
             managed_clusterset_binding_yaml_data["spec"]["clusterSet"] = clusterset_name
-            if config.ENV_DATA.get("deploy_via_git"):
-                managed_clusterset_binding_yaml_data["metadata"]["namespace"] = self.workload_namespace
+            if config.ENV_DATA.get("deploy_via_cli"):
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
             if placement_yaml_data["kind"] == "Placement":
                 drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
                 drpc_yaml_data["metadata"]["name"] = f"{self.sub_placement_name}-drpc"
@@ -234,40 +249,70 @@ class BusyBox(DRWorkload):
         # load channel.yaml
         channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
         channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
-        if config.ENV_DATA.get("deploy_via_git"):
+        if config.ENV_DATA.get("deploy_via_cli"):
             channel_yaml_data["metadata"]["namespace"] = self.workload_namespace
 
-        if config.ENV_DATA.get("deploy_via_git"):
-            subscription_app_yaml_data = templating.load_yaml(self.subscription_app_file)
-            subscription_app_yaml_data["metadata"]["name"]=self.workload_namespace
-            subscription_app_yaml_data["metadata"]["namespace"] = self.workload_namespace
-            subscription_app_yaml_data["spec"]["selector"]["matchExpressions"][0]["values"][0] = self.workload_namespace
+        if config.ENV_DATA.get("deploy_via_cli"):
+            subscription_app_yaml_data = templating.load_yaml(
+                self.subscription_app_file
+            )
+            subscription_app_yaml_data["metadata"]["name"] = self.workload_namespace
+            subscription_app_yaml_data["metadata"][
+                "namespace"
+            ] = self.workload_namespace
+            subscription_app_yaml_data["spec"]["selector"]["matchExpressions"][0][
+                "values"
+            ][0] = self.workload_namespace
 
-            subscription_workload_yaml_data = templating.load_yaml(self.subscription_workload_file)
-            subscription_workload_yaml_data["metadata"]["name"]=self.workload_namespace
-            subscription_workload_yaml_data["metadata"]["namespace"]=self.workload_namespace
-            subscription_workload_yaml_data["metadata"]["labels"]["app"] = self.workload_namespace
-            subscription_workload_yaml_data["metadata"]["annotations"]["apps.open-cluster-management.io/git-path"] = self.workload_path
-            subscription_workload_yaml_data["metadata"]["annotations"]["apps.open-cluster-management.io/git-branch"] = self.workload_repo_branch
-            subscription_workload_yaml_data["spec"]["channel"] = f"{self.workload_namespace}/ramen-gitops"
-            subscription_workload_yaml_data["spec"]["placement"]["placementRef"]["name"] = self.sub_placement_name
+            subscription_workload_yaml_data = templating.load_yaml(
+                self.subscription_workload_file
+            )
+            subscription_workload_yaml_data["metadata"][
+                "name"
+            ] = self.workload_namespace
+            subscription_workload_yaml_data["metadata"][
+                "namespace"
+            ] = self.workload_namespace
+            subscription_workload_yaml_data["metadata"]["labels"][
+                "app"
+            ] = self.workload_namespace
+            subscription_workload_yaml_data["metadata"]["annotations"][
+                "apps.open-cluster-management.io/git-path"
+            ] = self.workload_path
+            subscription_workload_yaml_data["metadata"]["annotations"][
+                "apps.open-cluster-management.io/git-branch"
+            ] = self.workload_repo_branch
+            subscription_workload_yaml_data["spec"][
+                "channel"
+            ] = f"{self.workload_namespace}/ramen-gitops"
+            subscription_workload_yaml_data["spec"]["placement"]["placementRef"][
+                "name"
+            ] = self.sub_placement_name
 
-            subscription_namespace_yaml_data = templating.load_yaml(self.subscription_namespace_file)
-            subscription_namespace_yaml_data["metadata"]["name"]=self.workload_namespace
+            subscription_namespace_yaml_data = templating.load_yaml(
+                self.subscription_namespace_file
+            )
+            subscription_namespace_yaml_data["metadata"][
+                "name"
+            ] = self.workload_namespace
 
-
-
-        templating.dump_data_to_temp_yaml(
-            placement_yaml_data, self.placement_yaml_file
-        )
+        templating.dump_data_to_temp_yaml(placement_yaml_data, self.placement_yaml_file)
         templating.dump_data_to_temp_yaml(
             managed_clusterset_binding_yaml_data,
             self.managed_clusterset_binding_file,
         )
         templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
-        ss_list=[]
-        ss_list.extend([subscription_namespace_yaml_data,channel_yaml_data,subscription_app_yaml_data,subscription_workload_yaml_data,placement_yaml_data,managed_clusterset_binding_yaml_data])
-
+        ss_list = []
+        ss_list.extend(
+            [
+                subscription_namespace_yaml_data,
+                channel_yaml_data,
+                subscription_app_yaml_data,
+                subscription_workload_yaml_data,
+                placement_yaml_data,
+                managed_clusterset_binding_yaml_data,
+            ]
+        )
 
         self.deploy_subscription_workload_yaml_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="sub_workload", delete=False
@@ -277,12 +322,13 @@ class BusyBox(DRWorkload):
             self.deploy_subscription_workload_yaml_file.name,
         )
 
-
         # Create the resources on Hub cluster
         config.switch_acm_ctx()
-        if not config.ENV_DATA.get("deploy_via_git"):
+        if not config.ENV_DATA.get("deploy_via_cli"):
             run_cmd(f"oc create -k {self.workload_subscription_dir}")
-            run_cmd(f"oc create -k {self.workload_subscription_dir}/{self.workload_name}")
+            run_cmd(
+                f"oc create -k {self.workload_subscription_dir}/{self.workload_name}"
+            )
         else:
             run_cmd(f"oc create -f {self.deploy_subscription_workload_yaml_file.name}")
         if self.is_placement:
@@ -484,7 +530,7 @@ class BusyBox(DRWorkload):
         Get the workload namespace
 
         """
-        if config.ENV_DATA.get("deploy_via_git"):
+        if config.ENV_DATA.get("deploy_via_cli"):
             return self.workload_namespace
         else:
             namespace_yaml_data = templating.load_yaml(self.namespace_yaml_file)
@@ -578,7 +624,7 @@ class BusyBox(DRWorkload):
                     managed_clusterset_binding_yaml_data,
                     self.managed_clusterset_binding_file,
                 )
-            if not config.ENV_DATA.get("deploy_via_git"):
+            if not config.ENV_DATA.get("deploy_via_cli"):
                 run_cmd(
                     f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
                 )
@@ -612,7 +658,7 @@ class BusyBox(DRWorkload):
             raise ResourceNotDeleted(err_msg)
 
         finally:
-            if not config.ENV_DATA.get("deploy_via_git"):
+            if not config.ENV_DATA.get("deploy_via_cli"):
                 config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
                 run_cmd(f"oc delete -k {self.workload_subscription_dir}")
 
@@ -649,7 +695,7 @@ class BusyBox_AppSet(DRWorkload):
         self.workload_appset_dir = os.path.join(
             self.target_clone_dir, kwargs.get("workload_dir")
         )
-        if not config.ENV_DATA.get("deploy_via_git"):
+        if not config.ENV_DATA.get("deploy_via_cli"):
             self.appset_yaml_file = os.path.join(
                 self.workload_appset_dir,
             )
@@ -658,7 +704,9 @@ class BusyBox_AppSet(DRWorkload):
             self.appset_yaml_file = os.path.join(
                 constants.APPSET_WORKLOAD_TEMPLATE,
             )
-            self.appset_placement_name = create_unique_resource_name("placement", "appset")[:25]
+            self.appset_placement_name = create_unique_resource_name(
+                "placement", "appset"
+            )[:25]
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
 
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
@@ -671,10 +719,12 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self._deploy_prereqs()
-        if not config.ENV_DATA.get("deploy_via_git"):
+        if not config.ENV_DATA.get("deploy_via_cli"):
             self.workload_namespace = self._get_workload_namespace()
         else:
-            self.workload_namespace = create_unique_resource_name("workload", "appset")[:25]
+            self.workload_namespace = create_unique_resource_name("workload", "appset")[
+                :25
+            ]
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
@@ -700,7 +750,7 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["clusterSets"][0] = (
                     config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
                 )
-                if config.ENV_DATA.get("deploy_via_git"):
+                if config.ENV_DATA.get("deploy_via_cli"):
                     app_set_yaml_data["metadata"]["name"] = self.appset_placement_name
 
             elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
@@ -720,25 +770,41 @@ class BusyBox_AppSet(DRWorkload):
                     app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
                         "apps.open-cluster-management.io/pull-to-ocm-managed-cluster"
                     ] = "true"
-                    if config.ENV_DATA.get("deploy_via_git"):
-                        app_set_yaml_data["spec"]["template"]["spec"]["destination"]["namespace"] = self.workload_namespace
-                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0]['repoURL'] = self.workload_repo_url
-                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0]['targetRevision'] = self.workload_repo_branch
-                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0]['path'] = self.workload_path
-                        app_set_yaml_data["spec"]["template"]["metadata"]["name"] = f"{self.workload_namespace}-{{{{name}}}}"
-                        app_set_yaml_data["spec"]["generators"][0]["clusterDecisionResource"]["labelSelector"]["matchLabels"][
-                            "cluster.open-cluster-management.io/placement"] = self.appset_placement_name
+                    if config.ENV_DATA.get("deploy_via_cli"):
+                        app_set_yaml_data["spec"]["template"]["spec"]["destination"][
+                            "namespace"
+                        ] = self.workload_namespace
+                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0][
+                            "repoURL"
+                        ] = self.workload_repo_url
+                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0][
+                            "targetRevision"
+                        ] = self.workload_repo_branch
+                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0][
+                            "path"
+                        ] = self.workload_path
+                        app_set_yaml_data["spec"]["template"]["metadata"][
+                            "name"
+                        ] = f"{self.workload_namespace}-{{{{name}}}}"
+                        app_set_yaml_data["spec"]["generators"][0][
+                            "clusterDecisionResource"
+                        ]["labelSelector"]["matchLabels"][
+                            "cluster.open-cluster-management.io/placement"
+                        ] = self.appset_placement_name
                         app_set_yaml_data["metadata"]["name"] = self.workload_namespace
 
-
-        if config.ENV_DATA.get("deploy_via_git"):
+        if config.ENV_DATA.get("deploy_via_cli"):
             self.appset_data_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="appset", delete=False
             )
-            templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_data_yaml.name)
+            templating.dump_data_to_temp_yaml(
+                app_set_yaml_data_list, self.appset_data_yaml.name
+            )
             self.appset_yaml_file = self.appset_data_yaml.name
         else:
-            templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
+            templating.dump_data_to_temp_yaml(
+                app_set_yaml_data_list, self.appset_yaml_file
+            )
 
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {self.appset_yaml_file}")

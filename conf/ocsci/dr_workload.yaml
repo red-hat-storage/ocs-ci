@@ -1,5 +1,6 @@
 ENV_DATA:
   deploy_via_git: True
+  deploy_via_cli: True
   cg_enabled: False
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
   dr_workload_repo_branch: "master"
