@@ -823,7 +823,7 @@ page_nav_4_10 = {
 }
 
 page_nav_4_14 = {
-    "object_storage_page": ("Object Storage", By.LINK_TEXT),
+    "object_storage_page": ("Object storage", By.LINK_TEXT),
     "storageclients_page": ("Storage Clients", By.LINK_TEXT),
 }
 
@@ -1763,6 +1763,22 @@ validation = {
         "//h2[@data-test-id='perspective-switcher-menu-option' and normalize-space()='Administrator']/ancestor"
         "::button[@role='option'] | //h2[.='Administrator']/ancestor::button[@class='pf-v5-c-menu__item']",
         By.XPATH,
+    ),
+    "storage-pools-tab": (
+        "button[data-test='horizontal-link-Storage pools']",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-tab-active": (
+        "button[data-test='horizontal-link-Block and File'][aria-selected='true']",
+        By.CSS_SELECTOR,
+    ),
+    "object-tab": (
+        "button[data-test='horizontal-link-Object']",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-tab": (
+        "button[data-test='horizontal-link-Block and File']",
+        By.CSS_SELECTOR,
     ),
 }
 
