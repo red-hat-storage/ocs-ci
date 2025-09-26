@@ -636,7 +636,9 @@ def pytest_fixture_setup(fixturedef, request):
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", ""):
         if request.fixturenames.index(fixturedef.argname) == 0:
             for mark in request.node.iter_markers():
-                if mark.name == "config_index":
+                if isinstance(
+                    request.node, pytest.Function
+                ) and request.node.callspec.params.get("cluster_index"):
                     ocsci_config.switch_ctx(mark.args[0])
     _switch_context_helper(request)
 
@@ -1770,6 +1772,7 @@ def service_account_factory_fixture(request):
         """
         Delete the service account
         """
+        _switch_context_helper(request)
         for instance in instances:
             original_cluster = None
             if instance.ocp.cluster_context:
@@ -1867,6 +1870,8 @@ def deployment_pod_factory(request, pvc_factory, service_account_factory):
         """
         Delete dc pods
         """
+        _switch_context_helper(request)
+
         for instance in instances:
             delete_deployment_pods(instance)
 
