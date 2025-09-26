@@ -811,6 +811,7 @@ page_nav = {
         ".pf-c-switch__toggle, .pf-v5-c-switch__toggle, .pf-v6-c-switch__toggle",
         By.CSS_SELECTOR,
     ),
+    "storage_cluster": ("Storage cluster", By.LINK_TEXT),
 }
 
 page_nav_4_6 = {
