@@ -174,8 +174,8 @@ class BusyBox(DRWorkload):
         """
 
         if not config.ENV_DATA.get("deploy_via_cli"):
-            self.workload_namespace = self._get_workload_namespace()
             self._deploy_prereqs()
+            self.workload_namespace = self._get_workload_namespace()
         else:
             self.workload_namespace = create_unique_resource_name("workload", "sub")[
                 :25
@@ -296,35 +296,38 @@ class BusyBox(DRWorkload):
                 "name"
             ] = self.workload_namespace
 
-        templating.dump_data_to_temp_yaml(placement_yaml_data, self.placement_yaml_file)
-        templating.dump_data_to_temp_yaml(
-            managed_clusterset_binding_yaml_data,
-            self.managed_clusterset_binding_file,
-        )
-        templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
-        ss_list = []
-        ss_list.extend(
-            [
-                subscription_namespace_yaml_data,
-                channel_yaml_data,
-                subscription_app_yaml_data,
-                subscription_workload_yaml_data,
-                placement_yaml_data,
-                managed_clusterset_binding_yaml_data,
-            ]
-        )
+            templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
+            ss_list = []
+            ss_list.extend(
+                [
+                    subscription_namespace_yaml_data,
+                    channel_yaml_data,
+                    subscription_app_yaml_data,
+                    subscription_workload_yaml_data,
+                    placement_yaml_data,
+                    managed_clusterset_binding_yaml_data,
+                ]
+            )
 
-        self.deploy_subscription_workload_yaml_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="sub_workload", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            ss_list,
-            self.deploy_subscription_workload_yaml_file.name,
-        )
+            self.deploy_subscription_workload_yaml_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="sub_workload", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                ss_list,
+                self.deploy_subscription_workload_yaml_file.name,
+            )
 
         # Create the resources on Hub cluster
         config.switch_acm_ctx()
         if not config.ENV_DATA.get("deploy_via_cli"):
+            templating.dump_data_to_temp_yaml(
+                placement_yaml_data, self.placement_yaml_file
+            )
+            templating.dump_data_to_temp_yaml(
+                managed_clusterset_binding_yaml_data,
+                self.managed_clusterset_binding_file,
+            )
+            templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
             run_cmd(f"oc create -k {self.workload_subscription_dir}")
             run_cmd(
                 f"oc create -k {self.workload_subscription_dir}/{self.workload_name}"
