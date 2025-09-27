@@ -3,10 +3,10 @@
   config:
     namespace: {{ namespace }}
 {%- if label_selector is defined %}
-    label_selector: {{ label_selector }}
+    label_selector: "{{ label_selector }}"
 {%- endif %}
 {%- if pod_name is defined %}
-    pod_name: {{ pod_name }}
+    pod_name: "{{ pod_name }}"
 {%- endif %}
 {%- if container_name %}
     container_name: {{ container_name }}

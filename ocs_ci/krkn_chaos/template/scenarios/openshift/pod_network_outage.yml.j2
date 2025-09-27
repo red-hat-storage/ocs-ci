@@ -32,9 +32,9 @@
 
     # One of these must be provided
 {%- if pod_name is defined and pod_name %}
-    pod_name: {{ pod_name }}
+    pod_name: "{{ pod_name }}"
 {%- elif label_selector is defined and label_selector %}
-    label_selector: {{ label_selector }}
+    label_selector: "{{ label_selector }}"
 {%- else %}
     # pod_name or label_selector must be provided
     pod_name: ""
