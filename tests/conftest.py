@@ -7719,9 +7719,7 @@ def discovered_apps_dr_workload_cnv(request):
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
-            workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[
-                :20
-            ]
+            workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
             workload = CnvWorkloadDiscoveredApps(
