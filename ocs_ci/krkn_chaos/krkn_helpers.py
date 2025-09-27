@@ -232,10 +232,11 @@ class ContainerScenarioHelper(BaseScenarioHelper):
                 "approach": "CONTROLLED_CHAOS",
             }
         else:
-            # Resilient components: Full chaos approach - target multiple instances
+            # Resilient components: Full chaos approach - but limit to 1 for Krkn compatibility
             if available_instances:
-                # For resilient components, target all instances for maximum chaos
-                target_instances = max(0, available_instances)
+                # WORKAROUND: Krkn ContainerScenarioPlugin has issues with instance_count > 1
+                # Limit to 1 instance to avoid "ContainerScenarioPlugin exiting due to Exception"
+                target_instances = 1  # Always use 1 for container scenarios
             else:
                 # Fallback to 1 if instance count is unknown
                 target_instances = 1
