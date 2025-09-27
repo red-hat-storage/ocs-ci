@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../plugin.schema.json
+- id: container_kill_by_label
+  config:
+    namespace: "{{ namespace }}"
+{%- if label_selector is defined %}
+    label_selector: "{{ label_selector }}"
+{%- endif %}
+{%- if pod_name is defined %}
+    pod_name: "{{ pod_name }}"
+{%- endif %}
+{%- if container_name %}
+    container_name: "{{ container_name }}"
+{%- else %}
+    container_name: ""
+{%- endif %}
+    kill_signal: "{{ kill_signal | default('SIGKILL') }}"
+    instance_count: {{ instance_count }}
+    wait_duration: {{ wait_duration }}
