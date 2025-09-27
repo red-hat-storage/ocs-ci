@@ -184,7 +184,6 @@ class BusyBox(DRWorkload):
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
-        templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
         if self.is_placement:
             # load placement.yaml
             self.sub_placement_name = create_unique_resource_name("placement", "sub")[
@@ -296,7 +295,6 @@ class BusyBox(DRWorkload):
                 "name"
             ] = self.workload_namespace
 
-            templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
             ss_list = []
             ss_list.extend(
                 [
@@ -721,8 +719,8 @@ class BusyBox_AppSet(DRWorkload):
 
         """
 
-        self._deploy_prereqs()
         if not config.ENV_DATA.get("deploy_via_cli"):
+            self._deploy_prereqs()
             self.workload_namespace = self._get_workload_namespace()
         else:
             self.workload_namespace = create_unique_resource_name("workload", "appset")[
