@@ -1804,6 +1804,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.workload_dir = kwargs.get("workload_dir")
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
+        if config.ENV_DATA.get("deploy_via_cli"):
+            self.discovered_apps_placement_name = self.workload_namespace
         self.cnv_workload_pvc_selector = kwargs.get("workload_pvc_selector")
         self.appset_model = kwargs.get("appset_model", None)
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
