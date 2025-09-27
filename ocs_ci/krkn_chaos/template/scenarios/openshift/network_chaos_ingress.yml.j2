@@ -17,7 +17,7 @@
 {%- if kubeconfig_path %}
     kubeconfig_path: {{ kubeconfig_path }}
 {%- endif %}
-    execution_type: {{ execution_type }}
+    execution_type: "{{ execution_type }}"
     network_params:
 {%- if network_params.get('latency') is not none %}
       latency: {{ network_params['latency'] }}

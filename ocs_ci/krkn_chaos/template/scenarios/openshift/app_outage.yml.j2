@@ -1,6 +1,6 @@
 application_outage:                                  # Scenario to create an outage of an application by blocking traffic
   duration: {{ duration }}                           # Duration in seconds after which the routes will be accessible
-  namespace: {{ namespace }}                         # Namespace to target - all application routes will go inaccessible if pod selector is empty
+  namespace: "{{ namespace }}"                         # Namespace to target - all application routes will go inaccessible if pod selector is empty
   pod_selector: {{ pod_selector }}                   # Pods to target
   block:                                             # It can be Ingress or Egress or Ingress, Egress
 {%- for policy_type in block %}

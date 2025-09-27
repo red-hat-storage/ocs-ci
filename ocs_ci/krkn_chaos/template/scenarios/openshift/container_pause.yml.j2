@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../plugin.schema.json
 - id: container_pause_by_name
   config:
-    namespace: {{ namespace }}
+    namespace: "{{ namespace }}"
 {%- if pod_name is defined %}
     pod_name: "{{ pod_name }}"
 {%- endif %}
@@ -9,7 +9,7 @@
     label_selector: "{{ label_selector }}"
 {%- endif %}
 {%- if container_name %}
-    container_name: {{ container_name }}
+    container_name: "{{ container_name }}"
 {%- else %}
     container_name: ""
 {%- endif %}
