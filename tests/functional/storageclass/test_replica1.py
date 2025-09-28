@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.storage_cluster import (
     set_non_resilient_pool,
     validate_non_resilient_pool,
@@ -221,7 +222,7 @@ class TestReplicaOne:
             else:
                 log.info(f"No PVCs found using StorageClass {REPLICA1_STORAGECLASS}")
                 return 0
-        except Exception as e:
+        except (CommandFailed, ValueError) as e:
             log.error(f"Failed to delete replica-1 PVCs: {e}")
             raise
 
@@ -241,7 +242,7 @@ class TestReplicaOne:
                 log.info(f"Deleting pod {pod.name} in namespace {pod.namespace}")
                 pod.delete()
                 summary["pods"] += 1
-            except Exception as e:
+            except CommandFailed as e:
                 log.warning(f"Failed to delete pod {pod.name}: {e}")
 
         # Delete PVCs
@@ -250,7 +251,7 @@ class TestReplicaOne:
                 log.info(f"Deleting PVC {pvc.name} in namespace {pvc.namespace}")
                 pvc.delete()
                 summary["pvcs"] += 1
-            except Exception as e:
+            except CommandFailed as e:
                 log.warning(f"Failed to delete PVC {pvc.name}: {e}")
 
         # Delete projects last
@@ -259,7 +260,7 @@ class TestReplicaOne:
                 log.info(f"Deleting project {project.namespace}")
                 project.delete()
                 summary["projects"] += 1
-            except Exception as e:
+            except CommandFailed as e:
                 log.warning(f"Failed to delete project {project.namespace}: {e}")
 
         log.info(f"Workload deletion summary: {summary}")
@@ -278,6 +279,11 @@ class TestReplicaOne:
         6. Remove replica-1 OSDs sequentially
         """
         log.info("Starting comprehensive replica-1 teardown orchestrator")
+
+        # Capture failure domains early before deleting CephBlockPools
+        log.info("Capturing failure domains before teardown")
+        failure_domains = get_failure_domains()
+        log.info(f"Captured failure domains: {failure_domains}")
 
         # Step 1: Delete workloads using replica-1 storage
         log.info("Step 1: Deleting workloads using replica-1 storage")
@@ -308,7 +314,7 @@ class TestReplicaOne:
 
         # Step 6: Remove replica-1 OSDs sequentially
         log.info("Step 6: Removing replica-1 OSDs sequentially")
-        removal_summary = sequential_remove_replica1_osds()
+        removal_summary = sequential_remove_replica1_osds(failure_domains)
         log.info(f"Step 6 completed: {removal_summary}")
 
         # Final verification
@@ -362,7 +368,6 @@ class TestReplicaOne:
         failure_domains = get_failure_domains()
         testing_pod = create_pod_on_failure_domain(
             project_factory,
-            pod_factory,
             failure_domain=failure_domains[0],
         )
         # Track the testing pod (note: create_pod_on_failure_domain also creates PVC but doesn't return it)
