@@ -70,11 +70,30 @@ class TestRbdImageMetadata:
             else constants.DEFAULT_CEPHBLOCKPOOL
         )
         ceph_tool_pod = get_ceph_tools_pod()
+        pv_name, pvc_name, pvc_namespace = (
+            pvc_obj.backed_pv,
+            pvc_obj.name,
+            pvc_obj.namespace,
+        )
         for image in rbd_images:
             cmd = f"rbd image-meta list {rbd_pool_name}/{image}"
             metadata = ceph_tool_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
             log.info(f"Metdata for {image}\n{metadata}")
             assert (
-                "There are 0 metadata on this image" in metadata
+                "There are 4 metadata on this image" in metadata
             ), f"Not expected, Metadata is being set for the rbd image - {image}!"
+            image_metadata = metadata.split("\n")
+            metadata_pv_name, metadata_pvc_name, metadata_namespace = image_metadata[
+                4:7
+            ]
+            assert (
+                metadata_pv_name in pv_name
+                and metadata_pvc_name in pvc_name
+                and metadata_namespace in pvc_namespace
+            ), (
+                f"Mismatch found:\n"
+                f"pv: expected {pv_name}, got {metadata_pv_name}\n"
+                f"pvc: expected {pvc_name}, got {metadata_pvc_name}\n"
+                f"namespace: expected {pvc_namespace}, got {metadata_namespace}"
+            )
         log.info("Metadata is not being set for the rbd images as expected!")
