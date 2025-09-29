@@ -44,7 +44,7 @@ def get_storageclass() -> str:
         storage_class = DEFAULT_STORAGE_CLASS_MAP.get(platform)
 
     logger.info(f"Using storage class: {storage_class}")
-    return storage_class
+    return storage_class or constants.DEFAULT_STORAGECLASS_LSO
 
 
 def create_custom_storageclass(storage_class_path: str) -> str:
