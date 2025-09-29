@@ -27,7 +27,26 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
     def hotplug_and_run_io(
         self, vm_obj, pvc, file_paths, before_disks, cross_pvc=False
     ):
+        """
+        Hotplugs a PVC to a VM and runs I/O operations.
 
+        This function handles the hotplugging of a Persistent Volume Claim (PVC) to a virtual machine (VM)
+        and performs I/O operations on the newly attached disk.
+
+        Args:
+            vm_obj (cnv_workload): The virtual machine object to which the PVC will be hotplugged.
+            pvc (pvc_object): The Persistent Volume Claim object to be hotplugged.
+            file_paths (list): A list of file paths for I/O operations.
+            before_disks (str): The output of 'lsblk -o NAME,SIZE,MOUNTPOINT -P' before hotplugging.
+            cross_pvc (bool, optional): If True, indicates that the I/O operation is for a pvc of pvc
+                                        based vm to dvt based VM and vice a versa. Defaults to False.
+
+        Returns:
+            str: The MD5 checksum of the source file after I/O operation if cross_pvc is False.
+
+        Raises:
+            Exception: If there is an error during hotplugging or I/O operation.
+        """
         # Hotplug the PVC volume to the VM
         log.info(f"Hotplugging PVC {pvc.name} to VM {vm_obj.name}")
         vm_obj.addvolume(volume_name=pvc.name)
@@ -52,6 +71,16 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
 
     def unplug_disks_and_verify(self, vm_obj, pvc):
+        """
+        Removes a PVC from the specified VM and verifies its detachment.
+
+        Args:
+            vm_obj (CnvWorkload): The VM object from which to remove the PVC.
+            pvc (Pvc): The PVC object to be removed from the VM.
+
+        Returns:
+            None
+        """
         vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
 
     def test_vm_hotpl_unplg_snap_clone(
@@ -206,21 +235,9 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         try:
             # Unplug cloned disks and verify detachment
             log.info(f"Unplugging clone of {dvt_obj.name} from VM {vm_obj_pvc.name}")
-            before_disks_pvc_rm = vm_obj_pvc.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-            log.info(
-                f"Disks before unplugging from VM {vm_obj_pvc.name}:\n{before_disks_pvc_rm}"
-            )
             self.unplug_disks_and_verify(vm_obj_pvc, clone_obj_dvt)
 
             log.info(f"Unplugging clone of {pvc_obj.name} from VM {vm_obj_dvt.name}")
-            before_disks_dvt_rm = vm_obj_dvt.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-            log.info(
-                f"Disks before unplugging from VM {vm_obj_dvt.name}:\n{before_disks_dvt_rm}"
-            )
             self.unplug_disks_and_verify(vm_obj_dvt, clone_obj_pvc)
 
             # Unplug normal disks and verify detachment

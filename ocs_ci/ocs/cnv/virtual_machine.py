@@ -501,6 +501,7 @@ class VirtualMachine(Virtctl):
         Args:
             verify: If true, checks volume_name not present in vm yaml
             volume_name (str): Name of the volume to remove.
+            persist (bool): True if the volume should be persisted.
 
         Returns:
              str: stdout of command

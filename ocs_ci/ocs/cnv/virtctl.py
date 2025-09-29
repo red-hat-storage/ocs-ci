@@ -58,6 +58,7 @@ class Virtctl(object):
         Args:
             vm_name (str): Name of the VM.
             volume_name (str): Name of the volume to remove.
+            persist (bool): True if the volume should be persisted.
 
         Returns:
              str: stdout of command
