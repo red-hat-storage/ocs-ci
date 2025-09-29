@@ -3540,6 +3540,9 @@ NFS_CSI_CTRLPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-ctrlplugi
 NFS_CSI_NODEPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_CEPHFS = "openshift-storage.cephfs.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD = "openshift-storage.rbd.csi.ceph.com-nodeplugin"
+DAEMONSET_CSI_RBD_CSI_ADDONS = (
+    "openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons"
+)
 # The expected mds cache memory values
 MDS_CACHE_MEMORY = 3221225472
 LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
