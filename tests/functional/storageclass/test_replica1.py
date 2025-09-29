@@ -334,14 +334,14 @@ class TestReplicaOne:
         log.info(f"{self.device_class_before_test} device class detected")
         self.project = project_factory()
         self.pvc = pvc_factory(
-            interface="ceph-rbd",
+            interface=CEPHBLOCKPOOL,
             project=self.project,
-            size="1Gi",
+            size="1",
             access_mode=ACCESS_MODE_RWO,
             volume_mode=VOLUME_MODE_BLOCK,
         )
         self.pod = pod_factory(
-            interface="ceph-rbd",
+            interface=CEPHBLOCKPOOL,
             pvc=self.pvc,
             raw_block_pv=True,
         )
