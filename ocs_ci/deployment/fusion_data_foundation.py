@@ -43,7 +43,7 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-        # self.setup_storage()
+        self.setup_storage()
 
     def create_image_tag_mirror_set(self):
         """
@@ -52,21 +52,7 @@ class FusionDataFoundationDeployment:
         logger.info("Creating or Updating FDF ImageTagMirrorSet")
 
         imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
-        # resource_name = "isf-fdf"
 
-        # cmd_check = (
-        #     f"oc --kubeconfig {self.kubeconfig} get imagetagmirrorset {resource_name}"
-        # )
-        # exists = run_cmd(cmd_check, ignore_error=True)
-
-        # if exists:
-        #     logger.info("ImageTagMirrorSet exists applying changes")
-        #     run_cmd(f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}")
-        # else:
-        #     logger.info("ImageTagMirrorSet not found creating with save-config")
-        #     run_cmd(
-        #         f"oc --kubeconfig {self.kubeconfig} create --save-config -f {imagetag_file}"
-        #     )
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}", silent=True
         )
@@ -77,21 +63,7 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set()
-        # resource_name = "df-repo"
 
-        # cmd_check = f"oc --kubeconfig {self.kubeconfig} get imagedigestmirrorset {resource_name}"
-        # exists = run_cmd(cmd_check, ignore_error=True)
-
-        # if exists:
-        #     logger.info("ImageDigestMirrorSet exists applying changes")
-        #     run_cmd(
-        #         f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}"
-        #     )
-        # else:
-        #     logger.info("ImageDigestMirrorSet not found creating with save-config")
-        #     run_cmd(
-        #         f"oc --kubeconfig {self.kubeconfig} create --save-config -f {image_digest_mirror_set}"
-        #     )
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}",
             silent=True,
