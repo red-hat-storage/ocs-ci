@@ -904,7 +904,7 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
             condition="Running",
             selector="app=rook-ceph-tools",
             resource_count=1,
-            timeout=120,
+            timeout=300,
         )
 
 
