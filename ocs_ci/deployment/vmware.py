@@ -1642,12 +1642,15 @@ class VSPHEREIPI(VSPHEREBASE):
             config.ENV_DATA["vsphere_password"],
         )
         try:
+            # removing mon and osd pods and also removing PVC's to avoid stale CNS volumes
+            scale_down_pods_and_remove_pvcs(self.storage_class)
+            # Fetch all VM's in cluster and stop
             infra_id = get_infra_id(self.cluster_path)
             all_vms = vsphere.get_vms_by_string(infra_id)
             vsphere.stop_vms(all_vms)
         except Exception as e:
             logger.error(
-                f"Failed to fetch VM's. Exception: {e}. Continuing to destroy cluster"
+                f"Failed to fetch VM's or Failed to scale down pods. Exception: {e}. Continuing to destroy cluster"
             )
             all_vms = []
 
