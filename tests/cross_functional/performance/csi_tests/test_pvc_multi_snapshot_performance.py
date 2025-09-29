@@ -600,6 +600,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         self.end = time.time()
 
         self.test_duration = int(self.end - self.start)
+        self.test_name = "test_pvc_multiple_snapshot_performance" + interface_type
 
         self.deploy_odf_grafana()
 

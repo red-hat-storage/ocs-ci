@@ -459,6 +459,7 @@ class TestFIOBenchmark(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
+        self.test_name = "fio-simple" + interface + io_pattern
 
         self.deploy_odf_grafana()
 
@@ -608,7 +609,7 @@ class TestFIOBenchmark(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
-
+        self.test_name = "fio" + io_pattern + bs + str(cmp_ratio)
         self.deploy_odf_grafana()
 
         # Writing the analyzed test results to the Elastic-Search server

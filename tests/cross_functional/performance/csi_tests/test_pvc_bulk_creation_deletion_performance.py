@@ -246,6 +246,11 @@ class TestPVCCreationPerformance(PASTest):
         end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
         epoch_gmte = calendar.timegm(end_t)
 
+        self.test_name = (
+            "test_bulk_pvc_creation_deletion_measurement_performance"
+            + interface_type
+            + str(bulk_size)
+        )
         self.test_duration = int(epoch_gmte - epoch_gmts)
 
         self.deploy_odf_grafana()

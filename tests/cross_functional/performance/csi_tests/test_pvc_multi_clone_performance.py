@@ -314,7 +314,7 @@ class TestPvcMultiClonePerformance(PASTest):
         )
         self.end = time.time()
         self.test_duration = int(self.end - self.start)
-
+        self.test_name = "test_pvc_multiple_clone_performance" + self.interface
         self.deploy_odf_grafana()
 
         # Write the test results into the ES server

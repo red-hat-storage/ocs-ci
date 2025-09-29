@@ -335,6 +335,9 @@ class TestPodReattachTimePerformance(PASTest):
         end_t = time.strptime(test_end_time, "%Y-%m-%dT%H:%M:%SGMT")
         epoch_gmte = calendar.timegm(end_t)
 
+        self.test_name = (
+            "test_pod_reattach_time_performance" + self.interface + str(copies)
+        )
         self.test_duration = int(epoch_gmte - epoch_gmts)
 
         self.deploy_odf_grafana()

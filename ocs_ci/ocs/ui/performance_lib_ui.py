@@ -12,7 +12,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 logger = logging.getLogger(__name__)
 
 
-def grafana_resource_consumption_ui(test_duration, url, username, password):
+def grafana_resource_consumption_ui(test_duration, test_name, url, username, password):
     """
     This function logs in to grafana and captures resource consumption during performance test executions
 
@@ -95,13 +95,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         time_range_selector.click()
         logger.info(f"Test duration {last_duration}")
         time.sleep(5)
-        """
-        last_duration_option = wait.until(
-            ec.element_to_be_clickable(
-                (By.XPATH, f"//label[normalize-space()='{last_duration}']")
-            )
-        )
-        """
+
         last_duration_option = wait.until(
             ec.element_to_be_clickable(
                 (By.XPATH, f"//label[contains(text(), '{last_duration}')]")
@@ -150,7 +144,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         # Take screenshot
 
         time.sleep(3)
-        driver.save_screenshot("/tmp/network_utilization.png")
+        driver.save_screenshot(f"/tmp/network_utilization{test_name}.png")
         logger.info("Screenshot for network utilization is captured.")
 
         # Go back to previous menu
@@ -193,7 +187,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         view.click()
 
         time.sleep(2)
-        driver.save_screenshot("/tmp/Ceph_CPU.png")
+        driver.save_screenshot(f"/tmp/Ceph_CPU{test_name}.png")
         logger.info("Ceph CPU resource consumption is captured")
 
         # Go back to previous menu
@@ -227,7 +221,7 @@ def grafana_resource_consumption_ui(test_duration, url, username, password):
         view_option.click()
 
         time.sleep(2)
-        driver.save_screenshot("/tmp/Ceph_memory.png")
+        driver.save_screenshot(f"/tmp/Ceph_memory{test_name}.png")
         logger.info("Ceph Memory resource consumption is captured")
 
         # Go back to previous menu

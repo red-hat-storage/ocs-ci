@@ -239,6 +239,9 @@ class TestBulkPodAttachPerformance(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
+        self.test_name = (
+            "test_bulk_pod_attach_performance" + interface_type + str(bulk_size)
+        )
 
         self.deploy_odf_grafana()
 

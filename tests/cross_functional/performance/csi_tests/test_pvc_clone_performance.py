@@ -368,7 +368,12 @@ class TestPVCClonePerformance(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
-
+        self.test_name = (
+            "test_clone_create_delete_performance"
+            + interface_type
+            + str(pvc_size)
+            + str(file_size)
+        )
         self.deploy_odf_grafana()
 
         # Write the test results into the ES server
@@ -522,7 +527,7 @@ class TestPVCClonePerformance(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
-
+        self.test_name = "test_pvc_clone_performance_multiple_files" + interface
         self.deploy_odf_grafana()
 
         full_results.add_key("clones_number", self.number_of_clones)

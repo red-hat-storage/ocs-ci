@@ -471,7 +471,9 @@ class TestPvcSnapshotPerformance(PASTest):
 
         self.end = time.time()
         self.test_duration = int(self.end - self.start)
-
+        self.test_name = (
+            "test_pvc_snapshot_performance" + self.interface + str(pvc_size)
+        )
         self.deploy_odf_grafana()
 
         # Write the test results into the ES server
@@ -722,6 +724,7 @@ class TestPvcSnapshotPerformance(PASTest):
         self.end = time.time()
 
         self.test_duration = int(self.end - self.start)
+        self.test_name = "test_pvc_snapshot_performance_multiple_files" + interface
 
         self.deploy_odf_grafana()
 

@@ -672,7 +672,15 @@ class TestSmallFileWorkload(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
-
+        self.test_name = (
+            "smallfile"
+            + str(file_size)
+            + str(files)
+            + str(threads)
+            + str(samples)
+            + str(clients)
+            + interface
+        )
         self.deploy_odf_grafana()
 
         if self.main_es:

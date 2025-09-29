@@ -1126,7 +1126,7 @@ class PASTest(BaseTest):
                     check=True,
                 )
                 grafana_resource_consumption_ui(
-                    self.test_duration, url, grafana_user, grafana_pwd
+                    self.test_duration, self.test_name, url, grafana_user, grafana_pwd
                 )
             except subprocess.CalledProcessError as e:
                 log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
@@ -1135,5 +1135,5 @@ class PASTest(BaseTest):
         else:
             log.info("grafana is running")
             grafana_resource_consumption_ui(
-                self.test_duration, url, grafana_user, grafana_pwd
+                self.test_duration, self.test_name, url, grafana_user, grafana_pwd
             )

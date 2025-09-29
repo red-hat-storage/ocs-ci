@@ -272,6 +272,9 @@ class TestPodStartTime(PASTest):
         end_t = time.strptime(self.test_end_time, "%Y-%m-%dT%H:%M:%SGMT")
         epoch_gmte = calendar.timegm(end_t)
 
+        self.test_name = (
+            "test_pod_start_time" + interface + str(samples_num) + str(pvc_size)
+        )
         self.test_duration = int(epoch_gmte - epoch_gmts)
 
         self.deploy_odf_grafana()

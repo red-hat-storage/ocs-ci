@@ -389,7 +389,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
-
+        self.test_name = (
+            "test_pvc_creation_deletion_measurement_performance" + interface_type
+        )
         self.deploy_odf_grafana()
 
         if self.full_results.es_write():
@@ -584,7 +586,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
         epoch_gmte = calendar.timegm(end_t)
 
         self.test_duration = int(epoch_gmte - epoch_gmts)
-
+        self.test_name = (
+            "test_multiple_pvc_deletion_measurement_performance" + interface_type
+        )
         self.deploy_odf_grafana()
 
         if self.full_results.es_write():
