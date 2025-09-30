@@ -2661,21 +2661,25 @@ def create_vr_for_offloaded_vr(namespace, scheduling_interval=5):
     )
 
 
-def update_vr_status_to_vgr(namespace):
+def update_vr_status_to_vgr(namespace, **kwargs):
     """
     This method is to update vr status to vgr
 
     Args:
         namespace (str): the namespace of the VR resources
-        vr_name (str): VR name
+        **kwargs: Additional arguments for exec_cmd
 
     """
     vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace).get()[
         "items"
     ]
     vr_status = vr_obj[0]["status"]
-    logger(f"vr status: {vr_status}")
+    patch = json.dumps(vr_status)
     vgr_obj = ocp.OCP(
         kind=constants.VOLUME_GROUP_REPLICATION, namespace=namespace
     ).get()["items"]
-    logger(f"vgr details: {vgr_obj}")
+    vgr_name = vgr_obj[0]["metadata"]["name"]
+    cmd = f"oc patch {constants.VOLUME_GROUP_REPLICATION} {vgr_name} --subresource status --type merge -p '{patch}'"
+    exec_cmd(cmd)
+    waiting_time = 60
+    time.sleep(waiting_time)
