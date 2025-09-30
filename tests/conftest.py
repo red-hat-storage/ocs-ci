@@ -639,7 +639,9 @@ def pytest_fixture_setup(fixturedef, request):
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", ""):
         if request.fixturenames.index(fixturedef.argname) == 0:
             for mark in request.node.iter_markers():
-                if mark.name == "config_index":
+                if isinstance(
+                    request.node, pytest.Function
+                ) and request.node.callspec.params.get("cluster_index"):
                     ocsci_config.switch_ctx(mark.args[0])
     _switch_context_helper(request)
 
@@ -1402,6 +1404,7 @@ def pvc_factory_fixture(request, project_factory):
         volume_mode=None,
         size_unit="Gi",
         wait_for_resource_status_timeout=90,
+        pvc_name=None,
     ):
         """
         Args:
@@ -1426,6 +1429,7 @@ def pvc_factory_fixture(request, project_factory):
             size_unit (str): PVC size unit, eg: "Mi"
             wait_for_resource_status_timeout (int): Wait in seconds until the
                 desired PVC status is reached.
+            pvc_name (str): The name of the PVC to create
 
         Returns:
             object: helpers.create_pvc instance.
@@ -1455,6 +1459,7 @@ def pvc_factory_fixture(request, project_factory):
 
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
+                pvc_name=pvc_name,
                 namespace=project.namespace,
                 size=pvc_size,
                 do_reload=False,
@@ -1773,6 +1778,7 @@ def service_account_factory_fixture(request):
         """
         Delete the service account
         """
+        _switch_context_helper(request)
         for instance in instances:
             original_cluster = None
             if instance.ocp.cluster_context:
@@ -1870,6 +1876,8 @@ def deployment_pod_factory(request, pvc_factory, service_account_factory):
         """
         Delete dc pods
         """
+        _switch_context_helper(request)
+
         for instance in instances:
             delete_deployment_pods(instance)
 
@@ -2192,6 +2200,7 @@ def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
+    log.info(marks_to_ignore)
     # app labels of resources to be excluded for leftover check
     exclude_labels = [
         constants.must_gather_pod_label,
@@ -5010,8 +5019,16 @@ def collect_logs_fixture(request):
                 if not skip_rpm_go_version_collection:
                     utils.collect_pod_container_rpm_package("testcases")
             except Exception as ex:
-                failure_in_mg.append(("rpm_package_info", ex))
-                log.error(f"Failure in collecting RPM package info! Exception: {ex}")
+                # If pod is killed/restarted during this operation, skip if pod not found error is shown
+                if "Error is Error from server (NotFound)" in str(ex):
+                    log.info(
+                        f"One of the pod was not found, assuming it was already deleted. refer {ex}"
+                    )
+                else:
+                    failure_in_mg.append(("rpm_package_info", ex))
+                    log.error(
+                        f"Failure in collecting RPM package info! Exception: {ex}"
+                    )
             if failure_in_mg:
                 if config.REPORTING.get("dont_fail_on_collect_logs"):
                     exception_errors = [str(ex) for ex in failure_in_mg]

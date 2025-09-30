@@ -2462,7 +2462,13 @@ def validate_storage_cluster_peer_state():
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
     for cluster in managed_clusters:
-        index = cluster.MULTICLUSTER["multicluster_index"]
+        if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
+            with config.RunWithConfigContext(
+                cluster.MULTICLUSTER["multicluster_index"]
+            ):
+                index = config.get_provider_index()
+        else:
+            index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         logger.info("Validating Storage Cluster Peer status")
         sample = TimeoutSampler(
@@ -2512,6 +2518,12 @@ def create_service_exporter():
     for cluster in managed_clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            logger.info("Skipping ServiceExport creation for multiclient cluster")
+            continue
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
     config.switch_ctx(restore_index)

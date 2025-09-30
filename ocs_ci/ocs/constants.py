@@ -293,6 +293,7 @@ NETWORK_FENCE = "NetworkFence"
 STORAGE_AUTO_SCALER = "StorageAutoScaler"
 INTERNAL_STORAGE_CONSUMER_NAME = "internal"
 CEPH_DRIVER_CSI = "drivers.csi.ceph.io"
+ADDONDEPLOYMENTCONFIG = "AddOnDeploymentConfig"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -690,6 +691,12 @@ CSI_RBDPLUGIN_PROVISIONER_LABEL_419 = (
 )
 CSI_CEPHFSPLUGIN_LABEL_419 = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
 CSI_RBDPLUGIN_LABEL_419 = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
+CSI_RBD_ADDON_NODEPLUGIN_LABEL_420 = (
+    "app=openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons"
+)
+CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420 = (
+    "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin-csi-addons"
+)
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 ODF_OPERATOR_CONTROL_MANAGER_LABEL = "app.kubernetes.io/name=odf-operator"
 ROOK_CEPH_DRAIN_CANARY = "rook-ceph-drain-canary"
@@ -1522,6 +1529,7 @@ OSBS_BOUNDLE_IMAGE = "registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pend
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
+REDHAT_OPERATOR_SELECTOR = "catalog=redhat-operators"
 OPERATOR_CS_QUAY_API_QUERY = (
     "https://quay.io/api/v1/repository/rhceph-dev/{image}/"
     "tag/?onlyActiveTags=true&limit={tag_limit}&page={page}"
@@ -2909,7 +2917,8 @@ ROOK_CEPH_CONFIG_VALUES_420 = {
         "mon_data_avail_warn": "15",
         "mon_max_pg_per_osd": "1000",
         "mon_pg_warn_max_object_skew": "0",
-        "mon_target_pg_per_osd": "400",
+        "mon_target_pg_per_osd": "200",
+        "rbd_default_pool": "ocs-storagecluster-cephblockpool",
     },
     "osd": {"osd_memory_target_cgroup_limit_ratio": "0.8"},
 }
@@ -3124,6 +3133,15 @@ ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
 ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
 ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
+)
+POLICY_MCE_HCP_AUTOIMPORT_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "policy_mce_hcp_autoimport.yaml"
+)
+POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "policy_mce_hcp_autoimport_placement.yaml"
+)
+POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_BINDING_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "policy_mce_hcp_autoimport_placement_binding.yaml"
 )
 ACM_OPERATOR_SUBSCRIPTION = "acm-operator-subscription"
 
