@@ -2627,11 +2627,11 @@ def verify_vgr_available_and_external_enabled_for_agnostic_rdr(namespace):
     vgr_obj_details = vgr_obj.get()["items"][0]
     vgr_name = vgr_obj_details["metadata"]["name"]
     vgr_external_status = vgr_name = vgr_obj_details["spec"]["external"]
-    assert vgr_obj.check_resource_existence(should_exist=True, resource_name=vgr_name)
     assert vgr_external_status == "true"
+    return vgr_obj.check_resource_existence(should_exist=True, resource_name=vgr_name)
 
 
-def create_vr_for_offloaded_vr(namespace, scheduling_interval=5):
+def create_vr_for_offloaded_vr(namespace, vr_state="primary", scheduling_interval=5):
     """
     This method is for creating vr manually for offloaded vr scenario
 
@@ -2639,6 +2639,7 @@ def create_vr_for_offloaded_vr(namespace, scheduling_interval=5):
         namespace (str): the namespace of the VR resources
     """
     vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace)
+    resource_name = "offloaded-vr" + namespace
     vrc_objs = ocp.OCP(kind=constants.VOLUME_REPLICATION_CLASS).get()["items"]
     for vrc_obj in vrc_objs:
         if scheduling_interval in vrc_obj:
@@ -2649,7 +2650,7 @@ def create_vr_for_offloaded_vr(namespace, scheduling_interval=5):
     vr_data["metadata"]["labels"][
         "ramendr.openshift.io/owner-namespace-name"
     ] = namespace
-    vr_data["metadata"]["name"] = "offloaded-vr" + namespace
+    vr_data["metadata"]["name"] = resource_name
     vr_data["metadata"]["namespace"] = namespace
     vr_data["spec"]["volumeReplicationClass"] = vrc_name
     vr_data_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="vr", delete=False)
@@ -2657,8 +2658,38 @@ def create_vr_for_offloaded_vr(namespace, scheduling_interval=5):
     run_cmd(f"oc create -f {vr_data_yaml.name}")
     assert vr_obj.check_resource_existence(
         should_exist=True,
-        resource_name="offloaded-vr" + namespace,
+        resource_name=resource_name,
     )
+    wait_for_vr_state(vr_state, namespace, resource_name=resource_name)
+
+
+def wait_for_vr_state(vr_state, namespace, resource_name, timeout=900, sleep_timeout=5):
+    """
+    Wait for VR state
+
+    Args:
+        vr_state (str): VR expected state primary/secondary
+        namespace (str): VR resource namespace
+        resource_name (str): VR resource name
+        timeout (int): Timeout for wait
+        sleep_timeout (int) Sleep between timeouts
+
+    """
+    logger.info(f"Waiting for VR to reach {vr_state} state")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep_timeout,
+        func=check_vr_state,
+        state=vr_state,
+        namespace=namespace,
+        resource_name=resource_name,
+    )
+    if not sample.wait_for_func_status(result=True):
+        error_msg = (
+            f"VR hasn't reached expected state {vr_state} within the time limit."
+        )
+        logger.info(error_msg)
+        raise TimeoutExpiredError(error_msg)
 
 
 def update_vr_status_to_vgr(namespace, **kwargs):
@@ -2683,3 +2714,203 @@ def update_vr_status_to_vgr(namespace, **kwargs):
     exec_cmd(cmd)
     waiting_time = 60
     time.sleep(waiting_time)
+
+
+def failover_for_offloade_vr(
+    namespace,
+    workload_placement_name=None,
+    switch_ctx=None,
+):
+    """
+    Initiates Failover action to the specified cluster
+
+    steps:
+        Initiate failover from hub
+        Wait until VGR gets created on failover cluster
+        Create a VR on the failoverCluster
+        Update primary status to vgr on primary cluster.
+        After this pod and volumeattachment will be created on failover cluster, drpc will move to Cleaning-Up
+        Wait until, pvc moves to ‘terminating’, pod goes down
+        and volume attachment is garbage collected from the secondary cluster
+        update vr on previously Primary cluster with,
+            spec.AutoResync to true
+            spec.replicationState to secondary
+        Update VGR with latest vr secondary status.
+        Delete vr from the secondary cluster it will delete the pvc and  failover will complete.
+
+
+    Args:
+        namespace (str): Namespace where workload is running
+        workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
+
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    primary_cluster_name = get_current_primary_cluster_name(namespace)
+    failover_cluster_name = get_current_secondary_cluster_name(namespace)
+
+    # fetch vr name from primary cluster
+    config.switch_to_cluster_by_name(primary_cluster_name)
+    vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace).get()[
+        "items"
+    ]
+    vr_name = vr_obj[0]["metadata"]["name"]
+
+    # Initiate failover
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}",'
+    +f'"failoverCluster":"{failover_cluster_name}"}}}}'
+
+    namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    drpc_obj = DRPC(
+        namespace=namespace,
+        resource_name=f"{workload_placement_name}-drpc",
+        switch_ctx=switch_ctx,
+    )
+
+    # Wait until VGR gets created on failover cluster
+    config.switch_to_cluster_by_name(failover_cluster_name)
+    assert verify_vgr_available_and_external_enabled_for_agnostic_rdr(namespace)
+
+    # Create VR on the failoverCluster
+    create_vr_for_offloaded_vr(namespace)
+    wait_for_vrg_state
+
+    # Update primary status to vgr on primary cluster.
+    wait_for_vr_state("primary", namespace, resource_name=vr_name)
+    update_vr_status_to_vgr(namespace)
+
+    # Check pod and volumeattachment created on the failover cluster
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        pod_obj.wait_for_phase(phase="Running", timeout=300)
+
+    # drpc will move to Cleaning-Up
+    drpc_obj.wait_for_progression_status("Cleaning-Up")
+
+    # Wait until, pvc moves to ‘terminating’, pod goes down,volume attachment,
+    # garbage collected from the secondary cluster
+    # update vr on previously Primary cluster with,
+    # spec.AutoResync to true and spec.replicationState to secondary
+    # Update VGR with latest vr secondary status.
+    # Delete vr from the secondary cluster it will delete the pvc and
+    config.switch_to_cluster_by_name(primary_cluster_name)
+    patch_secondary_vr = '{"spec":{"autoResync":true,"replicationState":"secondary"}}'
+    cmd = f"oc patch {constants.VOLUME_REPLICATION} {vr_name} --type merge -p '{patch_secondary_vr}'"
+    run_cmd(cmd)
+    wait_for_vr_state("secondary", namespace, resource_name=vr_name)
+    update_vr_status_to_vgr(namespace)
+
+    # failover will complete.
+    drpc_obj.wait_for_peer_ready_status()
+    logger.info(
+        f"Initiating Failover action with failoverCluster:{failover_cluster_name}"
+    )
+    assert drpc_obj.patch(
+        params=failover_params, format_type="merge"
+    ), f"Failed to patch {constants.DRPC}: {drpc_obj.resource_name}"
+
+    logger.info(
+        f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
+    )
+
+    drpc_obj.wait_for_phase(
+        constants.STATUS_FAILEDOVER,
+        timeout=360,
+    )
+    config.switch_ctx(restore_index)
+
+
+def relocate_for_offloade_vr(
+    preferred_cluster,
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    workload_placement_name=None,
+    switch_ctx=None,
+    discovered_apps=False,
+    old_primary=None,
+    workload_instance=None,
+    multi_ns=False,
+    workload_instances_shared=None,
+):
+    """
+    Initiates Relocate action to the specified cluster
+
+    Args:
+        preferred_cluster (str): Cluster name to which the workload should be relocated
+        namespace (str): Namespace where workload is running
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        old_primary (str): Name of cluster where workload were running
+        workload_instance (object): Discovered App instance to get namespace and dir location
+        multi_ns (bool): Multi Namespace
+        workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
+
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","preferredCluster":"{preferred_cluster}"}}}}'
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+            switch_ctx=switch_ctx,
+        )
+    elif discovered_apps:
+        relocate_params = (
+            f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}",'
+            f'"failoverCluster":"{old_primary}",'
+            f'"preferredCluster":"{preferred_cluster}"}}}}'
+        )
+        namespace = constants.DR_OPS_NAMESAPCE
+        drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
+    else:
+        drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
+    drpc_obj.wait_for_peer_ready_status()
+    logger.info(f"Initiating Relocate action with preferredCluster:{preferred_cluster}")
+    assert drpc_obj.patch(
+        params=relocate_params, format_type="merge"
+    ), f"Failed to patch {constants.DRPC}: {drpc_obj.resource_name}"
+
+    logger.info(
+        f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_RELOCATED} phase"
+    )
+    relocate_condition = constants.STATUS_RELOCATED
+    if discovered_apps:
+        relocate_condition = constants.STATUS_RELOCATING
+    drpc_obj.wait_for_phase(relocate_condition)
+
+    if multi_ns:
+        logger.info("Doing Cleanup Operations")
+        do_discovered_apps_cleanup_multi_ns(
+            old_primary=old_primary, workload_instance=workload_instance
+        )
+    else:
+        if discovered_apps and workload_instance and not workload_instances_shared:
+            logger.info("Doing Cleanup Operations")
+            do_discovered_apps_cleanup(
+                drpc_name=workload_placement_name,
+                old_primary=old_primary,
+                workload_namespace=workload_instance.workload_namespace,
+                workload_dir=workload_instance.workload_dir,
+                vrg_name=workload_instance.discovered_apps_placement_name,
+            )
+        elif discovered_apps and workload_instance and workload_instances_shared:
+            logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
+            for cnv_wl in workload_instances_shared:
+                do_discovered_apps_cleanup(
+                    drpc_name=workload_placement_name,
+                    old_primary=old_primary,
+                    workload_namespace=workload_instances_shared[0].workload_namespace,
+                    workload_dir=cnv_wl.workload_dir,
+                    vrg_name=workload_instances_shared[
+                        0
+                    ].discovered_apps_placement_name,
+                    skip_resource_deletion_verification=True,
+                )
+
+    config.switch_ctx(restore_index)
