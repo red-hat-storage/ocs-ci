@@ -157,6 +157,89 @@ def check_cluster_status_on_acm_console(
                     return False
 
 
+def create_drpolicy_ui(
+    acm_obj,
+    policy_name="odr-policy-5m",
+    first_cluster_name=None,
+    second_cluster_name=None,
+    scheduling_interval=5,
+):
+    """
+    Function to create DRPolicy via ACM console on the Regional DR setup
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        scheduling_interval (int): Scheduling interval to be used in the DRPolicy
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    acm_obj.navigate_data_services()
+    log.info("Click on 'Policies' tab under Disaster recovery")
+    acm_obj.do_click(
+        acm_loc["Policies"], avoid_stale=True, enable_screenshot=True, timeout=120
+    )
+    log.info("Create DRPolicy by clicking on 'Create' button")
+    acm_obj.do_click(
+        acm_loc["click-create-policy"],
+        avoid_stale=True,
+        enable_screenshot=True,
+        timeout=120,
+    )
+    log.info("Send policy name")
+    acm_obj.do_click(acm_loc["policy-name"])
+    acm_obj.do_send_keys(acm_loc["policy-name"], text=policy_name)
+    log.info("Clear existing filters (if any)")
+    clear_filter = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["clear-existing-filter"],
+        expected_text="Clear all filters",
+        timeout=10,
+    )
+    if clear_filter:
+        acm_obj.do_click(acm_loc["clear-filter"])
+    log.info("Click on cluster search bar")
+    acm_obj.do_click(acm_loc["cluster-search-bar"])
+    acm_obj.do_clear(acm_loc["cluster-search-bar"])
+    log.info("Select the first cluster")
+    acm_obj.do_send_keys(acm_loc["policy-name"], text=first_cluster_name)
+    acm_obj.do_click(
+        acm_loc["checkbox-selection"], enable_screenshot=True, avoid_stale=True
+    )
+    if clear_filter:
+        acm_obj.do_click(acm_loc["clear-filter"])
+    log.info("Select the second cluster")
+    acm_obj.do_clear(acm_loc["cluster-search-bar"])
+    acm_obj.do_send_keys(acm_loc["policy-name"], text=second_cluster_name)
+    acm_obj.do_click(
+        acm_loc["checkbox-selection"], enable_screenshot=True, avoid_stale=True
+    )
+    if clear_filter:
+        acm_obj.do_click(acm_loc["clear-filter"])
+
+    policy_status = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["drpolicy-status"], expected_text="Validated"
+    )
+    if policy_status:
+        log.info(f"DRPolicy status on ACM UI is {constants.DRPOLICY_STATUS}")
+    else:
+        log.error(
+            f"DRPolicy status on ACM UI is not {constants.DRPOLICY_STATUS}, can not proceed"
+        )
+        raise NoSuchElementException
+    log.info("Verify Replication policy on ACM UI")
+    replication_policy = acm_obj.get_element_text(acm_loc["replication-policy"])
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
+    if multicluster_mode == constants.RDR_MODE:
+        assert (
+            replication_policy
+            == f"{constants.RDR_REPLICATION_POLICY}, interval: {scheduling_interval}m"
+        ), f"Replication policy on ACM UI is {replication_policy}, can not proceed"
+    log.info("DRPolicy and replication policy successfully validated on ACM UI")
+    log.info("Navigate back to Disaster recovery Overview page")
+    acm_obj.do_click(
+        acm_loc["disaster-recovery-overview"], avoid_stale=True, enable_screenshot=True
+    )
+
+
 def verify_drpolicy_ui(acm_obj, scheduling_interval):
     """
     Function to verify DRPolicy status and replication policy on Data Policies page of ACM console

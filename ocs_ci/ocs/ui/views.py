@@ -1418,6 +1418,14 @@ acm_configuration_4_20 = {
     "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
     "cnv-vm-name": ('//a[@data-test-id="{}"]', By.XPATH),
     "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
+    "click-create-policy": ("yaml-create", By.ID),
+    "policy-name": ("#policy-name", By.CSS_SELECTOR),
+    "cluster-search-bar": ("input[data-test='name-filter-input']", By.CSS_SELECTOR),
+    "checkbox-selection": ("input[name='checkrow0']", By.CSS_SELECTOR),
+    "clear-existing-filter": (
+        "//span[normalize-space()='Clear all filters']",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
