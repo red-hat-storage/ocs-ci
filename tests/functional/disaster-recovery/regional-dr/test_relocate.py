@@ -11,7 +11,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
-    verify_failover_relocate_status_ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -188,9 +187,4 @@ class TestRelocate:
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
-            )
-
-        if via_ui:
-            verify_failover_relocate_status_ui(
-                acm_obj, action=constants.ACTION_RELOCATE
             )

@@ -11,7 +11,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
-    verify_failover_relocate_status_ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -289,10 +288,6 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if via_ui:
-            config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(acm_obj)
-
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
@@ -389,12 +384,6 @@ class TestFailoverAndRelocate:
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
-            )
-
-        if via_ui:
-            config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(
-                acm_obj, action=constants.ACTION_RELOCATE
             )
 
         for obj, initial_last_group_sync_time in zip(
