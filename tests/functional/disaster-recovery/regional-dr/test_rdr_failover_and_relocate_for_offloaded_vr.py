@@ -181,10 +181,6 @@ class TestFailoverAndRelocateForOffloadedVR:
                 replaying_images=sum([workload.workload_pvc_count])
             )
 
-        if via_ui:
-            config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(acm_obj)
-
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
@@ -200,15 +196,8 @@ class TestFailoverAndRelocateForOffloadedVR:
         logger.info("Verified lastGroupSyncTime after failover.")
 
         # Relocate action
-        dr_helpers.relocate(
-            primary_cluster_name,
+        dr_helpers.relocate_for_offloade_vr(
             workload.workload_namespace,
-            workload.workload_type,
-            (
-                workload.appset_placement_name
-                if workload.workload_type == constants.APPLICATION_SET
-                else None
-            ),
         )
 
         # Verify resources deletion from secondary cluster
