@@ -2661,7 +2661,7 @@ def create_vr_for_offloaded_vr(namespace, scheduling_interval=5):
     )
 
 
-def update_vr_status_to_vgr(namespace, vgr_name):
+def update_vr_status_to_vgr(namespace):
     """
     This method is to update vr status to vgr
 
@@ -2672,7 +2672,10 @@ def update_vr_status_to_vgr(namespace, vgr_name):
     """
     vr_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION, namespace=namespace).get()[
         "items"
-    ][0]
-    vr_status = vr_obj["status"]
-    vgr_obj = ocp.OCP(kind=constants.VOLUME_GROUP_REPLICATION, namespace=namespace)
-    vgr_obj["status"] = vr_status
+    ]
+    vr_status = vr_obj[0]["status"]
+    logger(f"vr status: {vr_status}")
+    vgr_obj = ocp.OCP(
+        kind=constants.VOLUME_GROUP_REPLICATION, namespace=namespace
+    ).get()["items"]
+    logger(f"vgr details: {vgr_obj}")
