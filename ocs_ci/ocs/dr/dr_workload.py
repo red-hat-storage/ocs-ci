@@ -548,7 +548,10 @@ class BusyBox_AppSet(DRWorkload):
 
     def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
-        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        if config.ENV_DATA["offload_vr", False]:
+            workload_repo_branch = "agnostic-rdr"
+        else:
+            workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
         super().__init__("busybox", workload_repo_url, workload_repo_branch)
 
         self.workload_type = kwargs.get("workload_type", constants.APPLICATION_SET)
