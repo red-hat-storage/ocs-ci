@@ -138,6 +138,7 @@ def create_pod_on_failure_domain(project_factory, failure_domain: str):
     if node_selector:
         log.info(f"Creating pod with node selector: {node_selector}")
         return create_pod(
+            interface_type=CEPHBLOCKPOOL,
             pvc_name=pvc.name,
             namespace=ns,
             node_selector=node_selector,
@@ -148,6 +149,7 @@ def create_pod_on_failure_domain(project_factory, failure_domain: str):
             f"Creating pod with preferred node affinity for domain: {failure_domain}"
         )
         return create_pod(
+            interface_type=CEPHBLOCKPOOL,
             pvc_name=pvc.name,
             namespace=ns,
         )
@@ -157,6 +159,7 @@ def create_pod_on_failure_domain(project_factory, failure_domain: str):
         failure_domain,
     )
     return create_pod(
+        interface_type=CEPHBLOCKPOOL,
         pvc_name=pvc.name,
         namespace=ns,
     )
