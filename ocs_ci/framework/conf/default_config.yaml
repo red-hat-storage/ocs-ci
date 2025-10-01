@@ -142,7 +142,10 @@ REPORTING:
     project_id: "OpenShiftContainerStorage"
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'DS'
-  ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
+  # We are keeping OCP must gather image empty, so the default will be used,
+  # but we still enable option to overwirte it if needed. Otherwise if
+  # specified, the ARM architecture is not supported.
+  ocp_must_gather_image: ""
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
   default_ocs_must_gather_latest_tag: 'latest-4.20'
