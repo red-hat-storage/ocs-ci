@@ -1382,8 +1382,15 @@ def get_all_drpolicy():
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            for item in dr_cluster_relations[0]
+        ]
+    else:
+        current_managed_clusters_list.remove(acm_hub_name)
 
-    current_managed_clusters_list.remove(acm_hub_name)
     for drpolicy in drpolicy_list:
 
         if all(
@@ -2487,6 +2494,13 @@ def get_cluster_set_name(switch_ctx=None):
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            for item in dr_cluster_relations[0]
+        ]
+
 
     # ignore local-cluster here
     for i in managed_clusters:

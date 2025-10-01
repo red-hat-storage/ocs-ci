@@ -914,7 +914,8 @@ def discover_hosted_clusters():
         resource_name="hypershift-addon-deploy-config",
         params=(
             '{"spec":{"customizedVariables":[{"name":"disableMetrics","value": "true"},'
-            '{"name":"disableHOManagement","value": "true"},{"name":"discoveryPrefix","value": "dr"}]}}'
+            '{"name":"disableHOManagement","value": "true"},'
+            f'{{"name":"discoveryPrefix","value": "{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}"}}]}}}}'
         ),
         format_type="merge",
     )
