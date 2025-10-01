@@ -374,12 +374,21 @@ class PageNavigator(BaseUI):
 
     def navigate_storage_pools_page(self):
         """
-        Navigate to storage pools page
+        Navigate to storage pools tab of Storage cluster page
 
         """
-        logger.info("Navigate to block pools page")
+        logger.info("Navigate to block pools tab")
 
         return self.nav_storage_cluster_default_page().nav_storage_pools_tab()
+
+    def navigate_object_tab(self):
+        """
+        Navigate to Object tab of Storage cluster page
+
+        """
+        logger.info("Navigate to Object tab of Storage Cluster page")
+
+        return self.nav_storage_cluster_default_page().nav_object_tab()
 
     def select_namespace(self, project_name):
         """

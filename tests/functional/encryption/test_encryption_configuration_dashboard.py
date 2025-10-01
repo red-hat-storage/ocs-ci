@@ -137,7 +137,7 @@ class TestEncryptionConfigurationDashboard:
             3. verify encryption data with the nooba and storagecluster spec.
         """
         # Navigate to the Object Storage page
-        object_details_page = PageNavigator().nav_object_tab()
+        object_details_page = PageNavigator().navigate_object_tab()
 
         encryption_summary = object_details_page.get_object_encryption_summary()
         log.info(f"Encryption Summary from page : {encryption_summary}")
