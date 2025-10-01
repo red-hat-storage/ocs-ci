@@ -8,7 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.helpers.helpers import storagecluster_independent_check
-from ocs_ci.ocs.ui.page_objects.encryption_module import EncryptionModule
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 
 @green_squad
@@ -81,7 +81,7 @@ class TestEncryptionConfigurationDashboard:
         """
 
         # Navigate to the block and file page
-        block_and_file_page = EncryptionModule().nav_storage_cluster_default_page()
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
         block_and_file_page.validate_block_and_file_tab_active()
 
         # Retrieve encryption summary from the dashboard
@@ -137,7 +137,7 @@ class TestEncryptionConfigurationDashboard:
             3. verify encryption data with the nooba and storagecluster spec.
         """
         # Navigate to the Object Storage page
-        object_details_page = EncryptionModule().nav_object_tab()
+        object_details_page = PageNavigator().nav_object_tab()
 
         encryption_summary = object_details_page.get_object_encryption_summary()
         log.info(f"Encryption Summary from page : {encryption_summary}")
