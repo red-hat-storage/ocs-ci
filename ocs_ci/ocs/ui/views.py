@@ -2362,7 +2362,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "storage_class_dropdown": (
-        "//button[contains(., 'SCSCSelect StorageClass')]",
+        "//button[@data-test='sc-dropdown']",
         By.XPATH,
     ),
     "storage_class_noobaa_option": (
