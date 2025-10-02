@@ -162,28 +162,37 @@ def create_drpolicy_ui(
     policy_name="odr-policy-5m",
     first_cluster_name=None,
     second_cluster_name=None,
-    scheduling_interval=5,
+    replication_interval="5",
 ):
     """
-    Function to create DRPolicy via ACM console on the Regional DR setup
+    Function to create DRPolicy via ACM console on the Regional DR setup. Policy creation requires 2 managed clusters
+    with ODF installed on them.
 
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
-        scheduling_interval (int): Scheduling interval to be used in the DRPolicy
+        policy_name (str): Name of replication policy (DR Policy)
+        first_cluster_name (str): Name of the first managed cluster to be used for policy creation
+        second_cluster_name (str): Name of the second managed cluster to be used for policy creation
+        replication_interval (str): Scheduling interval to be used in the DRPolicy, should be a number
+                                    but sent as a string.
+                                    Default is 5 whose unit will always be set in minutes.
+
+    Returns:
+        True if the policy creation is successful, False if the flow breaks in between
 
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     acm_obj.navigate_data_services()
     log.info("Click on 'Policies' tab under Disaster recovery")
     acm_obj.do_click(
-        acm_loc["Policies"], avoid_stale=True, enable_screenshot=True, timeout=120
+        acm_loc["Policies"], avoid_stale=True, enable_screenshot=True, timeout=30
     )
     log.info("Create DRPolicy by clicking on 'Create' button")
     acm_obj.do_click(
         acm_loc["click-create-policy"],
         avoid_stale=True,
         enable_screenshot=True,
-        timeout=120,
+        timeout=30,
     )
     log.info("Send policy name")
     acm_obj.do_click(acm_loc["policy-name"])
@@ -192,52 +201,71 @@ def create_drpolicy_ui(
     clear_filter = acm_obj.wait_until_expected_text_is_found(
         locator=acm_loc["clear-existing-filter"],
         expected_text="Clear all filters",
-        timeout=10,
+        timeout=5,
     )
     if clear_filter:
-        acm_obj.do_click(acm_loc["clear-filter"])
-    log.info("Click on cluster search bar")
-    acm_obj.do_click(acm_loc["cluster-search-bar"])
-    acm_obj.do_clear(acm_loc["cluster-search-bar"])
+        acm_obj.do_click(acm_loc["clear-existing-filter"])
     log.info("Select the first cluster")
-    acm_obj.do_send_keys(acm_loc["policy-name"], text=first_cluster_name)
-    acm_obj.do_click(
-        acm_loc["checkbox-selection"], enable_screenshot=True, avoid_stale=True
-    )
-    if clear_filter:
-        acm_obj.do_click(acm_loc["clear-filter"])
+    acm_obj.do_click(format_locator(acm_loc["cluster-selection"], first_cluster_name))
     log.info("Select the second cluster")
-    acm_obj.do_clear(acm_loc["cluster-search-bar"])
-    acm_obj.do_send_keys(acm_loc["policy-name"], text=second_cluster_name)
-    acm_obj.do_click(
-        acm_loc["checkbox-selection"], enable_screenshot=True, avoid_stale=True
+    acm_obj.do_click(format_locator(acm_loc["cluster-selection"], second_cluster_name))
+    check_prereq_msg = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["check-prereq-msg"],
+        expected_text="All disaster recovery prerequisites met for both clusters.",
+        timeout=15,
     )
-    if clear_filter:
-        acm_obj.do_click(acm_loc["clear-filter"])
-
-    policy_status = acm_obj.wait_until_expected_text_is_found(
-        acm_loc["drpolicy-status"], expected_text="Validated"
-    )
-    if policy_status:
-        log.info(f"DRPolicy status on ACM UI is {constants.DRPOLICY_STATUS}")
+    if check_prereq_msg:
+        log.info("Cluster selection for policy creation is successful")
     else:
-        log.error(
-            f"DRPolicy status on ACM UI is not {constants.DRPOLICY_STATUS}, can not proceed"
-        )
-        raise NoSuchElementException
-    log.info("Verify Replication policy on ACM UI")
-    replication_policy = acm_obj.get_element_text(acm_loc["replication-policy"])
+        return False
+    log.info("Select 'Data Foundation' for policy creation")
+    acm_obj.do_click(acm_loc["data-foundation-policy"])
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
     if multicluster_mode == constants.RDR_MODE:
-        assert (
-            replication_policy
-            == f"{constants.RDR_REPLICATION_POLICY}, interval: {scheduling_interval}m"
-        ), f"Replication policy on ACM UI is {replication_policy}, can not proceed"
-    log.info("DRPolicy and replication policy successfully validated on ACM UI")
-    log.info("Navigate back to Disaster recovery Overview page")
-    acm_obj.do_click(
-        acm_loc["disaster-recovery-overview"], avoid_stale=True, enable_screenshot=True
+        log.info("Check if Replication Policy is set to 'Asynchronous'")
+        check_policy_type = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["check-policy-type"],
+            expected_text="Asynchronous",
+            timeout=5,
+        )
+        if check_policy_type:
+            log.info("Policy type is 'Asynchronous'")
+            acm_obj.take_screenshot()
+        else:
+            return False
+    log.info("Provide replication interval")
+    default_interval = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["default-interval"],
+        expected_text="5",
+        timeout=5,
     )
+    if default_interval:
+        log.info("Default replication interval is 5")
+    else:
+        log.info("Clear default policy")
+        acm_obj.do_clear(acm_loc["default-interval"])
+        log.info("Clear default policy one more time")
+        acm_obj.do_clear(acm_loc["default-interval"])
+        log.info("Send replication interval")
+        acm_obj.do_send_keys(acm_loc["default-interval"], text=replication_interval)
+        acm_obj.take_screenshot()
+    default_unit = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["default-unit"],
+        expected_text="minutes",
+        timeout=5,
+    )
+    if default_unit:
+        log.info("Default unit is minutes")
+    else:
+        log.info("Click on unit selection dropdown")
+        acm_obj.do_click(acm_loc["default-unit"], enable_screenshot=True)
+        log.info("Select minutes from dropdown")
+        acm_obj.do_click(acm_loc["default-unit"], enable_screenshot=True)
+        acm_obj.do_click(acm_loc["dropdown-minutes"])
+    log.info("Click on Create")
+    acm_obj.do_click(acm_loc["policy-create-btn"])
+    log.info("DR Policy successfully created")
+    return True
 
 
 def verify_drpolicy_ui(acm_obj, scheduling_interval):

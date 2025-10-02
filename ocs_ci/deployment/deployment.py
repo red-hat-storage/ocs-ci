@@ -26,6 +26,8 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.helpers.dr_helpers_ui import create_drpolicy_ui
+from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
@@ -3776,6 +3778,12 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
+            acm_obj = AcmAddClusters()
+            create_drpolicy_ui(
+                acm_obj,
+                first_cluster_name=config.get_cluster_name_by_index(1),
+                second_cluster_name=config.get_cluster_name_by_index(2),
+            )
             self.configure_mirror_peer()
             rbddops.deploy()
 

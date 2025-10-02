@@ -1420,12 +1420,31 @@ acm_configuration_4_20 = {
     "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
     "click-create-policy": ("yaml-create", By.ID),
     "policy-name": ("#policy-name", By.CSS_SELECTOR),
-    "cluster-search-bar": ("input[data-test='name-filter-input']", By.CSS_SELECTOR),
-    "checkbox-selection": ("input[name='checkrow0']", By.CSS_SELECTOR),
     "clear-existing-filter": (
         "//span[normalize-space()='Clear all filters']",
         By.XPATH,
     ),
+    "cluster-selection": (
+        "//tr[td[@data-label='Managed Cluster']/p[text()='{}']]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "check-prereq-msg": (
+        "div[class='pf-v5-c-alert pf-m-inline pf-m-success odf-alert mco-create-data-policy__alert'] "
+        "h4[class='pf-v5-c-alert__title']",
+        By.CSS_SELECTOR,
+    ),
+    "data-foundation-policy": (
+        "label[for='selectable-action-Data Foundation']",
+        By.CSS_SELECTOR,
+    ),
+    "check-policy-type": ("//button[@aria-label='Options menu']", By.XPATH),
+    "default-interval": ("//input[@aria-label='Input']", By.XPATH),
+    "default-unit": (
+        "//button[@data-ouia-component-id='OUIA-Generated-DropdownToggle-1']",
+        By.XPATH,
+    ),
+    "policy-create-btn": ("button[data-test-id='create-button']", By.CSS_SELECTOR),
+    "dropdown-minutes": ("//a[normalize-space()='minutes']", By.XPATH),
 }
 
 add_capacity = {
