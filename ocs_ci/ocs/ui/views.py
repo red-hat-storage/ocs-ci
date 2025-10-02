@@ -2426,11 +2426,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_action_button": (
-        "tbody tr:nth-child(1) td:last-child button:first-child",
+        "//button[@aria-label='Kebab toggle']",
         By.CSS_SELECTOR,
     ),
     "bucket_delete_option": (
-        "tbody li:nth-child(2) button:nth-child(1) span:nth-child(1) span:nth-child(1)",
+        "//button[@tabindex='-1']",
         By.CSS_SELECTOR,
     ),
     "bucket_confirm_button": (
