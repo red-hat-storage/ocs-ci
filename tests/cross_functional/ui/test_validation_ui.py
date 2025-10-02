@@ -99,7 +99,7 @@ class TestUserInterfaceValidation(object):
     @skipif_hci_provider_or_client
     def test_odf_cephblockpool_compression_status(self, setup_ui_class_factory):
         """
-        Validate Compression status for cephblockpool at StorageSystem details and ocs-storagecluster-cephblockpool
+        Validate Compression status for cephblockpool at Storage Cluster details and ocs-storagecluster-cephblockpool
         are matching
 
          Args:
@@ -108,11 +108,11 @@ class TestUserInterfaceValidation(object):
         """
         setup_ui_class_factory()
 
-        storage_system_details = ValidationUI().nav_storage_cluster_default_page()
-        storage_system_details.nav_cephblockpool_verify_statusready()
+        storage_cluster_details = ValidationUI().nav_storage_cluster_default_page()
+        storage_cluster_details.nav_cephblockpool_verify_statusready()
 
         compression_statuses = (
-            storage_system_details.get_blockpools_compression_status_from_storagesystem()
+            storage_cluster_details.get_blockpools_compression_status_from_storagesystem()
         )
         compression_status_expected = "Disabled"
         assert all(
