@@ -579,11 +579,11 @@ pvc = {
     # works for ODF 4.14 and 4.15; OCP 4.14 and 4.15
     "storage_class_name": ('//a[@id="{}-link"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
-        'a[id="ocs-storagecluster-ceph-rbd-link"]',
+        'a[id="ocs-storagecluster-ceph-rbd-link"], button[id="ocs-storagecluster-ceph-rbd-link"]',
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-cephfs": (
-        'a[id="ocs-storagecluster-cephfs-link"]',
+        'a[id="ocs-storagecluster-cephfs-link"], button[id="ocs-storagecluster-cephfs-link"]',
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-ceph-rbd-thick": (
@@ -1553,7 +1553,6 @@ storageclass = {
         'button[data-test="storage-class-provisioner-dropdown"]',
         By.CSS_SELECTOR,
     ),
-    "rbd_provisioner": ("openshift-storage.rbd.csi.ceph.com", By.LINK_TEXT),
     "pool_dropdown": ('button[id="pool-dropdown-id"]', By.CSS_SELECTOR),
     "save_storageclass": ('button[id="save-changes"]', By.CSS_SELECTOR),
     "action_inside_storageclass": (
@@ -1583,11 +1582,11 @@ storageclass = {
     "reclaim-policy-retain": ("#Retain-link", By.CSS_SELECTOR),
     "provisioner": ("#storage-class-provisioner", By.CSS_SELECTOR),
     "rbd-provisioner": (
-        "//a[normalize-space()='openshift-storage.rbd.csi.ceph.com']",
-        By.XPATH,
+        'button[id="openshift-storage.rbd.csi.ceph.com-link"]',
+        By.CSS_SELECTOR,
     ),
     "cephfs-provisioner": (
-        "//a[normalize-space()='openshift-storage.cephfs.csi.ceph.com']",
+        'button[id="openshift-storage.cephfs.csi.ceph.com-link"]',
         By.XPATH,
     ),
     "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
