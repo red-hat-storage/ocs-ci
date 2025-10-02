@@ -134,6 +134,344 @@ class KrKnRunner:
 
         return False
 
+    def _monitor_krkn_output(self, timeout):
+        """
+        Monitor Krkn output in real-time and detect completion messages.
+
+        This method reads the process output line by line and looks for success
+        indicators like "Successfully finished running Kraken." to allow early
+        termination instead of waiting for the full timeout.
+
+        Args:
+            timeout (int): Maximum time to wait in seconds
+
+        Returns:
+            tuple: (stdout, stderr) strings
+
+        Raises:
+            subprocess.TimeoutExpired: If timeout is reached without completion
+        """
+        import select
+
+        start_time = time.time()
+        stdout_lines = []
+        stderr_lines = []
+
+        # Success patterns that indicate Krkn has completed successfully
+        # Primary pattern matches exact grep behavior
+        primary_success_pattern = "Successfully finished running Kraken"
+        additional_success_patterns = [
+            "Kraken has finished running",
+            "All scenarios have been executed",
+            "Chaos injection completed successfully",
+        ]
+
+        log.info("🔍 Monitoring Krkn output for completion messages...")
+
+        try:
+            # Set stdout and stderr to non-blocking mode for real-time monitoring
+            while self.process.poll() is None:
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
+                    raise subprocess.TimeoutExpired(self.process.args, timeout)
+
+                # Read available output
+                if self.process.stdout.readable():
+                    try:
+                        # Use select to check if data is available (Unix-like systems)
+                        if hasattr(select, "select"):
+                            ready, _, _ = select.select(
+                                [self.process.stdout], [], [], 0.1
+                            )
+                            if ready:
+                                line = self.process.stdout.readline()
+                                if line:
+                                    line_str = line.strip()
+                                    stdout_lines.append(line_str)
+                                    log.debug(f"Krkn output: {line_str}")
+
+                                    # Check for success patterns - prioritize primary pattern
+                                    if primary_success_pattern in line_str:
+                                        log.info(
+                                            f"🎉 Detected PRIMARY Krkn completion message: '{primary_success_pattern}'"
+                                        )
+                                        log.info(
+                                            "✅ Krkn has finished successfully - terminating monitoring early"
+                                        )
+
+                                        # Read any remaining output
+                                        remaining_stdout, remaining_stderr = (
+                                            self.process.communicate(timeout=10)
+                                        )
+                                        if remaining_stdout:
+                                            stdout_lines.extend(
+                                                remaining_stdout.strip().split("\n")
+                                            )
+                                        if remaining_stderr:
+                                            stderr_lines.extend(
+                                                remaining_stderr.strip().split("\n")
+                                            )
+
+                                        return "\n".join(stdout_lines), "\n".join(
+                                            stderr_lines
+                                        )
+
+                                    # Check additional success patterns
+                                    for pattern in additional_success_patterns:
+                                        if pattern in line_str:
+                                            log.info(
+                                                f"🎉 Detected Krkn completion message: '{pattern}'"
+                                            )
+                                            log.info(
+                                                "✅ Krkn has finished successfully - terminating monitoring early"
+                                            )
+
+                                            # Read any remaining output
+                                            remaining_stdout, remaining_stderr = (
+                                                self.process.communicate(timeout=10)
+                                            )
+                                            if remaining_stdout:
+                                                stdout_lines.extend(
+                                                    remaining_stdout.strip().split("\n")
+                                                )
+                                            if remaining_stderr:
+                                                stderr_lines.extend(
+                                                    remaining_stderr.strip().split("\n")
+                                                )
+
+                                            return "\n".join(stdout_lines), "\n".join(
+                                                stderr_lines
+                                            )
+                        else:
+                            # Fallback for systems without select (like Windows)
+                            time.sleep(0.1)
+                    except Exception as e:
+                        log.debug(f"Error reading stdout: {e}")
+                        time.sleep(0.1)
+
+                # Read stderr if available
+                if self.process.stderr.readable():
+                    try:
+                        if hasattr(select, "select"):
+                            ready, _, _ = select.select(
+                                [self.process.stderr], [], [], 0.1
+                            )
+                            if ready:
+                                line = self.process.stderr.readline()
+                                if line:
+                                    line_str = line.strip()
+                                    stderr_lines.append(line_str)
+                                    log.debug(f"Krkn stderr: {line_str}")
+                    except Exception as e:
+                        log.debug(f"Error reading stderr: {e}")
+
+                # Small sleep to prevent excessive CPU usage
+                time.sleep(0.1)
+
+            # Process has completed, read any remaining output
+            remaining_stdout, remaining_stderr = self.process.communicate(timeout=10)
+            if remaining_stdout:
+                stdout_lines.extend(remaining_stdout.strip().split("\n"))
+            if remaining_stderr:
+                stderr_lines.extend(remaining_stderr.strip().split("\n"))
+
+        except subprocess.TimeoutExpired:
+            log.error("Timeout expired while monitoring Krkn output")
+            raise
+        except Exception as e:
+            log.warning(
+                f"Error during output monitoring, falling back to standard communicate: {e}"
+            )
+            # Fallback to standard communicate if monitoring fails
+            remaining_stdout, remaining_stderr = self.process.communicate(
+                timeout=max(0, timeout - (time.time() - start_time))
+            )
+            if remaining_stdout:
+                stdout_lines.extend(remaining_stdout.strip().split("\n"))
+            if remaining_stderr:
+                stderr_lines.extend(remaining_stderr.strip().split("\n"))
+
+        return "\n".join(stdout_lines), "\n".join(stderr_lines)
+
+    def _check_output_log_for_completion(self):
+        """
+        Check the output log file for completion messages.
+
+        This provides an additional way to detect completion by monitoring
+        the Krkn output log file for success messages.
+
+        Returns:
+            bool: True if completion message found, False otherwise
+        """
+        if not os.path.exists(self.output_log):
+            return False
+
+        try:
+            # Success patterns to look for in the log file
+            success_patterns = [
+                "Successfully finished running Kraken.",
+                "Kraken has finished running",
+                "All scenarios have been executed",
+                "Chaos injection completed successfully",
+            ]
+
+            # Read the last few lines of the log file
+            with open(self.output_log, "r", encoding="utf-8") as f:
+                # Read last 50 lines to check for completion
+                lines = f.readlines()
+                last_lines = lines[-50:] if len(lines) > 50 else lines
+
+                for line in last_lines:
+                    for pattern in success_patterns:
+                        if pattern in line:
+                            log.info(
+                                f"🎉 Found completion message in log: '{pattern.strip()}'"
+                            )
+                            return True
+
+        except Exception as e:
+            log.debug(f"Error checking output log for completion: {e}")
+
+        return False
+
+    def _check_kraken_success_completion(self):
+        """
+        Check if Kraken completed successfully using precise pattern matching.
+
+        This method mimics the bash command:
+        if grep -q "Successfully finished running Kraken" kraken.log; then
+            echo "SUCCESS: All scenarios completed successfully"
+            exit 0
+        else
+            echo "FAILURE: Kraken execution failed or incomplete"
+            exit 1
+        fi
+
+        Returns:
+            tuple: (success: bool, message: str) - success status and descriptive message
+        """
+        if not os.path.exists(self.output_log):
+            return False, f"Output log file not found: {self.output_log}"
+
+        try:
+            # Primary success pattern - exact match like grep
+            primary_success_pattern = "Successfully finished running Kraken"
+
+            # Additional success indicators
+            additional_patterns = [
+                "Kraken has finished running",
+                "All scenarios have been executed successfully",
+                "Chaos injection completed successfully",
+            ]
+
+            with open(self.output_log, "r", encoding="utf-8") as f:
+                content = f.read()
+
+                # Check for primary success pattern (exact grep-like match)
+                if primary_success_pattern in content:
+                    log.info(
+                        f"🎉 SUCCESS: Found exact completion pattern: '{primary_success_pattern}'"
+                    )
+                    return (
+                        True,
+                        f"SUCCESS: All scenarios completed successfully - found '{primary_success_pattern}'",
+                    )
+
+                # Check for additional success patterns
+                for pattern in additional_patterns:
+                    if pattern in content:
+                        log.info(f"🎉 SUCCESS: Found completion pattern: '{pattern}'")
+                        return True, f"SUCCESS: Kraken completed - found '{pattern}'"
+
+                # Check for failure indicators
+                failure_patterns = [
+                    "FAILED",
+                    "ERROR",
+                    "CRITICAL",
+                    "Exception",
+                    "Traceback",
+                    "failed to execute",
+                    "execution failed",
+                ]
+
+                failure_found = []
+                for pattern in failure_patterns:
+                    if pattern.lower() in content.lower():
+                        failure_found.append(pattern)
+
+                if failure_found:
+                    failure_msg = (
+                        f"FAILURE: Kraken execution failed - found error indicators: "
+                        f"{', '.join(failure_found)}"
+                    )
+                    log.warning(failure_msg)
+                    return False, failure_msg
+
+                # No clear success or failure pattern found
+                return (
+                    False,
+                    "INCOMPLETE: Kraken execution status unclear - no definitive completion pattern found",
+                )
+
+        except Exception as e:
+            error_msg = f"ERROR: Failed to check Kraken completion status: {e}"
+            log.error(error_msg)
+            return False, error_msg
+
+    def validate_kraken_execution_success(self):
+        """
+        Validate Kraken execution success with exit-like behavior.
+
+        This method provides a final validation similar to:
+        if grep -q "Successfully finished running Kraken" kraken.log; then
+            echo "SUCCESS: All scenarios completed successfully"
+            exit 0
+        else
+            echo "FAILURE: Kraken execution failed or incomplete"
+            exit 1
+        fi
+
+        Returns:
+            bool: True if execution was successful, False otherwise
+
+        Raises:
+            CommandFailed: If execution failed with detailed error information
+        """
+        success, message = self._check_kraken_success_completion()
+
+        if success:
+            log.info(f"🎉 VALIDATION PASSED: {message}")
+            return True
+        else:
+            # Log the failure and raise an exception with detailed information
+            log.error(f"❌ VALIDATION FAILED: {message}")
+
+            # Provide additional context from the log file
+            try:
+                if os.path.exists(self.output_log):
+                    log.error(
+                        f"📄 Check the full Kraken log for details: {self.output_log}"
+                    )
+
+                    # Show last 20 lines of the log for debugging
+                    with open(self.output_log, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                        last_lines = lines[-20:] if len(lines) > 20 else lines
+                        log.error("📄 Last 20 lines of Kraken log:")
+                        for i, line in enumerate(last_lines, 1):
+                            log.error(f"  {i:2d}: {line.rstrip()}")
+                else:
+                    log.error(f"📄 Kraken log file not found: {self.output_log}")
+
+            except Exception as e:
+                log.error(f"Failed to read Kraken log file: {e}")
+
+            # Raise exception to indicate failure (similar to exit 1)
+            raise CommandFailed(
+                f"Kraken execution validation failed: {message}. "
+                f"Check the Kraken log file at {self.output_log} for detailed error information."
+            )
+
     def _run_krkn_command(self):
         """Internal method to start the Krkn process with port conflict handling."""
         # Validate environment first
@@ -177,10 +515,36 @@ class KrKnRunner:
                     text=True,
                     env=env,
                 )
-                stdout, stderr = self.process.communicate()
-                log.info(f"Krkn stdout:\n{stdout}")
-                if stderr:
-                    log.error(f"Krkn stderr:\n{stderr}")
+
+                # CRITICAL FIX: Add timeout to prevent infinite blocking
+                # Set timeout to 4 hours (14400 seconds) for large scenario sets
+                # This prevents subprocess from hanging but allows long executions
+                timeout = 14400
+                log.info(
+                    f"Waiting for Krkn process to complete (timeout: {timeout}s = 4 hours)"
+                )
+
+                try:
+                    # Monitor output in real-time to detect completion
+                    stdout, stderr = self._monitor_krkn_output(timeout)
+                    log.info(f"Krkn stdout:\n{stdout}")
+                    if stderr:
+                        log.error(f"Krkn stderr:\n{stderr}")
+                except subprocess.TimeoutExpired:
+                    log.error(f"Krkn process timed out after {timeout} seconds")
+                    # Kill the process and its children
+                    self.process.kill()
+                    try:
+                        stdout, stderr = self.process.communicate(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        log.error("Failed to kill Krkn process cleanly")
+                        stdout, stderr = "", "Process killed due to timeout"
+
+                    raise CommandFailed(
+                        f"Krkn process timed out after {timeout} seconds. "
+                        f"This may indicate the Krkn tool is stuck or scenarios are taking too long. "
+                        f"Check Krkn logs and cluster status."
+                    )
 
                 if self.process.returncode != 0:
                     if self.process.returncode == 2:
@@ -253,22 +617,102 @@ class KrKnRunner:
         """Check if the Krkn process is still running."""
         return self.process and self.process.poll() is None
 
-    def wait_for_completion(self, check_interval=30):
+    def wait_for_completion(self, check_interval=30, max_wait_time=None):
         """
         Wait for Krkn to complete, checking status every `check_interval` seconds.
 
         Args:
             check_interval (int): Seconds to wait between status checks.
+            max_wait_time (int): Maximum time to wait in seconds. If None, waits indefinitely
+                                until completion is detected or thread exception occurs.
+                                This is recommended for large scenario sets.
 
         Raises:
             CommandFailed: If the Krkn thread encountered an exception.
         """
+        start_time = time.time()
+
         while self.thread.is_alive():
             # Check for thread exceptions during execution
             if self.thread_exception:
                 log.error("Krkn thread encountered an exception")
                 raise self.thread_exception
-            log.info("✅ Krkn is still running...")
+
+            # Check for Kraken success completion using precise pattern matching
+            success, message = self._check_kraken_success_completion()
+            if success:
+                log.info(f"🎉 {message}")
+                log.info(
+                    "✅ Detected Krkn success completion - waiting for thread to finish..."
+                )
+                # Give thread a moment to finish cleanly
+                self.thread.join(timeout=30)
+                if not self.thread.is_alive():
+                    log.info(
+                        "✅ Thread completed successfully after detecting success completion"
+                    )
+                    break
+                else:
+                    log.warning(
+                        "Thread still alive after success detection - continuing to wait..."
+                    )
+
+            # Also check output log for completion messages (fallback)
+            elif self._check_output_log_for_completion():
+                log.info(
+                    "✅ Detected Krkn completion in output log - waiting for thread to finish..."
+                )
+                # Give thread a moment to finish cleanly
+                self.thread.join(timeout=30)
+                if not self.thread.is_alive():
+                    log.info(
+                        "✅ Thread completed successfully after detecting completion message"
+                    )
+                    break
+                else:
+                    log.warning(
+                        "Thread still alive after completion message - continuing to wait..."
+                    )
+
+            # Check for optional timeout (only if specified)
+            if max_wait_time is not None:
+                elapsed_time = time.time() - start_time
+                if elapsed_time > max_wait_time:
+                    log.error(f"Krkn execution timed out after {max_wait_time} seconds")
+                    # Try to terminate the process gracefully
+                    if self.process and self.process.poll() is None:
+                        log.warning("Attempting to terminate stuck Krkn process...")
+                        self.process.terminate()
+                        time.sleep(5)
+                        if self.process.poll() is None:
+                            log.warning("Force killing stuck Krkn process...")
+                            self.process.kill()
+
+                    raise CommandFailed(
+                        f"Krkn execution timed out after {max_wait_time} seconds. "
+                        f"The process may be stuck. Check Krkn logs and cluster connectivity."
+                    )
+
+                log.info(
+                    f"✅ Krkn is still running... (elapsed: {elapsed_time:.0f}s/{max_wait_time}s)"
+                )
+            else:
+                # No timeout - just show elapsed time for large scenario sets
+                elapsed_time = time.time() - start_time
+                hours = int(elapsed_time // 3600)
+                minutes = int((elapsed_time % 3600) // 60)
+                seconds = int(elapsed_time % 60)
+
+                if hours > 0:
+                    time_str = f"{hours}h {minutes}m {seconds}s"
+                elif minutes > 0:
+                    time_str = f"{minutes}m {seconds}s"
+                else:
+                    time_str = f"{seconds}s"
+
+                log.info(
+                    f"✅ Krkn is still running... (elapsed: {time_str}) - Waiting for completion detection..."
+                )
             time.sleep(check_interval)
 
         # Check for thread exceptions after completion
