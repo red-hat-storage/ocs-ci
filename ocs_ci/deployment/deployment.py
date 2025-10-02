@@ -2734,9 +2734,7 @@ class Deployment(object):
         else:
             self.deploy_acm_hub_released()
             self.deploy_multicluster_hub()
-        if config.ENV_DATA.get(
-            "configure_acm_to_import_mce"
-        ) and config.MULTICLUSTER.get("active_acm_cluster"):
+        if config.ENV_DATA.get("configure_acm_to_import_mce"):
             self.configure_acm_to_import_mce_clusters()
 
     def configure_acm_to_import_mce_clusters(self):

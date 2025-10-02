@@ -734,9 +734,7 @@ def import_clusters_via_cli(clusters):
 
         # TODO: This check is based on current requirements of RDR in provider mode. Change the condition and add
         #  additional check to verify whether Multicluster Engine (MCE) is installed in the managedcluster
-        if config.ENV_DATA.get(
-            "configure_acm_to_import_mce"
-        ) and config.MULTICLUSTER.get("active_acm_cluster"):
+        if config.ENV_DATA.get("configure_acm_to_import_mce"):
             # Find the klusterletconfig to import MCE cluster
             klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
             klusterletconfigs = klusterletconfig_obj.get().get("items", [])
@@ -847,9 +845,7 @@ def import_clusters_with_acm():
     else:
         import_clusters_via_cli(clusters)
 
-    if config.ENV_DATA.get("configure_acm_to_import_mce") and config.MULTICLUSTER.get(
-        "active_acm_cluster"
-    ):
+    if config.ENV_DATA.get("configure_acm_to_import_mce"):
         discover_hosted_clusters()
         automate_import_of_hosted_clusters()
 
