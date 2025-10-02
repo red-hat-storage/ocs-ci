@@ -447,7 +447,8 @@ class Deployment(object):
                             if get_provider_service_type() != "NodePort":
                                 ptch = (
                                     f'\'{{"spec": {{"network": {{"multiClusterService": '
-                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
+                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+                                    f'"enabled": true}}}}}}}}\''
                                 )
                                 ptch_cmd = (
                                     f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
