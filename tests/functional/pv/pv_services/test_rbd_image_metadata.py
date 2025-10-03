@@ -32,6 +32,7 @@ class TestRbdImageMetadata:
         """
 
         rbd_images = []
+        metadata_dict = {}
         # create a pvc with ceph-rbd sc
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -40,6 +41,11 @@ class TestRbdImageMetadata:
         )
         log.info(f"PVC {pvc_obj.name} created!")
         rbd_images.append(pvc_obj.get_rbd_image_name)
+        rbd_image = pvc_obj.get_rbd_image_name
+        metadata_dict[rbd_image] = {}
+        metadata_dict[rbd_image]["pv_name"] = pvc_obj.backed_pv
+        metadata_dict[rbd_image]["pvc_name"] = pvc_obj.name
+        metadata_dict[rbd_image]["pvc_namespace"] = pvc_obj.namespace
 
         # create a snapshot of the PVC
         snap_obj = pvc_obj.create_snapshot(
@@ -50,6 +56,10 @@ class TestRbdImageMetadata:
         snapshot_content = get_snapshot_content_obj(snap_obj=snap_obj)
         snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
         snap_image_name = f'csi-snap-{snap_handle.split("-", 5)[5]}'
+        metadata_dict[snap_image_name] = {}
+        metadata_dict[snap_image_name]["vs_name"] = snap_obj.name
+        metadata_dict[snap_image_name]["vs_namespace"] = snap_obj.namespace
+        metadata_dict[snap_image_name]["vs_content_name"] = snapshot_content.name
         rbd_images.append(snap_image_name)
 
         # restore the snapshot
@@ -62,6 +72,11 @@ class TestRbdImageMetadata:
         clone_obj = pvc_clone_factory(pvc_obj)
         log.info(f"Clone of PVC {pvc_obj.name} created!")
         rbd_images.append(clone_obj.get_rbd_image_name)
+        clone_image = clone_obj.get_rbd_image_name
+        metadata_dict[clone_image] = {}
+        metadata_dict[clone_image]["pv_name"] = clone_obj.backed_pv
+        metadata_dict[clone_image]["pvc_name"] = clone_obj.name
+        metadata_dict[clone_image]["pvc_name"] = clone_obj.namespace
 
         # check the metadata on each images
         rbd_pool_name = (
@@ -70,30 +85,25 @@ class TestRbdImageMetadata:
             else constants.DEFAULT_CEPHBLOCKPOOL
         )
         ceph_tool_pod = get_ceph_tools_pod()
-        pv_name, pvc_name, pvc_namespace = (
-            pvc_obj.backed_pv,
-            pvc_obj.name,
-            pvc_obj.namespace,
-        )
         for image in rbd_images:
             cmd = f"rbd image-meta list {rbd_pool_name}/{image}"
             metadata = ceph_tool_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
-            log.info(f"Metdata for {image}\n{metadata}")
+            log.info(f"\nMetadata for {image}\n{metadata}")
             assert (
                 "There are 4 metadata on this image" in metadata
-            ), f"Not expected, Metadata is being set for the rbd image - {image}!"
-            image_metadata = metadata.split("\n")
-            metadata_pv_name, metadata_pvc_name, metadata_namespace = image_metadata[
-                4:7
-            ]
-            assert (
-                metadata_pv_name in pv_name
-                and metadata_pvc_name in pvc_name
-                and metadata_namespace in pvc_namespace
-            ), (
-                f"Mismatch found:\n"
-                f"pv: expected {pv_name}, got {metadata_pv_name}\n"
-                f"pvc: expected {pvc_name}, got {metadata_pvc_name}\n"
-                f"namespace: expected {pvc_namespace}, got {metadata_namespace}"
-            )
-        log.info("Metadata is not being set for the rbd images as expected!")
+            ), f"Not expected, Metadata is not being set for the rbd image - {image}!"
+            image_metadata = metadata.split("\n")[4::]
+            import pdb
+
+            pdb.set_trace()
+            for key, current_metadata in zip(
+                metadata_dict[image].keys(), image_metadata
+            ):
+                if not metadata_dict[image][key] in current_metadata:
+                    log.error(
+                        f"Mismatch found for {key} of image {image}: expected {metadata_dict[image][key]} "
+                        f"got {current_metadata}"
+                    )
+                    assert False, f"Mismatch found  for {key} of image {image}!"
+
+        log.info("Metadata is being set for the rbd images as expected!")
