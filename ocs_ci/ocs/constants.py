@@ -2974,6 +2974,7 @@ ACM_BREW_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
+SUBCTL_BREW_DOWNSTREAM_URL = "brew.registry.redhat.io/rh-osbs/rhacm2-"
 
 # OADP
 OADP_BREW_BUILD_URL = (

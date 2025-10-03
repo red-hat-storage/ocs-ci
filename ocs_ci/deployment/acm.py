@@ -201,7 +201,12 @@ class Submariner(object):
                 os.path.join(config.RUN["bin_dir"], "subctl"),
             )
         elif self.source == "downstream":
-            self.download_downstream_binary()
+            try:
+                self.download_downstream_binary()
+            except IndexError:
+                self.download_downstream_binary(
+                    download_url=constants.SUBCTL_BREW_DOWNSTREAM_URL
+                )
 
     @retry((tarfile.TarError, EOFError, FileNotFoundError), tries=8, delay=5)
     def wait_for_tar_file(self, subctl_download_tar_file):
@@ -235,7 +240,7 @@ class Submariner(object):
             raise tarfile.TarError()
 
     @retry((SubctlDownloadFailed, CommandFailed))
-    def download_downstream_binary(self):
+    def download_downstream_binary(self, download_url=constants.SUBCTL_DOWNSTREAM_URL):
         """
         Download downstream subctl binary
 
@@ -258,7 +263,7 @@ class Submariner(object):
             )
         cmd = (
             f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
-            f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+            f"{pull_secret_path} {download_url}{subctl_ver} "
             f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
         )
         run_cmd(cmd)
