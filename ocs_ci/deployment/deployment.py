@@ -4307,7 +4307,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     continue
                 second_cluster_name = cluster.ENV_DATA["cluster_name"]
 
-            if config:
+            if config.DRPOLICY.get("create_from_cli"):
                 self.configure_mirror_peer()
                 self.deploy_dr_policy()
             else:
