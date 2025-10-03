@@ -1,0 +1,4 @@
+#Create DRPolicy via CLI
+
+DRPOLICY:
+  create_from_cli: true
