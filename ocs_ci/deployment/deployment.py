@@ -1859,16 +1859,18 @@ class Deployment(object):
             if not config.ENV_DATA.get("odf_provider_mode_deployment"):
                 cluster_address = config.ENV_DATA["cluster_name"]
                 cluster_address_port = "50051"
+                cluster_service_export_provider_server = ".ocs-provider-server.openshift-storage.svc.clusterset.local"
             else:
                 cluster_address = get_node_internal_ip(
                     get_node_objs(get_worker_nodes()[0])[0]
                 )
                 cluster_address_port = "31659"
+                cluster_service_export_provider_server = ""
 
             api_server_exported_address_annotation = {
                 "ocs.openshift.io/api-server-exported-address": (
-                    f"{cluster_address}."
-                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:{cluster_address_port}"
+                    f"{cluster_address}"
+                    f"{cluster_service_export_provider_server}:{cluster_address_port}"
                 )
             }
             merge_dict(
