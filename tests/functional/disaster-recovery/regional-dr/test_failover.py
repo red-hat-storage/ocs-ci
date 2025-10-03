@@ -11,15 +11,14 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_replication_destinations_creation,
     wait_for_replication_destinations_deletion,
     validate_replicationgroupdestinations,
+    is_cg_cephfs_enabled,
+    validate_volumesnapshot,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs.exceptions import (
-    ReplicationGroupDestinationNotFound,
-    UnexpectedBehaviour,
-)
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +94,13 @@ class TestFailover:
             # Verify the creation of ReplicationDestination resources on secondary cluster
             config.switch_to_cluster_by_name(secondary_cluster_name)
             for wl in workloads:
-                validate_rgd = validate_replicationgroupdestinations(
-                    wl.workload_namespace
-                )
-                raise ReplicationGroupDestinationNotFound if not validate_rgd else None
+                # Verifying the existence of replication group destination and volume snapshots
+                if is_cg_cephfs_enabled():
+                    validate_replicationgroupdestinations(
+                        wl.workload_namespace
+                    )
+                    validate_volumesnapshot(wl.workload_pvc_count,
+                                            wl.workload_namespace)
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
@@ -178,10 +180,11 @@ class TestFailover:
                 validate_rgd = validate_replicationgroupdestinations(
                     wl.workload_namespace
                 )
-                raise ReplicationGroupDestinationNotFound if not validate_rgd else None
+                validate_volumesnapshot(wl.workload_pvc_count, wl.workload_namespac)
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
+
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(
