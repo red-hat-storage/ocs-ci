@@ -875,6 +875,7 @@ def wait_for_replication_resources_creation(
         if is_cg_cephfs_enabled():
             validate_rgs = validate_replicationgroupsources()
             raise ReplicationGroupSourceNotFound if not validate_rgs else None
+            validate_volumegroupsnapshot(namespace)
         count_function = get_replicationsources_count
     else:
         resource_kind = constants.VOLUME_REPLICATION
