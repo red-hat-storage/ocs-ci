@@ -22,6 +22,7 @@ from ocs_ci.ocs.ui.base_ui import (
 from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility.utils import get_random_str
 
 log = logging.getLogger(__name__)
 
@@ -159,10 +160,10 @@ def check_cluster_status_on_acm_console(
 
 def create_drpolicy_ui(
     acm_obj,
-    policy_name="odr-policy-5m",
-    first_cluster_name=None,
-    second_cluster_name=None,
-    replication_interval="5",
+    first_cluster_name,
+    second_cluster_name,
+    policy_name=None,
+    replication_interval=5,
 ):
     """
     Function to create DRPolicy via ACM console on the Regional DR setup. Policy creation requires 2 managed clusters
@@ -170,11 +171,10 @@ def create_drpolicy_ui(
 
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
-        policy_name (str): Name of replication policy (DR Policy)
         first_cluster_name (str): Name of the first managed cluster to be used for policy creation
         second_cluster_name (str): Name of the second managed cluster to be used for policy creation
-        replication_interval (str): Scheduling interval to be used in the DRPolicy, should be a number
-                                    but sent as a string.
+        policy_name (str): Name of replication policy (DR Policy)
+        replication_interval (int): Scheduling interval to be used in the DRPolicy, should be a non-zero integer number.
                                     Default is 5 whose unit will always be set in minutes.
 
     Returns:
@@ -196,6 +196,15 @@ def create_drpolicy_ui(
     )
     log.info("Send policy name")
     acm_obj.do_click(acm_loc["policy-name"])
+    randam_hash = get_random_str(size=5)
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        randam_hash = randam_hash + "-cl"
+    policy_name = (
+        policy_name
+        if policy_name
+        else f"odr-policy-{replication_interval}m-{randam_hash}"
+    )
     acm_obj.do_send_keys(acm_loc["policy-name"], text=policy_name)
     log.info("Clear existing filters (if any)")
     clear_filter = acm_obj.wait_until_expected_text_is_found(
@@ -265,6 +274,7 @@ def create_drpolicy_ui(
     log.info("Click on Create")
     acm_obj.do_click(acm_loc["policy-create-btn"])
     log.info("DR Policy successfully created")
+    verify_drpolicy_ui(acm_obj, scheduling_interval=replication_interval)
     return True
 
 

@@ -2606,6 +2606,45 @@ def verify_volsync():
     config.switch_ctx(restore_index)
 
 
+def get_mirrorpeer_for_clusters(cluster1, cluster2):
+    """
+    Get the MirrorPeer resource name for the given two clusters.
+
+    Args:
+        cluster1 (str): Name or ID of the first cluster
+        cluster2 (str): Name or ID of the second cluster
+
+    Returns:
+        str: MirrorPeer name if found, else None
+    """
+    mirrorpeer_obj = ocp.OCP(
+        kind="MirrorPeer",
+        namespace=constants.DR_DEFAULT_NAMESPACE,
+    )
+
+    mirrorpeers = mirrorpeer_obj.get().get("items", [])
+    log.info(
+        f"Found {len(mirrorpeers)} MirrorPeers in {constants.DR_DEFAULT_NAMESPACE}"
+    )
+
+    for mirrorpeer in mirrorpeers:
+        mirrorpeer_name = mirrorpeer["metadata"]["name"]
+        cluster_refs = [
+            cluster.get("clusterName")
+            for cluster in mirrorpeer.get("spec", {}).get("items", [])
+            if "clusterName" in cluster
+        ]
+        # Normalize & check if both clusters match this MirrorPeer
+        if cluster1 in cluster_refs and cluster2 in cluster_refs:
+            log.info(
+                f"MirrorPeer '{mirrorpeer_name}' matches clusters {cluster1}, {cluster2}"
+            )
+            return mirrorpeer_name
+
+    log.error(f"No MirrorPeer found for clusters {cluster1} and {cluster2}")
+    return None
+
+
 def verify_cluster_data_protected_status(
     workload_type, namespace, workload_placement_name=None
 ):

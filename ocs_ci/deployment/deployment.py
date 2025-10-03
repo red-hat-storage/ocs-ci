@@ -51,6 +51,7 @@ from ocs_ci.helpers.dr_helpers import (
     is_cg_enabled,
     validate_storage_cluster_peer_state,
     verify_volsync,
+    get_mirrorpeer_for_clusters,
     validate_drpolicy_grouping,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
@@ -3779,12 +3780,46 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         if self.rbd:
             rbddops = RBDDRDeployOps()
             acm_obj = AcmAddClusters()
-            create_drpolicy_ui(
-                acm_obj,
-                first_cluster_name=config.get_cluster_name_by_index(1),
-                second_cluster_name=config.get_cluster_name_by_index(2),
-            )
-            self.configure_mirror_peer()
+            first_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
+            # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
+            # in multiclient configuration and provider cluster contexts will also be present.
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                cluster_configs = [
+                    cluster
+                    for cluster in config.clusters
+                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+                ]
+            else:
+                cluster_configs = get_non_acm_cluster_config()
+            for cluster in cluster_configs:
+                if (
+                    cluster.ENV_DATA["cluster_name"]
+                    == get_primary_cluster_config().ENV_DATA["cluster_name"]
+                ) or is_recovery_cluster(cluster):
+                    continue
+                second_cluster_name = cluster.ENV_DATA["cluster_name"]
+
+            if config:
+                self.configure_mirror_peer()
+                self.deploy_dr_policy()
+            else:
+                assert create_drpolicy_ui(
+                    acm_obj,
+                    first_cluster_name=first_cluster_name,
+                    second_cluster_name=second_cluster_name,
+                ), "DRPolicy creation via UI failed"
+                mirror_peer_resource_name = get_mirrorpeer_for_clusters(
+                    first_cluster_name, second_cluster_name
+                )
+
+                # Fail immediately if no MirrorPeer is found
+                assert (
+                    mirror_peer_resource_name is not None
+                ), "MirrorPeer not found for the given clusters"
+                self.validate_mirror_peer(resource_name=mirror_peer_resource_name)
             rbddops.deploy()
 
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
@@ -3792,7 +3827,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
             self.enable_acm_observability()
 
-        self.deploy_dr_policy()
         if odf_running_version >= version.VERSION_4_19:
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
