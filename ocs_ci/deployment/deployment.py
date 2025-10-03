@@ -4252,7 +4252,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         odf_running_version = version.get_semantic_ocs_version_from_config()
         if odf_running_version >= version.VERSION_4_19:
             # create service exporter
-            config.switch_to_cluster_by_name()
             for cluster in get_non_acm_cluster_config():
                 index = cluster.MULTICLUSTER["multicluster_index"]
                 config.switch_ctx(index)
