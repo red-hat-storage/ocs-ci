@@ -577,7 +577,7 @@ pvc = {
         By.CSS_SELECTOR,
     ),
     # works for ODF 4.14 and 4.15; OCP 4.14 and 4.15
-    "storage_class_name": ('//a[@id="{}-link"]', By.XPATH),
+    "storage_class_name": ('//button[@id="{}-link"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
         'a[id="ocs-storagecluster-ceph-rbd-link"], button[id="ocs-storagecluster-ceph-rbd-link"]',
         By.CSS_SELECTOR,
