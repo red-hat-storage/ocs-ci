@@ -96,11 +96,10 @@ class TestFailover:
             for wl in workloads:
                 # Verifying the existence of replication group destination and volume snapshots
                 if is_cg_cephfs_enabled():
-                    validate_replicationgroupdestinations(
-                        wl.workload_namespace
+                    validate_replicationgroupdestinations(wl.workload_namespace)
+                    validate_volumesnapshot(
+                        wl.workload_pvc_count, wl.workload_namespace
                     )
-                    validate_volumesnapshot(wl.workload_pvc_count,
-                                            wl.workload_namespace)
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
@@ -184,7 +183,6 @@ class TestFailover:
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
-
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(
