@@ -104,7 +104,7 @@ class TestStoreUserInterface(object):
         log_step(
             "Navigate to Data Foundation / Object Storage / (Backing Store | Namespace Store)"
         )
-        object_storage = PageNavigator().nav_object_storage()
+        object_storage = PageNavigator().nav_object_storage_page()
 
         if kind == "BackingStore":
             store_tab = object_storage.nav_backing_store_tab()

@@ -38,7 +38,7 @@ class StorageClassUI(PageNavigator):
         self.do_click(self.sc_loc["volume_binding_mode"])
         self.do_click(self.sc_loc["immediate_binding_mode"])
         self.do_click(self.sc_loc["provisioner_dropdown"])
-        self.do_click(self.sc_loc["rbd_provisioner"])
+        self.do_click(self.sc_loc["rbd-provisioner"])
         self.do_click(self.sc_loc["pool_dropdown"])
         self.do_click([f"button[data-test={pool_name}", By.CSS_SELECTOR])
         self.do_click(self.sc_loc["save_storageclass"])
