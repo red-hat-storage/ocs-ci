@@ -36,7 +36,7 @@ def check_subctl_cli():
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
     try:
-        run_cmd("./bin/subctl")
+        run_cmd("/home/jenkins/.local/bin/subctl")
     except (CommandFailed, FileNotFoundError):
         log.debug("subctl binary not found, downloading now...")
         submariner = acm.Submariner()
