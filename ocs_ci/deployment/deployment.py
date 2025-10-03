@@ -1856,7 +1856,7 @@ class Deployment(object):
             version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
             and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
         ):
-            if get_provider_service_type() != "NodePort":
+            if not config.ENV_DATA.get("odf_provider_mode_deployment"):
                 cluster_address = config.ENV_DATA["cluster_name"]
                 cluster_address_port = "50051"
             else:
