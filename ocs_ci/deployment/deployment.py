@@ -1859,7 +1859,9 @@ class Deployment(object):
             if not config.ENV_DATA.get("odf_provider_mode_deployment"):
                 cluster_address = config.ENV_DATA["cluster_name"]
                 cluster_address_port = "50051"
-                cluster_service_export_provider_server = ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                cluster_service_export_provider_server = (
+                    ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                )
             else:
                 cluster_address = get_node_internal_ip(
                     get_node_objs(get_worker_nodes()[0])[0]
