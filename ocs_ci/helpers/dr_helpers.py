@@ -2545,12 +2545,6 @@ def verify_volsync():
     config.switch_ctx(restore_index)
 
 
-from ocs_ci.ocs import constants
-import logging
-
-log = logging.getLogger(__name__)
-
-
 def get_mirrorpeer_for_clusters(cluster1, cluster2):
     """
     Get the MirrorPeer resource name for the given two clusters.
@@ -2568,7 +2562,7 @@ def get_mirrorpeer_for_clusters(cluster1, cluster2):
     )
 
     mirrorpeers = mirrorpeer_obj.get().get("items", [])
-    log.info(
+    logger.info(
         f"Found {len(mirrorpeers)} MirrorPeers in {constants.DR_DEFAULT_NAMESPACE}"
     )
 
@@ -2581,10 +2575,10 @@ def get_mirrorpeer_for_clusters(cluster1, cluster2):
         ]
         # Normalize & check if both clusters match this MirrorPeer
         if cluster1 in cluster_refs and cluster2 in cluster_refs:
-            log.info(
+            logger.info(
                 f"MirrorPeer '{mirrorpeer_name}' matches clusters {cluster1}, {cluster2}"
             )
             return mirrorpeer_name
 
-    log.error(f"No MirrorPeer found for clusters {cluster1} and {cluster2}")
+    logger.error(f"No MirrorPeer found for clusters {cluster1} and {cluster2}")
     return None
