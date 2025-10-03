@@ -1426,6 +1426,9 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
         disk["kname"] for disk in disks_available_for_cleanup
     ]
 
+    if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+        # TODO: comment
+        disks_names_available_for_cleanup.append("sda5")
     return disks_names_available_for_cleanup
 
 
