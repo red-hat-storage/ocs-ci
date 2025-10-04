@@ -700,7 +700,7 @@ class Deployment(object):
         if config.DEPLOYMENT.get("metallb_operator"):
             MetalLBInstaller().deploy_lb()
 
-    def do_deploy_hosted_clusters(self):
+    def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
         """
@@ -708,10 +708,37 @@ class Deployment(object):
             not config.ENV_DATA["skip_ocs_deployment"]
             or config.DEPLOYMENT.get("deploy_hosted_clusters")
         ):
+            hosted_client_clusters = {
+                name: data
+                for name, data in config.ENV_DATA.get("clusters", {}).items()
+                if data.get("cluster_type") == "hci_client"
+            }
+            if not hosted_client_clusters:
+                return
             # imported locally due to a circular dependency
-            from ocs_ci.deployment.hosted_cluster import HostedClients
+            from ocs_ci.deployment.hub_spoke import HostedClients
 
             HostedClients().do_deploy()
+
+    def do_deploy_external_spoke_clusters(self):
+        """
+        Deploy External spoke cluster(s)
+        """
+        if config.ENV_DATA.get("clusters", False) and (
+            not config.ENV_DATA["skip_ocs_deployment"]
+            or config.DEPLOYMENT.get("deploy_hosted_clusters")
+        ):
+            ext_client_clusters = {
+                name: data
+                for name, data in config.ENV_DATA.get("clusters", {}).items()
+                if data.get("cluster_type") == "ext_client"
+            }
+            if not ext_client_clusters:
+                return
+            # imported locally due to a circular dependency
+            from ocs_ci.deployment.hub_spoke import ExternalClients
+
+            ExternalClients().do_deploy()
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
@@ -786,7 +813,7 @@ class Deployment(object):
             setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
         if config.DEPLOYMENT.get("enable_nested_virtualization"):
-            from ocs_ci.deployment.hosted_cluster import enable_nested_virtualization
+            from ocs_ci.deployment.hub_spoke import enable_nested_virtualization
 
             enable_nested_virtualization()
         if config.DEPLOYMENT.get("enable_data_separation_replication"):
@@ -802,7 +829,8 @@ class Deployment(object):
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
-        self.do_deploy_hosted_clusters()
+        self.do_deploy_hosted_spoke_clusters()
+        self.do_deploy_external_spoke_clusters()
 
     def get_rdr_conf(self):
         """
