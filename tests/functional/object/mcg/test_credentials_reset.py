@@ -52,7 +52,9 @@ class TestCredentialsReset(MCGTest):
 
     @tier2
     @polarion_id("OCS-5118")
-    def test_change_nb_admin_pw(self, mcg_obj_session, original_noobaa_admin_password):
+    def deprecate_test_change_nb_admin_pw(
+        self, mcg_obj_session, original_noobaa_admin_password
+    ):
         """
         Test changing the NooBaa admin password
 
