@@ -1210,7 +1210,7 @@ def validate_cephfilesystem(fs_name, namespace=None):
         return False
 
     try:
-        for pools in TimeoutSampler(60, 3, ct_pod.exec_ceph_cmd, "ceph fs ls"):
+        for pools in TimeoutSampler(120, 10, ct_pod.exec_ceph_cmd, "ceph fs ls"):
             for out in pools:
                 result = out.get("name")
                 if result == fs_name:
