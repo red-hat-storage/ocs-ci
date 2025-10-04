@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../plugin.schema.json
+scenarios:
+  - name: "{{ scenario_name | default('container_pause_example') }}"
+    namespace: "{{ namespace | default('openshift-storage') }}"
+    label_selector: "{{ label_selector | default('app=rook-ceph-osd') }}"
+    container_name: "{{ container_name | default('') }}"     # Leave blank to target all containers
+    pause_seconds: {{ pause_seconds | default(60) }}         # Duration to pause the container(s)
+    count: {{ count | default(1) }}                          # Number of containers to pause
+    expected_recovery_time: {{ expected_recovery_time | default(120) }}

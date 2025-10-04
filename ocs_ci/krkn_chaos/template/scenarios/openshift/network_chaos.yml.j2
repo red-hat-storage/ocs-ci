@@ -1,0 +1,24 @@
+# Jinja2 template for Krkn network_chaos scenario
+network_chaos:
+  duration: {{ duration }}
+{%- if node_name %}
+  node_name: {{ node_name }}
+{%- elif label_selector %}
+  label_selector: "{{ label_selector }}"
+{%- endif %}
+  instance_count: {{ instance_count }}
+  interfaces:
+{%- for iface in interfaces %}
+    - "{{ iface }}"
+{%- endfor %}
+  execution: {{ execution }}
+{%- if image %}
+  image: {{ image }}
+{%- endif %}
+  egress:
+{%- if egress.latency is defined %}
+    latency: {{ egress.latency }}
+{%- endif %}
+{%- if egress.loss is defined %}
+    loss: {{ egress.loss }}
+{%- endif %}
