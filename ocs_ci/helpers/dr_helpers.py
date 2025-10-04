@@ -2267,7 +2267,6 @@ def get_cluster_set_name():
             for item in dr_cluster_relations[0]
         ]
 
-
     # ignore local-cluster here
     for i in managed_clusters:
         if (
