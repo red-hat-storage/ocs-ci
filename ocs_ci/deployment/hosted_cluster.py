@@ -913,7 +913,7 @@ class HostedODF(HypershiftHostedOCP):
 
             storage_client_data["spec"]["onboardingTicket"] = onboarding_key
 
-            self.storage_client_name = storage_client_data["metadata"]["name"]
+            self.storage_client_name = constants.STORAGE_CLIENT_NAME
 
             storage_client_file = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storage_client", delete=False
