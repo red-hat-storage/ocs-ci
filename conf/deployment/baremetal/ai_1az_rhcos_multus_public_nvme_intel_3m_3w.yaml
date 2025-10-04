@@ -1,0 +1,16 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'ai'
+  worker_replicas: 3
+  master_replicas: 3
+  is_multus_enabled: true
+  multus_create_public_net: true
+  multus_create_cluster_net: false
+  multus_public_net_interface: 'eno1'
+  multus_public_net_namespace: 'openshift-storage'
+  multus_public_net_type: 'macvlan'
+  multus_public_net_mode: 'bridge'
