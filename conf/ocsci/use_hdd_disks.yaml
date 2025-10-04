@@ -1,0 +1,4 @@
+---
+# This configuration file is used to create hdd disks for LSO
+ENV_DATA:
+  hdd_disks: true
