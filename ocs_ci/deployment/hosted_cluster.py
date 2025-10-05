@@ -955,7 +955,7 @@ class HostedODF(HypershiftHostedOCP):
         """
         cmd = (
             f"get {constants.STORAGECLIENTS} {constants.DEFAULT_CLUSTERNAME} -n {self.namespace_client} | "
-            "awk '/storage-client/{{print $2}}'"
+            f"awk '/{constants.DEFAULT_CLUSTERNAME}/{{print $2}}'"
         )
         return self.exec_oc_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
