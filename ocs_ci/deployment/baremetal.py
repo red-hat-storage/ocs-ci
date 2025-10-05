@@ -1493,6 +1493,96 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
                 logger.info(out)
 
 
+def download_script_to_node(
+    worker,
+    script_url: str,
+    script_path: str,
+    namespace: str = "default",
+    timeout: int = 300,
+):
+    """
+    Download a shell script directly on a node (inside chroot /host)
+    using curl via oc debug.
+
+    Assumes the URL is valid and directly downloadable
+    (e.g., a raw GitHub or internal script URL).
+
+    Args:
+        worker (object): Worker node object.
+        script_url (str): Direct URL to the script.
+        script_path (str): Destination path on the node (default: /tmp/simulate_bluestore_label.sh).
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the oc debug command (in seconds).
+
+    Returns:
+        str: Output of the command execution.
+    """
+    ocp_obj = ocp.OCP()
+
+    # Single, atomic command string
+    download_cmd = [
+        (
+            f"set -euo pipefail; "
+            f'curl -fsSL "{script_url}" -o "{script_path}" && '
+            f'chmod 755 "{script_path}" && '
+            f'echo "Downloaded to {script_path}" && ls -l "{script_path}"'
+        )
+    ]
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=worker.name,
+        cmd_list=download_cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
+def run_script_on_node(
+    worker,
+    script_path: str,
+    args: str = "",
+    namespace: str = "default",
+    timeout: int = 600,
+):
+    """
+    Execute a shell script directly on a node (inside chroot /host)
+    using oc debug.
+
+    Args:
+        worker (object): Worker node object.
+        script_path (str): Full path to the script on the node.
+        args (str): Optional arguments to pass to the script.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the command execution (in seconds).
+
+    Returns:
+        str: Output of the script execution.
+    """
+    ocp_obj = ocp.OCP()
+
+    # Build the command — single element, no single quotes inside
+    run_cmd = [
+        (
+            f"set -euo pipefail; "
+            f'echo ">>> Running: {script_path} {args}"; '
+            f'bash "{script_path}" {args}'
+        )
+    ]
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=worker.name,
+        cmd_list=run_cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
 class BaremetalPSIUPI(Deployment):
     """
     All the functionalities related to BaremetalPSI- UPI deployment
