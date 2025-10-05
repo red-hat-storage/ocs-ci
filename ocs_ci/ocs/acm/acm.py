@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     get_running_acm_version,
     string_chunkify,
     run_cmd,
+    exec_cmd,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
@@ -1027,9 +1028,10 @@ def install_clusteradm():
         run_cmd("clusteradm")
     except (CommandFailed, FileNotFoundError):
         # Install/reinstall clusteradm
-        run_cmd(
+        exec_cmd(
             "bash -c 'curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh "
-            "| bash'"
+            "| bash'",
+            shell=True
         )
 
 
