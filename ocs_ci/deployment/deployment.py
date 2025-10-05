@@ -370,8 +370,8 @@ class Deployment(object):
                 namespace=constants.GITOPS_CLUSTER_NAMESPACE,
                 kind=constants.GITOPS_CLUSTER,
             )
-            gitops_obj._has_phase = True
-            gitops_obj.wait_for_phase("successful", timeout=720)
+            # gitops_obj._has_phase = True
+            # gitops_obj.wait_for_phase("successful", timeout=720)
 
             logger.info(
                 "Create clusterrolebinding on both the managed clusters, needed "
