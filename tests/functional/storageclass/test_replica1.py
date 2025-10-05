@@ -1,5 +1,5 @@
 from logging import getLogger
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -28,7 +28,7 @@ from ocs_ci.ocs.constants import (
     RACK_LABEL,
     ZONE_LABEL,
 )
-from ocs_ci.helpers.helpers import create_pvc, create_pod
+from ocs_ci.helpers.helpers import create_pvc, create_pod, wait_for_resource_state
 from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
 from ocs_ci.ocs.replica_one import (
     delete_replica_1_sc,
@@ -51,23 +51,15 @@ log = getLogger(__name__)
 
 def _get_node_selector_for_failure_domain(
     failure_domain: str,
-) -> Tuple[Optional[Dict[str, str]], Optional[dict]]:
+) -> Optional[Dict[str, str]]:
     """
-    Return either
-
-    * a **hard** node‐selector — when at least one *worker* carries the
-      requested domain label, or
-    * a **preferred (soft) node‑affinity** — as a last‑chance
-      fallback when no worker has the label, or
-    * (None, None) if absolutely nothing can be used.
+    Return a hard node selector if workers exist with the requested failure domain label.
 
     Args:
         failure_domain (str): The failure domain value to match.
 
     Returns:
-        tuple: (node_selector, preferred_affinity)
-            node_selector (dict[str, str] | None): Hard selector if possible.
-            preferred_affinity (dict | None): Soft affinity if possible.
+        dict[str, str] | None: Hard node selector if workers found, None otherwise.
     """
     if config.ENV_DATA["platform"].lower() == VSPHERE_PLATFORM:
         label_key = RACK_LABEL
@@ -90,36 +82,12 @@ def _get_node_selector_for_failure_domain(
         log.info(
             f"Found worker(s) with {label_key}={failure_domain}, using hard node selector."
         )
-        return {label_key: failure_domain}, None  # hard selector
-
-    if workers_with_label:  # label exists but not the value
-        log.info(
-            f"No worker with {label_key}={failure_domain}, but label exists. Using soft affinity."
-        )
-        soft_affinity = {
-            "nodeAffinity": {
-                "preferredDuringSchedulingIgnoredDuringExecution": [
-                    {
-                        "weight": 100,
-                        "preference": {
-                            "matchExpressions": [
-                                {
-                                    "key": label_key,
-                                    "operator": "In",
-                                    "values": [failure_domain],
-                                }
-                            ]
-                        },
-                    }
-                ]
-            }
-        }
-        return None, soft_affinity
+        return {label_key: failure_domain}
 
     log.warning(
-        f"No workers expose label {label_key} for failure-domain {failure_domain}."
+        f"No workers with {label_key}={failure_domain}. Pod will be created without node selector."
     )
-    return None, None
+    return None
 
 
 def create_pod_on_failure_domain(project_factory, failure_domain: str):
@@ -131,38 +99,24 @@ def create_pod_on_failure_domain(project_factory, failure_domain: str):
         access_mode=ACCESS_MODE_RWO,
     )
 
-    node_selector, preferred_affinity = _get_node_selector_for_failure_domain(
-        failure_domain
-    )
+    node_selector = _get_node_selector_for_failure_domain(failure_domain)
 
     if node_selector:
         log.info(f"Creating pod with node selector: {node_selector}")
-        return create_pod(
-            interface_type=CEPHBLOCKPOOL,
-            pvc_name=pvc.name,
-            namespace=ns,
-            node_selector=node_selector,
-        )
-
-    if preferred_affinity:
+    else:
         log.info(
-            f"Creating pod with preferred node affinity for domain: {failure_domain}"
-        )
-        return create_pod(
-            interface_type=CEPHBLOCKPOOL,
-            pvc_name=pvc.name,
-            namespace=ns,
+            f"Creating pod without node selector for failure domain: {failure_domain}"
         )
 
-    log.warning(
-        "No nodes expose label for failure‑domain %s – creating unconstrained pod.",
-        failure_domain,
-    )
-    return create_pod(
+    pod_obj = create_pod(
         interface_type=CEPHBLOCKPOOL,
         pvc_name=pvc.name,
         namespace=ns,
+        node_selector=node_selector,
     )
+    wait_for_resource_state(pod_obj, STATUS_RUNNING, timeout=300)
+    pod_obj.reload()
+    return pod_obj
 
 
 @polarion_id("OCS-5720")
