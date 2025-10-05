@@ -2599,7 +2599,6 @@ def verify_volsync():
         )
     config.switch_ctx(restore_index)
 
-
 def verify_cluster_data_protected_status(
     workload_type, namespace, workload_placement_name=None
 ):
@@ -2700,3 +2699,169 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+def get_drpolicy(dr_cluster1, dr_cluster2):
+    """
+    Gets the dr policy based on cluster names associated with the dr policy
+
+    Args:
+        dr_cluster1 (str): peer cluster 1 or primary cluster
+        dr_cluster2 (str): peer cluster 2 or secondary cluster
+
+    Returns:
+        str: name of dr policy
+
+    """
+    cmd = (
+        "oc get drpolicies -o json | "
+        f"jq -r --arg c1 {dr_cluster1} --arg c2 {dr_cluster2} '.items[] |"
+        f"select((.spec.drClusters | sort) == "
+        "([$c1, $c2] | sort)) .metadata.name'"
+    )
+    dr_policy_name = run_cmd(cmd)
+
+    return dr_policy_name
+
+
+def get_mirrorpeer(drpolicy):
+    """
+    Gets the mirror peer based on dr policy associated with the mirror peer
+
+    Args:
+        drpolicy (str): dr policy name
+
+    Returns:
+        str: name of mirror peer
+
+    """
+    cmd = (
+        f"oc get mirrorpeers -A -o json | "
+        f"jq -r --arg dr_clusters {drpolicy} "
+        f"'.items[] | "
+        f'{{name: .metadata.name, clusters: (.spec.items | map(.clusterName) | sort | join(","))}} '
+        f"| select(.clusters == $dr_clusters) "
+        f"| .name'"
+    )
+
+    mirror_peer = run_cmd(cmd)
+
+    return mirror_peer
+
+
+def partial_rdr_uninstall(drpolicy, mirrorpeer):
+    """
+    Performs partial uninstallation of RDR
+
+    Args:
+        drpolicy (str): dr policy name
+        mirrorpeer (str): mirror peer name
+
+    """
+    drpolicy_delete_cmd = f"oc delete drpolicy {drpolicy}"
+    mirrorpeer_delete_cmd = f"oc delete mirrorpeer {mirrorpeer}"
+
+    run_cmd(cmd=drpolicy_delete_cmd)
+    run_cmd(cmd=mirrorpeer_delete_cmd)
+
+
+def complete_rdr_uninstall():
+    """
+    Performs Complete uninstallation of RDR. Deletes the subscriptions,
+    managedclusterview, consoleplugins, configmap, service from
+    openshift-operators namespace in ACM
+
+    """
+    config.switch_acm_ctx()
+
+    # Common namespace
+    namespace = "openshift-operators"
+
+    # Operators to delete
+    operators = [
+        "odr-hub-operator",
+        "odf-multicluster-orchestrator",
+    ]
+
+    # Delete subscriptions and CSVs for each operator
+    for op in operators:
+        run_cmd(
+            f"oc delete subscriptions.operators.coreos.com "
+            f"-l operators.coreos.com/{op}.{namespace} -n {namespace}"
+        )
+        run_cmd(
+            f"oc delete csv " f"-l operators.coreos.com/{op}.{namespace} -n {namespace}"
+        )
+
+    # Delete other related resources
+    additonal_cmds = [
+        "oc delete managedclusterview -l multicluster.odf.openshift.io/"
+        "created-by=odf-multicluster-managedcluster-controller -A",
+        "oc delete consoleplugins.console.openshift.io odf-multicluster-console",
+        f"oc delete configmap odf-client-info -n {namespace}",
+        f"oc delete service odf-multicluster-console -n {namespace}",
+    ]
+
+    for cmd in additonal_cmds:
+        run_cmd(cmd)
+
+
+def verify_mirroring_status_in_tools_pod(expected_mirroring_status):
+    """
+    Validates mirroring status in tools pods
+
+    Args:
+        expected_mirroring_status(list): Expected mirroring status' message in the output
+
+    """
+    tools_pod = get_ceph_tools_pod()
+    mirroring_status = []
+    mirroring_status.append(
+        tools_pod.exec_cmd_on_pod(
+            "rbd -p ocs-storagecluster-cephblockpool " "mirror pool info --all"
+        )
+    )
+    mirroring_status.append(
+        tools_pod.exec_cmd_on_pod(
+            "rbd -p ocs-storagecluster-cephblockpool " "mirror pool status"
+        )
+    )
+    assert expected_mirroring_status == mirroring_status, (
+        f"Mirroring status {mirroring_status} is not as expected as "
+        f"{expected_mirroring_status}"
+    )
+
+
+def verify_resource_rdr_resource_deletion(cluster_name):
+    """
+    Validates the deletion of RDR resources (For eg:- vrc, rbd mirror secrets etc..)
+
+
+    """
+
+    config.switch_to_cluster_by_name(cluster_name)
+
+    cli_commands = [
+        "oc get obc -n openshift-storage",
+        "oc get cephrbdmirrors.ceph.rook.io -n openshift-storage"
+        "oc get pods -n openshift-storage | egrep 'token|rbd-mirror'",
+        "oc get secrets -n openshift-storage | grep rbd-mirror",
+        "oc get project openshift-dr-system",
+        "oc get project openshift-dr-ops",
+        "oc get vrc",
+        "oc get volumegroupreplicationclasses",
+    ]
+    failed_cmds = []
+    for cli_cmd in cli_commands:
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=run_cmd_verify_cli_output,
+            cmd=cli_cmd,
+            expected_output_lst="No resources found",
+        )
+        if not sample.wait_for_func_status(result=False):
+            failed_cmds.append(cli_cmd)
+
+    if failed_cmds:
+        raise Exception(f"The following commands failed: {failed_cmds}")
+
