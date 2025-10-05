@@ -51,6 +51,7 @@ from ocs_ci.helpers.dr_helpers import (
     create_service_exporter,
     validate_storage_cluster_peer_state,
     verify_volsync,
+    validate_drpolicy_grouping,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -3783,6 +3784,10 @@ class MultiClusterDROperatorsDeploy(object):
         )
         if not sample.wait_for_func_status(True):
             raise TimeoutExpiredError("DR Policy failed to reach Succeeded state")
+
+        # Validate DRPolicy grouping for ODF version >= 4.20
+        logger.info("Validating DRPolicy grouping configuration")
+        validate_drpolicy_grouping(drpolicy_name=self.dr_policy_name)
 
     def enable_cluster_backup(self):
         """

@@ -406,7 +406,11 @@ def check_mirroring_status_ok(
 
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
-    health_keys = ["daemon_health", "health", "image_health", "group_health"]
+
+    health_keys = ["daemon_health", "health", "image_health"]
+    if ocs_version >= version.VERSION_4_19:
+        health_keys.append("group_health")
+
     for key in health_keys:
         expected_value = "OK"
         current_value = mirroring_status.get(key)
@@ -648,11 +652,10 @@ def check_replication_resource_state(kind, state, namespace, resource_name=""):
     resource_obj = ocp.OCP(kind=kind, namespace=namespace)
 
     if resource_name:
-        resource_list = resource_obj.get(resource_name=resource_name)
-        resource_list_index = resource_list
+        resource_data = resource_obj.get(resource_name=resource_name)
+        resource_list = [resource_data] if resource_data else []
     else:
         resource_list = resource_obj.get().get("items")
-        resource_list_index = resource_list[0] if resource_list else None
 
     # Handle deletion case
     if len(resource_list) == 0 and state.lower() == "secondary":
@@ -668,7 +671,7 @@ def check_replication_resource_state(kind, state, namespace, resource_name=""):
             logger.info(f"{kind} resource not found, skipping state check")
             return True
 
-    if kind == constants.VOLUME_REPLICATION:
+    if kind == constants.VOLUME_REPLICATION and len(resource_list) > 1:
         # Handle multiple VR resources
         state_mismatch = []
         for resource in resource_list:
@@ -696,10 +699,10 @@ def check_replication_resource_state(kind, state, namespace, resource_name=""):
             )
             return False
     else:
-        # Handle single resource
-        resource_name = resource_list_index["metadata"]["name"]
-        desired_state = resource_list_index["spec"]["replicationState"]
-        current_state = resource_list_index["status"]["state"]
+        resource = resource_list[0]
+        resource_name = resource["metadata"]["name"]
+        desired_state = resource["spec"]["replicationState"]
+        current_state = resource["status"]["state"]
         logger.info(
             f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
         )
@@ -787,7 +790,7 @@ def wait_for_resource_state(kind, state, namespace, resource_name="", timeout=90
     Wait for resources to reach expected count
 
     Args:
-        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.REPLICATION_SOURCE, etc.)
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_REPLICATION_GROUP, etc.)
         state (str): The resource state to check for (e.g. 'primary', 'secondary')
         namespace (str): the namespace of the resources
         resource_name (str): Name of specific resource
@@ -1320,6 +1323,126 @@ def get_all_drpolicy():
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     return drpolicy_list
+
+
+def validate_drpolicy_grouping(drpolicy_name=None):
+    """
+    Validate DRPolicy configuration for CG behavior.
+
+    This function validates that DRPolicy has grouping=true for every storageClass
+    in status.async.peerClasses in ODF version >= 4.20.
+
+    Args:
+        drpolicy_name (str, optional): Name of specific DRPolicy to validate.
+            If None, validates all DRPolicies.
+
+    Returns:
+        bool: True if all validations pass, False otherwise
+
+    Raises:
+        AssertionError: If grouping validation fails
+
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_20:
+        logger.info("ODF version < 4.20, skipping DRPolicy grouping validation")
+        return True
+
+    logger.info(
+        "Validating DRPolicy grouping for ODF version >= 4.20 to ensure CG behavior is properly configured."
+    )
+
+    # Get DRPolicy resources
+    config.switch_acm_ctx()
+    if drpolicy_name:
+        drpolicy_obj = ocp.OCP(
+            kind=constants.DRPOLICY,
+            resource_name=drpolicy_name,
+            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+        )
+        drpolicy_data = drpolicy_obj.get()
+        drpolicies = [drpolicy_data]
+        logger.info(f"Validating DRPolicy: {drpolicy_name}")
+    else:
+        drpolicies = get_all_drpolicy()
+        logger.info(f"Validating all {len(drpolicies)} DRPolicy resources")
+
+    for drp in drpolicies:
+        drp_name = drp.get("metadata").get("name")
+        peer_classes = drp.get("status").get("async").get("peerClasses")
+
+        # Assert grouping is true for every storageClass in peerClasses
+        logger.info(f"Check grouping for storageClasses in DRPolicy: {drp_name}")
+        sc_with_grouping = [
+            pc.get("storageClassName")
+            for pc in peer_classes
+            if pc.get("grouping", False)
+        ]
+        logger.info(f"Grouping is true for storageClasses: {sc_with_grouping}")
+
+        sc_without_grouping = [
+            pc.get("storageClassName")
+            for pc in peer_classes
+            if not pc.get("grouping", False)
+        ]
+
+        if sc_without_grouping:
+            error_msg = f"Grouping is not true for storageClasses: {sc_without_grouping} in DRPolicy: {drp_name}"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+
+        logger.info(
+            f"Verified grouping is true for every storageClass in DRPolicy: {drp_name}"
+        )
+
+    logger.info("DRPolicy grouping validation completed successfully")
+    return True
+
+
+def validate_vgrc_count():
+    """
+    Validate VGRC count on each managed cluster per unique scheduling interval.
+
+    This function collects all unique scheduling intervals from all DRPolicies
+    and validates that the VGRC count matches the number of unique intervals.
+
+    Returns:
+        bool: True if VGRC count validation passes, False otherwise
+
+    Raises:
+        AssertionError: If VGRC count validation fails
+
+    """
+    logger.info("Validating VGRC count based on DRPolicy scheduling intervals")
+
+    drpolicies = get_all_drpolicy()
+
+    scheduling_intervals = []
+
+    for drp in drpolicies:
+        scheduling_interval = drp.get("spec").get("schedulingInterval")
+        scheduling_intervals.append(scheduling_interval)
+
+    scheduling_intervals = list(set(scheduling_intervals))
+    logger.info(f"Unique Scheduling Intervals: {scheduling_intervals}")
+
+    for cluster in get_non_acm_cluster_config():
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        vgrc_count = get_resource_count(kind=constants.VOLUME_GROUP_REPLICATION_CLASS)
+        logger.info(
+            f"{constants.VOLUME_GROUP_REPLICATION_CLASS} count in {cluster.ENV_DATA['cluster_name']}= {vgrc_count}"
+        )
+
+        if vgrc_count != len(scheduling_intervals):
+            error_msg = (
+                f"VGRC count mismatch in {cluster.ENV_DATA['cluster_name']}: "
+                f"expected {len(scheduling_intervals)}, got {vgrc_count}"
+            )
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+
+    logger.info("VGRC count validation completed successfully")
+    return True
 
 
 def verify_last_group_sync_time(
