@@ -33,6 +33,7 @@ from ocs_ci.ocs.exceptions import (
     PVNotSufficientException,
     ResourceWrongStatusException,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
@@ -875,7 +876,7 @@ def ocs_install_verification(
         "multicluster_mode"
     ) == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
         "enable_globalnet", True
-    ):
+    ) and get_provider_service_type() != "NodePort":
         validate_serviceexport()
 
     # Verify the owner of CSI deployments and daemonsets
