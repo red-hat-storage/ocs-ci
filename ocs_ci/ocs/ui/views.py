@@ -405,8 +405,7 @@ generic_locators = {
     ),
     "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
-        "//td[@id='name']//a[contains(text(), '{}')]"
-        "/../../..//button[@aria-label='Actions'] | "
+        "//tr[contains(., '{}')]//button[@aria-label='Kebab toggle'] | "
         "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
         By.XPATH,
     ),
@@ -2427,11 +2426,11 @@ bucket_tab = {
     ),
     "bucket_action_button": (
         "//button[@aria-label='Kebab toggle']",
-        By.CSS_SELECTOR,
+        By.XPATH,
     ),
     "bucket_delete_option": (
         "//button[@tabindex='-1']",
-        By.CSS_SELECTOR,
+        By.XPATH,
     ),
     "bucket_confirm_button": (
         ".pf-v5-c-button.pf-m-danger.pf-m-progress",
