@@ -3778,7 +3778,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
-            if config.DRPOLICY.get("create_from_cli"):
+            if config.ENV_DATA.get("create_drpolicy_via_cli", False):
                 self.configure_mirror_peer()
                 self.deploy_dr_policy()
             else:

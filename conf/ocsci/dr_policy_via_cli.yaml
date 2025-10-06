@@ -1,0 +1,4 @@
+#Create DRPolicy via CLI on Regional DR setup
+---
+ENV_DATA:
+  create_drpolicy_via_cli: true
