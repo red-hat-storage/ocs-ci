@@ -39,13 +39,9 @@ class TestCSIADDonDaemonset(ManageTest):
             constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
         )
         for pod in csi_addon_pods:
-            logger.info(f"DebugDelete: {dir(pod)}")
-            pod_data = pod.get("spec").get("status")
-            logger.info(f"DebugDelete: {pod_data}")
-            logger.info(f"DebugDelete: {pod_data['containerStatuses']}")
-
-            for container_status in pod_data["containerStatuses"]:
+            container_status_list = pod.get("status").get("containerStatuses")
+            for container_status in container_status_list:
                 assert container_status[
                     "ready"
                 ], f"container {container_status['name']} in pod {pod.name} is not ready"
-                logger.info("All containers in CSI-addon DaemonSet pods are ready")
+        logger.info("All containers in CSI-addon DaemonSet pods are ready")
