@@ -970,7 +970,7 @@ def install_clusteradm():
         # Install/re0install clusteradm
         exec_cmd(
             "curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash",
-            shell=True
+            shell=True,
         )
 
 
