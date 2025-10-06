@@ -444,7 +444,11 @@ class Deployment(object):
                             )
                             storage_cluster.reload_data()
                             storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
-                            if get_provider_service_type() != "NodePort":
+                            if (
+                                get_provider_service_type() != "NodePort"
+                                and cluster.ENV_DATA.get("cluster_type").lower()
+                                == constants.HCI_CLIENT
+                            ):
                                 ptch = (
                                     f'\'{{"spec": {{"network": {{"multiClusterService": '
                                     f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
@@ -4255,7 +4259,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             for cluster in get_non_acm_cluster_config():
                 index = cluster.MULTICLUSTER["multicluster_index"]
                 config.switch_ctx(index)
-                if get_provider_service_type() != "NodePort":
+                if (
+                    get_provider_service_type() != "NodePort"
+                    and cluster.ENV_DATA.get("cluster_type").lower()
+                    == constants.HCI_CLIENT
+                ):
                     create_service_exporter()
                     break
 
