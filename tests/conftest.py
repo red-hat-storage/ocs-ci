@@ -20,7 +20,7 @@ import pytest
 from collections import namedtuple
 
 from ocs_ci.deployment import factory as dep_factory
-from ocs_ci.framework import config as ocsci_config
+from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
@@ -2740,6 +2740,16 @@ def javasdk_pod_fixture(request, scope_name):
     javas3_pod_dict["metadata"]["name"] = javas3_pod_name
     update_container_with_mirrored_image(javas3_pod_dict)
     update_container_with_proxy_env(javas3_pod_dict)
+    if config.DEPLOYMENT.get("ipv6"):
+        if "containers" in javas3_pod_dict["spec"]:
+            container = javas3_pod_dict["spec"]["containers"][0]
+        else:
+            container = javas3_pod_dict["spec"]["template"]["spec"]["containers"][0]
+        if "env" not in container:
+            container["env"] = []
+        container["env"].append(
+            {"name": "MAVEN_OPTS", "value": "-Djava.net.preferIPv6Addresses=true"}
+        )
     javas3_pod_obj = Pod(**javas3_pod_dict)
 
     assert javas3_pod_obj.create(do_reload=True), f"Failed to create {javas3_pod_name}"
