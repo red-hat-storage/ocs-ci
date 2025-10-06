@@ -446,7 +446,7 @@ class Deployment(object):
                             storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
                             if (
                                 get_provider_service_type() != "NodePort"
-                                and cluster.ENV_DATA.get("cluster_type").lower()
+                                and cluster.ENV_DATA.get("cluster_type", "").lower()
                                 == constants.HCI_CLIENT
                             ):
                                 ptch = (
