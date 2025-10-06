@@ -27,7 +27,6 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
 from ocs_ci.helpers.dr_helpers_ui import create_drpolicy_ui
-from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
@@ -3783,6 +3782,9 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                 self.configure_mirror_peer()
                 self.deploy_dr_policy()
             else:
+                from ocs_ci.ocs.acm.acm import AcmAddClusters
+
+                # Importing here to avoid circular import error
                 acm_obj = AcmAddClusters()
                 first_cluster_name = get_primary_cluster_config().ENV_DATA[
                     "cluster_name"
