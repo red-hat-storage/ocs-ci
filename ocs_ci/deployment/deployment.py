@@ -789,7 +789,7 @@ class Deployment(object):
             from ocs_ci.deployment.hosted_cluster import enable_nested_virtualization
 
             enable_nested_virtualization()
-        if config.DEPLOYMENT.get("enable_data_separation_replication"):
+        if config.DEPLOYMENT.get("enable_data_replication_separation"):
             annotate_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
