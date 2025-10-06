@@ -872,11 +872,11 @@ def ocs_install_verification(
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
     # RDR with globalnet submariner
-    if config.MULTICLUSTER.get(
-        "multicluster_mode"
-    ) == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
-        "enable_globalnet", True
-    ) and get_provider_service_type() != "NodePort":
+    if (
+        config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        and get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+        and get_provider_service_type() != "NodePort"
+    ):
         validate_serviceexport()
 
     # Verify the owner of CSI deployments and daemonsets
