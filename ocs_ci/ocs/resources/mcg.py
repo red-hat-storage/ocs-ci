@@ -72,9 +72,8 @@ class MCG:
         namespace,
         noobaa_user,
         noobaa_password,
-        noobaa_token,
         data_to_mask,
-    ) = (None,) * 13
+    ) = (None,) * 12
 
     def __init__(self, *args, **kwargs):
         """
@@ -175,47 +174,6 @@ class MCG:
                     aws_access_key_id=self.aws_access_key_id,
                     aws_secret_access_key=self.aws_access_key,
                 )
-
-    def retrieve_nb_token(self, timeout=300, sleep=30):
-        """
-        Try to retrieve a NB RPC token and decode its JSON
-
-        """
-
-        def internal_retrieval_logic():
-            try:
-                rpc_response = self.send_rpc_query(
-                    "auth_api",
-                    "create_auth",
-                    params={
-                        "role": "admin",
-                        "system": "noobaa",
-                        "email": self.noobaa_user,
-                        "password": self.noobaa_password,
-                    },
-                )
-                return rpc_response.json().get("reply").get("token")
-
-            except json.JSONDecodeError:
-                logger.warning(
-                    "RPC did not respond with a JSON. Response: \n" + str(rpc_response)
-                )
-                logger.warning(
-                    "Failed to retrieve token, NooBaa might be unhealthy. Retrying"
-                )
-                return None
-
-        try:
-            for token in TimeoutSampler(timeout, sleep, internal_retrieval_logic):
-                if token:
-                    return token
-        except TimeoutExpiredError:
-            logger.error(
-                "NB RPC token was not retrieved successfully within the time limit."
-            )
-            assert False, (
-                "NB RPC token was not retrieved successfully " "within the time limit."
-            )
 
     def determine_s3_endpoint(self):
         """
@@ -1238,7 +1196,6 @@ class MCG:
         self.noobaa_password = admin_credentials["password"]
 
         self.data_to_mask.extend(flatten_multilevel_dict(admin_credentials))
-        self.noobaa_token = self.retrieve_nb_token()
 
         # Increase boto3's built-in retry configuration to handle transient errors
         # it uses exponential backoff with a base delay of 0.5 seconds
