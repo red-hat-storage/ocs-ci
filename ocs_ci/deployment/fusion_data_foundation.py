@@ -17,6 +17,11 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
+import time
+from ocs_ci.utility.utils import (
+    wait_for_machineconfigpool_status,
+    get_running_ocp_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,27 +40,33 @@ class FusionDataFoundationDeployment:
             self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
+
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.setup_storage()
 
     def create_image_tag_mirror_set(self):
         """
-        Create ImageTagMirrorSet.
+        Create or update ImageTagMirrorSet.
         """
-        logger.info("Creating FDF ImageTagMirrorSet")
+        logger.info("Creating or Updating FDF ImageTagMirrorSet")
+
+        imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
+
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_IMAGE_TAG_MIRROR_SET}"
+            f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}", silent=True
         )
 
     def create_image_digest_mirror_set(self):
         """
-        Create ImageDigestMirrorSet.
+        Create or update ImageTagMirrorSet.
         """
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set()
+
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {image_digest_mirror_set}"
+            f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}",
+            silent=True,
         )
         os.remove(image_digest_mirror_set)
 
@@ -72,6 +83,9 @@ class FusionDataFoundationDeployment:
         """
         Perform steps to prepare for a Pre-release deployment of FDF.
         """
+        time.sleep(60)
+        wait_for_machineconfigpool_status(node_type="all")
+
         fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
         fdf_catalog_name = defaults.FUSION_CATALOG_NAME
         fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
@@ -86,13 +100,15 @@ class FusionDataFoundationDeployment:
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
             config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
+        ocp_version = f"ocp{get_running_ocp_version().replace('.', '')}-t"
+        logger.info(f"OCP version: {ocp_version}")
         logger.info("Updating FusionServiceDefinition")
         params_dict = {
             "spec": {
                 "onboarding": {
                     "serviceOperatorSubscription": {
                         "multiVersionCatSrcDetails": {
-                            "ocp418-t": {
+                            ocp_version: {
                                 "imageDigest": fdf_image_digest,
                                 "registryPath": fdf_registry,
                             }
