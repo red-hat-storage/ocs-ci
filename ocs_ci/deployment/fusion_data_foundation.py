@@ -15,7 +15,7 @@ from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.utility.labeling import label_and_taint_nodes
+from ocs_ci.utility.labeling import label_and_taint_nodes, label_storage_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 import time
@@ -159,6 +159,7 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Configuring storage.")
         self.patch_catalogsource()
+        label_storage_nodes()
         label_and_taint_nodes()
         self.create_odfcluster()
         odfcluster_status_check()
