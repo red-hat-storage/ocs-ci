@@ -797,11 +797,11 @@ class Deployment(object):
         if config.DEPLOYMENT.get("enable_data_separation_replication"):
             annotate_worker_nodes_with_mon_ip()
 
-        # self.do_deploy_lvmo()
-        # self.do_deploy_submariner()
-        # self.do_gitops_deploy()
-        # self.do_deploy_oadp()
-        # self.do_deploy_ocs()
+        self.do_deploy_lvmo()
+        self.do_deploy_submariner()
+        self.do_gitops_deploy()
+        self.do_deploy_oadp()
+        self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
