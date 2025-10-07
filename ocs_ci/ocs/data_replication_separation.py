@@ -25,7 +25,7 @@ def validate_pods_have_host_network(pods):
     result = True
     for pod in pods:
         log.info(f"checking that pod {pod.name} has set host network")
-        if _pod.pod_data.get("spec").get(
+        if pod.pod_data.get("spec").get(
             "dnsPolicy"
         ) != constants.DNSPOLICY_CLUSTERFIRSTWITHHOSTNET or not pod.pod_data.get(
             "spec"
@@ -34,7 +34,7 @@ def validate_pods_have_host_network(pods):
         ):
             log.error(f"pod {pod.name} doesn't have set Host network: {pod.pod_data}")
             result = False
-    return False
+    return result
 
 
 @config.run_with_provider_context_if_available
