@@ -335,7 +335,11 @@ class TestObcUserInterface(object):
 
     def teardown(self):
         obc_lst = get_all_resource_names_of_a_kind("obc")
-        test_obcs = [obc_name for obc_name in obc_lst if "obc-testing" in obc_name]
+        test_obcs = [
+            obc_name
+            for obc_name in obc_lst
+            if ("obc-testing" or "test-bucket-") in obc_name
+        ]
         for obc_name in test_obcs:
             OCP(kind="obc", namespace=config.ENV_DATA["cluster_namespace"]).delete(
                 resource_name=obc_name
