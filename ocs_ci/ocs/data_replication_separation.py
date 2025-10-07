@@ -7,7 +7,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import Pod
+from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ def validate_pods_have_host_network(pods):
     return False
 
 
+@config.run_with_provider_context_if_available
 def validate_monitor_pods_have_host_network():
     """
     Validate that monitor pods have set host network.
@@ -53,6 +54,7 @@ def validate_monitor_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_osd_pods_have_host_network():
     """
     Validate that osd pods have set host network.
@@ -69,6 +71,7 @@ def validate_osd_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_rgw_pods_have_host_network():
     """
     Validate that rgw pods have set host network.
@@ -85,6 +88,7 @@ def validate_rgw_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_mgr_and_mdr_pods_have_host_network():
     """
     Validate that MGR and MDR pods have set host network.
@@ -109,6 +113,7 @@ def validate_mgr_and_mdr_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_ceph_tool_pods_have_host_network():
     """
     Validate that ceph tool pods have set host network.
@@ -125,6 +130,7 @@ def validate_ceph_tool_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_ceph_exporter_pods_have_host_network():
     """
     Validate that rook ceph exporter tool pods have set host network.
@@ -141,6 +147,7 @@ def validate_ceph_exporter_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_ceph_operator_pods_have_host_network():
     """
     Validate that odf operator pods have set host network.
@@ -165,6 +172,7 @@ def validate_ceph_operator_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_metrics_exporter_pods_have_host_network():
     """
     Validate that ocs metrics exporter pods have set host network.
@@ -181,6 +189,7 @@ def validate_metrics_exporter_pods_have_host_network():
     return validate_pods_have_host_network(pods)
 
 
+@config.run_with_provider_context_if_available
 def validate_csi_pods_have_host_network():
     """
     Validate that csi pods have set host network.
