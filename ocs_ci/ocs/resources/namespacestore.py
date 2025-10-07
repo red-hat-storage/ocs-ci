@@ -156,7 +156,7 @@ class NamespaceStore:
             == constants.STATUS_READY
         )
 
-    def verify_health(self, timeout=240, interval=5):
+    def verify_health(self, timeout=360, interval=5):
         """
         Health verification function that tries to verify
         a namespacestores's health until a given time limit is reached

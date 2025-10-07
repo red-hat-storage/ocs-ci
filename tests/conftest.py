@@ -1401,6 +1401,7 @@ def pvc_factory_fixture(request, project_factory):
         volume_mode=None,
         size_unit="Gi",
         wait_for_resource_status_timeout=90,
+        pvc_name=None,
     ):
         """
         Args:
@@ -1425,6 +1426,7 @@ def pvc_factory_fixture(request, project_factory):
             size_unit (str): PVC size unit, eg: "Mi"
             wait_for_resource_status_timeout (int): Wait in seconds until the
                 desired PVC status is reached.
+            pvc_name (str): The name of the PVC to create
 
         Returns:
             object: helpers.create_pvc instance.
@@ -1454,6 +1456,7 @@ def pvc_factory_fixture(request, project_factory):
 
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
+                pvc_name=pvc_name,
                 namespace=project.namespace,
                 size=pvc_size,
                 do_reload=False,

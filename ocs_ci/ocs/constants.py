@@ -1922,6 +1922,11 @@ DR_CLUSTER_OPERATOR_SUBSCRIPTION = "ramen-dr-cluster-subscription"
 RBD_MIRROR_DAEMON_DEPLOYMENT = "rook-ceph-rbd-mirror-a"
 MDS_DAEMON_DEPLOYMENT_ONE = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a"
 MDS_DAEMON_DEPLOYMENT_TWO = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b"
+ROOK_CEPH_OSD_ONE = "rook-ceph-osd-1"
+ROOK_CEPH_MGR_A = "rook-ceph-mgr-a"
+SUBMARINER_DEPLOYMENT = "submariner-operator"
+SUBMARINER_LIGHTHOUSE_AGENT_DEPLOYMENT = "submariner-lighthouse-agent"
+SUBMARINER_LIGHTHOUSE_COREDNS_DEPLOYMENT = "submariner-lighthouse-coredns"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -3031,6 +3036,7 @@ ACM_BREW_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
+SUBCTL_BREW_DOWNSTREAM_URL = "brew.registry.redhat.io/rh-osbs/rhacm2-"
 
 # OADP
 OADP_BREW_BUILD_URL = (
