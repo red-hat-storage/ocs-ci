@@ -3,6 +3,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import UnavailableResourceException
+from ocs_ci.ocs.node import get_all_nodes, get_node_objs, get_nodes, label_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -119,3 +120,36 @@ def label_and_taint_nodes():
             f"adm taint nodes {workers_to_taint} {constants.OPERATOR_NODE_TAINT}"
         )
         _ocp.exec_oc_cmd(command=taint_cmd)
+
+
+def label_storage_nodes():
+    """
+    Label storage nodes.
+    """
+    # Mark master nodes schedulable if mark_masters_schedulable: True
+    if config.ENV_DATA.get("mark_masters_schedulable", False):
+        mark_masters_schedulable()
+        # Allow ODF to be deployed on all nodes
+        logger.info("labeling all nodes as storage nodes")
+        nodes = get_all_nodes()
+        node_objs = get_node_objs(nodes)
+        label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+    else:
+        logger.info("labeling worker nodes as storage nodes")
+        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+        label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
+
+
+def mark_masters_schedulable():
+    """
+    Mark masters schedulable.
+    """
+    path = "/spec/mastersSchedulable"
+    params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+    scheduler_obj = ocp.OCP(
+        kind=constants.SCHEDULERS_CONFIG,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert scheduler_obj.patch(
+        params=params, format_type="json"
+    ), "Failed to run patch command to update control nodes as scheduleable"

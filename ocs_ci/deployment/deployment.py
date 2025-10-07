@@ -88,10 +88,7 @@ from ocs_ci.ocs.monitoring import (
 from ocs_ci.ocs.node import (
     get_worker_nodes,
     verify_all_nodes_created,
-    label_nodes,
-    get_all_nodes,
     get_node_objs,
-    get_nodes,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import machineconfig
@@ -159,7 +156,7 @@ from ocs_ci.utility import (
     version,
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
-from ocs_ci.utility.labeling import label_and_taint_nodes
+from ocs_ci.utility.labeling import label_and_taint_nodes, label_storage_nodes
 from ocs_ci.utility.multicluster import create_mce_catsrc
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
@@ -2209,26 +2206,7 @@ class Deployment(object):
             )
             OCP().exec_oc_cmd(command=patch_cmd)
 
-            # Mark master nodes schedulable if mark_masters_schedulable: True
-            if config.ENV_DATA.get("mark_masters_schedulable", False):
-                path = "/spec/mastersSchedulable"
-                params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-                scheduler_obj = ocp.OCP(
-                    kind=constants.SCHEDULERS_CONFIG,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-                assert scheduler_obj.patch(
-                    params=params, format_type="json"
-                ), "Failed to run patch command to update control nodes as scheduleable"
-                # Allow ODF to be deployed on all nodes
-                logger.info("labeling all nodes as storage nodes")
-                nodes = get_all_nodes()
-                node_objs = get_node_objs(nodes)
-                label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
-            else:
-                logger.info("labeling worker nodes as storage nodes")
-                worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-                label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
+            label_storage_nodes()
 
         if config.DEPLOYMENT["external_mode"]:
             self.deploy_with_external_mode()
