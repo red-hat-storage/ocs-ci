@@ -119,7 +119,8 @@ class TestMaintenancePod(E2ETest):
 
         # enable the maintenance mode for osd
         Mot_obj = ceph_monstore_factory
-        Mot_obj.maintenance_start(deployment_name=original_deployment)
+        self.odf_cli_runner.run_maintenance_start(deployment_name=original_deployment)
+        Mot_obj.deployment_in_maintenance[original_deployment] = True
 
         # make sure original deployment is scaled down
         # make sure the new maintenance pod is brought up and running successfully
@@ -165,7 +166,7 @@ class TestMaintenancePod(E2ETest):
         )
 
         # stop the maintenance
-        Mot_obj.maintenance_stop(original_deployment)
+        self.odf_cli_runner.run_maintenance_stop(original_deployment)
 
         # make sure the original deployment is scaled up and maintenance pod is removed
         maintenance_deployment = get_deployments_having_label(
