@@ -113,20 +113,6 @@ class PageNavigator(BaseUI):
 
         return StorageClusterPage()
 
-    def nav_object_storage(self):
-        """
-        Navigate to Object Storage Page
-
-        Returns:
-            ObjectService: ObjectService page object
-        """
-        self.navigate_storage()
-        self.do_click(locator=self.page_nav["object_storage"], timeout=90)
-
-        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
-
-        return ObjectStorage()
-
     def nav_object_storage_page(self):
         """
         Navigate to Object Storage page
@@ -336,7 +322,7 @@ class PageNavigator(BaseUI):
 
         """
 
-        return self.nav_object_storage().nav_buckets_tab()
+        return self.nav_object_storage_page().nav_buckets_tab()
 
     def navigate_object_bucket_claims_page(self):
         """
@@ -344,7 +330,7 @@ class PageNavigator(BaseUI):
 
         """
 
-        return self.nav_object_storage().nav_object_buckets_claims_tab()
+        return self.nav_object_storage_page().nav_object_buckets_claims_tab()
 
     def navigate_alerting_page(self):
         """
@@ -388,12 +374,21 @@ class PageNavigator(BaseUI):
 
     def navigate_storage_pools_page(self):
         """
-        Navigate to storage pools page
+        Navigate to storage pools tab of Storage cluster page
 
         """
-        logger.info("Navigate to block pools page")
+        logger.info("Navigate to block pools tab")
 
         return self.nav_storage_cluster_default_page().nav_storage_pools_tab()
+
+    def navigate_object_tab(self):
+        """
+        Navigate to Object tab of Storage cluster page
+
+        """
+        logger.info("Navigate to Object tab of Storage Cluster page")
+
+        return self.nav_storage_cluster_default_page().nav_object_tab()
 
     def select_namespace(self, project_name):
         """

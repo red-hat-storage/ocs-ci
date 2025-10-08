@@ -142,7 +142,7 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         logger.info("Click on 'Create Object Bucket Claim'")
         self.do_click(self.generic_locators["create_resource_button"])
 
-        logger.info("Enter OBC name")
+        logger.info(f"Enter OBC name {obc_name}")
         self.do_send_keys(self.obc_loc["obc_name"], obc_name)
 
         logger.info("Select Storage Class")
