@@ -330,7 +330,7 @@ generic_locators = {
         'a[data-test="dropdown-menu-item-link"]',
         By.CSS_SELECTOR,
     ),
-    "storage_class": ("//span[contains(text(), '{}')]", By.XPATH),
+    "storage_class": ("//span[contains(text(), '{}')]/ancestor::button", By.XPATH),
     "second_dropdown_option": (
         '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
         By.XPATH,
@@ -405,8 +405,7 @@ generic_locators = {
     ),
     "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
-        "//td[@id='name']//a[contains(text(), '{}')]"
-        "/../../..//button[@aria-label='Actions'] | "
+        "//tr[contains(., '{}')]//button[@aria-label='Kebab toggle'] | "
         "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
         By.XPATH,
     ),
@@ -577,13 +576,13 @@ pvc = {
         By.CSS_SELECTOR,
     ),
     # works for ODF 4.14 and 4.15; OCP 4.14 and 4.15
-    "storage_class_name": ('//a[@id="{}-link"]', By.XPATH),
+    "storage_class_name": ('//button[@id="{}-link"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
-        'a[id="ocs-storagecluster-ceph-rbd-link"]',
+        'a[id="ocs-storagecluster-ceph-rbd-link"], button[id="ocs-storagecluster-ceph-rbd-link"]',
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-cephfs": (
-        'a[id="ocs-storagecluster-cephfs-link"]',
+        'a[id="ocs-storagecluster-cephfs-link"], button[id="ocs-storagecluster-cephfs-link"]',
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-ceph-rbd-thick": (
@@ -820,7 +819,7 @@ page_nav_4_10 = {
 }
 
 page_nav_4_14 = {
-    "object_storage_page": ("Object Storage", By.LINK_TEXT),
+    "object_storage_page": ("Object storage", By.LINK_TEXT),
     "storageclients_page": ("Storage Clients", By.LINK_TEXT),
 }
 
@@ -1553,7 +1552,6 @@ storageclass = {
         'button[data-test="storage-class-provisioner-dropdown"]',
         By.CSS_SELECTOR,
     ),
-    "rbd_provisioner": ("openshift-storage.rbd.csi.ceph.com", By.LINK_TEXT),
     "pool_dropdown": ('button[id="pool-dropdown-id"]', By.CSS_SELECTOR),
     "save_storageclass": ('button[id="save-changes"]', By.CSS_SELECTOR),
     "action_inside_storageclass": (
@@ -1583,11 +1581,11 @@ storageclass = {
     "reclaim-policy-retain": ("#Retain-link", By.CSS_SELECTOR),
     "provisioner": ("#storage-class-provisioner", By.CSS_SELECTOR),
     "rbd-provisioner": (
-        "//a[normalize-space()='openshift-storage.rbd.csi.ceph.com']",
-        By.XPATH,
+        'button[id="openshift-storage.rbd.csi.ceph.com-link"]',
+        By.CSS_SELECTOR,
     ),
     "cephfs-provisioner": (
-        "//a[normalize-space()='openshift-storage.cephfs.csi.ceph.com']",
+        'button[id="openshift-storage.cephfs.csi.ceph.com-link"]',
         By.XPATH,
     ),
     "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
@@ -1769,6 +1767,22 @@ validation = {
         "//h2[@data-test-id='perspective-switcher-menu-option' and normalize-space()='Administrator']/ancestor"
         "::button[@role='option'] | //h2[.='Administrator']/ancestor::button[@class='pf-v5-c-menu__item']",
         By.XPATH,
+    ),
+    "storage-pools-tab": (
+        "button[data-test='horizontal-link-Storage pools']",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-tab-active": (
+        "button[data-test='horizontal-link-Block and File'][aria-selected='true']",
+        By.CSS_SELECTOR,
+    ),
+    "object-tab": (
+        "button[data-test='horizontal-link-Object']",
+        By.CSS_SELECTOR,
+    ),
+    "block-and-file-tab": (
+        "button[data-test='horizontal-link-Block and File']",
+        By.CSS_SELECTOR,
     ),
 }
 
@@ -2346,7 +2360,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "storage_class_dropdown": (
-        "//button[contains(., 'SCSCSelect StorageClass')]",
+        "//button[@data-test='sc-dropdown']",
         By.XPATH,
     ),
     "storage_class_noobaa_option": (
@@ -2411,12 +2425,12 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_action_button": (
-        "tbody tr:nth-child(1) td:last-child button:first-child",
-        By.CSS_SELECTOR,
+        "//button[@aria-label='Kebab toggle']",
+        By.XPATH,
     ),
     "bucket_delete_option": (
-        "tbody li:nth-child(2) button:nth-child(1) span:nth-child(1) span:nth-child(1)",
-        By.CSS_SELECTOR,
+        "//button[@tabindex='-1']",
+        By.XPATH,
     ),
     "bucket_confirm_button": (
         ".pf-v5-c-button.pf-m-danger.pf-m-progress",
