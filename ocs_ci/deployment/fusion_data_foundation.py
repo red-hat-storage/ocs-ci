@@ -9,6 +9,7 @@ import tempfile
 
 import yaml
 
+from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, node
@@ -164,6 +165,8 @@ class FusionDataFoundationDeployment:
 
         # Storage configuration method changed in Fusion 2.11
         if fusion_version < version.VERSION_2_11:
+            if self.lso_enabled:
+                add_disks_lso()
             self.create_odfcluster()
             odfcluster_status_check()
         else:
