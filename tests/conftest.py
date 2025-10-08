@@ -42,6 +42,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_resource_not_found_error_label,
     config_index,
 )
+from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
@@ -8207,7 +8208,8 @@ def ceph_objectstore_tool_fixture(request):
     def teardown():
         deployment_in_maintenance = cot_obj.deployment_in_maintenance
         for deployment_name in list(deployment_in_maintenance):
-            cot_obj.maintenance_stop(deployment_name=deployment_name)
+            odf_cli_runner = ODFCliRunner()
+            odf_cli_runner.run_maintenance_stop(deployment_name=deployment_name)
 
     request.addfinalizer(teardown)
 
@@ -8231,7 +8233,8 @@ def ceph_monstore_tool_fixture(request):
     def teardown():
         deployment_in_maintenance = mot_obj.deployment_in_maintenance
         for deployment_name in list(deployment_in_maintenance):
-            mot_obj.maintenance_stop(deployment_name=deployment_name)
+            odf_cli_runner = ODFCliRunner()
+            odf_cli_runner.run_maintenance_stop(deployment_name=deployment_name)
 
     request.addfinalizer(teardown)
 
