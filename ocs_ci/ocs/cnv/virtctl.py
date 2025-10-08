@@ -195,11 +195,11 @@ class Virtctl(object):
         if to_vm:
             mandatory_params = [
                 f"{local_path}",
-                f"{vm_username}@{vm_name}:{vm_dest_path}",
+                f"vmi/{vm_name}:{vm_dest_path}",
             ]
         else:
             mandatory_params = [
-                f"{vm_username}@{vm_name}:{vm_dest_path} " f"{local_path}",
+                f"vmi/{vm_name}:{vm_dest_path} " f"{local_path}",
             ]
 
         command = f"{base_command} {' '.join(extra_params + mandatory_params)}"
