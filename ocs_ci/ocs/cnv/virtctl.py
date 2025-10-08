@@ -194,6 +194,7 @@ class Virtctl(object):
         vm_dest_path = vm_dest_path if vm_dest_path else "."
         if to_vm:
             mandatory_params = [
+                f"--username={vm_username}",
                 f"{local_path}",
                 f"vmi/{vm_name}:{vm_dest_path}",
             ]
