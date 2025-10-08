@@ -913,7 +913,7 @@ class HostedODF(HypershiftHostedOCP):
 
             storage_client_data["spec"]["onboardingTicket"] = onboarding_key
 
-            self.storage_client_name = storage_client_data["metadata"]["name"]
+            self.storage_client_name = constants.STORAGE_CLIENT_NAME
 
             storage_client_file = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storage_client", delete=False
@@ -955,7 +955,7 @@ class HostedODF(HypershiftHostedOCP):
         """
         cmd = (
             f"get {constants.STORAGECLIENTS} {constants.DEFAULT_CLUSTERNAME} -n {self.namespace_client} | "
-            "awk '/storage-client/{{print $2}}'"
+            f"awk '/{constants.DEFAULT_CLUSTERNAME}/{{print $2}}'"
         )
         return self.exec_oc_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
