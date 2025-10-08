@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 @rdr
-@acceptance
 @tier1
 @turquoise_squad
 class TestRelocate:
@@ -35,22 +34,26 @@ class TestRelocate:
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
                 False,
-                marks=pytest.mark.polarion_id("OCS-4425"),
+                marks=[acceptance, pytest.mark.polarion_id("OCS-4425")],
+                id="rbd-cli",
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM],
                 False,
-                marks=pytest.mark.polarion_id("OCS-4725"),
+                marks=[acceptance, pytest.mark.polarion_id("OCS-4725")],
+                id="cephfs-cli",
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
                 True,
                 marks=pytest.mark.polarion_id("OCS-4744"),
+                id="rbd-ui",
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM],
                 True,
                 marks=pytest.mark.polarion_id("OCS-6862"),
+                id="cephfs-ui",
             ),
         ],
     )
