@@ -4252,7 +4252,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             rbddops.deploy()
 
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
-        if not multicluster_observability.get("items"):
+        if not multicluster_observability.get()["items"]:
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
             self.enable_acm_observability()
 
