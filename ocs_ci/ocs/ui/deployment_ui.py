@@ -142,9 +142,6 @@ class DeploymentUI(PageNavigator):
             self.nav_storage_cluster_default_page()
             logger.info("Click Configure ODF")
             self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
-            self.do_click(
-                locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
-            )
         elif ocs_version >= version.VERSION_4_19:
             self.nav_storage_cluster_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
@@ -205,6 +202,11 @@ class DeploymentUI(PageNavigator):
         elif config.DEPLOYMENT.get("local_storage"):
             self.install_lso_cluster()
         else:
+            if ocs_version >= version.VERSION_4_20:
+                self.do_click(
+                    locator=self.dep_loc["setup_storage_cluster"],
+                    enable_screenshot=True,
+                )
             self.install_internal_cluster()
 
     def install_mcg_only_cluster(self):
@@ -213,19 +215,29 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Install MCG ONLY cluster via UI")
-        if self.ocp_version == "4.9":
-            self.do_click(self.dep_loc["advanced_deployment"])
-        self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
-        if self.ocp_version == "4.9":
-            self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
-        elif self.ocp_version in ("4.10", "4.11", "4.12"):
-            self.do_click(self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True)
-        if config.DEPLOYMENT.get("local_storage"):
-            self.install_lso_cluster()
-        else:
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_20:
+            self.do_click(self.dep_loc["deploy_mcg_only"], enable_screenshot=True)
+            self.do_click(self.dep_loc["next"], enable_screenshot=True, timeout=180)
             self.do_click(self.dep_loc["next"], enable_screenshot=True)
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
-        self.create_storage_cluster()
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
+            self.do_click(self.dep_loc["create_storage_system"], enable_screenshot=True)
+        else:
+            if self.ocp_version == "4.9":
+                self.do_click(self.dep_loc["advanced_deployment"])
+            self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
+            if self.ocp_version == "4.9":
+                self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
+            elif self.ocp_version in ("4.10", "4.11", "4.12"):
+                self.do_click(
+                    self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True
+                )
+            if config.DEPLOYMENT.get("local_storage"):
+                self.install_lso_cluster()
+            else:
+                self.do_click(self.dep_loc["next"], enable_screenshot=True)
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
+            self.create_storage_cluster()
 
     def configure_in_transit_encryption(self):
         """
