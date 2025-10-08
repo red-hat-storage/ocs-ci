@@ -5,7 +5,7 @@ All provider client operator upgrades implemented here
 
 import logging
 
-from ocs_ci.deployment.hosted_cluster import HostedODF
+from ocs_ci.deployment.hub_spoke import HostedODF
 from ocs_ci.ocs.dr_upgrade import DRUpgrade
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocs_upgrade
