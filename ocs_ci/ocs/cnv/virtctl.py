@@ -200,6 +200,7 @@ class Virtctl(object):
             ]
         else:
             mandatory_params = [
+                f"--username={vm_username}",
                 f"vmi/{vm_name}:{vm_dest_path} " f"{local_path}",
             ]
 
