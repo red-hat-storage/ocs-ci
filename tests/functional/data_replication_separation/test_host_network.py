@@ -1,12 +1,16 @@
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import yellow_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    data_replication_separation_required,
+    yellow_squad,
+)
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import data_replication_separation
 
 
 @tier1
 @yellow_squad
+@data_replication_separation_required
 @pytest.mark.polarion_id("OCS-7308")
 def test_ceph_pods_have_host_network():
     """
@@ -31,6 +35,7 @@ def test_ceph_pods_have_host_network():
 
 @tier1
 @yellow_squad
+@data_replication_separation_required
 @pytest.mark.polarion_id("OCS-7307")
 def test_operator_and_csi_pods_have_host_network():
     """
