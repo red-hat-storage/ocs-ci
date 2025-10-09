@@ -24,6 +24,46 @@ class TestCSIADDonDaemonset(ManageTest):
     Test class for CSI addon daemonset verification
     """
 
+    def test_csi_addon_daemonset_exists(self):
+        """
+        Verify that the CSI addon daemonset exists and is properly configured
+        steps:
+        1. Check if CSI addon Daemonset exists
+        2. Verify daemonset configuration
+        """
+        daemonsets = DaemonSet(namespace=config.ENV_DATA["cluster_namespace"])
+        logger.info("Validating existence of CSI Addon daemonset")
+
+        # Verify Daemonset exists
+        assert daemonsets.check_resource_existence(
+            should_exist=True, resource_name=constants.DAEMONSET_CSI_RBD_CSI_ADDONS
+        ), f"CSI addon daemonset '{constants.DAEMONSET_CSI_RBD_CSI_ADDONS}' does not exist"
+        logger.info(
+            f"CSIaddon daemonset '{constants.DAEMONSET_CSI_RBD_CSI_ADDONS}' exists"
+        )
+
+        # Verify daemonset configuration
+        logger.info("Validating configuration of CSI Addon daemonset")
+        daemonset_info = daemonsets.get(
+            resource_name=constants.DAEMONSET_CSI_RBD_CSI_ADDONS
+        )
+        actual_labels = (
+            daemonset_info.get("spec", {})
+            .get("template", {})
+            .get("metadata", {})
+            .get("labels", {})
+        )
+        assert (
+            actual_labels
+        ), f" The Daemonset {constants.DAEMONSET_CSI_RBD_CSI_ADDONS} has label {actual_labels} "
+        expected_label = constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420.split("=")
+        for key, value in actual_labels.items():
+            assert expected_label == [
+                key,
+                value,
+            ], f"expected label {constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420} not found in daemonset labels"
+        logger.info("CSI addon daemonset has correct labels")
+
     @acceptance
     def test_csi_addon_pods_containers_ready(self):
         """
