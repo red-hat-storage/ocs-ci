@@ -1171,7 +1171,7 @@ def get_used_subnets(vpc_id=""):
     Get currently used subnets in IBM Cloud
 
     Args:
-        vpc_id (str): VPC ID to filter subnets, if empty it will. Empty string means all VPCs.
+        vpc_id (str): VPC ID to filter subnets. Empty string means all VPCs.
 
     Returns:
         list: subnets
@@ -1248,6 +1248,7 @@ def add_security_group_rule(
         port_max (int): maximum port number
         **kwargs: other arguments to be passed to command, e.g.
             --vpc ID or name of the VPC. It is required to specify only the unique resource by name inside this VPC.
+
     """
     cmd = (
         f"ibmcloud is security-group-rule-add {security_group} {direction} {protocol} "
