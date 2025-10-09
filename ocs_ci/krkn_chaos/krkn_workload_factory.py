@@ -222,17 +222,16 @@ class KrknWorkloadFactory:
     and provides a unified interface for workload management.
     """
 
-    def __init__(self, config_file_path=None):
+    def __init__(self):
         """
         Initialize the workload factory.
-
-        Args:
-            config_file_path (str, optional): Path to krkn_chaos_config.yaml
         """
-        self.config = KrknWorkloadConfig(config_file_path)
-        self.workload_types = self.config.get_workload_types()
+        self.config = KrknWorkloadConfig()
+        self.workload_types = self.config.get_workloads()
         # Backward compatibility
-        self.workload_type = self.config.get_workload_type()
+        self.workload_type = (
+            self.workload_types[0] if self.workload_types else "VDBENCH"
+        )
 
     def create_workload_ops(
         self,
@@ -242,6 +241,7 @@ class KrknWorkloadFactory:
         vdbench_block_config=None,
         vdbench_filesystem_config=None,
         multi_cnv_workload=None,
+        timeout=180,
     ):
         """
         Create WorkloadOps based on the configured workload types.
@@ -269,6 +269,10 @@ class KrknWorkloadFactory:
         # Create workloads for each configured type
         for workload_type in self.workload_types:
             log.info(f"Creating {workload_type} workloads")
+            log.debug(
+                f"Workload type: '{workload_type}' | VDBENCH: '{KrknWorkloadConfig.VDBENCH}' | "
+                f"GOSBENCH: '{KrknWorkloadConfig.GOSBENCH}' | CNV: '{KrknWorkloadConfig.CNV_WORKLOAD}'"
+            )
 
             if workload_type == KrknWorkloadConfig.VDBENCH:
                 vdbench_workloads = self._create_vdbench_workloads_for_project(
@@ -290,9 +294,13 @@ class KrknWorkloadFactory:
                 all_workloads.extend(cnv_workloads)
 
             elif workload_type == KrknWorkloadConfig.GOSBENCH:
+                log.info(
+                    f"✅ Matched GOSBENCH workload type: '{workload_type}' == '{KrknWorkloadConfig.GOSBENCH}'"
+                )
                 gosbench_workloads = self._create_gosbench_workloads_for_project(
                     proj_obj,
                 )
+                log.info(f"✅ Created {len(gosbench_workloads)} GOSBENCH workloads")
                 workloads_by_type[workload_type] = gosbench_workloads
                 all_workloads.extend(gosbench_workloads)
 
@@ -355,56 +363,129 @@ class KrknWorkloadFactory:
             return temp_file.name
 
         def get_fs_config():
-            return create_temp_config_file(
-                vdbench_filesystem_config(
-                    size="10m",
-                    depth=4,
-                    width=5,
-                    default_threads=10,
-                    elapsed=1200,
-                    default_rdpct=0,  # All writes
-                    precreate_then_run=True,
-                    precreate_elapsed=120,
-                    precreate_interval=60,
-                    anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
-                    patterns=[
-                        {
-                            "name": "random_write",
-                            "rdpct": 0,
-                            "xfersize": "256k",
-                            "threads": 10,
-                            "fwdrate": "max",
-                        },
-                        {
-                            "name": "verify_data_integrity",
-                            "rdpct": 100,
-                            "xfersize": "256k",
-                            "threads": 5,
-                            "fwdrate": "max",
-                            "forx": "verify",  # VDBENCH verification mode
-                        },
-                    ],
+            # Get configuration from krkn_chaos_config
+            vdbench_config = self.config.get_vdbench_config()
+            fs_config = vdbench_config.get("filesystem", {})
+
+            # Get common parameters
+            threads = vdbench_config.get("threads", 16)
+            elapsed = vdbench_config.get("elapsed", 600)
+            interval = vdbench_config.get("interval", 60)
+
+            # Get filesystem-specific parameters
+            depth = fs_config.get("depth", 4)
+            width = fs_config.get("width", 5)
+            files = fs_config.get("files", 10)
+            file_size = fs_config.get("file_size", "1m")
+
+            # Get original patterns from config
+            original_patterns = fs_config.get("patterns", [])
+
+            # Check if verification is enabled
+            enable_verification = self.config.should_run_verification()
+            all_patterns = original_patterns.copy()
+
+            # Add verification patterns only if verification is enabled
+            if enable_verification:
+                verification_patterns = [
+                    {
+                        "name": "verify_write_data",
+                        "rdpct": 0,  # Write-only
+                        "seekpct": 100,  # Random I/O
+                        "xfersize": "256k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "verify_read_data",
+                        "rdpct": 100,  # Read-only
+                        "seekpct": 100,  # Random I/O
+                        "xfersize": "256k",
+                        "skew": 0,
+                    },
+                ]
+                all_patterns.extend(verification_patterns)
+                log.info("✅ Added verification patterns for filesystem workload")
+            else:
+                log.info(
+                    "ℹ️ Verification disabled - skipping verification patterns for filesystem workload"
                 )
-            )
+
+            # Create krkn_chaos_config format that will be processed by _convert_krkn_chaos_config_to_vdbench
+            krkn_chaos_config = {
+                "vdbench_config": {
+                    "threads": threads,
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "filesystem": {
+                        "size": file_size,
+                        "depth": depth,
+                        "width": width,
+                        "files": files,
+                        "file_size": file_size,
+                        "group_all_fwds_in_one_rd": True,
+                        "patterns": all_patterns,
+                    },
+                }
+            }
+
+            return create_temp_config_file(krkn_chaos_config)
 
         def get_blk_config():
-            return create_temp_config_file(
-                vdbench_block_config(
-                    threads=10,
-                    size="10g",
-                    elapsed=3600,
-                    interval=60,
-                    patterns=[
-                        {
-                            "name": "random_write",
-                            "rdpct": 0,  # 0% reads → all writes
-                            "seekpct": 100,  # random
-                            "xfersize": "4k",  # 4k block size
-                            "skew": 0,
-                        }
-                    ],
+            # Get configuration from krkn_chaos_config
+            vdbench_config = self.config.get_vdbench_config()
+            block_config = vdbench_config.get("block", {})
+
+            # Get common parameters
+            threads = vdbench_config.get("threads", 16)
+            elapsed = vdbench_config.get("elapsed", 600)
+            interval = vdbench_config.get("interval", 60)
+
+            # Get block-specific parameters
+            size = block_config.get("size", "15g")
+
+            # Get original patterns from config
+            original_patterns = block_config.get("patterns", [])
+
+            # Check if verification is enabled
+            enable_verification = self.config.should_run_verification()
+            all_patterns = original_patterns.copy()
+
+            # Add verification patterns only if verification is enabled
+            if enable_verification:
+                verification_patterns = [
+                    {
+                        "name": "verify_write_data",
+                        "rdpct": 0,  # Write-only
+                        "seekpct": 100,  # Random I/O
+                        "xfersize": "4k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "verify_read_data",
+                        "rdpct": 100,  # Read-only
+                        "seekpct": 100,  # Random I/O
+                        "xfersize": "4k",
+                        "skew": 0,
+                    },
+                ]
+                all_patterns.extend(verification_patterns)
+                log.info("✅ Added verification patterns for block workload")
+            else:
+                log.info(
+                    "ℹ️ Verification disabled - skipping verification patterns for block workload"
                 )
-            )
+
+            # Create krkn_chaos_config format that will be processed by _convert_krkn_chaos_config_to_vdbench
+            krkn_chaos_config = {
+                "vdbench_config": {
+                    "threads": threads,
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "block": {"size": size, "patterns": all_patterns},
+                }
+            }
+
+            return create_temp_config_file(krkn_chaos_config)
 
         interface_configs = {
             constants.CEPHFILESYSTEM: {
@@ -429,6 +510,7 @@ class KrknWorkloadFactory:
                 access_modes=cfg["access_modes"],
                 size=size,
                 num_of_pvc=4,
+                timeout=180,
             )
             config_file = cfg["config_file"]()
             for pvc in pvcs:
@@ -478,8 +560,10 @@ class KrknWorkloadFactory:
         from ocs_ci.workloads.gosbench_workload import GOSBenchWorkload
 
         # Get GOSBENCH configuration from krkn_config
-        krkn_config = self.config.get_workload_config()
-        gosbench_config = krkn_config.get("gosbench_config", {})
+        gosbench_config = self.config.get_gosbench_config()
+        log.debug(
+            f"GOSBENCH config | Namespace: {proj_obj.namespace} | Config: {gosbench_config}"
+        )
 
         # Create GOSBENCH workload with configuration
         workload_name = f"gosbench-chaos-{fauxfactory.gen_alpha(6).lower()}"
@@ -548,17 +632,20 @@ class KrknWorkloadFactory:
             # Wait for workload to be ready
             gosbench_workload.wait_for_workload_ready(timeout=300)
 
-            log.info(f"Successfully created GOSBENCH workload: {workload_name}")
-            log.info(f"  - Workers: {worker_replicas}")
-            log.info(f"  - Duration: {benchmark_duration}s")
-            log.info(f"  - Object size: {object_size}")
-            log.info(f"  - Concurrency: {concurrency}")
-            if server_image:
-                log.info(f"  - Server image: {server_image}")
-            if worker_image:
-                log.info(f"  - Worker image: {worker_image}")
-            if custom_image and not server_image and not worker_image:
-                log.info(f"  - Image: {custom_image}")
+            log.info(
+                f"✅ Successfully created GOSBENCH workload: {workload_name} | "
+                f"Workers: {worker_replicas} | Duration: {benchmark_duration}s | "
+                f"Object size: {object_size} | Concurrency: {concurrency}"
+            )
+            if server_image or worker_image or custom_image:
+                images = []
+                if server_image:
+                    images.append(f"server: {server_image}")
+                if worker_image:
+                    images.append(f"worker: {worker_image}")
+                if custom_image and not server_image and not worker_image:
+                    images.append(f"image: {custom_image}")
+                log.info(f"  Images: {', '.join(images)}")
 
             return [gosbench_workload]
         except Exception as e:
