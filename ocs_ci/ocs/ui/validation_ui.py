@@ -4,7 +4,6 @@ import time
 
 import pandas as pd
 import pytest
-from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.page_objects.backing_store_tab import BackingStoreTab
 from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
@@ -17,7 +16,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.framework.logger_helper import log_step
-
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
 
@@ -203,32 +203,35 @@ class ValidationUI(PageNavigator):
         if not, this function will enable it so as to see ODF tab under Storage section
 
         """
-        if (
-            self.ocp_version_semantic >= version.VERSION_4_9
-            and self.ocs_version_semantic >= version.VERSION_4_9
-        ):
-            self.navigate_installed_operators_page()
-            logger.info("Click on project dropdown")
-            self.do_click(self.validation_loc["project-dropdown"])
-            default_projects_is_checked = self.driver.find_element_by_xpath(
-                "//input[@type='checkbox']"
-            )
-            if (
-                default_projects_is_checked.get_attribute("data-checked-state")
-                == "false"
-            ):
-                logger.info("Show default projects")
-                self.do_click(self.validation_loc["show-default-projects"])
-            logger.info("Search for 'openshift-storage' project")
-            self.do_send_keys(
-                self.validation_loc["project-search-bar"], text="openshift-storage"
-            )
-            logger.info("Select 'openshift-storage' project")
-            time.sleep(2)
-            self.do_click(
-                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
-            )
-            self.page_has_loaded(retries=25, sleep_time=10)
+
+        self.navigate_installed_operators_page()
+        logger.info("Click on project dropdown")
+        self.do_click(self.validation_loc["project-dropdown"])
+        default_projects_is_checked = self.driver.find_element(
+            By.XPATH, "//input[@type='checkbox']"
+        )
+        if default_projects_is_checked.get_attribute("data-checked-state") == "false":
+            logger.info("Show default projects")
+            self.do_click(self.validation_loc["show-default-projects"])
+        logger.info("Search for 'openshift-storage' project")
+        self.do_send_keys(
+            self.validation_loc["project-search-bar"], text="openshift-storage"
+        )
+        logger.info("Select 'openshift-storage' project")
+        time.sleep(2)
+        self.do_click(
+            self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+        )
+        self.page_has_loaded(retries=25, sleep_time=1)
+        logger.info(
+            "Check if 'Plugin available' option is available on the Installed Operators page"
+        )
+        plugin_availability_check = self.wait_until_expected_text_is_found(
+            locator=self.dep_loc["plugin-available"],
+            expected_text="Plugin available",
+            timeout=15,
+        )
+        if plugin_availability_check:
             logger.info(
                 "Check if 'Plugin available' option is available on the Installed Operators page"
             )
