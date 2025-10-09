@@ -17,6 +17,7 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -277,7 +278,7 @@ class BaseUI:
             an object of the type WebElement
 
         """
-        element = self.driver.find_element_by_xpath(locator)
+        element = self.driver.find_element(By.XPATH, locator)
         return element
 
     def do_send_keys(self, locator, text, timeout=30):
@@ -395,8 +396,8 @@ class BaseUI:
         """
         if take_screenshot:
             self.take_screenshot()
-        element_list = self.driver.find_elements_by_xpath(
-            f"//{element}[contains(text(), '{expected_text}')]"
+        element_list = self.driver.find_elements(
+            By.XPATH, f"//{element}[contains(text(), '{expected_text}')]"
         )
         return len(element_list) > 0
 
@@ -412,8 +413,8 @@ class BaseUI:
             bool: True if the text matches the expected text, False otherwise
 
         """
-        element_list = self.driver.find_elements_by_xpath(
-            f"//{element}[contains(text(), '{expected_text}')]"
+        element_list = self.driver.find_elements(
+            By.XPATH, f"//{element}[contains(text(), '{expected_text}')]"
         )
         return len(element_list) == number
 
@@ -910,8 +911,11 @@ class SeleniumDriver(WebDriver):
                     )
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
+            chrome_service = Service(
+                ChromeDriverManager(chrome_type=chrome_browser_type).install()
+            )
             driver = webdriver.Chrome(
-                ChromeDriverManager(chrome_type=chrome_browser_type).install(),
+                service=chrome_service,
                 options=chrome_options,
             )
         else:
