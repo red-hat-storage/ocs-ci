@@ -1,10 +1,12 @@
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator, logger
+from ocs_ci.ocs.ui.page_objects.page_navigator import logger
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
+from ocs_ci.ocs.ui.page_objects.encryption_module import EncryptionModule
 
 
-class ObjectStorage(PageNavigator, ResourceList):
+class ObjectStorage(EncryptionModule, ResourceList):
     """
-    Object Service page object under PageNavigator / Storage (version 4.14 and above)
+    Object Service page object under EncryptionModule(PageNavigator) / Storage
+    version 4.14 and above
     """
 
     def __init__(self):

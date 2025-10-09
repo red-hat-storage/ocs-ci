@@ -6,11 +6,13 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
     get_random_hosted_cluster_name,
 )
-from ocs_ci.deployment.hosted_cluster import (
+from ocs_ci.deployment.hub_spoke import (
     HypershiftHostedOCP,
     HostedODF,
     HostedClients,
 )
+
+from ocs_ci.deployment.hub_spoke import deploy_hosted_ocp_clusters
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
@@ -112,7 +114,7 @@ class TestProviderHosted(object):
         Test deploy hosted OCP on provider platform multiple times
         """
         logger.info("Test deploy hosted OCP on provider platform multiple times")
-        HostedClients().deploy_hosted_ocp_clusters()
+        deploy_hosted_ocp_clusters()
 
     @runs_on_provider
     @hci_provider_required
