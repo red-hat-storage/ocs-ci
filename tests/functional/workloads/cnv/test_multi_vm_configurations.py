@@ -66,7 +66,7 @@ class TestCNVVM(E2ETest):
 
     @workloads
     @pytest.mark.polarion_id("OCS-6298")
-    def test_cnv_vms(self, setup):
+    def test_cnv_vms(self, setup, setup_cnv):
         """
         Tests to verify configuration for non-GS like environment
 
