@@ -29,6 +29,9 @@ from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
+from ocs_ci.utility.deployment import (
+    add_mc_partitioned_disk_on_workers_to_ocp_deployment,
+)
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -322,6 +325,11 @@ class BAREMETALUPI(BAREMETALBASE):
             self.create_manifest()
             # create chrony resource
             add_chrony_to_ocp_deployment()
+            if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+                root_disk_common_path = self.bm_config["root_disk_common_path"]
+                add_mc_partitioned_disk_on_workers_to_ocp_deployment(
+                    root_disk_common_path
+                )
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
@@ -1458,6 +1466,11 @@ def clean_disks(worker, namespace=constants.DEFAULT_NAMESPACE):
                 ocp_obj=ocp_obj,
             )
 
+    if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+        root_disk_common_path = config.ENV_DATA["baremetal"]["root_disk_common_path"]
+        partition = f"{root_disk_common_path}-part5"
+        clean_disk(worker.name, partition, run_sgdisk=False, ocp_obj=ocp_obj)
+
 
 def clean_disk(
     node_name,
@@ -1485,14 +1498,14 @@ def clean_disk(
     logger.info(f"Cleaning up {device}")
     out = ocp_obj.exec_oc_debug_cmd(
         node=node_name,
-        cmd_list=[f"wipefs -a -f /dev/{device}"],
+        cmd_list=[f"wipefs -a -f {device}"],
         namespace=namespace,
     )
 
     logger.info(out)
     out = ocp_obj.exec_oc_debug_cmd(
         node=node_name,
-        cmd_list=[f"sgdisk --zap-all /dev/{device}"],
+        cmd_list=[f"sgdisk --zap-all {device}"],
         namespace=namespace,
     )
     logger.info(out)
@@ -1519,9 +1532,7 @@ def clean_disk(
         dd_seek_bytes = dd_seek_bytes * 10
 
     for dd_seek in dd_seek_offsets:
-        dd_cmd = [
-            f"dd if=/dev/zero of='/dev/{device}' bs=1 count=204800 seek={dd_seek}"
-        ]
+        dd_cmd = [f"dd if=/dev/zero of='{device}' bs=1 count=204800 seek={dd_seek}"]
         out = ocp_obj.exec_oc_debug_cmd(
             node=node_name,
             cmd_list=dd_cmd,

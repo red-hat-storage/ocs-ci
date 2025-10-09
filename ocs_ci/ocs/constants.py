@@ -110,6 +110,9 @@ AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
 )
 MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses")
 AUTO_SCALING_DIR = os.path.join(TEMPLATE_DIR, "storage-auto-scaling")
+PARTITIONED_DISK_MC = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "98-osd-partition-worker.yaml"
+)
 
 # Statuses
 STATUS_READY = "Ready"

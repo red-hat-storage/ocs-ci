@@ -1,0 +1,19 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: worker
+  name: 98-osd-partition-worker
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      disks:
+        - device: PLACEHOLDER
+          # wipeTable: true
+          partitions:
+            - number: 0
+              label: osd
+              startMiB: 260000 # space left for the CoreOS partition.
+              sizeMiB: 0 # size of the partition, zero means that the partition will be made as large as possible.
