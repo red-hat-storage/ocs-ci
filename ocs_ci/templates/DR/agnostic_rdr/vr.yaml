@@ -1,0 +1,17 @@
+apiVersion: replication.storage.openshift.io/v1alpha1
+kind: VolumeReplication
+metadata:
+  labels:
+    ramendr.openshift.io/owner-name: PLACEHOLDER
+    ramendr.openshift.io/owner-namespace-name: PLACEHOLDER
+  name: PLACEHOLDER
+  namespace: PLACEHOLDER
+spec:
+  autoResync: false
+  dataSource:
+    apiGroup: ""
+    kind: PersistentVolumeClaim
+    name: busybox-rbd-pvc
+  replicationHandle: ""
+  replicationState: primary
+  volumeReplicationClass: PLACEHOLDER
