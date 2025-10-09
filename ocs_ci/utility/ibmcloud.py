@@ -1171,7 +1171,7 @@ def get_used_subnets(vpc_id=""):
     Get currently used subnets in IBM Cloud
 
     Args:
-        vpc_id (str): VPC ID to filter subnets, if empty it will. Empty string means all VPCs.
+        vpc_id (str): VPC ID to filter subnets. Empty string means all VPCs.
 
     Returns:
         list: subnets
@@ -1189,10 +1189,8 @@ def get_security_groups(vpc_id="", resource_group_id="", resource_group_name="")
 
     Args:
         vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
-        resource_group_id (str): Resource group ID to filter security groups,
-            if empty it will return security groups for all resource groups.
-        resource_group_name (str): Resource group name to filter security groups,
-            if empty it will return security groups for all resource groups.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups.
 
     Returns:
         list: security groups
@@ -1218,10 +1216,8 @@ def get_security_group_id(
     Args:
         sg_name (str): security group name
         vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
-        resource_group_id (str): Resource group ID to filter security groups,
-            if empty it will return security groups for all resource groups.
-        resource_group_name (str): Resource group name to filter security groups,
-            if empty it will return security groups for all resource groups.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups
 
     Returns:
         str: security group ID or empty string if not found
@@ -1248,6 +1244,7 @@ def add_security_group_rule(
         port_max (int): maximum port number
         **kwargs: other arguments to be passed to command, e.g.
             --vpc ID or name of the VPC. It is required to specify only the unique resource by name inside this VPC.
+
     """
     cmd = (
         f"ibmcloud is security-group-rule-add {security_group} {direction} {protocol} "
@@ -1266,11 +1263,9 @@ def get_security_group_name_by_pattern(
 
     Args:
         sg_name_pattern (str): security group name pattern (regular expression)
-        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
-        resource_group_id (str): Resource group ID to filter security groups,
-            if empty it will return security groups for all resource groups.
-        resource_group_name (str): Resource group name to filter security groups,
-            if empty it will return security groups for all resource groups.
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs
+        resource_group_id (str): Resource group ID to filter security groups
+        resource_group_name (str): Resource group name to filter security groups
 
     Returns:
         str: security group name or empty string if not found
