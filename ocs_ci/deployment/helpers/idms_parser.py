@@ -139,3 +139,31 @@ def parse_IDMS_json_to_mirrors_file(idms_json_dict, file_path):
         logger.info(f"Processing item {item.metadata.name}")
         write_mirrors_to_file(file_path, item.spec.imageDigestMirrors)
     logger.info(f"Mirrors were written to file {file_path}")
+
+
+def extract_image_content_sources(idms_json_dict):
+    """
+    Extract imageContentSources list (for HostedCluster spec) from ImageDigestMirrorSet JSON.
+
+    Args:
+        idms_json_dict (dict): Output of 'oc get imagedigestmirrorsets -o json' parsed as dict
+
+    Returns:
+        list[dict]: imageContentSources entries (possibly empty)
+    """
+    if not idms_json_dict or not idms_json_dict.get("items"):
+        return []
+    idms_obj = parse_image_digest_mirror_set(idms_json_dict)
+    image_content_sources = []
+    for item in idms_obj.items:
+        for mdm in item.spec.imageDigestMirrors:
+            image_content_sources.append({"mirrors": mdm.mirrors, "source": mdm.source})
+    seen = set()
+    deduped = []
+    for entry in image_content_sources:
+        key = (entry["source"], tuple(entry["mirrors"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(entry)
+    return deduped
