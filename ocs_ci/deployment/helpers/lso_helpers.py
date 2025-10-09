@@ -484,7 +484,7 @@ def cleanup_nodes_for_lso_install():
     """
     Cleanup before installing lso
     """
-    from ocs_ci.deployment.baremetal import clean_disk
+    from ocs_ci.deployment.baremetal import clean_disks
 
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
@@ -497,7 +497,7 @@ def cleanup_nodes_for_lso_install():
         logger.info(out)
         logger.info(f"Mount data cleared from node, {node}")
     for node_obj in node_objs:
-        clean_disk(node_obj)
+        clean_disks(node_obj)
     logger.info("All nodes are wiped")
 
 
