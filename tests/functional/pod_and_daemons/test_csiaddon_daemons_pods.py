@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.resources.daemonset import DaemonSet
+from ocs_ci.ocs.node import get_worker_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -139,3 +140,44 @@ class TestCSIADDonDaemonset(ManageTest):
             f"Verified CSI-addon DaemonSet status- Desired: {desired_number_ready}, "
             f"Ready: {number_ready}, Available: {number_available}"
         )
+
+    def test_csi_addon_pods_on_worker_nodes(self):
+        """
+        Verify that the CSI addon pods are running on each worker node
+        step:
+        1. Get all worker nodes
+        2. Get CSI addon daemonset pods
+        3. Verify each worker node has a CSI addon pod
+        """
+        logger.info("Validating csi addon pods on each worker node")
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        worker_nodes_names = get_worker_nodes()
+        logger.info(f"Current available worker nodes are {worker_nodes_names}")
+
+        csi_addon_pods = get_pods_having_label(
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        assert len(csi_addon_pods) > 0, "csi addon pods not found"
+        logger.info(f"Found {len(csi_addon_pods)} csi addon pods")
+
+        assert len(csi_addon_pods) == len(worker_nodes_names), (
+            f"Expected {len(worker_nodes_names)} csi addon pods, one per worker node, "
+            f"found {len(csi_addon_pods)}"
+        )
+        # verify each node has csi addon pod
+        csi_pod_running_nodes_name = []
+        for pod_obj in csi_addon_pods:
+            csi_pod_running_node_name = pod_obj.get("spec").get("nodeName")
+            assert csi_pod_running_node_name in worker_nodes_names, (
+                f"CSI addon pod {pod_obj['metadata']['name']} is running on "
+                f"node {csi_pod_running_nodes_name} which is not a worker node"
+            )
+            csi_pod_running_nodes_name.append(csi_pod_running_node_name)
+            logger.info(f" {csi_addon_pods} : {pod_obj}, {dir(csi_addon_pods)}")
+
+        pod_missed_node = set(worker_nodes_names) - set(csi_pod_running_nodes_name)
+        assert (
+            not pod_missed_node
+        ), f"worker node {pod_missed_node} do not have CSI addon pods"
+        logger.info("CSI addon pods running on each worker node")
