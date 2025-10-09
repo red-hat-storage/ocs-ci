@@ -158,8 +158,9 @@ class AcmPageNavigator(BaseUI):
             timeout=240,
         )
         if find_element:
-            element = self.driver.find_element_by_xpath(
-                "//button[normalize-space()='Data Services']"
+            log.info("Data Services page found")
+            element = self.driver.find_element(
+                By.XPATH, "//button[normalize-space()='Data Services']"
             )
             if element.get_attribute("aria-expanded") == "false":
                 self.do_click(locator=self.acm_page_nav["data-services"])

@@ -15,6 +15,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
 )
+from selenium.webdriver.common.by import By
 
 
 logger = logging.getLogger(__name__)
@@ -474,8 +475,8 @@ class DeploymentUI(PageNavigator):
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
-            default_projects_is_checked = self.driver.find_element_by_id(
-                "no-label-switch-on"
+            default_projects_is_checked = self.driver.find_element(
+                By.ID, "no-label-switch-on"
             ).is_selected()
             if not default_projects_is_checked:
                 logger.info("Show default projects")
