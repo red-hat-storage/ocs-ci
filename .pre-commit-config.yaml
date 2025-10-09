@@ -35,3 +35,8 @@ repos:
       language: system
       types: [python]
       files: \.py$
+- repo: https://github.com/ibm/detect-secrets
+  rev: 0.13.1+ibm.64.dss
+  hooks:
+    - id: detect-secrets
+      args: [--baseline, .secrets.baseline, --use-all-plugins]
