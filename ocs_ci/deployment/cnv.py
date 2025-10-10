@@ -237,7 +237,7 @@ class CNVInstaller(object):
         result = ocp.wait(
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             condition="Available",
-            timeout=600,
+            timeout=1000,
         )
         if not result:
             err_str = (
