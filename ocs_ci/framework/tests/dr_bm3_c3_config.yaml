@@ -1,0 +1,4 @@
+ENV_DATA:
+  radosnamespace_name: "ocs-storagecluster-cephblockpool-bm3-r-c3"
+  subvolumegroup_name: "bm3-r-c3"
+  provider_cluster_name: "ibm-bm-p3"
