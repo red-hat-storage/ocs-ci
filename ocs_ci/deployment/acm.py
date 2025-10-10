@@ -169,6 +169,15 @@ class Submariner(object):
 
         acm_obj.submariner_validation_ui()
 
+        logger.info("Patch oauthclient console to increase session timeout value")
+        run_cmd(
+            """oc patch oauthclient console -p '{"accessTokenInactivityTimeoutSeconds":18000}' --type merge"""
+        )
+        run_cmd(
+            """oc patch oauthclient console -p '{"accessTokenMaxAgeSeconds":18000}' --type merge"""
+        )
+        logger.info("oauthclient console patched successfully")
+
     def create_acm_brew_idms(self):
         """
         This is a prereq for downstream unreleased submariner
