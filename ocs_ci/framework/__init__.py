@@ -16,6 +16,8 @@ import logging
 from collections.abc import Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass, field, fields
+
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ClusterNotFoundException
 from threading import Thread, RLock, local, get_ident
 
@@ -339,7 +341,13 @@ class MultiClusterConfig:
         for i, cluster in enumerate(self.clusters):
             if cluster.ENV_DATA["cluster_name"] == cluster_name:
                 return i
+        dr_cluster_name = cluster_name.removeprefix(
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-"
+        )
 
+        for i, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_name"] == dr_cluster_name:
+                return i
         raise ClusterNotFoundException(f"Didn't find the cluster '{cluster_name}' ")
 
     def switch_to_provider(self):
@@ -519,6 +527,20 @@ class MultiClusterConfig:
                 func(*args, **kwargs)
 
         return wrapper
+
+        def get_cluster_kubeconfig_by_index(self, index):
+            """
+            Get the cluster kubeconfig by the cluster index
+            Args:
+                index (int): The cluster index
+            Returns:
+                str: The cluster kubeconfig path
+            Raises:
+                ClusterNotFoundException: In case it didn't find the cluster
+            """
+            if index < 0 or index >= self.nclusters:
+                raise ClusterNotFoundException(f"Cluster with index {index} not found")
+            return self.clusters[index].ENV_DATA.get("cluster_path") + "auth/kubeconfig"
 
     class RunWithConfigContext(object):
         def __init__(self, config_index):
