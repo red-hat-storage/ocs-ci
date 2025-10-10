@@ -459,6 +459,9 @@ PROVIDER_CLUSTER_RESOURCE_KINDS = [
 ]
 PROVIDER_SUBSCRIPTION = "subs"
 
+# DNS policy
+DNSPOLICY_CLUSTERFIRSTWITHHOSTNET = "ClusterFirstWithHostNet"
+
 # duties for fixtures to create hosted clusters and manipulate configurations
 DUTY_USE_EXISTING_HOSTED_CLUSTERS_FORCE_PUSH_CONFIG = (
     "use_existing_hosted_clusters_force_push_configs"

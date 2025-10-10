@@ -421,6 +421,11 @@ hci_provider_and_client_required = pytest.mark.skipif(
     reason="Test runs ONLY on Fusion HCI provider and client clusters",
 )
 
+data_replication_separation_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("enable_data_replication_separation") is False,
+    reason="Test runs only on deployments with enabled data replication separation",
+)
+
 
 # when run_on_all_clients marker is used, there needs to be added cluster_index
 # parameter to the test to prevent any issues with the test parametrization
