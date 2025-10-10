@@ -13,6 +13,7 @@ from selenium.common.exceptions import (
 )
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.dr_helpers import validate_drpolicy_grouping
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
 from ocs_ci.ocs.ui.base_ui import (
@@ -275,6 +276,7 @@ def create_drpolicy_ui(
     acm_obj.do_click(acm_loc["policy-create-btn"])
     log.info("DR Policy successfully created")
     verify_drpolicy_ui(acm_obj, scheduling_interval=replication_interval)
+    validate_drpolicy_grouping(drpolicy_name=policy_name)
     return True
 
 
