@@ -31,7 +31,8 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
+from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config, \
+    get_non_acm_cluster_and_non_provider_cluster_config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import clone_repo, run_cmd, TimeoutSampler
 
@@ -90,6 +91,17 @@ class BusyBox(DRWorkload):
             for cluster in dr_helpers.get_all_drclusters()
             if cluster != self.preferred_primary_cluster
         ][0]
+        if get_primary_cluster_config().ENV_DATA["cluster_type"] == "hci_client":
+            self.preferred_primary_cluster_client = (
+                constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                + "-"
+                + self.preferred_primary_cluster
+            )
+            self.preferred_secondary_cluster = (
+                constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                + "-"
+                + self.preferred_secondary_cluster
+            )
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
@@ -153,7 +165,11 @@ class BusyBox(DRWorkload):
         self.workload_namespace = self._get_workload_namespace()
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
-        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["preferredCluster"] = (
+                    self.preferred_primary_cluster_client
+                    if self.preferred_primary_cluster_client
+                    else self.preferred_primary_cluster
+                )
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
         if self.is_placement:
@@ -164,7 +180,11 @@ class BusyBox(DRWorkload):
             placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                 "labelSelector"
-            ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+            ]["matchExpressions"][0]["values"][0] = (
+                    self.preferred_primary_cluster_client
+                    if self.preferred_primary_cluster_client
+                    else self.preferred_primary_cluster
+                )
             placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
 
             self.sub_placement_name = placement_yaml_data["metadata"]["name"]
@@ -185,7 +205,11 @@ class BusyBox(DRWorkload):
                 drpc_yaml_data["metadata"]["name"] = f"{self.sub_placement_name}-drpc"
                 drpc_yaml_data["spec"][
                     "preferredCluster"
-                ] = self.preferred_primary_cluster
+                ] = (
+                    self.preferred_primary_cluster_client
+                    if self.preferred_primary_cluster_client
+                    else self.preferred_primary_cluster
+                )
                 drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
                 drpc_yaml_data["spec"]["placementRef"]["name"] = self.sub_placement_name
 
@@ -454,7 +478,11 @@ class BusyBox(DRWorkload):
         """
         self.workload_namespace = self._get_workload_namespace()
         if cluster is None:
-            cluster = self.preferred_primary_cluster
+            cluster = (
+                    self.preferred_primary_cluster_client
+                    if self.preferred_primary_cluster_client
+                    else self.preferred_primary_cluster
+                )
         else:
             cluster = cluster
         config.switch_to_cluster_by_name(cluster)
@@ -565,6 +593,13 @@ class BusyBox_AppSet(DRWorkload):
         self.preferred_primary_cluster = config.ENV_DATA.get(
             "preferred_primary_cluster"
         ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
+        log.info(f"==------{self.preferred_primary_cluster}")
+        if get_primary_cluster_config().ENV_DATA["cluster_type"] == "hci_client":
+            self.preferred_primary_cluster_client = (
+                constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                + "-"
+                + self.preferred_primary_cluster
+            )
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
@@ -589,7 +624,11 @@ class BusyBox_AppSet(DRWorkload):
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
-        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["preferredCluster"] = (
+            self.preferred_primary_cluster_client
+            if self.preferred_primary_cluster_client
+            else self.preferred_primary_cluster
+        )
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = self.appset_placement_name
         del drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"]
@@ -607,7 +646,11 @@ class BusyBox_AppSet(DRWorkload):
             if app_set_yaml_data["kind"] == constants.PLACEMENT:
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
-                ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                ]["matchExpressions"][0]["values"][0] = (
+                    self.preferred_primary_cluster_client
+                    if self.preferred_primary_cluster_client
+                    else self.preferred_primary_cluster
+                )
                 app_set_yaml_data["spec"]["clusterSets"][0] = (
                     config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
                 )
@@ -701,9 +744,11 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self.check_pod_pvc_status(skip_replication_resources=False)
-
+        config.switch_acm_ctx()
         appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster_client
+            if self.preferred_primary_cluster_client
+            else self.preferred_primary_cluster
         )
 
         if self.appset_model == "pull":
@@ -724,7 +769,9 @@ class BusyBox_AppSet(DRWorkload):
 
         """
         appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster_client
+            if self.preferred_primary_cluster_client
+            else self.preferred_primary_cluster
         )
         appset_obj = ocp.OCP(
             kind=constants.APPLICATION_ARGOCD,
@@ -1188,6 +1235,12 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster") or (
             get_primary_cluster_config().ENV_DATA["cluster_name"]
         )
+        if get_primary_cluster_config().ENV_DATA["cluster_type"] == "hci_client":
+            self.preferred_primary_cluster_client = (
+                constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                + "-"
+                + self.preferred_primary_cluster
+            )
         self.workload_dir = kwargs.get("workload_dir")
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
@@ -1239,7 +1292,12 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         """
         self._deploy_prereqs()
-        for cluster in get_non_acm_cluster_config():
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            non_acm_cluster_config = get_non_acm_cluster_and_non_provider_cluster_config()
+        else:
+            non_acm_cluster_config = get_non_acm_cluster_config()
+        for cluster in non_acm_cluster_config:
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             self.create_namespace()
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -1255,7 +1313,7 @@ class BusyboxDiscoveredApps(DRWorkload):
 
             # Switch back to primary, then to each managed cluster to apply recipe
             config.switch_to_cluster_by_name(self.preferred_primary_cluster)
-            for cluster in get_non_acm_cluster_config():
+            for cluster in non_acm_cluster_config:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_recipe_with_checkhooks()
 
@@ -1287,7 +1345,9 @@ class BusyboxDiscoveredApps(DRWorkload):
             vrg_name (str): Name of vrg
 
         """
-        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster_client
+                    if self.preferred_primary_cluster_client
+                    else self.preferred_primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count,
             self.workload_pod_count,
@@ -1405,7 +1465,11 @@ class BusyboxDiscoveredApps(DRWorkload):
             drpc_name or self.discovered_apps_placement_name
         )
         drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
-        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["preferredCluster"] = (
+                    self.preferred_primary_cluster_client
+                    if self.preferred_primary_cluster_client
+                    else self.preferred_primary_cluster
+                )
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
             placement_name or self.discovered_apps_placement_name + "-placement-1"
@@ -1459,7 +1523,11 @@ class BusyboxDiscoveredApps(DRWorkload):
         )
         drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
         drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
-        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["preferredCluster"] = (
+            self.preferred_primary_cluster_client
+            if self.preferred_primary_cluster_client
+            else self.preferred_primary_cluster
+        )
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
             self.discovered_apps_placement_name + "-placement-1"
@@ -1492,7 +1560,11 @@ class BusyboxDiscoveredApps(DRWorkload):
             skip_replication_resources (bool): Skip Volumereplication check
 
         """
-        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        config.switch_to_cluster_by_name(
+            self.preferred_primary_cluster_client
+            if self.preferred_primary_cluster_client
+            else self.preferred_primary_cluster
+        )
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count,
             self.workload_pod_count,
@@ -1531,8 +1603,12 @@ class BusyboxDiscoveredApps(DRWorkload):
                 f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} "
                 f"{self.discovered_apps_placement_name}-placement-1 {ignore_not_found_param}"
             )
-
-        for cluster in get_non_acm_cluster_config():
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            non_acm_cluster_config = get_non_acm_cluster_and_non_provider_cluster_config()
+        else:
+            non_acm_cluster_config = get_non_acm_cluster_config()
+        for cluster in non_acm_cluster_config:
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(

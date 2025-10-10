@@ -32,6 +32,7 @@ from ocs_ci.ocs.utils import (
     enable_mco_console_plugin,
     set_recovery_as_primary,
     get_all_acm_indexes,
+    get_non_acm_cluster_and_non_provider_cluster_config,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -384,12 +385,14 @@ def check_mirroring_status_ok(
 
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
-
+        cephbpradosns = "ocs-storagecluster-cephblockpool-" + cephbpradosns
+        logger.info(f"Got cephblockpoolradosnamespace {cephbpradosns}")
         cbp_obj = ocp.OCP(
             kind=constants.CEPHBLOCKPOOLRADOSNS,
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=cephbpradosns,
         )
+
     else:
         if ocs_version >= version.VERSION_4_19:
             cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
@@ -444,7 +447,7 @@ def check_mirroring_status_ok(
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=60):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
@@ -461,7 +464,12 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
 
     """
     restore_index = config.cur_index
-    for cluster in get_non_acm_cluster_config():
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        non_acm_cluster_config = get_non_acm_cluster_and_non_provider_cluster_config()
+    else:
+        non_acm_cluster_config = get_non_acm_cluster_config()
+    for cluster in non_acm_cluster_config:
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(
             f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
