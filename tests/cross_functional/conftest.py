@@ -6,6 +6,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
@@ -1927,3 +1928,13 @@ def setup_stress_testing_buckets(bucket_factory_session, rgw_bucket_factory_sess
         return bucket_objects
 
     return factory
+
+
+@pytest.fixture(scope="function")
+def odf_cli_setup():
+    try:
+        odf_cli_runner = odf_cli_setup_helper()
+    except RuntimeError as ex:
+        pytest.fail(str(ex))
+
+    return odf_cli_runner
