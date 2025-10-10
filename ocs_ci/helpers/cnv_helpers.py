@@ -9,7 +9,7 @@ import re
 import time
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, cluster
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -18,7 +18,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
-
+from ocs_ci.ocs.node import get_worker_node_allocatable, get_pod_requests_per_node
 
 logger = logging.getLogger(__name__)
 
@@ -620,3 +620,59 @@ def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
     return "running" in output
+
+
+def compute_vm_count_from_storage_capacity():
+    """
+    Computes the number of VMs to create based on available storage capacity.
+
+    This function calculates the number of VMs to create by determining the usable storage
+    capacity after accounting for used storage and then dividing it by the VM size (30 GiB).
+
+    Returns:
+        int: The computed number of VMs to create.
+    """
+    total_used_in_gibibytes, _ = cluster.get_used_and_total_capacity_in_gibibytes()
+    ceph_obj = cluster.CephCluster()
+    total_capacity_in_gibibytes = ceph_obj.get_ceph_capacity()
+    usable_capacity = (0.75 * total_capacity_in_gibibytes) - total_used_in_gibibytes
+    vm_count = int(usable_capacity / 30)  # 30 gib is size of 1 vm
+    return vm_count
+
+
+def calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4, buffer=0.9):
+    """
+    Calculate the total and per-node virtual machine (VM) counts based on available CPU and memory resources.
+
+    This function determines the number of VMs that can be provisioned on each node in a Kubernetes cluster,
+    considering both CPU and memory constraints. It uses the provided buffer factor to account for overheads.
+
+    Args:
+    cpu_per_vm (int): The amount of CPU required per VM (default: 1).
+    mem_per_vm (int): The amount of memory required per VM in GB (default: 4GB).
+    buffer (float): The buffer percentage to reserve for node overheads (default: 0.9 or 90%).
+
+    Returns:
+    tuple: A tuple containing two dictionaries -
+        cluster_vm_count (dict): Total number of VMs that can be provisioned across the entire cluster.
+        per_node_vm_count (dict): Number of VMs that can be provisioned on each node in the cluster.
+    """
+    node_alloc = get_worker_node_allocatable()
+    pod_usage = get_pod_requests_per_node(worker_nodes=node_alloc.keys())
+
+    cluster_vm_count = 0
+    per_node_vm_count = {}
+
+    for node, alloc in node_alloc.items():
+        used = pod_usage.get(node, {"cpu": 0, "mem": 0})
+        free_cpu = (alloc["cpu"] - used["cpu"]) * buffer
+        free_mem = (alloc["mem"] - used["mem"]) * buffer
+
+        vm_by_cpu = int(free_cpu // cpu_per_vm)
+        vm_by_mem = int(free_mem // mem_per_vm)
+        vm_count = max(0, min(vm_by_cpu, vm_by_mem))
+
+        per_node_vm_count[node] = vm_count
+        cluster_vm_count += vm_count
+
+    return cluster_vm_count, per_node_vm_count
