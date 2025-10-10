@@ -126,6 +126,7 @@ deployment = {
     "enable_nfs": ('input[id="enable-nfs"]', By.CSS_SELECTOR),
     "configure_odf": ('button[data-test="configure-data-foundation"]', By.CSS_SELECTOR),
     "setup_storage_cluster": ("#setup-storage-cluster", By.CSS_SELECTOR),
+    "deploy_mcg_only": ("#setup-object-storage", By.CSS_SELECTOR),
 }
 
 deployment_4_6 = {
