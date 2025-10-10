@@ -387,6 +387,7 @@ higher priority).
 * `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
+* `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
 
 #### UPGRADE
 
