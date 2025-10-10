@@ -180,6 +180,13 @@ class TestCephDefaultValuesCheck(ManageTest):
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Expected config values: {expected_config}")
 
+        # Ignore mon_warn_on_pool_no_redundancy - leftover from failed replica-1 cleanup
+        if (
+            "global" in ceph_config
+            and "mon_warn_on_pool_no_redundancy" in ceph_config["global"]
+        ):
+            ceph_config["global"].pop("mon_warn_on_pool_no_redundancy")
+
         # Direct dictionary comparison
         assert ceph_config == expected_config, (
             f"The Ceph config in CephCluster spec.cephConfig "
