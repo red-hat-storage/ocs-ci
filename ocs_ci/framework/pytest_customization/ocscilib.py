@@ -279,6 +279,14 @@ def pytest_addoption(parser):
         help="acm version to upgrade(e.g. 2.8), use only with DR upgrade scenario",
     )
     parser.addoption(
+        "--product-type",
+        action="store",
+        choices=["odf", "fdf"],
+        default="odf",
+        dest="product_type",
+        help="Product type (ODF or FDF)",
+    )
+    parser.addoption(
         "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
     )
     parser.addoption(
@@ -831,6 +839,7 @@ def process_cluster_cli_params(config):
         config, "skip_rpm_go_version_collection"
     )
     ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
+    ocsci_config.ENV_DATA["product_type"] = get_cli_param(config, "product_type")
 
 
 def pytest_collection_modifyitems(session, config, items):
