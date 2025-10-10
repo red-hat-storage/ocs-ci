@@ -656,7 +656,7 @@ def create_ceph_file_system(cephfs_name=None, label=None, namespace=None):
 
 
 @retry(
-    CommandFailed,
+    (CommandFailed, IndexError),
     tries=6,
     delay=30,
     backoff=1,
@@ -1149,7 +1149,7 @@ def validate_cephfilesystem(fs_name, namespace=None):
         return False
 
     try:
-        for pools in TimeoutSampler(60, 3, ct_pod.exec_ceph_cmd, "ceph fs ls"):
+        for pools in TimeoutSampler(120, 10, ct_pod.exec_ceph_cmd, "ceph fs ls"):
             for out in pools:
                 result = out.get("name")
                 if result == fs_name:
