@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-1. Python version >= 3.9.18 < 3.12
+1. Python version >= 3.10 < 3.12
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
    - gcc, git, openssl-devel, python3-devel or python specific version packages
    depends on Python version installed e.g. python39-devel (or similar packages for ubuntu).
@@ -82,11 +82,11 @@ necessary dependencies
     [https://github.com/red-hat-storage/ocs-ci](https://github.com/red-hat-storage/ocs-ci)
     via cmd `git clone git@github.com:red-hat-storage/ocs-ci.git`.
 2. Go to ocs-ci folder `cd ocs-ci`.
-3. Setup a python 3.9 virtual environment. This is actually quite easy to do
+3. Setup a python 3.11 virtual environment. This is actually quite easy to do
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
     ignoring this in flake8 configuration in tox.
 
-    * `python3.9 -m venv <path/to/venv>`
+    * `python3.11 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`

@@ -22,6 +22,7 @@ from selenium.common.exceptions import (
     ElementClickInterceptedException,
     InvalidSessionIdException,
 )
+from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
 
@@ -215,8 +216,8 @@ class ValidationUI(PageNavigator):
         self.navigate_installed_operators_page()
         logger.info("Click on project dropdown")
         self.do_click(self.validation_loc["project-dropdown"])
-        default_projects_is_checked = self.driver.find_element_by_xpath(
-            "//input[@type='checkbox']"
+        default_projects_is_checked = self.driver.find_element(
+            By.XPATH, "//input[@type='checkbox']"
         )
         if default_projects_is_checked.get_attribute("data-checked-state") == "false":
             logger.info("Show default projects")
