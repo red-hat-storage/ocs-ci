@@ -42,7 +42,11 @@ spec:
 {% endif %}
 
           echo "Running Vdbench..."
+{% if enable_verification | default(false) %}
+          /vdbench/vdbench -f /tmp/vdbench.conf -v || { echo "Vdbench failed"; exit 1; }
+{% else %}
           /vdbench/vdbench -f /tmp/vdbench.conf || { echo "Vdbench failed"; exit 1; }
+{% endif %}
           echo "Vdbench completed"
 
           # Prevent container from exiting
