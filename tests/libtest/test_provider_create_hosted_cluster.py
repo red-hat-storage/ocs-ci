@@ -434,3 +434,14 @@ class TestProviderHosted(object):
         assert (
             metallb_installer_obj.upgrade_metallb()
         ), "Metallb operator upgrade not successful"
+
+    @runs_on_provider
+    def test_mce_upgrade(self):
+        """
+        Verify mce upgrade
+        """
+        logger.info("Verify mce upgrade")
+        from ocs_ci.deployment.mce import MCEInstaller
+
+        mce_installer_obj = MCEInstaller()
+        assert mce_installer_obj.upgrade_mce(), "MCE operator upgrade not successful"
