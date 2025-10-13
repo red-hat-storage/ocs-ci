@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import pytest
 
@@ -8,6 +9,13 @@ from semantic_version import Version
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CephHealthException
+from ocs_ci.ocs.node import (
+    get_node_objs,
+    unschedule_nodes,
+    drain_nodes,
+    schedule_nodes,
+    wait_for_nodes_status,
+)
 from ocs_ci.ocs.ocp import check_cluster_operator_versions
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
@@ -217,6 +225,25 @@ class TestUpgradeOCP(ManageTest):
 
                 logger.info(f"full upgrade path: {image_path}:{target_image}")
                 ocp.upgrade_ocp(image=target_image, image_path=image_path)
+
+                # On HCI provider clusters, automatic node restart fails due to kube-apiserver and virt-launcher pods
+                if provider_cluster and config.ENV_DATA["platform"] == "hci_baremetal":
+                    node_objs = get_node_objs()
+                    waiting_time = 30
+                    for node in node_objs:
+                        node_name = node.name
+                        unschedule_nodes([node_name])
+                        drain_nodes(node_names=[node_name], disable_eviction=True)
+
+                        logger.info(f"Waiting for {waiting_time} seconds")
+                        time.sleep(waiting_time)
+                        schedule_nodes([node_name])
+                        wait_for_nodes_status(
+                            node_names=[node_name],
+                            status=constants.NODE_READY,
+                            timeout=1800,
+                        )
+
             else:
                 logger.info(f"upgrade rosa cluster to target version: '{target_image}'")
                 upgrade_rosa_cluster(config.ENV_DATA["cluster_name"], target_image)
