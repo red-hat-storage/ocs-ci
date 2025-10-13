@@ -29,7 +29,7 @@ checks.
 
 You can list available tests by doing:
 ```
-$ tox -e py11 -- --collect-only
+$ tox -e py311 -- --collect-only
 ```
 
 ## How to run particular test only?
