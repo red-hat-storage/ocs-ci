@@ -3273,7 +3273,7 @@ def nodes_multicluster():
     """
     factory = platform_nodes.PlatformNodesFactory()
     nodes_multicluster = []
-    for cluster in range(ocsci_config.nclusters):
+    for cluster in ocsci_config.get_consumer_indexes_list():
         ocsci_config.switch_ctx(cluster)
         nodes = factory.get_nodes_platform()
         nodes_multicluster.append(nodes)
