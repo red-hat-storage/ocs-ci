@@ -161,14 +161,6 @@ def validate_ceph_operator_pods_have_host_network():
             label=constants.OPERATOR_LABEL, statuses=["Running"]
         )
     ]
-    pods.extend(
-        [
-            Pod(**pod_info)
-            for pod_info in get_pods_having_label(
-                label=constants.OCS_OPERATOR_LABEL, statuses=["Running"]
-            )
-        ]
-    )
     return validate_pods_have_host_network(pods)
 
 
