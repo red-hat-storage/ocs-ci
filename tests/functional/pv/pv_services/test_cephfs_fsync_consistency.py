@@ -58,15 +58,21 @@ class TestCephfsFsyncConsistency(ManageTest):
             node_name=worker_node_names[1],
         )
 
-        # Copy write_to_file inside the client pod
-        exec_cmd(
-            cmd=f"oc cp {constants.WRITE_TO_FILE_USING_FSYNC} {pod_obj_client.name}:/tmp"
-        )
+        # # Copy write_to_file inside the client pod
+        # exec_cmd(
+        #     cmd=f"oc cp {constants.WRITE_TO_FILE_USING_FSYNC} {pod_obj_client.name}:/tmp"
+        # )
+        #
+        # command_client = f"python3 /tmp/write_to_file.py {project_obj.namespace} {pod_obj_server.name}"
+        # pod_obj_client.exec_cmd_on_pod(
+        #     command=command_client, out_yaml_format=False, timeout=1800
+        # )
 
-        command_client = "python3 /tmp/write_to_file.py"
-        pod_obj_client.exec_cmd_on_pod(
-            command=command_client, out_yaml_format=False, timeout=1800
+        command = (
+            f"python3 {constants.WRITE_TO_FILE_USING_FSYNC} "
+            f"{project_obj.namespace} {pod_obj_client.name} {pod_obj_server.name}"
         )
+        exec_cmd(cmd=command)
 
         command = "cat /mnt/shared_filed.html"
         server_read_output = pod_obj_server.exec_cmd_on_pod(
