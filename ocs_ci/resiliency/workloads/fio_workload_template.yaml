@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: fio
-          image: quay.io/ocsci/nginx:fio
+          image: quay.io/ocsci/nginx:latest
           command:
             - fio
           args:
