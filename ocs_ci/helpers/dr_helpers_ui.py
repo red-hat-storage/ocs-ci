@@ -891,3 +891,10 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         log.info("Close page")
         acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
         return True
+
+
+def naviagte_using_fleet_virtulization(acm_obj):
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    log.info("Navigate to VMs console using Fleet Virtulization dropdown")
+    acm_obj.do_click(acm_loc["switch-perspective"])
+    acm_obj.do_click(acm_loc["fleet-virtual"])
