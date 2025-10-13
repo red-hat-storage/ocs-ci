@@ -2064,9 +2064,12 @@ def get_osd_replica_count():
     return replica_count
 
 
-def verify_multus_network():
+def verify_multus_network(skip_mds=False):
     """
     Verify Multus network(s) created successfully and are present on relevant pods.
+
+    Args:
+        skip_mds (bool): If True, skip MDS pod and MDS map validation
     """
 
     public_net_created = config.ENV_DATA["multus_create_public_net"]
@@ -2147,10 +2150,13 @@ def verify_multus_network():
     if public_net_created:
         log.info("Verifying multus public network exists on ceph pods")
         mon_pods = get_mon_pods()
-        mds_pods = get_mds_pods()
         mgr_pods = get_mgr_pods()
         rgw_pods = get_rgw_pods()
-        ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
+        if skip_mds:
+            ceph_pods = [*mon_pods, *mgr_pods, *rgw_pods]
+        else:
+            mds_pods = get_mds_pods()
+            ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
         for _pod in ceph_pods:
             pod_networks = _pod.data["metadata"]["annotations"][
                 "k8s.v1.cni.cncf.io/networks"
@@ -2184,24 +2190,25 @@ def verify_multus_network():
             not pod_validation_failures
         ), f"There were several failues in multus annotation validations: {pod_validation_failures}"
 
-        log.info("Verifying MDS Map IPs are in the multus public network range")
-        ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
-            "ceph fs dump --format json"
-        )
-        mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
-        for _, gid_data in mds_map["info"].items():
-            if not config.DEPLOYMENT.get("ipv6"):
-                ip = gid_data["addr"].split(":")[0]
-                range = config.ENV_DATA["multus_public_net_range"]
+        if not skip_mds:
+            log.info("Verifying MDS Map IPs are in the multus public network range")
+            ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
+                "ceph fs dump --format json"
+            )
+            mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
+            for _, gid_data in mds_map["info"].items():
+                if not config.DEPLOYMENT.get("ipv6"):
+                    ip = gid_data["addr"].split(":")[0]
+                    range = config.ENV_DATA["multus_public_net_range"]
 
-            else:
-                gid_dt_ip = gid_data["addr"]
-                pattern = r"^\[([\da-f:]+)\]"
-                match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
-                ip = match.group(1)
-                range = config.ENV_DATA["multus_public_ipv6_net_range"]
+                else:
+                    gid_dt_ip = gid_data["addr"]
+                    pattern = r"^\[([\da-f:]+)\]"
+                    match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
+                    ip = match.group(1)
+                    range = config.ENV_DATA["multus_public_ipv6_net_range"]
 
-            assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
+                assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
 
     log.info("Verifying StorageCluster multus network data")
     sc = get_storage_cluster()
