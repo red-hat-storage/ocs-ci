@@ -9,7 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
-    DeploymentPlatformNotSupported,
+    UnexpectedDeploymentConfiguration,
     UnavailableResourceException,
 )
 
@@ -22,7 +22,7 @@ def annotate_worker_nodes_with_mon_ip():
     Annotate worker nodes with annotation 'network.rook.io/mon-ip: <IPAddress>'
     """
     if not config.ENV_DATA["platform"].lower() in constants.BAREMETAL_PLATFORMS:
-        raise DeploymentPlatformNotSupported(
+        raise UnexpectedDeploymentConfiguration(
             "Annotating nodes with mon ip is not implemented for current platform"
         )
 
@@ -58,7 +58,7 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     Returns:
         dict: updated storage storage cluster yaml
     """
-    if config.DEPLOYMENT.get("enable_data_separation_replication"):
+    if config.DEPLOYMENT.get("enable_data_replication_separation"):
         nodes = OCP(kind="node").get().get("items", [])
         worker_nodes = [
             node["metadata"]["name"]
