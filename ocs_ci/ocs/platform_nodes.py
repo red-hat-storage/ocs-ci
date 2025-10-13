@@ -115,6 +115,7 @@ class PlatformNodesFactory:
 
     def get_nodes_platform(self):
         cluster_name = config.ENV_DATA.get("cluster_name")
+        cluster_name = cluster_name.replace("dr-", "")
         platform = config.ENV_DATA["platform"]
         if platform == constants.VSPHERE_PLATFORM:
             deployment_type = config.ENV_DATA["deployment_type"]
@@ -3391,6 +3392,7 @@ class KubevirtVMNodes(NodesBase):
         from ocs_ci.utility import kubevirt_vm
 
         cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        cluster_name = cluster_name.replace("dr-", "")
         self.kubevirt_vm = kubevirt_vm.KubevirtVM(cluster_name)
 
     def get_kubevirt_vms(self, nodes):
