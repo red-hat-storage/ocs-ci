@@ -8,6 +8,7 @@ ENV_DATA:
   platform: 'ibm_cloud'
   deployment_type: 'ipi'
   region: 'us-south'
+  custom_vpc: false
   base_domain: 'ibmcloud2.qe.rh-ocs.com'
   worker_instance_type: 'bx2-16x64'
   master_instance_type: 'bx2-4x16'
