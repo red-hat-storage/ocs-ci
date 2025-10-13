@@ -1245,7 +1245,7 @@ def verify_backend_volume_deletion(
             or config.ENV_DATA.get("radosnamespace_name", None)
             or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
         )
-
+        cephbpradosns = cephbpradosns.replace("ocs-storagecluster-cephblockpool-", "")
         if not cephbpradosns:
             raise NotFoundError("Could not identify the cephblockpoolradosnamespace")
         namespace_param = f"--namespace {cephbpradosns}"
