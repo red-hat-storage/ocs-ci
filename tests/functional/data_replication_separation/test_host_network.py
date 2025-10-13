@@ -2,6 +2,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     data_replication_separation_required,
+    jira,
     yellow_squad,
 )
 from ocs_ci.framework.testlib import tier1
@@ -36,6 +37,7 @@ def test_ceph_pods_have_host_network():
 @tier1
 @yellow_squad
 @data_replication_separation_required
+@jira("DFBUGS-4306")
 @pytest.mark.polarion_id("OCS-7307")
 def test_operator_and_csi_pods_have_host_network():
     """
