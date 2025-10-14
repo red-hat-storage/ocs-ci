@@ -19,7 +19,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.utility import storage_cluster_setup
+from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 import time
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
@@ -173,6 +173,9 @@ class FusionDataFoundationDeployment:
             storage_cluster_setup.setup_storage_cluster()
         # self.patch_catalogsource()
        
+        clustersetup = StorageClusterSetup()
+        # self.patch_catalogsource()
+        clustersetup.setup_storage_cluster()
         # self.create_odfcluster()
         # odfcluster_status_check()
 
