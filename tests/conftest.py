@@ -4465,12 +4465,12 @@ def node_restart_teardown(request, nodes_multicluster, nodes):
 
     """
     cluster_node_objs = []
-    for index in range(ocsci_config.nclusters):
+    for index in ocsci_config.get_consumer_indexes_list():
         ocsci_config.switch_ctx(index)
         cluster_node_objs.append(get_node_objs())
 
     def finalizer():
-        for index in range(ocsci_config.nclusters):
+        for index in ocsci_config.get_consumer_indexes_list():
             ocsci_config.switch_ctx(index)
             # Start the powered off nodes
             try:
