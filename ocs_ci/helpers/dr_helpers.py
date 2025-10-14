@@ -1325,6 +1325,7 @@ def get_all_drpolicy():
     return drpolicy_list
 
 
+@retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
 def validate_drpolicy_grouping(drpolicy_name=None):
     """
     Validate DRPolicy configuration for CG behavior.
@@ -1337,10 +1338,10 @@ def validate_drpolicy_grouping(drpolicy_name=None):
             If None, validates all DRPolicies.
 
     Returns:
-        bool: True if all validations pass, False otherwise
+        bool: True if DRPolicy grouping validation passes
 
     Raises:
-        AssertionError: If grouping validation fails
+        UnexpectedBehaviour: If peerClasses are not found or grouping validation fails
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
@@ -1371,7 +1372,12 @@ def validate_drpolicy_grouping(drpolicy_name=None):
         drp_name = drp.get("metadata").get("name")
         peer_classes = drp.get("status").get("async").get("peerClasses")
 
-        # Assert grouping is true for every storageClass in peerClasses
+        if not peer_classes:
+            error_msg = f"PeerClasses not found in DRPolicy: {drp_name}"
+            logger.error(error_msg)
+            raise UnexpectedBehaviour(error_msg)
+
+        # Validate grouping is true for every storageClass in peerClasses
         logger.info(f"Check grouping for storageClasses in DRPolicy: {drp_name}")
         sc_with_grouping = [
             pc.get("storageClassName")
@@ -1389,7 +1395,7 @@ def validate_drpolicy_grouping(drpolicy_name=None):
         if sc_without_grouping:
             error_msg = f"Grouping is not true for storageClasses: {sc_without_grouping} in DRPolicy: {drp_name}"
             logger.error(error_msg)
-            raise AssertionError(error_msg)
+            raise UnexpectedBehaviour(error_msg)
 
         logger.info(
             f"Verified grouping is true for every storageClass in DRPolicy: {drp_name}"
