@@ -43,11 +43,11 @@ spec:
     selectResource: pod
     type: exec
     ops:
-    - command: >
+    - command: |
         ["/bin/sh", "-c", "ls"]
       name: busy
       inverseOp: busy-inv-same
-    - command: >
+    - command: |
         ["/bin/sh", "-c", "ls -lrt"]
       name: busy-inv-same
   - chks:

@@ -1298,7 +1298,7 @@ class BusyboxDiscoveredApps(DRWorkload):
 
     def create_recipe_with_checkhooks(self):
         """
-        Create recipe with checkhooks for discovered apps
+        Create recipe with checkhooks and exechooks for discovered apps
 
         """
 
@@ -1318,7 +1318,7 @@ class BusyboxDiscoveredApps(DRWorkload):
                 ][0]["values"] = [self.discovered_apps_pod_selector_value]
 
             if "workflows" in recipe_yaml_data["spec"]:
-                recipe_yaml_data["spec"]["workflows"][0]["sequence"][1][
+                recipe_yaml_data["spec"]["workflows"][0]["sequence"][2][
                     "group"
                 ] = self.workload_namespace
                 recipe_yaml_data["spec"]["workflows"][1]["sequence"][0][
@@ -1554,7 +1554,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             )
             log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
-                cmd=f"oc delete recipe {self.discovered_apps_recipe_name_value} -n {self.workload_namespace}",
+                cmd=f"oc delete recipe --all -n {self.workload_namespace}",
                 ignore_error=True,
             )
             log.info(f"Deleting secret from {cluster.ENV_DATA['cluster_name']}")
