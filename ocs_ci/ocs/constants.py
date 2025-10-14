@@ -3402,6 +3402,9 @@ NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
 
 NODE_OUT_OF_SERVICE_TAINT = "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute"
 
+# Out of service
+OUT_OF_SERVICE_TAINT = "node.kubernetes.io/out-of-service:NoExecute"
+
 # Logwriter workload labels
 
 LOGWRITER_CEPHFS_LABEL = "app=logwriter-cephfs"

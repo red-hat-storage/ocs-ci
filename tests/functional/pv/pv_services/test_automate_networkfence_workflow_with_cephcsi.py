@@ -13,7 +13,12 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     verify_data_integrity,
 )
-from ocs_ci.ocs.node import node_network_failure, taint_nodes, untaint_nodes
+from ocs_ci.ocs.node import (
+    node_network_failure,
+    taint_nodes,
+    untaint_nodes,
+    get_worker_nodes,
+)
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -32,6 +37,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
     """
 
     nw_fail_time = 900
+    taint_nodes_list = []
 
     @retry(UnexpectedBehaviour, tries=10, delay=10, backoff=1)
     def verify_multi_attach_error_not_found(self, pod_list):
@@ -132,6 +138,23 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Verify if taint exist on node, if yes remove the taint and restart the nodes
+
+        """
+
+        def finalizer():
+            for node in get_worker_nodes():
+                if self.taint_nodes_list:
+                    untaint_nodes(
+                        taint_label=constants.OUT_OF_SERVICE_TAINT,
+                        nodes_to_untaint=self.taint_nodes_list,
+                    )
+
+        request.addfinalizer(finalizer)
+
     @pytest.mark.parametrize(
         argnames=["node_shutdown"],
         argvalues=[
@@ -146,12 +169,11 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
 
         This scenario tests workload migration with PVCs during a node outage.
 
-        1. Label one of the storage nodes with app-pod
-        2. Create and verify a workload (deployment type) using a PVC.
-        3. Shut down the node, apply an "out-of-service" taint, and verify its "NotReady" status.
-        4. Confirm workload moved, is accessible, and can write new files to the PVC on the new node.
-        5. Remove taint, bring node online, and verify its "Ready" state.
-        6. Verify overall cluster health.
+        1. Create and verify a workload (deployment type) using a PVC.
+        2. Shut down the node, apply an "out-of-service" taint, and verify its "NotReady" status.
+        3. Confirm workload moved, is accessible, and can write new files to the PVC on the new node.
+        4. Remove taint, bring node online, and verify its "Ready" state.
+        5. Verify overall cluster health.
 
         """
 
@@ -179,15 +201,17 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 if node_shutdown:
                     # Shut down the node, apply an "out-of-service" taint, and verify its "NotReady" status.
                     nodes.stop_nodes([node])
-                    taint_nodes(
-                        nodes=[node.name],
-                        taint_label="node.kubernetes.io/out-of-service:NoExecute",
-                    )
                 else:
                     # Networkfailure the node, apply an "out-of-service" taint, and verify its "NotReady" status.
                     node_network_failure([node])
                     logger.info(f"Waiting for {self.nw_fail_time} seconds")
                     sleep(self.nw_fail_time)
+
+                # Taint the node
+                assert taint_nodes(
+                    nodes=[node.name], taint_label=constants.OUT_OF_SERVICE_TAINT
+                ), f"Failed to add taint on the node {node.name}"
+                self.taint_nodes_list.append(node)
 
                 # Verify workload moved to another healthy node
                 new_pod_obj_list = get_all_pods(
@@ -204,26 +228,30 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                     )
 
                 # Remove the taint and start the nodes
-                untaint_nodes(
-                    taint_label="node.kubernetes.io/out-of-service:NoExecute-",
+                assert untaint_nodes(
+                    taint_label=constants.OUT_OF_SERVICE_TAINT,
                     nodes_to_untaint=[node],
-                )
+                ), f"Failed to remove the taint on node {node.name}"
                 nodes.start_nodes([node])
+                self.taint_nodes_list = []
 
         else:
             logger.info("Both the pods are running on same nodes")
             if node_shutdown:
-                # Shut down the node, apply an "out-of-service" taint, and verify its "NotReady" status.
+                # Shut down the node
                 nodes.stop_nodes([app_nodes_obj[0]])
-                taint_nodes(
-                    nodes=[node],
-                    taint_label="node.kubernetes.io/out-of-service:NoExecute",
-                )
+
             else:
                 # Networkfailure the node, apply an "out-of-service" taint, and verify its "NotReady" status.
                 node_network_failure([app_nodes_obj[0]])
                 logger.info(f"Waiting for {self.nw_fail_time} seconds")
                 sleep(self.nw_fail_time)
+
+            assert taint_nodes(
+                nodes=[app_nodes_obj[0].name],
+                taint_label=constants.OUT_OF_SERVICE_TAINT,
+            ), f"Failed to add taint on the node {app_nodes_obj[0].name}"
+            self.taint_nodes_list.append(app_nodes_obj[0])
 
             # Verify workload moved to another healthy node
             new_pod_obj_list = get_all_pods(
@@ -240,11 +268,12 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 )
 
             # Remove the taint and start the nodes
-            untaint_nodes(
-                taint_label="node.kubernetes.io/out-of-service:NoExecute-",
-                nodes_to_untaint=[app_nodes_obj],
-            )
-            nodes.start_nodes(app_nodes_obj)
+            assert untaint_nodes(
+                taint_label=constants.OUT_OF_SERVICE_TAINT,
+                nodes_to_untaint=[app_nodes_obj[0]],
+            ), f"Failed to remove taint on the node {app_nodes_obj.name}"
+            nodes.start_nodes(app_nodes_obj[0])
+            self.taint_nodes_list = []
 
         # Verify overall cluster health
         # Check the node are Ready state and check cluster is health ok]
