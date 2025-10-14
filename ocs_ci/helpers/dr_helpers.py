@@ -353,12 +353,6 @@ def relocate(
     config.switch_ctx(restore_index)
 
 
-def get_ramen_pod_logs(namespace, cluster_name):
-    """
-    Fetch
-    """
-
-
 def check_mirroring_status_ok(
     replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
 ):
