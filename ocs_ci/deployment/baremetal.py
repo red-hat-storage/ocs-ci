@@ -911,6 +911,7 @@ class BAREMETALAI(BAREMETALBASE):
             static_network_config = []
             # which network is used for provisioning (public|private)
             provisioning_network = self.bm_config["bm_provisioning_network"]
+            additional_ntp_source = self.bm_config.get("additional_ntp_source")
             for machine in self.srv_details:
                 if (
                     self.srv_details[machine]["role"] == constants.MASTER_MACHINE
@@ -981,6 +982,7 @@ class BAREMETALAI(BAREMETALBASE):
                 ssh_public_key=self.get_ssh_key(),
                 pull_secret=self.get_pull_secret(),
                 static_network_config=static_network_config,
+                additional_ntp_source=additional_ntp_source,
             )
 
             # create (register) cluster in Assisted Installer console
