@@ -18,6 +18,7 @@ from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
     assign_drpolicy_for_discovered_vms_via_ui,
     verify_drpolicy_ui,
+    navigate_using_fleet_virtulization,
 )
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
@@ -83,13 +84,18 @@ class TestACMKubevirtDRIntergration:
         )
         logger.info(f"CNV workloads instance is {cnv_workloads}")
 
+        primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
+            cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
+        )
         acm_obj = AcmAddClusters()
-
-        logger.info("Navigate to Virtual machines page on the ACM console")
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
         protection_name = cnv_workloads[0].workload_namespace
         logger.info(f"Protection name is {protection_name}")
+        acm_obj.navigate_clusters_page(vms=True)
+        assert navigate_using_fleet_virtulization(
+            acm_obj, managed_cluster_name=primary_cluster_name
+        )
         assert assign_drpolicy_for_discovered_vms_via_ui(
             acm_obj,
             vms=[cnv_workloads[0].vm_name],
