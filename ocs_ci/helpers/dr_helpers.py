@@ -2306,7 +2306,7 @@ def verify_drpc_placement_deletion(cmd, expected_output_lst):
     return True
 
 
-@retry(CommandFailed, tries=40, delay=30, backoff=1)
+@retry(AssertionError, tries=40, delay=30, backoff=1)
 def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
     """
     Verifies that the lastKubeObjectProtectionTime for a given DRPC object is within the expected range.
@@ -2326,8 +2326,8 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
     restore_index = config.cur_index
     logger.info("Adding backup yaml for reference")
     for cl_index in config.get_consumer_indexes_list():
-        config.switch_ctx(cl_index)
-        exec_cmd("oc get backup -n openshift-adp -o yaml")
+        backup = OCP(kind="backup", namespace="openshift-adp")
+        logger.info(f"Backups from cluster index {cl_index}\n {backup.get()}")
     config.switch_acm_ctx()
     last_kubeobject_protection_time = drpc_obj.get_last_kubeobject_protection_time()
     if not last_kubeobject_protection_time:
