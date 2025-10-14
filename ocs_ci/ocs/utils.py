@@ -1687,6 +1687,8 @@ def get_non_acm_cluster_config():
     for i in range(len(ocsci_config.clusters)):
         if i in get_all_acm_indexes():
             continue
+        if i in ocsci_config.get_provider_cluster_indexes():
+            continue
         else:
             non_acm_list.append(ocsci_config.clusters[i])
 
