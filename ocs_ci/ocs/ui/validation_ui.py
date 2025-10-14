@@ -9,19 +9,12 @@ from ocs_ci.ocs.cluster import (
     get_used_and_total_capacity_in_gibibytes,
     get_age_of_cluster_in_days,
 )
-from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
+from ocs_ci.ocs.exceptions import UnexpectedODFAccessException, CephHealthException
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
-from selenium.common.exceptions import (
-    TimeoutException,
-    WebDriverException,
-    NoSuchElementException,
-    StaleElementReferenceException,
-    ElementClickInterceptedException,
-    InvalidSessionIdException,
-)
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -280,32 +273,60 @@ class ValidationUI(PageNavigator):
         """
         Method to verify changes and validate elements on ODF Storage and Data Foundation web pages
 
-        Steps:
+        **Steps**
+
         1. Validate ODF console plugin is enabled, if not enable it
-        2. Navigate to Data Foundation page via PageNavigator and Data Foundation
-        3. Validate if legend for Available vs Used capacity is present
-        4. Verify if Overview tab is active
-        5. Ensure used raw capacity string in System Capacity card
-        6. Verify if Block and File tab is active
-        7. Verify all tabs are working
-        8. Validate content of Storage Cluster / Block and File tab
-        9. Verify CephBlockPool status is Ready
-        10. Verify cephfs data pool status is Ready
-        11. Navigate to default cephblockpool using searching filter
-        12. Verify if Performance Card is present
-        13. Navigate to ODF Backing store tab via Object Storage tab or PageNavigator
-        14. Verify if Backing Store is present and link to Backing Store resource works
-        15. Navigate to Backing Store tab via breadcrumb
-        16. Navigate to Bucket class tab
-        17. Navigate to the default Bucket Class details via Bucket Class tab
-        18. Verify the status of a default bucket class
-        19. Navigate to Bucket class via breadcrumb
-        20. Navigate to Namespace Store tab via Bucket Class tab, verify if it works
-        21. Navigate to ODF Storage Cluster via Page navigator
-        22. Verify if Overview tab is active
-        23. Process results
+        2. Navigate to **Data Foundation** page via **PageNavigator** and **Data Foundation**
+        3. If storage is on cluster or configuration is multi storagecluster:
+
+            - Validate that the legend for **Available vs Used capacity** is present.
+            - Verify that **Overview** navigates to the **Storage Cluster** page.
+            - Ensure the **Used Raw Capacity** string is visible in the **System Capacity** card.
+            - Verify that the **Block and File** tab is active.
+            - Verify that utilization is good in the **Block and File** tab.
+            - Verify that resiliency is OK in the **Block and File** tab.
+            - Verify that **CephBlockPool** status is **Ready**.
+            - Verify that **CephFS data pool** status is **Ready**.
+            - Navigate to the default **CephBlockPool** using the search filter.
+            - Verify that the **Storage Cluster** is healthy on the **CephBlockPool** page.
+            - Verify that the **Performance Card** is present.
+            - Navigate to the **Storage Pools** page via the breadcrumb link.
+            - Navigate to the **ODF Backing Store** tab via the **Object Storage** tab or **PageNavigator**.
+            - Verify that all tabs are working.
+
+        4. If **external mode** or **multi–storagecluster**:
+
+            - Navigate to **External Systems**
+            - Verify if **Block and File** tab is active
+            - verify content of **External Storage Cluster** / **Block and File** tab
+            - Check if **PersistentVolumeClaims capacity breakdown** is available
+            - Navigate to **Object** tab from **External cluster**
+
+        5. Navigate to **Buckets page** via View **Buckets link**
+        6. Navigate to **Backing Store** tab via **Buckets tab**
+        7. Verify if **Backing Store** is present and link to **Backing Store** resource works
+        8. Navigate to **Backing Store** tab via breadcrumb
+        9. Navigate to **Bucket class** tab via **Backing Store** tab
+        10. Navigate to the default **Bucket Class** details via **Bucket Class** tab
+        11. Verify the status of a default **bucket class**
+        12. Navigate to **Bucket class** via breadcrumb
+        13. Navigate to **Namespace Store** tab via **Bucket Class** tab, verify if it works
+        14. If not **external mode**:
+            - Navigate to **Storage Cluster** via **Page navigator**
+            - Verify if **Block and File** tab is active
+        15. If **external mode**:
+            - Navigate to **External Systems** page via **Page navigator**
+            - Verify if **External Systems** page is opening
+        16. Process results
+
+        Raises:
+            AssertionError: If one of the verifications fails
+
         """
         res_dict = {}
+        external_mode = config.DEPLOYMENT.get("external_mode")
+        storage_on_cluster = not external_mode
+        multi_storagecluster = config.ENV_DATA.get("multi_storagecluster", False)
 
         log_step("Validate ODF console plugin is enabled, if not enable it")
         self.odf_console_plugin_check()
@@ -315,74 +336,116 @@ class ValidationUI(PageNavigator):
         )
         overview_page = self.nav_storage_data_foundation_overview_page()
 
-        log_step("Validate if legend for Available vs Used capacity is present")
-        overview_page.available_vs_used_capacity_present()
+        if storage_on_cluster or multi_storagecluster:
+            log_step("Validate if legend for Available vs Used capacity is present")
+            overview_page.available_vs_used_capacity_present()
 
-        log_step("Verify if Overview tab is active")
-        storage_cluster_page = overview_page.navigate_to_view_storage()
-        res_dict["overview_tab_is_active_1"] = (
+            log_step("Verify if Overview navigates to Storage Cluster page")
+            storage_cluster_page = overview_page.navigate_to_view_storage()
+            res_dict["block_and_file_tab_is_active_1"] = (
+                storage_cluster_page.validate_block_and_file_tab_active()
+            )
+
+            log_step("Ensure used raw capacity string in System Capacity card")
+            res_dict["system_raw_capacity_check_bz_2185042"] = self.check_element_text(
+                "Raw capacity"
+            )
+
+            log_step("Verify if Block and File tab is active")
             storage_cluster_page.validate_block_and_file_tab_active()
-        )
 
-        log_step("Ensure used raw capacity string in System Capacity card")
-        res_dict["system_raw_capacity_check_bz_2185042"] = self.check_element_text(
-            "Raw capacity"
-        )
+            block_and_file_tab = storage_cluster_page
 
-        log_step("Verify if Block and File tab is active")
-        storage_cluster_page.validate_block_and_file_tab_active()
+            res_dict["block_and_file_utilization_good"] = (
+                block_and_file_tab.verify_utilization_is_good()
+            )
+            res_dict["block_and_file_resiliency_ok"] = (
+                block_and_file_tab.resiliency_ok()
+            )
 
-        log_step("Verify all tabs are working")
-        try:
-            storage_cluster_page.nav_object_tab()
-            storage_cluster_page.nav_storage_pools_tab()
-            storage_cluster_page.nav_topology_tab()
-        except (
-            TimeoutException,
-            WebDriverException,
-            NoSuchElementException,
-            StaleElementReferenceException,
-            ElementClickInterceptedException,
-            InvalidSessionIdException,
-        ):
-            logger.error("One of the tabs is not working")
-            res_dict["storage_cluster_tabs_work"] = False
-        res_dict["storage_cluster_tabs_work"] = True
+            storage_pools_tab = storage_cluster_page.nav_storage_pools_tab()
 
-        log_step("Validate content of Storage Cluster / Block and File tab")
-        block_and_file_tab = storage_cluster_page.nav_block_and_file_tab()
-        res_dict["block_and_file_utilization_good"] = (
-            block_and_file_tab.verify_utilization_is_good()
-        )
-        res_dict["block_and_file_resiliency_ok"] = block_and_file_tab.resiliency_ok()
+            log_step("Verify CephBlockPool status is Ready")
+            try:
+                storage_pools_tab.verify_cephblockpool_status()
+                res_dict["cephblockpool_status_ready"] = True
+            except (CephHealthException, WebDriverException) as e:
+                logger.error(f"CephBlockPool status is not Ready: {e}")
+                self.take_screenshot("cephblockpool_status_not_ready")
+                res_dict["cephblockpool_status_ready"] = False
 
-        storage_pools_tab = storage_cluster_page.nav_storage_pools_tab()
+            log_step("Verify cephfs data pool status is Ready")
+            try:
+                storage_pools_tab.verify_cephfs_status()
+                res_dict["cephfs_data_pool_status_ready"] = True
+            except (CephHealthException, WebDriverException) as e:
+                logger.error(f"CephFS Data Pool status is not Ready: {e}")
+                self.take_screenshot("cephfs_data_pool_status_not_ready")
+                res_dict["cephfs_data_pool_status_ready"] = False
 
-        log_step("Verify CephBlockPool status is Ready")
-        storage_pools_tab.verify_cephblockpool_status()
+            log_step("Navigate to default cephblockpool using searching filter")
+            ceph_block_pool_page = storage_pools_tab.navigate_to_block_pool(
+                constants.DEFAULT_CEPHBLOCKPOOL
+            )
+            res_dict["storage_cluster_healthy"] = (
+                ceph_block_pool_page.block_pool_ready()
+            )
 
-        log_step("Verify cephfs data pool status is Ready")
-        storage_pools_tab.verify_cephfs_status()
+            log_step("Verify if Performance Card is present")
+            # BlockPoolUI is not a POM class, but helper class
+            block_pool_helper = BlockPoolUI()
+            res_dict["performance_card_header_present"] = (
+                block_pool_helper.validate_performance_card_header_present()
+            )
 
-        log_step("Navigate to default cephblockpool using searching filter")
-        ceph_block_pool_page = storage_pools_tab.navigate_to_block_pool(
-            constants.DEFAULT_CEPHBLOCKPOOL
-        )
-        res_dict["storage_cluster_healthy"] = ceph_block_pool_page.block_pool_ready()
+            ceph_block_pool_page.navigate_storage_pools_via_breadcrumb()
+            res_dict["block_pool_navigation_works"] = True
 
-        log_step("Verify if Performance Card is present")
-        # BlockPoolUI is not a POM class, but helper class
-        block_pool_helper = BlockPoolUI()
-        res_dict["performance_card_header_present"] = (
-            block_pool_helper.validate_performance_card_header_present()
-        )
+            log_step(
+                "Navigate ODF Backing store tab via Object Storage tab or PageNavigator"
+            )
 
-        ceph_block_pool_page.navigate_storage_pools_via_breadcrumb()
-        res_dict["block_pool_navigation_works"] = True
+            log_step("Verify all tabs are working")
+            try:
+                storage_cluster_page.nav_object_tab()
+                storage_cluster_page.nav_storage_pools_tab()
+                storage_cluster_page.nav_topology_tab()
+                res_dict["storage_cluster_tabs_work"] = True
+            except WebDriverException:
+                logger.error("One of the tabs is not working")
+                res_dict["storage_cluster_tabs_work"] = False
 
-        log_step(
-            "Navigate ODF Backing store tab via Object Storage tab or PageNavigator"
-        )
+        if external_mode or multi_storagecluster:
+            log_step("Navigate to External Systems")
+            storage_cluster_page = (
+                overview_page.navigate_to_external_storage_systems().nav_to_external_storage_cluster()
+            )
+            log_step("Verify if Block and File tab is active")
+            storage_cluster_page.validate_block_and_file_tab_active()
+            log_step("verify content of External Storage Cluster / Block and File tab")
+
+            logger.info(
+                "Check if PersistentVolumeClaims capacity breakdown is available"
+            )
+            storage_cluster_page.select_capacity_resource(
+                "PersistentVolumeClaims", config.ENV_DATA["cluster_namespace"]
+            )
+            pvc_to_size_dict = storage_cluster_page.read_capacity_breakdown()
+            self.take_screenshot("bloack_and_file_req_capacity")
+            res_dict["external_storage_cluster_req_cap_OK"] = bool(pvc_to_size_dict)
+
+            logger.info("Navigate to Object tab from External storage cluster")
+            try:
+                storage_cluster_page.nav_object_tab()
+                self.take_screenshot("objectr_tab_external_storage_cluster")
+                self.wait_for_endswith_url("object")
+                logger.info(f"Web Page title: {self.driver.title}")
+                res_dict["external_storage_cluster_obj_tab_OK"] = True
+            except WebDriverException:
+                logger.error("External cluster / Object tab is not working")
+                self.take_screenshot("objectr_tab_external_storage_cluster")
+                res_dict["external_storage_cluster_obj_tab_OK"] = False
+
         buckets_tab = (
             PageNavigator()
             .nav_storage_data_foundation_overview_page()
@@ -424,15 +487,25 @@ class ValidationUI(PageNavigator):
             namespace_store_tab.is_namespace_store_tab_active()
         )
 
-        log_step("Navigate to ODF Storage Cluster via Page navigator")
+        if storage_on_cluster or multi_storagecluster:
+            log_step("Navigate to ODF Storage Cluster via Page navigator")
+            storage_cluster_page = PageNavigator().nav_storage_cluster_default_page()
+            logger.info(f"Web Page title: {self.driver.title}")
+            res_dict["block_and_file_tab_is_active_2"] = (
+                storage_cluster_page.validate_block_and_file_tab_active()
+            )
 
-        storage_cluster_page = PageNavigator().nav_storage_cluster_default_page()
+        if external_mode or multi_storagecluster:
+            PageNavigator().nav_external_systems_page()
+            try:
+                self.wait_for_endswith_url("external-systems")
+                logger.info(f"Web Page title: {self.driver.title}")
+                res_dict["external_systems_page_OK"] = True
+            except WebDriverException:
+                logger.error("External Systems page is not opening")
+                res_dict["external_systems_page_OK"] = False
 
-        res_dict["overview_tab_is_active_2"] = (
-            storage_cluster_page.validate_block_and_file_tab_active()
-        )
-        logger.info("Navigated back to ODF tab under Storage. Check results below:")
-
+        self.take_screenshot("summary_of_odf_ui_checks")
         log_step("Process results")
         res_pd = pd.DataFrame.from_dict(res_dict, orient="index", columns=["check"])
         logger.info(res_pd.to_markdown(headers="keys", index=True, tablefmt="grid"))

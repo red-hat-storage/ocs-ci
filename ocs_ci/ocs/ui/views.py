@@ -826,6 +826,7 @@ page_nav_4_14 = {
 page_nav_4_20 = {
     "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
     "storage_cluster": ("Storage cluster", By.LINK_TEXT),
+    "external_systems_page": ("External systems", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -2454,6 +2455,10 @@ data_foundation_overview = {
     ),
     "available_capacity_legend": (
         "//*[name()='text' and @id='legend-labels-1']//*[name()='tspan' and contains(text(), 'Available:')]",
+        By.XPATH,
+    ),
+    "external_storage_systems_link": (
+        "//button[normalize-space()='View external systems']",
         By.XPATH,
     ),
 }
