@@ -177,6 +177,8 @@ class IBMCloudIPI(CloudDeploymentBase):
                 ibmcloud.login()
         if config.ENV_DATA.get("custom_vpc"):
             self.prepare_custom_vpc_and_network()
+        if config.ENV_DATA.get("existing_vpc"):
+            self.prepare_existing_vpc_and_network()
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 
@@ -774,3 +776,63 @@ class IBMCloudIPI(CloudDeploymentBase):
                 ibmcloud.attach_subnet_to_public_gateway(
                     subnet_name, gateway_name, vpc_name
                 )
+
+    def prepare_existing_vpc_and_network(self):
+        """
+        Prepare to use existing VPC, resource group, and subnets for IBM Cloud IPI deployment.
+        This function allows you to use your own pre-existing VPC infrastructure.
+
+        Required ENV_DATA configuration:
+        - existing_vpc: true
+        - resource_group_name: name of existing resource group
+        - network_resource_group_name: name of existing network resource group (can be same as resource_group_name)
+        - vpc_name: name of existing VPC
+        - control_plane_subnets: list of existing control plane subnet names
+        - compute_subnets: list of existing compute subnet names
+        """
+        cluster_id = get_random_str(size=5)
+        config.ENV_DATA["cluster_id"] = cluster_id
+
+        # Use existing resource group and VPC names from config
+        resource_group = config.ENV_DATA.get("resource_group_name")
+        network_resource_group = config.ENV_DATA.get(
+            "network_resource_group_name", resource_group
+        )
+        vpc_name = config.ENV_DATA.get("vpc_name")
+
+        # Validate required configuration
+        if not resource_group:
+            raise ValueError(
+                "resource_group_name must be specified in ENV_DATA when using existing VPC"
+            )
+        if not vpc_name:
+            raise ValueError(
+                "vpc_name must be specified in ENV_DATA when using existing VPC"
+            )
+
+        # Get existing subnet names from config
+        control_plane_subnets = config.ENV_DATA.get("control_plane_subnets", [])
+        compute_subnets = config.ENV_DATA.get("compute_subnets", [])
+
+        if not control_plane_subnets:
+            raise ValueError(
+                "control_plane_subnets must be specified in ENV_DATA when using existing VPC"
+            )
+        if not compute_subnets:
+            raise ValueError(
+                "compute_subnets must be specified in ENV_DATA when using existing VPC"
+            )
+
+        logger.info(f"Using existing VPC: {vpc_name}")
+        logger.info(f"Using existing resource group: {resource_group}")
+        logger.info(f"Using existing network resource group: {network_resource_group}")
+        logger.info(f"Using existing control plane subnets: {control_plane_subnets}")
+        logger.info(f"Using existing compute subnets: {compute_subnets}")
+
+        # Set the configuration for the installer
+        config.ENV_DATA["existing_vpc"] = True
+        config.ENV_DATA["resource_group_name"] = resource_group
+        config.ENV_DATA["network_resource_group_name"] = network_resource_group
+        config.ENV_DATA["vpc_name"] = vpc_name
+        config.ENV_DATA["control_plane_subnets"] = control_plane_subnets
+        config.ENV_DATA["compute_subnets"] = compute_subnets

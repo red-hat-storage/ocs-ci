@@ -60,5 +60,18 @@ platform:
       - {{ compute_subnet }}
 {% endfor %}
 {% endif %}
+{% if existing_vpc %}
+    resourceGroupName: {{ resource_group_name }}
+    networkResourceGroupName: {{ network_resource_group_name }}
+    vpcName: {{ vpc_name }}
+    controlPlaneSubnets:
+{% for control_plane_subnet in control_plane_subnets %}
+      - {{ control_plane_subnet }}
+{% endfor %}
+    computeSubnets:
+{% for compute_subnet in compute_subnets %}
+      - {{ compute_subnet }}
+{% endfor %}
+{% endif %}
 publish: External
 pullSecret: ''
