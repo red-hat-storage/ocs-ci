@@ -1376,9 +1376,14 @@ acm_configuration_4_20 = {
     ),
     "kebab-action": ("//button[@aria-label='Actions']", By.XPATH),
     "select-dr-policy": ('//*[text()="{}"]', By.XPATH),
-    "switch-perspective": ("//button[@data-test-id='perspective-switcher-toggle']", By.XPATH),
+    "switch-perspective": (
+        "//button[@data-test-id='perspective-switcher-toggle']",
+        By.XPATH,
+    ),
     "fleet-virtual": ("//h2[text()='Fleet Virtualization']", By.XPATH),
-
+    "nav-bar-vms-page": ("//a[@data-test-id='virtualmachines-nav-item']", By.XPATH),
+    "all-clusters": ("//button[text()='All clusters']", By.XPATH),
+    "managed-cluster-name": ("//button[text()='{}']", By.XPATH),
 }
 
 add_capacity = {
