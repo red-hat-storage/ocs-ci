@@ -794,7 +794,7 @@ def assign_drpolicy_for_discovered_vms_via_ui(
     """
     This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
     of the ACM console.
-    With ACM 2.14 and above, Data Policy can be assigned as Standalone or Shared Protection type (if there is an
+    Starting ODF 4.19 and ACM 2.14, Data Policy can be assigned as Standalone or Shared Protection type (if there is an
     existing DRPC for another VM workload, and you want to club it together)
 
     Args:
@@ -811,7 +811,6 @@ def assign_drpolicy_for_discovered_vms_via_ui(
     if not vms or any(not vm.strip() for vm in vms):
         raise ValueError("Parameter 'vms' is required and must be a non-empty list")
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    acm_obj.navigate_clusters_page(vms=True)
     for vm in vms:
         existing_filter = acm_obj.check_element_presence(
             acm_loc["remove-existing-filter"][::-1]
@@ -893,8 +892,45 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         return True
 
 
-def naviagte_using_fleet_virtulization(acm_obj):
+def navigate_using_fleet_virtulization(acm_obj, managed_cluster_name):
+    """
+    Starting ACM 2.15, VMs page from the ACM console has been removed and is integrated
+    with the Virtulization Operator which is required to be installed on the ACM hub cluster and
+    has it's own perspective dropdown to switch to, which is called Fleet Virtulization.
+
+    This function is to navigate to the new VMs page using the Fleet Virtulization dropdown and
+    connect dots with the existing tests so as to apply DR Policy to the CNV VM workloads from this page
+    using Standalone or Shared Protection type.
+
+    Refer ACM-23371 and ACM-22068 for more details
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        managed_cluster_name (str): Name of the managed cluster where VM is running
+
+    Returns:
+        True if VM is found on the selected managed cluster and function executes successfully, False otherwise
+    """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Navigate to VMs console using Fleet Virtulization dropdown")
     acm_obj.do_click(acm_loc["switch-perspective"])
     acm_obj.do_click(acm_loc["fleet-virtual"])
+    acm_obj.page_has_loaded(retries=10, sleep_time=5)
+    log.info("From side nav bar, navigate to VirtualMachines page")
+    acm_obj.do_click(acm_loc["nav-bar-vms-page"])
+    log.info("Look for 'All Clusters'")
+    all_clusters = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["all-clusters"], expected_text="All clusters"
+    )
+    if all_clusters:
+        log.info("All Clusters found, select the managed cluster")
+        acm_obj.do_click(
+            format_locator(acm_loc["managed-cluster-name"]), managed_cluster_name
+        )
+        log.info("Managed cluster found")
+    else:
+        log.warning("'All Clusters' not found on the VMs page")
+        return False
+    log.info("Search for the VM workload")
+
+    return True
