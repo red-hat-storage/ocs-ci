@@ -5,8 +5,12 @@ import shutil
 import tempfile
 import time
 from datetime import datetime
+import json
 
-from ocs_ci.deployment.helpers.idms_parser import parse_IDMS_json_to_mirrors_file
+from ocs_ci.deployment.helpers.idms_parser import (
+    parse_IDMS_json_to_mirrors_file,
+    extract_image_content_sources,
+)
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -842,6 +846,83 @@ class HyperShiftBase:
                 mode="w+", prefix="idms_mirrors-", delete=False
             ).name
         self.save_mirrors_list_to_file()
+
+    def apply_idms_to_hosted_cluster(self, name, idms_json_dict=None, replace=False):
+        """
+        Apply ImageDigestMirrorSet data to an existing HostedCluster as imageContentSources.
+        This patches spec.imageContentSources of the HostedCluster resource in the management (hub) cluster.
+
+        Args:
+            name (str): HostedCluster name (namespace is clusters-<name> but resource lives in clusters namespace)
+            idms_json_dict (dict|None): If provided, use this pre-fetched dict
+                (output of 'oc get imagedigestmirrorsets -o json').
+                If None, it will be fetched automatically.
+            replace (bool): If True, replace any existing spec.imageContentSources with the new list.
+                            If False, merge (append new unique entries after existing ones).
+
+        Returns:
+            bool: True if patch applied (or nothing to do), False on failure.
+
+        Notes:
+            - Empty or missing IDMS items will result in a no-op (returns True).
+            - Deduplication retains first occurrence (existing entries preserved if replace=False).
+        """
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                if idms_json_dict is None:
+                    logger.info(
+                        "Fetching ImageDigestMirrorSets JSON for HostedCluster patch"
+                    )
+                    idms_json_dict = self.ocp.exec_oc_cmd(
+                        "get imagedigestmirrorsets -o json"
+                    )
+                ics_new = extract_image_content_sources(idms_json_dict)
+                if not ics_new:
+                    logger.info(
+                        "No imageContentSources extracted from IDMS; skipping patch"
+                    )
+                    return True
+                ocp_hc = OCP(
+                    kind=constants.HOSTED_CLUSTERS,
+                    namespace=constants.CLUSTERS_NAMESPACE,
+                )
+                hosted = ocp_hc.get(name)
+                existing = hosted.get("spec", {}).get("imageContentSources") or []
+                if replace:
+                    combined = ics_new
+                else:
+                    seen = set(
+                        (
+                            e.get("source"),
+                            tuple(e.get("mirrors", [])),
+                        )
+                        for e in existing
+                    )
+                    combined = list(existing)
+                    for entry in ics_new:
+                        key = (entry.get("source"), tuple(entry.get("mirrors", [])))
+                        if key not in seen:
+                            seen.add(key)
+                            combined.append(entry)
+                if combined == existing:
+                    logger.info(
+                        "HostedCluster already has desired imageContentSources; no patch needed"
+                    )
+                    return True
+                patch_body = json.dumps({"spec": {"imageContentSources": combined}})
+                logger.info(
+                    f"Patching HostedCluster '{name}' with {len(combined)} imageContentSources "
+                    f"entries (replace={replace})"
+                )
+                ocp_hc.exec_oc_cmd(
+                    f"patch hostedclusters {name} --type=merge -p '{patch_body}'"
+                )
+                return True
+        except Exception as e:
+            # this is non-critical operation, it should not fail deployment or upgrade on multiple clusters,
+            # thus exception is broad
+            logger.error(f"Failed to apply IDMS mirrors to HostedCluster '{name}': {e}")
+            return False
 
     def destroy_kubevirt_cluster(self, name):
         """
