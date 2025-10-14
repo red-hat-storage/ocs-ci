@@ -112,6 +112,7 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         headers = {"content-type": "application/json"}
         response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        response.encoding = "utf-8-sig"
         return response.json()[0]["status"]
 
     def get_locked_username(self):
