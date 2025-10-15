@@ -198,6 +198,9 @@ class TestNodesMaintenance(ManageTest):
         # Mark the node back to schedulable
         schedule_nodes([typed_node_name])
 
+        # Wait for storage pods to stabilize after node operations
+        pod.wait_for_storage_pods()
+
         # Perform cluster and Ceph health checks
         if (
             node_type == "worker"
