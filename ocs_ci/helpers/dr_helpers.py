@@ -2611,12 +2611,13 @@ def verify_mirroring_status_on_primary(
     on primary VR/VGR.
 
     Args:
-        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_REPLICATION_GROUP, etc.)
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_GROUP_REPLICATION)
         namespace (str): the namespace of the resources
         resource_name (str): Name of specific resource
+        timeout (int): time in seconds to wait for resource to reach at desired state
 
     Returns:
-        bool: True if resources are in expected state or were deleted, False otherwise
+        dict: returns latest condition details
     """
     resource_obj = ocp.OCP(kind=kind, namespace=namespace)
 
@@ -2626,47 +2627,85 @@ def verify_mirroring_status_on_primary(
     else:
         resource_list = resource_obj.get().get("items")
 
-    if kind == constants.VOLUME_REPLICATION and len(resource_list) > 1:
-        # Handle multiple VR resources
-        state_mismatch = []
-        for resource in resource_list:
-            resource_name = resource["metadata"]["name"]
-            desired_state = resource["spec"]["replicationState"]
-            current_state = resource["status"]["state"]
-            logger.info(
-                f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
-            )
+    # wait until vr state is 'primary'
+    wait_for_resource_state(
+        kind=kind,
+        state="primary",
+        namespace=namespace,
+        timeout=timeout,
+    )
 
-            if not (
-                state.lower() == desired_state.lower()
-                and state.lower() == current_state.lower()
-            ):
-                state_mismatch.append(resource_name)
-
-        if not state_mismatch:
-            logger.info(
-                f"All {len(resource_list)} {kind} are in expected state {state}"
-            )
-            return True
-        else:
-            logger.warning(
-                f"Following {len(state_mismatch)} {kind} are not in expected state {state}: {state_mismatch}"
-            )
-            return False
-    else:
-        resource = resource_list[0]
+    for resource in resource_list:
         resource_name = resource["metadata"]["name"]
-        desired_state = resource["spec"]["replicationState"]
-        current_state = resource["status"]["state"]
-        logger.info(
-            f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
-        )
+        conditions = resource["status"]["conditions"]
+        logger.info(f"{kind}: {resource_name} state.conditions {conditions}")
 
-        if (
-            state.lower() == desired_state.lower()
-            and state.lower() == current_state.lower()
-        ):
-            return True
-        else:
-            logger.warning(f"{kind} is not in expected state {state}")
-            return False
+    # return latest state.conditions details
+    latest_condition = max(c["lastTransitionTime"] for c in conditions)
+    logger.info(f"{kind}: {resource_name} latest state.conditions {latest_condition}")
+    return latest_condition
+
+
+def validate_latest_status_type_displayed(
+    namespace,
+    kind=constants.VOLUME_REPLICATION,
+    resource_name="",
+    timeout=600,
+    cephbpradosns="",
+):
+    """
+    This method is for validating the status message updated to reflect the current mirroring status
+    on primary VR/VGR.
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+        timeout (int): time in seconds to wait for resource to reach at desired state
+        cephbpradosns (str): cephblockpoolradosnamespaces name
+
+    Returns:
+        # bool: True if as per mirroring status expected status and type is displayed in
+        # vr/vgr status.conditions, False otherwise
+    """
+    if not cephbpradosns:
+        cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOLRADOSNS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=cephbpradosns,
+    )
+    latest_condition = fetch_status_and_type_reflecting_on_vr_orvgr(
+        namespace, kind=kind, resource_name=""
+    )
+
+    # fetch mirroring status
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
+    logger.info(f"Mirroring status: {mirroring_status}")
+
+    mirroring_health = mirroring_status.get("health")
+    # mirroring_daemon_health = mirroring_status.get("daemon_health")
+    # mirroring_daemon_health = mirroring_status.get("image_health")
+    # mirroring_daemon_health = mirroring_status.get("group_health")
+    if latest_condition.get("type") == "Replicating":
+        if mirroring_health == "OK":
+            expected_reason = "Replicating"
+            expected_status = "True"
+            assert (
+                latest_condition.get("reason") == expected_reason
+                and latest_condition.get("status") == expected_status
+            ), "reason and type details are incorrect"
+        elif mirroring_health == "WARNING":
+            expected_reason = "Replicating"
+            expected_status = "Unknown"
+            assert (
+                latest_condition.get("reason") == expected_reason
+                and latest_condition.get("status") == expected_status
+            ), "reason and type details are incorrect"
+        elif mirroring_health == "ERROR":
+            expected_reason = "Replicating"
+            expected_status = "Unknown"
+            assert (
+                latest_condition.get("reason") == expected_reason
+                and latest_condition.get("status") == expected_status
+            ), "reason and type details are incorrect"
