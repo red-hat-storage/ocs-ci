@@ -1510,8 +1510,9 @@ class BusyboxDiscoveredApps(DRWorkload):
             workload_ns = ocp.OCP(
                 kind=constants.NAMESPACE, resource_name=self.workload_namespace
             )
-            workload_ns.delete(resource_name=self.workload_namespace)
-            workload_ns.wait_for_delete(resource_name=self.workload_namespace)
+            if workload_ns.is_exist(resource_name=self.workload_namespace):
+                workload_ns.delete(resource_name=self.workload_namespace)
+                workload_ns.wait_for_delete(resource_name=self.workload_namespace)
         run_cmd(f"oc create namespace {self.workload_namespace}")
 
     def delete_workload(self, drpc_name=None, skip_vrg_check=False):
