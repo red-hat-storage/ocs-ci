@@ -126,54 +126,68 @@ The system uses a structured YAML format that automatically converts to Vdbench 
 
 ```yaml
 storage_definitions:
+  # Block Storage Definition (SD)
   - id: 1
-    lun: "/vdbench-data/testfile"     # File path for filesystem
-    # lun: "/dev/vdbench-device"      # Device path for block
+    lun: "/dev/vdbench-device"        # Block device path
     size: "10g"
     threads: 4
-    openflags: "o_direct"             # Auto-added for /dev/ paths
+    openflags: "o_direct"             # Direct I/O flags
+    open_flags: "o_direct"            # Alternative flag format
+    align: "1k"                       # Alignment parameter
+    offset: "0"                       # Offset parameter
 
+  # Filesystem Storage Definition (FSD)
   - id: 2
-    fsd: true                         # Filesystem definition
-    anchor: "/vdbench-data/fs-test"
-    depth: 3
-    width: 10
-    files: 100
-    size: "1g"
+    fsd: true                         # Marks as filesystem definition
+    anchor: "/vdbench-data/fs-test"   # Root directory
+    depth: 3                          # Directory depth
+    width: 10                         # Files per directory
+    files: 100                        # Total files
+    size: "1g"                        # Per-file size
+    open_flags: "o_direct"            # File opening flags
 
 workload_definitions:
+  # Block Workload Definition (WD)
   - id: 1
-    sd_id: 1
+    sd_id: 1                          # References block storage
     rdpct: 70                         # Read percentage
     seekpct: 100                      # Random vs sequential
     xfersize: "64k"                   # Transfer size
-    threads: 2
+    threads: 2                        # Thread count
+    skew: 10                          # Load skewing
 
+  # Filesystem Workload Definition (FWD)
   - id: 2
-    sd_id: 2                          # References filesystem sd
-    rdpct: 50
-    xfersize: "32k"
-    threads: 4
+    fsd_id: 2                         # References filesystem storage
+    fileio: "random"                  # I/O pattern (random/sequential)
+    rdpct: 50                         # Read percentage
+    xfersize: "32k"                   # Transfer size
+    threads: 4                        # Thread count
+    skew: 5                           # Load skewing
 
 run_definitions:
+  # Block Run Definition
   - id: 1
-    wd_id: 1
+    wd_id: 1                          # References block workload
     elapsed: 300                      # Duration in seconds
-    interval: 15                      # Reporting interval
+    interval: 60                      # Reporting interval
     iorate: "max"                     # I/O rate limit
+    format: "yes"                     # Format control
 
+  # Filesystem Run Definition
   - id: 2
-    wd_id: 2
-    elapsed: 600
-    interval: 10
-    iorate: "1000"                    # Fixed rate limit
+    fwd_id: 2                         # References filesystem workload
+    elapsed: 300                      # Duration in seconds
+    interval: 60                      # Reporting interval
+    iorate: "1000"                    # Fixed rate limit (uses fwdrate internally)
+    format: "no"                      # Skip formatting
 ```
 
 ### Automatic Configuration Conversion
 
-The system automatically converts YAML to native Vdbench format:
+The system automatically converts YAML to native Vdbench format with full parameter support:
 
-**YAML Input:**
+**Block Storage YAML Input:**
 ```yaml
 storage_definitions:
   - id: 1
@@ -181,11 +195,73 @@ storage_definitions:
     size: "100%"
     threads: 4
     openflags: "o_direct"
+    align: "1k"
+    offset: "0"
+
+workload_definitions:
+  - id: 1
+    sd_id: 1
+    rdpct: 70
+    seekpct: 100
+    xfersize: "64k"
+    threads: 2
+    skew: 10
+
+run_definitions:
+  - id: 1
+    wd_id: 1
+    elapsed: 300
+    interval: 15
+    iorate: "max"
+    format: "yes"
 ```
 
 **Generated Vdbench Format:**
 ```
-sd=sd1,lun=/dev/sdb,size=100%,threads=4,openflags=o_direct
+sd=sd1,lun=/dev/sdb,size=100%,threads=4,openflags=o_direct,align=1k,offset=0
+
+wd=wd1,sd=sd1,rdpct=70,seekpct=100,xfersize=64k,threads=2,skew=10
+
+rd=rd1,wd=wd1,elapsed=300,interval=60,iorate=max,format=yes
+```
+
+**Filesystem Storage YAML Input:**
+```yaml
+storage_definitions:
+  - id: 1
+    fsd: true
+    anchor: "/vdbench-data/fs-test"
+    depth: 3
+    width: 10
+    files: 100
+    size: "1g"
+    open_flags: "o_direct"
+
+workload_definitions:
+  - id: 1
+    fsd_id: 1
+    fileio: "random"
+    rdpct: 70
+    xfersize: "64k"
+    threads: 4
+    skew: 5
+
+run_definitions:
+  - id: 1
+    fwd_id: 1
+    elapsed: 300
+    interval: 15
+    iorate: "max"
+    format: "no"
+```
+
+**Generated Vdbench Format:**
+```
+fsd=fsd1,anchor=/vdbench-data/fs-test,depth=3,width=10,files=100,size=1g,openflags=o_direct
+
+fwd=fwd1,fsd=fsd1,fileio=random,rdpct=70,xfersize=64k,threads=4,skew=5
+
+rd=rd1,fwd=fwd1,elapsed=300,interval=60,fwdrate=max,format=no
 ```
 
 ---
@@ -264,7 +340,7 @@ vdbench_default_config(
     seekpct=100,
     xfersize="4k",
     elapsed=60,
-    interval=5,
+    interval=60,
     iorate="max"
 )
 ```
@@ -298,13 +374,21 @@ vdbench_block_config(
     lun="/dev/vdbench-device",
     size="1g",
     threads=2,
-    rdpct=50,
-    seekpct=100,
-    xfersize="8k",
+    open_flags="o_direct",
+    sd_align="",                    # Alignment parameter
+    sd_offset="",                   # Offset parameter
+    sd_name="sd1",                  # Storage definition name
     elapsed=120,
-    interval=5,
-    iorate="max",
-    openflags="o_direct"
+    interval=60,
+    patterns=[                      # Custom workload patterns
+        {
+            "name": "random_mixed",
+            "rdpct": 50,            # 50% reads, 50% writes
+            "seekpct": 100,         # Random I/O
+            "xfersize": "8k",       # Transfer size
+            "skew": 0,              # Load skewing
+        }
+    ],
 )
 ```
 
@@ -314,17 +398,30 @@ Configuration designed for filesystem testing with file structure definition.
 **Configurable Parameters:**
 ```python
 vdbench_filesystem_config(
-    anchor="/vdbench-data/fs-test",
-    depth=2,        # Directory depth
-    width=4,        # Files per directory
-    files=10,       # Total files
-    size="1g",      # Per-file size
-    threads=2,
-    rdpct=50,
-    xfersize="8k",
+    anchor="/vdbench-data/fs-test", # Root directory
+    depth=2,                        # Directory depth
+    width=4,                        # Files per directory
+    files=10,                       # Total files
+    size="1g",                      # Per-file size
+    open_flags="o_direct",          # File opening flags
+    default_threads=2,             # Default thread count
     elapsed=120,
-    interval=5,
-    iorate="max"
+    interval=60,
+    default_rdpct=50,              # Default read percentage
+    precreate_then_run=True,       # Two-phase execution
+    precreate_elapsed=120,         # Precreate duration (must be >= 2*interval)
+    precreate_interval=60,         # Precreate reporting interval
+    precreate_iorate="max",        # Precreate I/O rate (cannot be 0 for filesystem)
+    patterns=[                     # Custom workload patterns
+        {
+            "name": "random_mixed",
+            "fileio": "random",
+            "rdpct": 50,
+            "xfersize": "8k",
+            "threads": 2,
+            "skew": 0,
+        }
+    ],
 )
 ```
 
@@ -344,9 +441,81 @@ vdbench_mixed_workload_config(
     size="5g",
     threads=2,
     elapsed=300,
-    interval=10
+    interval=60
 )
 ```
+
+---
+
+## Enhanced Parameter Support
+
+### Comprehensive Parameter Handling
+
+The VdbenchWorkload class now supports all standard Vdbench parameters with intelligent conversion between YAML and native Vdbench formats:
+
+#### Storage Definition Parameters
+
+**Block Storage (SD):**
+- `lun` - Device or file path
+- `size` - Storage size
+- `threads` - Thread count
+- `openflags` / `open_flags` - Opening flags (both formats supported)
+- `align` - Alignment parameter (omitted if empty)
+- `offset` - Offset parameter (omitted if empty)
+
+**Filesystem Storage (FSD):**
+- `anchor` - Root directory path
+- `depth` - Directory depth
+- `width` - Files per directory
+- `files` - Total file count
+- `size` - Per-file size
+- `open_flags` - File opening flags
+
+#### Workload Definition Parameters
+
+**Block Workloads (WD):**
+- `sd_id` - Storage definition reference
+- `rdpct` - Read percentage (0-100)
+- `seekpct` - Random seek percentage
+- `xfersize` - Transfer size
+- `threads` - Thread count
+- `skew` - Load skewing parameter
+- `openflags` - Opening flags
+
+**Filesystem Workloads (FWD):**
+- `fsd_id` - Filesystem storage reference
+- `fileio` - I/O pattern (random/sequential)
+- `rdpct` - Read percentage (0-100) - Cannot be used with fileio=sequential
+- `xfersize` - Transfer size
+- `threads` - Thread count
+- `skew` - Load skewing parameter
+
+#### Run Definition Parameters
+
+**Block Runs:**
+- `wd_id` - Workload definition reference
+- `elapsed` - Duration in seconds
+- `interval` - Reporting interval
+- `iorate` - I/O rate limit
+- `format` - Format control (yes/no)
+
+**Filesystem Runs:**
+- `fwd_id` - Filesystem workload reference
+- `elapsed` - Duration in seconds
+- `interval` - Reporting interval
+- `iorate` - I/O rate limit (converted to fwdrate)
+- `format` - Format control (yes/no)
+
+### Intelligent Parameter Conversion
+
+The system automatically:
+- Detects storage type (block vs filesystem) and applies appropriate parameter handling
+- Converts between different parameter naming conventions (`openflags` vs `open_flags`)
+- Maps rate parameters correctly (`iorate` for block, `fwdrate` for filesystem)
+- Handles both single and multiple workload/run definitions
+- Supports precreate operations with proper format control
+- Enforces vdbench constraints (e.g., excludes `rdpct` when `fileio=sequential`)
+- Omits empty parameter values (e.g., skips `align=` and `offset=` when empty)
 
 ---
 
@@ -552,9 +721,18 @@ def test_block_device_workload(vdbench_workload_factory, vdbench_block_config):
     config = vdbench_block_config(
         lun="/dev/vdbench-device",
         threads=8,
-        xfersize="64k",
-        elapsed=600,
-        openflags="o_direct"
+        elapsed=300,
+        interval=60,
+        open_flags="o_direct",
+        patterns=[
+            {
+                "name": "high_performance",
+                "rdpct": 70,
+                "seekpct": 100,
+                "xfersize": "64k",
+                "skew": 0,
+            }
+        ],
     )
 
     workload = vdbench_workload_factory(
@@ -584,7 +762,24 @@ def test_filesystem_workload(vdbench_workload_factory, vdbench_filesystem_config
         width=10,
         files=100,
         size="100m",
-        threads=4
+        default_threads=4,
+        elapsed=300,
+        interval=60,
+        default_rdpct=50,
+        precreate_then_run=True,
+        precreate_elapsed=120,
+        precreate_interval=60,
+        precreate_iorate="max",
+        patterns=[
+            {
+                "name": "mixed_workload",
+                "fileio": "random",
+                "rdpct": 50,
+                "xfersize": "64k",
+                "threads": 4,
+                "skew": 0,
+            }
+        ],
     )
 
     workload = vdbench_workload_factory(vdbench_config=config, auto_start=True)

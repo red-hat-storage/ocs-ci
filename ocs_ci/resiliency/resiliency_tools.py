@@ -106,3 +106,56 @@ class CephStatusTool:
             return True
         log.error("Ceph cluster is not healthy.")
         return False
+
+    def get_ceph_health(self, detail=False):
+        """
+        Get Ceph cluster health status.
+
+        Args:
+            detail (bool): If True, get detailed health information
+
+        Returns:
+            str: Ceph health status (e.g., "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR")
+        """
+        try:
+            ceph_health_cmd = "ceph health"
+            if detail:
+                ceph_health_cmd = f"{ceph_health_cmd} detail"
+
+            health_output = self.toolbox.exec_cmd_on_pod(
+                ceph_health_cmd, out_yaml_format=False, timeout=60
+            )
+
+            # Extract just the health status from the output
+            if isinstance(health_output, str):
+                return health_output.strip().split()[0]
+            return health_output
+
+        except (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ) as ex:
+            log.error(f"Failed to get Ceph health: {ex}")
+            return "HEALTH_ERR"
+
+    def get_ceph_crashes(self):
+        """
+        Get list of Ceph crashes.
+
+        Returns:
+            list: List of Ceph crash information dictionaries
+        """
+        try:
+            # Get full crash objects instead of just IDs
+            ceph_crashes = self.toolbox.exec_ceph_cmd("ceph crash ls")
+            return ceph_crashes if ceph_crashes else []
+        except (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ) as ex:
+            log.error(f"Failed to get Ceph crashes: {ex}")
+            return []

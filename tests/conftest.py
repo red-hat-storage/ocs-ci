@@ -1999,10 +1999,14 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
 
     node = request.node
 
-    # Skip health check if the test is marked as 'Resiliency'
-    if any(mark.name.lower() == "resiliency" for mark in node.iter_markers()):
-        log.info("Skipping Ceph health check for test marked with 'Resiliency'")
-        return
+    # Skip health check if the test is marked as 'Resiliency' or 'Chaos'
+    skip_markers = ["resiliency", "chaos"]
+    for mark in node.iter_markers():
+        if mark.name.lower() in skip_markers:
+            log.info(
+                f"Skipping Ceph health check for test marked with '{mark.name.title()}'"
+            )
+            return
 
     # ignore ceph health check for the TestFailurePropagator test cases
     if "FailurePropagator" in str(node.cls):
