@@ -2603,3 +2603,70 @@ def mdr_post_failover_check(namespace, timeout=1200):
         helpers.wait_for_resource_state(
             resource=pvc_obj, state=constants.STATUS_TERMINATING, timeout=timeout
         )
+def verify_mirroring_status_on_primary(
+    kind, namespace, state="primary", resource_name=""
+):
+    """
+    This method is for validating the status message updated to reflect the current mirroring status
+    on primary VR/VGR.
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_REPLICATION_GROUP, etc.)
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+
+    Returns:
+        bool: True if resources are in expected state or were deleted, False otherwise
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+
+    if resource_name:
+        resource_data = resource_obj.get(resource_name=resource_name)
+        resource_list = [resource_data] if resource_data else []
+    else:
+        resource_list = resource_obj.get().get("items")
+
+    if kind == constants.VOLUME_REPLICATION and len(resource_list) > 1:
+        # Handle multiple VR resources
+        state_mismatch = []
+        for resource in resource_list:
+            resource_name = resource["metadata"]["name"]
+            desired_state = resource["spec"]["replicationState"]
+            current_state = resource["status"]["state"]
+            logger.info(
+                f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
+            )
+
+            if not (
+                state.lower() == desired_state.lower()
+                and state.lower() == current_state.lower()
+            ):
+                state_mismatch.append(resource_name)
+
+        if not state_mismatch:
+            logger.info(
+                f"All {len(resource_list)} {kind} are in expected state {state}"
+            )
+            return True
+        else:
+            logger.warning(
+                f"Following {len(state_mismatch)} {kind} are not in expected state {state}: {state_mismatch}"
+            )
+            return False
+    else:
+        resource = resource_list[0]
+        resource_name = resource["metadata"]["name"]
+        desired_state = resource["spec"]["replicationState"]
+        current_state = resource["status"]["state"]
+        logger.info(
+            f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
+        )
+
+        if (
+            state.lower() == desired_state.lower()
+            and state.lower() == current_state.lower()
+        ):
+            return True
+        else:
+            logger.warning(f"{kind} is not in expected state {state}")
+            return False
