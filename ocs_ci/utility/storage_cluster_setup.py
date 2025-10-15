@@ -141,6 +141,7 @@ class StorageClusterSetup(object):
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
+            logger.info("Local storage is true")
         elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
@@ -184,7 +185,7 @@ class StorageClusterSetup(object):
             pv_size_list.sort()
             deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
                 "storage"
-            ] = f"{pv_size_list[0]}"
+            ] = f"{device_size}Gi"
         else:
             deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
                 "storage"
