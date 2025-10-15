@@ -2416,11 +2416,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "pagination_next_button": (
-        "button[class='pf-v5-c-button pf-m-plain pf-v5-u-ml-xs'] svg",
+        "button[class*='c-button'][class*='pf-m-plain'][class*='u-ml-xs'] svg",
         By.CSS_SELECTOR,
     ),
     "pagination_prev_button": (
-        "button[class='pf-v5-c-button pf-m-plain pf-v5-u-mr-xs'] svg",
+        "button[class*='c-button'][class*='pf-m-plain'][class*='u-mr-xs'] svg",
         By.CSS_SELECTOR,
     ),
     "bucket_list_items": (
@@ -2436,7 +2436,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_confirm_button": (
-        ".pf-v5-c-button.pf-m-danger.pf-m-progress",
+        "[class*='c-button'][class*='pf-m-danger'][class*='pf-m-progress']",
         By.CSS_SELECTOR,
     ),
     "bucket_confirm_input": (
@@ -2444,15 +2444,15 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),  # Input field for bucket name confirmation
     "properties_tab": (
-        "button[id='pf-tab-2-s3-overview'] span[class='pf-v5-c-tabs__item-text']",
+        "button[id='pf-tab-2-s3-overview'] span[class*='c-tabs__item-text']",
         By.CSS_SELECTOR,
     ),
     "versioning_toggle": (
-        ".pf-v5-c-switch__toggle",
+        "[class*='c-switch__toggle']",
         By.CSS_SELECTOR,
     ),
     "versioning_checkbox_input": (
-        ".pf-v5-c-switch__input",
+        "[class*='c-switch__input']",
         By.CSS_SELECTOR,
     ),
     "versioning_status": (
@@ -2460,11 +2460,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "versioning_enable_confirm_button": (
-        "//div[contains(@class, 'pf-v5-c-modal-box')]//button[contains(@class, 'pf-m-primary') and text()='Enable']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'pf-m-primary') and text()='Enable']",
         By.XPATH,
     ),
     "versioning_cancel_confirm_button": (
-        "//div[contains(@class, 'pf-v5-c-modal-box')]//button[contains(@class,  'pf-m-link') and text()='Cancel']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'pf-m-link') and text()='Cancel']",
         By.XPATH,
     ),
     "file_input_directory": (
@@ -2477,17 +2477,17 @@ bucket_tab = {
     ),
     "list_all_versions_toggle": (
         "//div[contains(@class, 'bucket-objects') or contains(@class, 'object-list')]"
-        "//span[@class='pf-v5-c-switch__toggle'] | "
-        "//span[contains(text(), 'List all versions')]/..//span[@class='pf-v5-c-switch__toggle'] | "
-        "//label[contains(text(), 'List all versions')]//span[@class='pf-v5-c-switch__toggle']",
+        "//span[contains(@class, 'c-switch__toggle')] | "
+        "//span[contains(text(), 'List all versions')]/..//span[contains(@class, 'c-switch__toggle')] | "
+        "//label[contains(text(), 'List all versions')]//span[contains(@class, 'c-switch__toggle')]",
         By.XPATH,
     ),
     "version_latest_label": (
-        ".pf-v5-c-label__text",
+        "[class*='c-label__text']",
         By.CSS_SELECTOR,
     ),
     "upload_success_dismiss_button": (
-        "button.pf-v5-c-button.pf-m-link.pf-m-inline[data-ouia-component-type='PF5/Button']",
+        "button[class*='c-button'][class*='pf-m-link'][class*='pf-m-inline'][data-ouia-component-type*='Button']",
         By.CSS_SELECTOR,
     ),
     "file_name_text": (
@@ -2503,15 +2503,15 @@ bucket_tab = {
         By.XPATH,
     ),
     "object_row_with_latest": (
-        "//tr[.//span[contains(@class, 'pf-v5-c-label__text') and text()='Latest']]",
+        "//tr[.//span[contains(@class, 'c-label__text') and text()='Latest']]",
         By.XPATH,
     ),
     "version_id_for_latest": (
-        "//tr[.//span[contains(@class, 'pf-v5-c-label__text') and text()='Latest']]//td[@data-label='Version ID']",
+        "//tr[.//span[contains(@class, 'c-label__text') and text()='Latest']]//td[@data-label='Version ID']",
         By.XPATH,
     ),
     "version_actions_menu_for_latest": (
-        "//tr[.//span[contains(@class, 'pf-v5-c-label__text') and text()='Latest']]"
+        "//tr[.//span[contains(@class, 'c-label__text') and text()='Latest']]"
         "//button[@aria-label='Kebab toggle']",
         By.XPATH,
     ),
@@ -2532,7 +2532,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "delete_version_cancel_button": (
-        "//button[@class='pf-v5-c-button pf-m-link' and text()='Cancel']",
+        "//button[contains(@class, 'c-button') and contains(@class, 'pf-m-link') and text()='Cancel']",
         By.XPATH,
     ),
     "version_row_checkboxes": (
