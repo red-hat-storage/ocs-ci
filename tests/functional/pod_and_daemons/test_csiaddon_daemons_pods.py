@@ -1,4 +1,6 @@
 import logging
+import random
+import time
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -8,8 +10,14 @@ from ocs_ci.framework.testlib import (
     brown_squad,
     skipif_ocs_version,
 )
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs import (
+    ocp,
+    constants,
+)
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    wait_for_pods_to_be_running,
+)
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.node import get_worker_nodes
 
@@ -181,3 +189,28 @@ class TestCSIADDonDaemonset(ManageTest):
             not pod_missed_node
         ), f"worker node {pod_missed_node} do not have CSI addon pods"
         logger.info("CSI addon pods running on each worker node")
+
+    def test_csi_addon_pod_restart(self):
+        """
+        Restart a CSI-addons pod and validate it restored to running state.
+        """
+        namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        pod_obj = ocp.OCP(kind="Pod", namespace=namespace)
+
+        csi_addons_pod_objs = get_pods_having_label(
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        pod_data = random.choice(csi_addons_pod_objs)
+        pod_obj.delete(resource_name=pod_data["metadata"]["name"])
+        time.sleep(5)
+
+        csi_addon_pod_new = get_pods_having_label(
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        csi_addon_pod_names_list = [
+            pod_data["metadata"]["name"] for pod_data in csi_addon_pod_new
+        ]
+
+        assert wait_for_pods_to_be_running(
+            namespace=namespace, pod_names=csi_addon_pod_names_list
+        ), "CSI-addons pod didn't came up is running sattus "
