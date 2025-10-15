@@ -25,6 +25,7 @@ from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import (
+    UnavailableResourceException,
     UnsupportedFeatureError,
 )
 from ocs_ci.utility.utils import (
@@ -39,6 +40,9 @@ logger = logging.getLogger(__name__)
 class StorageClusterSetup(object):
     def __init__(self):
         self.custom_storage_class_path = None
+        self.namespace = config.ENV_DATA["cluster_namespace"]
+        self.platform = config.ENV_DATA["platform"]
+        self.storage_class = storage_class.get_storageclass()
 
     def setup_storage_cluster(self):
         if self.custom_storage_class_path is not None:
@@ -580,6 +584,45 @@ class StorageClusterSetup(object):
                 command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
+
+    def set_rook_log_level(self):
+        rook_log_level = config.DEPLOYMENT.get("rook_log_level")
+        if rook_log_level:
+            helpers.set_configmap_log_level_rook_ceph_operator(rook_log_level)
+
+    def get_arbiter_location(self):
+        """
+        Get arbiter mon location for storage cluster
+        """
+        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+            "arbiter_autodetect"
+        ):
+            return config.DEPLOYMENT.get("arbiter_zone")
+
+        # below logic will autodetect arbiter_zone
+        nodes = ocp.OCP(kind="node").get().get("items", [])
+
+        worker_nodes_zones = {
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
+            for node in nodes
+            if constants.WORKER_LABEL in node["metadata"]["labels"]
+            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+        }
+
+        master_nodes_zones = {
+            node["metadata"]["labels"].get(constants.ZONE_LABEL)
+            for node in nodes
+            if constants.MASTER_LABEL in node["metadata"]["labels"]
+        }
+
+        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+        if len(arbiter_locations) < 1:
+            raise UnavailableResourceException(
+                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+            )
+
+        return arbiter_locations[0]
 
 
 def create_external_pgsql_secret():
