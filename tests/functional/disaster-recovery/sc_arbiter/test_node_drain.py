@@ -72,7 +72,7 @@ class TestNodeDrain:
         # setup vm and write some data to the VM instance
         vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(
-            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+            command="dd if=/dev/zero of=/test/file_1.txt bs=1024 count=102400"
         )
         md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
 
