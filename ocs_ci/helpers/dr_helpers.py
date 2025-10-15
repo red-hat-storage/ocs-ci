@@ -1075,10 +1075,7 @@ def wait_for_all_resources_deletion(
         namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
     )
 
-    if workload_cleanup or not (
-        config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
-        and "cephfs" in namespace
-    ):
+    if workload_cleanup or "cephfs" not in namespace:
         logger.info("Waiting for all PVCs to be deleted")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
 

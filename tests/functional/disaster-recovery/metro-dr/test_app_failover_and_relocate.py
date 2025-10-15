@@ -240,12 +240,6 @@ class TestApplicationFailoverAndRelocate:
                 timeout=720
             ), "Not all the pods reached running state"
 
-        # Verify application are deleted from old cluster
-        set_current_secondary_cluster_context(
-            workload.workload_namespace, workload_type
-        )
-        wait_for_all_resources_deletion(workload.workload_namespace)
-
         # Validate data integrity
         set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
@@ -258,6 +252,12 @@ class TestApplicationFailoverAndRelocate:
 
         # Reboot the nodes which unfenced
         gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
+
+        # Verify application are deleted from old cluster
+        set_current_secondary_cluster_context(
+            workload.workload_namespace, workload_type
+        )
+        wait_for_all_resources_deletion(workload.workload_namespace)
 
         # Application Relocate to Primary managed cluster
         logger.info(
