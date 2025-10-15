@@ -1,0 +1,5 @@
+---
+# this configuration file is supposed to work on bm-octo-argo environment
+# related to OCSQE-3874
+DEPLOYMENT:
+  partitioned_disk_on_workers: true

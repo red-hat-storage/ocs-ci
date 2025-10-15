@@ -29,6 +29,9 @@ from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
+from ocs_ci.utility.deployment import (
+    add_mc_partitioned_disk_on_workers_to_ocp_deployment,
+)
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -324,6 +327,11 @@ class BAREMETALUPI(BAREMETALBASE):
             self.create_manifest()
             # create chrony resource
             add_chrony_to_ocp_deployment()
+            if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+                root_disk_common_path = self.bm_config["root_disk_common_path"]
+                add_mc_partitioned_disk_on_workers_to_ocp_deployment(
+                    root_disk_common_path
+                )
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
@@ -675,7 +683,7 @@ class BAREMETALUPI(BAREMETALBASE):
                 time.sleep(10)
                 workers = get_nodes(node_type="worker")
                 for worker in workers:
-                    clean_disk(worker)
+                    clean_disks(worker)
                 ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         def create_config(self):
@@ -1129,7 +1137,7 @@ class BAREMETALAI(BAREMETALBASE):
                 logger.info("Performing Disk cleanup")
                 workers = get_nodes(node_type="worker")
                 for worker in workers:
-                    clean_disk(worker)
+                    clean_disks(worker)
 
         def pending_user_action_handler(self, host):
             """
@@ -1427,9 +1435,9 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
+def clean_disks(worker, namespace=constants.DEFAULT_NAMESPACE):
     """
-    Perform disk cleanup
+    Perform disks cleanup
 
     Args:
         worker (object): worker node object
@@ -1453,46 +1461,86 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
             logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
             pass
         else:
-            logger.info(f"Cleaning up {lsblk_device['name']}")
-            out = ocp_obj.exec_oc_debug_cmd(
-                node=worker.name,
-                cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
-                namespace=namespace,
+            clean_disk(
+                worker.name,
+                f"/dev/{lsblk_device['name']}",
+                int(lsblk_device["size"]),
+                ocp_obj=ocp_obj,
             )
 
-            logger.info(out)
-            out = ocp_obj.exec_oc_debug_cmd(
-                node=worker.name,
-                cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
-                namespace=namespace,
-            )
-            logger.info(out)
+    if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+        root_disk_common_path = config.ENV_DATA["baremetal"]["root_disk_common_path"]
+        partition = f"{root_disk_common_path}-part5"
+        clean_disk(worker.name, partition, run_sgdisk=False, ocp_obj=ocp_obj)
 
-            # Write different portion because bluestore replicates its metadata at multiple places on the device
-            # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
 
-            # Get the size of disk in bytes
-            disk_size_bytes = int(lsblk_device["size"])
+def clean_disk(
+    node_name,
+    device,
+    size=None,
+    run_sgdisk=True,
+    ocp_obj=None,
+    namespace=constants.DEFAULT_NAMESPACE,
+):
+    """
+    Perform disks cleanup
 
-            # Start offset as 1GiB
-            dd_seek_bytes = 1073741824
-            dd_seek_offsets = []
+    Args:
+        node_name (str): name of the (worker) node where to run the disk cleanup
+        device (str): path to the device to be cleaned up
+        size (int): size of the device, if not provided, it will be obtained via `lsblk -n --output SIZE -b {device}`
+            command
+        run_sgdisk (bool): run `sgdisk --zap-all {device}` command (default: True)
+        ocp_obj (obj): OCP object, if not provided, new one is initialized
+        namespace (str): namespace where the oc_debug command will be executed
 
-            # Get byte values in 1Gb / 10Gb / 100Gb etc. Applicable when 'bs' in dd command is 1
-            while dd_seek_bytes < disk_size_bytes:
-                dd_seek_offsets.append(dd_seek_bytes)
-                dd_seek_bytes = dd_seek_bytes * 10
+    """
+    if not ocp_obj:
+        ocp_obj = ocp.OCP()
+    logger.info(f"Cleaning up {device}")
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=node_name,
+        cmd_list=[f"wipefs -a -f {device}"],
+        namespace=namespace,
+    )
 
-            for dd_seek in dd_seek_offsets:
-                dd_cmd = [
-                    f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\" bs=1 count=204800 seek={dd_seek}"
-                ]
-                out = ocp_obj.exec_oc_debug_cmd(
-                    node=worker.name,
-                    cmd_list=dd_cmd,
-                    namespace=namespace,
-                )
-                logger.info(out)
+    logger.info(out)
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=node_name,
+        cmd_list=[f"sgdisk --zap-all {device}"],
+        namespace=namespace,
+    )
+    logger.info(out)
+
+    # Write different portion because bluestore replicates its metadata at multiple places on the device
+    # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
+
+    # Get the size of disk in bytes
+    if not size:
+        size = ocp_obj.exec_oc_debug_cmd(
+            node=node_name,
+            cmd_list=[f"lsblk -n  --output SIZE -b {device}"],
+            namespace=namespace,
+        )
+    disk_size_bytes = int(size)
+
+    # Start offset as 1GiB
+    dd_seek_bytes = 1073741824
+    dd_seek_offsets = []
+
+    # Get byte values in 1Gb / 10Gb / 100Gb etc. Applicable when 'bs' in dd command is 1
+    while dd_seek_bytes < disk_size_bytes:
+        dd_seek_offsets.append(dd_seek_bytes)
+        dd_seek_bytes = dd_seek_bytes * 10
+
+    for dd_seek in dd_seek_offsets:
+        dd_cmd = [f"dd if=/dev/zero of='{device}' bs=1 count=204800 seek={dd_seek}"]
+        out = ocp_obj.exec_oc_debug_cmd(
+            node=node_name,
+            cmd_list=dd_cmd,
+            namespace=namespace,
+        )
+        logger.info(out)
 
 
 class BaremetalPSIUPI(Deployment):

@@ -181,6 +181,7 @@ version.
 * `enable_data_replication_separation` - Set to True to label worker nodes with `network.rook.io/mon-ip: <IPAddress>` and enable data replication separation.
 * `enable_nested_virtualization` - Enable nested virtualization for vSphere platform primarily. Used for kubevirt on HCP Clusters. It sets options kvm_intel nested=1 options kvm_amd nested=1 in MachineConfig
 * `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
+* `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
 
 #### REPORTING
 
@@ -323,6 +324,7 @@ higher priority).
     * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
     * `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
     * `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
+    * `root_disk_common_path` - path to root disk where an additional partition should be created common for all worker nodes (see `partitioned_disk_on_workers` option)
     * `servers` - definition of the servers in the BM environment (map where key is the name of the server)
         * `<server-name>`
             * `mgmt_provider` - defines how the server should be managed (`ipmitool` or `ibmcloud`)
