@@ -1698,18 +1698,20 @@ def verify_fence_state(drcluster_name, state, switch_ctx=None):
         state (str): The fence state it is either constants.ACTION_FENCE or constants.ACTION_UNFENCE
         switch_ctx (int): The cluster index by the cluster name
 
+    Returns:
+        True (bool) if the drcluster is in expected state
+
     Raises:
         Raises exception Unexpected-behaviour if the specified drcluster is not in the given state condition
     """
     sample = get_fence_state(drcluster_name=drcluster_name, switch_ctx=switch_ctx)
     if sample == state:
-        logger.info(f"Primary managed cluster {drcluster_name} reached {state} state")
+        logger.info(f"DR cluster {drcluster_name} reached {state} state")
+        return True
     else:
-        logger.error(
-            f"Primary managed cluster {drcluster_name} not reached {state} state"
-        )
+        logger.error(f"DR cluster {drcluster_name} not reached {state} state")
         raise UnexpectedBehaviour(
-            f"Primary managed cluster {drcluster_name} not reached {state} state"
+            f"DR cluster {drcluster_name} not reached {state} state"
         )
 
 

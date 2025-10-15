@@ -24,6 +24,7 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_deletion,
     gracefully_reboot_ocp_nodes,
     verify_cluster_data_protected_status,
+    verify_fence_state,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
@@ -173,6 +174,9 @@ class TestApplicationFailoverAndRelocate:
 
         # Fenced the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
 
         # Application Failover to Secondary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
@@ -248,6 +252,9 @@ class TestApplicationFailoverAndRelocate:
 
         # Un-fence the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_UNFENCE} state"
 
         # Reboot the nodes which unfenced
         gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
