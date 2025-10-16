@@ -3,6 +3,7 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: vm
+  namespace: namespace-cnv-workload
 spec:
   running: true
   template:
