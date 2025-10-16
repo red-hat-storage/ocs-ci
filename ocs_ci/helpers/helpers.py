@@ -656,8 +656,8 @@ def create_ceph_file_system(cephfs_name=None, label=None, namespace=None):
 
 
 @retry(
-    CommandFailed,
-    tries=6,
+    (CommandFailed, IndexError),
+    tries=20,
     delay=30,
     backoff=1,
 )
