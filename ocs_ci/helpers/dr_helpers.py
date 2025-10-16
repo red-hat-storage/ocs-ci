@@ -2551,7 +2551,7 @@ def verify_volsync():
     config.switch_ctx(restore_index)
 
 
-def fetch_status_and_type_reflecting_on_vr_orvgr(
+def fetch_status_and_type_reflecting_on_vr_or_vgr(
     namespace, kind=constants.VOLUME_REPLICATION, resource_name="", timeout=600
 ):
     """
@@ -2604,6 +2604,15 @@ def validate_latest_status_type_displayed(
     """
     This method is for validating the status message updated to reflect the current mirroring status
     on primary VR/VGR.
+    for mirroring image in healthy status:
+        reason: Replicating
+        status: "True"
+        type: Replicating
+
+    for mirroring image in warning/error status:
+        reason: Replicating
+        status: "Unknown"
+        type: Replicating
 
     Args:
         kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_GROUP_REPLICATION)
@@ -2615,6 +2624,7 @@ def validate_latest_status_type_displayed(
     Returns:
         # bool: True if as per mirroring status expected status and type is displayed in
         # vr/vgr status.conditions, False otherwise
+
     """
     if not cephbpradosns:
         cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
@@ -2623,8 +2633,8 @@ def validate_latest_status_type_displayed(
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=cephbpradosns,
     )
-    latest_condition = fetch_status_and_type_reflecting_on_vr_orvgr(
-        namespace, kind=kind, resource_name=""
+    latest_condition = fetch_status_and_type_reflecting_on_vr_or_vgr(
+        namespace, kind=kind, resource_name=resource_name, timeout=timeout
     )
 
     # fetch mirroring status
