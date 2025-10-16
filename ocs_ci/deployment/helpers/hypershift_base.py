@@ -28,7 +28,6 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
-from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -379,7 +378,6 @@ class HyperShiftBase:
 
     def __init__(self):
         super().__init__()
-        BaseOCPDeployment(skip_download_installer=True).test_cluster()
 
         bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
         self.bin_dir = os.path.abspath(bin_dir_rel_path)
