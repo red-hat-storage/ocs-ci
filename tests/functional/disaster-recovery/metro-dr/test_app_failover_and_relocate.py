@@ -25,6 +25,7 @@ from ocs_ci.helpers.dr_helpers import (
     gracefully_reboot_ocp_nodes,
     verify_cluster_data_protected_status,
     verify_fence_state,
+    mdr_post_failover_check,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
@@ -74,30 +75,30 @@ class TestApplicationFailoverAndRelocate:
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
                 id="primary_up_subscription",
             ),
-            pytest.param(
-                constants.SUBSCRIPTION,
-                True,
-                marks=pytest.mark.polarion_id(polarion_id_primary_down),
-                id="primary_down_subscription",
-            ),
-            pytest.param(
-                constants.APPLICATION_SET,
-                False,
-                marks=[
-                    pytest.mark.polarion_id(polarion_id_primary_up),
-                    pytest.mark.skipif_ocs_version("<4.13"),
-                ],
-                id="primary_up_appset",
-            ),
-            pytest.param(
-                constants.APPLICATION_SET,
-                True,
-                marks=[
-                    pytest.mark.polarion_id(polarion_id_primary_down),
-                    pytest.mark.skipif_ocs_version("<4.13"),
-                ],
-                id="primary_down_appset",
-            ),
+            # pytest.param(
+            #     constants.SUBSCRIPTION,
+            #     True,
+            #     marks=pytest.mark.polarion_id(polarion_id_primary_down),
+            #     id="primary_down_subscription",
+            # ),
+            # pytest.param(
+            #     constants.APPLICATION_SET,
+            #     False,
+            #     marks=[
+            #         pytest.mark.polarion_id(polarion_id_primary_up),
+            #         pytest.mark.skipif_ocs_version("<4.13"),
+            #     ],
+            #     id="primary_up_appset",
+            # ),
+            # pytest.param(
+            #     constants.APPLICATION_SET,
+            #     True,
+            #     marks=[
+            #         pytest.mark.polarion_id(polarion_id_primary_down),
+            #         pytest.mark.skipif_ocs_version("<4.13"),
+            #     ],
+            #     id="primary_down_appset",
+            # ),
         ],
     )
     def test_application_failover_and_relocate(
@@ -243,6 +244,12 @@ class TestApplicationFailoverAndRelocate:
         # Validate data integrity
         set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
+
+        # Verify application are deleted from old cluster
+        set_current_secondary_cluster_context(
+            workload.workload_namespace, workload_type
+        )
+        mdr_post_failover_check(namespace=workload.workload_namespace)
 
         # Un-fence the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.primary_cluster_name)

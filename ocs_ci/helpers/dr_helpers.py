@@ -48,6 +48,7 @@ from ocs_ci.helpers.helpers import (
     find_cephfilesystemsubvolumegroup,
     create_unique_resource_name,
 )
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -2571,3 +2572,28 @@ def verify_cluster_data_protected_status(
     else:
         drpc_obj = DRPC(namespace=namespace)
     drpc_obj.wait_for_clusterdataprotected_status()
+
+
+def mdr_post_failover_check(namespace, timeout=1200):
+    """
+    Post the failover verify that Pod is been deleted
+    from primary cluster and PVCs are in terminating state
+
+    Args:
+        namespace (str): Namespace of the application
+        timeout (int): time in seconds to wait for resource deletion
+
+    """
+    logger.info("Waiting for all pods to be deleted")
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        pod_obj.ocp.wait_for_delete(
+            resource_name=pod_obj.name, timeout=timeout, sleep=5
+        )
+
+    logger.info("Waiting for all PVCs to be deleted")
+    all_pvcs = get_all_pvc_objs(namespace=namespace)
+    for pvc_obj in all_pvcs:
+        helpers.wait_for_resource_state(
+            resource=pvc_obj, state=constants.STATUS_TERMINATING, timeout=timeout
+        )
