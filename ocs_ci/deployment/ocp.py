@@ -223,7 +223,13 @@ class OCPDeployment:
                 config.RUN.get("kubeconfig_location"),
             )
         ):
-            pytest.fail("Cluster is not available!")
+            if config.RUN.get("kubeadmin_password") and config.RUN.get("ocp_url"):
+                logger.warning(
+                    "OCP url and kubeadmin password for cluster were provided,"
+                    "kubeconfig will be generated"
+                )
+            else:
+                pytest.fail("Cluster is not available!")
 
     def destroy(self, log_level="DEBUG"):
         """
