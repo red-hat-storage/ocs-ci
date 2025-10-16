@@ -822,7 +822,7 @@ class BackgroundClusterOperations:
             for pvc_obj in workload_pvcs:
                 try:
                     pvc_obj.reload()
-                    snapshot_obj = pvc_obj.create_snapshot(wait=True, timeout=300)
+                    snapshot_obj = pvc_obj.create_snapshot(wait=True)
                     snapshots.append(snapshot_obj)
                     self._resources_to_cleanup.append(snapshot_obj)
                     log.info(
