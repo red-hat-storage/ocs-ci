@@ -501,6 +501,7 @@ class KrknWorkloadFactory:
             width = fs_config.get("width", 5)
             files = fs_config.get("files", 10)
             file_size = fs_config.get("file_size", "1m")
+            openflags = fs_config.get("openflags", "o_direct")
 
             # Get original patterns from config
             original_patterns = fs_config.get("patterns", [])
@@ -541,6 +542,7 @@ class KrknWorkloadFactory:
                         "width": width,
                         "files": files,
                         "file_size": file_size,
+                        "openflags": openflags,
                         "group_all_fwds_in_one_rd": True,
                         "patterns": all_patterns,
                     },

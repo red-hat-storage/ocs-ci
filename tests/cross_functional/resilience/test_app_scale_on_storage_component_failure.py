@@ -1,22 +1,13 @@
 import logging
 import pytest
-import fauxfactory
 
-from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     resiliency,
     polarion_id,
 )
-from ocs_ci.resiliency.resiliency_helper import Resiliency, WorkloadScalingHelper
-from ocs_ci.helpers.vdbench_helpers import (
-    create_temp_config_file,
-)
-from ocs_ci.ocs.exceptions import (
-    TimeoutExpiredError,
-    CommandFailed,
-    UnexpectedBehaviour,
-)
+from ocs_ci.resiliency.resiliency_helper import Resiliency
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
@@ -24,156 +15,16 @@ log = logging.getLogger(__name__)
 @green_squad
 @resiliency
 class TestAppScaleOnStorageComponentFailure:
+    """
+    Test suite for validating ODF platform resiliency under storage component
+    failures while I/O workloads are actively running and scaling in parallel.
 
-    def setup_method(self):
-        """Setup method called before each test method."""
-        # Initialize the scaling helper with custom replica limits if needed
-        self.scaling_helper = WorkloadScalingHelper(min_replicas=1, max_replicas=5)
-
-    def teardown_method(self):
-        """Teardown method called after each test method."""
-        # Clean up the scaling helper
-        if hasattr(self, "scaling_helper") and self.scaling_helper:
-            self.scaling_helper.cleanup()
-
-    def _prepare_pvcs_and_workloads(
-        self,
-        project_factory,
-        multi_pvc_factory,
-        resiliency_workload,
-        vdbench_block_config,
-        vdbench_filesystem_config,
-    ):
-        """
-        Create VDBENCH workloads and initiate scaling on eligible ones.
-
-        Returns:
-            tuple: (List of workload objects, scaling thread)
-        """
-        project = project_factory()
-        size = 20
-        workloads = []
-
-        interface_configs = {
-            constants.CEPHFILESYSTEM: {
-                "access_modes": [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO],
-                "config_file": lambda: create_temp_config_file(
-                    vdbench_filesystem_config(
-                        size="10m",
-                        depth=4,
-                        width=5,
-                        files=10,
-                        default_threads=10,
-                        elapsed=1200,
-                        interval=60,
-                        default_rdpct=0,  # All writes
-                        precreate_then_run=True,
-                        precreate_elapsed=120,  # precreate duration (must be >= 2*interval)
-                        precreate_interval=60,  # precreate reporting interval - match main interval
-                        precreate_iorate="max",  # Ensure valid fwdrate for filesystem precreate
-                        anchor=f"/vdbench-data/{fauxfactory.gen_alpha(8).lower()}",
-                        patterns=[
-                            {
-                                "name": "random_write",
-                                "fileio": "random",
-                                "rdpct": 0,
-                                "xfersize": "4k",
-                                "threads": 10,
-                                "skew": 0,
-                            }
-                        ],
-                    )
-                ),
-            },
-            constants.CEPHBLOCKPOOL: {
-                "access_modes": [
-                    f"{constants.ACCESS_MODE_RWO}-Block",
-                    f"{constants.ACCESS_MODE_RWX}-Block",
-                ],
-                "config_file": lambda: create_temp_config_file(
-                    vdbench_block_config(
-                        threads=10,
-                        size="10g",
-                        elapsed=1200,
-                        interval=60,
-                        patterns=[
-                            {
-                                "name": "random_write",
-                                "rdpct": 0,  # 0% reads → all writes
-                                "seekpct": 100,  # random
-                                "xfersize": "4k",  # 4k block size
-                                "skew": 0,
-                            }
-                        ],
-                    )
-                ),
-            },
-        }
-
-        for interface, config in interface_configs.items():
-            pvcs = multi_pvc_factory(
-                interface=interface,
-                project=project,
-                access_modes=config["access_modes"],
-                size=size,
-                num_of_pvc=4,
-            )
-            config_file = config["config_file"]()
-
-            for pvc in pvcs:
-                workload = resiliency_workload(
-                    "VDBENCH", pvc, vdbench_config_file=config_file
-                )
-                workload.start_workload()
-                workloads.append(workload)
-
-        scale_workloads = [
-            wl
-            for wl in workloads
-            if wl.pvc.get_pvc_access_mode
-            not in {constants.ACCESS_MODE_RWO, f"{constants.ACCESS_MODE_RWO}-Block"}
-        ]
-
-        scaling_thread = self.scaling_helper.start_background_scaling(
-            scale_workloads, delay=30
-        )
-
-        return workloads, scaling_thread
-
-    def _validate_and_cleanup_workloads(self, workloads):
-        """
-        Validate workload results and stop/cleanup all workloads.
-        """
-        validation_errors = []
-
-        for workload in workloads:
-            try:
-                result = workload.workload_impl.get_all_deployment_pod_logs()
-                workload.stop_workload()
-
-                if result is None:
-                    validation_errors.append(
-                        f"Workload {workload.workload_impl.deployment_name} returned no logs after failure injection"
-                    )
-                elif "error" in result.lower():
-                    validation_errors.append(
-                        f"Workload {workload.workload_impl.deployment_name} failed after failure injection"
-                    )
-
-                # Clean up individual workload
-                workload.cleanup_workload()
-
-            except UnexpectedBehaviour as e:
-                validation_errors.append(
-                    f"Failed to get results for workload {workload.workload_impl.deployment_name}: {e}"
-                )
-
-        if validation_errors:
-            error_msg = "\n".join(validation_errors)
-            log.error(f"Workload validation errors:\n{error_msg}")
-            pytest.fail(error_msg)
-
-        log.info("All workloads passed validation after failure injection.")
+    This test suite uses the workload_ops fixture which provides:
+    - Automated workload creation and management
+    - Background cluster operations
+    - Optional workload scaling
+    - Configuration via resiliency_tests_config.yaml
+    """
 
     @pytest.mark.parametrize(
         argnames=["scenario_name", "failure_case"],
@@ -214,82 +65,67 @@ class TestAppScaleOnStorageComponentFailure:
         self,
         scenario_name,
         failure_case,
-        project_factory,
-        multi_pvc_factory,
-        resiliency_workload,
-        vdbench_block_config,
-        vdbench_filesystem_config,
+        workload_ops,
     ):
         """
-        Test that validates ODF platform resiliency under application component
+        Test that validates ODF platform resiliency under storage component
         failures while I/O workloads are actively running and scaling in parallel.
 
+        This test uses the workload_ops fixture which automatically:
+        - Creates VDBENCH workloads on CephFS and RBD PVCs
+        - Starts background cluster operations
+        - Starts background scaling operations (if enabled in config)
+        - Validates and cleans up all resources
+
+        Configuration is loaded from resiliency_tests_config.yaml via:
+            pytest --ocsci-conf conf/ocsci/resiliency_tests_config.yaml ...
+
         Steps:
-        1. Create a mix of CephFS and RBD PVCs with multiple access modes.
-        2. Deploy VDBENCH-based workloads on these PVCs.
-        3. Start background scaling operations in parallel.
-        4. Inject specific failure scenario (e.g., OSD, MGR, MDS pod deletion).
-        5. Wait for scaling operations and failure injection to complete.
-        6. Verify workloads continue to function without I/O errors post recovery.
-        7. Clean up workloads and verify system stability.
+        1. Setup workloads using workload_ops fixture (automated)
+        2. Inject specific failure scenario (e.g., OSD, MGR, MDS pod deletion)
+        3. Wait for failure injection to complete
+        4. Validate workloads and cleanup (automated)
+
+        Args:
+            scenario_name: Scenario category (e.g., STORAGECLUSTER_COMPONENT_FAILURES)
+            failure_case: Specific failure to inject (e.g., OSD_POD_FAILURES)
+            workload_ops: WorkloadOps fixture for workload management
         """
         log.info(f"Running Scenario: {scenario_name}, Failure Case: {failure_case}")
 
-        workloads = []
-        scaling_thread = None
         resiliency_runner = None
 
         try:
-            # Prepare workloads and start background scaling
-            workloads, scaling_thread = self._prepare_pvcs_and_workloads(
-                project_factory,
-                multi_pvc_factory,
-                resiliency_workload,
-                vdbench_block_config,
-                vdbench_filesystem_config,
-            )
+            # Setup workloads (starts workloads, background ops, and scaling)
+            log.info("Setting up workloads and background operations")
+            workload_ops.setup_workloads()
 
-            # Start failure injection in parallel with scaling
-            log.info("Starting failure injection while scaling operations are running")
+            # Start failure injection
+            log.info(
+                "Starting failure injection while workloads and scaling operations are running"
+            )
             resiliency_runner = Resiliency(scenario_name, failure_method=failure_case)
             resiliency_runner.start()
-
-            # Wait for scaling operations to complete using the helper
-            scaling_completed = self.scaling_helper.wait_for_scaling_completion(
-                scaling_thread, timeout=120
-            )
-            if not scaling_completed:
-                log.warning("Scaling operations may still be running during cleanup")
 
             # Cleanup failure injection
             resiliency_runner.cleanup()
             resiliency_runner = None
 
-            # Validate workloads after both scaling and failure injection
-            self._validate_and_cleanup_workloads(workloads)
+            # Validate and cleanup workloads
+            log.info("Validating and cleaning up workloads")
+            workload_ops.validate_and_cleanup()
 
         except UnexpectedBehaviour as e:
             log.error(f"Test execution failed: {e}")
             raise
         finally:
-            # Cleanup in reverse order of creation
+            # Cleanup failure injection if not already done
             if resiliency_runner:
                 try:
                     resiliency_runner.cleanup()
                 except UnexpectedBehaviour as cleanup_e:
                     log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
 
-            # Ensure we wait for scaling thread even if test fails
-            self.scaling_helper.wait_for_scaling_completion(scaling_thread, timeout=60)
-
-            # Cleanup any remaining workloads
-            for workload in workloads:
-                try:
-                    if hasattr(workload, "cleanup"):
-                        workload.cleanup()
-                except (CommandFailed, TimeoutExpiredError) as workload_e:
-                    log.warning(f"Failed to cleanup workload: {workload_e}")
-
         log.info(
-            "Test completed successfully - scaling and failure injection ran in parallel"
+            "Test completed successfully - workloads, scaling, and failure injection completed"
         )
