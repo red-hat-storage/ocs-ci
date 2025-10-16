@@ -300,7 +300,7 @@ class KrknWorkloadFactory:
         project_factory,
         multi_pvc_factory,
         loaded_fixtures=None,
-        timeout=180,
+        timeout=360,
         # Backward compatibility - old signature
         resiliency_workload=None,
         vdbench_block_config=None,
@@ -620,15 +620,22 @@ class KrknWorkloadFactory:
         }
 
         workloads = []
-        size = 50
+        # Get configurable values from krkn config
+        num_pvcs = self.config.get_num_pvcs_per_interface()
+        pvc_size = self.config.get_pvc_size()
+
+        log.info(
+            f"Creating {num_pvcs} PVCs per storage interface with size {pvc_size}Gi"
+        )
+
         for interface, cfg in interface_configs.items():
             pvcs = multi_pvc_factory(
                 interface=interface,
                 project=proj_obj,
                 access_modes=cfg["access_modes"],
-                size=size,
-                num_of_pvc=4,
-                timeout=180,
+                size=pvc_size,
+                num_of_pvc=num_pvcs,
+                timeout=600,
             )
             config_file = cfg["config_file"]()
             for pvc in pvcs:
@@ -638,6 +645,10 @@ class KrknWorkloadFactory:
                 wl.start_workload()
                 workloads.append(wl)
 
+        log.info(
+            f"Created {len(workloads)} total vdbench workloads "
+            f"({num_pvcs} per interface x 2 interfaces)"
+        )
         return workloads
 
     def _create_cnv_workloads(

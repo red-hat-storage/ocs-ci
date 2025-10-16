@@ -3621,7 +3621,7 @@ MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
 
 # chaos Tests constants
 KRKN_REPO_URL = "https://github.com/redhat-chaos/krkn.git"
-KRKN_VERSION = "v4.0.8"
+KRKN_VERSION = "v4.0.11"
 KRKN_DIR = os.path.join(DATA_DIR, "krkn")
 KRKN_CHAOS_DIR = os.path.join(TOP_DIR, "ocs_ci", "krkn_chaos")
 KRKN_SCENARIO_TEMPLATE_DIR = os.path.join(KRKN_CHAOS_DIR, "template")

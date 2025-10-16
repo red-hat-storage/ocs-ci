@@ -29,6 +29,7 @@ class KrknConfigGenerator:
         self.set_tunings()
         self.set_telemetry()
         self.set_health_checks()
+        self.set_kubevirt_checks()
 
     def set_kraken_config(
         self,
@@ -233,6 +234,31 @@ class KrknConfigGenerator:
             ],
         }
 
+    def set_kubevirt_checks(
+        self,
+        interval=2,
+        namespace="",
+        name="",
+        only_failures=False,
+        disconnected=False,
+    ):
+        """Sets kubevirt check configuration.
+
+        Args:
+            interval (int): Interval in seconds to perform virt checks
+            namespace (str): Namespace where to find VMI's
+            name (str): Regex Name style of VMI's to watch
+            only_failures (bool): Whether to show only failures
+            disconnected (bool): How to try to connect to the VMIs
+        """
+        self.config_data["kubevirt_checks"] = {
+            "interval": interval,
+            "namespace": namespace,
+            "name": name,
+            "only_failures": only_failures,
+            "disconnected": disconnected,
+        }
+
     def _prepare_scenarios_for_krkn(self, chaos_scenarios):
         """Prepare chaos_scenarios in the format expected by Krkn.
 
@@ -389,6 +415,14 @@ class KrknConfigGenerator:
         template_vars.update(
             {
                 "health_checks": health_checks_config,
+            }
+        )
+
+        # Extract kubevirt checks section variables
+        kubevirt_checks_config = self.config_data.get("kubevirt_checks", {})
+        template_vars.update(
+            {
+                "kubevirt_checks": kubevirt_checks_config,
             }
         )
 

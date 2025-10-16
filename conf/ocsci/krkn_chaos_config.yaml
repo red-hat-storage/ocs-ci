@@ -21,6 +21,10 @@ ENV_DATA:
       workload_monitor_interval: 30
       workload_loop: 20  # Number of times to run workload (1 = run once, 20 = run 20 times)
 
+      # Deployment configuration
+      num_pvcs_per_interface: 5  # Number of PVCs to create per storage interface (CephFS, CephBlockPool)
+      pvc_size: 50  # PVC size in GiB
+
       # Common workload parameters
       threads: 16
       elapsed: 600
