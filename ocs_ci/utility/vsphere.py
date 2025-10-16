@@ -254,7 +254,9 @@ class VSPHERE(object):
         """
         rp = self.get_pool(name, dc, cluster)
         if not self.is_resource_pool_exist(name, dc, cluster):
-            raise ResourcePoolNotFound
+            raise ResourcePoolNotFound(
+                f"Unable to find ResourcePool {name} in {dc}:{cluster}"
+            )
         return [vm for vm in rp.vm]
 
     def get_vm_in_pool_by_name(self, name, dc, cluster, pool):
