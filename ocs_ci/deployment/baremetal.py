@@ -156,6 +156,7 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             json=payload,
             headers=headers,
         )
+        response.encoding = "utf-8-sig"
         return response.json()["message"]
 
     def destroy(self, log_level=""):
