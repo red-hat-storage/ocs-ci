@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 
 import boto3
+from botocore.client import Config
 import google.api_core.exceptions as GoogleExceptions
 from azure.core.exceptions import ResourceNotFoundError, AzureError
 from azure.storage.blob import BlobServiceClient
@@ -243,11 +244,19 @@ class S3Client(CloudClient):
         self.access_key = key_id
         self.secret_key = access_key
 
+        # To support cross-region bucket operations for AWS buckets
+        if self.data_prefix == "AWS":
+            self.endpoint = None  # lets boto3 pick the endpoint dynamically
+            self.region = "us-east-1"  # the only region that allows cross-region bucket operations
+        else:
+            self.region = config.ENV_DATA["region"]
+
         self.client = boto3.resource(
             "s3",
             verify=verify,
+            region_name=self.region,
             endpoint_url=self.endpoint,
-            region_name=config.ENV_DATA["region"],
+            config=Config(s3={"addressing_style": "virtual"}),
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
@@ -273,7 +282,7 @@ class S3Client(CloudClient):
            the default region for AWS
 
         """
-        if region is None:
+        if region is None or region == "us-east-1":
             self.client.create_bucket(Bucket=name)
         else:
             self.client.create_bucket(
