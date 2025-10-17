@@ -82,6 +82,8 @@ class Initializer(object):
                 config.ENV_DATA["cluster_name"] = get_cluster_name(cluster_path)
             except FileNotFoundError:
                 raise ClusterNameNotProvidedError()
+        else:
+            config.ENV_DATA["cluster_name"] = cluster_name
 
         config.REPORTING["report_path"] = args.report
 
