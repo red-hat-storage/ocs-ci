@@ -7717,6 +7717,8 @@ def cnv_workload_factory(request):
                 vm_workload_data, cnv_worklod_for_disconnected.name
             )
             run_cmd(f"oc apply -f {cnv_worklod_for_disconnected.name}")
+            cnv_wl = VirtualMachine(vm_name="vm", namespace=namespace)
+            cnv_wl.verify_vm(verify_ssh=True)
 
         return cnv_wl
 
