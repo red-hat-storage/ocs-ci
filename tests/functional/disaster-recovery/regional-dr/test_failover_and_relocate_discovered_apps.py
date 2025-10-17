@@ -4,7 +4,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import acceptance, tier1, tier4, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 @rdr
-@acceptance
-@tier1
 @turquoise_squad
 @skipif_ocs_version("<4.16")
 class TestFailoverAndRelocateWithDiscoveredApps:
@@ -35,6 +33,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHBLOCKPOOL,
                 0,
                 1,
+                marks=[tier1, acceptance],
                 id="primary_up-rbd-recipe",
             ),
             pytest.param(
@@ -42,6 +41,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHBLOCKPOOL,
                 0,
                 1,
+                marks=tier4,
                 id="primary_down-rbd-recipe",
             ),
             pytest.param(
@@ -49,6 +49,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHBLOCKPOOL,
                 1,
                 0,
+                marks=[tier1, acceptance],
                 id="primary_up-rbd-kubeobject",
             ),
             pytest.param(
@@ -56,6 +57,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHBLOCKPOOL,
                 1,
                 0,
+                marks=tier4,
                 id="primary_down-rbd-kubeobject",
             ),
             pytest.param(
@@ -63,7 +65,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHFILESYSTEM,
                 1,
                 0,
-                marks=[skipif_ocs_version("<4.19")],
+                marks=[skipif_ocs_version("<4.19"), tier1, acceptance],
                 id="primary_up-cephfs-kubeobject",
             ),
             pytest.param(
@@ -71,7 +73,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHFILESYSTEM,
                 1,
                 0,
-                marks=[skipif_ocs_version("<4.19")],
+                marks=[skipif_ocs_version("<4.19"), tier4],
                 id="primary_down-cephfs-kubeobject",
             ),
             pytest.param(
@@ -79,7 +81,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHFILESYSTEM,
                 0,
                 1,
-                marks=[skipif_ocs_version("<4.19")],
+                marks=[skipif_ocs_version("<4.19"), tier1, acceptance],
                 id="primary_up-cephfs-recipe",
             ),
             pytest.param(
@@ -87,7 +89,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 constants.CEPHFILESYSTEM,
                 0,
                 1,
-                marks=[skipif_ocs_version("<4.19")],
+                marks=[skipif_ocs_version("<4.19"), tier4],
                 id="primary_down-cephfs-recipe",
             ),
         ],
