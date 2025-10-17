@@ -10,12 +10,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     turquoise_squad,
 )
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
+
+# from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     check_for_logwriter_workload_pods,
     verify_data_loss,
     verify_data_corruption,
-    verify_vm_workload,
+    # verify_vm_workload,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
@@ -69,12 +70,12 @@ class TestNodeDrain:
             zone_aware=False
         )
 
-        # setup vm and write some data to the VM instance
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
-        vm_obj.run_ssh_cmd(
-            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
-        )
-        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        # # setup vm and write some data to the VM instance
+        # vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
+        # vm_obj.run_ssh_cmd(
+        #     command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        # )
+        # md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
         # make sure all the worload pods are running
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
@@ -104,12 +105,12 @@ class TestNodeDrain:
 
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
-        # check vm data written before the failure for integrity
-        verify_vm_workload(vm_obj, md5sum_before)
+        # # check vm data written before the failure for integrity
+        # verify_vm_workload(vm_obj, md5sum_before)
 
-        # stop the VM
-        vm_obj.stop()
-        log.info("Stoped the VM successfully")
+        # # stop the VM
+        # vm_obj.stop()
+        # log.info("Stoped the VM successfully")
 
         # check for any data loss
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)

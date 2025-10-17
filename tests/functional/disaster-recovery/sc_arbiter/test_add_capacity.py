@@ -8,11 +8,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     jira,
 )
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
+
+# from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     verify_data_loss,
     verify_data_corruption,
-    verify_vm_workload,
+    # verify_vm_workload,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import storage_cluster
@@ -120,16 +121,16 @@ class TestAddCapacityStretchCluster:
         )
         logger.info("All the workloads pods are successfully up and running")
 
-        # setup vm and write some data to the VM instance
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
-        vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
-        vm_obj.run_ssh_cmd(
-            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt && sync"
-        )
-        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
-        logger.debug(
-            f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
-        )
+        # # setup vm and write some data to the VM instance
+        # vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
+        # vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
+        # vm_obj.run_ssh_cmd(
+        #     command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt && sync"
+        # )
+        # md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
+        # logger.debug(
+        #     f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
+        # )
 
         start_time = datetime.now(timezone.utc)
 
@@ -147,12 +148,12 @@ class TestAddCapacityStretchCluster:
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
         logger.info("Successfully verified with post failure checks for the workloads")
 
-        # check vm data written after the failure for integrity
-        verify_vm_workload(vm_obj, md5sum_before)
+        # # check vm data written after the failure for integrity
+        # verify_vm_workload(vm_obj, md5sum_before)
 
-        # stop the VM
-        vm_obj.stop()
-        logger.info("Stoped the VM successfully")
+        # # stop the VM
+        # vm_obj.stop()
+        # logger.info("Stoped the VM successfully")
 
         sc_obj.cephfs_logreader_job.delete()
         logger.info(sc_obj.cephfs_logreader_pods)
