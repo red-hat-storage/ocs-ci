@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     skipif_ocs_version,
     BaseTest,
+    polarion_id,
 )
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.ocs.resources.pod import (
@@ -29,6 +30,7 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
     """
 
     @brown_squad
+    @polarion_id("OCS-7362")
     def test_live_resources_presence_and_format(self):
         """
         Steps:
