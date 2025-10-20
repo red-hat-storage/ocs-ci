@@ -244,22 +244,25 @@ class S3Client(CloudClient):
         self.access_key = key_id
         self.secret_key = access_key
 
-        # To support cross-region bucket operations for AWS buckets
+        boto3_kwargs = {
+            "verify": verify,
+            "endpoint_url": self.endpoint,
+            "aws_access_key_id": self.access_key,
+            "aws_secret_access_key": self.secret_key,
+        }
         if self.data_prefix == "AWS":
-            self.endpoint = None  # lets boto3 pick the endpoint dynamically
-            self.region = "us-east-1"  # the only region that allows cross-region bucket operations
-        else:
-            self.region = config.ENV_DATA["region"]
+            boto3_kwargs.update(
+                {
+                    "endpoint_url": None,  # lets boto3 pick the endpoint dynamically
+                    "region_name": "us-east-1",  # the only region that allows cross-region bucket operations
+                    "config": Config(
+                        s3={"addressing_style": "virtual"}
+                    ),  # supports cross-region bucket operation
+                }
+            )
+            self.region = "us-east-1"
 
-        self.client = boto3.resource(
-            "s3",
-            verify=verify,
-            region_name=self.region,
-            endpoint_url=self.endpoint,
-            config=Config(s3={"addressing_style": "virtual"}),
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-        )
+        self.client = boto3.resource("s3", **boto3_kwargs)
         self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
 
         self.nss_creds = {
