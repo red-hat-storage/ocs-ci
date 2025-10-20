@@ -5,6 +5,7 @@ from logging import getLogger
 from typing import Union
 
 from ocs_ci.ocs.exceptions import NotSupportedException
+from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -45,7 +46,10 @@ class ODFCLIRetriever:
         """
         self._validate_odf_cli_support()
 
-        if not self.check_odf_cli_binary():
+        # Re-download the CLI to match the new cluster version after an upgrade
+        odf_was_upgraded = check_if_cluster_was_upgraded()
+
+        if not self.check_odf_cli_binary() or odf_was_upgraded:
             image = self._get_odf_cli_image()
             self._extract_cli_binary(image)
             self._set_executable_permissions()
