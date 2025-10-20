@@ -70,7 +70,9 @@ def create_cluster(cluster_name, version_str, region):
         region (str): Cluster region
 
     """
-    create_timeout = 2400
+    # AWS does not guarantee cluster creation time, and machinepool desired replicas.
+    # we need to wait cmd finish execution up to 3 hours (recorded time during observation)
+    create_timeout = 60 * 60 * 3
     aws = AWSUtil()
     rosa_ocp_version = config.DEPLOYMENT["installer_version"]
     # Validate ocp version with rosa ocp supported version
@@ -196,7 +198,7 @@ def create_cluster(cluster_name, version_str, region):
 
     logger.info("Waiting for installation of ROSA cluster")
     for cluster_info in utils.TimeoutSampler(
-        4500, 30, ocm.get_cluster_details, cluster_name
+        create_timeout, 30, ocm.get_cluster_details, cluster_name
     ):
         status = cluster_info["status"]["state"]
         logger.info(f"Current installation status: {status}")
