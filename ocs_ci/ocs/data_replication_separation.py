@@ -203,3 +203,30 @@ def validate_csi_pods_have_host_network():
             ]
         )
     return validate_pods_have_host_network(pods)
+
+
+@config.run_with_provider_context_if_available
+def validate_mon_ip_annotation_on_workers():
+    """
+    Validate that worker nodes have
+
+    Returns:
+        bool: True if all nodes have correct annotation
+    """
+    nodes_obj = OCP(kind="node")
+    nodes = nodes_obj.get().get("items", [])
+    worker_nodes = [
+        node["metadata"]["name"]
+        for node in nodes
+        if constants.WORKER_LABEL in node["metadata"]["labels"]
+    ]
+    if not worker_nodes:
+        raise UnavailableResourceException("No worker node found!")
+    for worker in worker_nodes:
+        network_data = (
+            config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
+        )
+        annotate_cmd = (
+            f"annotate node {worker} "
+            f"network.rook.io/mon-ip={network_data['private_ip']} --overwrite"
+        )
