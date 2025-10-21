@@ -67,4 +67,7 @@ spec:
           userData: |
             #!/bin/sh
             echo "Running user-data script"
+            user: cirros
+            password: gocubsgo
+            chpasswd: { expire: False }
         name: cloud-init
