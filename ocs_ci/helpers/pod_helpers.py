@@ -3,7 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_pod_resource_details(pod_obj):
+def get_pod_container_resource_details(pod_obj):
     """
     Extracts resource requests and limits for all containers within a single pod.
 
@@ -43,7 +43,7 @@ def get_pod_resource_details(pod_obj):
     return pod_resource_list
 
 
-def get_pods_resources_details(pod_objs):
+def get_all_pods_container_resource_details(pod_objs):
     """
     Extracts resource requests and limits from the pod objects.
 
@@ -58,15 +58,15 @@ def get_pods_resources_details(pod_objs):
     """
     pods_resources_details = {}
     for pod_obj in pod_objs:
-        pod_resource_list = get_pod_resource_details(pod_obj)
+        pod_resource_list = get_pod_container_resource_details(pod_obj)
         # Store the list of container resources with the pod's name as the key.
         pods_resources_details[pod_obj.name] = pod_resource_list
     return pods_resources_details
 
 
-def check_live_pod_resources_details(pod_name, pod_resources_details):
+def validate_pod_container_resources(pod_name, pod_resources_details):
     """
-    Check that all live pod resource values exist and start with a digit.
+    Validate that all container resource values in a pod exist and start with a digit.
 
     Args:
         pod_name (str): Name of the pod.
@@ -111,9 +111,10 @@ def check_live_pod_resources_details(pod_name, pod_resources_details):
     return {"result": result, "invalid_values": invalid_values}
 
 
-def check_all_live_pods_resources(pods_resources_details_dict):
+def validate_all_pods_container_resources(pods_resources_details_dict):
     """
-    Check all live pods to ensure their resource values exist and start with a digit.
+    Validate all live pods to ensure their container resource values exist
+    and start with a digit.
 
     Args:
         pods_resources_details_dict (dict): Mapping of pod names to container resource details.
@@ -134,7 +135,7 @@ def check_all_live_pods_resources(pods_resources_details_dict):
     invalid_values = {}
 
     for pod_name, pod_resources_details in pods_resources_details_dict.items():
-        res = check_live_pod_resources_details(pod_name, pod_resources_details)
+        res = validate_pod_container_resources(pod_name, pod_resources_details)
 
         if not res.get("result", False):
             all_ok = False

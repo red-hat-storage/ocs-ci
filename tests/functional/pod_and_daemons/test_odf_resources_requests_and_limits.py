@@ -14,8 +14,8 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
 from ocs_ci.helpers.pod_helpers import (
-    get_pods_resources_details,
-    check_all_live_pods_resources,
+    get_all_pods_container_resource_details,
+    validate_all_pods_container_resources,
 )
 
 log = logging.getLogger(__name__)
@@ -59,10 +59,10 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
         log.info(f"Found {len(pod_objs)} pods after filtering.")
 
         log.info("Extracting live resource details for validation.")
-        pods_resources_details_dict = get_pods_resources_details(pod_objs)
+        pods_resources_details_dict = get_all_pods_container_resource_details(pod_objs)
 
         log.info("Checking live pod resource values (exist + start with digit).")
-        validation = check_all_live_pods_resources(pods_resources_details_dict)
+        validation = validate_all_pods_container_resources(pods_resources_details_dict)
 
         if not validation["result"]:
             pretty = json.dumps(validation["invalid_values"], indent=2, sort_keys=True)
