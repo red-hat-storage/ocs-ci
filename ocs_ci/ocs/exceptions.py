@@ -774,11 +774,3 @@ class FloatingIPAssignException(Exception):
 
 class SubctlDownloadFailed(Exception):
     pass
-
-
-class ReplicationGroupSourceNotFound(Exception):
-    pass
-
-
-class ReplicationGroupDestinationNotFound(Exception):
-    pass
