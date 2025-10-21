@@ -1226,7 +1226,8 @@ class Deployment(object):
             return
         else:
             log_step("Deployment of OCS via OCS operator")
-            self.label_and_taint_nodes()
+            if not config.ENV_DATA["mcg_only_deployment"]:
+                self.label_and_taint_nodes()
 
         if aws_sts_deployment:
             log_step("Create STS role and attach AmazonS3FullAccess Policy")
