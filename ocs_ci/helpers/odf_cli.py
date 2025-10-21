@@ -5,7 +5,6 @@ from logging import getLogger
 from typing import Union
 
 from ocs_ci.ocs.exceptions import NotSupportedException
-from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -25,17 +24,27 @@ class ODFCLIRetriever:
     def __init__(self):
         self.semantic_version = get_semantic_ocs_version_from_config()
         self.local_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
+        self.version_attribute_name = "user.version"
 
     def check_odf_cli_binary(self):
         """
-        Check if the ODF CLI binary exists and is executable.
+        Check if the ODF CLI binary exists, is executable, and matches the cluster version.
 
         Returns:
-            bool: True if the binary exists and is executable, False otherwise.
+            bool: True if the binary exists, is executable, and matches the cluster version, False otherwise.
         """
-        return os.path.isfile(self.local_cli_path) and os.access(
-            self.local_cli_path, os.X_OK
-        )
+        path = self.local_cli_path
+
+        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            return False
+
+        # Check if the binary's version matches the cluster's in upgrade runs
+        if getattr(config, "UPGRADE", False):
+            return os.getxattr(path, self.version_attribute_name) == str(
+                self.semantic_version
+            )
+
+        return True
 
     def retrieve_odf_cli_binary(self):
         """
@@ -46,14 +55,19 @@ class ODFCLIRetriever:
         """
         self._validate_odf_cli_support()
 
-        # Re-download the CLI to match the new cluster version after an upgrade
-        odf_was_upgraded = check_if_cluster_was_upgraded()
-
-        if not self.check_odf_cli_binary() or odf_was_upgraded:
+        if not self.check_odf_cli_binary():
             image = self._get_odf_cli_image()
             self._extract_cli_binary(image)
             self._set_executable_permissions()
             self.add_cli_to_path()
+
+            # Tag the CLI binary with its version for post-upgrade verification
+            if getattr(config, "UPGRADE", False):
+                os.setxattr(
+                    self.local_cli_path,
+                    self.version_attribute_name,
+                    str(self.semantic_version).encode(),
+                )
 
         if not self.check_odf_cli_binary():
             raise RuntimeError(
