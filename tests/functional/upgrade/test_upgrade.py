@@ -2,11 +2,13 @@ import logging
 
 import pytest
 
+from ocs_ci.deployment.hub_spoke import HostedClients
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
     multicluster_roles,
     runs_on_provider,
     yellow_squad,
+    kubevirt_cluster_upgrade,
 )
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
@@ -184,3 +186,15 @@ def test_acm_upgrade(zone_rank, role_rank, config_index):
     """
     acm_hub_upgrade_obj = ACMUpgrade()
     acm_hub_upgrade_obj.run_upgrade()
+
+
+@purple_squad
+@kubevirt_cluster_upgrade
+@multicluster_roles(["mdr-all-acm", "rdr-all-acm"])
+def test_upgrade_kubevirt_clusters():
+    """
+    Test upgrade of hosted kubevirt clusters in the managed clusters (named Provider/Client in past)
+
+    """
+    hosted_clients = HostedClients()
+    hosted_clients.upgrade_ocp_on_kubevirt_clusters()
