@@ -1,3 +1,6 @@
+import types
+
+import pytest
 import logging
 import random
 
@@ -11,6 +14,7 @@ from ocs_ci.deployment.hub_spoke import (
     HostedODF,
     HostedClients,
 )
+from ocs_ci.deployment import hub_spoke as hs_module
 
 from ocs_ci.deployment.hub_spoke import deploy_hosted_ocp_clusters
 from ocs_ci.framework import config
@@ -40,6 +44,24 @@ from ocs_ci.ocs.rados_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _ga_resolver_factory(ga_map=None, raise_for=None):
+    """
+    Returns a function suitable for monkeypatching get_ocp_ga_version.
+    - ga_map: dict of 'x.y' -> 'x.y.z'
+    - raise_for: set of 'x.y' that should raise Exception
+    """
+    ga_map = ga_map or {}
+    raise_for = set(raise_for or [])
+
+    def _resolver(xy):
+        if xy in raise_for:
+            raise RuntimeError(f"GA not found for {xy}")
+        # default behavior: append '.9' if not specified
+        return ga_map.get(xy, f"{xy}.9")
+
+    return _resolver
 
 
 @libtest
@@ -434,6 +456,148 @@ class TestProviderHosted(object):
         assert (
             metallb_installer_obj.upgrade_metallb()
         ), "Metallb operator upgrade not successful"
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            # 1: No configured version, provider GA -> QUAY:provider-x86_64
+            dict(
+                name="no_config_ga_provider",
+                cfg_ocp=None,
+                provider="4.19.9",
+                hosted="4.18.8",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.9-x86_64",
+            ),
+            # 2: No configured version, provider nightly -> REG:provider
+            dict(
+                name="no_config_nightly_provider",
+                cfg_ocp=None,
+                provider="4.19.0-0.nightly-2024-09-10-123456",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.REGISTRY_SVC}:4.19.0-0.nightly-2024-09-10-123456",
+            ),
+            # 3: x.y resolves to GA, < provider, hosted < desired -> use desired GA
+            dict(
+                name="xy_lower_than_provider_use_desired",
+                cfg_ocp="4.18",
+                provider="4.19.3",
+                hosted="4.17.9",
+                ga_map={"4.18": "4.18.9"},
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.18.9-x86_64",
+            ),
+            # 4: x.y resolves to GA equal to provider -> None
+            dict(
+                name="xy_equal_provider_return_none",
+                cfg_ocp="4.18",
+                provider="4.18.9",
+                hosted="4.18.0",
+                ga_map={"4.18": "4.18.9"},
+                raise_for=None,
+                expected=lambda: None,
+            ),
+            # 5: desired xyz but hosted >= desired -> fallback to provider GA
+            dict(
+                name="xyz_hosted_greater_fallback_provider",
+                cfg_ocp="4.18.9",
+                provider="4.19.3",
+                hosted="4.18.10",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+            # 6: desired xyz and hosted < desired -> use desired
+            dict(
+                name="xyz_hosted_lower_use_desired",
+                cfg_ocp="4.18.9",
+                provider="4.19.3",
+                hosted="4.18.8",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.18.9-x86_64",
+            ),
+            # 7: GA resolver raises and desired (x.y) > provider -> None
+            dict(
+                name="ga_resolve_fails_desired_gt_provider_none",
+                cfg_ocp="4.99",
+                provider="4.19.3",
+                hosted="4.19.2",
+                ga_map=None,
+                raise_for={"4.99"},
+                expected=lambda: None,
+            ),
+            # 8: empty string -> use provider GA
+            dict(
+                name="empty_string_use_provider",
+                cfg_ocp="",
+                provider="4.19.3",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+            # 9: whitespace -> use provider GA
+            dict(
+                name="whitespace_use_provider",
+                cfg_ocp="   ",
+                provider="4.19.3",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+            # 10: None again -> use provider GA
+            dict(
+                name="none_use_provider_again",
+                cfg_ocp=None,
+                provider="4.19.3",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+        ],
+    )
+    def test_compute_target_release_image(self, monkeypatch, case):
+        """
+        Unit test for HypershiftHostedOCP._compute_target_release_image.
+
+        It:
+        - patches provider version (get_server_version)
+        - patches GA resolver (get_ocp_ga_version)
+        - injects the hosted cluster version by replacing:
+          hypershift_hosted_ocp.get_hosted_cluster_ocp_version = lambda: "<ver>"
+        - sets config.ENV_DATA["clusters"][cluster]["ocp_version"]
+        """
+        cluster = "cl-418-a"
+
+        # Prepare ENV_DATA
+        # Keep global config intact; only set the nested key needed for the test
+        clusters = ocsci_config.ENV_DATA.setdefault("clusters", {})
+        cluster_cfg = clusters.setdefault(cluster, {})
+        cluster_cfg.setdefault("cluster_type", "hci_client")
+        monkeypatch.setitem(cluster_cfg, "ocp_version", case["cfg_ocp"])
+
+        # Patch provider version
+        monkeypatch.setattr(hs_module, "get_server_version", lambda: case["provider"])
+
+        # Patch provider and GA resolver
+        monkeypatch.setattr(hs_module, "get_server_version", lambda: case["provider"])
+        ga_resolver = _ga_resolver_factory(
+            ga_map=case["ga_map"], raise_for=case["raise_for"]
+        )
+        monkeypatch.setattr(hs_module, "get_ocp_ga_version", ga_resolver)
+
+        self_stub = types.SimpleNamespace()
+        self_stub.name = cluster
+        self_stub.get_hosted_cluster_ocp_version = lambda: case["hosted"]
+
+        result = hs_module.HypershiftHostedOCP._compute_target_release_image(self_stub)
+        assert result == case["expected"]()
 
     @runs_on_provider
     def test_mce_upgrade(self):

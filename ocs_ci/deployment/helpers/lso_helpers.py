@@ -314,7 +314,11 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
         run_cmd(f"oc apply -f {optional_operators_yaml.name}")
-    wait_for_machineconfigpool_status("all")
+    if config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
+        force_delete_pods = True
+    else:
+        force_delete_pods = False
+    wait_for_machineconfigpool_status("all", force_delete_pods=force_delete_pods)
 
 
 def get_device_paths(worker_names):
