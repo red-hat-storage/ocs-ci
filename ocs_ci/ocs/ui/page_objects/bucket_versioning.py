@@ -93,7 +93,7 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
                     timeout=self.DIALOG_TIMEOUT,
                 )
         except NoSuchElementException:
-            logger.error("Could not find versioning confirmation dialog")
+            logger.exception("Could not find versioning confirmation dialog")
             raise
 
     def is_versioning_enabled(self, bucket_name: Optional[str] = None) -> bool:
