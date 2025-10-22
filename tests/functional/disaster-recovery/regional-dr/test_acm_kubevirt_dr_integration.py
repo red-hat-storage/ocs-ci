@@ -82,11 +82,16 @@ class TestACMKubevirtDRIntergration:
         cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1, dr_protect=False, shared_drpc_protection=True
         )
-        logger.info(f"CNV workloads instance is {cnv_workloads}")
 
+        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
+
+        logger.info(f"CNV workloads instance is {cnv_workloads}")
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
+            cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=resource_name,
         )
+
         acm_obj = AcmAddClusters()
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
@@ -109,7 +114,6 @@ class TestACMKubevirtDRIntergration:
             namespace=cnv_workloads[0].workload_namespace,
         )
 
-        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
         logger.info(
             f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
         )
