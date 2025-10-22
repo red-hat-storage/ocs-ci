@@ -64,9 +64,8 @@ spec:
         persistentVolumeClaim:
           claimName: root-disk
       - cloudInitConfigDrive:
-          userData: |
-            #!/bin/sh
-            echo "Running user-data script"
+          userData: |-
+            #user-config
             user: cirros
             password: gocubsgo
             chpasswd: { expire: False }
