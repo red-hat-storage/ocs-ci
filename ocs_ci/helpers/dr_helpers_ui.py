@@ -923,7 +923,7 @@ def navigate_using_fleet_virtulization(acm_obj, managed_cluster_name):
         acm_loc["all-clusters"], expected_text="All clusters"
     )
     if all_clusters:
-        log.info("All Clusters found, select the managed cluster")
+        log.info("All Clusters found, now select the cluster where VM workload is running")
         acm_obj.do_click(
             format_locator(acm_loc["managed-cluster-name"]), managed_cluster_name
         )
@@ -931,6 +931,8 @@ def navigate_using_fleet_virtulization(acm_obj, managed_cluster_name):
     else:
         log.warning("'All Clusters' not found on the VMs page")
         return False
-    log.info("Search for the VM workload")
-
+    log.info("Select the namespace")
+    vms_namespace = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["all-clusters"], expected_text="All clusters"
+    )
     return True
