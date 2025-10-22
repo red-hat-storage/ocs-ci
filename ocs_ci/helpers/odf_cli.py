@@ -1,5 +1,6 @@
 import os
 import platform
+import xattr
 from stat import S_IEXEC
 from logging import getLogger
 from typing import Union
@@ -24,7 +25,9 @@ class ODFCLIRetriever:
     def __init__(self):
         self.semantic_version = get_semantic_ocs_version_from_config()
         self.local_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
-        self.version_attribute_name = "user.version"
+        self.version_attribute_name = (
+            "user.version"  # "user." prefix is required on Linux
+        )
 
     def check_odf_cli_binary(self):
         """
@@ -36,14 +39,21 @@ class ODFCLIRetriever:
         path = self.local_cli_path
 
         if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            log.warning(f"ODF CLI binary is not accessible at {path}")
             return False
 
         # Check if the binary's version matches the cluster's in upgrade runs
-        if getattr(config, "UPGRADE", False):
-            return os.getxattr(path, self.version_attribute_name) == str(
-                self.semantic_version
+        if not xattr.getxattr(path, self.version_attribute_name).decode() == str(
+            self.semantic_version
+        ):
+            log.warning(
+                f"ODF CLI binary is not tagged with the correct version {self.semantic_version}"
             )
+            return False
 
+        log.info(
+            f"ODF CLI binary is compatible with the current cluster version {self.semantic_version}"
+        )
         return True
 
     def retrieve_odf_cli_binary(self):
@@ -62,12 +72,15 @@ class ODFCLIRetriever:
             self.add_cli_to_path()
 
             # Tag the CLI binary with its version for post-upgrade verification
-            if getattr(config, "UPGRADE", False):
-                os.setxattr(
-                    self.local_cli_path,
-                    self.version_attribute_name,
-                    str(self.semantic_version).encode(),
-                )
+            log.info(f"Tagging ODF CLI binary with version {self.semantic_version}")
+            xattr.setxattr(
+                self.local_cli_path,
+                self.version_attribute_name,
+                str(
+                    self.semantic_version
+                ).encode(),  # setxattr expects the value as bytes
+            )
+            log.info(f"Tagged ODF CLI binary with version {self.semantic_version}")
 
         if not self.check_odf_cli_binary():
             raise RuntimeError(
