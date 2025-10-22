@@ -2,6 +2,8 @@ import logging
 
 from time import sleep
 
+import pytest
+
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import skipif_ocs_version
@@ -40,26 +42,40 @@ class TestACMKubevirtDRIntergration:
 
     """
 
-    # @pytest.mark.polarion_id("OCS-xxxx")
+    @pytest.mark.parametrize(
+        argnames=["protection_type"],
+        argvalues=[
+            pytest.param(
+                False,
+                id="standalone",
+                marks=pytest.mark.polarion_id("OCS-xxxx")),
+
+            pytest.param(
+                True,
+                id="shared",
+                marks=pytest.mark.polarion_id("OCS-yyyy")),
+        ],
+    )
     # TODO: Add Polarion ID when available
-    def test_acm_kubevirt_using_shared_protection(
+    def test_acm_kubevirt_using_different_protection_types(
         self,
         setup_acm_ui,
+        protection_type,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
         node_restart_teardown,
     ):
         """
-        DR operation on discovered VMs using Shared Protection type, both VMs are tied to a single DRPC
-        in the same namespace where same DRPolicy is applied via UI to both the apps.
+        DR operation on discovered VMs using Standalone and Shared Protection type. In shared protection, both VMs are
+        tied to a single DRPC in the same namespace where same DRPolicy is applied via UI to both the apps.
 
         Test steps:
 
         1. Deploy a CNV discovered workload in a test NS via CLI
         2. Deploy another CNV discovered workload in the same namespace via CLI
         3. Using ACM UI, DR protect the 1st workload from the VMs page using Standalone as Protection type
-        4. Then DR protect 2nd workload from the VMs page using Shared option, which will use the existing DRPC
-        of the 1st workload and gets tied to it.
+        4. Then for shared protection, repeat the above steps and DR protect 2nd workload from the VMs page using
+            Shared option, which will use the existing DRPC of the 1st workload and gets tied to it.
         5. Write data, take md5sum, failover this workload via CLI (both VMs) by shutting down the primary managed
         cluster.
         6. After successful failover, check md5sum, recover the down managed cluster and perform cleanup.
@@ -77,11 +93,12 @@ class TestACMKubevirtDRIntergration:
             pvc_vm=1, dr_protect=False, shared_drpc_protection=False
         )
 
-        # Second workload (uses same namespace as first)
-        logger.info("Deploy 2nd CNV workload in the existing namespace")
-        cnv_workloads = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=True
-        )
+        if protection_type == "shared":
+            # Second workload (uses same namespace as first)
+            logger.info("Deploy 2nd CNV workload in the existing namespace")
+            cnv_workloads = discovered_apps_dr_workload_cnv(
+                pvc_vm=1, dr_protect=False, shared_drpc_protection=True
+            )
 
         resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
 
