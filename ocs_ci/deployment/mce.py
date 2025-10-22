@@ -4,6 +4,7 @@ This module contains functionality required for mce installation.
 
 import logging
 import tempfile
+import json
 
 from ocs_ci.deployment.qe_app_registry import QeAppRegistry
 from ocs_ci.ocs import ocp
@@ -16,6 +17,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
     wait_custom_resource_defenition_available,
+    TimeoutSampler,
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.deployment import Deployment
@@ -188,7 +190,7 @@ class MCEInstaller(object):
 
         if not configmaps_obj.check_resource_existence(
             should_exist=True,
-            timeout=600,
+            timeout=300,
             resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP,
         ):
             raise UnavailableResourceException(
@@ -196,16 +198,34 @@ class MCEInstaller(object):
                 f"in {constants.HYPERSHIFT_NAMESPACE} namespace"
             )
 
-        cmd = f"oc get cm -n {constants.HYPERSHIFT_NAMESPACE} supported-versions "
-        cmd += "-o jsonpath='{.data.supported-versions}'"
-        cmd_res = exec_cmd(cmd, shell=True)
-        supported_versions = ""
-        if cmd_res.returncode == 0:
-            supported_versions = cmd_res.stdout.decode("utf-8")
-            logger.info(f"Supported versions: {supported_versions}")
+        ocp_version = get_running_ocp_version()
+        supported_versions = self.get_supported_versions()
 
         if not get_running_ocp_version() in supported_versions:
             self.create_image_override()
+
+        sampler = TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=lambda: ocp_version in self.get_supported_versions(),
+        )
+        if sampler.wait_for_func_value(True):
+            logger.info(f"Version {ocp_version} found in supported-versions configmap")
+
+    def get_supported_versions(self):
+        """
+        Get supported versions from the supported-versions configmap.
+
+        Returns:
+            str: Supported versions string or empty string if command fails.
+        """
+        cmd = f"oc get cm -n {constants.HYPERSHIFT_NAMESPACE} supported-versions "
+        cmd += "-o jsonpath='{.data.supported-versions}'"
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode == 0:
+            versions_data = json.loads(cmd_res.stdout.decode("utf-8"))
+            return versions_data.get("versions", [])
+        return []
 
     def create_image_override(self):
         """
@@ -224,7 +244,6 @@ class MCEInstaller(object):
         self.multicluster_engine.annotate(
             annotation=f"imageOverridesCM={self.hypershift_override_image_cm}"
         )
-        self.multicluster_engine.wait_until_running()
 
     def deploy_mce(self):
         """
