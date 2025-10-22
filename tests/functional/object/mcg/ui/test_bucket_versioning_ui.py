@@ -3,7 +3,6 @@ import os
 import time
 
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
 
 from ocs_ci.ocs.ui.page_objects.bucket_versioning import BucketVersioning
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
@@ -33,29 +32,6 @@ class TestBucketVersioningUI:
     INITIAL_UPLOAD_WAIT_TIME = 2
     VERSION_DETECTION_TIMEOUT = 30
 
-    def _upload_folder_to_bucket(
-        self, buckets_tab: BucketsTab, folder_path: str, wait_time: int = None
-    ) -> None:
-        """
-        Upload a folder to the bucket.
-
-        Args:
-            buckets_tab: BucketsTab instance for UI operations
-            folder_path: Path to the folder to upload
-            wait_time: Time to wait after upload (default: 2 seconds)
-        """
-        file_input = buckets_tab.driver.find_element(
-            buckets_tab.bucket_tab["file_input_directory"][1],
-            buckets_tab.bucket_tab["file_input_directory"][0],
-        )
-        buckets_tab.driver.execute_script(
-            "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
-            file_input,
-        )
-        file_input.clear()
-        file_input.send_keys(folder_path)
-        time.sleep(wait_time or self.INITIAL_UPLOAD_WAIT_TIME)
-
     def _modify_file_content(self, file_path: str, content: str) -> None:
         """
         Modify file content by removing and recreating with new content.
@@ -68,32 +44,10 @@ class TestBucketVersioningUI:
         with open(file_path, "w") as f:
             f.write(content)
 
-    def _navigate_to_bucket(
-        self,
-        bucket_versioning: BucketVersioning,
-        buckets_tab: BucketsTab,
-        bucket_name: str,
-    ) -> None:
-        """
-        Navigate to object storage and select the specific test bucket by name.
-
-        Args:
-            bucket_versioning: BucketVersioning instance for navigation
-            buckets_tab: BucketsTab instance for UI operations
-            bucket_name: Name of the bucket to navigate to
-        """
-        bucket_versioning.nav_object_storage_page()
-        logger.info(f"Navigating to bucket: {bucket_name}")
-        logger.info(f"Looking for bucket link with text: {bucket_name}")
-        bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
-        buckets_tab.do_click((bucket_link_locator, By.XPATH))
-        logger.info(f"Successfully navigated into bucket: {bucket_name}")
-
     def _create_file_version(
         self,
         file_path: str,
         version_content: str,
-        bucket_versioning: BucketVersioning,
         buckets_tab: BucketsTab,
         folder_path: str,
         folder_name: str,
@@ -106,7 +60,6 @@ class TestBucketVersioningUI:
         Args:
             file_path: Path to the file to modify
             version_content: Content to write to the file
-            bucket_versioning: BucketVersioning instance for navigation
             buckets_tab: BucketsTab instance for UI operations
             folder_path: Path to the folder containing the file
             folder_name: Name of the folder for logging
@@ -117,10 +70,10 @@ class TestBucketVersioningUI:
         self._modify_file_content(file_path, version_content)
 
         if version_number > 1:
-            self._navigate_to_bucket(bucket_versioning, buckets_tab, bucket_name)
+            buckets_tab.navigate_to_bucket(bucket_name)
 
-        self._upload_folder_to_bucket(
-            buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME
+        buckets_tab.upload_folder_to_bucket(
+            folder_path, wait_time=self.UPLOAD_WAIT_TIME
         )
         logger.info(
             f"Successfully uploaded folder: {folder_name} - version {version_number} created"
@@ -145,37 +98,6 @@ class TestBucketVersioningUI:
         logger.info(f"Created folder at: {folder_path} with {len(files)} file(s)")
         return file_path, folder_path
 
-    def _navigate_to_folder_and_enable_versions(
-        self,
-        bucket_versioning: BucketVersioning,
-        buckets_tab: BucketsTab,
-        folder_name: str,
-        bucket_name: str,
-    ) -> None:
-        """
-        Navigate to the test folder and enable version listing.
-
-        Args:
-            bucket_versioning: BucketVersioning instance for navigation
-            buckets_tab: BucketsTab instance for UI operations
-            folder_name: Name of the folder to navigate to
-            bucket_name: Name of the bucket to work with
-        """
-        logger.info("Navigating to folder and showing versions")
-        self._navigate_to_bucket(bucket_versioning, buckets_tab, bucket_name)
-
-        logger.info(f"Clicking on folder link to navigate into folder: {folder_name}")
-        buckets_tab.do_click(buckets_tab.bucket_tab["first_folder_link"])
-
-        time.sleep(self.NAVIGATION_WAIT_TIME)
-        logger.info("Clicking 'List all versions' toggle")
-        buckets_tab.do_click(buckets_tab.bucket_tab["list_all_versions_toggle"])
-
-        time.sleep(self.VERSIONS_LOAD_WAIT_TIME)
-        logger.info(
-            f"Successfully navigated to folder '{folder_name}' and enabled version listing"
-        )
-
     def _create_bucket_and_upload_folder(self, folder_path: str) -> tuple[str, str]:
         """
         Create a new bucket and upload the initial file folder.
@@ -194,7 +116,7 @@ class TestBucketVersioningUI:
         buckets_tab = bucket_ui
 
         # Upload folder directly to bucket root (no nested test-folder creation)
-        self._upload_folder_to_bucket(buckets_tab, folder_path)
+        buckets_tab.upload_folder_to_bucket(folder_path)
 
         # Extract the actual folder name from the uploaded content
         folder_name = os.path.basename(folder_path)
@@ -406,7 +328,6 @@ class TestBucketVersioningUI:
         self._create_file_version(
             file_path,
             "content-v2",
-            bucket_versioning,
             buckets_tab,
             folder_path,
             folder_name,
@@ -417,7 +338,6 @@ class TestBucketVersioningUI:
         self._create_file_version(
             file_path,
             "content-v3",
-            bucket_versioning,
             buckets_tab,
             folder_path,
             folder_name,
@@ -427,8 +347,11 @@ class TestBucketVersioningUI:
 
         # Step 5: Navigate to folder and show versioning
         logger.info("Step 5: Navigating to folder and showing versions")
-        self._navigate_to_folder_and_enable_versions(
-            bucket_versioning, buckets_tab, folder_name, current_bucket_name
+        buckets_tab.navigate_to_folder_and_enable_versions(
+            folder_name,
+            current_bucket_name,
+            self.NAVIGATION_WAIT_TIME,
+            self.VERSIONS_LOAD_WAIT_TIME,
         )
 
         # Step 6: Validate "Latest" label appears on newest version
@@ -498,16 +421,15 @@ class TestBucketVersioningUI:
         # Step 4: Re-upload the modified object
         logger.info("Step 4: Re-uploading modified object")
         buckets_tab = BucketsTab()
-        self._navigate_to_bucket(bucket_versioning, buckets_tab, current_bucket_name)
-        self._upload_folder_to_bucket(
-            buckets_tab, folder_path, wait_time=self.UPLOAD_WAIT_TIME
+        buckets_tab.navigate_to_bucket(current_bucket_name)
+        buckets_tab.upload_folder_to_bucket(
+            folder_path, wait_time=self.UPLOAD_WAIT_TIME
         )
 
         logger.info("Creating third version of the object")
         self._create_file_version(
             file_path,
             "modified-content-v3",
-            bucket_versioning,
             buckets_tab,
             folder_path,
             folder_name,
@@ -517,8 +439,11 @@ class TestBucketVersioningUI:
 
         # Step 5: Navigate to folder and toggle "List all versions"
         logger.info("Step 5: Navigating to folder and showing versions")
-        self._navigate_to_folder_and_enable_versions(
-            bucket_versioning, buckets_tab, folder_name, current_bucket_name
+        buckets_tab.navigate_to_folder_and_enable_versions(
+            folder_name,
+            current_bucket_name,
+            self.NAVIGATION_WAIT_TIME,
+            self.VERSIONS_LOAD_WAIT_TIME,
         )
 
         # Wait for UI to refresh after enabling version listing

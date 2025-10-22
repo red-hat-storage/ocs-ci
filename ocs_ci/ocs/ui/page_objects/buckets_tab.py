@@ -515,3 +515,68 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             self.driver.refresh()
             self.page_has_loaded(sleep_time=2)
             _check_three_dots_disabled("check three dots inactive after refresh")
+
+    def upload_folder_to_bucket(self, folder_path: str, wait_time: int = 2) -> None:
+        """
+        Upload a folder to the bucket.
+
+        Args:
+            folder_path (str): Path to the folder to upload.
+            wait_time (int): Time to wait after upload (default: 2 seconds).
+        """
+        file_input = self.driver.find_element(
+            self.bucket_tab["file_input_directory"][1],
+            self.bucket_tab["file_input_directory"][0],
+        )
+        self.driver.execute_script(
+            "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
+            file_input,
+        )
+        file_input.clear()
+        file_input.send_keys(folder_path)
+        time.sleep(wait_time)
+
+    def navigate_to_bucket(self, bucket_name: str) -> None:
+        """
+        Navigate to object storage and select the specific test bucket by name.
+
+        Args:
+            bucket_name (str): Name of the bucket to navigate to.
+        """
+        self.nav_object_storage_page()
+        logger.info(f"Navigating to bucket: {bucket_name}")
+        logger.info(f"Looking for bucket link with text: {bucket_name}")
+        bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
+        self.do_click((bucket_link_locator, By.XPATH))
+        logger.info(f"Successfully navigated into bucket: {bucket_name}")
+
+    def navigate_to_folder_and_enable_versions(
+        self,
+        folder_name: str,
+        bucket_name: str,
+        navigation_wait_time: int = 2,
+        versions_load_wait_time: int = 3,
+    ) -> None:
+        """
+        Navigate to the test folder and enable version listing.
+
+        Args:
+            folder_name (str): Name of the folder to navigate to.
+            bucket_name (str): Name of the bucket to work with.
+            navigation_wait_time (int): Time to wait after navigation (default: 2 seconds).
+            versions_load_wait_time (int): Time to wait for versions to load (default: 3 seconds).
+        """
+        logger.info("Navigating to folder and showing versions")
+        self.navigate_to_bucket(bucket_name)
+
+        logger.info(f"Clicking on folder link to navigate into folder: {folder_name}")
+        self.do_click(self.bucket_tab["first_folder_link"])
+
+        time.sleep(navigation_wait_time)
+        logger.info("Clicking 'List all versions' toggle")
+        self.do_click(self.bucket_tab["list_all_versions_toggle"])
+
+        time.sleep(versions_load_wait_time)
+        logger.info(
+            f"Successfully navigated to folder '{folder_name}' and enabled version listing"
+        )
