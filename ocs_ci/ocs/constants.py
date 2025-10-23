@@ -3637,3 +3637,7 @@ KRKN_RUN_CMD = os.path.join(KRKN_DIR, "run_kraken.py")
 KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
 
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
+RBD_CSI_ADDONS_PLUGIN_DIR = (
+    "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
+)
+RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
