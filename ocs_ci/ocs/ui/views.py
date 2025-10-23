@@ -348,9 +348,7 @@ generic_locators = {
     ),
     "resource_link": (
         "//a[@data-test='resource-link-{}'] | "
-        "//td[@id='name']//a[contains(text(),'{}')] | "
-        "//td[@data-label='Name']//a[contains(text(),'{}')] | "
-        "//td[@data-label='name']//a[contains(text(),'{}')]",
+        "//td[@data-label='Name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
     "confirm_action": (
@@ -2385,6 +2383,10 @@ bucket_tab = {
         "tr:nth-of-type(1) a",
         By.CSS_SELECTOR,
     ),
+    "bucket_link_by_name": (
+        "//tr//a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
     "create_folder_button": (
         "div.pf-v5-u-w-50 > div > button.pf-v5-c-button",
         By.CSS_SELECTOR,
@@ -2414,11 +2416,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "pagination_next_button": (
-        "button[class='pf-v5-c-button pf-m-plain pf-v5-u-ml-xs'] svg",
+        "button[class*='c-button'][class*='pf-m-plain'][class*='u-ml-xs'] svg",
         By.CSS_SELECTOR,
     ),
     "pagination_prev_button": (
-        "button[class='pf-v5-c-button pf-m-plain pf-v5-u-mr-xs'] svg",
+        "button[class*='c-button'][class*='pf-m-plain'][class*='u-mr-xs'] svg",
         By.CSS_SELECTOR,
     ),
     "bucket_list_items": (
@@ -2434,13 +2436,109 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_confirm_button": (
-        ".pf-v5-c-button.pf-m-danger.pf-m-progress",
+        "[class*='c-button'][class*='pf-m-danger'][class*='pf-m-progress']",
         By.CSS_SELECTOR,
     ),
     "bucket_confirm_input": (
         "form input[id]",
         By.CSS_SELECTOR,
     ),  # Input field for bucket name confirmation
+    "properties_tab": (
+        "button[id='pf-tab-2-s3-overview'] span[class*='c-tabs__item-text']",
+        By.CSS_SELECTOR,
+    ),
+    "versioning_toggle": (
+        "[class*='c-switch__toggle']",
+        By.CSS_SELECTOR,
+    ),
+    "versioning_checkbox_input": (
+        "[class*='c-switch__input']",
+        By.CSS_SELECTOR,
+    ),
+    "versioning_status": (
+        "//div[contains(text(), 'Versioning')]/following-sibling::div//span[contains(@class, 'switch__label')]",
+        By.XPATH,
+    ),
+    "versioning_enable_confirm_button": (
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'pf-m-primary') and text()='Enable']",
+        By.XPATH,
+    ),
+    "versioning_cancel_confirm_button": (
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'pf-m-link') and text()='Cancel']",
+        By.XPATH,
+    ),
+    "file_input_directory": (
+        "//input[@type='file'][@webkitdirectory]",
+        By.XPATH,
+    ),
+    "first_folder_link": (
+        "tbody tr:nth-child(1) td:nth-child(2) a:nth-child(1)",
+        By.CSS_SELECTOR,
+    ),
+    "list_all_versions_toggle": (
+        "//div[contains(@class, 'bucket-objects') or contains(@class, 'object-list')]"
+        "//span[contains(@class, 'c-switch__toggle')] | "
+        "//span[contains(text(), 'List all versions')]/..//span[contains(@class, 'c-switch__toggle')] | "
+        "//label[contains(text(), 'List all versions')]//span[contains(@class, 'c-switch__toggle')]",
+        By.XPATH,
+    ),
+    "version_latest_label": (
+        "[class*='c-label__text']",
+        By.CSS_SELECTOR,
+    ),
+    "upload_success_dismiss_button": (
+        "button[class*='c-button'][class*='pf-m-link'][class*='pf-m-inline'][data-ouia-component-type*='Button']",
+        By.CSS_SELECTOR,
+    ),
+    "file_name_text": (
+        "//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "txt_files": (
+        "//*[contains(text(), '.txt')]",
+        By.XPATH,
+    ),
+    "version_id_cell": (
+        "//td[@data-label='Version ID']",
+        By.XPATH,
+    ),
+    "object_row_with_latest": (
+        "//tr[.//span[contains(@class, 'c-label__text') and text()='Latest']]",
+        By.XPATH,
+    ),
+    "version_id_for_latest": (
+        "//tr[.//span[contains(@class, 'c-label__text') and text()='Latest']]//td[@data-label='Version ID']",
+        By.XPATH,
+    ),
+    "version_actions_menu_for_latest": (
+        "//tr[.//span[contains(@class, 'c-label__text') and text()='Latest']]"
+        "//button[@aria-label='Kebab toggle']",
+        By.XPATH,
+    ),
+    "delete_this_version_option": (
+        "//*[contains(text(), 'Delete this version')]",
+        By.XPATH,
+    ),
+    "delete_version_modal_title": (
+        "//*[contains(text(), 'Delete version')]",
+        By.XPATH,
+    ),
+    "delete_version_input": (
+        "//input[contains(@placeholder, 'delete')]",
+        By.XPATH,
+    ),
+    "delete_version_confirm_button": (
+        "//button[contains(@class, 'pf-m-danger') and contains(text(), 'Delete object')]",
+        By.XPATH,
+    ),
+    "delete_version_cancel_button": (
+        "//button[contains(@class, 'c-button') and contains(@class, 'pf-m-link') and text()='Cancel']",
+        By.XPATH,
+    ),
+    "version_row_checkboxes": (
+        "//input[@type='checkbox' and @aria-label[starts-with(., 'Select row')] and not(@name='check-all')]",
+        By.XPATH,
+    ),
 }
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
