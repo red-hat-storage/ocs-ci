@@ -218,23 +218,27 @@ def validate_mon_ip_annotation_on_workers():
     nodes_obj = OCP(kind="node")
     nodes = nodes_obj.get().get("items", [])
     worker_nodes = [
-        node
-        for node in nodes
-        if constants.WORKER_LABEL in node["metadata"]["labels"]
+        node for node in nodes if constants.WORKER_LABEL in node["metadata"]["labels"]
     ]
     if not worker_nodes:
         raise UnavailableResourceException("No worker node found!")
     correct_annotations = True
     for worker in worker_nodes:
-        log.info(f"Checking node {worker['metadata']['name']} for annotation network.rook.io/mon-ip")
-        network_data = (
-            config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker["metadata"]["name"])
+        log.info(
+            f"Checking node {worker['metadata']['name']} for annotation network.rook.io/mon-ip"
         )
-        annotation_ip = worker.get("metadata").get("annotations", {}).get("network.rook.io/mon-ip")
+        network_data = (
+            config.ENV_DATA.get("baremetal", {})
+            .get("servers", {})
+            .get(worker["metadata"]["name"])
+        )
+        annotation_ip = (
+            worker.get("metadata").get("annotations", {}).get("network.rook.io/mon-ip")
+        )
         if annotation_ip != network_data["private_ip"]:
             log.error(
                 f"Node {worker['metadata']['name']} has annotation network.rook.io/mon-ip={annotation_ip}"
-                f" instead of network.rook.io/mon-ip={network_data["private_ip"]}"
+                f" instead of network.rook.io/mon-ip={network_data['private_ip']}"
             )
             correct_annotations = False
     return correct_annotations
