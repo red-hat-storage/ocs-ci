@@ -4,7 +4,6 @@ metadata:
   name: odfcluster
   namespace: ibm-spectrum-fusion-ns
 spec:
-  taintNode: false
   creator: CreatedByFusion
   deviceSets:
   - capacity: 1Ti

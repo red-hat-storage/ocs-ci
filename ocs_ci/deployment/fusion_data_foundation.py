@@ -220,7 +220,6 @@ class FusionDataFoundationDeployment:
             odfcluster_data["spec"]["deviceSets"][0][
                 "name"
             ] = constants.FDF_LSO_DEVICE_SET_NAME
-            odfcluster_data["spec"]["taintNode"] = True
         else:
             storageclass = get_storageclass()
 
