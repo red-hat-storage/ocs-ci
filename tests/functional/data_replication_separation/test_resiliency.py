@@ -5,7 +5,6 @@ import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     data_replication_separation_required,
-    jira,
     yellow_squad,
 )
 from ocs_ci.framework.testlib import tier4a, tier4c
@@ -16,18 +15,25 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import data_replication_separation
-from ocs_ci.ocs.node import drain_nodes, get_nodes, schedule_nodes, wait_for_nodes_status
+from ocs_ci.ocs.node import (
+    drain_nodes,
+    get_nodes,
+    schedule_nodes,
+    wait_for_nodes_status,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @tier4a
 @data_replication_separation_required
+@pytest.mark.polarion_id("")
+@yellow_squad
 def test_worker_node_drain():
     """
     Test that node configuration is correct after a worker node drain.
     """
-    ocp_nodes = get_nodes(node_type=node_type)
+    ocp_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
     ocp_node = random.choice(ocp_nodes)
     drain_nodes([ocp_node.name])
     # Wait for the node to be unschedule
@@ -53,10 +59,14 @@ def test_worker_node_drain():
     )
     logger.info("Checking that the Ceph health is OK")
     ceph_health_check()
+    logger.info("Checking that all nodes are correctly annotated")
+    data_replication_separation.validate_mon_ip_annotation_on_workers()
 
 
 @tier4c
+@pytest.mark.polarion_id("")
 @data_replication_separation_required
+@yellow_squad
 def test_mon_respin():
     """
     Test that a new montor has set hostnetwork correctly when monitor is respinned.
@@ -69,4 +79,5 @@ def test_mon_respin():
     time.sleep(60)
     logger.info("Checking that the Ceph health is OK")
     ceph_health_check()
+    logger.info("Checking that all mons have set host network")
     data_replication_separation.validate_monitor_pods_have_host_network()
