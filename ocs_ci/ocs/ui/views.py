@@ -1384,6 +1384,9 @@ acm_configuration_4_20 = {
     "nav-bar-vms-page": ("//a[@data-test-id='virtualmachines-nav-item']", By.XPATH),
     "all-clusters": ("//button[text()='All clusters']", By.XPATH),
     "managed-cluster-name": ("//button[text()='{}']", By.XPATH),
+    "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
+    "cnv-vm-name": ('//a[@data-test-id="{}"]', By.XPATH),
+    "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
 }
 
 add_capacity = {

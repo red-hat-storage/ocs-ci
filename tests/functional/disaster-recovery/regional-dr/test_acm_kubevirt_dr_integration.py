@@ -46,14 +46,9 @@ class TestACMKubevirtDRIntergration:
         argnames=["protection_type"],
         argvalues=[
             pytest.param(
-                False,
-                id="standalone",
-                marks=pytest.mark.polarion_id("OCS-xxxx")),
-
-            pytest.param(
-                True,
-                id="shared",
-                marks=pytest.mark.polarion_id("OCS-yyyy")),
+                False, id="standalone", marks=pytest.mark.polarion_id("OCS-xxxx")
+            ),
+            pytest.param(True, id="shared", marks=pytest.mark.polarion_id("OCS-yyyy")),
         ],
     )
     # TODO: Add Polarion ID when available
@@ -123,13 +118,18 @@ class TestACMKubevirtDRIntergration:
             vms=[cnv_workloads[0].vm_name],
             protection_name=protection_name,
             namespace=cnv_workloads[0].workload_namespace,
+            vms_name=[cnv_workloads[0].vm_name],
+            managed_cluster_name=primary_cluster_name,
         )
-        assert assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[cnv_workloads[1].vm_name],
-            standalone=False,
-            namespace=cnv_workloads[0].workload_namespace,
-        )
+        if protection_type == "shared":
+            assert assign_drpolicy_for_discovered_vms_via_ui(
+                acm_obj,
+                vms=[cnv_workloads[1].vm_name],
+                standalone=False,
+                namespace=cnv_workloads[0].workload_namespace,
+                vms_name=[cnv_workloads[0].vm_name],
+                managed_cluster_name=primary_cluster_name,
+            )
 
         logger.info(
             f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
@@ -155,9 +155,20 @@ class TestACMKubevirtDRIntergration:
         )
 
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+
+        workload_pvc_count = (
+            cnv_workloads[0].workload_pvc_count * 2
+            if protection_type == "shared"
+            else cnv_workloads[0].workload_pvc_count
+        )
+        workload_pod_count = (
+            cnv_workloads[0].workload_pod_count * 2
+            if protection_type == "shared"
+            else cnv_workloads[0].workload_pod_count
+        )
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count * 2,
-            cnv_workloads[0].workload_pod_count * 2,
+            workload_pvc_count,
+            workload_pod_count,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
@@ -222,8 +233,8 @@ class TestACMKubevirtDRIntergration:
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count * 2,
-            cnv_workloads[0].workload_pod_count * 2,
+            workload_pvc_count,
+            workload_pod_count,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
@@ -332,8 +343,8 @@ class TestACMKubevirtDRIntergration:
         # Verify resources creation on primary managed cluster
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count * 2,
-            cnv_workloads[0].workload_pod_count * 2,
+            workload_pvc_count,
+            workload_pod_count,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
