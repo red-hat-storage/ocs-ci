@@ -183,6 +183,7 @@ class StorageClusterSetup(object):
                 storageclass=constants.DEFAULT_STORAGECLASS_LSO
             )
             pv_size_list.sort()
+            # setting it device size as no pv is available
             deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
                 "storage"
             ] = f"{device_size}Gi"

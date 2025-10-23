@@ -3555,6 +3555,8 @@ DAEMONSET_CSI_RBD = "openshift-storage.rbd.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD_CSI_ADDONS = (
     "openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons"
 )
+FDF_LSO_STORAGECLASS = "ibm-spectrum-fusion-local"
+FDF_LSO_DEVICE_SET_NAME = "ocs-deviceset-ibm-spectrum-fusion-local"
 # The expected mds cache memory values
 MDS_CACHE_MEMORY = 3221225472
 LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
