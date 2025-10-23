@@ -205,6 +205,7 @@ class FusionDataFoundationDeployment:
                     odfcluster_data["spec"][key] = {}
             storageclass = constants.FDF_LSO_STORAGECLASS
             device_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+            device_size = f"{device_size}Gi"
             device_set_count = config.DEPLOYMENT.get(
                 "local_storage_storagedeviceset_count", len(worker_nodes)
             )
