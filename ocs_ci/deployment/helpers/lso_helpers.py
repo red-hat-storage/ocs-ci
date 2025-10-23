@@ -443,11 +443,14 @@ def add_disk_for_vsphere_platform():
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
+            ssd_disk = True
+            if config.ENV_DATA.get("hdd_disks"):
+                ssd_disk = False
             logger.info(f"LSO Deployment type: {constants.VMDK}")
             vsphere_base.attach_disk(
                 config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
                 config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
-                ssd=True,
+                ssd=ssd_disk,
             )
 
         if lso_type == constants.DIRECTPATH:
