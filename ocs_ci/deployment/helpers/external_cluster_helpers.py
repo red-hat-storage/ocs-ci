@@ -8,6 +8,7 @@ import logging
 import re
 import tempfile
 import uuid
+import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
@@ -73,8 +74,11 @@ class ExternalCluster(object):
             )
         # adding jump host configuration to connect to external RHCS cluster on ibmcloud via jump host
         jump_host = config.DEPLOYMENT.get("ssh_jump_host", {})
+
         if jump_host:
-            jump_host["private_key"] = self.private_key
+            jump_host["private_key"] = os.path.expanduser(
+                config.DEPLOYMENT["ssh_key_private"]
+            )
 
         self.rhcs_conn = Connection(
             host=self.host,
