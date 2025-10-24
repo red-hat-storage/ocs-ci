@@ -231,11 +231,12 @@ class OCP(object):
         except ValueError:
             pass
 
+        if original_context is not None:
+            config.switch_ctx(original_context)
+
         if out_yaml_format:
             return yaml.safe_load(out)
 
-        if original_context:
-            config.switch_ctx(original_context)
         return out
 
     @retry(CommandFailed, tries=3, delay=30, backoff=1)
