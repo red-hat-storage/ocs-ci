@@ -233,9 +233,10 @@ class TestKrKnNetworkChaosScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes(
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
             ceph_component_label, "network outage chaos"
         )
+        assert no_crashes, crash_details
 
         log.info(
             f"Network outage test for {ceph_component_label} completed successfully"
@@ -475,7 +476,10 @@ class TestKrKnNetworkChaosScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes(ceph_component_label, "network chaos")
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
+            ceph_component_label, "network chaos"
+        )
+        assert no_crashes, crash_details
 
         log.info(
             f"Network chaos test for {ceph_component_label} completed successfully"
@@ -669,9 +673,10 @@ class TestKrKnNetworkChaosScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes(
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
             f"{node_type} nodes", "network ingress chaos"
         )
+        assert no_crashes, crash_details
 
         log.info(
             f"Network ingress chaos test for {node_type} nodes completed successfully"
@@ -955,9 +960,10 @@ class TestKrKnNetworkChaosScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes(
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
             ceph_component_label, f"pod {traffic_direction} shaping chaos"
         )
+        assert no_crashes, crash_details
 
         log.info(
             f"Pod {traffic_direction} shaping test for {ceph_component_label} completed successfully"
@@ -1248,7 +1254,10 @@ class TestKrKnNetworkChaosScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes("OSD ports", "OSD port chaos")
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
+            "OSD ports", "OSD port chaos"
+        )
+        assert no_crashes, crash_details
 
         # Analyze chaos run results
         chaos_run_output = krkn.get_chaos_data()
@@ -1385,6 +1394,9 @@ class TestKrKnNetworkChaosScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes("network interfaces", "interface chaos")
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
+            "network interfaces", "interface chaos"
+        )
+        assert no_crashes, crash_details
 
         log.info("Interface-specific network chaos test completed successfully")

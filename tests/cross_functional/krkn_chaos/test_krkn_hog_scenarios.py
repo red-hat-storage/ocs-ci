@@ -287,7 +287,10 @@ class TestKrKnHogChaosScenarios:
         )
 
         # Final health check
-        assert health_helper.check_ceph_crashes("cluster", "multi-stress hog chaos")
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
+            "cluster", "multi-stress hog chaos"
+        )
+        assert no_crashes, crash_details
 
         log.info(
             f"🏆 Multi-stress hog chaos testing for {node_type} nodes "
@@ -498,9 +501,10 @@ class TestKrKnHogChaosScenarios:
         )
 
         # Final health check
-        assert health_helper.check_ceph_crashes(
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
             "cluster", f"{stress_level} cluster strength testing"
         )
+        assert no_crashes, crash_details
 
         log.info(
             f"🏆 {stress_level.upper()} cluster strength testing completed successfully!"

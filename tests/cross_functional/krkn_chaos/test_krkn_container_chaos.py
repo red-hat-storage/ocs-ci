@@ -226,9 +226,10 @@ class TestKrKnContainerChaosScenarios:
         )
 
         # Final health check
-        assert health_helper.check_ceph_crashes(
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, f"multi-component container chaos ({kill_signal})"
         )
+        assert no_crashes, crash_details
 
         log.info(
             f"🏆 Multi-component container chaos testing with {kill_signal} completed successfully! "
@@ -409,7 +410,10 @@ class TestKrKnContainerChaosScenarios:
         )
 
         # Final health check
-        assert health_helper.check_ceph_crashes(None, "random pod kill chaos")
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
+            None, "random pod kill chaos"
+        )
+        assert no_crashes, crash_details
 
         log.info(
             f"🏆 Random pod kill chaos testing for {stress_level} level completed successfully!"

@@ -1870,7 +1870,7 @@ class CephHealthHelper(BaseScenarioHelper):
             chaos_type (str): Type of chaos performed
 
         Returns:
-            bool: True if no crashes found, False if crashes detected
+            tuple: (bool, str) - (True if no crashes found, detailed error message if crashes detected)
         """
         try:
             self.log.info(
@@ -1883,36 +1883,47 @@ class CephHealthHelper(BaseScenarioHelper):
 
             if not crashes_found:
                 self.log.info("✅ No Ceph crashes detected")
-                return True
+                return True, ""
             else:
                 self.log.error("❌ Ceph crashes detected")
-                # Get detailed crash information for logging
+                # Get detailed crash information for logging and error message
+                error_msg = (
+                    f"Ceph crashes detected after {component_label} {chaos_type}. "
+                )
                 try:
                     crashes = ceph_status.get_ceph_crashes()
                     if crashes:
                         self.log.error(f"Found {len(crashes)} Ceph crashes:")
+                        error_msg += f"Found {len(crashes)} crash(es):\n"
                         for i, crash in enumerate(
-                            crashes[:3], 1
-                        ):  # Show first 3 crashes
+                            crashes[:5], 1
+                        ):  # Show first 5 crashes
                             crash_id = crash.get("crash_id", "unknown")
                             timestamp = crash.get("timestamp", "unknown")
+                            entity = crash.get("entity_name", "unknown")
                             self.log.error(
-                                f"   {i}. Crash ID: {crash_id}, Time: {timestamp}"
+                                f"   {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}"
                             )
+                            error_msg += f"  {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}\n"
 
-                        if len(crashes) > 3:
-                            self.log.error(
-                                f"   ... and {len(crashes) - 3} more crashes"
-                            )
+                        if len(crashes) > 5:
+                            remaining = len(crashes) - 5
+                            self.log.error(f"   ... and {remaining} more crashes")
+                            error_msg += f"  ... and {remaining} more crash(es)\n"
+
+                        error_msg += "\nRun 'ceph crash ls' and 'ceph crash info <crash_id>' for more details."
+                    else:
+                        error_msg += "Unable to retrieve crash details."
                 except Exception as detail_ex:
                     self.log.warning(f"Could not get detailed crash info: {detail_ex}")
+                    error_msg += f"Unable to retrieve crash details: {detail_ex}"
 
-                return False
+                return False, error_msg
 
         except Exception as e:
             self.log.error(f"Failed to check Ceph crashes: {e}")
             # In case of check failure, assume no crashes (conservative approach)
-            return True
+            return True, ""
 
 
 # ============================================================================
