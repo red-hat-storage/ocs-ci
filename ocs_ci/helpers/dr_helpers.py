@@ -2549,3 +2549,121 @@ def verify_volsync():
             timeout=600,
         )
     config.switch_ctx(restore_index)
+
+
+def fetch_status_and_type_reflecting_on_vr_or_vgr(
+    namespace, kind=constants.VOLUME_REPLICATION, resource_name="", timeout=600
+):
+    """
+    This method is for validating the status message updated to reflect the current mirroring status
+    on primary VR/VGR.
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+        timeout (int): time in seconds to wait for resource to reach at desired state
+
+    Returns:
+        dict: returns latest condition details
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+
+    if resource_name:
+        resource_data = resource_obj.get(resource_name=resource_name)
+        resource_list = [resource_data] if resource_data else []
+    else:
+        resource_list = resource_obj.get().get("items")
+
+    # wait until vr state is 'primary'
+    wait_for_resource_state(
+        kind=kind,
+        state="primary",
+        namespace=namespace,
+        timeout=timeout,
+    )
+
+    for resource in resource_list:
+        resource_name = resource["metadata"]["name"]
+        conditions = resource["status"]["conditions"]
+        logger.info(f"{kind}: {resource_name} state.conditions {conditions}")
+
+    # return latest state.conditions details
+    latest_condition = max(c["lastTransitionTime"] for c in conditions)
+    logger.info(f"{kind}: {resource_name} latest state.conditions {latest_condition}")
+    return latest_condition
+
+
+def validate_latest_status_type_displayed(
+    namespace,
+    kind=constants.VOLUME_REPLICATION,
+    resource_name="",
+    timeout=600,
+    cephbpradosns="",
+):
+    """
+    This method is for validating the status message updated to reflect the current mirroring status
+    on primary VR/VGR.
+    for mirroring image in healthy status:
+        reason: Replicating
+        status: "True"
+        type: Replicating
+
+    for mirroring image in warning/error status:
+        reason: Replicating
+        status: "Unknown"
+        type: Replicating
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+        timeout (int): time in seconds to wait for resource to reach at desired state
+        cephbpradosns (str): cephblockpoolradosnamespaces name
+
+    Returns:
+        # bool: True if as per mirroring status expected status and type is displayed in
+        # vr/vgr status.conditions, False otherwise
+
+    """
+    if not cephbpradosns:
+        cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOLRADOSNS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=cephbpradosns,
+    )
+    latest_condition = fetch_status_and_type_reflecting_on_vr_or_vgr(
+        namespace, kind=kind, resource_name=resource_name, timeout=timeout
+    )
+
+    # fetch mirroring status
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
+    logger.info(f"Mirroring status: {mirroring_status}")
+
+    mirroring_health = mirroring_status.get("health")
+    # mirroring_daemon_health = mirroring_status.get("daemon_health")
+    # mirroring_daemon_health = mirroring_status.get("image_health")
+    # mirroring_daemon_health = mirroring_status.get("group_health")
+    if latest_condition.get("type") == "Replicating":
+        if mirroring_health == "OK":
+            expected_reason = "Replicating"
+            expected_status = "True"
+            assert (
+                latest_condition.get("reason") == expected_reason
+                and latest_condition.get("status") == expected_status
+            ), "reason and type details are incorrect"
+        elif mirroring_health == "WARNING":
+            expected_reason = "Replicating"
+            expected_status = "Unknown"
+            assert (
+                latest_condition.get("reason") == expected_reason
+                and latest_condition.get("status") == expected_status
+            ), "reason and type details are incorrect"
+        elif mirroring_health == "ERROR":
+            expected_reason = "Replicating"
+            expected_status = "Unknown"
+            assert (
+                latest_condition.get("reason") == expected_reason
+                and latest_condition.get("status") == expected_status
+            ), "reason and type details are incorrect"
