@@ -231,7 +231,7 @@ class OCP(object):
         except ValueError:
             pass
 
-        if original_context:
+        if original_context is not None:
             config.switch_ctx(original_context)
 
         if out_yaml_format:
