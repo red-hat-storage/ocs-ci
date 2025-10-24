@@ -1,0 +1,69 @@
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: vm
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/size: small
+        kubevirt.io/domain: vm
+    spec:
+      domain:
+        devices:
+          disks:
+            - name: root-disk
+              disk:
+                bus: virtio
+            - name: cloud-init
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              model: virtio
+        resources:
+          requests:
+            # See https://github.com/cirros-dev/cirros/issues/53
+            memory: 256Mi
+      networks:
+        - name: default
+          pod: {}
+      accessCredentials:
+        - sshPublicKey:
+            source:
+              secret:
+                secretName: my-public-key
+            propagationMethod:
+              configDrive: {}
+      volumes:
+        - name: root-disk
+          persistentVolumeClaim:
+            claimName: root-disk
+        - name: cloud-init
+          cloudInitConfigDrive:
+            userData: |
+              #!/bin/sh
+              echo "Running user-data script"
+  dataVolumeTemplates:
+    - metadata:
+        name: root-disk
+        annotations:
+          cdi.kubevirt.io/storage.checkStaticVolume: "true"
+        labels:
+          appname: vm
+      spec:
+        storage:
+          accessModes:
+            - ReadWriteMany
+          # Customize in your overlay.
+          storageClassName: ocs-storagecluster-ceph-rbd-virtualization
+          resources:
+            requests:
+              storage: 128Mi
+        source:
+          registry:
+             certConfigMap: user-ca-bundle
+             secretRef: quayadmin
+             url: 'docker://r8-ru26-w-l.quay-service.fusion.tadn.ibm.com:8443/ocsci-image/nirsof/cirros:0.6.2-1'
