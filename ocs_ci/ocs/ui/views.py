@@ -1358,6 +1358,11 @@ acm_configuration_4_20 = {
     ),
     "submariner-custom-source": ("//input[@id='source']", By.XPATH),
     "submariner-custom-channel": ("//input[@id='channel']", By.XPATH),
+    "view-vms": (
+        "button[class='pf-v5-c-button pf-m-link pf-m-inline']",
+        By.CSS_SELECTOR,
+    ),
+    "vm-name": ("//td[contains(text(),'vm-workload-1')]", By.XPATH),
 }
 
 add_capacity = {
