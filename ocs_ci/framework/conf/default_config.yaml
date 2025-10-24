@@ -109,14 +109,15 @@ DEPLOYMENT:
   # See also: https://mbukatov.gitlab.io/ocp-network-split/
   network_split_setup: False
   # Custom Ingress SSL certificate, key and CA certificate
-  ingress_ssl_cert: "data/ingress-cert.crt"
-  ingress_ssl_key: "data/ingress-cert.key"
-  ingress_ssl_ca_cert: "data/ca.crt"
+  # (default paths are configured in defaults module)
+  # ingress_ssl_cert: "data/ingress-cert.crt"
+  # ingress_ssl_key: "data/ingress-cert.key"
+  # ingress_ssl_ca_cert: "data/ca.crt"
   custom_ssl_cert_provider: 'ocs-qe-ca'
   certbot_dns_plugin: 'dns-route53'
-  api_ssl_cert: "data/api-cert.crt"
-  api_ssl_key: "data/api-cert.key"
-  api_ssl_ca_cert: "data/ca.crt"
+  #api_ssl_cert: "data/api-cert.crt"
+  #api_ssl_key: "data/api-cert.key"
+  #api_ssl_ca_cert: "data/ca.crt"
   install_lvmo: False
   # AWS profile ( profile must exist in ~/.aws/credentials )
   aws_profile: "ocs_ci"
