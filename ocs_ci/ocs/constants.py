@@ -530,8 +530,6 @@ CONSOLE_CONFIG = "console.v1.operator.openshift.io/cluster"
 
 # Default pools
 DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
-DEFAULT_CEPHFS_DATA_POOL = "ocs-storagecluster-cephfilesystem-data0"
-
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
@@ -696,7 +694,6 @@ CSI_RBDPLUGIN_PROVISIONER_LABEL_419 = (
 )
 CSI_CEPHFSPLUGIN_LABEL_419 = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
 CSI_RBDPLUGIN_LABEL_419 = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
-# ODF 4.20+ CSI Addon pod labels - these pods contain the csi-addons containers
 CSI_RBD_ADDON_NODEPLUGIN_LABEL_420 = (
     "app=openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons"
 )
@@ -3366,6 +3363,12 @@ PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
 DISCOVERED_APPS = "DiscoveredApps"
 DR_OPS_NAMESAPCE = "openshift-dr-ops"
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
+
+# Agnostic rdr
+TEMPLATE_DR_DIR = os.path.join(TEMPLATE_DIR, "DR")
+TEMPLATE_AGNOSTIC_RDR = os.path.join(TEMPLATE_DR_DIR, "agnostic_rdr")
+VR_PATH = os.path.join(TEMPLATE_AGNOSTIC_RDR, "vr.yaml")
+
 
 DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
 REMOVE_DR_EACH_MANAGED_CLUSTER = os.path.join(TEMPLATE_DIR, "DR", "dr_conf_removal.sh")
