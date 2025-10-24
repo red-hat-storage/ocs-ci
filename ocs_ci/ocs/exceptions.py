@@ -770,3 +770,7 @@ class InvalidPodPresent(Exception):
 
 class FloatingIPAssignException(Exception):
     pass
+
+
+class SubctlDownloadFailed(Exception):
+    pass
