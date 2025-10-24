@@ -8,6 +8,7 @@ import logging
 import re
 import tempfile
 import uuid
+import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
@@ -71,11 +72,20 @@ class ExternalCluster(object):
                 "No SSH Auth to connect to external RHCS cluster provided! "
                 "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
             )
+        # adding jump host configuration to connect to external RHCS cluster on ibmcloud via jump host
+        jump_host = config.DEPLOYMENT.get("ssh_jump_host", {})
+
+        if jump_host:
+            jump_host["private_key"] = os.path.expanduser(
+                config.DEPLOYMENT["ssh_key_private"]
+            )
+
         self.rhcs_conn = Connection(
             host=self.host,
             user=self.user,
             password=self.password,
             private_key=self.ssh_key,
+            jump_host=None if not jump_host else jump_host,
         )
 
     def get_external_cluster_details(self):
