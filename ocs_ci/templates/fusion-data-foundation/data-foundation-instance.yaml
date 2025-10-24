@@ -4,7 +4,7 @@ metadata:
   name:  odfmanager
   namespace: ibm-spectrum-fusion-ns
 spec:
-  creator: User
+  creator: Fusion
   doInstall: true
   parameters:
   - name: namespace
