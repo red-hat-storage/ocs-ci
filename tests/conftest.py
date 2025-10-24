@@ -7609,9 +7609,11 @@ def discovered_apps_dr_workload(request):
                         "dr_workload_app_recipe_name_selector_value"
                     ],
                 )
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload(recipe=True)
+
+                instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(recipe=True)
+
         return instances
 
     def teardown():
