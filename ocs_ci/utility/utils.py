@@ -15,7 +15,8 @@ import string
 import subprocess
 import time
 import traceback
-from typing import Match, Iterator
+from typing import Match, Iterator, Union, List, Optional
+from collections import OrderedDict
 import stat
 import shutil
 from copy import deepcopy
@@ -85,6 +86,78 @@ RC = []
 failure = {}
 output = []
 unique_test_names = []
+
+
+# Command throttling state for reducing repetitive log noise (LRU cache with max size)
+class _LRUThrottleCache:
+    def __init__(self, max_size=1000):
+        self.cache = OrderedDict()
+        self.max_size = max_size
+
+    def __getitem__(self, key):
+        if key not in self.cache:
+            self.cache[key] = {"last_logged": 0, "skip_count": 0}
+        else:
+            # Move to end (mark as recently used)
+            self.cache.move_to_end(key)
+
+        # Remove oldest entries if cache is too large
+        while len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+        return self.cache[key]
+
+
+_command_throttle_state = _LRUThrottleCache()
+_throttle_window_seconds = int(
+    os.environ.get("OCS_LOG_THROTTLE_WINDOW", "15")
+)  # Reduced from 60s for better granularity
+
+# Smart logging truncation constants
+YAML_MAX_SIZE = 15000
+YAML_FIRST_PART_SIZE = 8000
+YAML_EVENTS_MAX_SIZE = 7000
+OUTPUT_SHORT_THRESHOLD = 5000
+OUTPUT_MEDIUM_THRESHOLD = 20000
+TRUNCATED_OUTPUT_MAX_SIZE = 25000
+YAML_INITIAL_LINES_KEEP = 100
+OUTPUT_LINES_THRESHOLD = 100
+OUTPUT_LINES_KEEP_START = 200
+OUTPUT_LINES_KEEP_END = 100
+OUTPUT_LINES_TRUNCATE_AFTER = 200
+
+# Pre-compiled patterns for command classification (performance optimization)
+_STATE_CHANGING_KEYWORDS = {
+    "create",
+    "delete",
+    "apply",
+    "patch",
+    "scale",
+    "drain",
+    "cordon",
+    "uncordon",
+    "taint",
+    "label",
+    "annotate",
+    "edit",
+    "replace",
+}
+
+_DIAGNOSTIC_PATTERNS = [
+    re.compile(r"get.*-o yaml"),  # All YAML outputs contain critical state info
+    re.compile(r"describe"),  # Contains events and error conditions
+    re.compile(r"logs"),  # Essential for debugging pod failures
+    re.compile(r"rsh.*ceph health$"),  # Ceph health checks are critical
+    re.compile(r"exec.*ceph health"),  # Alternative ceph health pattern
+]
+
+_MONITORING_PATTERNS = [
+    re.compile(r"exec.*stat -c %i.*\.log"),  # Log file stat monitoring
+    re.compile(r"whoami$"),  # Standalone whoami
+    re.compile(r"version$"),  # Standalone version commands
+    re.compile(r"get pod(?!.*-o yaml)"),  # Plain get pod commands (without yaml)
+    re.compile(r"get.*(?<!-o yaml)$"),  # Other plain get commands (without yaml)
+]
 
 
 # function for getting the clients
@@ -603,19 +676,272 @@ def run_cmd_multicluster(
     backoff=1,
     text_in_exception="client connection lost",
 )
+def _should_log_command_at_all(cmd_str: str, return_code: int) -> tuple[bool, int]:
+    """
+    Decide if command deserves logging with time-based throttling.
+
+    For monitoring commands, implements time-based throttling to reduce noise
+    while preserving visibility. Always logs failures and state changes.
+
+    Args:
+        cmd_str: The command string to evaluate
+        return_code: Command exit code
+
+    Returns:
+        tuple: (should_log, log_level) - log_level is None if should_log is False
+    """
+    cmd_lower = cmd_str.lower()
+
+    # ALWAYS log failures (regardless of command type)
+    if return_code != 0:
+        return True, logging.ERROR
+
+    # ALWAYS log state-changing operations (using O(1) set lookup)
+    if any(keyword in cmd_lower for keyword in _STATE_CHANGING_KEYWORDS):
+        return True, logging.INFO
+
+    # IMPORTANT diagnostic commands - always visible at INFO level (pre-compiled patterns)
+    if any(pattern.search(cmd_lower) for pattern in _DIAGNOSTIC_PATTERNS):
+        return True, logging.INFO
+
+    # Monitoring commands that should be throttled (less critical, pre-compiled patterns)
+    is_monitoring = any(pattern.search(cmd_lower) for pattern in _MONITORING_PATTERNS)
+
+    if is_monitoring and _throttle_window_seconds > 0:
+        current_time = time.time()
+        cmd_state = _command_throttle_state[cmd_str]
+
+        # Check if we should throttle
+        time_since_last = current_time - cmd_state["last_logged"]
+
+        if time_since_last >= _throttle_window_seconds:
+            # Log this occurrence with skip count if any
+            cmd_state["last_logged"] = current_time
+            skip_count = cmd_state["skip_count"]
+            cmd_state["skip_count"] = 0
+
+            if skip_count > 0:
+                # Will log a message about skipped occurrences
+                log.debug(
+                    f"[Command was executed {skip_count} more times in last "
+                    f"{_throttle_window_seconds}s but logging was throttled]"
+                )
+            return True, logging.DEBUG
+        else:
+            # Throttle this occurrence
+            cmd_state["skip_count"] += 1
+            return False, None
+
+    # Everything else at DEBUG level
+    return True, logging.DEBUG
+
+
+def _smart_yaml_truncation(yaml_output: str) -> str:
+    """
+    Smart YAML truncation that preserves critical diagnostic info.
+    Removes: base64 data, images, certificates, large binary blobs
+    Preserves: events, status, conditions, errors, metadata
+    """
+    # Early return for small outputs - no processing needed
+    if len(yaml_output) < YAML_MAX_SIZE:
+        return yaml_output
+
+    lines = yaml_output.split("\n")
+    preserved_lines = []
+    skip_until_indent = -1
+    in_events_section = False
+
+    for i, line in enumerate(lines):
+        # Calculate current indentation
+        indent = len(line) - len(line.lstrip())
+
+        # Skip continuation of base64/image/binary blocks
+        if skip_until_indent >= 0:
+            if indent > skip_until_indent:
+                continue  # Still inside the block to skip
+            else:
+                skip_until_indent = -1  # Block ended
+
+        # Detect sections to skip entirely (binary data)
+        if any(
+            pattern in line.lower()
+            for pattern in [
+                "base64data:",
+                "image:",
+                "binarydata:",
+                "certificate:",
+                "privatekey:",
+                "publickey:",
+                "dockerconfigjson:",
+                "data:image/",
+                ".dockercfg:",
+                ".dockerconfigjson:",
+            ]
+        ):
+            skip_until_indent = indent
+            binary_size = (
+                len(line)
+                if i + 1 >= len(lines)
+                else sum(len(l) for l in lines[i : i + 10])
+            )
+            preserved_lines.append(
+                f"{line.split(':')[0]}: [BINARY DATA REMOVED - ~{binary_size} chars]"
+            )
+            continue
+
+        # Detect important sections to ALWAYS preserve
+        if any(
+            pattern in line.lower()
+            for pattern in [
+                "events:",
+                "status:",
+                "conditions:",
+                "message:",
+                "reason:",
+                "error:",
+                "warning:",
+                "failed:",
+                "phase:",
+                "lastprobe:",
+                "lasttransition:",
+            ]
+        ):
+            in_events_section = "events:" in line.lower()
+            preserved_lines.append(line)
+            continue
+
+        # In events section - keep everything
+        if in_events_section:
+            preserved_lines.append(line)
+            # Check if events section ended (new top-level key)
+            if (
+                indent == 0
+                and line.strip()
+                and ":" in line
+                and not line.startswith(" ")
+            ):
+                in_events_section = False
+            continue
+
+        # For first N lines, keep metadata and basic structure
+        if i < YAML_INITIAL_LINES_KEEP:
+            preserved_lines.append(line)
+        # After that, only keep important fields
+        elif any(
+            key in line.lower()
+            for key in [
+                "name:",
+                "namespace:",
+                "uid:",
+                "resourceversion:",
+                "creationtimestamp:",
+                "deletiontimestamp:",
+                "generation:",
+            ]
+        ):
+            preserved_lines.append(line)
+
+    result = "\n".join(preserved_lines)
+
+    # If still too large, do a final truncation but preserve events at end
+    if len(result) > YAML_MAX_SIZE:
+        # Find events section
+        events_start = result.rfind("\nevents:")
+        if events_start > 0:
+            # Keep first part + events
+            first_part = result[:YAML_FIRST_PART_SIZE]
+            events_part = result[events_start:]
+            if len(events_part) > YAML_EVENTS_MAX_SIZE:
+                events_part = (
+                    events_part[:YAML_EVENTS_MAX_SIZE] + "\n  ... [events truncated]"
+                )
+            result = f"{first_part}\n... [middle section removed] ...\n{events_part}"
+        else:
+            # No events, preserve content up to max size
+            result = result[:YAML_MAX_SIZE] + "\n... [truncated]"
+
+    # Add summary stats
+    original_lines = len(lines)
+    preserved_lines_count = len([line for line in preserved_lines if line.strip()])
+    reduction_pct = (1 - len(result) / len(yaml_output)) * 100 if yaml_output else 0
+
+    result += f"\n[YAML: {preserved_lines_count}/{original_lines} lines kept, {reduction_pct:.1f}% reduced]"
+
+    return result
+
+
+def _smart_output_logging(output: str) -> str:
+    """
+    Intelligent output truncation and summarization for non-YAML outputs.
+    """
+    if len(output) < OUTPUT_SHORT_THRESHOLD:
+        return output  # Short outputs: log in full
+
+    # JSON outputs: show first part + structure summary
+    if output.strip().startswith("{"):
+        try:
+            import json
+
+            data = json.loads(output)
+            if isinstance(data, dict):
+                keys = list(data.keys())[:15]  # Show more keys
+                # Show first 5000 chars + summary (increased from 1000)
+                preview = output[:5000] + "..."
+                return f"{preview}\n[JSON structure - Keys: {keys}] [Full: {len(output)} chars]"
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Detect actual base64 content blocks (not just the word "base64")
+    lines = output.split("\n")
+    base64_line_count = sum(
+        1
+        for line in lines
+        if len(line.strip()) > 50
+        and line.strip().replace("+", "").replace("/", "").replace("=", "").isalnum()
+    )
+
+    # Only truncate if >500 lines AND >30% are likely base64 content
+    if len(lines) > 500 and base64_line_count > len(lines) * 0.3:
+        return (
+            f"Large base64/binary output: {len(lines)} lines, {len(output)} chars "
+            f"[~{base64_line_count} base64 lines detected, truncated for brevity]"
+        )
+
+    # For large outputs, preserve much more content
+    if len(lines) > OUTPUT_LINES_THRESHOLD:
+        # Keep first N and last M lines for context
+        if len(lines) > OUTPUT_LINES_TRUNCATE_AFTER:
+            truncated_lines = (
+                lines[:OUTPUT_LINES_KEEP_START]
+                + [f"... [{len(lines)-OUTPUT_LINES_TRUNCATE_AFTER} lines omitted] ..."]
+                + lines[-OUTPUT_LINES_KEEP_END:]
+            )
+            return "\n".join(truncated_lines)
+        else:
+            return output  # Show everything if below truncate threshold
+    else:
+        # For medium outputs, increase character limit significantly
+        if len(output) > OUTPUT_MEDIUM_THRESHOLD:
+            return f"{output[:OUTPUT_MEDIUM_THRESHOLD]}...\n[TRUNCATED: {len(output)} chars total]"
+        else:
+            return output  # Show in full
+
+
 def exec_cmd(
-    cmd,
-    secrets=None,
-    timeout=600,
-    ignore_error=False,
-    threading_lock=None,
-    silent=False,
-    use_shell=False,
-    cluster_config=None,
-    lock_timeout=7200,
-    output_file=None,
+    cmd: Union[str, List[str]],
+    secrets: Optional[List[str]] = None,
+    timeout: int = 600,
+    ignore_error: bool = False,
+    threading_lock: Optional = None,
+    silent: bool = False,
+    use_shell: bool = False,
+    cluster_config: Optional[object] = None,
+    lock_timeout: int = 7200,
+    output_file: Optional[str] = None,
+    log_stdout: bool = True,
+    log_stderr_level: int = logging.DEBUG,
     **kwargs,
-):
+) -> subprocess.CompletedProcess:
     """
     Run an arbitrary command locally
 
@@ -638,6 +964,8 @@ def exec_cmd(
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
         output_file (str): path where to write output of stderr from command - apply only when silent mode is True
+        log_stdout (bool): If True will log stdout, default true
+        log_stderr_level (int): Log level for stderr on successful commands, default DEBUG
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -686,58 +1014,118 @@ def exec_cmd(
                 # If oc cmdline has plugin name then we need to push the
                 # --kubeconfig to next index
                 kube_index = 2
-                log.info(f"Found oc plugin {subcmd}")
+                log.info("Found oc plugin %s", subcmd)
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
-        if kwargs.get("shell"):
-            masked_cmd = mask_secrets(cmd, secrets)
+        # Determine actual shell usage (for consistent processing)
+        actual_use_shell = use_shell or kwargs.get("shell", False)
+
+        # Normalize command to list format for consistent masking
+        if isinstance(cmd, str):
+            cmd_list = shlex.split(cmd) if not actual_use_shell else [cmd]
         else:
-            masked_cmd = shlex.join(mask_secrets(cmd, secrets))
-        log.info(f"Executing command: {masked_cmd}")
-        if threading_lock and cmd[0] == "oc":
+            cmd_list = cmd
+
+        # Mask secrets and create display string
+        masked_cmd_list = mask_secrets(cmd_list, secrets)
+        masked_cmd = (
+            shlex.join(masked_cmd_list)
+            if len(masked_cmd_list) > 1 or not actual_use_shell
+            else masked_cmd_list[0]
+        )
+        # Smart command logging - decide if and how to log this command
+        should_log_cmd, cmd_log_level = _should_log_command_at_all(
+            masked_cmd,
+            0,  # We don't know return code yet, will handle failures later
+        )
+
+        if should_log_cmd:
+            log.log(cmd_log_level, "Executing command: %s", masked_cmd)
+
+        # Check if command is oc for threading lock (handle both list and string formats)
+        is_oc_command = (isinstance(cmd, list) and cmd[0] == "oc") or (
+            isinstance(cmd, str) and cmd.startswith("oc ")
+        )
+        if threading_lock and is_oc_command:
             threading_lock.acquire(timeout=lock_timeout)
+        # Handle both use_shell parameter and shell kwarg for backward compatibility
+        subprocess_kwargs = kwargs.copy()
+        # use_shell parameter takes precedence over shell kwarg (already calculated above)
+        subprocess_kwargs["shell"] = actual_use_shell
+
+        # Convert cmd to string when shell=True, subprocess expects string for shell commands
+        if actual_use_shell and isinstance(cmd, list):
+            actual_cmd = shlex.join(cmd)
+        else:
+            actual_cmd = cmd
+
         completed_process = subprocess.run(
-            cmd,
+            actual_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
             timeout=timeout,
             env=_env,
-            **kwargs,
+            **subprocess_kwargs,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise CommandFailed(
+            f"Command timed out after {timeout}s: {masked_cmd}"
+        ) from exc
     finally:
-        if threading_lock and cmd[0] == "oc":
+        if threading_lock and is_oc_command:
             threading_lock.release()
-    masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
-    if len(completed_process.stdout) > 0:
-        log.debug(f"Command stdout: {masked_stdout}")
-    else:
-        log.debug("Command stdout is empty")
 
+    # After execution, re-evaluate logging based on actual results
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
+    should_log_cmd, cmd_log_level = _should_log_command_at_all(
+        masked_cmd, completed_process.returncode
+    )
+
+    # Smart stdout logging
+    masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
+    if log_stdout and len(completed_process.stdout) > 0 and should_log_cmd:
+        if re.search(
+            r"(?:\s|^)-o(?:utput)?(?:\s*=?\s*)yaml(?:\s|$)", masked_cmd.lower()
+        ):
+            # Use YAML-specific truncation
+            truncated_stdout = _smart_yaml_truncation(masked_stdout)
+        else:
+            # Use general output truncation
+            truncated_stdout = _smart_output_logging(masked_stdout)
+
+        # Only log if truncated output is reasonable size
+        if len(truncated_stdout) < TRUNCATED_OUTPUT_MAX_SIZE:
+            log.debug("Command stdout: %s", truncated_stdout.rstrip())
+
+    # Smart stderr logging
     if len(completed_process.stderr) > 0:
         if not silent:
-            log.warning(f"Command stderr: {masked_stderr}")
+            # Use ERROR level for failed commands, configurable level for successful ones
+            level = logging.ERROR if completed_process.returncode else log_stderr_level
+            log.log(level, "Command stderr: %s", masked_stderr.rstrip())
         else:
             if output_file:
                 with open(output_file, "a") as out_fd:
                     out_fd.write(masked_stderr)
-    else:
-        if not silent:
-            log.debug("Command stderr is empty")
-    log.debug(f"Command return code: {completed_process.returncode}")
+
+    # Smart return code logging - only for failures or important commands
+    if should_log_cmd and (
+        completed_process.returncode != 0 or cmd_log_level == logging.INFO
+    ):
+        log.debug("Command return code: %d", completed_process.returncode)
     if completed_process.returncode and not ignore_error:
         masked_stderr = bin_xml_escape(filter_out_emojis(masked_stderr))
         if (
             "grep" in masked_cmd
             and b"command terminated with exit code 1" in completed_process.stderr
         ):
-            log.info(f"No results found for grep command: {masked_cmd}")
+            log.info("No results found for grep command: %s", masked_cmd)
         else:
             raise CommandFailed(
-                f"Error during execution of command: {masked_cmd}."
-                f"\nError is {masked_stderr}"
+                f"Command '{masked_cmd}' failed with return code {completed_process.returncode}.\n"
+                f"Error: {masked_stderr}"
             )
     return completed_process
 
