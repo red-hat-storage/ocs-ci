@@ -175,7 +175,8 @@ class AlertingRules(Alerting, SearchBar):
 
         """
         logger.info(f"Navigate to Alerting Rule Details for {alert_name}")
-        self.clear_search()
+        # clearing search no longer needed in 4.19
+        # self.clear_search()
         self.search(alert_name)
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
