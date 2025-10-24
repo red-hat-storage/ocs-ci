@@ -1,3 +1,4 @@
+import re
 import logging
 from time import sleep
 
@@ -10,7 +11,11 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
+    get_pods_having_label,
+    get_pod_logs,
+)
 from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
@@ -128,8 +133,67 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         rdr_workload = discovered_apps_dr_workload(
             pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
         )[0]
-        iteration = 1
-        while iteration <= iterations:
+
+        def check_ramen_dr_cluster_logs(cluster_name):
+            """
+            Check for exec hook executions in logs for applications
+
+            Args:
+                cluster_name (str): The name of the cluster to which the app has been failovered/relocated
+
+            """
+            restore_index = config.cur_index
+            config.switch_to_cluster_by_name(cluster_name=cluster_name)
+
+            # Get pods with the Ramen DR operator label
+            pods = get_pods_having_label(
+                label=constants.RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL,
+                namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+            )
+
+            if not pods:
+                logger.warning(
+                    "No pods found with label %s",
+                    constants.RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL,
+                )
+                config.switch_ctx(restore_index)
+                return
+
+            # Fetch logs of the first pod
+            pod_name = pods[0]["metadata"]["name"]
+            pod_logs = get_pod_logs(
+                pod_name=pod_name, namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE
+            )
+
+            if "executed exec command successfully" in pod_logs:
+                # Regex to extract name and namespace from the log line
+                pattern = re.compile(
+                    r'executed exec command successfully.*?"name":"([^"]+)","namespace":"([^"]+)"'
+                )
+                matches = pattern.findall(pod_logs)
+
+                # Track unique applications to avoid repeated logs
+                seen = set()
+                for name, namespace in matches:
+                    if (
+                        name in rdr_workload.workload_namespace
+                        and (name, namespace) not in seen
+                    ):
+                        logger.info(
+                            f"Exechook running on {name} application in discovered namespace {namespace}"
+                        )
+                        seen.add((name, namespace))
+
+            else:
+                logger.info(
+                    "No 'executed exec command successfully' entries found in pod logs."
+                )
+
+            # Restore original cluster context
+            config.switch_ctx(restore_index)
+
+        iteration = 0
+        while iteration < iterations:
             primary_cluster_name_before_failover = (
                 dr_helpers.get_current_primary_cluster_name(
                     rdr_workload.workload_namespace,
@@ -187,6 +251,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 workload_placement_name=rdr_workload.discovered_apps_placement_name,
                 old_primary=primary_cluster_name_before_failover,
             )
+            check_ramen_dr_cluster_logs(cluster_name=secondary_cluster_name)
 
             if primary_cluster_down:
                 logger.info(
@@ -271,6 +336,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 old_primary=primary_cluster_name_after_failover,
                 workload_instance=rdr_workload,
             )
+            check_ramen_dr_cluster_logs(cluster_name=secondary_cluster_name)
 
             logger.info(
                 "Checking for lastKubeObjectProtectionTime post Relocate Operation"
