@@ -7693,17 +7693,35 @@ def cnv_workload_factory(request):
             object: cnv workload class instance
 
         """
-        vm_name = create_unique_resource_name("test", "vm")
-        cnv_wl = VirtualMachine(vm_name=vm_name, namespace=namespace)
-        cnv_wl.create_vm_workload(
-            volume_interface=volume_interface,
-            access_mode=access_mode,
-            sc_name=storageclass,
-            pvc_size=pvc_size,
-            source_url=source_url,
-            existing_pvc_obj=existing_pvc_obj,
+        offline_disconnected_cluster = config.ENV_DATA.get(
+            "offline_disconnected", False
         )
-        cnv_workloads.append(cnv_wl)
+        if not offline_disconnected_cluster:
+            vm_name = create_unique_resource_name("test", "vm")
+            cnv_wl = VirtualMachine(vm_name=vm_name, namespace=namespace)
+            cnv_wl.create_vm_workload(
+                volume_interface=volume_interface,
+                access_mode=access_mode,
+                sc_name=storageclass,
+                pvc_size=pvc_size,
+                source_url=source_url,
+                existing_pvc_obj=existing_pvc_obj,
+            )
+            cnv_workloads.append(cnv_wl)
+        else:
+            vm_workload_data = templating.load_yaml(
+                constants.CNV_VM_WORKLOADS_FOR_OFFLINE_DISCONNECTED_CLUSTER
+            )
+            cnv_worklod_for_offline_disconnected = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="cnv_workload_for_disconnected_cluster", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                vm_workload_data, cnv_worklod_for_offline_disconnected.name
+            )
+            run_cmd(f"oc apply -f {cnv_worklod_for_offline_disconnected.name}")
+            cnv_wl = VirtualMachine(vm_name="vm", namespace=namespace)
+            cnv_wl.verify_vm(verify_ssh=True)
+
         return cnv_wl
 
     def teardown():
