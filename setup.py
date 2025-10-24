@@ -109,6 +109,7 @@ setup(
         # TypeError: __init__() got an unexpected keyword argument 'default'
         "marshmallow==3.26.1",
         "zope.event==6.0",
+        "pyotp==2.9.0",
     ],
     entry_points={
         "console_scripts": [
