@@ -561,7 +561,7 @@ class OCP(object):
         if selector:
             command += f" --selector={selector}"
         try:
-            self.exec_oc_cmd(command, out_yaml_format=False)
+            self.exec_oc_cmd(command, out_yaml_format=False, timeout=timeout)
             return True
         except CommandFailed:
             return False
