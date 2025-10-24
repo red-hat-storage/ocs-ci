@@ -7,6 +7,7 @@ import os
 import logging
 import pytest
 import time
+import calendar
 import json
 
 from ocs_ci.framework import config
@@ -452,6 +453,16 @@ class TestFIOBenchmark(PASTest):
         # Setting the global parameters of the test
         full_results.add_key("io_pattern", io_pattern)
 
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+        self.test_name = "fio-simple" + interface + io_pattern
+
+        self.deploy_odf_grafana()
+
         # Clean up fio benchmark
         self.cleanup()
 
@@ -591,6 +602,15 @@ class TestFIOBenchmark(PASTest):
         full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+        self.test_name = "fio" + io_pattern + bs + str(cmp_ratio)
+        self.deploy_odf_grafana()
 
         # Writing the analyzed test results to the Elastic-Search server
         if full_results.es_write():

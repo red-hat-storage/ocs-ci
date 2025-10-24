@@ -452,6 +452,8 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         log.info(f"Logs file path name is : {self.full_log_path}")
         log.info(f"Reslut path is : {self.results_path}")
 
+        self.start = time.time()
+
         self.full_teardown = True
         self.num_of_snaps = snap_number
         if self.dev_mode:
@@ -595,6 +597,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         full_results.add_key(
             "test_time", {"start": self.start_time, "end": self.end_time}
         )
+        self.end = time.time()
+
+        self.test_duration = int(self.end - self.start)
+        self.test_name = "test_pvc_multiple_snapshot_performance" + interface_type
+
+        self.deploy_odf_grafana()
 
         # Writing the analyzed test results to the Elastic-Search server
         if full_results.es_write():

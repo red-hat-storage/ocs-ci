@@ -194,6 +194,7 @@ class TestPvcSnapshotPerformance(PASTest):
             pvc_size: the size of the PVC to be tested - parametrize
 
         """
+        self.start = time.time()
 
         # Getting the total Storage capacity
         ceph_capacity = self.ceph_cluster.get_ceph_capacity()
@@ -468,6 +469,13 @@ class TestPvcSnapshotPerformance(PASTest):
             "avg_snap_restore_csi_time_insecs", avg_snap_r_csi_time
         )
 
+        self.end = time.time()
+        self.test_duration = int(self.end - self.start)
+        self.test_name = (
+            "test_pvc_snapshot_performance" + self.interface + str(pvc_size)
+        )
+        self.deploy_odf_grafana()
+
         # Write the test results into the ES server
         self.results_path = helpers.get_full_test_logs_path(cname=self)
         log.info(f"Logs file path name is : {self.full_log_path}")
@@ -519,6 +527,8 @@ class TestPvcSnapshotPerformance(PASTest):
         # Loading the main template yaml file for the benchmark and update some
         # fields with new values
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
+        self.start = time.time()
 
         # Deploying elastic-search server in the cluster for use by the
         # SmallFiles workload, since it is mandatory for the workload.
@@ -710,6 +720,13 @@ class TestPvcSnapshotPerformance(PASTest):
         self.full_results.all_results["total_dataset"] = t_dateset
         self.full_results.all_results["creation_time"] = creation_times
         self.full_results.all_results["csi_creation_time"] = csi_creation_times
+
+        self.end = time.time()
+
+        self.test_duration = int(self.end - self.start)
+        self.test_name = "test_pvc_snapshot_performance_multiple_files" + interface
+
+        self.deploy_odf_grafana()
 
         # Write the test results into the ES server
         log.info("writing results to elastic search server")
