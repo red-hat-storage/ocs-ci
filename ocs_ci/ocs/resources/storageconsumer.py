@@ -18,9 +18,10 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating
-from ocs_ci.utility.retry import retry, catch_exceptions
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, is_cluster_y_version_upgraded
+from ocs_ci.utility.version import get_semantic_version
 
 log = logging.getLogger(__name__)
 
@@ -224,7 +225,7 @@ class StorageConsumer:
         with config.RunWithConfigContext(self.consumer_context):
             resource_name_mapping_config_map = (
                 self.ocp.get(resource_name=self.name)
-                .get("spec")
+                .get("status")
                 .get("resourceNameMappingConfigMap")
             )
         return (
@@ -538,7 +539,6 @@ def create_storage_consumer_on_default_cluster(
 
 
 @if_version(">4.18")
-@catch_exceptions(Exception)
 def verify_storage_consumer_resources(
     consumer_name,
     distributed_storage_classes=None,
@@ -705,16 +705,150 @@ def verify_storage_consumer_resources(
         raise AssertionError(
             f"StorageConsumer {consumer_name} has no ResourceNameMappingConfigMap."
         )
+    ceph_data_on_consumer_match = verify_consumer_configmap(
+        consumer_name,
+        internal_consumer,
+        resource_name_mapping_config_map,
+        storage_consumer_uid,
+    )
+    log.info(
+        f"StorageConsumer config map data match:\n "
+        f"{json.dumps(ceph_data_on_consumer_match, indent=2)}"
+    )
+    assert all(ceph_data_on_consumer_match.values()), (
+        f"StorageConsumer config map data does not match expected values. Consumer name: {consumer_name};"
+        f"ODF Operator upgraded: {is_cluster_y_version_upgraded()}; "
+    )
+
+
+@if_version(">4.18")
+def verify_consumer_configmap(
+    consumer_name, internal_consumer, config_map_name, storage_consumer_uid
+):
+
     config_map_obj = ocp.OCP(
         kind=constants.CONFIGMAP,
         namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
-        resource_name=resource_name_mapping_config_map,
+        resource_name=config_map_name,
     ).get()
     ceph_data = config_map_obj.get("data", {})
-
     ceph_data_on_consumer_match = {}
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
+
+    def convergence_ver(version):
+        return get_semantic_version(
+            version, only_major_minor=True
+        ) == get_semantic_version("4.19", only_major_minor=True)
+
+    def _handle_storageconsumer_ceph_client_names_fresh_converged(
+        ceph_data_arg, ceph_data_on_consumer_match_arg, storage_consumer_uid_arg
+    ):
+        """
+        Handle post-converged client names for ceph data on consumer match.
+
+        Args:
+            ceph_data_arg (dict): The ceph data dictionary from the config map.
+            ceph_data_on_consumer_match_arg (dict): The dictionary to store the match results.
+            storage_consumer_uid_arg (str): The UID of the storage consumer.
+        """
+
+        ceph_data_on_consumer_match_arg["csi-cephfs-node-ceph-user"] = (
+            ceph_data_arg.get("csi-cephfs-node-ceph-user", "")
+            == f"csi-cephfs-node-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csi-cephfs-provisioner-ceph-user"] = (
+            ceph_data_arg.get("csi-cephfs-provisioner-ceph-user", "")
+            == f"csi-cephfs-provisioner-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csi-rbd-node-ceph-user"] = (
+            ceph_data_arg.get("csi-rbd-node-ceph-user", "")
+            == f"csi-rbd-node-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csi-rbd-provisioner-ceph-user"] = (
+            ceph_data_arg.get("csi-rbd-provisioner-ceph-user", "")
+            == f"csi-rbd-provisioner-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csiop-cephfs-client-profile"] = (
+            ceph_data_arg.get("csiop-cephfs-client-profile", "")
+            == storage_consumer_uid_arg
+        )
+        ceph_data_on_consumer_match_arg["csiop-rbd-client-profile"] = (
+            ceph_data_arg.get("csiop-rbd-client-profile", "")
+            == storage_consumer_uid_arg
+        )
+
+    def _handle_storageconsumer_ceph_client_names_upgraded_converged(
+        ceph_data_arg, ceph_data_on_consumer_match_arg, storage_consumer_uid_arg
+    ):
+        """
+        Handle post-converged client names for ceph data on consumer match.
+
+        Args:
+            ceph_data_arg (dict): The ceph data dictionary from the config map.
+            ceph_data_on_consumer_match_arg (dict): The dictionary to store the match results.
+            storage_consumer_uid_arg (str): The UID of the storage consumer.
+        """
+
+        ceph_data_on_consumer_match_arg["csi-cephfs-node-ceph-user"] = (
+            ceph_data_arg.get("csi-cephfs-node-ceph-user", "")
+            == f"cephfs-node-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csi-cephfs-provisioner-ceph-user"] = (
+            ceph_data_arg.get("csi-cephfs-provisioner-ceph-user", "")
+            == f"cephfs-provisioner-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csi-rbd-node-ceph-user"] = (
+            ceph_data_arg.get("csi-rbd-node-ceph-user", "")
+            == f"rbd-node-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csi-rbd-provisioner-ceph-user"] = (
+            ceph_data_arg.get("csi-rbd-provisioner-ceph-user", "")
+            == f"rbd-provisioner-{storage_consumer_uid_arg}"
+        )
+        ceph_data_on_consumer_match_arg["csiop-cephfs-client-profile"] = (
+            ceph_data_arg.get("csiop-cephfs-client-profile", "")
+            == storage_consumer_uid_arg
+        )
+        ceph_data_on_consumer_match_arg["csiop-rbd-client-profile"] = (
+            ceph_data_arg.get("csiop-rbd-client-profile", "")
+            == storage_consumer_uid_arg
+        )
+
+    def _handle_converged_client_ceph_names(
+        ceph_data_arg, ceph_data_on_consumer_match_arg
+    ):
+        """
+        Handle post-converged client names for ceph data on consumer match.
+
+        Args:
+            ceph_data_arg (dict): The ceph data dictionary from the config map.
+            ceph_data_on_consumer_match_arg (dict): The dictionary to store the match results.
+
+        """
+        ceph_data_on_consumer_match_arg["csi-cephfs-node-ceph-user"] = (
+            ceph_data_arg.get("csi-cephfs-node-ceph-user", "") == "rook-csi-cephfs-node"
+        )
+        ceph_data_on_consumer_match_arg["csi-cephfs-provisioner-ceph-user"] = (
+            ceph_data_arg.get("csi-cephfs-provisioner-ceph-user", "")
+            == "rook-csi-cephfs-provisioner"
+        )
+        ceph_data_on_consumer_match_arg["csi-rbd-node-ceph-user"] = (
+            ceph_data_arg.get("csi-rbd-node-ceph-user", "") == "rook-csi-rbd-node"
+        )
+        ceph_data_on_consumer_match_arg["csi-rbd-provisioner-ceph-user"] = (
+            ceph_data_arg.get("csi-rbd-provisioner-ceph-user", "")
+            == "rook-csi-rbd-provisioner"
+        )
+        ceph_data_on_consumer_match_arg["csiop-cephfs-client-profile"] = (
+            ceph_data_arg.get("csiop-cephfs-client-profile", "")
+            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+        )
+        ceph_data_on_consumer_match_arg["csiop-rbd-client-profile"] = (
+            ceph_data_arg.get("csiop-rbd-client-profile", "")
+            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+        )
+
     if internal_consumer and not (disable_blockpools or disable_cephfs):
         """
         check by example:
@@ -739,32 +873,33 @@ def verify_storage_consumer_resources(
             ceph_data.get("rbd-rados-ns", "") == "<implicit>"
         )
 
-        # other client names are dynamic, so we check if they start with the expected suffix
-        ceph_data_on_consumer_match["csi-cephfs-node-ceph-user"] = (
-            ceph_data.get("csi-cephfs-node-ceph-user", "")
-            == f"cephfs-node-{storage_consumer_uid}"
+        _handle_converged_client_ceph_names(ceph_data, ceph_data_on_consumer_match)
+    elif (
+        not internal_consumer
+        and not (disable_blockpools or disable_cephfs)
+        and not is_cluster_y_version_upgraded()
+    ):
+        ceph_data_on_consumer_match["cephfs-subvolumegroup"] = (
+            ceph_data.get("cephfs-subvolumegroup", "") == f"{consumer_name}"
         )
-        ceph_data_on_consumer_match["csi-cephfs-provisioner-ceph-user"] = (
-            ceph_data.get("csi-cephfs-provisioner-ceph-user", "")
-            == f"cephfs-provisioner-{storage_consumer_uid}"
+        ceph_data_on_consumer_match["cephfs-subvolumegroup-rados-ns"] = (
+            ceph_data.get("cephfs-subvolumegroup-rados-ns", "") == f"{consumer_name}"
         )
-        ceph_data_on_consumer_match["csi-rbd-node-ceph-user"] = (
-            ceph_data.get("csi-rbd-node-ceph-user", "")
-            == f"rbd-node-{storage_consumer_uid}"
+        ceph_data_on_consumer_match["rbd-rados-ns"] = (
+            ceph_data.get("rbd-rados-ns", "") == f"{consumer_name}"
         )
-        ceph_data_on_consumer_match["csi-rbd-provisioner-ceph-user"] = (
-            ceph_data.get("csi-rbd-provisioner-ceph-user", "")
-            == f"rbd-provisioner-{storage_consumer_uid}"
+
+        _handle_storageconsumer_ceph_client_names_fresh_converged(
+            ceph_data, ceph_data_on_consumer_match, storage_consumer_uid
         )
-        ceph_data_on_consumer_match["csiop-cephfs-client-profile"] = (
-            ceph_data.get("csiop-cephfs-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
-        )
-        ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
-            ceph_data.get("csiop-rbd-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
-        )
-    else:
+    # next elif block guarantees we are verifying external consumer on post-upgrade 4.19 cluster
+    # post-upgrade 4.20 must be same as a fresh 4.19 cluster
+    elif (
+        not internal_consumer
+        and not (disable_blockpools or disable_cephfs)
+        and is_cluster_y_version_upgraded()
+        and convergence_ver(config.ENV_DATA["ocs_version"])
+    ):
         """
         check by example:
         cephfs-subvolumegroup: consumer-cl-418-c
@@ -777,7 +912,6 @@ def verify_storage_consumer_resources(
         csiop-rbd-client-profile: ffb707b4-855e-4e70-a7df-910e56a7b56c
         rbd-rados-ns: consumer-cl-418-c
         """
-        # basic check with static names
         ceph_data_on_consumer_match["cephfs-subvolumegroup"] = (
             ceph_data.get("cephfs-subvolumegroup", "") == f"{consumer_name}"
         )
@@ -787,38 +921,19 @@ def verify_storage_consumer_resources(
         ceph_data_on_consumer_match["rbd-rados-ns"] = (
             ceph_data.get("rbd-rados-ns", "") == f"{consumer_name}"
         )
-
-        # other client names are dynamic, so we check if they start with the expected suffix
-        ceph_data_on_consumer_match["csi-cephfs-node-ceph-user"] = (
-            ceph_data.get("csi-cephfs-node-ceph-user", "")
-            == f"cephfs-node-{storage_consumer_uid}"
+        _handle_storageconsumer_ceph_client_names_upgraded_converged(
+            ceph_data, ceph_data_on_consumer_match, storage_consumer_uid
         )
-        ceph_data_on_consumer_match["csi-cephfs-provisioner-ceph-user"] = (
-            ceph_data.get("csi-cephfs-provisioner-ceph-user", "")
-            == f"cephfs-provisioner-{storage_consumer_uid}"
+    else:
+        # mainly a placeholder, we should not reach this line
+        raise NotImplementedError(
+            "Unknown configuration for ceph data on consumer:\n"
+            f"is internal consumer: {internal_consumer}\n"
+            f"disabled blockpools: {disable_blockpools}\n"
+            f"disabled cephfs: {disable_cephfs}\n"
+            f"ODF_ver: {convergence_ver(config.ENV_DATA['ocs_version'])}"
         )
-        ceph_data_on_consumer_match["csi-rbd-node-ceph-user"] = (
-            ceph_data.get("csi-rbd-node-ceph-user", "")
-            == f"rbd-node-{storage_consumer_uid}"
-        )
-        ceph_data_on_consumer_match["csi-rbd-provisioner-ceph-user"] = (
-            ceph_data.get("csi-rbd-provisioner-ceph-user", "")
-            == f"rbd-provisioner-{storage_consumer_uid}"
-        )
-        ceph_data_on_consumer_match["csiop-cephfs-client-profile"] = (
-            ceph_data.get("csiop-cephfs-client-profile", "") == storage_consumer_uid
-        )
-        ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
-            ceph_data.get("csiop-rbd-client-profile", "") == storage_consumer_uid
-        )
-
-        log.info(
-            f"StorageConsumer config map data match:\n "
-            f"{json.dumps(ceph_data_on_consumer_match, indent=2)}"
-        )
-    assert all(
-        ceph_data_on_consumer_match.values()
-    ), "StorageConsumer config map data does not match expected values."
+    return ceph_data_on_consumer_match
 
 
 def get_ready_storage_consumers():
