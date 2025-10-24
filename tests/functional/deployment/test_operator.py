@@ -29,6 +29,9 @@ class TestOperator(ManageTest):
 
     @tier2
     @pytest.mark.polarion_id("OCS-6866")
+    @pytest.mark.skip(
+        reason="need to be optimized: https://github.com/red-hat-storage/ocs-ci/issues/13436"
+    )
     def test_no_errors_in_operator_pod_logs(self, operator_pods):
         """
         1. Get list of all operator pods.
