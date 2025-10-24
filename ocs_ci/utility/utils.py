@@ -4773,13 +4773,21 @@ def enable_huge_pages():
     # Wait for Master nodes ready state when Compact mode 3M 0W config
     from ocs_ci.ocs.node import get_nodes
 
+    num_nodes = (
+        config.ENV_DATA["worker_replicas"]
+        + config.ENV_DATA["master_replicas"]
+        + config.ENV_DATA.get("infra_replicas", 0)
+    )
+    timeout = 1200
     if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
         wait_for_machineconfigpool_status(
-            node_type=constants.MASTER_MACHINE, timeout=1200
+            node_type=constants.MASTER_MACHINE, timeout=timeout
         )
     else:
+        if num_nodes >= 6:
+            timeout = 2400
         wait_for_machineconfigpool_status(
-            node_type=constants.WORKER_MACHINE, timeout=1200
+            node_type=constants.WORKER_MACHINE, timeout=timeout
         )
 
 
