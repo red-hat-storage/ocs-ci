@@ -26,12 +26,26 @@ class TestDisableMCGExternalService:
             resource_name="noobaa",
         )
 
-        # patch noobaa object
-        noobaa_ocp_obj.patch(
-            resource_name="noobaa",
-            params='{"spec": {"disableLoadBalancerService": true }}',
-            format_type="merge",
+        # get storagecluster object
+        storagecluster_obj = OCP(
+            kind="storagecluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name="ocs-storagecluster",
         )
+
+        if config.ENV_DATA["deployment_type"].lower() == "managed":
+            storagecluster_obj.patch(
+                resource_name="ocs-storagecluster",
+                params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": true }}}',
+                format_type="merge",
+            )
+        else:
+            # patch noobaa object
+            noobaa_ocp_obj.patch(
+                resource_name="noobaa",
+                params='{"spec": {"disableLoadBalancerService": true }}',
+                format_type="merge",
+            )
 
         # scale up noobaa endpoints
         noobaa_ocp_obj.patch(
@@ -41,10 +55,17 @@ class TestDisableMCGExternalService:
         )
 
         def finalizer():
-            noobaa_ocp_obj.patch(
-                resource_name="noobaa",
-                params='{"spec": {"disableLoadBalancerService": false }}',
-                format_type="merge",
+            if config.ENV_DATA["deployment_type"].lower() == "managed":
+                storagecluster_obj.patch(
+                    resource_name="ocs-storagecluster",
+                    params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": false }}}',
+                    format_type="merge",
+            )
+            else:
+                noobaa_ocp_obj.patch(
+                    resource_name="noobaa",
+                    params='{"spec": {"disableLoadBalancerService": false }}',
+                    format_type="merge",
             )
             noobaa_ocp_obj.patch(
                 resource_name="noobaa",
