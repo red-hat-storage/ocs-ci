@@ -8229,25 +8229,34 @@ def change_the_noobaa_log_level(request):
     """
     This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
     """
-    noobaa_cm = OCP(
-        kind="configmap",
-        resource_name="noobaa-config",
-        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-    )
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        noobaa_cm = OCP(
+            kind="configmap",
+            resource_name="noobaa-config",
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        )
 
     def factory(level="all"):
-        assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
-        noobaa_cm.patch(
-            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
-        )
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
+            noobaa_cm.patch(
+                params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}',
+                format_type="merge",
+            )
+            wait_for_pods_to_be_running(
+                pod_names=[pod.name for pod in get_noobaa_pods()]
+            )
 
     def finalizer():
-        level = "default_level"
-        noobaa_cm.patch(
-            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
-        )
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            level = "default_level"
+            noobaa_cm.patch(
+                params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}',
+                format_type="merge",
+            )
+            wait_for_pods_to_be_running(
+                pod_names=[pod.name for pod in get_noobaa_pods()]
+            )
 
     request.addfinalizer(finalizer)
     return factory
