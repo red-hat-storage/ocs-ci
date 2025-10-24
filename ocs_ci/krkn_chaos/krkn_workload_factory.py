@@ -628,7 +628,7 @@ class KrknWorkloadFactory:
                 access_modes=cfg["access_modes"],
                 size=size,
                 num_of_pvc=4,
-                timeout=180,
+                timeout=600,
             )
             config_file = cfg["config_file"]()
             for pvc in pvcs:

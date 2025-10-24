@@ -114,3 +114,10 @@ health_checks:
       auth: {{ check.auth | default('') }}
       exit_on_failure: {{ check.exit_on_failure | default(False) }}
     {%- endfor %}
+
+kubevirt_checks:
+  interval: {{ kubevirt_checks.interval | default(2) }}
+  namespace: {{ kubevirt_checks.namespace | default('') }}
+  name: {{ kubevirt_checks.name | default('') }}
+  only_failures: {{ kubevirt_checks.only_failures | default(False) }}
+  disconnected: {{ kubevirt_checks.disconnected | default(False) }}
