@@ -17,7 +17,6 @@ from .flexy import FlexyBaremetalPSI
 from ocs_ci.utility import psiutils, aws, version
 
 from ocs_ci.deployment.deployment import Deployment
-from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -45,6 +44,7 @@ from ocs_ci.utility.utils import (
     add_chrony_to_ocp_deployment,
     replace_content_in_file,
 )
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -1541,6 +1541,222 @@ def clean_disk(
             namespace=namespace,
         )
         logger.info(out)
+
+
+def detect_simulation_disk_on_node(wnode, namespace="default", timeout=300):
+    """
+    Detects the last available /dev/sd* disk on a given worker node.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the command execution.
+
+    Returns:
+        str or None: The detected disk path (e.g., "/dev/sdb") or None if not found.
+
+    """
+    logger.info("Attempting to auto-detect a suitable /dev/sd* disk.")
+    cmd = ['lsblk -dn -o NAME | grep -E "^sd[a-z]$" | sed "s#^#/dev/#" | tail -1']
+    ocp_obj = ocp.OCP()
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    logger.info(f"Disk detection command output: {out}")
+    disk_name = out.strip()
+
+    if not disk_name:
+        logger.warning("No suitable disk found for BlueStore simulation.")
+        return None
+
+    logger.info(f"Detected disk for simulation: {disk_name}")
+    return disk_name
+
+
+def download_script_to_node(
+    wnode,
+    script_url: str,
+    script_path: str,
+    namespace: str = "default",
+    timeout: int = 300,
+):
+    """
+    Download a shell script directly on a node (inside chroot /host)
+    using curl via oc debug.
+
+    Assumes the URL is valid and directly downloadable
+    (e.g., a raw GitHub or internal script URL).
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
+        script_url (str): Direct URL to the script.
+        script_path (str): Destination path on the node (default: /tmp/simulate_bluestore_label.sh).
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the oc debug command (in seconds).
+
+    Returns:
+        str: Output of the command execution.
+    """
+    ocp_obj = ocp.OCP()
+
+    # Single, atomic command string
+    download_cmd = [
+        (
+            f"set -euo pipefail; "
+            f'curl -fsSL "{script_url}" -o "{script_path}" && '
+            f'chmod 755 "{script_path}" && '
+            f'echo "Downloaded to {script_path}" && ls -l "{script_path}"'
+        )
+    ]
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=download_cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
+def run_script_on_node(
+    wnode,
+    script_path: str,
+    args: str = "",
+    namespace: str = "default",
+    timeout: int = 600,
+):
+    """
+    Execute a shell script directly on a node (inside chroot /host)
+    using oc debug.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
+        script_path (str): Full path to the script on the node.
+        args (str): Optional arguments to pass to the script.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the command execution (in seconds).
+
+    Returns:
+        str: Output of the script execution.
+    """
+    ocp_obj = ocp.OCP()
+
+    logger.info(
+        f"Running the script {script_path} with the args '{args}' "
+        f"on the worker node {wnode.name}"
+    )
+    # Build the command — single element, no single quotes inside
+    cmd = [f"set -euo pipefail; " f"bash {script_path} {args} "]
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
+def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="default"):
+    """
+    Simulates a Ceph BlueStore label on a specified disk of a given worker node.
+
+    This function downloads a shell script to the node and executes it to simulate
+    a BlueStore label on the specified disk. It verifies the output to determine
+    if the simulation was successful.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object where the simulation
+            should be performed.
+        disk_name (str, optional): The disk device name to simulate the label on.
+            If not provided, the function auto-detects the last /dev/sd* disk on the node.
+        namespace (str): Namespace for the debug pod.
+
+    Returns:
+        bool: True if the simulation succeeded (BlueStore label detected), False otherwise.
+
+    Raises:
+        ValueError: If the script integrity using SHA256 verification failed
+
+    """
+    ocp_obj = ocp.OCP()
+
+    if not disk_name:
+        disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+
+    if not disk_name:
+        logger.error("Disk detection failed. Aborting BlueStore simulation.")
+        return False
+
+    # Step 2: Define script location and source
+    script_path = "/tmp/simulate_bluestore_label.sh"
+    url_prefix = "https://raw.githubusercontent.com/yitzhak12/ocs-ci/add-simulate-ceph-bluestore-label/"
+    script_name = "scripts/bash/simulate_bluestore_label.sh"
+    script_url = url_prefix + script_name
+
+    # Step 3: Download the script directly on the node
+    logger.info(f"Downloading BlueStore simulation script to {script_path}")
+    download_script_to_node(
+        wnode=wnode,
+        script_url=script_url,
+        script_path=script_path,
+        namespace=namespace,
+        timeout=300,
+    )
+
+    # Step 4: Verify script integrity using SHA256
+    logger.info("Verifying the script's SHA256 checksum")
+    script_expected_sha256sum = (
+        "64def92796659eaf2ae438ad3e7724420dd1d1494c9e8c2e7f0efe3754"  # pragma: allowlist secret
+        "93ff1d"  # pragma: allowlist secret
+    )
+    cmd = [f"sha256sum {script_path}"]
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=300,
+    )
+    script_sha256sum = out.strip().split()[0]
+    if script_sha256sum != script_expected_sha256sum:
+        logger.error(
+            f"SHA256 mismatch: expected {script_expected_sha256sum}, got {script_sha256sum}"
+        )
+        raise ValueError("Script integrity verification failed.")
+    logger.info("Script checksum verified successfully.")
+
+    # Step 5: Run the script on the node
+    logger.info(f"Running BlueStore simulation script on disk: {disk_name}")
+    out = run_script_on_node(
+        wnode=wnode,
+        script_path=script_path,
+        args=disk_name,
+        namespace=namespace,
+        timeout=300,
+    )
+
+    logger.info("Script output:\n" + out)
+    result = "Verification PASSED" in out or ">>> BlueStore UUID:" in out
+    if result:
+        logger.info(
+            f"BlueStore label simulation succeeded on the worker node {wnode.name}"
+        )
+    else:
+        logger.warning(
+            f"BlueStore label simulation failed.on the worker node {wnode.name}"
+        )
+    return result
 
 
 class BaremetalPSIUPI(Deployment):
