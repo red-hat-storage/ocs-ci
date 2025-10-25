@@ -46,7 +46,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
@@ -1630,43 +1630,38 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
     """
     This function is to verify noobaa rebuild. Verifies KCS: https://access.redhat.com/solutions/5948631
 
-    1. Stop the noobaa-operator by setting the replicas of noobaa-operator deployment to 0.
-    2. Delete the noobaa deployments/statefulsets.
-    3. Delete the PVC db-noobaa-db-0.
-    4. Patch existing backingstores and bucketclasses to remove finalizer
-    5. Delete the backingstores/bucketclass.
-    6. Delete the noobaa secrets.
-    7. Restart noobaa-operator by setting the replicas back to 1.
-    8. Monitor the pods in openshift-storage for noobaa pods to be Running.
+        1.Patch noobaa resource and set up cleanup policy as true
+        2.Delete NooBaa/Multcloud Gateway (MCG)
+        3.Waiting some time for the termination/re-creation of all NooBaa resource
+        4.validate the new age of all MCG resources
 
     """
 
     def factory(bucket_factory_session, mcg_obj_session):
 
         noobaa_obj = OCP(
-            kind="noobaa",
+            kind="constants.NOOBAA_RESOURCE_NAME",
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         params = '{"spec":{"cleanupPolicy":{"allowNoobaaDeletion":true}}}'
         noobaa_obj.patch(
-            resource_name="noobaa",
+            resource_name="constants.NOOBAA_RESOURCE_NAME",
             params=params,
             format_type="merge",
-        ), "Failed to set noobaa componenets deletion as true"
+        )
 
-        time.sleep(10)
         try:
             noobaa_obj.exec_oc_cmd(
                 "delete -n openshift-storage noobaas.noobaa.io  --all"
             )
-        except CommandFailed:
+        except TimeoutExpiredError:
             params = '{"metadata": {"finalizers":null}}'
             noobaa_obj.exec_oc_cmd(
                 f"patch -n openshift-storage noobaas/noobaa --type=merge -p {params}"
             )
 
-        logger.info("--------verification of noobaa resources rebuiling----------")
+        logger.info("--------NooBaa resource rebuild verification----------")
         logger.info(
             "waiting for some time for deletion and recreation of all noobaa resources"
         )
@@ -1680,10 +1675,10 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         )
 
         # Wait and validate noobaa PVC is in bound state
-        for i in range(len(noobaa_pvc_obj)):
+        for pvc_index in range(len(noobaa_pvc_obj)):
             pvc_obj.wait_for_resource(
                 condition=constants.STATUS_BOUND,
-                resource_name=noobaa_pvc_obj[i].name,
+                resource_name=noobaa_pvc_obj[pvc_index].name,
                 timeout=600,
                 sleep=120,
             )
@@ -1698,6 +1693,14 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             selector=constants.NOOBAA_APP_LABEL,
             timeout=900,
         )
+        # verify noobaa statefulset is present
+        noobaa_core_sts = OCP(
+            kind="Statefulset", namespace=config.ENV_DATA["cluster_namespace"]
+        ).get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+        assert (
+            noobaa_core_sts["status"]["readyReplicas"] == 1
+        ), "Failed: Default statefulset is not in ready state"
+
         # Since the rebuild changed the noobaa-admin secret, update
         # the s3 credentials in mcg_object_session
         mcg_obj_session.update_s3_creds()
@@ -1714,14 +1717,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             == default_bc["status"]["phase"]
             == constants.STATUS_READY
         ), "Failed: Default bs/bc are not in ready state"
-
-        # verify noobaa statefulset is present
-        noobaa_core_sts = OCP(
-            kind="Statefulset", namespace=config.ENV_DATA["cluster_namespace"]
-        ).get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
-        assert (
-            noobaa_core_sts["status"]["readyReplicas"] == 1
-        ), "Failed: Default statefulset is not in ready state"
 
         # Create OBCs
         logger.info("Creating OBCs after noobaa rebuild")
