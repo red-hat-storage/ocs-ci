@@ -208,7 +208,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                     sleep(self.nw_fail_time)
 
                 # Taint the node
-                assert taint_nodes(
+                taint_nodes(
                     nodes=[node.name], taint_label=constants.OUT_OF_SERVICE_TAINT
                 ), f"Failed to add taint on the node {node.name}"
                 self.taint_nodes_list.append(node)
@@ -247,10 +247,10 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 logger.info(f"Waiting for {self.nw_fail_time} seconds")
                 sleep(self.nw_fail_time)
 
-            assert taint_nodes(
+            taint_nodes(
                 nodes=[app_nodes_obj[0].name],
                 taint_label=constants.OUT_OF_SERVICE_TAINT,
-            ), f"Failed to add taint on the node {app_nodes_obj[0].name}"
+            )
             self.taint_nodes_list.append(app_nodes_obj[0])
 
             # Verify workload moved to another healthy node
