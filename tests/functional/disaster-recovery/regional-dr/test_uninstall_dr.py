@@ -135,3 +135,15 @@ class TestFailoverAndRelocate:
             f"Verifying the RDR resource deletion on the cluster {secondary_cluster_name}"
         )
         dr_helpers.verify_resource_rdr_resource_deletion(secondary_cluster_name)
+
+        # Reinstall RDR
+        # Install MCO on the hub again
+        from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
+
+        dr_conf = dict()
+        mco_obj = MultiClusterDROperatorsDeploy(dr_conf)
+
+        mco_obj.deploy()
+        mco_obj.configure_mirror_peer()
+        mco_obj.deploy_dr_policy()
+        dr_helpers.apply_drpolicy_to_workload(workloads, primary_cluster_name)
