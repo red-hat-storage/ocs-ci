@@ -43,6 +43,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     add_chrony_to_ocp_deployment,
     replace_content_in_file,
+    is_master_branch,
 )
 from ocs_ci.framework import config
 
@@ -1556,7 +1557,9 @@ def detect_simulation_disk_on_node(wnode, namespace="default", timeout=300):
         str or None: The detected disk path (e.g., "/dev/sdb") or None if not found.
 
     """
-    logger.info("Attempting to auto-detect a suitable /dev/sd* disk.")
+    logger.info(
+        f"Attempting to auto-detect a suitable /dev/sd* disk on worker node: {wnode.name}."
+    )
     cmd = ['lsblk -dn -o NAME | grep -E "^sd[a-z]$" | sed "s#^#/dev/#" | tail -1']
     ocp_obj = ocp.OCP()
 
@@ -1572,7 +1575,9 @@ def detect_simulation_disk_on_node(wnode, namespace="default", timeout=300):
     disk_name = out.strip()
 
     if not disk_name:
-        logger.warning("No suitable disk found for BlueStore simulation.")
+        logger.warning(
+            f"No suitable disk found for BlueStore simulation on worker node: {wnode.name}."
+        )
         return None
 
     logger.info(f"Detected disk for simulation: {disk_name}")
@@ -1699,10 +1704,16 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="defau
         return False
 
     # Step 2: Define script location and source
-    script_path = "/tmp/simulate_bluestore_label.sh"
-    url_prefix = "https://raw.githubusercontent.com/yitzhak12/ocs-ci/add-simulate-ceph-bluestore-label/"
+    if is_master_branch():
+        # Get the url prefix from the master branch
+        url_prefix = "https://raw.githubusercontent.com/red-hat-storage/ocs-ci/master"
+    else:
+        # Fallback to the local branch url
+        url_prefix = "https://raw.githubusercontent.com/yitzhak12/ocs-ci/add-simulate-ceph-bluestore-label/"
+
     script_name = "scripts/bash/simulate_bluestore_label.sh"
     script_url = url_prefix + script_name
+    script_path = "/tmp/simulate_bluestore_label.sh"
 
     # Step 3: Download the script directly on the node
     logger.info(f"Downloading BlueStore simulation script to {script_path}")
