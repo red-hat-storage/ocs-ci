@@ -182,7 +182,7 @@ class TestFailover:
                     )
                     wait_for_replication_destinations_deletion(wl.workload_namespace)
 
-                    # Verify the deletion of Replication Group Destination resources
+                    # Verify the creation of Replication Group Destination resources
                     # on the current secondary cluster
                     config.switch_to_cluster_by_name(primary_cluster_name)
 
