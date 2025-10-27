@@ -6748,7 +6748,7 @@ def get_schedule_precedance_value_from_csi_addons_configmap(
 
 def verify_socket_on_node(node_name, host_path, socket_name):
     """
-    Verify the exitance of socket at host path on node.
+    Verify the existence of socket at host path on node.
 
     Args:
         node_name (str): The name of specific node
@@ -6757,9 +6757,10 @@ def verify_socket_on_node(node_name, host_path, socket_name):
 
     Returns:
         bool: True if the socket file exist at host path on given node.
+
     """
     ocp = OCP(kind="node")
-    debug_pod = ocp.exec_oc_debug_cmd(
+    debug_node_output = ocp.exec_oc_debug_cmd(
         node=node_name, cmd_list=[f"ls -l {host_path}/{socket_name}"]
     )
-    return socket_name in debug_pod
+    return socket_name in debug_node_output
