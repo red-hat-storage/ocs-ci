@@ -34,7 +34,7 @@ class TestFailoverAndRelocate:
         This test will run twice both via CLI and UI
 
         """
-        drpc_objs = []
+
         workloads = dr_workload(
             num_of_subscription=1,
             num_of_appset=1,
@@ -147,3 +147,11 @@ class TestFailoverAndRelocate:
         mco_obj.configure_mirror_peer()
         mco_obj.deploy_dr_policy()
         dr_helpers.apply_drpolicy_to_workload(workloads, primary_cluster_name)
+
+        # Validate Resource creation
+        for wl in workloads:
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+            )
