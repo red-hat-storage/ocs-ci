@@ -167,6 +167,12 @@ class FusionDataFoundationDeployment:
         if fusion_version < version.VERSION_2_11:
             if self.lso_enabled:
                 add_disks_lso()
+            if config.ENV_DATA.get("mark_masters_schedulable", False):
+                node.mark_masters_schedulable()
+                logger.info("labeling all nodes as storage nodes")
+                nodes = node.get_all_nodes()
+                node_objs = node.get_node_objs(nodes)
+                node.label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
             self.create_odfcluster()
             odfcluster_status_check()
         else:
