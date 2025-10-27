@@ -167,6 +167,8 @@ class FusionDataFoundationDeployment:
         if fusion_version < version.VERSION_2_11:
             if self.lso_enabled:
                 add_disks_lso()
+            if config.ENV_DATA.get("mark_masters_schedulable", False):
+                node.mark_masters_schedulable()
             self.create_odfcluster()
             odfcluster_status_check()
         else:
