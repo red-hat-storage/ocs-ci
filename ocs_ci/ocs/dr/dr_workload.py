@@ -1541,7 +1541,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             )
             log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
-                cmd=f"oc delete recipe {self.discovered_apps_recipe_name_value} -n {self.workload_namespace}",
+                cmd=f"oc delete recipe --all -n {self.workload_namespace}",
                 ignore_error=True,
             )
             log.info(f"Deleting secret from {cluster.ENV_DATA['cluster_name']}")
