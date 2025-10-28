@@ -20,6 +20,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.helpers.helpers import verify_socket_on_node
 
 logger = logging.getLogger(__name__)
 
@@ -214,3 +215,30 @@ class TestCSIADDonDaemonset(ManageTest):
         assert wait_for_pods_to_be_running(
             namespace=namespace, pod_names=csi_addon_pod_names_list
         ), "CSI-addons pod didn't came up is running sattus "
+
+    def test_csi_addons_socket_creation_per_pods_node(self):
+        """
+        csi-addons.sock are used for communication for csi-addons.
+        This test ensure the socket creation of csi-addons.sock socket
+        on hostpath for each pods node.
+        Steps:
+        1. Get all csi-addons pods
+        2. Get nodes of each csi-addons pod
+        3. Verify socket creation on nodes
+        """
+        logger.info(
+            "Validating csi-addons socket creation on nodes of each csi-addons pod"
+        )
+        namespace = config.ENV_DATA["cluster_namespace"]
+        # 1. Get all csi-addons pods
+        csi_addon_pods = get_pods_having_label(
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        # Verify socket creation on node of each csi-addons pod
+        for pod_obj in csi_addon_pods:
+            csi_pod_running_node_name = pod_obj.get("spec").get("nodeName")
+            assert verify_socket_on_node(
+                node_name=csi_pod_running_node_name,
+                host_path=constants.RBD_CSI_ADDONS_PLUGIN_DIR,
+                socket_name=constants.RBD_CSI_ADDONS_SOCKET_NAME,
+            ), f"csi-addons Socket not found on node {csi_pod_running_node_name}"
