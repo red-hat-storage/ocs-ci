@@ -42,7 +42,7 @@ class StorageClusterSetup(object):
         self.custom_storage_class_path = None
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.platform = config.ENV_DATA["platform"]
-        self.storage_class = storage_class.get_storageclass()
+        self.storage_class = "test-lvs"
 
     def setup_storage_cluster(self):
         if self.custom_storage_class_path is not None:
