@@ -3933,7 +3933,24 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
         #  This should be updated for the client clusters
+        # Create DPA when the RDR clusters are client clusters.
         if config.hci_client_exist():
+            # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
+            # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
+            # in multiclient configuration where provider cluster contexts will also be present.
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                cluster_configs = [
+                    cluster
+                    for cluster in config.clusters
+                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+                ]
+                for cluster in cluster_configs:
+                    index = cluster.MULTICLUSTER["multicluster_index"]
+                    config.switch_ctx(index)
+                    logger.info("Creating Resource DataProtectionApplication")
+                    run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
             return
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
