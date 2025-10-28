@@ -3947,10 +3947,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
                 ]
                 for cluster in cluster_configs:
-                    index = cluster.MULTICLUSTER["multicluster_index"]
-                    config.switch_ctx(index)
-                    logger.info("Creating Resource DataProtectionApplication")
-                    run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        logger.info("Creating Resource DataProtectionApplication")
+                        run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
             return
         # Enable cluster backup on both ACMs
         for i in acm_indexes:

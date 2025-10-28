@@ -346,7 +346,7 @@ class AcmAddClusters(AcmPageNavigator):
             for dr_cluster in [primary_index, secondary_index]:
                 cluster_name = config.get_cluster_name_by_index(dr_cluster)
                 if get_client_type_by_name(cluster_name) == "kubevirt":
-                    # "dr-" is discoveryprefix value. The cluster name in hosting cluster will not have this prefix.x`
+                    # "dr-" is discoveryprefix value. The cluster name in hosting cluster will not have this prefix
                     cluster_name.replace("dr-", "")
                     submariner_config = OCP(
                         kind="SubmarinerConfig",
