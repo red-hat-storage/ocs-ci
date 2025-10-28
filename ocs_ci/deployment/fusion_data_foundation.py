@@ -80,7 +80,8 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Creating FDF service CR")
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_SERVICE_CR}"
+            f"oc --kubeconfig {self.kubeconfig} apply -f {constants.FDF_SERVICE_CR}",
+            silent=True,
         )
 
     def setup_fdf_pre_release_deployment(self):
