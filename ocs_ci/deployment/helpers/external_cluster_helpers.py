@@ -76,9 +76,9 @@ class ExternalCluster(object):
         jump_host = config.DEPLOYMENT.get("ssh_jump_host", {})
 
         if jump_host:
-            jump_host["private_key"] = os.path.expanduser(
-                config.DEPLOYMENT["ssh_key_private"]
-            )
+            jump_host["private_key"] = jump_host.get(
+                "private_key"
+            ) or os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
 
         self.rhcs_conn = Connection(
             host=self.host,
