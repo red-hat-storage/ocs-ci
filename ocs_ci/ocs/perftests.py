@@ -9,6 +9,7 @@ import yaml
 
 import requests
 import json
+import subprocess
 
 from elasticsearch import Elasticsearch, exceptions as esexp
 
@@ -34,7 +35,13 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.utility import templating
 from ocs_ci.utility.perf_dash.dashboard_api import PerfDash
-from ocs_ci.utility.utils import TimeoutSampler, get_running_cluster_id, ocsci_log_path
+from ocs_ci.ocs.ui.performance_lib_ui import grafana_resource_consumption_ui
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_running_cluster_id,
+    ocsci_log_path,
+    clone_repo,
+)
 
 log = logging.getLogger(__name__)
 
@@ -1071,3 +1078,62 @@ class PASTest(BaseTest):
         except Exception:
             log.warning("The POD failed to delete")
             pass
+
+    def deploy_odf_grafana(self):
+        all_file_path = constants.ODF_GRAFANA_PATH + "/group_vars/all.yml"
+
+        cluster_name = config.ENV_DATA["cluster_name"]
+        base_domain = config.ENV_DATA["base_domain"]
+        grafana_user = "grafana"
+        grafana_pwd = "grafanapassword123"
+        url = f"https://grafana-route-perfscale.apps.{cluster_name}.{base_domain}./dashboards"
+        env = os.environ.copy()
+
+        kubeconfig_path = config.RUN.get("kubeconfig")
+        full_kubeconfig_path = os.path.abspath(kubeconfig_path)
+        env["KUBECONFIG"] = full_kubeconfig_path
+
+        clone_repo(
+            constants.ODF_GRAFANA_REPO, constants.ODF_GRAFANA_PATH, branch="main"
+        )
+
+        # ODF grafana requires pwgen package which is not included in ocs-ci
+        try:
+            subprocess.run(
+                "sudo yum install -y pwgen",
+                shell=True,
+                check=True,
+            )
+        except CommandFailed:
+            log.error("Failed to install pwgen")
+
+        # Update grafana username and password
+        with open(all_file_path, "a") as f:
+            f.write(f"\ngrafana_user: {grafana_user}\n")
+            f.write(f"grafana_password: {grafana_pwd}\n")
+
+        pods = get_pod_name_by_pattern(
+            pattern="grafana",
+            namespace=constants.GRAFANA_NAMESPACE,
+        )
+        if len(pods) == 0:
+            log.info("No grafana pods found")
+            try:
+                subprocess.run(
+                    "ansible-playbook /tmp/odf-grafana/deploy-grafana.yml",
+                    shell=True,
+                    env=env,
+                    check=True,
+                )
+                grafana_resource_consumption_ui(
+                    self.test_duration, self.test_name, url, grafana_user, grafana_pwd
+                )
+            except subprocess.CalledProcessError as e:
+                log.info(f"Command failed with non-zero exit code, {e.output.strip()}")
+            except subprocess.TimeoutExpired as e:
+                log.info(f"Command timed out, {e.output.strip()}")
+        else:
+            log.info("grafana is running")
+            grafana_resource_consumption_ui(
+                self.test_duration, self.test_name, url, grafana_user, grafana_pwd
+            )

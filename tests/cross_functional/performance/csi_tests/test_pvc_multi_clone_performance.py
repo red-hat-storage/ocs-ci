@@ -7,6 +7,7 @@ import logging
 import statistics
 
 import pytest
+import time
 
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
@@ -224,7 +225,7 @@ class TestPvcMultiClonePerformance(PASTest):
         )
 
         self.interface = interface_iterate
-
+        self.start = time.time()
         # Create new pool and sc only for RBD, for CepgFS use the++ default
         if self.interface == constants.CEPHBLOCKPOOL:
             # Creating new pool to run the test on it
@@ -311,6 +312,10 @@ class TestPvcMultiClonePerformance(PASTest):
         full_results.add_key(
             "multi_clone_csi_creation_time_average", average_csi_creation_time
         )
+        self.end = time.time()
+        self.test_duration = int(self.end - self.start)
+        self.test_name = "test_pvc_multiple_clone_performance" + self.interface
+        self.deploy_odf_grafana()
 
         # Write the test results into the ES server
         if full_results.es_write():

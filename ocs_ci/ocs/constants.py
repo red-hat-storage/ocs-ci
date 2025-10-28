@@ -3637,3 +3637,8 @@ KRKN_RUN_CMD = os.path.join(KRKN_DIR, "run_kraken.py")
 KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
 
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
+
+# ODF Grafana repo
+ODF_GRAFANA_REPO = "https://github.com/redhat-performance/odf-grafana"
+ODF_GRAFANA_PATH = "/tmp/odf-grafana"
+GRAFANA_NAMESPACE = "perfscale"

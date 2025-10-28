@@ -7,6 +7,8 @@ import os
 import pytest
 import math
 import datetime
+import calendar
+import time
 
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
@@ -238,6 +240,21 @@ class TestPVCCreationPerformance(PASTest):
         full_results.add_key(
             "test_time", {"start": self.test_start_time, "end": self.test_end_time}
         )
+
+        start_t = time.strptime(self.start_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmts = calendar.timegm(start_t)
+        end_t = time.strptime(self.end_time, "%Y-%m-%dT%H:%M:%SGMT")
+        epoch_gmte = calendar.timegm(end_t)
+
+        self.test_name = (
+            "test_bulk_pvc_creation_deletion_measurement_performance"
+            + interface_type
+            + str(bulk_size)
+        )
+        self.test_duration = int(epoch_gmte - epoch_gmts)
+
+        self.deploy_odf_grafana()
+
         full_results.add_key("bulk_size", bulk_size)
         full_results.add_key("bulk_pvc_creation_time", total_time)
         full_results.add_key("bulk_pvc_csi_creation_time", csi_creation_times)
