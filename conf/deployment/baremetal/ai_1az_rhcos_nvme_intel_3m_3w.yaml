@@ -7,3 +7,6 @@ ENV_DATA:
   deployment_type: 'ai'
   worker_replicas: 3
   master_replicas: 3
+  host_network: true
+  cluster_namespace: 'openshift-storage'
+  odf_provider_mode_deployment: true
