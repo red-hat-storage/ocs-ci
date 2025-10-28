@@ -349,7 +349,7 @@ class AcmAddClusters(AcmPageNavigator):
                     # "dr-" is discoveryprefix value. The cluster name in hosting cluster will not have this prefix
                     cluster_name.replace("dr-", "")
                     submariner_config = OCP(
-                        kind="SubmarinerConfig",
+                        kind=constants.SUBMARINERCONFIG,
                         namespace=cluster_name,
                         resource_name="submariner",
                     )
