@@ -2,11 +2,13 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
+  customized_deployment_storage_class: 'test-lvs'
+  host_network: true
 ENV_DATA:
   platform: 'baremetal'
   deployment_type: 'ai'
   worker_replicas: 3
   master_replicas: 3
-  host_network: true
   cluster_namespace: 'openshift-storage'
   odf_provider_mode_deployment: true
+  storage_cluster_name: 'ocs-storagecluster'
