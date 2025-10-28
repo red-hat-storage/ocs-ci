@@ -318,6 +318,7 @@ TRIGGER_AUTHENTICATION = "TriggerAuthentication"
 SCALED_OBJECT = "ScaledObject"
 ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME = "addon-ns-config"
 ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG = "hypershift-addon-deploy-config"
+SUBMARINERCONFIG = "SubmarinerConfig"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
