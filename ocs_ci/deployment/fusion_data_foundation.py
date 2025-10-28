@@ -12,6 +12,7 @@ import tempfile
 import yaml
 
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
+from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, node
@@ -49,7 +50,7 @@ class FusionDataFoundationDeployment:
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
 
-        # self.setup_storage()
+        self.setup_storage()
 
     def create_image_tag_mirror_set(self):
         """
@@ -180,6 +181,7 @@ class FusionDataFoundationDeployment:
         # self.patch_catalogsource()
         if self.lso_enabled:
             add_disks_lso()
+        create_lvs_resource("test-lvs", "test-lvs")
         clustersetup.setup_storage_cluster()
         # self.create_odfcluster()
         # odfcluster_status_check()
