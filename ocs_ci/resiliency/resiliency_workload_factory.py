@@ -385,15 +385,16 @@ class ResiliencyWorkloadFactory:
                 ),
             }
 
+        # Get PVC configuration from config
+        num_pvcs_per_interface = self.config.get_num_pvcs_per_interface()
+        pvc_size = self.config.get_pvc_size()
+        log.info(
+            f"Creating {num_pvcs_per_interface} PVCs per storage interface with size {pvc_size}Gi"
+        )
+
         # Create workloads for each interface
         for interface, config_data in interface_configs.items():
             log.info(f"Creating workloads for interface: {interface}")
-
-            # Get PVC size from config
-            if interface == constants.CEPHFILESYSTEM:
-                pvc_size = 20  # Default for filesystem
-            else:
-                pvc_size = 20  # Default for block
 
             # Create PVCs
             pvcs = multi_pvc_factory(
@@ -401,7 +402,7 @@ class ResiliencyWorkloadFactory:
                 project=project,
                 access_modes=config_data["access_modes"],
                 size=pvc_size,
-                num_of_pvc=4,
+                num_of_pvc=num_pvcs_per_interface,
             )
 
             # Create config file
