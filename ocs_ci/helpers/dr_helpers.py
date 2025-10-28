@@ -1319,10 +1319,34 @@ def get_all_drpolicy():
         list: List of all DRPolicy
 
     """
+    return_drpolicy_list = []
+    current_managed_clusters_list = []
     config.switch_acm_ctx()
+    acm_hub_name = config.current_cluster_name()
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
-    return drpolicy_list
+    for cluster_name in config.clusters:
+        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            for item in dr_cluster_relations[0]
+        ]
+    else:
+        current_managed_clusters_list.remove(acm_hub_name)
+
+    for drpolicy in drpolicy_list:
+
+        if all(
+            mngcls in drpolicy["spec"]["drClusters"]
+            for mngcls in current_managed_clusters_list
+        ):
+            return_drpolicy_list.append(drpolicy)
+    return return_drpolicy_list
 
 
 @retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
@@ -2407,12 +2431,22 @@ def get_cluster_set_name():
         list: List of uniq cluster set name
     """
     cluster_set = []
+    current_managed_clusters_list = []
     restore_index = config.cur_index
     config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
-    current_managed_clusters_list = [
-        cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
-    ]
+    for cluster_name in config.clusters:
+        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            for item in dr_cluster_relations[0]
+        ]
+
     # ignore local-cluster here
     for i in managed_clusters:
         if (
