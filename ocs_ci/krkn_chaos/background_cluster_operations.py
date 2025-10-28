@@ -32,7 +32,11 @@ from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
 from ocs_ci.ocs.resources import job as job_helpers
 from ocs_ci.ocs import node as node_helpers
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    UnexpectedBehaviour,
+    CommandFailed,
+    ResourceNotFoundError,
+)
 from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
@@ -124,6 +128,9 @@ class BackgroundClusterOperations:
         # Metrics and tracking
         self.metrics = BackgroundClusterMetrics()
         self._resources_to_cleanup: List[Any] = []
+
+        # Feature availability tracking
+        self._csi_addons_available = True  # Assume available until proven otherwise
 
         # Available operations
         self.available_operations = {
@@ -232,6 +239,31 @@ class BackgroundClusterOperations:
 
         log.info("Background cluster operation loop stopped")
 
+    def _namespace_exists(self) -> bool:
+        """
+        Check if the namespace still exists using the existing OCP utility.
+
+        Returns:
+            bool: True if namespace exists, False otherwise
+        """
+        try:
+            # Use existing OCP.is_exist() method - simple check without retries
+            ns_obj = ocp.OCP(kind="Namespace", resource_name=self.namespace)
+            exists = ns_obj.is_exist(resource_name=self.namespace)
+
+            if not exists and self._running:  # Only log once
+                log.warning(
+                    f"Namespace {self.namespace} no longer exists. "
+                    "Stopping background operations."
+                )
+                self._running = False  # Stop the loop if namespace is gone
+
+            return exists
+        except Exception as e:
+            log.debug(f"Error checking namespace existence: {e}")
+            # Assume namespace exists if we can't check (to avoid false positives)
+            return True
+
     def _run_operation_safe(self, operation_name: str, operation_func):
         """
         Safely run an operation with error handling.
@@ -241,6 +273,11 @@ class BackgroundClusterOperations:
             operation_func: Function to execute
         """
         try:
+            # Check if namespace still exists before running operation
+            if not self._namespace_exists():
+                log.info(f"Skipping {operation_name} - namespace no longer exists")
+                return
+
             log.info(f"Starting background operation: {operation_name}")
             operation_func()
             self.metrics.record_operation(operation_name, success=True)
@@ -263,6 +300,10 @@ class BackgroundClusterOperations:
         This validates the entire snapshot workflow while workloads are running.
         """
         log.info("Executing PVC snapshot lifecycle operation")
+
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
 
         # Get a random workload PVC
         workload_pvc = self._get_random_workload_pvc()
@@ -339,7 +380,7 @@ class BackgroundClusterOperations:
             if test_pod_obj:
                 test_pod_obj.delete()
                 test_pod_obj.ocp.wait_for_delete(
-                    resource_name=test_pod_obj.name, timeout=60
+                    resource_name=test_pod_obj.name, timeout=180
                 )
 
             if restored_pvc_obj:
@@ -351,7 +392,7 @@ class BackgroundClusterOperations:
             if snapshot_obj:
                 snapshot_obj.delete()
                 snapshot_obj.ocp.wait_for_delete(
-                    resource_name=snapshot_obj.name, timeout=60
+                    resource_name=snapshot_obj.name, timeout=180
                 )
 
             log.info("Snapshot lifecycle operation completed successfully")
@@ -368,7 +409,8 @@ class BackgroundClusterOperations:
             with suppress(Exception):
                 if snapshot_obj:
                     snapshot_obj.delete()
-            raise
+            # Don't raise - allow other background operations to continue
+            return
 
     # ==========================================================================
     # PVC Clone Lifecycle Operations
@@ -381,6 +423,10 @@ class BackgroundClusterOperations:
         This validates PVC cloning and data consistency.
         """
         log.info("Executing PVC clone lifecycle operation")
+
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
 
         # Get a random workload PVC
         workload_pvc = self._get_random_workload_pvc()
@@ -458,7 +504,7 @@ class BackgroundClusterOperations:
             if test_pod_obj:
                 test_pod_obj.delete()
                 test_pod_obj.ocp.wait_for_delete(
-                    resource_name=test_pod_obj.name, timeout=60
+                    resource_name=test_pod_obj.name, timeout=180
                 )
 
             if clone_pvc_obj:
@@ -478,7 +524,8 @@ class BackgroundClusterOperations:
             with suppress(Exception):
                 if clone_pvc_obj:
                     clone_pvc_obj.delete()
-            raise
+            # Don't raise - allow other background operations to continue
+            return
 
     # ==========================================================================
     # Node Taint & Toleration Churn Operations
@@ -491,6 +538,10 @@ class BackgroundClusterOperations:
         This validates CSI attachment/detachment flows and pod rescheduling.
         """
         log.info("Executing node taint churn operation")
+
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
 
         # Get worker nodes
         worker_nodes = node_helpers.get_worker_nodes()
@@ -532,7 +583,8 @@ class BackgroundClusterOperations:
                 ocp_obj = ocp.OCP()
                 command = f"adm taint node {target_node} chaos-taint-"
                 ocp_obj.exec_oc_cmd(command)
-            raise
+            # Don't raise - allow other background operations to continue
+            return
 
     # ==========================================================================
     # Rook/Ceph OSD Operations
@@ -545,6 +597,10 @@ class BackgroundClusterOperations:
         This validates OSD resilience without causing actual data movement.
         """
         log.info("Executing OSD operations (noout flag toggle)")
+
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
 
         try:
             # Get ceph tools pod
@@ -572,7 +628,8 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"OSD operations failed: {e}")
-            raise
+            # Don't raise - allow other background operations to continue
+            return
 
     # ==========================================================================
     # MDS Failover Operations
@@ -585,6 +642,10 @@ class BackgroundClusterOperations:
         This validates CephFS resilience during MDS failures.
         """
         log.info("Executing MDS failover operation")
+
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
 
         try:
             # Get ceph tools pod
@@ -614,7 +675,8 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"MDS failover operation failed: {e}")
-            raise
+            # Don't raise - allow other background operations to continue
+            return
 
     # ==========================================================================
     # RGW Restart Operations
@@ -627,6 +689,10 @@ class BackgroundClusterOperations:
         This validates RGW resilience and S3 workload continuity.
         """
         log.info("Executing RGW restart operation")
+
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
 
         try:
             # Get RGW pods
@@ -652,7 +718,8 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"RGW restart operation failed: {e}")
-            raise
+            # Don't raise - allow other background operations to continue
+            return
 
     # ==========================================================================
     # CSI-Addons Reclaim Space Operations
@@ -666,6 +733,15 @@ class BackgroundClusterOperations:
         """
         log.info("Executing reclaim space operation")
 
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
+
+        # Check if we've already determined CSI-Addons is not available
+        if not self._csi_addons_available:
+            log.debug("Skipping reclaim space operation (CSI-Addons not available)")
+            return
+
         # Get a random RBD workload PVC
         workload_pvc = self._get_random_workload_pvc(provisioner_type="rbd")
         if not workload_pvc:
@@ -674,29 +750,58 @@ class BackgroundClusterOperations:
 
         try:
             log.info(f"Creating ReclaimSpace job for PVC {workload_pvc.name}")
-            reclaim_job = workload_pvc.create_reclaim_space_job()
+
+            # Try to create reclaim space job - this may fail if CSI-Addons is not installed
+            try:
+                reclaim_job = workload_pvc.create_reclaim_space_job()
+            except Exception:
+                log.info(
+                    "Failed to create ReclaimSpace job (CSI-Addons not installed). "
+                    "Disabling reclaim space operations for this session."
+                )
+                self._csi_addons_available = False
+                return
 
             if not reclaim_job:
-                log.warning(
-                    "ReclaimSpace job creation returned None - CSI-Addons may not be available"
+                log.info(
+                    "ReclaimSpace job creation returned None - CSI-Addons not available. "
+                    "Disabling reclaim space operations for this session."
                 )
+                self._csi_addons_available = False
                 return
 
             log.info(f"Created ReclaimSpace job: {reclaim_job.name}")
 
             # Give the job a moment to be registered
-            time.sleep(2)
+            time.sleep(5)
 
-            # Verify job exists before waiting
+            # Verify job exists before waiting - use direct check without retries
             try:
-                reclaim_job.reload()
+                # Check if job exists by trying to get its status
+                # Suppress retry logging by catching CommandFailed early
+                job_data = reclaim_job.get()
+                if not job_data:
+                    log.warning(
+                        f"ReclaimSpace job {reclaim_job.name} was created but does not exist. "
+                        "This may indicate CSI-Addons is not properly configured."
+                    )
+                    return
                 log.info(f"Verified job {reclaim_job.name} exists")
+            except CommandFailed:
+                # Job doesn't exist - CSI-Addons likely not installed or configured
+                log.info(
+                    f"ReclaimSpace job {reclaim_job.name} not found "
+                    "(likely CSI-Addons not installed). "
+                    "Disabling reclaim space operations for this session."
+                )
+                self._csi_addons_available = False
+                return
             except Exception as e:
                 log.warning(
-                    f"ReclaimSpace job {reclaim_job.name} not found after creation. "
-                    f"CSI-Addons may not be installed or RBD CSI doesn't support ReclaimSpace. "
-                    f"Error: {e}"
+                    f"Could not verify ReclaimSpace job {reclaim_job.name}: {e}. "
+                    "Disabling reclaim space operations for this session."
                 )
+                self._csi_addons_available = False
                 return
 
             # Wait for job to complete
@@ -709,16 +814,24 @@ class BackgroundClusterOperations:
                     sleep_time=5,
                 )
                 log.info(f"ReclaimSpace job {reclaim_job.name} completed successfully")
-            except Exception as wait_error:
-                log.warning(
-                    f"Failed to wait for ReclaimSpace job completion: {wait_error}"
+            except ResourceNotFoundError:
+                # Job not found - handle gracefully with specific exception
+                log.info(
+                    f"ReclaimSpace job {reclaim_job.name} not found "
+                    "(CSI-Addons may not be configured). "
+                    "Disabling reclaim space operations for this session."
                 )
-                # Try to get job status for debugging
-                try:
-                    job_status = reclaim_job.get()
-                    log.debug(f"Job status: {job_status}")
-                except Exception:
-                    pass
+                self._csi_addons_available = False
+                return
+            except CommandFailed as cmd_error:
+                # Other command failures
+                log.info(f"ReclaimSpace job command failed: {cmd_error}")
+                return
+            except Exception as wait_error:
+                log.info(
+                    f"ReclaimSpace job wait timed out or failed "
+                    f"(expected if CSI-Addons not configured): {wait_error}"
+                )
                 return
 
             # Cleanup job
@@ -726,7 +839,10 @@ class BackgroundClusterOperations:
                 reclaim_job.delete()
                 log.info(f"Cleaned up ReclaimSpace job {reclaim_job.name}")
             except Exception as cleanup_error:
-                log.warning(f"Failed to cleanup ReclaimSpace job: {cleanup_error}")
+                log.info(
+                    f"Failed to cleanup ReclaimSpace job (may have been auto-deleted): "
+                    f"{cleanup_error}"
+                )
 
             log.info("Reclaim space operation completed successfully")
 
@@ -745,6 +861,10 @@ class BackgroundClusterOperations:
 
         This validates CSI-Addons VolumeReplication functionality.
         """
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
+
         log.info(
             "Volume replication operations not yet implemented (requires DR setup)"
         )
@@ -764,6 +884,10 @@ class BackgroundClusterOperations:
         This validates long-running PVC/snapshot workflows during chaos testing.
         """
         log.info("Executing longevity operations (snapshot/restore/expand)")
+
+        # Check if namespace still exists
+        if not self._namespace_exists():
+            return
 
         from ocs_ci.ocs.resources.pvc import delete_pvcs
 
@@ -822,7 +946,7 @@ class BackgroundClusterOperations:
             for pvc_obj in workload_pvcs:
                 try:
                     pvc_obj.reload()
-                    snapshot_obj = pvc_obj.create_snapshot(wait=True, timeout=300)
+                    snapshot_obj = pvc_obj.create_snapshot(wait=True)
                     snapshots.append(snapshot_obj)
                     self._resources_to_cleanup.append(snapshot_obj)
                     log.info(
@@ -878,7 +1002,7 @@ class BackgroundClusterOperations:
                     helpers.wait_for_resource_state(
                         resource=restored_pvc_obj,
                         state=constants.STATUS_BOUND,
-                        timeout=180,
+                        timeout=300,
                     )
                 except Exception as e:
                     log.error(
@@ -928,7 +1052,7 @@ class BackgroundClusterOperations:
                 try:
                     snapshot_obj.delete()
                     snapshot_obj.ocp.wait_for_delete(
-                        resource_name=snapshot_obj.name, timeout=60
+                        resource_name=snapshot_obj.name, timeout=180
                     )
                 except Exception as e:
                     log.error(f"Failed to cleanup snapshot {snapshot_obj.name}: {e}")

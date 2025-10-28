@@ -163,9 +163,10 @@ class TestKrKnApplicationOutageScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes(
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
             group_name, "grouped application outage chaos"
         )
+        assert no_crashes, crash_details
 
         log.info(
             f"🎉 Grouped application outage test for {group_name} completed successfully"
@@ -306,10 +307,11 @@ class TestKrKnApplicationOutageScenarios:
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        assert health_helper.check_ceph_crashes(
+        no_crashes, crash_details = health_helper.check_ceph_crashes(
             f"{target_component} strength testing",
             "application outage strength testing",
         )
+        assert no_crashes, crash_details
 
         log.info(
             f"🎉 STRENGTH TEST PASSED: {target_component} achieved {strength_score:.1f}% "

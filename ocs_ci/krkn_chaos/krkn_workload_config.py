@@ -199,6 +199,26 @@ class KrknWorkloadConfig:
         vdbench_config = self.get_vdbench_config()
         return vdbench_config.get("workload_loop", 1)
 
+    def get_num_pvcs_per_interface(self) -> int:
+        """
+        Get number of PVCs to create per storage interface.
+
+        Returns:
+            int: Number of PVCs per interface (default: 4)
+        """
+        vdbench_config = self.get_vdbench_config()
+        return vdbench_config.get("num_pvcs_per_interface", 4)
+
+    def get_pvc_size(self) -> int:
+        """
+        Get PVC size in GiB.
+
+        Returns:
+            int: PVC size in GiB (default: 50)
+        """
+        vdbench_config = self.get_vdbench_config()
+        return vdbench_config.get("pvc_size", 50)
+
     def get_block_workload_config(self) -> Dict[str, Any]:
         """
         Get block workload configuration.

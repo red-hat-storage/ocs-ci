@@ -191,6 +191,8 @@ ENV_DATA:
   krkn_config:
     workloads: ["VDBENCH"]
     vdbench_config:
+      num_pvcs_per_interface: 4  # Number of PVCs per storage interface (default: 4)
+      pvc_size: 50  # PVC size in GiB (default: 50)
       threads: 32
       size: "15g"
       elapsed: 600
@@ -391,9 +393,26 @@ ENV_DATA:
     workload: "VDBENCH"
     enable_verification: true
     vdbench_config:
+      num_pvcs_per_interface: 6  # Create 6 PVCs per storage type (12 total workloads)
+      pvc_size: 100  # 100 GiB per PVC
       threads: 32
       size: "20g"
       elapsed: 1200
+```
+
+#### VDBENCH with Minimal Deployment Count
+
+```yaml
+# Jenkins ENV_DATA export - Faster testing with fewer deployments
+ENV_DATA:
+  krkn_config:
+    workload: "VDBENCH"
+    enable_verification: true
+    vdbench_config:
+      num_pvcs_per_interface: 2  # Only 2 PVCs per storage type (4 total workloads)
+      pvc_size: 30  # Smaller PVCs for faster provisioning
+      threads: 16
+      elapsed: 300
 ```
 
 ### Configuration File Examples
