@@ -386,7 +386,9 @@ def check_mirroring_status_ok(
 
         cbp_obj = ocp.OCP(
             kind=constants.CEPHBLOCKPOOLRADOSNS,
-            namespace=config.ENV_DATA["cluster_namespace"],
+            namespace=config.clusters[config.get_provider_index()].ENV_DATA[
+                "cluster_namespace"
+            ],
             resource_name=cephbpradosns,
         )
     else:
