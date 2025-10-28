@@ -21,7 +21,6 @@ ENV_DATA:
   resource_group_name: 'odf-qe'
   network_resource_group_name: 'odf-qe'
   vpc_name: 'odf-qe-vpc'
-  zone: 'us-south-2'
   control_plane_subnets:
     - 'sn-20250917-02'
   compute_subnets:
