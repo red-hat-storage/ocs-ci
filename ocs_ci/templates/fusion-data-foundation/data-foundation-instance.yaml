@@ -4,7 +4,7 @@ metadata:
   name:  odfmanager
   namespace: ibm-spectrum-fusion-ns
 spec:
-  creator: Fusion
+  creator: User
   doInstall: true
   parameters:
   - name: namespace
@@ -20,6 +20,7 @@ spec:
     provided: false
     value: "false"
   - name: installPlanApproval
+    provided: true
     value: Automatic
   serviceDefinition: data-foundation-service
   triggerUpdate: false
