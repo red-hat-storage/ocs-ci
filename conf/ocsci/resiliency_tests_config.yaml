@@ -5,6 +5,7 @@ ENV_DATA:
     # Workload types: VDBENCH, CNV_WORKLOAD, GOSBENCH, FIO
     workloads:
       - VDBENCH
+      - GOSBENCH
 
     # Run workloads during resiliency testing
     run_workload: true
