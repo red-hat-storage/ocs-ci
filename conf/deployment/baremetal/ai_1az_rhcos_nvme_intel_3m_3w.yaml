@@ -2,7 +2,7 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
-  customized_deployment_storage_class: 'test-lvs'
+  customized_deployment_storage_class: 'localblock'
   host_network: true
 ENV_DATA:
   platform: 'baremetal'
