@@ -5,7 +5,7 @@ All provider client operator upgrades implemented here
 
 import logging
 
-from ocs_ci.deployment.hub_spoke import HostedODF
+from ocs_ci.deployment.hub_spoke import HostedODF, HostedClients
 from ocs_ci.ocs.dr_upgrade import DRUpgrade
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocs_upgrade
@@ -174,6 +174,17 @@ class OperatorUpgrade(ProviderUpgrade):
                 log.error(
                     f"Failed to bump ODF client operator version on hosted OCP cluster '{cluster_name}': {e}"
                 )
+
+
+class KubevirtClusterUpgrade(ProviderUpgrade):
+    """
+    A class to handle Kubevirt Cluster(s) upgrade
+
+    """
+
+    def run_upgrade_ocp_on_kubevirt_clusters(self):
+        hosted_clients = HostedClients()
+        hosted_clients.upgrade_ocp_on_kubevirt_clusters()
 
 
 class ProviderClusterOperatorUpgrade(ProviderUpgrade):
