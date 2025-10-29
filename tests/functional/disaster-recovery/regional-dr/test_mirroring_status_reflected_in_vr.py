@@ -35,8 +35,16 @@ class TestMirroringStatusReflectedInVR:
 
     """
 
+    params = [
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+        ),
+    ]
+
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface", "via_ui"]
+        argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
     )
     def test_vr_status_and_type_for_mirroring_in_healthy_status(
         self,
