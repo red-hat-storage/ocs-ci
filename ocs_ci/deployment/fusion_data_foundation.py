@@ -330,7 +330,7 @@ def extract_image_digest_mirror_set():
 
 
 def add_storage_label():
-    nodes = node.get_worker_nodes()
+    nodes = node.get_nodes(node_type="worker")
     node.label_nodes(nodes)
 
 
