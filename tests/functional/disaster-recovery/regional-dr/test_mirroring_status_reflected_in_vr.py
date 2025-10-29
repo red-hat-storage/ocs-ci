@@ -76,7 +76,7 @@ class TestMirroringStatusReflectedInVR:
         )
         drpc_appset = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{workloads[1].appset_placement_name}-drpc",
+            resource_name=f"{workloads[0].appset_placement_name}-drpc",
         )
         _ = [drpc_appset]
         namespace = workloads[1].workload_namespace
