@@ -101,6 +101,21 @@ class TestMirroringStatusReflectedInVR:
             namespace,
         )
 
+        # mirror health, vr_type, vr_status, vr_message
+        mirroring_health, vr_type, vr_reason, vr_status, vr_message = (
+            dr_helpers.fetch_latest_status_type_displayed_and_mirroring_status(
+                namespace,
+            )
+        )
+        print("#########Amrita##########")
+        print(
+            f"mirroring_health: {mirroring_health}, "
+            f"vr_type: {vr_type}, "
+            f"vr_reason: {vr_reason}, "
+            f"vr_status: {vr_status}, "
+            f"vr_message: {vr_message}"
+        )
+
         # validate latest status type displayed on vr status
         dr_helpers.validate_latest_status_type_reflecting_mirroring_status(
             namespace,
