@@ -36,7 +36,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
     nw_fail_time = 180
     taint_nodes_list = []
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture()
     def teardown(self, request, node_restart_teardown):
         """
         Verify if taint exist on node, if yes remove the taint and restart the nodes
@@ -61,7 +61,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         ],
     )
     def test_automate_networkfence_workflow_with_cephsi(
-        self, node_shutdown, nodes, deployment_pod_factory
+        self, node_shutdown, nodes, deployment_pod_factory, teardown
     ):
         """
 
@@ -147,7 +147,10 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         )
 
         # Start the nodes and remove taint
-        nodes.start_nodes([node])
+        if node_shutdown:
+            nodes.start_nodes([node])
+        else
+            nodes.restart_nodes([node])
         wait_for_nodes_status(node_names=[node.name], status=constants.NODE_READY)
         assert untaint_nodes(
             taint_label=constants.OUT_OF_SERVICE_TAINT,
