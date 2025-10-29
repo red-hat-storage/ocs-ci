@@ -2,13 +2,11 @@ import logging
 
 import pytest
 
-from ocs_ci.deployment.hub_spoke import HostedClients
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
     multicluster_roles,
     runs_on_provider,
     yellow_squad,
-    kubevirt_cluster_upgrade,
 )
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
@@ -18,6 +16,7 @@ from ocs_ci.framework.testlib import (
     dr_cluster_operator_upgrade,
     acm_upgrade,
     provider_operator_upgrade,
+    kubevirt_cluster_upgrade,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
@@ -28,7 +27,10 @@ from ocs_ci.ocs.dr_upgrade import (
     MultiClusterOrchestratorUpgrade,
     DRHubUpgrade,
 )
-from ocs_ci.ocs.provider_client_upgrade import ProviderClusterOperatorUpgrade
+from ocs_ci.ocs.provider_client_upgrade import (
+    ProviderClusterOperatorUpgrade,
+    KubevirtClusterUpgrade,
+)
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_z_stream_upgrade
 
@@ -188,13 +190,13 @@ def test_acm_upgrade(zone_rank, role_rank, config_index):
     acm_hub_upgrade_obj.run_upgrade()
 
 
-@purple_squad
+@yellow_squad
 @kubevirt_cluster_upgrade
-@multicluster_roles(["mdr-all-acm", "rdr-all-acm"])
-def test_upgrade_kubevirt_clusters():
+@runs_on_provider
+def test_upgrade_kubevirt_clusters(zone_rank, role_rank, config_index):
     """
     Test upgrade of hosted kubevirt clusters in the managed clusters (named Provider/Client in past)
 
     """
-    hosted_clients = HostedClients()
-    hosted_clients.upgrade_ocp_on_kubevirt_clusters()
+    hosted_clients = KubevirtClusterUpgrade()
+    hosted_clients.run_upgrade_ocp_on_kubevirt_clusters()
