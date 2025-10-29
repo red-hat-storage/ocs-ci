@@ -5,7 +5,6 @@ from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
-    ipi_deployment_required,
     ignore_leftovers,
     skipif_external_mode,
     skipif_ibm_cloud,
@@ -36,16 +35,18 @@ from ocs_ci.ocs.node import (
     wait_for_nodes_racks_or_zones,
     wait_for_nodes_status,
     wait_for_node_count_to_reach_status,
+    add_new_node_and_label_upi,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
+deployment_type = config.ENV_DATA["deployment_type"].lower()
+
 
 @brown_squad
 @ignore_leftovers
 @tier4b
-@ipi_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes - Reactive
@@ -61,14 +62,16 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             remove_label_from_worker_node(worker_nodes, label_key="dc")
             for thread in self.threads:
                 thread.join()
-
-            log.info("Get the machine set name from one of the worker node names")
-            machine_name = machine.get_machine_from_node_name(worker_nodes[0])
-            machineset_name = machine.get_machineset_from_machine_name(machine_name)
-            log.info(
-                "Verify that the current replica count is equal to the ready replica count"
-            )
-            machine.change_current_replica_count_to_ready_replica_count(machineset_name)
+            if deployment_type == "ipi":
+                log.info("Get the machine set name from one of the worker node names")
+                machine_name = machine.get_machine_from_node_name(worker_nodes[0])
+                machineset_name = machine.get_machineset_from_machine_name(machine_name)
+                log.info(
+                    "Verify that the current replica count is equal to the ready replica count"
+                )
+                machine.change_current_replica_count_to_ready_replica_count(
+                    machineset_name
+                )
 
             ceph_health_check()
 
@@ -105,7 +108,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             ),
         ],
     )
-    def test_automated_recovery_from_failed_nodes_IPI_reactive(
+    def test_automated_recovery_from_failed_nodes_reactive(
         self,
         nodes,
         pvc_factory,
@@ -118,7 +121,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     ):
         """
         Knip-678 Automated recovery from failed nodes
-        Reactive case - IPI
+        Reactive case - IPI and UPI
         """
         # Get OSD running nodes
         osd_running_nodes = get_osd_running_nodes()
@@ -150,16 +153,37 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         )
         log.info(f"Both OSD and app pod is running on nodes {common_nodes}")
 
-        # Get the machine name using the node name
-        machine_name = machine.get_machine_from_node_name(common_nodes[0])
-        log.info(f"{common_nodes[0]} associated machine is {machine_name}")
+        try:
+            if deployment_type == "ipi":
+                log.info("IPI setup")
+                # Get the machine name using the node name
+                machine_name = machine.get_machine_from_node_name(common_nodes[0])
+                log.info(f"{common_nodes[0]} associated machine is {machine_name}")
 
-        # Get the machineset name using machine name
-        machineset_name = machine.get_machineset_from_machine_name(machine_name)
-        log.info(f"{common_nodes[0]} associated machineset is {machineset_name}")
+                # Get the machineset name using machine name
+                machineset_name = machine.get_machineset_from_machine_name(machine_name)
+                log.info(
+                    f"{common_nodes[0]} associated machineset is {machineset_name}"
+                )
 
-        # Add a new node and label it
-        new_ocs_node_names = add_new_node_and_label_it(machineset_name)
+                # Add a new node and label it
+                new_ocs_node_names = add_new_node_and_label_it(machineset_name)
+
+            elif deployment_type == "upi":
+                log.info("UPI setup")
+                log.info("Preparing to create a new node...")
+                if config.ENV_DATA.get("rhel_workers"):
+                    node_type = constants.RHEL_OS
+                else:
+                    node_type = constants.RHCOS
+                node_conf = {"stack_name": common_nodes[0]}
+                print(f"node_conf: {node_conf}")
+                new_ocs_node_names = add_new_node_and_label_upi(
+                    node_type, 1, mark_for_ocs_label=True
+                )
+        except ValueError as e:
+            log.error(f"Unsupported deployment type: {e}")
+
         failure_domain = get_failure_domain()
         log.info("Wait for the nodes racks or zones to appear...")
         wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
@@ -219,7 +243,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @brown_squad
 @ignore_leftovers
 @tier4a
-@ipi_deployment_required
 @skipif_ibm_cloud
 @skipif_compact_mode
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
@@ -245,29 +268,36 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                         f"The recovery of the osd worker node "
                         f"{self.osd_worker_node.name} failed. Adding a new OCS worker node..."
                     )
-                    add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
+                    if deployment_type == "ipi":
+                        add_new_nodes_and_label_after_node_failure_ipi(
+                            self.machineset_name
+                        )
+                else:
+                    log.info("Wait for node count to be equal to original count")
+                    wait_for_node_count_to_reach_status(node_count=initial_node_count)
+                    log.info("Node count matched")
 
-            log.info("Wait for node count to be equal to original count")
-            wait_for_node_count_to_reach_status(node_count=initial_node_count)
-            log.info("Node count matched")
             ceph_health_check()
 
-            machine.wait_for_ready_replica_count_to_reach_expected_value(
-                self.machineset_name,
-                expected_value=self.start_ready_replica_count,
-                timeout=420,
-            )
-            log.info(
-                "Verify that the current replica count is equal to the ready replica count"
-            )
-            ready_replica_count = machine.get_ready_replica_count(self.machineset_name)
-            res = machine.wait_for_current_replica_count_to_reach_expected_value(
-                self.machineset_name, expected_value=ready_replica_count
-            )
-            if not res:
-                machine.change_current_replica_count_to_ready_replica_count(
+            if deployment_type == "ipi":
+                machine.wait_for_ready_replica_count_to_reach_expected_value(
+                    self.machineset_name,
+                    expected_value=self.start_ready_replica_count,
+                    timeout=420,
+                )
+                log.info(
+                    "Verify that the current replica count is equal to the ready replica count"
+                )
+                ready_replica_count = machine.get_ready_replica_count(
                     self.machineset_name
                 )
+                res = machine.wait_for_current_replica_count_to_reach_expected_value(
+                    self.machineset_name, expected_value=ready_replica_count
+                )
+                if not res:
+                    machine.change_current_replica_count_to_ready_replica_count(
+                        self.machineset_name
+                    )
 
             log.info("Check again that the Ceph Health is Health OK")
             ceph_health_check()
@@ -302,19 +332,33 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
              A - pods should start on the new node
              B - pods should start on the stopped node after starting it
         """
-        wnode_name = get_worker_nodes()[0]
-        machine_name = machine.get_machine_from_node_name(wnode_name)
-        self.machineset_name = machine.get_machineset_from_machine_name(machine_name)
-        self.start_ready_replica_count = machine.get_ready_replica_count(
-            self.machineset_name
-        )
 
         global initial_node_count
         initial_node_count = len(get_worker_nodes())
         log.info(f"Initial node count is {initial_node_count}")
 
         if additional_node:
-            new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
+            try:
+                if deployment_type == "ipi":
+                    wnode_name = get_worker_nodes()[0]
+                    machine_name = machine.get_machine_from_node_name(wnode_name)
+                    self.machineset_name = machine.get_machineset_from_machine_name(
+                        machine_name
+                    )
+                    self.start_ready_replica_count = machine.get_ready_replica_count(
+                        self.machineset_name
+                    )
+                    new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
+
+                elif deployment_type == "upi":
+                    if config.ENV_DATA.get("rhel_workers"):
+                        node_type = constants.RHEL_OS
+                    else:
+                        node_type = constants.RHCOS
+                    new_ocs_node_names = add_new_node_and_label_upi(node_type, 1)
+            except ValueError as e:
+                log.error(f"Unsupported deployment type: {e}")
+
             failure_domain = get_failure_domain()
             log.info("Wait for the nodes racks or zones to appear...")
             wait_for_nodes_racks_or_zones(

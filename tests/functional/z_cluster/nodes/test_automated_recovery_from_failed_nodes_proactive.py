@@ -1,13 +1,13 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4,
     tier4b,
     ManageTest,
     aws_based_platform_required,
-    ipi_deployment_required,
     ignore_leftovers,
 )
 from ocs_ci.ocs import machine, constants
@@ -20,6 +20,7 @@ from ocs_ci.ocs.node import (
     get_both_osd_and_app_pod_running_node,
     add_new_node_and_label_it,
     get_worker_nodes,
+    delete_and_create_osd_node_aws_upi,
 )
 
 
@@ -31,7 +32,6 @@ log = logging.getLogger(__name__)
 @tier4b
 @ignore_leftovers
 @aws_based_platform_required
-@ipi_deployment_required
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes
@@ -61,7 +61,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             pytest.param(*["cephfs"], marks=pytest.mark.polarion_id("OCS-2101")),
         ],
     )
-    def test_automated_recovery_from_failed_nodes_IPI_proactive(
+    def test_automated_recovery_from_failed_nodes_proactive(
         self,
         interface,
         pvc_factory,
@@ -72,7 +72,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     ):
         """
         Knip-678 Automated recovery from failed nodes
-        Proactive case - IPI
+        Proactive case - for IPI and UPI
         """
         # Get OSD running nodes
         osd_running_nodes = get_osd_running_nodes()
@@ -105,20 +105,35 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         assert len(common_nodes) > 0, msg
         log.info(f"Common OSD and app pod running nodes are {common_nodes}")
 
-        # Get the machine name using the node name
-        machine_name = machine.get_machine_from_node_name(common_nodes[0])
-        log.info(f"{common_nodes[0]} associated machine is {machine_name}")
+        try:
+            if config.ENV_DATA["deployment_type"].lower() == "ipi":
+                log.info("IPI setup")
 
-        # Get the machineset name using machine name
-        machineset_name = machine.get_machineset_from_machine_name(machine_name)
-        log.info(f"{common_nodes[0]} associated machineset is {machineset_name}")
+                # Get the machine name using the node name
+                machine_name = machine.get_machine_from_node_name(common_nodes[0])
+                log.info(f"{common_nodes[0]} associated machine is {machine_name}")
 
-        # Add a new node and label it
-        add_new_node_and_label_it(machineset_name)
+                # Get the machineset name using machine name
+                machineset_name = machine.get_machineset_from_machine_name(machine_name)
+                log.info(
+                    f"{common_nodes[0]} associated machineset is {machineset_name}"
+                )
 
-        # Delete the machine
-        machine.delete_machine(machine_name)
-        log.info(f"Successfully deleted machine {machine_name}")
+                # Add a new node and label it
+                add_new_node_and_label_it(machineset_name)
+
+                # Delete the machine
+                machine.delete_machine(machine_name)
+                log.info(f"Successfully deleted machine {machine_name}")
+
+            elif config.ENV_DATA["deployment_type"].lower() == "upi":
+                log.info("UPI setup")
+                # delete the common node and create osd node for aws_upi
+                new_node_name = delete_and_create_osd_node_aws_upi(common_nodes[0])
+                log.info(f"The new node created: {new_node_name}")
+
+        except ValueError as e:
+            log.error(f"Unsupported deployment type: {e}")
 
         # DC app pods on the failed node will get automatically created on
         # other running node. Waiting for all dc app pod to reach running
