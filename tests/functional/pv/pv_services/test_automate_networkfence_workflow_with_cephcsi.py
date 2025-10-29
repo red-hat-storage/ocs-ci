@@ -149,7 +149,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         # Start the nodes and remove taint
         if node_shutdown:
             nodes.start_nodes([node])
-        else
+        else:
             nodes.restart_nodes([node])
         wait_for_nodes_status(node_names=[node.name], status=constants.NODE_READY)
         assert untaint_nodes(
