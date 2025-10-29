@@ -11,6 +11,7 @@ This module provides functionality to:
 import logging
 import yaml
 import base64
+import json
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -283,8 +284,13 @@ class GOSBenchWorkload:
                 }
             }
 
+            # Convert patch_data to JSON string for oc patch command
+            patch_data_json = json.dumps(patch_data)
+
             cm_ocp.patch(
-                resource_name=self.config_name, params=patch_data, format_type="merge"
+                resource_name=self.config_name,
+                params=patch_data_json,
+                format_type="merge",
             )
             logger.info(f"Updated workload ConfigMap: {self.config_name}")
             return True
@@ -1120,9 +1126,14 @@ class GOSBenchWorkload:
         """
         try:
             deploy_ocp = OCP(kind="Deployment", namespace=self.namespace)
+
+            # Convert patch data to JSON string for oc patch command
+            patch_data = {"spec": {"replicas": replicas}}
+            patch_data_json = json.dumps(patch_data)
+
             deploy_ocp.patch(
                 resource_name=self.worker_name,
-                params={"spec": {"replicas": replicas}},
+                params=patch_data_json,
                 format_type="merge",
             )
             logger.info(f"Scaled workers to {replicas} replicas")
@@ -1287,7 +1298,7 @@ class GOSBenchWorkload:
             "server": {"deployment": "NotFound", "pods": []},
             "workers": {"deployment": "NotFound", "pods": []},
             "config": "NotFound",
-            "secret": "NotFound",
+            "secret": "NotFound",  # pragma: allowlist secret
         }
 
         try:
@@ -1335,7 +1346,7 @@ class GOSBenchWorkload:
             try:
                 secret_ocp = OCP(kind="Secret", namespace=self.namespace)
                 secret_ocp.get(resource_name=self.secret_name)
-                status["secret"] = "Found"
+                status["secret"] = "Found"  # pragma: allowlist secret
             except CommandFailed:
                 pass
 
