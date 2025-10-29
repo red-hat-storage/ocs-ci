@@ -102,6 +102,6 @@ class TestMirroringStatusReflectedInVR:
         )
 
         # validate latest status type displayed on vr status
-        dr_helpers.validate_latest_status_type_displayed(
+        dr_helpers.validate_latest_status_type_reflecting_mirroring_status(
             namespace,
         )

@@ -2646,7 +2646,7 @@ def verify_mirroring_status_on_primary(
     return latest_condition
 
 
-def validate_latest_status_type_displayed(
+def fetch_latest_status_type_displayed_and_mirroring_status(
     namespace,
     kind=constants.VOLUME_REPLICATION,
     resource_name="",
@@ -2654,7 +2654,64 @@ def validate_latest_status_type_displayed(
     cephbpradosns="",
 ):
     """
-    This method is for validating the status message updated to reflect the current mirroring status
+    This method is for fetching the type, status, reason, message and current mirroring status
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+        timeout (int): time in seconds to wait for resource to reach at desired state
+        cephbpradosns (str): cephblockpoolradosnamespaces name
+
+    Returns:
+        mirroring health (str): mirroring health
+        vr_status (str): latest vr status.conditions.status
+        vr_type (str): vr status.conditions.type
+        vr_reason (str): latest vr status.conditions.reason
+        vr_message (str): latest vr status.conditions.message
+
+    """
+    if not cephbpradosns:
+        cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOLRADOSNS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=cephbpradosns,
+    )
+    latest_condition = fetch_status_and_type_reflecting_on_vr_or_vgr(
+        namespace, kind=kind, resource_name=resource_name, timeout=timeout
+    )
+
+    # vr status.conditions.type
+    vr_type = latest_condition.get("type")
+
+    # vr status.conditions.reason
+    vr_reason = latest_condition.get("reason")
+
+    # vr status.conditions.status
+    vr_status = latest_condition.get("status")
+
+    # vr status.conditions.message
+    vr_message = latest_condition.get("message")
+
+    # fetch mirroring status
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
+    logger.info(f"Mirroring status: {mirroring_status}")
+    mirroring_health = mirroring_status.get("health")
+
+    return mirroring_health, vr_type, vr_reason, vr_status, vr_message
+
+
+def validate_latest_status_type_reflecting_mirroring_status(
+    namespace,
+    kind=constants.VOLUME_REPLICATION,
+    resource_name="",
+    timeout=600,
+    cephbpradosns="",
+):
+    """
+    This method is for validationg that the type, status, reason, message are updated to
+    reflect the current mirroring status
     on primary VR/VGR.
     for mirroring image in healthy status:
         reason: Replicating
@@ -2674,48 +2731,54 @@ def validate_latest_status_type_displayed(
         cephbpradosns (str): cephblockpoolradosnamespaces name
 
     Returns:
-        # bool: True if as per mirroring status expected status and type is displayed in
-        # vr/vgr status.conditions, False otherwise
+        mirroring health (str): mirroring health
+        vr_status (str): latest vr status.conditions.status
+        vr_type (str): vr status.conditions.type
+        vr_reason (str): latest vr status.conditions.reason
+        vr_message (str): latest vr status.conditions.message
 
     """
-    if not cephbpradosns:
-        cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
-    cbp_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOLRADOSNS,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=cephbpradosns,
-    )
-    latest_condition = fetch_status_and_type_reflecting_on_vr_or_vgr(
-        namespace, kind=kind, resource_name=resource_name, timeout=timeout
+
+    mirroring_health, vr_type, vr_reason, vr_status, vr_message = (
+        fetch_latest_status_type_displayed_and_mirroring_status(
+            namespace, kind=kind, resource_name=resource_name, timeout=timeout
+        )
     )
 
-    # fetch mirroring status
-    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
-    logger.info(f"Mirroring status: {mirroring_status}")
-
-    mirroring_health = mirroring_status.get("health")
-    # mirroring_daemon_health = mirroring_status.get("daemon_health")
-    # mirroring_daemon_health = mirroring_status.get("image_health")
-    # mirroring_daemon_health = mirroring_status.get("group_health")
-    if latest_condition.get("type") == "Replicating":
-        if mirroring_health == "OK":
-            expected_reason = "Replicating"
-            expected_status = "True"
-            assert (
-                latest_condition.get("reason") == expected_reason
-                and latest_condition.get("status") == expected_status
-            ), "reason and type details are incorrect"
-        elif mirroring_health == "WARNING":
-            expected_reason = "Replicating"
-            expected_status = "Unknown"
-            assert (
-                latest_condition.get("reason") == expected_reason
-                and latest_condition.get("status") == expected_status
-            ), "reason and type details are incorrect"
-        elif mirroring_health == "ERROR":
-            expected_reason = "Replicating"
-            expected_status = "Unknown"
-            assert (
-                latest_condition.get("reason") == expected_reason
-                and latest_condition.get("status") == expected_status
-            ), "reason and type details are incorrect"
+    if mirroring_health == "OK":
+        expected_type = "Replicating"
+        expected_reason = "Replicating"
+        expected_status = "True"
+        if kind == constants.VOLUME_REPLICATION:
+            message_contains = "volume is replicating: local image is primary"
+        elif kind == constants.VOLUME_GROUP_REPLICATION:
+            message_contains = "volume group is replicating: local group is primary"
+        assert (
+            vr_reason == expected_reason
+            and vr_status == expected_status
+            and vr_type == expected_type
+            and vr_message in message_contains
+        ), "reason and type details are incorrect"
+    elif mirroring_health == "WARNING":
+        expected_type = "Replicating"
+        expected_reason = "Replicating"
+        expected_status = "Unknown"
+        message_contains = "volume group replication status is unknown: starting replay"
+        assert (
+            vr_reason == expected_reason
+            and vr_status == expected_status
+            and vr_type == expected_type
+            and vr_message in message_contains
+        ), "reason and type details are incorrect"
+    elif mirroring_health == "ERROR":
+        expected_type = "Replicating"
+        expected_reason = "Replicating"
+        expected_status = "Unknown"
+        message_contains = "volume group replication status is unknown: rpc error: code = FailedPrecondition"
+        +"desc = failed to get last sync info: no snapshot details: last sync time not found"
+        assert (
+            vr_reason == expected_reason
+            and vr_status == expected_status
+            and vr_type == expected_type
+            and vr_message in message_contains
+        ), "reason and type details are incorrect"
