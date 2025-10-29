@@ -14,7 +14,6 @@ import yaml
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -182,9 +181,9 @@ class FusionDataFoundationDeployment:
         # self.patch_catalogsource()
         if self.lso_enabled:
             add_disks_lso()
-        create_lvs_resource(
-            constants.DEFAULT_STORAGECLASS_LSO, constants.DEFAULT_STORAGECLASS_LSO
-        )
+        # create_lvs_resource(
+        #     constants.DEFAULT_STORAGECLASS_LSO, constants.DEFAULT_STORAGECLASS_LSO
+        # )
         # label all the worker node cluster.ocs.openshift.io/openshift-storage=''localblock
         add_storage_label()
         clustersetup.setup_storage_cluster()
