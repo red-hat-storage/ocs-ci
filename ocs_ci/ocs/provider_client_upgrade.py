@@ -176,6 +176,17 @@ class OperatorUpgrade(ProviderUpgrade):
                 )
 
 
+class KubevirtClusterUpgrade(ProviderUpgrade):
+    """
+    A class to handle Kubevirt Cluster(s) upgrade
+
+    """
+
+    def run_upgrade_ocp_on_kubevirt_clusters(self):
+        hosted_clients = HostedClients()
+        hosted_clients.upgrade_ocp_on_kubevirt_clusters()
+
+
 class ProviderClusterOperatorUpgrade(ProviderUpgrade):
     """
     A class to handle Provider Cluster operator upgrades
