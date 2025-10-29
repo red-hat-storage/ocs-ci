@@ -422,9 +422,9 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
         Parametrized marker or original marker if setup fails
     """
     try:
-        if push_missing_configs:
+        if push_missing_configs and not config.multicluster:
             # run this only if cluster type is provider and it is part of test execution stage (not deployment or
-            # teardown)
+            # teardown) and when run-ci is
             # FIXME: the usage of `sys.argv` here is not correct, but we can't use something like
             # `config.RUN["cli_params"]["deploy"]`, because this setup_multicluster_marker(...) function is called on
             # the module level (see the lines below this function definition) which means that it is actually called
@@ -432,7 +432,11 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
             # the command line arguments are not processed)
             # the solution will be to move following logic to some fixture (similarly as we have session scope autouse
             # fixture `cluster`, which is responsible for deploying and teardown of the whole cluster (when particular
-            # parameters are passed)
+            # parameters are passed). This solution will still not update cluster indexes on parametrization level,
+            # meaning, run_on_all_clients will continue execute only on the clients available at the time of the
+            # parametrization, but at least, we will be able to run tests with updated MultiCluster configs during the
+            # session and test clusters switching between contexts within the body of the test
+            # when this fixture will be used.
             test_stage = not ("--deploy" in sys.argv or "--teardown" in sys.argv)
             if (
                 config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()

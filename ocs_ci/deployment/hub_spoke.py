@@ -2796,7 +2796,7 @@ def hypershift_cluster_factory(
             )
             continue
 
-        # creating this configuration is necessary to run multicluster job. It will have actual specs of cluster.
+        # creating this configuration is necessary to run multicluster job. It will have actual specs of the cluster.
         client_conf_default_dir = os.path.join(
             FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
         )
@@ -2851,13 +2851,11 @@ def hypershift_cluster_factory(
                     )
                 )
                 if not kubeconf_paths:
-                    from ocs_ci.framework.exceptions import (
-                        ClusterKubeconfigNotFoundError,
+                    logger.warning(
+                        "kubeconfig was not found after download attempt; "
+                        "abort pushing kubeconfig to the multicluster config"
                     )
-
-                    raise ClusterKubeconfigNotFoundError(
-                        f"Failed to download kubeconfig for cluster {cluster_name}"
-                    )
+                    continue
                 else:
                     kubeconf_path = [
                         path for path in kubeconf_paths if cluster_name in path
