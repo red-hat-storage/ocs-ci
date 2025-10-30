@@ -79,7 +79,7 @@ class TestMirroringStatusReflectedInVR:
             resource_name=f"{workloads[0].appset_placement_name}-drpc",
         )
         _ = [drpc_appset]
-        namespace = workloads[1].workload_namespace
+        namespace = workloads[0].workload_namespace
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             namespace=namespace
         )
@@ -91,7 +91,7 @@ class TestMirroringStatusReflectedInVR:
         # )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            workloads[1].workload_namespace
+            workloads[0].workload_namespace
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
