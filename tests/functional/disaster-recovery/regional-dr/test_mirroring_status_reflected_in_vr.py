@@ -72,7 +72,7 @@ class TestMirroringStatusReflectedInVR:
 
         """
         workloads = dr_workload(
-            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
+            num_of_subscription=0, num_of_appset=1, pvc_interface=pvc_interface
         )
         namespace = workloads[0].workload_namespace
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
