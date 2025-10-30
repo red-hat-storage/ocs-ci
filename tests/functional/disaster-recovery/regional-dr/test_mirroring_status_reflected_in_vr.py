@@ -88,7 +88,7 @@ class TestMirroringStatusReflectedInVR:
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            workloads[0].workload_namespace
+            workloads[0].workload_namespace, workloads[0].workload_type
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
