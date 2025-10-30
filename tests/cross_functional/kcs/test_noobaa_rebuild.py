@@ -81,13 +81,13 @@ class TestNoobaaRebuild(E2ETest):
 
         """
         noobaa_obj = OCP(
-            kind="constants.NOOBAA_RESOURCE_NAME",
+            kind=constants.NOOBAA_RESOURCE_NAME,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         params = '{"spec":{"cleanupPolicy":{"allowNoobaaDeletion":true}}}'
         noobaa_obj.patch(
-            resource_name="constants.NOOBAA_RESOURCE_NAME",
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
             params=params,
             format_type="merge",
         )
