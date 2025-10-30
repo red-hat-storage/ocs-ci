@@ -18,7 +18,7 @@ from ocs_ci.ocs import constants
 
 # from ocs_ci.ocs.acm.acm import AcmAddClusters
 # from ocs_ci.ocs.node import get_node_objs
-from ocs_ci.ocs.resources.drpc import DRPC
+# from ocs_ci.ocs.resources.drpc import DRPC
 
 # from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 # from ocs_ci.utility.utils import ceph_health_check
@@ -72,21 +72,16 @@ class TestMirroringStatusReflectedInVR:
 
         """
         workloads = dr_workload(
-            num_of_subscription=0, num_of_appset=1, pvc_interface=pvc_interface
+            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
         )
-        drpc_appset = DRPC(
-            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{workloads[0].appset_placement_name}-drpc",
-        )
-        _ = [drpc_appset]
         namespace = workloads[0].workload_namespace
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            namespace=namespace
+            namespace, workloads[0].workload_type
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            namespace=namespace
+            namespace, workloads[0].workload_type
         )
-        config.switch_to_cluster_by_name(primary_cluster_name)
+
         scheduling_interval = dr_helpers.get_scheduling_interval(
             workloads[0].workload_namespace, workloads[0].workload_type
         )
@@ -95,6 +90,7 @@ class TestMirroringStatusReflectedInVR:
         sleep(wait_time * 60)
 
         # Check vr created on the primary cluster
+        config.switch_to_cluster_by_name(primary_cluster_name)
         dr_helpers.wait_for_resource_state(
             kind=constants.VOLUME_REPLICATION,
             state="primary",
@@ -106,11 +102,12 @@ class TestMirroringStatusReflectedInVR:
             namespace,
         )
 
+        # Fetch mirroring image status from secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
         dr_helpers.fetch_mirroring_health_for_the_cluster(secondary_cluster_name)
 
-        config.switch_to_cluster_by_name(primary_cluster_name)
         # mirror health, vr_type, vr_status, vr_message
+        config.switch_to_cluster_by_name(primary_cluster_name)
         vr_type, vr_reason, vr_status, vr_message = (
             dr_helpers.fetch_latest_vr_status_and_type_displayed(
                 namespace,
