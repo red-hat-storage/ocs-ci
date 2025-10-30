@@ -2638,10 +2638,10 @@ def verify_mirroring_status_on_primary(
     for resource in resource_list:
         resource_name = resource["metadata"]["name"]
         conditions = resource["status"]["conditions"]
-        logger.info(f"{kind}: {resource_name} state.conditions {conditions}")
+        logger.info(f"{kind}: {resource_name} state.conditions --- {conditions}")
 
     # return latest state.conditions details
-    latest_condition = max(c["lastTransitionTime"] for c in conditions)
+    latest_condition = conditions[0]
     logger.info(f"{kind}: {resource_name} latest state.conditions {latest_condition}")
     return latest_condition
 
