@@ -2553,6 +2553,41 @@ def verify_volsync():
     config.switch_ctx(restore_index)
 
 
+def fetch_mirroring_health_for_the_cluster(
+    cluster_name, cephbpradosns=None, timeout=600
+):
+    """
+    This method is for fetching mirroring health for a cluster
+
+    Args:
+        cluster_name (str): Name of specific cluster
+        cephbpradosns (str): cephblockpoolradosnamespaces name
+
+    Returns:
+        mirroring health (str): mirroring health
+
+    """
+    logger.info(f"Fetching mirroring health on cluster {cluster_name}")
+    if not cephbpradosns:
+        cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+        cbp_obj = ocp.OCP(
+            kind=constants.CEPHBLOCKPOOLRADOSNS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=cephbpradosns,
+        )
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOLRADOSNS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=cephbpradosns,
+    )
+    # fetch mirroring status
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
+    logger.info(f"Mirroring status: {mirroring_status}")
+    mirroring_health = mirroring_status.get("health")
+
+    return mirroring_health
+
+
 def fetch_status_and_type_reflecting_on_vr_or_vgr(
     namespace, kind=constants.VOLUME_REPLICATION, resource_name="", timeout=600
 ):
@@ -2596,38 +2631,27 @@ def fetch_status_and_type_reflecting_on_vr_or_vgr(
     return latest_condition
 
 
-def fetch_latest_status_type_displayed_and_mirroring_status(
+def fetch_latest_vr_status_and_type_displayed(
     namespace,
     kind=constants.VOLUME_REPLICATION,
     resource_name="",
     timeout=600,
-    cephbpradosns="",
 ):
     """
-    This method is for fetching the type, status, reason, message and current mirroring status
+    This method is for fetching the type, status, reason and message
 
     Args:
         kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_GROUP_REPLICATION)
         namespace (str): the namespace of the resources
         resource_name (str): Name of specific resource
         timeout (int): time in seconds to wait for resource to reach at desired state
-        cephbpradosns (str): cephblockpoolradosnamespaces name
 
     Returns:
-        mirroring health (str): mirroring health
         vr_status (str): latest vr status.conditions.status
         vr_type (str): vr status.conditions.type
         vr_reason (str): latest vr status.conditions.reason
-        vr_message (str): latest vr status.conditions.message
 
     """
-    if not cephbpradosns:
-        cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
-    cbp_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOLRADOSNS,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=cephbpradosns,
-    )
     latest_condition = fetch_status_and_type_reflecting_on_vr_or_vgr(
         namespace, kind=kind, resource_name=resource_name, timeout=timeout
     )
@@ -2644,20 +2668,15 @@ def fetch_latest_status_type_displayed_and_mirroring_status(
     # vr status.conditions.message
     vr_message = latest_condition.get("message")
 
-    # fetch mirroring status
-    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
-    logger.info(f"Mirroring status: {mirroring_status}")
-    mirroring_health = mirroring_status.get("health")
-
-    return mirroring_health, vr_type, vr_reason, vr_status, vr_message
+    return vr_type, vr_reason, vr_status, vr_message
 
 
-def validate_latest_status_type_reflecting_mirroring_status(
+def validate_latest_vr_status_and_type_reflecting_mirroring_status(
     namespace,
+    mirroring_health_secondary,
     kind=constants.VOLUME_REPLICATION,
     resource_name="",
     timeout=600,
-    cephbpradosns="",
 ):
     """
     This method is for validationg that the type, status, reason, message are updated to
@@ -2678,24 +2697,20 @@ def validate_latest_status_type_reflecting_mirroring_status(
         namespace (str): the namespace of the resources
         resource_name (str): Name of specific resource
         timeout (int): time in seconds to wait for resource to reach at desired state
-        cephbpradosns (str): cephblockpoolradosnamespaces name
+        mirroring_health_secondary (str): mirroring health of secondary cluster
 
     Returns:
-        mirroring health (str): mirroring health
-        vr_status (str): latest vr status.conditions.status
-        vr_type (str): vr status.conditions.type
-        vr_reason (str): latest vr status.conditions.reason
-        vr_message (str): latest vr status.conditions.message
+        bool: True if the vr status,type reflects proper mirroring health else False
 
     """
 
-    mirroring_health, vr_type, vr_reason, vr_status, vr_message = (
-        fetch_latest_status_type_displayed_and_mirroring_status(
+    vr_type, vr_reason, vr_status, vr_message = (
+        fetch_latest_vr_status_and_type_displayed(
             namespace, kind=kind, resource_name=resource_name, timeout=timeout
         )
     )
 
-    if mirroring_health == "OK":
+    if mirroring_health_secondary == "OK":
         expected_type = "Replicating"
         expected_reason = "Replicating"
         expected_status = "True"
@@ -2709,7 +2724,7 @@ def validate_latest_status_type_reflecting_mirroring_status(
             and vr_type == expected_type
             and vr_message in message_contains
         ), "reason and type details are incorrect"
-    elif mirroring_health == "WARNING":
+    elif mirroring_health_secondary == "WARNING":
         expected_type = "Replicating"
         expected_reason = "Replicating"
         expected_status = "Unknown"
@@ -2720,7 +2735,7 @@ def validate_latest_status_type_reflecting_mirroring_status(
             and vr_type == expected_type
             and vr_message in message_contains
         ), "reason and type details are incorrect"
-    elif mirroring_health == "ERROR":
+    elif mirroring_health_secondary == "ERROR":
         expected_type = "Replicating"
         expected_reason = "Replicating"
         expected_status = "Unknown"

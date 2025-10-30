@@ -83,13 +83,10 @@ class TestMirroringStatusReflectedInVR:
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             namespace=namespace
         )
+        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
+            namespace=namespace
+        )
         config.switch_to_cluster_by_name(primary_cluster_name)
-        # primary_cluster_index = config.cur_index
-        # primary_cluster_nodes = get_node_objs()
-        # secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-        #     workloads[1].workload_namespace
-        # )
-
         scheduling_interval = dr_helpers.get_scheduling_interval(
             workloads[0].workload_namespace
         )
@@ -109,15 +106,18 @@ class TestMirroringStatusReflectedInVR:
             namespace,
         )
 
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        dr_helpers.fetch_mirroring_health_for_the_cluster(secondary_cluster_name)
+
+        config.switch_to_cluster_by_name(primary_cluster_name)
         # mirror health, vr_type, vr_status, vr_message
-        mirroring_health, vr_type, vr_reason, vr_status, vr_message = (
-            dr_helpers.fetch_latest_status_type_displayed_and_mirroring_status(
+        vr_type, vr_reason, vr_status, vr_message = (
+            dr_helpers.fetch_latest_vr_status_and_type_displayed(
                 namespace,
             )
         )
         print("#########Amrita##########")
         print(
-            f"mirroring_health: {mirroring_health}, "
             f"vr_type: {vr_type}, "
             f"vr_reason: {vr_reason}, "
             f"vr_status: {vr_status}, "
@@ -125,6 +125,4 @@ class TestMirroringStatusReflectedInVR:
         )
 
         # validate latest status type displayed on vr status
-        dr_helpers.validate_latest_status_type_reflecting_mirroring_status(
-            namespace,
-        )
+        dr_helpers.validate_latest_vr_status_and_type_reflecting_mirroring_status()
