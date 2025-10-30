@@ -11,9 +11,8 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.node import get_all_nodes
@@ -194,7 +193,8 @@ def get_obc():
     """
     Checking for successful creation of OBC for providing s3 object storage for lokistack.
 
-    Returns: Bool if obc created
+    Returns:
+        bool:  The return value. True for success  if obc created, False otherwise.
 
     """
 
@@ -375,7 +375,7 @@ def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     )
     pvc_status = pvc_obj.wait_for_resource(
         condition=constants.STATUS_BOUND,
-        resource_count=6,
+        resource_count=nodes_in_cluster,
         timeout=150,
         sleep=5,
     )
@@ -494,8 +494,8 @@ def install_logging():
 
     # Gets OCP version to align logging version to OCP version
     package_manifest = PackageManifest(
-        resource_name="cluster-logging",
-        selector="catalog=redhat-operators",
+        resource_name="constants.CLUSTERLOGGING_SUBSCRIPTION",
+        selector="catalog=constants.OPERATOR_CATALOG_SOURCE_NAME",
     )
     logging_channel = package_manifest.get_default_channel()
 
@@ -519,12 +519,18 @@ def install_logging():
     # Create RGW obc
     obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
 
-    if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-        obc_yaml["spec"]["storageClassName"] = "ocs-storagecluster-ceph-rgw"
-    elif config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
-        obc_yaml["spec"]["storageClassName"] = "openshift-storage.noobaa.io"
+    if config.ENV_DATA["platform"].lower() in [
+        constants.ON_PREM_PLATFORMS,
+        constants.BAREMETAL_PLATFORMS,
+    ]:
+        obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
+
+    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
+        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
+
     else:
-        logger.info("Supported platforms for test execution are vsphere and ibmcloud")
+        logger.info("Unsupported platform")
+
     helpers.create_resource(**obc_yaml)
 
     ocp_logging_obj.get_obc()
