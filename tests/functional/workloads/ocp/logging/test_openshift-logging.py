@@ -84,8 +84,7 @@ class Testopenshiftloggingonocs(E2ETest):
             project: test namespace to verify logging
 
         Returns:
-               lokistack_route
-               decoded token
+            return values: lokistack_route, decoded token for success
         """
         sa_name = "loki-reader2"
         sa_cmd = f"oc create sa {sa_name} -n {project}"
@@ -135,7 +134,7 @@ class Testopenshiftloggingonocs(E2ETest):
             == "application"
         ), "not able to access project in logs"
 
-    @pytest.mark.polarion_id("OCS-657")
+    @pytest.mark.polarion_id("OCS-6912")
     @tier1
     @skipif_managed_service
     @skipif_ms_provider_and_consumer
@@ -157,4 +156,4 @@ class Testopenshiftloggingonocs(E2ETest):
 
         # Validating if the project exists in lokistack
         project = pvc_obj.project.namespace
-        self.validate_project_exists(project)
+        self.validate_project_exists_in_logs(project)

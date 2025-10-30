@@ -3800,8 +3800,8 @@ def install_logging(request):
 
     # Gets OCP version to align logging version to OCP version
     package_manifest = PackageManifest(
-        resource_name="cluster-logging",
-        selector="catalog=redhat-operators",
+        resource_name="constants.CLUSTERLOGGING_SUBSCRIPTION",
+        selector="catalog=constants.OPERATOR_CATALOG_SOURCE_NAME",
     )
     logging_channel = package_manifest.get_default_channel()
 
@@ -3826,15 +3826,20 @@ def install_logging(request):
         yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
     # Create RGW obc
-
     obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
-    log.info(config.ENV_DATA.get("platform"))
-    if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
-        obc_yaml["spec"]["storageClassName"] = "ocs-storagecluster-ceph-rgw"
-    elif config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM:
-        obc_yaml["spec"]["storageClassName"] = "openshift-storage.noobaa.io"
+
+    if config.ENV_DATA["platform"].lower() in [
+        constants.ON_PREM_PLATFORMS,
+        constants.BAREMETAL_PLATFORMS,
+    ]:
+        obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
+
+    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
+        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
+
     else:
-        log.info("Supported platforms for test execution are vsphere and ibmcloud")
+        log.info("Unsupported platform")
+
     helpers.create_resource(**obc_yaml)
 
     ocp_logging_obj.get_obc()

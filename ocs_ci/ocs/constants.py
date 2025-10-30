@@ -1093,13 +1093,6 @@ CO_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-og.yaml")
 CO_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-sub.yaml")
 CO_UI_PLUGIN_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-ui-plugin.yaml")
 
-# Openshift-logging elasticsearch operator deployment yamls
-EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
-
-EO_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-og.yaml")
-EO_RBAC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-rbac.yaml")
-EO_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml")
-
 OLM_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml")
 CERT_MANAGER_NS_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER, "namespace_opg_cert_manager.yaml"
