@@ -63,7 +63,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
-from ocs_ci.utility.retry import retry, catch_exceptions
+from ocs_ci.utility.retry import retry
 from psutil._common import bytes2human
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
@@ -6018,19 +6018,3 @@ def get_git_active_branch(repo_path: str = ".") -> str:
     except Exception as ex:
         log.warning(f"Unexpected error while retrieving active Git branch: {ex}")
         raise
-
-
-def is_master_branch(repo_path: str = ".") -> bool:
-    """
-    Check if the currently active Git branch is 'master'.
-
-    Args:
-        repo_path (str): Path to the local Git repository.
-            Defaults to the current working directory (".").
-
-    Returns:
-        bool: True if the active branch is 'master', False otherwise.
-              Returns False if the repository is in a detached HEAD state.
-    """
-    branch = catch_exceptions(Exception)(get_git_active_branch)(repo_path)
-    return branch == "master"
