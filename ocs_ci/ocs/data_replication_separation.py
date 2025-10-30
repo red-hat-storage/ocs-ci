@@ -210,7 +210,8 @@ def validate_csi_pods_have_host_network():
 @config.run_with_provider_context_if_available
 def validate_mon_ip_annotation_on_workers():
     """
-    Validate that worker nodes have correct annotation.
+    Validate that worker nodes have correctly setnetwork.rook.io/mon-ip annotation.
+    It should be a private ip of the node.
 
     Returns:
         bool: True if all nodes have correct annotation
