@@ -27,4 +27,5 @@ def main(argv=None):
         fusion.deploy()
 
     # Fusion deployment
-    fusion_deployment()
+    exit_code = fusion_deployment()
+    sys.exit(exit_code)
