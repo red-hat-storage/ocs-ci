@@ -5,6 +5,7 @@ import pytest
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
+from subprocess import TimeoutExpired
 
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
@@ -46,7 +47,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
@@ -1655,7 +1656,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             noobaa_obj.exec_oc_cmd(
                 "delete -n openshift-storage noobaas.noobaa.io  --all"
             )
-        except TimeoutExpiredError:
+        except TimeoutExpired:
             params = '{"metadata": {"finalizers":null}}'
             noobaa_obj.exec_oc_cmd(
                 f"patch -n openshift-storage noobaas/noobaa --type=merge -p {params}"
