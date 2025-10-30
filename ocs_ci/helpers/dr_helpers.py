@@ -2641,7 +2641,7 @@ def verify_mirroring_status_on_primary(
         logger.info(f"{kind}: {resource_name} state.conditions --- {conditions}")
 
     # return latest state.conditions details
-    latest_condition = conditions[0]
+    latest_condition = conditions[-1]
     logger.info(f"{kind}: {resource_name} latest state.conditions {latest_condition}")
     return latest_condition
 

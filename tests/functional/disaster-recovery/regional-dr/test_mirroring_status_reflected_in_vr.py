@@ -104,7 +104,9 @@ class TestMirroringStatusReflectedInVR:
 
         # Fetch mirroring image status from secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        dr_helpers.fetch_mirroring_health_for_the_cluster(secondary_cluster_name)
+        mirroring_health_secondary = dr_helpers.fetch_mirroring_health_for_the_cluster(
+            secondary_cluster_name
+        )
 
         # mirror health, vr_type, vr_status, vr_message
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -122,4 +124,6 @@ class TestMirroringStatusReflectedInVR:
         )
 
         # validate latest status type displayed on vr status
-        dr_helpers.validate_latest_vr_status_and_type_reflecting_mirroring_status()
+        dr_helpers.validate_latest_vr_status_and_type_reflecting_mirroring_status(
+            namespace, mirroring_health_secondary
+        )
