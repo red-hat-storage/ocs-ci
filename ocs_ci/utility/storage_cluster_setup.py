@@ -40,9 +40,9 @@ logger = logging.getLogger(__name__)
 class StorageClusterSetup(object):
     def __init__(self):
         self.custom_storage_class_path = None
-        self.namespace = config.ENV_DATA["cluster_namespace"]
+        self.namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         self.platform = config.ENV_DATA["platform"]
-        self.storage_class = "test-lvs"
+        self.storage_class = constants.LOCALSTORAGE_SC
 
     def setup_storage_cluster(self):
         if self.custom_storage_class_path is not None:
@@ -116,7 +116,7 @@ class StorageClusterSetup(object):
             ] = self.get_arbiter_location()
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
 
-        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+        cluster_data["metadata"]["name"] = constants.STORAGE_CLIENT_NAME
         cluster_data["metadata"]["namespace"] = self.namespace
 
         deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
@@ -141,7 +141,6 @@ class StorageClusterSetup(object):
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
-            logger.info("Local storage is true")
         elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
@@ -555,7 +554,7 @@ class StorageClusterSetup(object):
 
         storage_cluster_obj = ocp.OCP(
             kind=constants.STORAGECLUSTER,
-            namespace=config.ENV_DATA["cluster_namespace"],
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         is_storagecluster = storage_cluster_obj.is_exist(
             resource_name=constants.DEFAULT_STORAGE_CLUSTER
@@ -583,7 +582,7 @@ class StorageClusterSetup(object):
             log_step("Labeling infra nodes")
             _ocp = ocp.OCP(kind="node")
             _ocp.exec_oc_cmd(
-                command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
+                command=f"annotate namespace {constants.OPENSHIFT_STORAGE_NAMESPACE} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
 
@@ -632,7 +631,7 @@ def create_external_pgsql_secret():
     Creates secret for external PgSQL to be used by Noobaa
     """
     secret_data = templating.load_yaml(constants.EXTERNAL_PGSQL_NOOBAA_SECRET_YAML)
-    secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    secret_data["metadata"]["namespace"] = constants.OPENSHIFT_STORAGE_NAMESPACE
     pgsql_data = config.AUTH["pgsql"]
     user = pgsql_data["username"]
     password = pgsql_data["password"]
