@@ -2,6 +2,7 @@ import logging
 
 import pytest
 import time
+from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
@@ -17,7 +18,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class TestNoobaaRebuild(E2ETest):
             noobaa_obj.exec_oc_cmd(
                 "delete -n openshift-storage noobaas.noobaa.io  --all"
             )
-        except TimeoutExpiredError:
+        except TimeoutExpired:
             params = '{"metadata": {"finalizers":null}}'
             noobaa_obj.exec_oc_cmd(
                 f"patch -n openshift-storage noobaas/noobaa --type=merge -p {params}"
