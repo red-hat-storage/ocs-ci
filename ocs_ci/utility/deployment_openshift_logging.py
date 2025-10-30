@@ -494,8 +494,8 @@ def install_logging():
 
     # Gets OCP version to align logging version to OCP version
     package_manifest = PackageManifest(
-        resource_name="constants.CLUSTERLOGGING_SUBSCRIPTION",
-        selector="catalog=constants.OPERATOR_CATALOG_SOURCE_NAME",
+        resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
+        selector="catalog=redhat-operators",
     )
     logging_channel = package_manifest.get_default_channel()
 
