@@ -12,8 +12,8 @@ import tempfile
 import yaml
 
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
-from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -179,14 +179,14 @@ class FusionDataFoundationDeployment:
        
         clustersetup = StorageClusterSetup()
         # self.patch_catalogsource()
-        if self.lso_enabled:
-            add_disks_lso()
-        # create_lvs_resource(
-        #     constants.DEFAULT_STORAGECLASS_LSO, constants.DEFAULT_STORAGECLASS_LSO
-        # )
+        #
+        create_lvs_resource(constants.LOCALSTORAGE_SC, constants.LOCALSTORAGE_SC)
         # label all the worker node cluster.ocs.openshift.io/openshift-storage=''localblock
         add_storage_label()
         clustersetup.setup_storage_cluster()
+        # before 2.11
+        # if self.lso_enabled:
+        #     add_disks_lso()
         # self.create_odfcluster()
         # odfcluster_status_check()
 
@@ -211,7 +211,7 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Creating OdfCluster CR")
-        # storageclass = get_storageclass()
+        storageclass = get_storageclass()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
