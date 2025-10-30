@@ -2617,6 +2617,7 @@ def verify_mirroring_status_on_primary(
         timeout (int): time in seconds to wait for resource to reach at desired state
 
     Returns:
+        str: value of vr.spec.kind
         dict: returns latest condition details
     """
     resource_obj = ocp.OCP(kind=kind, namespace=namespace)
@@ -2637,13 +2638,14 @@ def verify_mirroring_status_on_primary(
 
     for resource in resource_list:
         resource_name = resource["metadata"]["name"]
+        vr_spec_kind = resource["spec"]["kind"]
         conditions = resource["status"]["conditions"]
         logger.info(f"{kind}: {resource_name} state.conditions --- {conditions}")
 
     # return latest state.conditions details
     latest_condition = conditions[-1]
     logger.info(f"{kind}: {resource_name} latest state.conditions {latest_condition}")
-    return latest_condition
+    return vr_spec_kind, latest_condition
 
 
 def fetch_latest_vr_status_and_type_displayed(
@@ -2667,7 +2669,7 @@ def fetch_latest_vr_status_and_type_displayed(
         vr_reason (str): latest vr status.conditions.reason
 
     """
-    latest_condition = fetch_status_and_type_reflecting_on_vr_or_vgr(
+    vr_spec_kind, latest_condition = fetch_status_and_type_reflecting_on_vr_or_vgr(
         namespace, kind=kind, resource_name=resource_name, timeout=timeout
     )
 
@@ -2683,7 +2685,7 @@ def fetch_latest_vr_status_and_type_displayed(
     # vr status.conditions.message
     vr_message = latest_condition.get("message")
 
-    return vr_type, vr_reason, vr_status, vr_message
+    return vr_spec_kind, vr_type, vr_reason, vr_status, vr_message
 
 
 def validate_latest_vr_status_and_type_reflecting_mirroring_status(
@@ -2719,7 +2721,7 @@ def validate_latest_vr_status_and_type_reflecting_mirroring_status(
 
     """
 
-    vr_type, vr_reason, vr_status, vr_message = (
+    vr_spec_kind, vr_type, vr_reason, vr_status, vr_message = (
         fetch_latest_vr_status_and_type_displayed(
             namespace, kind=kind, resource_name=resource_name, timeout=timeout
         )
@@ -2729,9 +2731,9 @@ def validate_latest_vr_status_and_type_reflecting_mirroring_status(
         expected_type = "Replicating"
         expected_reason = "Replicating"
         expected_status = "True"
-        if kind == constants.VOLUME_REPLICATION:
+        if vr_spec_kind == constants.PVC:
             message_contains = "volume is replicating: local image is primary"
-        elif kind == constants.VOLUME_GROUP_REPLICATION:
+        elif vr_spec_kind == constants.VOLUME_GROUP_REPLICATION:
             message_contains = "volume group is replicating: local group is primary"
         assert (
             vr_reason == expected_reason
