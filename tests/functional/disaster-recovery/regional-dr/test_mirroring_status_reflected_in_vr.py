@@ -120,6 +120,7 @@ class TestMirroringStatusReflectedInVR:
         )
 
         # validate vr.status displayes volume is replicating successfully
+        config.switch_to_cluster_by_name(primary_cluster_name)
         dr_helpers.validate_latest_vr_status_and_type_reflecting_mirroring_status(
             namespace, mirroring_health_secondary
         )
