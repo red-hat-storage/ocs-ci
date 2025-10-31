@@ -879,7 +879,13 @@ def destroy_rosa_cluster(cluster, best_effort=True):
         cluster (str): name of the cluster
         best_effort (bool): If True (true), ignore errors and continue with the deletion of the cluster
     """
-    external_id = get_cluster_details(cluster)["id"]
+    try:
+        external_id = get_cluster_details(cluster)["id"]
+    except CommandFailed as e:
+        if "Cluster was Deprovisioned" in str(e):
+            logger.warning(f"Cluster {cluster} is already deprovisioned, {e}")
+            return True
+        raise
     cmd = f"ocm delete cluster {external_id} -p best_effort={str(best_effort).lower()}"
     proc = exec_cmd(cmd, timeout=1200)
     if proc.returncode != 0:
