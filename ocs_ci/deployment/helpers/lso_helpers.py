@@ -114,11 +114,7 @@ def setup_local_storage(storageclass):
     platform = config.ENV_DATA.get("platform").lower()
     lso_type = config.DEPLOYMENT.get("type")
 
-    if platform == constants.VSPHERE_PLATFORM:
-        add_disk_for_vsphere_platform()
-
-    if platform == constants.RHV_PLATFORM:
-        add_disk_for_rhv_platform()
+    add_disks_lso()
 
     if (ocp_version >= version.VERSION_4_6) and (ocs_version >= version.VERSION_4_6):
         # Pull local volume discovery yaml data
@@ -237,6 +233,18 @@ def setup_local_storage(storageclass):
         verify_pvs_created(expected_pvs, storageclass, False)
     else:
         verify_pvs_created(expected_pvs, storageclass)
+
+
+def add_disks_lso():
+    """
+    Add disks based on which platform we are running on
+    """
+    platform = config.ENV_DATA.get("platform").lower()
+    if platform == constants.VSPHERE_PLATFORM:
+        add_disk_for_vsphere_platform()
+
+    if platform == constants.RHV_PLATFORM:
+        add_disk_for_rhv_platform()
 
 
 def create_optional_operators_catalogsource_non_ga(force=False):

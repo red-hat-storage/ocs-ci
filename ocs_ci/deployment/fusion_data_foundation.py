@@ -9,6 +9,7 @@ import tempfile
 
 import yaml
 
+from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, node
@@ -30,6 +31,7 @@ class FusionDataFoundationDeployment:
     def __init__(self):
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
         self.kubeconfig = config.RUN["kubeconfig"]
+        self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
 
     def deploy(self):
         """
@@ -163,6 +165,10 @@ class FusionDataFoundationDeployment:
 
         # Storage configuration method changed in Fusion 2.11
         if fusion_version < version.VERSION_2_11:
+            if self.lso_enabled:
+                add_disks_lso()
+            if config.ENV_DATA.get("mark_masters_schedulable", False):
+                node.mark_masters_schedulable()
             self.create_odfcluster()
             odfcluster_status_check()
         else:
@@ -184,20 +190,48 @@ class FusionDataFoundationDeployment:
         )
         run_patch_cmd(cmd)
 
-    @staticmethod
-    def create_odfcluster():
+    def create_odfcluster(self):
         """
         Create OdfCluster CR
         """
 
         logger.info("Creating OdfCluster CR")
-        storageclass = get_storageclass()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
 
+        if self.lso_enabled:
+            additional_keys = ["localVolumeSetSpec", "storageClient"]
+            for key in additional_keys:
+                if key not in odfcluster_data["spec"]:
+                    odfcluster_data["spec"][key] = {}
+            storageclass = constants.FDF_LSO_STORAGECLASS
+            device_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+            device_size = f"{device_size}Gi"
+            device_set_count = config.DEPLOYMENT.get(
+                "local_storage_storagedeviceset_count", len(worker_nodes)
+            )
+            odfcluster_data["spec"]["localVolumeSetSpec"]["deviceTypes"] = [
+                "disk",
+                "part",
+            ]
+            odfcluster_data["spec"]["localVolumeSetSpec"]["diskType"] = "SSD"
+            odfcluster_data["spec"]["localVolumeSetSpec"]["size"] = device_size
+            odfcluster_data["spec"]["deviceSets"][0]["capacity"] = "0"
+            odfcluster_data["spec"]["deviceSets"][0]["count"] = device_set_count
+            odfcluster_data["spec"]["deviceSets"][0][
+                "name"
+            ] = constants.FDF_LSO_DEVICE_SET_NAME
+        else:
+            storageclass = get_storageclass()
+
         odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
+
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            odfcluster_data["spec"]["allowRemoteStorageConsumers"] = True
+            odfcluster_data["spec"]["autoScaleUp"] = True
+            odfcluster_data["spec"]["storageClient"]["enable"] = True
 
         odfcluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odfcluster", delete=False
