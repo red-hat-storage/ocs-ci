@@ -49,3 +49,4 @@ class NSFS:
     mounted_bucket_path: str = None
     s3_creds: dict = None
     nss: NamespaceStore = None
+    nsfs_only: bool = False
