@@ -18,6 +18,7 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_creation,
     gracefully_reboot_ocp_nodes,
     verify_cluster_data_protected_status,
+    verify_fence_state,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
@@ -103,7 +104,7 @@ class TestMultipleApplicationFailoverAndRelocate:
         # Verify that the cluster dataProtected is True and peerReady is True
         verify_cluster_data_protected_status(
             workload_type=workload_type,
-            namespace=self.namespace,
+            namespace=primary_instances[0].workload_namespace,
         )
 
         wait_time = 120
@@ -114,6 +115,9 @@ class TestMultipleApplicationFailoverAndRelocate:
 
         # Fence the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
 
         # Multiple applications Failover to Secondary managed cluster
         config.switch_acm_ctx()

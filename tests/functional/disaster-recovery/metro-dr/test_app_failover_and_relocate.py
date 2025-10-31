@@ -75,30 +75,30 @@ class TestApplicationFailoverAndRelocate:
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
                 id="primary_up_subscription",
             ),
-            # pytest.param(
-            #     constants.SUBSCRIPTION,
-            #     True,
-            #     marks=pytest.mark.polarion_id(polarion_id_primary_down),
-            #     id="primary_down_subscription",
-            # ),
-            # pytest.param(
-            #     constants.APPLICATION_SET,
-            #     False,
-            #     marks=[
-            #         pytest.mark.polarion_id(polarion_id_primary_up),
-            #         pytest.mark.skipif_ocs_version("<4.13"),
-            #     ],
-            #     id="primary_up_appset",
-            # ),
-            # pytest.param(
-            #     constants.APPLICATION_SET,
-            #     True,
-            #     marks=[
-            #         pytest.mark.polarion_id(polarion_id_primary_down),
-            #         pytest.mark.skipif_ocs_version("<4.13"),
-            #     ],
-            #     id="primary_down_appset",
-            # ),
+            pytest.param(
+                constants.SUBSCRIPTION,
+                True,
+                marks=pytest.mark.polarion_id(polarion_id_primary_down),
+                id="primary_down_subscription",
+            ),
+            pytest.param(
+                constants.APPLICATION_SET,
+                False,
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_up),
+                    pytest.mark.skipif_ocs_version("<4.13"),
+                ],
+                id="primary_up_appset",
+            ),
+            pytest.param(
+                constants.APPLICATION_SET,
+                True,
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_down),
+                    pytest.mark.skipif_ocs_version("<4.13"),
+                ],
+                id="primary_down_appset",
+            ),
         ],
     )
     def test_application_failover_and_relocate(
