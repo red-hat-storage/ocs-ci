@@ -2,8 +2,6 @@
 This module contains functions needed to install IBM Fusion Data Foundation.
 """
 
-# framco3
-# beta
 import json
 import logging
 import os
@@ -48,7 +46,6 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-
         self.setup_storage()
 
     def create_image_tag_mirror_set(self):
@@ -58,6 +55,7 @@ class FusionDataFoundationDeployment:
         logger.info("Creating or Updating FDF ImageTagMirrorSet")
 
         imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
+
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}", silent=True
         )
@@ -68,6 +66,7 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set()
+
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}",
             silent=True,
@@ -279,6 +278,9 @@ def extract_image_digest_mirror_set():
 
 
 def add_storage_label():
+    """
+    Add storage label on worker nodes.
+    """
     nodes = node.get_nodes(node_type="worker")
     node.label_nodes(nodes)
 
