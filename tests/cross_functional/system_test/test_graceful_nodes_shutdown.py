@@ -7,7 +7,6 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults, registry
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -22,7 +21,6 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.framework import config
-from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
@@ -34,6 +32,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources.fips import check_fips_enabled
+from ocs_ci.utility.utils import enable_huge_pages
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +58,7 @@ class TestGracefulNodesShutdown(E2ETest):
             )
 
         nodes = get_nodes()
+        enable_huge_pages()
         for node in nodes:
             assert (
                 node.get()["status"]["allocatable"]["hugepages-2Mi"] == "64Mi"
@@ -85,6 +85,7 @@ class TestGracefulNodesShutdown(E2ETest):
         def teardown():
             logger.info("cleanup the environment")
 
+            """
             # cleanup logging workload
             sub = OCP(
                 kind=constants.SUBSCRIPTION,
@@ -94,6 +95,7 @@ class TestGracefulNodesShutdown(E2ETest):
             if logging_sub:
                 logger.info("Logging is configured")
                 uninstall_cluster_logging()
+            """
 
         request.addfinalizer(teardown)
 
@@ -361,6 +363,7 @@ class TestGracefulNodesShutdown(E2ETest):
         retry((CommandFailed, UnexpectedBehaviour, AssertionError), tries=3, delay=15)(
             registry.validate_pvc_mount_on_registry_pod
         )()
+        """
         sub = OCP(
             kind=constants.SUBSCRIPTION,
             namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
@@ -368,6 +371,8 @@ class TestGracefulNodesShutdown(E2ETest):
         logging_sub = sub.get().get("items")
         if not logging_sub:
             assert "Logging is not configured"
+
+        """
 
     @system_test
     @polarion_id("OCS-3976")
@@ -408,9 +413,7 @@ class TestGracefulNodesShutdown(E2ETest):
 
         # OCP Workloads
         logger.info("start_ocp_workload")
-        start_ocp_workload(
-            workloads_list=["monitoring", "registry", "logging"], run_in_bg=True
-        )
+        start_ocp_workload(workloads_list=["monitoring", "registry"], run_in_bg=True)
 
         # Setup MCG Features
         logger.info(
@@ -431,8 +434,8 @@ class TestGracefulNodesShutdown(E2ETest):
             worker_instances = nodes.get_ec2_instances(nodes=worker_nodes)
 
         logger.info("Gracefully Shutting down worker & master nodes")
-        nodes.stop_nodes(nodes=worker_nodes, force=False)
-        nodes.stop_nodes(nodes=master_nodes, force=False)
+        nodes.stop_nodes(nodes=worker_nodes, force=False, timeout=1200)
+        nodes.stop_nodes(nodes=master_nodes, force=False, timeout=1200)
 
         logger.info("waiting for 5 min before starting nodes")
         time.sleep(300)

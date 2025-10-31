@@ -340,7 +340,7 @@ class VMWareNodes(NodesBase):
                 if volume_kube_path in volume.values():
                     return node
 
-    def stop_nodes(self, nodes, force=True, wait=True):
+    def stop_nodes(self, nodes, force=True, wait=True, timeout=600):
         """
         Stop vSphere VMs
 
@@ -352,7 +352,7 @@ class VMWareNodes(NodesBase):
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.stop_vms(vms, force=force, wait=wait)
+        self.vsphere.stop_vms(vms, force=force, wait=wait, timeout=timeout)
 
     def start_nodes(self, nodes, wait=True):
         """
