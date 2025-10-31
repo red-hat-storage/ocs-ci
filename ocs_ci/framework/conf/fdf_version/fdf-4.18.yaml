@@ -1,7 +1,7 @@
 ---
 DEPLOYMENT:
   fdf_pre_release: true
-  fdf_image_tag: v4.19.5-1
+  fdf_image_tag: v4.18
   fdf_pre_release_registry: docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df
   fdf_pre_release_image_digest: null
   local_storage: true
