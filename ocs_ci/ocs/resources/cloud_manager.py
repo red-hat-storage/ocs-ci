@@ -112,7 +112,7 @@ class CloudManager(ABC):
                 endpoint, access_key, secret_key = rgw_conn.get_credentials()
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
-                "DATA_PREFIX": "AWS",
+                "DATA_PREFIX": "RGW",
                 "ENDPOINT": endpoint,
                 "S3_INTERNAL_ENDPOINT": rgw_conn.s3_internal_endpoint,
                 "RGW_ACCESS_KEY_ID": access_key,
