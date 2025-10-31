@@ -12,7 +12,7 @@ import yaml
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
-# from ocs_ci.helpers.helpers import create_lvs_resource
+from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -20,7 +20,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 
-# from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
+from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 import time
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
@@ -173,10 +173,10 @@ class FusionDataFoundationDeployment:
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
-            # clustersetup = StorageClusterSetup()
-            # create_lvs_resource(constants.LOCALSTORAGE_SC, constants.LOCALSTORAGE_SC)
-            # add_storage_label()
-            # clustersetup.setup_storage_cluster()
+            clustersetup = StorageClusterSetup()
+            create_lvs_resource(constants.LOCALSTORAGE_SC, constants.LOCALSTORAGE_SC)
+            add_storage_label()
+            clustersetup.setup_storage_cluster()
             storagecluster_health_check()
 
     def patch_catalogsource(self):
