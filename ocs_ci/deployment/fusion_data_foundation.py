@@ -171,24 +171,11 @@ class FusionDataFoundationDeployment:
             self.create_odfcluster()
             odfcluster_status_check()
         else:
-            logger.warning(
-                "Storage configuration for Fusion 2.11 or greater not yet implemented"
-            )
-            storage_cluster_setup.setup_storage_cluster()
-        # self.patch_catalogsource()
-       
-        clustersetup = StorageClusterSetup()
-        # self.patch_catalogsource()
-        #
-        create_lvs_resource(constants.LOCALSTORAGE_SC, constants.LOCALSTORAGE_SC)
-        # label all the worker node cluster.ocs.openshift.io/openshift-storage=''localblock
-        add_storage_label()
-        clustersetup.setup_storage_cluster()
-        # before 2.11
-        # if self.lso_enabled:
-        #     add_disks_lso()
-        # self.create_odfcluster()
-        # odfcluster_status_check()
+            logger.info("Storage configuration for Fusion 2.11 or greater")
+            clustersetup = StorageClusterSetup()
+            create_lvs_resource(constants.LOCALSTORAGE_SC, constants.LOCALSTORAGE_SC)
+            add_storage_label()
+            clustersetup.setup_storage_cluster()
 
     def patch_catalogsource(self):
         """
