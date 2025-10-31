@@ -42,6 +42,7 @@ class CloudManager(ABC):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(self, obc_obj=None):
         """
         Constructor for the CloudManager class
@@ -222,6 +223,7 @@ class S3Client(CloudClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self,
         auth_dict,
@@ -404,6 +406,7 @@ class GoogleClient(CloudClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(self, auth_dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cred_dict_string = base64.b64decode(
@@ -514,6 +517,7 @@ class AzureClient(CloudClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self, account_name=None, credential=None, auth_dict=None, *args, **kwargs
     ):
@@ -619,6 +623,7 @@ class AzureWithLogsClient(AzureClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self, account_name=None, credential=None, auth_dict=None, *args, **kwargs
     ):
