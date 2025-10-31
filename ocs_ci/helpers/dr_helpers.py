@@ -575,6 +575,10 @@ def is_cg_enabled():
         bool: True if CG is enabled, False otherwise
 
     """
+    # CG is applicable for Regional-DR mode only
+    if config.MULTICLUSTER["multicluster_mode"] != constants.RDR_MODE:
+        return False
+
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_20:
         return config.ENV_DATA.get("cg_enabled", True)
