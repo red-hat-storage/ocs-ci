@@ -2623,7 +2623,7 @@ def fetch_status_and_type_reflecting_on_vr_or_vgr(
 
     for resource in resource_list:
         resource_name = resource["metadata"]["name"]
-        vr_spec_kind = resource["spec"]["kind"]
+        vr_spec_kind = resource["spec"]["dataSource"]["kind"]
         conditions = resource["status"]["conditions"]
         logger.info(f"{kind}: {resource_name} state.conditions --- {conditions}")
 
