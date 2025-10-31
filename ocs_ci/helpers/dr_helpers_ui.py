@@ -789,12 +789,18 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
 
 
 def assign_drpolicy_for_discovered_vms_via_ui(
-    acm_obj, vms: List[str], standalone=True, protection_name=None, namespace=None
+    acm_obj,
+    vms: List[str],
+    standalone=True,
+    protection_name=None,
+    namespace=None,
+    vms_name=None,
+    managed_cluster_name=None,
 ):
     """
     This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
     of the ACM console.
-    With ACM 2.14 and above, Data Policy can be assigned as Standalone or Shared Protection type (if there is an
+    Starting ODF 4.19 and ACM 2.14, Data Policy can be assigned as Standalone or Shared Protection type (if there is an
     existing DRPC for another VM workload, and you want to club it together)
 
     Args:
@@ -804,6 +810,8 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         protection_name (str): Protection name used to DR protect the workload using which
                                 DRPC and Placement would be created
         namespace (str): None by default, namespace of the workload
+        vms_name (str): Name of the VM
+        managed_cluster_name (str): Name of the managed cluster where VM workload is running
      Returns:
          True if function executes successfully
 
@@ -811,28 +819,20 @@ def assign_drpolicy_for_discovered_vms_via_ui(
     if not vms or any(not vm.strip() for vm in vms):
         raise ValueError("Parameter 'vms' is required and must be a non-empty list")
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    acm_obj.navigate_clusters_page(vms=True)
-    for vm in vms:
-        existing_filter = acm_obj.check_element_presence(
-            acm_loc["remove-existing-filter"][::-1]
+    for _ in vms:
+        assert navigate_using_fleet_virtulization(
+            acm_obj, managed_cluster_name=managed_cluster_name
         )
-        if existing_filter:
-            acm_obj.do_click(acm_loc["remove-existing-filter"])
-            log.info("Existing filter removed")
-        else:
-            log.info("No filter exists")
-        log.info("Select name as filter")
-        acm_obj.do_click(acm_loc["filter-vms"], enable_screenshot=True)
-        acm_obj.do_click(acm_loc["filter-with-name"], enable_screenshot=True)
-        log.info("Select the name of the VM and apply filter")
-        acm_obj.do_click(format_locator(acm_loc["vm_name"], vm))
-        log.info("Select namespace as filter")
-        acm_obj.do_click(acm_loc["filter-vms-2"], enable_screenshot=True)
-        acm_obj.do_click(acm_loc["filter-with-namespace"], enable_screenshot=True)
-        log.info("Select the name of the namespace where VM is running")
-        acm_obj.do_click(format_locator(acm_loc["vm-namespace"], namespace))
-        log.info("Click on forward arrow to apply filter")
-        acm_obj.do_click(acm_loc["click-forward-arrow"], enable_screenshot=True)
+        log.info("Select the namespace where VM workload is running")
+        acm_obj.do_click(
+            format_locator(acm_loc["cnv-workload-namespace"]),
+            namespace,
+            enable_screenshot=True,
+        )
+        log.info("Click on the VM")
+        acm_obj.do_click(
+            format_locator(acm_loc["cnv-vm-name"]), vms_name, enable_screenshot=True
+        )
         log.info("Check the status of the VM")
         vm_current_status = acm_obj.get_element_text(acm_loc["vm-status"])
         if vm_current_status != "Running":
@@ -842,8 +842,8 @@ def assign_drpolicy_for_discovered_vms_via_ui(
             assert (
                 wait_for_status
             ), f"Expected VM status is 'Running', but got '{vm_current_status}'"
-        log.info("Click on the kebab menu option")
-        acm_obj.do_click(acm_loc["vm-kebab-menu"], enable_screenshot=True)
+        log.info("Click on the Actions button")
+        acm_obj.do_click(acm_loc["vm-actions"], enable_screenshot=True)
         log.info("Click on Manage disaster recovery")
         acm_obj.do_click(acm_loc["manage-dr"], enable_screenshot=True)
         log.info("Click on Enroll virtual machine")
@@ -891,3 +891,47 @@ def assign_drpolicy_for_discovered_vms_via_ui(
         log.info("Close page")
         acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
         return True
+
+
+def navigate_using_fleet_virtulization(acm_obj, managed_cluster_name):
+    """
+    Starting ACM 2.15, VMs page from the ACM console has been removed and is integrated
+    with the Virtulization Operator which is required to be installed on the ACM hub cluster and
+    has it's own perspective dropdown to switch to, which is called Fleet Virtulization.
+
+    This function is to navigate to the new VMs page using the Fleet Virtulization dropdown and
+    connect dots with the existing tests so as to apply DR Policy to the CNV VM workloads from this page
+    using Standalone or Shared Protection type.
+
+    Refer ACM-23371 and ACM-22068 for more details
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        managed_cluster_name (str): Name of the managed cluster where VM is running
+
+    Returns:
+        True if VM is found on the selected managed cluster and function executes successfully, False otherwise
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    log.info("Navigate to VMs console using Fleet Virtulization dropdown")
+    acm_obj.do_click(acm_loc["switch-perspective"])
+    acm_obj.do_click(acm_loc["fleet-virtual"])
+    acm_obj.page_has_loaded(retries=10, sleep_time=5)
+    log.info("From side nav bar, navigate to VirtualMachines page")
+    acm_obj.do_click(acm_loc["nav-bar-vms-page"])
+    log.info("Look for 'All Clusters'")
+    all_clusters = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["all-clusters"], expected_text="All clusters"
+    )
+    if all_clusters:
+        log.info(
+            "All Clusters found, now select the cluster where VM workload is running"
+        )
+        acm_obj.do_click(
+            format_locator(acm_loc["managed-cluster-name"]), managed_cluster_name
+        )
+        log.info("Managed cluster found")
+    else:
+        log.warning("'All Clusters' not found on the VMs page")
+        return False
+    return True
