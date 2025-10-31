@@ -1,6 +1,9 @@
+import pytest
 import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+
+from ocs_ci.ocs.scale_noobaa_lib import fetch_noobaa_storage_class_name
 
 log = logging.getLogger(__name__)
 
@@ -32,3 +35,8 @@ def pytest_collection_modifyitems(items):
                     )
                     items.remove(item)
                     break
+
+
+@pytest.fixture(scope="session")
+def noobaa_storage_class_name():
+    return fetch_noobaa_storage_class_name()
