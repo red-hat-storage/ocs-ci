@@ -8,7 +8,7 @@ from ocs_ci.ocs.exceptions import ACMClusterDeployException, ACMClusterDestroyEx
 from ocs_ci.ocs.ui import acm_ui
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.ocs.acm import acm
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 
 
 logger = logging.getLogger(__name__)
@@ -62,8 +62,10 @@ class OCPDeployWithACM(Deployment):
         prev = config.cur_index
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            ssl_key = config.DEPLOYMENT.get("ingress_ssl_key")
-            ssl_cert = config.DEPLOYMENT.get("ingress_ssl_cert")
+            ssl_key = config.DEPLOYMENT.get("ingress_ssl_key", defaults.INGRESS_SSL_KEY)
+            ssl_cert = config.DEPLOYMENT.get(
+                "ingress_ssl_cert", defaults.INGRESS_SSL_CERT
+            )
             for key in [ssl_key, ssl_cert]:
                 if os.path.exists(key):
                     os.unlink(key)
