@@ -13,6 +13,7 @@ from ocs_ci.helpers.dr_helpers import (
     enable_fence,
     enable_unfence,
     get_fence_state,
+    mdr_post_failover_check,
     failover,
     relocate,
     set_current_primary_cluster_context,
@@ -23,6 +24,8 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_deletion,
     gracefully_reboot_ocp_nodes,
     wait_for_cnv_workload,
+    verify_cluster_data_protected_status,
+    verify_fence_state,
 )
 
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
@@ -124,6 +127,23 @@ class TestCnvApplicationMDR:
                 f"Original checksum of file {vm_filepaths[0]} on VM {cnv_wl.workload_name}: {md5sum}"
             )
 
+        # Verify that the cluster dataProtected is True and peerReady is True
+        verify_cluster_data_protected_status(
+            workload_type=cnv_workloads[0].workload_type,
+            namespace=self.wl_namespace,
+            workload_placement_name=(
+                cnv_workloads[0].cnv_workload_placement_name
+                if cnv_workloads[0].workload_type != constants.SUBSCRIPTION
+                else None
+            ),
+        )
+
+        wait_time = 120
+        logger.info(
+            f"Wait for {wait_time} seconds before starting Failover of application"
+        )
+        time.sleep(wait_time)
+
         # Shutting down primary cluster nodes
         node_objs = get_node_objs()
         if primary_cluster_down:
@@ -132,6 +152,9 @@ class TestCnvApplicationMDR:
 
         # Fence the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
 
         secondary_cluster_name = get_current_secondary_cluster_name(
             self.wl_namespace, cnv_workloads[0].workload_type
@@ -172,7 +195,7 @@ class TestCnvApplicationMDR:
                 cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
             )
             for cnv_wl in cnv_workloads:
-                wait_for_all_resources_deletion(cnv_wl.workload_namespace)
+                mdr_post_failover_check(namespace=cnv_wl.workload_namespace)
 
         set_current_primary_cluster_context(
             self.wl_namespace, cnv_workloads[0].workload_type
@@ -213,15 +236,25 @@ class TestCnvApplicationMDR:
                 cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
             )
             for cnv_wl in cnv_workloads:
-                wait_for_all_resources_deletion(cnv_wl.workload_namespace)
+                mdr_post_failover_check(namespace=cnv_wl.workload_namespace)
 
         # Un-fence the managed cluster
         enable_unfence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_UNFENCE} state"
 
         # Reboot the nodes after unfenced
         gracefully_reboot_ocp_nodes(
             drcluster_name=self.primary_cluster_name, disable_eviction=True
         )
+
+        # Verify application are deleted from old managed cluster
+        set_current_secondary_cluster_context(
+            cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
+        )
+        for cnv_wl in cnv_workloads:
+            wait_for_all_resources_deletion(cnv_wl.workload_namespace)
 
         secondary_cluster_name = get_current_secondary_cluster_name(
             self.wl_namespace, cnv_workloads[0].workload_type
