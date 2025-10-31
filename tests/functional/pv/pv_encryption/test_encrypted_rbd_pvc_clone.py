@@ -275,11 +275,17 @@ class TestEncryptedRbdClone(ManageTest):
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
+        # Wait for encrypted volumes to detach from nodes before PVC deletion
+        all_pvc_objs = cloned_pvc_objs + self.pvc_objs
+        helpers.wait_for_volume_detachment(pvc_objs=all_pvc_objs, timeout=180)
+
         log.info("Deleting all PVCs")
-        for pvc_obj in cloned_pvc_objs + self.pvc_objs:
+        for pvc_obj in all_pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             pvc_obj.delete()
-            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
+            # Increased timeout for encrypted volume deletion as it requires
+            # additional steps (closing encrypted device, cleaning up secrets)
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
 
         if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Verify if the keys for parent and cloned PVCs are deleted from Vault

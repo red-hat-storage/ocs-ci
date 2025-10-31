@@ -1487,6 +1487,22 @@ def pvc_factory_fixture(request, project_factory):
 
         pv_objs = []
 
+        # Wait for volumes to detach before PVC deletion for encrypted volumes.
+        # For encrypted volumes, deleting PVCs too early can remove the secret
+        # before detachment, causing volume deletion errors.
+        non_deleted_instances = [
+            instance for instance in instances if not instance.is_deleted
+        ]
+        encrypted_pvcs = [
+            pvc for pvc in non_deleted_instances if helpers.is_pvc_encrypted(pvc)
+        ]
+        if encrypted_pvcs:
+            log.info(
+                f"Waiting for {len(encrypted_pvcs)} encrypted volume(s) to detach "
+                "before PVC deletion"
+            )
+            helpers.wait_for_volume_detachment(pvc_objs=encrypted_pvcs, timeout=180)
+
         # Get PV form PVC instances and delete PVCs
         for instance in instances:
             if not instance.is_deleted:
