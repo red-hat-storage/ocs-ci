@@ -42,6 +42,7 @@ from ocs_ci.ocs.constants import (
     VAULT_KMS_PROVIDER,
     NFS_OUTCLUSTER_TEST_PLATFORMS,
     DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+    ORDER_OCP_ON_KUBEVIRT_UPGRADE,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -134,6 +135,7 @@ order_dr_hub_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
+order_ocp_on_kubevirt_upgrade = pytest.mark.order(ORDER_OCP_ON_KUBEVIRT_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
@@ -153,6 +155,9 @@ ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
 # provider operator upgrade
 provider_operator_upgrade = compose(
     order_ocs_upgrade, pytest.mark.provider_operator_upgrade
+)
+kubevirt_cluster_upgrade = compose(
+    order_ocp_on_kubevirt_upgrade, pytest.mark.kubevirt_cluster_upgrade
 )
 
 # pre_*_upgrade markers
