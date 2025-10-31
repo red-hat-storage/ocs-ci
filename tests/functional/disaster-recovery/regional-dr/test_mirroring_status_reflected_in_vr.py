@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import tier1
-from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers import dr_helpers, helpers
 
 # from ocs_ci.helpers.dr_helpers_ui import (
 #     dr_submariner_validation_from_ui,
@@ -58,12 +58,23 @@ class TestMirroringStatusReflectedInVR:
     ):
         """
         Validate on primary VR/VGR a status message is updated to reflect the current mirroring status.
-        When mirroring is setup successfully and image status is healthy
 
-        message: 'volume is replicating: local image is primary'
-        observedGeneration: 2
+        for mirroring image in healthy status:
         reason: Replicating
         status: "True"
+        type: Replicating
+
+        for mirroring image in warning/error status:
+        reason: Replicating
+        status: "Unknown"
+        type: Replicating
+
+        for mirroring image in down status:
+        message: 'volume group replication status is unknown: rpc error: code = FailedPrecondition
+        desc = failed to get last sync info: no snapshot details: last sync time not
+        found'
+        reason: Replicating
+        status: "Unknown"
         type: Replicating
 
         is displayed.
@@ -108,22 +119,25 @@ class TestMirroringStatusReflectedInVR:
             secondary_cluster_name
         )
 
-        # mirror health, vr_type, vr_status, vr_message
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        vr_type, vr_reason, vr_status, vr_message = (
-            dr_helpers.fetch_latest_vr_status_and_type_displayed(
-                namespace,
-            )
-        )
-        print("#########Amrita##########")
-        print(
-            f"vr_type: {vr_type}, "
-            f"vr_reason: {vr_reason}, "
-            f"vr_status: {vr_status}, "
-            f"vr_message: {vr_message}"
-        )
-
-        # validate latest status type displayed on vr status
+        # validate vr.status displayes volume is replicating successfully
         dr_helpers.validate_latest_vr_status_and_type_reflecting_mirroring_status(
             namespace, mirroring_health_secondary
         )
+
+        logger.info(
+            "Validate vr status reflects mirroring status when image health=down"
+        )
+        # bring mirroring down on the secondary cluster
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT,
+            replica_count=0,
+        ), "Failed to scale down mirroring deployment to 0"
+        logger.info("Successfully scaled down rbd mirroring deployment to 0")
+        sleep(120)
+
+        # Fetch mirroring image status from secondary cluster
+        mirroring_health_secondary = dr_helpers.fetch_mirroring_health_for_the_cluster(
+            secondary_cluster_name
+        )
+        print(f"mirroring health on secondary: {mirroring_health_secondary}")
