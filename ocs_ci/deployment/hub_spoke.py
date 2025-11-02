@@ -1189,6 +1189,25 @@ class HostedClients(HyperShiftBase):
             hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
 
+    def apply_idms_to_hosted_clusters(self):
+        """
+        Apply ImageDigestMirrorSet data to all existing HostedClusters as imageContentSources.
+        This patches spec.imageContentSources of the HostedCluster resource in the management (hub) cluster,
+        replacing old items.
+        """
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                hosted_cluster_names = get_hosted_cluster_names()
+                for hc_name in hosted_cluster_names:
+                    self.apply_idms_to_hosted_cluster(
+                        name=hc_name,
+                        replace=True,
+                    )
+        except Exception as e:
+            # this is non-critical operation, it should not fail deployment or upgrade on multiple clusters,
+            # thus exception is broad
+            logger.error(f"Failed to apply IDMS mirrors to HostedClusters: {e}")
+
 
 class SpokeOCP(ABC):
     """
@@ -1548,6 +1567,24 @@ class HypershiftHostedOCP(
             ):
                 create_agent_service_config()
                 create_host_inventory()
+
+    def apply_idms_to_hosted_clusters(self):
+        """
+        Apply ImageDigestMirrorSet data to all existing HostedClusters as imageContentSources.
+        This patches spec.imageContentSources of the HostedCluster resource in the management (hub) cluster.
+        """
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                hosted_cluster_names = get_hosted_cluster_names()
+                for hc_name in hosted_cluster_names:
+                    self.apply_idms_to_hosted_cluster(
+                        name=hc_name,
+                        replace=False,
+                    )
+        except Exception as e:
+            # this is non-critical operation, it should not fail deployment or upgrade on multiple clusters,
+            # thus exception is broad
+            logger.error(f"Failed to apply IDMS mirrors to HostedClusters: {e}")
 
 
 class SpokeODF(SpokeOCP, ABC):

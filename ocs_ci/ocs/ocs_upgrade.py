@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime
 from copy import deepcopy
 from packaging.version import parse as parse_version
 from tempfile import NamedTemporaryFile
@@ -68,6 +69,8 @@ from ocs_ci.utility.utils import (
     get_ocs_version_from_image,
     load_config_file,
     TimeoutSampler,
+    parse_k8s_timestamp,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
@@ -84,6 +87,79 @@ from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 
 log = logging.getLogger(__name__)
+
+
+def list_df_repo_idms():
+    """
+    Return a list of df-repo IDMS objects sorted by creation time (oldest first).
+    Each item is a dict: {'name': str, 'created': datetime, 'raw_ts': str}
+
+    Returns:
+        list[dict]: list of sorted df-repo IDMS objects
+
+    """
+    ocp_idms = OCP(kind=constants.IMAGEDIGESTMIRRORSET)
+    data = ocp_idms.get() or {}
+    items = data.get("items", [])
+
+    results = []
+    for it in items:
+        meta = it.get("metadata", {})
+        name = meta.get("name", "")
+        if not name.startswith("df-repo-"):
+            continue
+        ts = meta.get("creationTimestamp")
+        created = parse_k8s_timestamp(ts) if ts else datetime.min
+        results.append({"name": name, "created": created, "raw_ts": ts})
+    results.sort(key=lambda x: x["created"])
+    return results
+
+
+def get_latest_df_repo_idms_name():
+    """
+    Return the name of the newest df-repo ImageDigestMirrorSet, or None if none present.
+    """
+    df_repo_idms = list_df_repo_idms()
+    return df_repo_idms[-1]["name"] if df_repo_idms else None
+
+
+def prune_old_df_repo_idms(keep_latest: int = 1, force_delete_pods: bool = False):
+    """
+    Delete older df-repo ImageDigestMirrorSet objects, keeping the newest N (default 1).
+    If there is 0 or 1 df-repo IDMS, nothing is deleted.
+
+    Args:
+        keep_latest (int): number of latest df-repo IDMS to keep
+        force_delete_pods (bool): whether to force delete pods during MCO wait
+
+    Returns:
+        list[str] of deleted names
+
+    """
+    df_repo_idms = list_df_repo_idms()
+    if len(df_repo_idms) <= keep_latest:
+        log.info(
+            f"df-repo IDMS count ({len(df_repo_idms)}) <= keep_latest ({keep_latest}); nothing to delete."
+        )
+        return []
+
+    to_delete = [x["name"] for x in df_repo_idms[:-keep_latest]]
+    ocp_idms = OCP(kind=constants.IMAGEDIGESTMIRRORSET)
+    for name in to_delete:
+        log.info(f"Deleting old df-repo ImageDigestMirrorSet {name}")
+        ocp_idms.delete(resource_name=name)
+
+    num_nodes = (
+        config.ENV_DATA["worker_replicas"]
+        + config.ENV_DATA["master_replicas"]
+        + config.ENV_DATA.get("infra_replicas", 0)
+    )
+    timeout = 2800 if num_nodes > 6 else 1900
+    wait_for_machineconfigpool_status(
+        node_type="all", timeout=timeout, force_delete_pods=force_delete_pods
+    )
+
+    return to_delete
 
 
 def get_upgrade_image_info(old_csv_images, new_csv_images):
@@ -692,6 +768,7 @@ class OCSUpgrade(object):
                 if not config.DEPLOYMENT.get("disconnected"):
                     # on Disconnected cluster, ICSP from the ocs-registry image is not needed/valid
                     get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
+                    prune_old_df_repo_idms()
 
 
 def run_ocs_upgrade(
