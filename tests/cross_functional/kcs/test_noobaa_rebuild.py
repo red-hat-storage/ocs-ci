@@ -14,11 +14,13 @@ from ocs_ci.framework.testlib import (
     mcg,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -132,12 +134,15 @@ class TestNoobaaRebuild(E2ETest):
             timeout=900,
         )
         # verify noobaa statefulset is present
-        noobaa_core_sts = OCP(
-            kind="Statefulset", namespace=config.ENV_DATA["cluster_namespace"]
-        ).get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
-        assert (
-            noobaa_core_sts["status"]["readyReplicas"] == 1
-        ), "Failed: Default statefulset is not in ready state"
+        sample = TimeoutSampler(
+            timeout=500,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get sts noobaa-core -n openshift-storage",
+            expected_output_lst={"noobaa-core", "1/1"},
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception("Statefulset noobaa-core is not recreated")
 
         # Verify everything running fine
         logger.info("Verifying all resources are Running and matches expected result")

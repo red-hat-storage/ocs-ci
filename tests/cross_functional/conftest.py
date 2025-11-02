@@ -8,6 +8,7 @@ from threading import Event
 from subprocess import TimeoutExpired
 
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
@@ -55,7 +56,12 @@ from ocs_ci.helpers.helpers import (
     default_storage_class,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import clone_notify, exec_nb_db_query, get_primary_nb_db_pod
+from ocs_ci.utility.utils import (
+    clone_notify,
+    exec_nb_db_query,
+    get_primary_nb_db_pod,
+    TimeoutSampler,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -1691,12 +1697,15 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             timeout=900,
         )
         # verify noobaa statefulset is present
-        noobaa_core_sts = OCP(
-            kind="Statefulset", namespace=config.ENV_DATA["cluster_namespace"]
-        ).get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
-        assert (
-            noobaa_core_sts["status"]["readyReplicas"] == 1
-        ), "Failed: Default statefulset is not in ready state"
+        sample = TimeoutSampler(
+            timeout=500,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get sts noobaa-core -n openshift-storage",
+            expected_output_lst={"noobaa-core", "1/1"},
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception("Statefulset noobaa-core is not recreated")
 
         # Since the rebuild changed the noobaa-admin secret, update
         # the s3 credentials in mcg_object_session
