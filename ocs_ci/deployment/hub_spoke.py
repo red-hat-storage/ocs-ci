@@ -1723,7 +1723,7 @@ class HypershiftHostedOCP(
             if get_semantic_version(running_hosted_ocp_version) >= desired_sem:
                 logger.warning(
                     f"Hosted cluster '{self.name}' is at version '{running_hosted_ocp_version}' "
-                    f"which matches or higher than desired ocp_version '{ocp_version}', abort upgrade for the cluster"
+                    f"which matches or higher than desired ocp_version '{ocp_version}', proceed with provider version"
                 )
                 ocp_version = None
 
@@ -2742,9 +2742,7 @@ def hypershift_cluster_factory(
     ]:
         cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
         if not cl_name_ver_dict:
-            logger.warning(
-                "Hosted cluster was not found. Please create hosted clusters first."
-            )
+            logger.warning("Hosted clusters were not found.")
             return
         deployed_clusters = list(cl_name_ver_dict.keys())
 
