@@ -1210,15 +1210,15 @@ def check_storage_classes_on_clients(ready_consumer_names: list[str]):
         return all(results)
 
 
-def get_storage_consumer_name(storage_consumer):
+def get_cluster_name_from_storage_consumer(storage_consumer):
     """
     Get the storage consumer name used pre-convergence for a given consumer. Status.client.clusterName
 
     Args:
-        storage_consumer (str): Name of the storage consumer
+        storage_consumer (str): Name value from the storage consumer cr
 
     Returns:
-        str: storage consumer name from Status.client.clusterName (prefix of full cluster console url)
+        str: storage consumer cluster name from Status.client.clusterName (prefix of full cluster console url)
 
     """
     if storage_consumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
@@ -1242,13 +1242,11 @@ def verify_last_heartbeat_timestamp(cluster_name):
     consumer resources to the given cluster name.
     """
     try:
-        # find matching storageconsumer resource name
-
         consumer_names = get_consumer_names()
         target_consumer = None
         for consumer in consumer_names:
             try:
-                mapped_name = get_storage_consumer_name(consumer)
+                mapped_name = get_cluster_name_from_storage_consumer(consumer)
             except CommandFailed as cf:
                 log.error(f"Failed to get storage consumer name for `{consumer}`: {cf}")
                 mapped_name = ""
