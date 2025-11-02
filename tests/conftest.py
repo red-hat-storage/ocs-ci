@@ -390,6 +390,13 @@ def pytest_generate_tests(metafunc):
     """
     # For now we are only dealing with multicluster scenarios in this hook
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        if (
+            ocsci_config.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            # Skipping multicluster upgrade parametrization for Hosted Control Plane platforms
+            # Sequence and handling of OCP and ODF upgrades are different for Hosted Control Plane multicluster upgrade
+            return
         upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
         # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
         roles = None
