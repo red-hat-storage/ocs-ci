@@ -187,8 +187,8 @@ class TestNSFSObjectIntegrity(MCGTest):
             bucketname=nsfs_obj.bucket_name,
             source=f"/{nsfs_obj.bucket_name}/{obj_key}-source",
             object_key=obj_key,
-            metadata={s3_md_key: s3_md_val},
-            metadata_directive="REPLACE",  # Otherwise the original empty md is kept
+            Metadata={s3_md_key: s3_md_val},
+            MetadataDirective="REPLACE",  # Otherwise the original empty md is kept
         )
 
         # 3. Using the FS interface, verify that the metadata shows in the file's extended attributes
