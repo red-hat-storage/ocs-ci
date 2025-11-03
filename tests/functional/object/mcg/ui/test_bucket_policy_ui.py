@@ -5,6 +5,7 @@ import time
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     tier1,
+    tier3,
     post_upgrade,
     polarion_id,
 )
@@ -26,33 +27,44 @@ class TestBucketPolicyUI:
     Test class for bucket policy UI operations
     """
 
-    @polarion_id("OCS-6889")
     @pytest.mark.parametrize(
         "policy_config",
         [
-            {
-                "name": "AllowPublicReadAccess",
-                "method": "set_bucket_policy_ui",
-                "params": {},
-            },
-            {
-                "name": "AllowAccessToSpecificAccount",
-                "method": "set_bucket_policy_specific_account_ui",
-                "params": {"account_list": ["123456789012"]},
-            },
-            {
-                "name": "EnforceSecureTransportHTTPS",
-                "method": "set_bucket_policy_enforce_https_ui",
-                "params": {},
-            },
-            {
-                "name": "AllowReadWriteAccessToFolder",
-                "method": "set_bucket_policy_folder_access_ui",
-                "params": {
-                    "folder_path": "documents",
-                    "account_list": ["123456789012"],
+            pytest.param(
+                {
+                    "name": "AllowPublicReadAccess",
+                    "method": "set_bucket_policy_ui",
+                    "params": {},
                 },
-            },
+                marks=[tier1, polarion_id("OCS-7382")],
+            ),
+            pytest.param(
+                {
+                    "name": "AllowAccessToSpecificAccount",
+                    "method": "set_bucket_policy_specific_account_ui",
+                    "params": {"account_list": ["123456789012"]},
+                },
+                marks=[tier3, polarion_id("OCS-7383")],
+            ),
+            pytest.param(
+                {
+                    "name": "EnforceSecureTransportHTTPS",
+                    "method": "set_bucket_policy_enforce_https_ui",
+                    "params": {},
+                },
+                marks=[tier3, polarion_id("OCS-7384")],
+            ),
+            pytest.param(
+                {
+                    "name": "AllowReadWriteAccessToFolder",
+                    "method": "set_bucket_policy_folder_access_ui",
+                    "params": {
+                        "folder_path": "documents",
+                        "account_list": ["123456789012"],
+                    },
+                },
+                marks=[tier3, polarion_id("OCS-7385")],
+            ),
         ],
     )
     def test_set_bucket_policy_ui(self, setup_ui_class_factory, policy_config):
