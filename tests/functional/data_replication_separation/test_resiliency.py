@@ -39,6 +39,9 @@ def test_worker_node_drain():
     ocp_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
     ocp_node = random.choice(ocp_nodes)
     drain_nodes([ocp_node.name])
+    wait_for_machineconfigpool_status(
+        node_type=constants.WORKER_MACHINE, force_delete_pods=True
+    )
     # Wait for the node to be unschedule
     wait_for_nodes_status(
         node_names=[ocp_node.name],
@@ -60,7 +63,6 @@ def test_worker_node_drain():
         timeout=120,
         sleep=5,
     )
-    wait_for_machineconfigpool_status("all")
     logger.info("Checking that the Ceph health is OK")
     ceph_health_check()
     logger.info("Checking that all nodes are correctly annotated")
@@ -74,7 +76,7 @@ def test_worker_node_drain():
 @yellow_squad
 def test_mon_respin():
     """
-    Test that a new montor has set hostnetwork correctly when monitor is respinned.
+    Test that a new monitor has set hostnetwork correctly when monitor is respinned.
     """
     mon_obj = random.choice(get_mon_deployments())
     assert modify_deployment_replica_count(
