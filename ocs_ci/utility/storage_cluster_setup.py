@@ -5,7 +5,6 @@ from copy import deepcopy
 from ocs_ci.utility import (
     templating,
     kms as KMS,
-    pgsql,
     version,
 )
 from ocs_ci.framework import config, merge_dict
@@ -42,7 +41,7 @@ class StorageClusterSetup(object):
         self.custom_storage_class_path = None
         self.namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         self.platform = config.ENV_DATA["platform"]
-        self.storage_class = constants.LOCALSTORAGE_SC
+        self.storage_class = storage_class.get_storageclass()
 
     def setup_storage_cluster(self):
         if self.custom_storage_class_path is not None:
@@ -428,30 +427,7 @@ class StorageClusterSetup(object):
                 cluster_data,
                 {"metadata": {"annotations": api_server_exported_address_annotation}},
             )
-        if config.ENV_DATA.get("noobaa_external_pgsql"):
-            log_step(
-                "Creating external pgsql DB for NooBaa and correct StorageCluster data"
-            )
-            pgsql_data = config.AUTH["pgsql"]
-            user = pgsql_data["username"]
-            password = pgsql_data["password"]
-            host = pgsql_data["host"]
-            port = pgsql_data["port"]
-            pgsql_manager = pgsql.PgsqlManager(
-                username=user,
-                password=password,
-                host=host,
-                port=port,
-            )
-            cluster_name = config.ENV_DATA["cluster_name"]
-            db_name = f"nbcore_{cluster_name.replace('-', '_')}"
-            pgsql_manager.create_database(
-                db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
-            )
-            create_external_pgsql_secret()
-            cluster_data["spec"]["multiCloudGateway"] = {
-                "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
-            }
+
         # To be able to verify: https://bugzilla.redhat.com/show_bug.cgi?id=2276694
         wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
             "wait_timeout_for_healthy_osd_in_minutes"
@@ -624,27 +600,3 @@ class StorageClusterSetup(object):
             )
 
         return arbiter_locations[0]
-
-
-def create_external_pgsql_secret():
-    """
-    Creates secret for external PgSQL to be used by Noobaa
-    """
-    secret_data = templating.load_yaml(constants.EXTERNAL_PGSQL_NOOBAA_SECRET_YAML)
-    secret_data["metadata"]["namespace"] = constants.OPENSHIFT_STORAGE_NAMESPACE
-    pgsql_data = config.AUTH["pgsql"]
-    user = pgsql_data["username"]
-    password = pgsql_data["password"]
-    host = pgsql_data["host"]
-    port = pgsql_data["port"]
-    cluster_name = config.ENV_DATA["cluster_name"].replace("-", "_")
-    secret_data["stringData"][
-        "db_url"
-    ] = f"postgres://{user}:{password}@{host}:{port}/nbcore_{cluster_name}"
-
-    secret_data_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="external_pgsql_noobaa_secret", delete=False
-    )
-    templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
-    logger.info("Creating external PgSQL Noobaa secret")
-    run_cmd(f"oc create -f {secret_data_yaml.name}")

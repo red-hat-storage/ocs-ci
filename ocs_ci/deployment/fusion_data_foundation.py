@@ -9,6 +9,7 @@ import tempfile
 
 import yaml
 
+from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
@@ -174,7 +175,8 @@ class FusionDataFoundationDeployment:
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
             clustersetup = StorageClusterSetup()
-            create_lvs_resource(constants.LOCALSTORAGE_SC, constants.LOCALSTORAGE_SC)
+            default_storage_class = storage_class.get_storageclass()
+            create_lvs_resource(default_storage_class, default_storage_class)
             add_storage_label()
             clustersetup.setup_storage_cluster()
             storagecluster_health_check()

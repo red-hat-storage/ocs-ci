@@ -1,6 +1,7 @@
 ---
 DEPLOYMENT:
   allow_lower_instance_requirements: false
+  customized_deployment_storage_class: 'localblock'
   local_storage: true
   host_network: true
 ENV_DATA:
