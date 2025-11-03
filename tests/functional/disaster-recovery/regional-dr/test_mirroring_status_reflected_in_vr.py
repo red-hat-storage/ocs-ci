@@ -278,6 +278,30 @@ class TestMirroringStatusReflectedInVR:
         elif via_ui:
             check_cluster_status_on_acm_console(acm_obj)
 
+        # Check vr status details is not displayed on secondary cluster
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+
+        # Fetch mirroring image status from previously primary cluster
+        mirroring_health_secondary = dr_helpers.fetch_mirroring_health_for_the_cluster(
+            primary_cluster_name
+        )
+        print("######Amrita#######")
+        print(f"After failover mirroring image status: {mirroring_health_secondary}")
+        # assert mirroting health is OK
+        assert (
+            mirroring_health_secondary == "OK"
+        ), "mirroring image health is not not 'OK'"
+
+        # assert vr resource not available on secondary cluster
+        for wl in workloads:
+            dr_helpers.check_resource_existence(
+                kind=constants.VOLUME_REPLICATION,
+                should_exist=False,
+                timeout=120,
+                resource_name=wl.workload_namespace,
+            )
+            assert False, "vr resource created on secondary cluster"
+
         for wl in workloads:
             if via_ui:
                 # Failover via ACM UI
