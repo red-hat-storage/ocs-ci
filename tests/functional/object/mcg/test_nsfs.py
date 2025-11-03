@@ -152,7 +152,7 @@ class TestNSFSObjectIntegrity(MCGTest):
         self,
         nsfs_bucket_factory,
     ):
-        """o
+        """
         Test NSFS metadata handling:
 
         1. Create an NSFS bucket
