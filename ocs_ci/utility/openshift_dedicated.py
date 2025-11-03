@@ -10,6 +10,7 @@ import os
 import json
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd, exec_cmd
 from ocs_ci.utility import utils
 
@@ -189,7 +190,13 @@ def destroy_cluster(cluster):
         cluster (str): Cluster name or ID.
 
     """
-    cluster_details = get_cluster_details(cluster)
+    try:
+        cluster_details = get_cluster_details(cluster)
+    except CommandFailed as e:
+        if "Cluster was Deprovisioned" in str(e):
+            logger.warning(f"Cluster {cluster} is already deprovisioned, {e}")
+            return
+        raise
     cluster_id = cluster_details.get("id")
     cmd = f"ocm delete /api/clusters_mgmt/v1/clusters/{cluster_id}"
     run_cmd(cmd, timeout=900)
