@@ -470,7 +470,13 @@ class MCGS3Bucket(ObjectBucket):
         else:
             self.s3resource = self.mcg.s3_resource
         self.s3client = self.mcg.s3_client
-        self.s3resource.create_bucket(Bucket=self.name)
+        try:
+            self.s3resource.create_bucket(Bucket=self.name)
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] == "BucketAlreadyOwnedByYou":
+                logger.info(f"Bucket {self.name} already exists")
+            else:
+                raise e
 
     def internal_delete(self):
         """
