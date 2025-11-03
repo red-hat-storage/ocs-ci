@@ -49,6 +49,7 @@ from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
     get_cluster_set_name,
     create_service_exporter,
+    is_cg_enabled,
     validate_storage_cluster_peer_state,
     verify_volsync,
     validate_drpolicy_grouping,
@@ -3814,9 +3815,10 @@ class MultiClusterDROperatorsDeploy(object):
         if not sample.wait_for_func_status(True):
             raise TimeoutExpiredError("DR Policy failed to reach Succeeded state")
 
-        # Validate DRPolicy grouping for ODF version >= 4.20
-        logger.info("Validating DRPolicy grouping configuration")
-        validate_drpolicy_grouping(drpolicy_name=self.dr_policy_name)
+        # Validate DRPolicy grouping for ODF version >= 4.20 (only when CG is enabled)
+        if is_cg_enabled():
+            logger.info("Validating DRPolicy grouping configuration")
+            validate_drpolicy_grouping(drpolicy_name=self.dr_policy_name)
 
     def enable_cluster_backup(self):
         """
