@@ -3261,7 +3261,8 @@ def default_volumesnapshotclass(interface_type):
 
     if interface_type == constants.CEPHBLOCKPOOL:
         if (
-            config.ENV_DATA["cluster_type"].lower() in ["hci_client", "provider"]
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
             and ocs_version <= version.VERSION_4_18
         ):
             sc_obj = OCP(kind=constants.STORAGECLASS)
