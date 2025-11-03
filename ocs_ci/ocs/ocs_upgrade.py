@@ -7,6 +7,8 @@ from tempfile import NamedTemporaryFile
 import time
 
 from selenium.webdriver.common.by import By
+
+from ocs_ci.deployment.hub_spoke import HostedClients
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.helpers import verify_nb_db_psql_version
@@ -743,6 +745,7 @@ class OCSUpgrade(object):
             if not ocs_catalog.is_exist():
                 log.info("OCS catalog source doesn't exist. Creating new one.")
                 create_catalog_source(self.ocs_registry_image, ignore_upgrade=True)
+                prune_old_df_repo_idms()
                 # We can return here as new CatalogSource contains right images
                 return
             image_url = ocs_catalog.get_image_url()
@@ -766,7 +769,7 @@ class OCSUpgrade(object):
                 dump_data_to_temp_yaml(cs_data, cs_yaml.name)
                 ocs_catalog.apply(cs_yaml.name)
                 if not config.DEPLOYMENT.get("disconnected"):
-                    # on Disconnected cluster, ICSP from the ocs-registry image is not needed/valid
+                    # on Disconnected cluster, ICSP /IDMS from the ocs-registry image is not needed/valid
                     get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
                     prune_old_df_repo_idms()
 
@@ -862,6 +865,11 @@ def run_ocs_upgrade(
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
+
+        if platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+            HostedClients().apply_idms_to_hosted_clusters()
+            wait_for_machineconfigpool_status(node_type="all")
+
         live_deployment = config.DEPLOYMENT["live_deployment"]
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
         managed_ibmcloud_platform = (
