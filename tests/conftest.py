@@ -7256,7 +7256,10 @@ def dr_workload(request):
             workload.deploy_workload()
 
         for index in range(num_of_appset):
-            workload_key = "dr_workload_appset"
+            if config.ENV_DATA["offload_vr", False]:
+                workload_key = "dr_workload_appset"
+            else:
+                workload_key = "dr_workload_appset_rbd_vr_offload"
             if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
                 workload_key += f"_{interface}"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
