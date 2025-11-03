@@ -22,7 +22,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_head_object,
     s3_list_buckets,
     s3_put_object,
-    sync_random_objects,
+    write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 
@@ -259,13 +259,13 @@ class TestNSFSObjectIntegrity(MCGTest):
             region=constants.DEFAULT_AWS_REGION,  # any region will do, we don't use it
         )
         objs_amount = 200
-        uploaded_objs = sync_random_objects(
-            podobj=awscli_pod_session,
+        uploaded_objs = write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            bucket_to_write=nsfs_obj.bucket_name,
             file_dir=test_directory_setup.origin_dir,
-            target=f"s3://{nsfs_obj.bucket_name}",
-            s3_obj=nsfs_s3_obj,
             amount=objs_amount,
             pattern="nsfs-test-obj-",
+            mcg_obj=nsfs_s3_obj,
         )
 
         # 3. List the objects and verify that the original objects are listed

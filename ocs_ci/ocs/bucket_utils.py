@@ -473,32 +473,6 @@ def copy_random_individual_objects(
         logger.info(f"Copied {src_obj}")
 
 
-def sync_random_objects(
-    podobj, file_dir, target, amount, pattern="test-obj-", s3_obj=None, **kwargs
-):
-    """
-    Generates random objects and then syncs them to a bucket
-
-    Args:
-        podobj: Pod object used to perform the operation
-        file_dir: file directory name where the generated objects are placed
-        target: target bucket name
-        amount: number of objects to generate
-        pattern: pattern to follow for objects naming
-        s3_obj: MCG/OBC object
-
-    Returns:
-        list: A list of the generated objects' names
-    """
-    logger.info(f"Generating {amount} random objects in {file_dir}")
-    podobj.exec_cmd_on_pod(f"mkdir -p {file_dir}")
-    object_files = write_random_objects_in_pod(
-        podobj, pattern=pattern, file_dir=file_dir, amount=amount
-    )
-    sync_object_directory(podobj, file_dir, target, s3_obj, **kwargs)
-    return object_files
-
-
 def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=False):
     """
     Performs upload operation using java s3 pod
