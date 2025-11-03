@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Module constants
 DEFAULT_UI_WAIT = 10
-QUICK_WAIT = 5  # Quick probe delay for checking element presence
+QUICK_WAIT = 5
 
 SUCCESS_TOAST_SELECTORS = [
     "[data-test='success-toast']",
@@ -76,14 +76,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             NoSuchElementException: If UI elements are not found.
         """
         if not bucket_name:
-            logger.debug("Navigating to first bucket")
             self.do_click(self.bucket_tab["bucket_list_items"])
             self.do_click(self.bucket_tab["permissions_tab"])
-            logger.debug("Navigating to bucket policy sub-tab")
             self.do_click(self.bucket_tab["bucket_policy_tab"])
             return
 
-        logger.debug(f"Navigating to bucket: {bucket_name}")
         bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
 
         for bucket_element in bucket_elements:
@@ -91,7 +88,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 continue
 
             bucket_element.click()
-            logger.debug(f"Successfully clicked on bucket: {bucket_name}")
             break
         else:
             available_buckets = [elem.text for elem in bucket_elements]
@@ -101,9 +97,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 "Verify bucket name exists and is visible on current page."
             )
 
-        logger.debug("Navigating to permissions tab")
         self.do_click(self.bucket_tab["permissions_tab"])
-        logger.debug("Navigating to bucket policy sub-tab")
         self.do_click(self.bucket_tab["bucket_policy_tab"])
 
     def activate_policy_editor(self) -> None:
@@ -117,27 +111,20 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             NoSuchElementException: If UI elements are not found.
         """
-        logger.debug("Activating policy editor")
-
         try:
             self.wait_for_element_to_be_visible(
                 self.bucket_tab["edit_policy_button"], timeout=QUICK_WAIT
             )
-            logger.debug("Policy exists - using edit policy button")
             self.do_click(self.bucket_tab["edit_policy_button"])
-            logger.debug("Successfully clicked edit policy button")
             return
         except (NoSuchElementException, TimeoutException):
             pass
 
-        # If "Edit policy" button not found, try "Start from scratch"
         try:
             self.wait_for_element_to_be_visible(
                 self.bucket_tab["policy_editor_start_scratch"], timeout=QUICK_WAIT
             )
-            logger.debug("No existing policy - using start from scratch")
             self.do_click(self.bucket_tab["policy_editor_start_scratch"])
-            logger.debug("Successfully clicked start from scratch button")
             return
         except (NoSuchElementException, TimeoutException):
             pass
@@ -168,9 +155,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
                 obc_obj = OBC(obc["metadata"]["name"])
                 if hasattr(obc_obj, "obc_account") and obc_obj.obc_account:
-                    logger.debug(
-                        f"Found account ID for bucket {bucket_name}: {obc_obj.obc_account}"
-                    )
                     return obc_obj.obc_account
 
                 break
@@ -220,9 +204,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 "Ensure buckets exist or specify a bucket name explicitly."
             )
 
-        bucket_name = buckets[0]
-        logger.debug(f"Using first available bucket: {bucket_name}")
-        return bucket_name
+        return buckets[0]
 
     def _get_and_log_real_account_id(
         self, bucket_name: str, account_list: Optional[list[str]] = None
@@ -237,11 +219,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Returns:
             str: Real account ID associated with the bucket.
         """
-        real_account_id = self._get_real_account_id_from_bucket(bucket_name)
-        logger.debug(
-            f"Using real account ID: {real_account_id} instead of provided accounts: {account_list}"
-        )
-        return real_account_id
+        return self._get_real_account_id_from_bucket(bucket_name)
 
     def _build_public_read_policy(self, config: PolicyConfig) -> dict:
         """Build AllowPublicReadAccess policy."""
@@ -309,10 +287,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             ValueError: If policy type is not supported.
         """
-        logger.debug(
-            f"Building {policy_type.value} policy for bucket: {config.bucket_name}"
-        )
-
         policy_builders = {
             PolicyType.ALLOW_PUBLIC_READ: self._build_public_read_policy,
             PolicyType.ALLOW_SPECIFIC_ACCOUNT: self._build_specific_account_policy,
@@ -325,9 +299,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         except KeyError:
             raise ValueError(f"Unsupported policy type: {policy_type}")
 
-        policy_json = json.dumps(bucket_policy_generated, indent=2)
-        logger.debug(f"Generated {policy_type.value} policy JSON")
-        return policy_json
+        return json.dumps(bucket_policy_generated, indent=2)
 
     def set_policy_json_in_editor(self, policy_json: str) -> None:
         """
@@ -339,7 +311,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             NoSuchElementException: If UI elements are not found.
         """
-        logger.info("Clicking on policy code editor to focus it")
         try:
             self.do_click(
                 self.bucket_tab["policy_code_editor"],
@@ -347,11 +318,8 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 copy_dom=False,
             )
         except TimeoutException:
-            logger.debug(
-                "Monaco editor click timeout (expected) - proceeding with JS approach"
-            )
+            pass
 
-        logger.debug("Setting policy JSON using JavaScript Monaco editor approach")
         self._set_content_via_javascript(policy_json)
 
     def _set_content_via_javascript(self, content: str) -> None:
@@ -364,8 +332,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             TimeoutException: If all fallback strategies fail.
         """
-        logger.debug("Attempting to set content via JavaScript")
-
         js_code = """
         // Try Monaco editor API first
         if (window.monaco && window.monaco.editor) {
@@ -398,10 +364,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 logger.error(error_msg)
                 raise PolicyEditorError(error_msg)
 
-            logger.debug(f"Successfully set policy JSON via: {result}")
-
         except WebDriverException as e:
-            logger.debug("JavaScript approach failed", exc_info=True)
             error_msg = (
                 "Failed to set policy JSON in Monaco editor using JavaScript approach. "
                 "Check if Monaco editor is properly loaded and accessible."
@@ -435,14 +398,12 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             ]
 
             if any(keyword in message.lower() for keyword in success_keywords):
-                logger.debug(f"WORKAROUND: Success message in warning modal: {message}")
                 return False, ""
 
             logger.error(f"Policy error dialog found: {message}")
             return True, message
 
         except (NoSuchElementException, TimeoutException):
-            logger.debug("No error dialog found")
             return False, ""
 
     def _extract_error_message(self, error_element) -> str:
@@ -456,7 +417,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             else:
                 return error_element.text.strip() or "Unknown message"
         except (NoSuchElementException, StaleElementReferenceException):
-            logger.debug("Could not extract detailed message")
             return error_element.text.strip() or "Unknown message"
 
     def _click_policy_action_button(self) -> None:
@@ -466,12 +426,9 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             TimeoutException: If no policy action button is found.
         """
-        logger.debug("Attempting to click policy action button")
-
         for button_key in self._POLICY_ACTION_BUTTONS:
             try:
                 self.do_click(self.bucket_tab[button_key])
-                logger.debug(f"Successfully clicked {button_key}")
                 return
             except (
                 NoSuchElementException,
@@ -495,17 +452,10 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             PolicyApplicationError: If policy application fails.
         """
-        logger.debug("Handling policy confirmation modal")
-
-        try:
-            self.wait_for_element_to_be_visible(
-                self.bucket_tab["update_policy_modal_button"],
-                timeout=DEFAULT_UI_WAIT,
-            )
-        except TimeoutException:
-            logger.debug("Modal wait timeout (expected) - proceeding")
-
-        logger.debug("Clicking modal confirmation button")
+        self.wait_for_element_to_be_visible(
+            self.bucket_tab["update_policy_modal_button"],
+            timeout=DEFAULT_UI_WAIT,
+        )
         self.do_click(self.bucket_tab["update_policy_modal_button"])
 
         error_found, error_message = self._check_for_policy_error_dialog()
@@ -516,19 +466,14 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """
         Verify that the policy was successfully applied by checking for success toast.
         """
-        logger.debug("Verifying policy application success")
-
         combined_selectors = ", ".join(SUCCESS_TOAST_SELECTORS)
 
         try:
             self.wait_for_element_to_be_visible(
                 (combined_selectors, By.CSS_SELECTOR), timeout=DEFAULT_UI_WAIT
             )
-            logger.debug("Success notification found")
         except TimeoutException:
-            logger.debug(
-                "No success toast found, but policy may have been applied successfully"
-            )
+            pass
 
     def apply_bucket_policy(self) -> None:
         """
@@ -539,8 +484,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             TimeoutException: If modal or toast elements are not found within timeout.
             PolicyApplicationError: If policy application fails with an error.
         """
-        logger.debug("Applying bucket policy")
-
         self._click_policy_action_button()
         self._handle_policy_confirmation_modal()
         self._verify_policy_application_success()
@@ -560,7 +503,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             ValueError: If no buckets are available or configuration is invalid.
             pytest.skip: If policy type is not supported by the storage backend.
         """
-        # Handle HTTPS enforcement special case - skip for NooBaa
         if policy_type == PolicyType.ENFORCE_HTTPS:
             import pytest
 
@@ -568,10 +510,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 "EnforceSecureTransportHTTPS policy with condition-based statements (aws:SecureTransport) "
                 "is not supported by NooBaa. NooBaa only supports basic Allow/Deny policies without conditions."
             )
-
-        logger.debug(
-            f"Setting {policy_type.value} policy for bucket {config.bucket_name}"
-        )
 
         try:
             self.navigate_to_bucket_permissions(config.bucket_name)
@@ -601,9 +539,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             list: List of bucket names as strings
         """
         buckets = self.get_elements(self.bucket_tab["bucket_list_items"])
-        bucket_names = [bucket.text for bucket in buckets]
-        logger.debug(f"Found {len(bucket_names)} buckets")
-        return bucket_names
+        return [bucket.text for bucket in buckets]
 
     def set_bucket_policy_ui(self, bucket_name: str = None) -> None:
         """
@@ -685,7 +621,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             self.wait_for_element_to_be_visible(
                 self.bucket_tab["edit_policy_button"], timeout=QUICK_WAIT
             )
-            logger.debug(f"Policy exists for bucket: {bucket_name}")
         except (NoSuchElementException, TimeoutException):
             raise ValueError(
                 "No bucket policy exists to delete. "
@@ -708,12 +643,9 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             NoSuchElementException: If UI elements are not found.
             TimeoutException: If elements are not found within timeout.
         """
-        logger.debug("Handling delete policy confirmation dialog")
-
         confirmation_input = self.wait_for_element_to_be_visible(
             self.bucket_tab["delete_policy_confirmation_input"]
         )
-        logger.info("Clicking input field to focus it before sending keys")
         confirmation_input.click()
         confirmation_input.clear()
         confirmation_input.send_keys("delete")
@@ -752,11 +684,8 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         self.navigate_to_bucket_permissions(bucket_name)
         self._validate_policy_exists_for_deletion(bucket_name)
         self.activate_policy_editor()
-        logger.info("Policy editor activated successfully")
 
-        logger.info("Clicking delete policy button")
         self.do_click(self.bucket_tab["delete_policy_button"])
-        logger.info("Delete button clicked successfully")
 
         self._handle_delete_confirmation_dialog()
 

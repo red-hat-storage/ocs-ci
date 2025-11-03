@@ -59,17 +59,6 @@ class TestBucketPolicyUI:
         """
         Test setting various bucket policies via UI.
 
-        This test follows the workflow:
-        1. Navigate to Object Storage
-        2. Create OBC bucket if needed for account-specific policies
-        3. Click on appropriate bucket
-        4. Go to Permissions tab
-        5. Click "Start from scratch" to activate policy editor
-        6. Generate policy JSON programmatically
-        7. Set the policy JSON in the code editor
-        8. Apply the policy
-        9. Confirm in modal
-
         Args:
             policy_config (dict): Configuration containing policy name, method, and parameters
 
@@ -86,7 +75,6 @@ class TestBucketPolicyUI:
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page()
 
-        # Check if this policy requires account ID (OBC bucket)
         account_dependent_policies = [
             "AllowAccessToSpecificAccount",
             "AllowReadWriteAccessToFolder",
@@ -95,36 +83,29 @@ class TestBucketPolicyUI:
         target_bucket_name = None
 
         if policy_name in account_dependent_policies:
-            # Get current bucket list to identify new bucket after creation
             initial_buckets = set(bucket_ui.get_buckets_list())
 
-            # Create OBC bucket for account-dependent policies
             bucket_ui.create_bucket_ui(method="obc")
 
-            # Navigate back to buckets page and wait for new bucket to appear
             bucket_ui.navigate_buckets_page()
             bucket_ui.page_has_loaded(sleep_time=2)
 
-            # Wait for new OBC bucket to appear (up to 30 seconds)
-            target_bucket_name = None
-            for attempt in range(6):  # 6 attempts * 5 seconds = 30 seconds max wait
+            for attempt in range(6):
                 current_buckets = set(bucket_ui.get_buckets_list())
                 new_buckets = current_buckets - initial_buckets
 
-                # Look for newly created bucket with OBC pattern
                 obc_buckets = [
                     b for b in new_buckets if b.startswith("test-bucket-obc-")
                 ]
 
                 if obc_buckets:
-                    target_bucket_name = obc_buckets[0]  # Use first OBC bucket found
+                    target_bucket_name = obc_buckets[0]
                     break
 
-                if attempt < 5:  # Don't sleep on last attempt
+                if attempt < 5:
                     time.sleep(5)
 
             if not target_bucket_name:
-                # Fallback: try to find any bucket with OBC pattern in the current list
                 all_buckets = bucket_ui.get_buckets_list()
                 obc_buckets = [
                     b for b in all_buckets if b.startswith("test-bucket-obc-")
@@ -135,11 +116,8 @@ class TestBucketPolicyUI:
                 else:
                     pytest.skip("No OBC bucket found for account-dependent policy test")
         else:
-            # For non-account-dependent policies, create new S3 bucket for isolation
             _, target_bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
-            logger.info(f"Created S3 bucket for {policy_name}: {target_bucket_name}")
 
-            # Navigate back to buckets page
             bucket_ui.navigate_buckets_page()
             bucket_ui.page_has_loaded(sleep_time=2)
 
@@ -154,11 +132,6 @@ class TestBucketPolicyUI:
     def test_delete_bucket_policy_ui(self, setup_ui_class_factory):
         """
         Test deleting bucket policy via UI.
-
-        This test is self-contained:
-        1. Creates a new S3 bucket
-        2. Applies a simple AllowPublicReadAccess policy
-        3. Deletes the policy (what we're actually testing)
         """
         setup_ui_class_factory()
         logger.info("Starting test to delete bucket policy")
@@ -166,24 +139,17 @@ class TestBucketPolicyUI:
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page()
 
-        # Create bucket for this test
         _, bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
-        logger.info(f"Created S3 bucket for delete test: {bucket_name}")
 
-        # Navigate back to buckets page
         bucket_ui.navigate_buckets_page()
         bucket_ui.page_has_loaded(sleep_time=2)
 
-        # Apply a simple policy first
         bucket_permissions_ui = BucketsTabPermissions()
         bucket_permissions_ui.set_bucket_policy_ui(bucket_name=bucket_name)
-        logger.info(f"Applied policy to bucket: {bucket_name}")
 
-        # Navigate back to buckets page before deleting
         bucket_ui.navigate_buckets_page()
         bucket_ui.page_has_loaded(sleep_time=2)
 
-        # Delete the policy (this is what we're testing)
         bucket_permissions_ui.delete_bucket_policy_ui(bucket_name=bucket_name)
 
         logger.info("Successfully completed delete bucket policy test")
@@ -193,9 +159,6 @@ class TestBucketPolicyUI:
     def test_bucket_policy_workflow_steps(self, setup_ui_class_factory, policy_name):
         """
         Test individual steps of bucket policy workflow.
-
-        This test breaks down the workflow into individual steps
-        to verify each component works correctly.
 
         Args:
             policy_name (str): Name of the policy to test
@@ -215,24 +178,16 @@ class TestBucketPolicyUI:
 
         bucket_permissions_ui = BucketsTabPermissions()
 
-        # Step 1: Navigate to bucket permissions
         bucket_permissions_ui.navigate_to_bucket_permissions(bucket_name=None)
-        logger.info("✓ Step 1: Navigated to bucket permissions")
 
-        # Step 2: Activate policy editor
         bucket_permissions_ui.activate_policy_editor()
-        logger.info("✓ Step 2: Activated policy editor")
 
-        # Step 3: Generate and set policy JSON manually for step-by-step verification
         config = PolicyConfig(buckets[0])
         policy_json = bucket_permissions_ui._build_bucket_policy(
             PolicyType.ALLOW_PUBLIC_READ, config
         )
         bucket_permissions_ui.set_policy_json_in_editor(policy_json)
-        logger.info(f"✓ Step 3: Generated and set policy {policy_name}")
 
-        # Step 4: Apply bucket policy
         bucket_permissions_ui.apply_bucket_policy()
-        logger.info("✓ Step 4: Applied bucket policy")
 
         logger.info(f"Successfully completed step-by-step test for {policy_name}")
