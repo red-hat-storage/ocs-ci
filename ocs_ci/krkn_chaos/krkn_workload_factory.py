@@ -701,9 +701,9 @@ class KrknWorkloadFactory:
             multi_pvc_factory: Multi-PVC factory (not used by GOSBENCH, but required for consistency)
 
         Returns:
-            List of GOSBENCH workload objects
+            List of GOSBENCH workload manager objects
         """
-        from ocs_ci.workloads.gosbench_workload import GOSBenchWorkload
+        from ocs_ci.workloads.gosbench_manager import GOSBenchWorkloadManager
 
         # Get GOSBENCH configuration from krkn_config
         gosbench_config = self.config.get_gosbench_config()
@@ -756,8 +756,13 @@ class KrknWorkloadFactory:
                 workload_name = f"gosbench-{config['name_suffix']}-{fauxfactory.gen_alpha(4).lower()}"
                 log.info(f"Creating GOSBENCH workload: {workload_name}")
 
-                gosbench_workload = GOSBenchWorkload(
-                    workload_name=workload_name, namespace=proj_obj.namespace
+                # Create workload manager with auto-trigger and background execution
+                gosbench_workload = GOSBenchWorkloadManager(
+                    workload_name=workload_name,
+                    namespace=proj_obj.namespace,
+                    auto_trigger=True,  # Automatically trigger benchmark
+                    background=True,  # Run in background during chaos
+                    benchmark_duration=benchmark_duration,
                 )
 
                 # Create stage configuration based on pattern
@@ -841,8 +846,8 @@ class KrknWorkloadFactory:
                     },
                 }
 
-                # Start the GOSBENCH workload
-                gosbench_workload.start_workload(
+                # Start the GOSBENCH workload (will auto-trigger benchmark in background)
+                gosbench_workload.start(
                     benchmark_config=benchmark_config,
                     worker_replicas=worker_replicas,
                     image=custom_image,
@@ -852,8 +857,10 @@ class KrknWorkloadFactory:
                     worker_resource_limits=worker_resources,
                 )
 
-                # Wait for workload to be ready
-                gosbench_workload.wait_for_workload_ready(timeout=300)
+                # Note: Benchmark is automatically triggered in background by the manager
+                log.info(
+                    f"✓ GOSBENCH workload started with automatic benchmark triggering: {workload_name}"
+                )
 
                 workloads.append(gosbench_workload)
                 log.info(

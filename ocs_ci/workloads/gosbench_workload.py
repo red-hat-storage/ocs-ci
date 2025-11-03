@@ -1287,7 +1287,7 @@ class GOSBenchWorkload:
             "server": {"deployment": "NotFound", "pods": []},
             "workers": {"deployment": "NotFound", "pods": []},
             "config": "NotFound",
-            "secret": "NotFound",
+            "secret": "NotFound",  # pragma: allowlist secret
         }
 
         try:
@@ -1335,12 +1335,18 @@ class GOSBenchWorkload:
             try:
                 secret_ocp = OCP(kind="Secret", namespace=self.namespace)
                 secret_ocp.get(resource_name=self.secret_name)
-                status["secret"] = "Found"
+                status["secret"] = "Found"  # pragma: allowlist secret
             except CommandFailed:
                 pass
 
         except Exception as e:
             logger.error(f"Failed to get workload status: {e}")
+
+        # Add convenience fields for validation
+        status["server_ready"] = len(status["server"]["pods"]) > 0 and all(
+            pod["status"] == "Running" for pod in status["server"]["pods"]
+        )
+        status["worker_count"] = len(status["workers"]["pods"])
 
         return status
 

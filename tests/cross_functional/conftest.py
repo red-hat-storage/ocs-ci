@@ -1988,6 +1988,86 @@ def resiliency_workload(request):
 
 
 @pytest.fixture
+def gosbench_manager(request):
+    """
+    Pytest fixture to create and manage GOSBENCH workload using the manager interface.
+
+    This fixture provides more control over the benchmark execution and is useful
+    for functional tests where you want explicit control over benchmark triggering.
+
+    Usage:
+        # For background execution (chaos/resiliency tests)
+        manager = gosbench_manager(
+            workload_name="test",
+            auto_trigger=True,
+            background=True
+        )
+        manager.start(benchmark_config=config, worker_replicas=5)
+        # Benchmark runs in background automatically
+
+        # For foreground execution (functional tests)
+        manager = gosbench_manager(
+            workload_name="test",
+            auto_trigger=False,
+            background=False
+        )
+        manager.start(benchmark_config=config)
+        results = manager.run_benchmark()  # Explicit blocking call
+
+    Args:
+        workload_name (str): Unique name for the workload
+        namespace (str): Kubernetes namespace (default: openshift-storage)
+        auto_trigger (bool): Automatically trigger benchmark after start (default: True)
+        background (bool): Run benchmark in background thread (default: True)
+        benchmark_duration (int): Expected benchmark duration in seconds
+
+    Returns:
+        GOSBenchWorkloadManager: Manager instance with automatic cleanup
+    """
+    from ocs_ci.workloads.gosbench_manager import GOSBenchWorkloadManager
+
+    created_managers = []
+
+    def factory(
+        workload_name,
+        namespace=None,
+        auto_trigger=True,
+        background=True,
+        benchmark_duration=None,
+    ):
+        """
+        Factory function to create a GOSBENCH workload manager.
+
+        Returns:
+            GOSBenchWorkloadManager: Manager instance
+        """
+        logger.info(f"Initializing GOSBENCH manager: {workload_name}")
+
+        manager = GOSBenchWorkloadManager(
+            workload_name=workload_name,
+            namespace=namespace,
+            auto_trigger=auto_trigger,
+            background=background,
+            benchmark_duration=benchmark_duration,
+        )
+
+        created_managers.append(manager)
+        return manager
+
+    def finalizer():
+        """Cleanup all created GOSBENCH managers."""
+        logger.info(f"Finalizing {len(created_managers)} GOSBENCH manager(s)")
+        for manager in created_managers:
+            try:
+                manager.stop()
+            except Exception as e:
+                logger.warning(f"Failed to stop GOSBENCH manager: {e}")
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture
 def run_platform_stress(request):
     """Factory fixture to create and run a PlatformStress object.
 
