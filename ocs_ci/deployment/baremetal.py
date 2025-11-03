@@ -1607,8 +1607,15 @@ def upload_script_to_node(
 
     Returns:
         str: Output of the command execution.
+
+    Raises:
+        FileNotFoundError: If the local script file does not exist.
+
     """
     ocp_obj = ocp.OCP()
+
+    if not os.path.exists(script_src_path):
+        raise FileNotFoundError(f"Script not found at {script_src_path}")
 
     # Read and encode the script
     with open(script_src_path, "rb") as f:
@@ -1703,13 +1710,7 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="defau
     Returns:
         bool: True if the simulation succeeded (BlueStore label detected), False otherwise.
 
-    Raises:
-        FileNotFoundError: If the local script file does not exist.
-        ValueError: If the script integrity using SHA256 verification failed
-
     """
-    ocp_obj = ocp.OCP()
-
     if not disk_name:
         disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
 
@@ -1720,9 +1721,6 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="defau
     script_name = "simulate_bluestore_label.sh"
     current_dir = Path(__file__).parent.parent.parent
     script_src_path = os.path.join(current_dir, "scripts", "bash", script_name)
-    if not os.path.exists(script_src_path):
-        raise FileNotFoundError(f"Script not found at {script_src_path}")
-
     script_dest_path = f"/tmp/{script_name}"
 
     # Step 3: Download the script directly on the node
@@ -1736,28 +1734,6 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="defau
         namespace=namespace,
         timeout=300,
     )
-
-    # Step 4: Verify script integrity using SHA256
-    logger.info("Verifying the script's SHA256 checksum")
-    script_expected_sha256sum = (
-        "64def92796659eaf2ae438ad3e7724420dd1d1494c9e8c2e7f0efe3754"  # pragma: allowlist secret
-        "93ff1d"  # pragma: allowlist secret
-    )
-    cmd = [f"sha256sum {script_dest_path}"]
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=wnode.name,
-        cmd_list=cmd,
-        namespace=namespace,
-        use_root=True,
-        timeout=300,
-    )
-    script_sha256sum = out.strip().split()[0]
-    if script_sha256sum != script_expected_sha256sum:
-        logger.error(
-            f"SHA256 mismatch: expected {script_expected_sha256sum}, got {script_sha256sum}"
-        )
-        raise ValueError("Script integrity verification failed.")
-    logger.info("Script checksum verified successfully.")
 
     # Step 5: Run the script on the node
     logger.info(f"Running BlueStore simulation script on disk: {disk_name}")
