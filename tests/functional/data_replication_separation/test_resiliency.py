@@ -22,6 +22,7 @@ from ocs_ci.ocs.node import (
     schedule_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility.utils import wait_for_machineconfigpool_status
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ def test_worker_node_drain():
         timeout=120,
         sleep=5,
     )
+    wait_for_machineconfigpool_status("all")
     logger.info("Checking that the Ceph health is OK")
     ceph_health_check()
     logger.info("Checking that all nodes are correctly annotated")
