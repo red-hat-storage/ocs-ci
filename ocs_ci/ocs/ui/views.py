@@ -2545,9 +2545,13 @@ bucket_tab = {
         "[data-test='horizontal-link-Permissions']",
         By.CSS_SELECTOR,
     ),
+    "bucket_policy_tab": (
+        "//button[contains(., 'Bucket policy')]",
+        By.XPATH,
+    ),
     "policy_editor_start_scratch": (
-        "div.pf-v5-c-code-editor__main span",
-        By.CSS_SELECTOR,
+        "//button[contains(normalize-space(), 'Start from scratch')]",
+        By.XPATH,
     ),
     "edit_policy_button": (
         "//button[normalize-space()='Edit bucket policy']",
@@ -2579,11 +2583,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "delete_policy_button": (
-        "button.pf-m-danger",
-        By.CSS_SELECTOR,
+        "//button[contains(@class, 'pf-m-danger') and normalize-space()='Delete']",
+        By.XPATH,
     ),
     "delete_policy_confirmation_modal": (
-        "div.pf-v5-c-modal-box.pf-m-warning.pf-m-md",
+        "[role='dialog'][aria-modal='true']",
         By.CSS_SELECTOR,
     ),
     "delete_policy_confirmation_input": (
@@ -2599,7 +2603,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "primary_button": (
-        ".pf-c-button.pf-m-primary",
+        "[class*='-c-button'][class*='pf-m-primary']",
         By.CSS_SELECTOR,
     ),
 }

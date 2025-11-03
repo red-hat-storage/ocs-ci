@@ -27,11 +27,8 @@ QUICK_WAIT = 5  # Quick probe delay for checking element presence
 
 SUCCESS_TOAST_SELECTORS = [
     "[data-test='success-toast']",
-    ".pf-c-alert--success",
-    ".pf-v5-c-alert--success",
-    ".pf-c-alert.pf-m-success",
-    ".pf-v5-c-alert.pf-m-success",
     "[role='alert'][class*='success']",
+    "[class*='-c-alert'][class*='success']",
     ".toast-notifications-list-pf .alert-success",
     ".co-alert--success",
 ]
@@ -82,6 +79,8 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             logger.debug("Navigating to first bucket")
             self.do_click(self.bucket_tab["bucket_list_items"])
             self.do_click(self.bucket_tab["permissions_tab"])
+            logger.debug("Navigating to bucket policy sub-tab")
+            self.do_click(self.bucket_tab["bucket_policy_tab"])
             return
 
         logger.debug(f"Navigating to bucket: {bucket_name}")
@@ -104,6 +103,8 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
         logger.debug("Navigating to permissions tab")
         self.do_click(self.bucket_tab["permissions_tab"])
+        logger.debug("Navigating to bucket policy sub-tab")
+        self.do_click(self.bucket_tab["bucket_policy_tab"])
 
     def activate_policy_editor(self) -> None:
         """
@@ -415,7 +416,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Returns:
             tuple[bool, str]: (error_found, error_message)
         """
-        error_selector = ".pf-v5-c-modal-box.pf-m-warning"
+        error_selector = "[role='dialog'][class*='pf-m-warning']"
 
         try:
             error_elements = self.get_elements((error_selector, By.CSS_SELECTOR))
@@ -448,7 +449,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """Extract error message from modal element."""
         try:
             desc_elements = self.get_elements(
-                (".pf-v5-c-alert__description", By.CSS_SELECTOR)
+                ("[class*='-c-alert__description']", By.CSS_SELECTOR)
             )
             if desc_elements and desc_elements[0].text.strip():
                 return desc_elements[0].text.strip()
@@ -697,10 +698,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Handle the delete policy confirmation dialog workflow.
 
         This method handles the complete confirmation flow:
-        1. Wait for confirmation modal to appear
-        2. Clear and type 'delete' in the input field
-        3. Wait for confirm button to be enabled
-        4. Click the confirm button
+        1. Wait for confirmation input field (modal is implied)
+        2. Click input to focus it
+        3. Clear and type 'delete' in the input field
+        4. Wait for confirm button to be enabled
+        5. Click the confirm button
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -708,13 +710,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """
         logger.debug("Handling delete policy confirmation dialog")
 
-        self.wait_for_element_to_be_visible(
-            self.bucket_tab["delete_policy_confirmation_modal"], timeout=DEFAULT_UI_WAIT
-        )
-
         confirmation_input = self.wait_for_element_to_be_visible(
             self.bucket_tab["delete_policy_confirmation_input"]
         )
+        logger.info("Clicking input field to focus it before sending keys")
+        confirmation_input.click()
         confirmation_input.clear()
         confirmation_input.send_keys("delete")
 
@@ -752,9 +752,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         self.navigate_to_bucket_permissions(bucket_name)
         self._validate_policy_exists_for_deletion(bucket_name)
         self.activate_policy_editor()
+        logger.info("Policy editor activated successfully")
 
-        logger.debug("Clicking delete policy button")
+        logger.info("Clicking delete policy button")
         self.do_click(self.bucket_tab["delete_policy_button"])
+        logger.info("Delete button clicked successfully")
 
         self._handle_delete_confirmation_dialog()
 
