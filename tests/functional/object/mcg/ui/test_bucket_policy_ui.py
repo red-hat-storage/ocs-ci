@@ -135,12 +135,13 @@ class TestBucketPolicyUI:
                 else:
                     pytest.skip("No OBC bucket found for account-dependent policy test")
         else:
-            # For policies that don't require account ID, use any existing bucket
-            buckets = bucket_ui.get_buckets_list()
-            if not buckets:
-                pytest.skip("No buckets available for testing")
+            # For non-account-dependent policies, create new S3 bucket for isolation
+            _, target_bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
+            logger.info(f"Created S3 bucket for {policy_name}: {target_bucket_name}")
 
-            target_bucket_name = buckets[0]
+            # Navigate back to buckets page
+            bucket_ui.navigate_buckets_page()
+            bucket_ui.page_has_loaded(sleep_time=2)
 
         bucket_permissions_ui = BucketsTabPermissions()
 
@@ -154,16 +155,10 @@ class TestBucketPolicyUI:
         """
         Test deleting bucket policy via UI.
 
-        This test uses the unified delete workflow that:
-        1. Navigates to Object Storage and bucket permissions
-        2. Verifies a policy exists before attempting deletion
-        3. Activates policy editor and deletes the policy
-        4. Handles confirmation dialog automatically
-
-        Note: This test assumes a policy already exists from previous tests.
-
-        Raises:
-            pytest.skip: If no buckets are available for testing
+        This test is self-contained:
+        1. Creates a new S3 bucket
+        2. Applies a simple AllowPublicReadAccess policy
+        3. Deletes the policy (what we're actually testing)
         """
         setup_ui_class_factory()
         logger.info("Starting test to delete bucket policy")
@@ -171,14 +166,25 @@ class TestBucketPolicyUI:
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page()
 
-        buckets = bucket_ui.get_buckets_list()
-        if not buckets:
-            pytest.skip("No buckets available for testing")
+        # Create bucket for this test
+        _, bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
+        logger.info(f"Created S3 bucket for delete test: {bucket_name}")
 
+        # Navigate back to buckets page
+        bucket_ui.navigate_buckets_page()
+        bucket_ui.page_has_loaded(sleep_time=2)
+
+        # Apply a simple policy first
         bucket_permissions_ui = BucketsTabPermissions()
+        bucket_permissions_ui.set_bucket_policy_ui(bucket_name=bucket_name)
+        logger.info(f"Applied policy to bucket: {bucket_name}")
 
-        # Use unified delete workflow
-        bucket_permissions_ui.delete_bucket_policy_ui(bucket_name=None)
+        # Navigate back to buckets page before deleting
+        bucket_ui.navigate_buckets_page()
+        bucket_ui.page_has_loaded(sleep_time=2)
+
+        # Delete the policy (this is what we're testing)
+        bucket_permissions_ui.delete_bucket_policy_ui(bucket_name=bucket_name)
 
         logger.info("Successfully completed delete bucket policy test")
 
