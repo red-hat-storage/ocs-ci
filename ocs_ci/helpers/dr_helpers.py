@@ -834,6 +834,7 @@ def wait_for_replication_resources_creation(
     discovered_apps=False,
     vrg_name="",
     skip_vrg_check=False,
+    performed_dr_action=False,
 ):
     """
     Wait for replication resources to be created
@@ -883,6 +884,17 @@ def wait_for_replication_resources_creation(
                 )
                 # Validating the creation of VolumeGroupSnapshot
                 validate_volumegroupsnapshot(namespace)
+
+                # Validate VolumeSnapshots
+                if performed_dr_action:
+                    count *= 2
+                wait_for_resource_count(
+                kind=constants.VOLUMESNAPSHOT,
+                namespace=namespace,
+                expected_count=count,
+                timeout=timeout,
+                )
+
 
         else:
             cg_enabled = is_cg_enabled()
@@ -1033,6 +1045,7 @@ def wait_for_all_resources_creation(
     discovered_apps=False,
     vrg_name="",
     skip_vrg_check=False,
+    performed_dr_action=False,
 ):
     """
     Wait for workload and replication resources to be created
@@ -1067,7 +1080,7 @@ def wait_for_all_resources_creation(
     )
     if not skip_replication_resources:
         wait_for_replication_resources_creation(
-            pvc_count, namespace, timeout, discovered_apps, vrg_name, skip_vrg_check
+            pvc_count, namespace, performed_dr_action, timeout, discovered_apps, vrg_name, skip_vrg_check
         )
 
 
@@ -2688,6 +2701,7 @@ def is_cg_cephfs_enabled():
 
     Returns: True, if volume group snapshot class exists. False otherwise
     """
+
     resource_name = constants.DEFAULT_VOLUMEGROUPSNAPSHOTCLASS
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 

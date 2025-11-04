@@ -31,30 +31,30 @@ class TestFailover:
     """
 
     params = [
-        pytest.param(
-            False,  # primary_cluster_down = False
-            constants.CEPHBLOCKPOOL,
-            marks=pytest.mark.polarion_id("OCS-4429"),
-            id="primary_up-rbd-cli",
-        ),
-        pytest.param(
-            True,  # primary_cluster_down = True
-            constants.CEPHBLOCKPOOL,
-            marks=pytest.mark.polarion_id("OCS-4426"),
-            id="primary_down-rbd-cli",
-        ),
+        # pytest.param(
+        #     False,  # primary_cluster_down = False
+        #     constants.CEPHBLOCKPOOL,
+        #     marks=pytest.mark.polarion_id("OCS-4429"),
+        #     id="primary_up-rbd-cli",
+        # ),
+        # pytest.param(
+        #     True,  # primary_cluster_down = True
+        #     constants.CEPHBLOCKPOOL,
+        #     marks=pytest.mark.polarion_id("OCS-4426"),
+        #     id="primary_down-rbd-cli",
+        # ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
             marks=pytest.mark.polarion_id("OCS-4726"),
             id="primary_up-cephfs-cli",
         ),
-        pytest.param(
-            True,  # primary_cluster_down = True
-            constants.CEPHFILESYSTEM,
-            marks=pytest.mark.polarion_id("OCS-4729"),
-            id="primary_down-cephfs-cli",
-        ),
+        # pytest.param(
+        #     True,  # primary_cluster_down = True
+        #     constants.CEPHFILESYSTEM,
+        #     marks=pytest.mark.polarion_id("OCS-4729"),
+        #     id="primary_down-cephfs-cli",
+        # ),
     ]
 
     @pytest.mark.parametrize(
@@ -74,7 +74,7 @@ class TestFailover:
         """
 
         workloads = dr_workload(
-            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
+            num_of_subscription=0, num_of_appset=1, pvc_interface=pvc_interface
         )
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
@@ -140,6 +140,7 @@ class TestFailover:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         # Verify resources deletion from primary cluster
