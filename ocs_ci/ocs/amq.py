@@ -1,5 +1,4 @@
 """
-"""
 AMQ Class to run amq specific tests
 """
 
