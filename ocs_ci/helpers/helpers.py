@@ -6844,7 +6844,6 @@ def verify_socket_on_node(node_name, host_path, socket_name):
     return socket_name in debug_node_output
 
 
-<<<<<<< HEAD
 def set_rook_log_level():
     """
     Set the rook log level
@@ -6852,7 +6851,8 @@ def set_rook_log_level():
     rook_log_level = config.DEPLOYMENT.get("rook_log_level")
     if rook_log_level:
         set_configmap_log_level_rook_ceph_operator(rook_log_level)
-=======
+
+
 def verify_socket_permission(node_name, host_path, socket_name):
     """
     Verify the permission of socket at host path on node.
@@ -6871,10 +6871,9 @@ def verify_socket_permission(node_name, host_path, socket_name):
     result = ocp.exec_oc_debug_cmd(
         node=node_name, cmd_list=[f"stat -c '%a %U:%G %F' {host_path}/{socket_name}"]
     )
-    perms, owner, file_type = result[1].strip().split()
+    perms, owner, file_type = result.strip().split()
     assert "660" in perms or "666" in perms, f"Invalid permissions: {perms}"
     assert "socket" in file_type, f"Invalid file type: {file_type}"
     assert "root:root" in owner or "kubelet:kubelet" in owner, f"Invalid owner: {owner}"
     logger.info(f"Socket {host_path}/{socket_name} has valid permissions on {node}")
     return True
->>>>>>> d6e1ddfd2 (RHSTOR-7086:Test to verify csi-addon socket permission)

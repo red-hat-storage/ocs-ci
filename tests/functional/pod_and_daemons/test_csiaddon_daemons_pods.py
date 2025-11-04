@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     acceptance,
     polarion_id,
-    green_squad,
+    brown_squad,
     skipif_ocs_version,
 )
 from ocs_ci.ocs import (
@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 
 
 @skipif_ocs_version("<4.20")
+@brown_squad
 class TestCSIADDonDaemonset(ManageTest):
     """
     Test class for CSI addon daemonset verification
     """
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7386")
     def test_csi_addon_daemonset_exists(self):
         """
@@ -81,7 +81,6 @@ class TestCSIADDonDaemonset(ManageTest):
 
     @acceptance
     @tier1
-    @green_squad
     @polarion_id("OCS-7374")
     def test_csi_addon_pods_containers_ready(self):
         """
@@ -106,7 +105,6 @@ class TestCSIADDonDaemonset(ManageTest):
         logger.info("All containers in CSI-addon DaemonSet pods are ready")
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7373")
     def test_csi_addon_pods_uses_pod_network(self):
         """
@@ -130,7 +128,6 @@ class TestCSIADDonDaemonset(ManageTest):
         )
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7375")
     def test_csi_addon_daemonset_desired_vs_ready(self):
         """
@@ -165,7 +162,6 @@ class TestCSIADDonDaemonset(ManageTest):
         )
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7305")
     def test_csi_addon_pods_on_worker_nodes(self):
         """
@@ -209,7 +205,6 @@ class TestCSIADDonDaemonset(ManageTest):
         logger.info("CSI addon pods running on each worker node")
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7387")
     def test_csi_addon_pod_restart(self):
         """
@@ -237,7 +232,6 @@ class TestCSIADDonDaemonset(ManageTest):
         ), "CSI-addons pod didn't came up is running sattus "
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7379")
     def test_csi_addons_socket_creation_per_pods_node(self):
         """
@@ -266,7 +260,6 @@ class TestCSIADDonDaemonset(ManageTest):
                 socket_name=constants.RBD_CSI_ADDONS_SOCKET_NAME,
             ), f"csi-addons Socket not found on node {csi_pod_running_node_name}"
 
-    @green_squad
     @tier4c
     @polarion_id("OCS-7376")
     def test_csi_addons_pod_crash_recovery(self):
@@ -316,7 +309,6 @@ class TestCSIADDonDaemonset(ManageTest):
         ), f"Restart count should increase, Pod restart count of pod- {pod_name} is {restart_count_after} "
 
     @tier2
-    @green_squad
     @polarion_id("OCS-7389")
     def test_csi_addons_socket_permission(self):
         """
