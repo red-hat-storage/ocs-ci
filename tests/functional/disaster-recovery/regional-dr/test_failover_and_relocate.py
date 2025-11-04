@@ -220,6 +220,7 @@ class TestFailoverAndRelocate:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         # Verify resources deletion from primary cluster
@@ -260,7 +261,9 @@ class TestFailoverAndRelocate:
                         namespace=wl.workload_namespace,
                         should_exist=False,
                     )
-                    dr_helpers.wait_for_replication_destinations_deletion(wl.workload_namespace)
+                    dr_helpers.wait_for_replication_destinations_deletion(
+                        wl.workload_namespace
+                    )
 
                     # Verify the creation of Replication Group Destination resources
                     # on the current secondary cluster
@@ -344,37 +347,50 @@ class TestFailoverAndRelocate:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
             for wl in workloads:
-                # Verify the deletion of ReplicationDestination resources on primary cluster
+                # Verify the deletion of ReplicationDestination resources on the old
+                # secondary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
-                cg_enabled =  dr_helpers.is_cg_cephfs_enabled()
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+
+                cg_enabled = dr_helpers.is_cg_cephfs_enabled()
                 if cg_enabled:
                     dr_helpers.wait_for_resource_existence(
                         kind=constants.REPLICATION_GROUP_DESTINATION,
                         namespace=wl.workload_namespace,
                         should_exist=False,
                     )
-                    dr_helpers.wait_for_replication_destinations_deletion(wl.workload_namespace)
+                    # Verify the deletion of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=0,
+                    )
 
-                # Verify the creation of ReplicationDestination resources on secondary cluster
+                # Verify the creation of ReplicationDestination resources on
+                # the current secondary cluster
                 config.switch_to_cluster_by_name(secondary_cluster_name)
-                dr_helpers.wait_for_resource_existence(
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
                         kind=constants.REPLICATION_GROUP_DESTINATION,
                         namespace=wl.workload_namespace,
                         should_exist=True,
                     )
-                dr_helpers.wait_for_replication_destinations_creation(
-                    wl.workload_pvc_count, wl.workload_namespace
-                )
-                # Verify the creation of Volume Snapshot
-                dr_helpers.wait_for_resource_count(
-                    kind=constants.VOLUMESNAPSHOT,
-                    namespace=wl.workload_namespace,
-                    expected_count=wl.workload_pvc_count,
-                )
+                    # Verify the creation of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(

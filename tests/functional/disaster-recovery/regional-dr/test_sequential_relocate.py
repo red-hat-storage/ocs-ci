@@ -8,6 +8,11 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.dr_helpers import (
+    wait_for_replication_destinations_creation,
+    wait_for_replication_destinations_deletion,
+    is_cg_cephfs_enabled,
+)
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
@@ -51,11 +56,23 @@ class TestSequentialRelocate:
             workloads[0].workload_namespace
         )
 
-        # Verify the creation of ReplicationDestination resources on secondary cluster
         if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the creation of ReplicationDestination resources on secondary cluster
             config.switch_to_cluster_by_name(secondary_cluster_name)
             for wl in workloads:
-                dr_helpers.wait_for_replication_destinations_creation(
+                # Verifying the existence of replication group destination and volume snapshots
+                if is_cg_cephfs_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
+                wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
 
@@ -102,20 +119,48 @@ class TestSequentialRelocate:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
             for wl in workloads:
-                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                # Verify the deletion of Replication Group Destination resources
+                # on the old secondary cluster
                 config.switch_to_cluster_by_name(secondary_cluster_name)
-                dr_helpers.wait_for_replication_destinations_deletion(
-                    wl.workload_namespace
-                )
-                # Verify the creation of ReplicationDestination resources on primary cluster
+                wait_for_replication_destinations_deletion(wl.workload_namespace)
+
+                cg_enabled = is_cg_cephfs_enabled()
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=False,
+                    )
+                    # Verify the deletion of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=0,
+                    )
+
+                # Verify the creation of Replication Group Destination resources
+                # on the current secondary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
                 dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    # Verify the creation of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(

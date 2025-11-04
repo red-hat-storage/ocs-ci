@@ -102,7 +102,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             drpc_obj, rdr_workload[0].kubeobject_capture_interval_int
         )
 
-
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
             namespace=rdr_workload[0].workload_namespace,
@@ -143,11 +142,15 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             namespace=wl.workload_namespace,
                             should_exist=False,
                         )
-                        dr_helpers.wait_for_replication_destinations_deletion(wl.workload_namespace)
+                        dr_helpers.wait_for_replication_destinations_deletion(
+                            wl.workload_namespace
+                        )
 
                         # Verify the deletion of Replication Group Destination resources
                         # on the current secondary cluster
-                        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+                        config.switch_to_cluster_by_name(
+                            primary_cluster_name_before_failover
+                        )
 
                         dr_helpers.wait_for_resource_existence(
                             kind=constants.REPLICATION_GROUP_DESTINATION,
@@ -225,7 +228,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 for wl in rdr_workload:
                     # Verify the deletion of Replication Group Destination resources
                     # on the old secondary cluster
-                    config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
+                    config.switch_to_cluster_by_name(
+                        primary_cluster_name_after_failover
+                    )
                     cg_enabled = dr_helpers.is_cg_cephfs_enabled()
 
                     if cg_enabled:
@@ -234,11 +239,15 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             namespace=wl.workload_namespace,
                             should_exist=False,
                         )
-                        dr_helpers.wait_for_replication_destinations_deletion(wl.workload_namespace)
+                        dr_helpers.wait_for_replication_destinations_deletion(
+                            wl.workload_namespace
+                        )
 
                         # Verify the creation of Replication Group Destination resources
                         # on the current secondary cluster
-                        config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
+                        config.switch_to_cluster_by_name(
+                            primary_cluster_name_after_failover
+                        )
 
                         dr_helpers.wait_for_resource_existence(
                             kind=constants.REPLICATION_GROUP_DESTINATION,
@@ -256,10 +265,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         )
 
         wait_for_vrg_state(
-                vrg_state="primary",
-                vrg_namespace=constants.DR_OPS_NAMESAPCE,
-                resource_name=rdr_workload[index].discovered_apps_placement_name,
-            )
+            vrg_state="primary",
+            vrg_namespace=constants.DR_OPS_NAMESAPCE,
+            resource_name=rdr_workload[index].discovered_apps_placement_name,
+        )
 
         logger.info("Checking for lastKubeObjectProtectionTime post Relocate Operation")
         dr_helpers.verify_last_kubeobject_protection_time(

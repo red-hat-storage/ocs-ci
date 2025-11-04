@@ -889,12 +889,11 @@ def wait_for_replication_resources_creation(
                 if performed_dr_action:
                     count *= 2
                 wait_for_resource_count(
-                kind=constants.VOLUMESNAPSHOT,
-                namespace=namespace,
-                expected_count=count,
-                timeout=timeout,
+                    kind=constants.VOLUMESNAPSHOT,
+                    namespace=namespace,
+                    expected_count=count,
+                    timeout=timeout,
                 )
-
 
         else:
             cg_enabled = is_cg_enabled()
@@ -1078,9 +1077,16 @@ def wait_for_all_resources_creation(
         timeout=timeout,
         sleep=5,
     )
+
     if not skip_replication_resources:
         wait_for_replication_resources_creation(
-            pvc_count, namespace, performed_dr_action, timeout, discovered_apps, vrg_name, skip_vrg_check
+            pvc_count,
+            namespace,
+            timeout,
+            discovered_apps,
+            vrg_name,
+            skip_vrg_check,
+            performed_dr_action,
         )
 
 
@@ -2651,7 +2657,8 @@ def get_vgs_name(vgs_namespace):
 
     """
     rgs_obj = ocp.OCP(kind=constants.REPLICATION_GROUP_SOURCE, namespace=vgs_namespace)
-    vgs_name = rgs_obj[0]
+    vgs_dict = rgs_obj.get().get("items")[0]
+    vgs_name = vgs_dict["metadata"]["name"]
     return vgs_name
 
 
@@ -2666,7 +2673,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     odf_external_snapshotter_pod = get_pods_having_label(
         constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
-    )[0]
+    )[0]["metadata"]["name"]
     vgs_name = get_vgs_name(vgs_namespace)
     sample = TimeoutSampler(
         timeout=300,
@@ -2680,20 +2687,6 @@ def validate_volumegroupsnapshot(vgs_namespace):
     )
     if not sample.wait_for_func_status(result=True):
         raise Exception("VolumeGroupSnapshot has not been created..")
-
-def validate_volumesnapshot(vs_count, namespace):
-    """
-    Validates Volume Snapshot resource count in given namespace
-
-    Args:
-        namespace (str): the namespace of the Volume snapshot resources
-
-    """
-    vs_obj = ocp.OCP(kind=constants.VOLUMESNAPSHOT, namespace=namespace)
-    vs_items = vs_obj.get().get("items")
-    if len(vs_items) != vs_count:
-        logging.error(f"Volume snapshot count is not expected : {vs_items}")
-
 
 def is_cg_cephfs_enabled():
     """
