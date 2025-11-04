@@ -3356,6 +3356,138 @@ def wait_for_pv_delete(pv_objs, timeout=180):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
 
 
+def is_pvc_encrypted(pvc_obj):
+    """
+    Check if a PVC is encrypted by examining its StorageClass and PV attributes.
+
+    Args:
+        pvc_obj (PVC): PVC object to check
+
+    Returns:
+        bool: True if PVC is encrypted, False otherwise
+
+    """
+    try:
+        # Check 1: PV CSI volumeAttributes for encryption flag
+        pv_obj = pvc_obj.backed_pv_obj
+        if pv_obj:
+            pv_data = pv_obj.get()
+            csi_data = pv_data.get("spec", {}).get("csi", {})
+            volume_attributes = csi_data.get("volumeAttributes", {})
+
+            # Check if encrypted attribute is set to true
+            if volume_attributes.get("encrypted") == "true":
+                return True
+
+            # Check if encryptionKMSID is present (indicates encryption)
+            if volume_attributes.get("encryptionKMSID"):
+                return True
+
+        # Check 2: StorageClass parameters
+        if hasattr(pvc_obj, "storageclass") and pvc_obj.storageclass:
+            sc_data = pvc_obj.storageclass.get()
+            parameters = sc_data.get("parameters", {})
+
+            # Check if encrypted parameter is set
+            if parameters.get("encrypted") == "true":
+                return True
+
+            # Check if encryptionKMSID parameter is present
+            if parameters.get("encryptionKMSID"):
+                return True
+
+        return False
+
+    except Exception as e:
+        # If we can't determine encryption status, assume not encrypted
+        # to avoid unnecessary delays
+        logger.debug(
+            f"Could not determine encryption status for PVC {pvc_obj.name}: {e}"
+        )
+        return False
+
+
+def wait_for_volume_detachment(pvc_objs, timeout=180):
+    """
+    Wait until the volumes are fully detached from all nodes by checking the VolumeAttachment resources.
+    This makes sure the volumes are safely removed before deleting.
+
+    Args:
+        pvc_objs (list): List of PVC objects to check for detachment
+        timeout (int): Timeout in seconds to wait for detachment (default: 180)
+
+    Returns:
+        bool: True if all volumes are detached, False otherwise
+
+    """
+    logger.info(
+        f"Waiting for {len(pvc_objs)} volumes to detach from nodes (timeout: {timeout}s)"
+    )
+
+    # Get PV names from PVCs
+    pv_names = [pvc_obj.backed_pv_obj.name for pvc_obj in pvc_objs]
+
+    def check_volumes_detached():
+        """
+        Check if all volumes are detached by querying VolumeAttachment resources.
+
+        Returns:
+            bool: True if all volumes are detached, False otherwise
+
+        """
+        try:
+            # Query VolumeAttachment resources (cluster-scoped)
+            va_ocp = OCP(kind="VolumeAttachment", namespace="")
+            attachments = va_ocp.get()
+
+            # If no items key or empty list, all volumes are detached
+            if not attachments or "items" not in attachments:
+                logger.info("No VolumeAttachment resources found - volumes detached")
+                return True
+
+            # Check if any of our PVs are still attached
+            attached_pvs = []
+            for va in attachments.get("items", []):
+                pv_name = (
+                    va.get("spec", {}).get("source", {}).get("persistentVolumeName", "")
+                )
+                if pv_name in pv_names:
+                    attached_pvs.append(pv_name)
+
+            if attached_pvs:
+                logger.debug(
+                    f"Still waiting for {len(attached_pvs)} volume(s) to detach: "
+                    f"{attached_pvs}"
+                )
+                return False
+
+            logger.info("All volumes successfully detached from nodes")
+            return True
+
+        except CommandFailed as e:
+            # If the API call fails with NotFound, it means no VolumeAttachments exist
+            if "NotFound" in str(e):
+                logger.info("No VolumeAttachment resources found - volumes detached")
+                return True
+            # For other errors, log warning but continue checking
+            logger.warning(f"Error checking VolumeAttachment: {e}")
+            return False
+
+    # Use TimeoutSampler to poll until volumes are detached
+    try:
+        for detached in TimeoutSampler(
+            timeout=timeout, sleep=5, func=check_volumes_detached
+        ):
+            if detached:
+                return True
+    except Exception as e:
+        logger.warning(
+            f"Timeout waiting for volume detachment after {timeout}s: {e}. "
+            "Proceeding anyway."
+        )
+        return False
+
+
 @retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
 def fetch_used_size(cbp_name, exp_val=None):
     """
