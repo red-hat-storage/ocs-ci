@@ -31,30 +31,30 @@ class TestFailover:
     """
 
     params = [
-        # pytest.param(
-        #     False,  # primary_cluster_down = False
-        #     constants.CEPHBLOCKPOOL,
-        #     marks=pytest.mark.polarion_id("OCS-4429"),
-        #     id="primary_up-rbd-cli",
-        # ),
-        # pytest.param(
-        #     True,  # primary_cluster_down = True
-        #     constants.CEPHBLOCKPOOL,
-        #     marks=pytest.mark.polarion_id("OCS-4426"),
-        #     id="primary_down-rbd-cli",
-        # ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHBLOCKPOOL,
+            marks=pytest.mark.polarion_id("OCS-4429"),
+            id="primary_up-rbd-cli",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            marks=pytest.mark.polarion_id("OCS-4426"),
+            id="primary_down-rbd-cli",
+        ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
             marks=pytest.mark.polarion_id("OCS-4726"),
             id="primary_up-cephfs-cli",
         ),
-        # pytest.param(
-        #     True,  # primary_cluster_down = True
-        #     constants.CEPHFILESYSTEM,
-        #     marks=pytest.mark.polarion_id("OCS-4729"),
-        #     id="primary_down-cephfs-cli",
-        # ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            marks=pytest.mark.polarion_id("OCS-4729"),
+            id="primary_down-cephfs-cli",
+        ),
     ]
 
     @pytest.mark.parametrize(
@@ -74,7 +74,7 @@ class TestFailover:
         """
 
         workloads = dr_workload(
-            num_of_subscription=0, num_of_appset=1, pvc_interface=pvc_interface
+            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
         )
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
@@ -175,26 +175,35 @@ class TestFailover:
                 config.switch_to_cluster_by_name(secondary_cluster_name)
                 cg_enabled = is_cg_cephfs_enabled()
 
+                wait_for_replication_destinations_deletion(wl.workload_namespace)
                 if cg_enabled:
                     dr_helpers.wait_for_resource_existence(
                         kind=constants.REPLICATION_GROUP_DESTINATION,
                         namespace=wl.workload_namespace,
                         should_exist=False,
                     )
-                    wait_for_replication_destinations_deletion(wl.workload_namespace)
 
-                    # Verify the creation of Replication Group Destination resources
-                    # on the current secondary cluster
-                    config.switch_to_cluster_by_name(primary_cluster_name)
+                    # Verify the deletion of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=0,
+                    )
 
+                # Verify the creation of Replication Group Destination resources
+                # on the current secondary cluster
+                config.switch_to_cluster_by_name(primary_cluster_name)
+
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+                if cg_enabled:
                     dr_helpers.wait_for_resource_existence(
                         kind=constants.REPLICATION_GROUP_DESTINATION,
                         namespace=wl.workload_namespace,
                         should_exist=True,
                     )
-                    dr_helpers.wait_for_replication_destinations_creation(
-                        wl.workload_pvc_count, wl.workload_namespace
-                    )
+
                     # Verify the creation of Volume Snapshot
                     dr_helpers.wait_for_resource_count(
                         kind=constants.VOLUMESNAPSHOT,
