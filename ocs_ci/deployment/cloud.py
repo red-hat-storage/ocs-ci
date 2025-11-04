@@ -8,13 +8,14 @@ import logging
 import os
 import subprocess
 
+from ocs_ci.ocs import ocp
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.deployment import get_cluster_prefix
-from ocs_ci.utility.utils import get_cluster_name, run_cmd
+from ocs_ci.utility.utils import get_cluster_name, run_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -117,5 +118,39 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     gather_bootstrap()
                 except Exception as ex:
                     logger.error(ex)
-            raise e
+            # W/A for bug: https://issues.redhat.com/browse/OCPBUGS-63723
+            # Issue to track W/A: https://github.com/red-hat-storage/ocs-ci/issues/13519
+            if (
+                "failed retrieving cos instance for destroy bootstrap: COS Resource Not Found"
+                in str(e)
+            ):
+                logger.warning(
+                    "COS instance not found for destroy bootstrap, related to bug: "
+                    "https://issues.redhat.com/browse/OCPBUGS-63723, continuing..."
+                )
+                cluster_operators = ocp.get_all_cluster_operators()
+                for ocp_operator in cluster_operators:
+                    logger.info(f"Checking cluster status of {ocp_operator}")
+                    for sampler in TimeoutSampler(
+                        timeout=1600,
+                        sleep=60,
+                        func=ocp.verify_cluster_operator_status,
+                        cluster_operator=ocp_operator,
+                    ):
+                        if sampler:
+                            break
+                        else:
+                            logger.info(f"{ocp_operator} status is not valid")
+                logger.info("Checking clusterversion status")
+                cluster_version_timeout = 1800
+                for sampler in TimeoutSampler(
+                    timeout=cluster_version_timeout,
+                    sleep=15,
+                    func=ocp.validate_cluster_version_status,
+                ):
+                    if sampler:
+                        logger.info("Installation Completed Successfully!")
+                        break
+            else:
+                raise e
         self.test_cluster()
