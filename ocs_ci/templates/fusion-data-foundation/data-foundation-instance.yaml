@@ -19,5 +19,8 @@ spec:
   - name: autoUpgrade
     provided: false
     value: "false"
+  - name: installPlanApproval
+    provided: true
+    value: Automatic
   serviceDefinition: data-foundation-service
   triggerUpdate: false
