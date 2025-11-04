@@ -171,6 +171,6 @@ class StoragePools(CreateResourceForm, EditLabelForm, ResourceList):
         logger.info(
             f"Navigate to the specific block pool details page {block_pool_name}"
         )
-        self.nav_to_resource_via_name(constants.DEFAULT_BLOCKPOOL)
+        self.nav_to_resource_via_name(block_pool_name)
 
         return CephBlockPool()

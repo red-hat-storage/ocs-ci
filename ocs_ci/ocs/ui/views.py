@@ -335,7 +335,9 @@ generic_locators = {
     ),
     "resource_link": (
         "//a[@data-test='resource-link-{}'] | "
-        "//td[@data-label='Name']//a[contains(text(),'{}')]",
+        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//td[@data-label='Name']//a[contains(text(),'{}')] | "
+        "//td[@data-label='name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
     "confirm_action": (
