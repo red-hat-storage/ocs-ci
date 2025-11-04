@@ -6916,7 +6916,7 @@ def verify_socket_permission(node_name, host_path, socket_name):
     result = ocp.exec_oc_debug_cmd(
         node=node_name, cmd_list=[f"stat -c '%a %U:%G %F' {host_path}/{socket_name}"]
     )
-    perms, owner, file_type = result[1].strip().split()
+    perms, owner, file_type = result.strip().split()
     assert "660" in perms or "666" in perms, f"Invalid permissions: {perms}"
     assert "socket" in file_type, f"Invalid file type: {file_type}"
     assert "root:root" in owner or "kubelet:kubelet" in owner, f"Invalid owner: {owner}"
