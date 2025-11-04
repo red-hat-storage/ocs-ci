@@ -7,7 +7,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     polarion_id,
-    brown_squad,
+    green_squad,
     skipif_ocs_version,
 )
 from ocs_ci.ocs import (
@@ -25,15 +25,15 @@ from ocs_ci.helpers.helpers import verify_socket_on_node
 logger = logging.getLogger(__name__)
 
 
-@tier1
-@brown_squad
 @skipif_ocs_version("<4.20")
-@polarion_id("OCS-7298")
 class TestCSIADDonDaemonset(ManageTest):
     """
     Test class for CSI addon daemonset verification
     """
 
+    @tier1
+    @green_squad
+    @polarion_id("OCS-7386")
     def test_csi_addon_daemonset_exists(self):
         """
         Verify that the CSI addon daemonset exists and is properly configured
@@ -75,13 +75,16 @@ class TestCSIADDonDaemonset(ManageTest):
         logger.info("CSI addon daemonset has correct labels")
 
     @acceptance
+    @tier1
+    @green_squad
+    @polarion_id("OCS-7374")
     def test_csi_addon_pods_containers_ready(self):
         """
         Verify that all containers in CSI-addon pods are in ready status
         Steps:
         1. Get all CSI Addons Pods
         2. Check each container in each pod
-        3.Verify Container readiness status of each pod
+        3. Verify Container readiness status of each pod
 
         """
         logger.info("Validating containers in csi addon pods having ready status")
@@ -97,6 +100,9 @@ class TestCSIADDonDaemonset(ManageTest):
                 ], f"container {container_status['name']} in pod {pod.name} is not ready"
         logger.info("All containers in CSI-addon DaemonSet pods are ready")
 
+    @tier1
+    @green_squad
+    @polarion_id("OCS-7373")
     def test_csi_addon_pods_uses_pod_network(self):
         """
         Verify that CSI-addon used pod network instead of host network
@@ -118,6 +124,9 @@ class TestCSIADDonDaemonset(ManageTest):
             "CSI-addon DaemonSet pods using pod network instead of host-network"
         )
 
+    @tier1
+    @green_squad
+    @polarion_id("OCS-7375")
     def test_csi_addon_daemonset_desired_vs_ready(self):
         """
         Verify that CSI addon DaemonSet has desired number of ready and available pods
@@ -150,6 +159,9 @@ class TestCSIADDonDaemonset(ManageTest):
             f"Ready: {number_ready}, Available: {number_available}"
         )
 
+    @tier1
+    @green_squad
+    @polarion_id("OCS-7305")
     def test_csi_addon_pods_on_worker_nodes(self):
         """
         Verify that the CSI addon pods are running on each worker node
@@ -191,6 +203,9 @@ class TestCSIADDonDaemonset(ManageTest):
         ), f"worker node {pod_missed_node} do not have CSI addon pods"
         logger.info("CSI addon pods running on each worker node")
 
+    @tier1
+    @green_squad
+    @polarion_id("OCS-7387")
     def test_csi_addon_pod_restart(self):
         """
         Restart a CSI-addons pod and validate it restored to running state.
@@ -216,6 +231,9 @@ class TestCSIADDonDaemonset(ManageTest):
             namespace=namespace, pod_names=csi_addon_pod_names_list
         ), "CSI-addons pod didn't came up is running sattus "
 
+    @tier1
+    @green_squad
+    @polarion_id("OCS-7379")
     def test_csi_addons_socket_creation_per_pods_node(self):
         """
         csi-addons.sock are used for communication for csi-addons.
