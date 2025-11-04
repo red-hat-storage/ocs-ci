@@ -23,7 +23,7 @@ setup(
         "reportportal-client==3.2.3",
         "requests==2.32.2",
         "paramiko==3.5.0",
-        "pyyaml==6.0",
+        "pyyaml==6.0.3",
         "jinja2==3.1.6",
         "openshift==0.13.2",
         "boto3==1.38.31",
