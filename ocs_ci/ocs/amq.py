@@ -2,29 +2,30 @@
 AMQ Class to run amq specific tests
 """
 
+import json
 import logging
 import os
 import tempfile
 import time
-import json
-from subprocess import run, CalledProcessError
+from concurrent.futures import ThreadPoolExecutor
+from subprocess import CalledProcessError, run
 
 import pytest
 from prettytable import PrettyTable
-from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, CommandFailed
-from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
-from ocs_ci.ocs.resources.pod import get_pod_obj
-from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.helpers.helpers import (storagecluster_independent_check,
+                                    validate_pv_delete)
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import get_pod_obj
+from ocs_ci.ocs.resources.pvc import delete_pvcs, get_all_pvc_objs
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating, utils
-from ocs_ci.utility.utils import run_cmd, exec_cmd, TimeoutSampler
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.helpers.helpers import storagecluster_independent_check, validate_pv_delete
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, run_cmd
 
 log = logging.getLogger(__name__)
 URL = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
@@ -977,66 +978,89 @@ class AMQ(object):
         tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
     ):
         """
-        Clean up function,
-        will start to delete from amq cluster operator
-        then amq-connector, persistent, bridge, at the end it will delete the created namespace
-
-        Args:
-            kafka_namespace (str): Created namespace for amq
-            tiller_namespace (str): Created namespace for benchmark
-
+        Enhanced AMQ cleanup to ensure no leftover resources remain.
+        Runs full cleanup even if setup failed or partially deployed.
         """
 
-        if self.amq_is_setup:
-            if self.consumer_pod:
-                self.consumer_pod.delete()
-            if self.producer_pod:
-                self.producer_pod.delete()
-            if self.kafka_user:
-                self.kafka_user.delete()
-            if self.kafka_topic:
-                self.kafka_topic.delete()
+    # Cleanup for successfully deployed objects
+    if self.amq_is_setup:
+        if self.consumer_pod:
+            self.consumer_pod.delete()
+        if self.producer_pod:
+            self.producer_pod.delete()
+        if self.kafka_user:
+            self.kafka_user.delete()
+        if self.kafka_topic:
+            self.kafka_topic.delete()
 
-            if self.benchmark:
-                # Delete the helm app
-                try:
-                    purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
-                    run(purge_cmd, shell=True, cwd=self.dir, check=True)
-                except (CommandFailed, CalledProcessError) as cf:
-                    log.error("Failed to delete help app")
-                    raise cf
-                # Delete the pods and namespace created
-                self.sa_tiller.delete()
-                self.crb_tiller.delete()
-                run_cmd(f"oc delete project {tiller_namespace}")
-                self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
+        if self.benchmark:
+            try:
+                purge_cmd = (
+                    f"linux-amd64/helm delete benchmark --purge "
+                    f"--tiller-namespace {tiller_namespace}"
+                )
+                run(purge_cmd, shell=True, cwd=self.dir, check=True)
+            except (CommandFailed, CalledProcessError) as cf:
+                log.error("Failed to delete helm benchmark app")
+                raise cf
 
-            if self.kafka_connect:
-                self.kafka_connect.delete()
-            if self.kafka_bridge:
-                self.kafka_bridge.delete()
-            for kafkanodepool in self.kafkanodepools:
-                kafkanodepool.delete()
-            if self.kafka_persistent:
-                self.kafka_persistent.delete()
-                log.info("Waiting for 20 seconds to delete persistent")
-                time.sleep(20)
-                ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
-                if ocs_pvc_obj:
-                    delete_pvcs(ocs_pvc_obj)
+            # Delete tiller resources and namespace
+            self.sa_tiller.delete()
+            self.crb_tiller.delete()
+            run_cmd(f"oc delete project {tiller_namespace}")
+            self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
+
+        if self.kafka_connect:
+            self.kafka_connect.delete()
+        if self.kafka_bridge:
+            self.kafka_bridge.delete()
+
+        for kafkanodepool in self.kafkanodepools:
+            kafkanodepool.delete()
+
+        if self.kafka_persistent:
+            self.kafka_persistent.delete()
+            log.info("Waiting 20 seconds for persistent storage deletion")
+            time.sleep(20)
+
+            ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
+            if ocs_pvc_obj:
+                delete_pvcs(ocs_pvc_obj)
                 for pvc in ocs_pvc_obj:
-                    log.info(pvc.name)
                     validate_pv_delete(pvc.backed_pv)
 
-            if self.crd_objects:
-                for adm_obj in self.crd_objects:
-                    adm_obj.delete()
-            time.sleep(30)
+        if self.crd_objects:
+            for adm_obj in self.crd_objects:
+                adm_obj.delete()
 
-            # Reset namespace to default
-            switch_to_default_rook_cluster_project()
-            run_cmd(f"oc delete project {kafka_namespace}")
-            self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+        time.sleep(30)
+
+    # FINAL SAFETY CLEANUP – handles partial or failed deployments
+    log.info("Performing final validation cleanup to remove leftovers")
+
+    # Delete pods
+    pods = get_all_pods(namespace=kafka_namespace)
+    if pods:
+        log.info("Deleting leftover pods")
+        delete_pods(pods)
+
+    # Delete PVCs and PVs
+    pvcs = get_all_pvc_objs(namespace=kafka_namespace)
+    if pvcs:
+        log.info("Deleting leftover PVCs and associated PVs")
+        delete_pvcs(pvcs)
+        for pvc in pvcs:
+            validate_pv_delete(pvc.backed_pv)
+
+    # Delete namespace
+    log.info(f"Deleting namespace {kafka_namespace} (ignore errors)")
+    run_cmd(f"oc delete project {kafka_namespace}", ignore_error=True)
+    self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+
+    # Switch back to default
+    switch_to_default_rook_cluster_project()
+
+    log.info("AMQ cleanup completed successfully and verified")
 
     def check_amq_cluster_exists(self):
         """
