@@ -135,7 +135,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             resource_name=rdr_workload.discovered_apps_placement_name,
         )
-        drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
+        drpc_obj = DRPC(
+            namespace=constants.DR_OPS_NAMESAPCE,
+            resource_name=rdr_workload.discovered_apps_placement_name,
+        )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
