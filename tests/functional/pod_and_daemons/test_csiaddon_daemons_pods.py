@@ -5,6 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier4c,
     acceptance,
     polarion_id,
     green_squad,
@@ -260,3 +261,52 @@ class TestCSIADDonDaemonset(ManageTest):
                 host_path=constants.RBD_CSI_ADDONS_PLUGIN_DIR,
                 socket_name=constants.RBD_CSI_ADDONS_SOCKET_NAME,
             ), f"csi-addons Socket not found on node {csi_pod_running_node_name}"
+
+    @green_squad
+    @tier4c
+    @polarion_id("OCS-7376")
+    def test_csi_addons_pod_crash_recovery(self):
+        """
+        Test csi-addons pod recovery after pod crash and ensure the restart count.
+        1. Get all csi-addons pods
+        2. Pick a random csi-addons pod
+        3. Crash the csi-addons pod
+        4. Wait for pod to be Running and check restart count
+        """
+        logger.info(
+            "Validating csi-addons pod recovery after pod crash with increase in restart count."
+        )
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # 1. Get all csi-addons pods
+        csi_addons_pod_objs = get_pods_having_label(
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        # 2. Pick a random csi-addons pod
+        pod_data = random.choice(csi_addons_pod_objs)
+        pod_name = pod_data["metadata"]["name"]
+        # Note restart count of the selected pod
+        restart_count_before = (
+            pod_data.get("status").get("containerStatuses")[0].get("restartCount")
+        )
+
+        # 3. Crash the csi-addons pod using 'kill 1'
+        pod_crash_cmd = f'exec {pod_name} -- /bin/sh -c "kill 1"'
+        ocp_pod = ocp.OCP(kind="pod", namespace=namespace)
+        ocp_pod.exec_oc_cmd(pod_crash_cmd)
+
+        # Give time for pod to restart
+        time.sleep(10)
+
+        # 4. Wait for pod to be Running and check restart count
+        assert wait_for_pods_to_be_running(
+            namespace=namespace, pod_names=[pod_name]
+        ), f"CSI-addons pod {pod_name} didn't came up is running status "
+
+        pod_obj = ocp_pod.get(resource_name=pod_name)
+        restart_count_after = (
+            pod_obj.get("status").get("containerStatuses")[0].get("restartCount")
+        )
+        assert (
+            restart_count_after > restart_count_before
+        ), f"Restart count should increase, Pod restart count of pod- {pod_name} is {restart_count_after} "
