@@ -775,9 +775,9 @@ class HyperShiftBase:
         create_hcp_cluster_cmd = (
             f"{self.hypershift_binary_path} create cluster agent "
             f"--name {name} "
-            f"--agent-namespace clusters-{name}"
-            f"--base-domain {config.ENV_DATA['base_domain']}"
-            f"--api-server-address api.${name}.${config.ENV_DATA['base_domain']}"
+            f"--agent-namespace {name} "
+            f"--base-domain {config.ENV_DATA['base_domain']} "
+            f"--api-server-address api.{name}.{config.ENV_DATA['base_domain']} "
             f"--release-image {index_image} "
             f"--node-pool-replicas {nodepool_replicas} "
             f"--pull-secret {pull_secret_path} "
