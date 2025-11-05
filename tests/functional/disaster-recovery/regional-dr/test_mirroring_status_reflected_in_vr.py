@@ -5,7 +5,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
-from ocs_ci.framework.testlib import tier1
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
@@ -19,11 +18,18 @@ from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.framework.testlib import (
+    skipif_ocs_version,
+    skipif_ocp_version,
+    tier1,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @rdr
+@skipif_ocs_version("<4.20")
+@skipif_ocp_version("<4.20")
 @tier1
 @turquoise_squad
 class TestMirroringStatusReflectedInVR:
