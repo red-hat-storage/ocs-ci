@@ -1360,6 +1360,11 @@ acm_configuration_4_19 = {
     "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
     "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
+    "apply-filter": ("(//button[@id='acm-table-filter-select-undefined'])", By.XPATH),
+    "clear-filter": (
+        "(//button[@type='button'][normalize-space()='Clear all filters'])",
+        By.XPATH,
+    ),
     "kebab-action": ("//button[@aria-label='Actions']", By.XPATH),
 }
 
