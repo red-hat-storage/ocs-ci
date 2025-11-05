@@ -12,16 +12,18 @@ OCS4.5 Link:
 https://github.com/openshift/ocs-operator/blob/de48c9c00f8964f0f8813d7b3ddd25f7bc318449/must-gather/collection-scripts/
 
 OCS 4.20 Notes:
+
 - Significant structural changes: files now organized by API group in subdirectories
   (e.g., apps/, core/, noobaa/, ceph/)
 - The existing os.walk() validation logic handles the new structure automatically
-- Added 45 new CEPH commands (see GATHER_COMMANDS_CEPH_4_20)
+- Added 43 new CEPH commands (see GATHER_COMMANDS_CEPH_4_20)
 - Added 13 new JSON commands (see GATHER_COMMANDS_JSON_4_20)
 - Deprecated commands removed via GATHER_COMMANDS_JSON_4_20_EXCLUDE:
   * ceph_osd_blacklist_ls replaced by ceph_osd_blocklist_ls (terminology change)
   * ceph_balancer_pool_ls no longer collected
   * ceph_progress_json replaced by formatted version
-- NooBaa CNPG (CloudNativePG) files exist but are not validated yet
+- Old NooBaa PostgreSQL files excluded via GATHER_COMMANDS_OTHERS_EXCLUDE_4_20
+  (NooBaa migrated to CNPG in 4.20)
 
 """
 
@@ -764,9 +766,7 @@ GATHER_COMMANDS_CEPH_4_20 = [
     "radosgw-admin_bucket_list",
     "radosgw-admin_bucket_stats",
     "radosgw-admin_realm_list",
-    "radosgw-admin_zone_get",
     "radosgw-admin_zone_list",
-    "radosgw-admin_zonegroup_get",
     "radosgw-admin_zonegroup_list",
     "rbd_ls_ocs-storagecluster-cephblockpool",
     "rbd_mirror_group_snapshot_schedule_ls",
@@ -806,6 +806,17 @@ GATHER_COMMANDS_JSON_4_20_EXCLUDE = [
     "ceph_balancer_pool_ls_--format_json-pretty",
     "ceph_osd_blacklist_ls_--format_json-pretty",
     "ceph_progress_json",
+]
+
+# OTHERS files removed in 4.20 due to NooBaa migration to CNPG (CloudNativePG)
+# Old PostgreSQL pod files replaced by CNPG cluster files
+GATHER_COMMANDS_OTHERS_EXCLUDE_4_20 = [
+    "noobaa-db-pg-0-pod-describe.txt",
+    "db-noobaa-db-pg-0.yaml",
+    "noobaa-db-pg-0.log",
+    "db-noobaa-db-pg-0-pvc-describe.txt",
+    "noobaa-db-pg-0-db.log",
+    "noobaa-db-pg-0.yaml",
 ]
 
 GATHER_COMMANDS_OTHERS_EXTERNAL = GATHER_COMMANDS_OTHERS + [
@@ -1195,6 +1206,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_20
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
