@@ -818,10 +818,10 @@ class HyperShiftBase:
         if disable_default_sources:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
+        infra_env = self.create_host_inventory(infra_env_name=name)
+
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)
-
-        infra_env = self.create_host_inventory(infra_env_name=name)
 
         self.boot_machines_for_agent()
         agents_obj = OCP(kind="agents", namespace=infra_env.namespace)
@@ -830,7 +830,7 @@ class HyperShiftBase:
             .get(name)
             .get("nodepool_replicas", defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT)
         )
-        # TODO: Ident
+
         agents_obj.wait_for_resource(
             condition="Discovered",
             resource_count=nodepool_replicas,
