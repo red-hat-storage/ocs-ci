@@ -223,12 +223,13 @@ class GOSBenchWorkload:
             logger.info(f"S3 bucket deletion note: {e}")
             return True
 
-    def create_workload_config(self, benchmark_config=None):
+    def create_workload_config(self, benchmark_config=None, server_only=False):
         """
         Create ConfigMap with GOSBench benchmark configuration.
 
         Args:
             benchmark_config (dict): Custom benchmark configuration
+            server_only (bool): If True, create server-only config without benchmark stages (for goroom-server)
 
         Returns:
             bool: True if ConfigMap created successfully
@@ -265,6 +266,16 @@ class GOSBenchWorkload:
         # Merge with custom config if provided
         if benchmark_config:
             self._deep_merge(default_config, benchmark_config)
+
+        # For goroom-server, create EMPTY config or minimal config
+        # goroom-server with any benchmark config will execute and exit
+        if server_only:
+            logger.info(
+                "Creating empty config for goroom-server to prevent auto-execution"
+            )
+            # Empty config - server runs as HTTP coordinator only
+            # Workers provide benchmark config via HTTP requests
+            default_config = {"_comment": "Empty config for server mode"}
 
         configmap_data = {
             "apiVersion": "v1",
@@ -392,6 +403,16 @@ class GOSBenchWorkload:
             "affinity": None,
             "dns_policy": None,
             "dns_config": None,
+            # Add readiness probe for goroom-server to ensure service endpoints work
+            "health_checks": {
+                "readiness": {
+                    "tcpSocket": {"port": 2000},
+                    "initialDelaySeconds": 5,
+                    "periodSeconds": 10,
+                    "timeoutSeconds": 5,
+                    "failureThreshold": 3,
+                }
+            },
         }
 
         # Add resource limits if provided
@@ -428,12 +449,13 @@ class GOSBenchWorkload:
             current_image = container.get("image", "")
 
             if "goroom-server" in current_image:
-                # For goroom-server image, run as server (no config file)
-                # The server listens for HTTP requests from workers
+                # For goroom-server image, use EMPTY config file
+                # Config is mandatory (-c) but should be empty to prevent auto-execution
+                # Server acts as HTTP coordinator, workers provide benchmark config
                 container["command"] = ["/app/main"]
-                container["args"] = []  # No args - server mode
+                container["args"] = ["-c", "/cfg/gosbench.yaml"]  # Empty config file
                 logger.info(
-                    "Fixed server container args for goroom-server image (server mode)"
+                    "Fixed server container args for goroom-server image (empty config)"
                 )
 
             deploy_temp_file = tempfile.NamedTemporaryFile(
@@ -582,12 +604,24 @@ class GOSBenchWorkload:
             # 2. Create S3 bucket
             self.create_s3_bucket()
 
-            # 3. Create workload configuration
-            self.create_workload_config(benchmark_config)
+            # 3. Determine if using goroom-server (needs server-only config)
+            # Use the same default image logic as the deployment template
+            actual_server_image = (
+                server_image or image or "ghcr.io/mulbc/gosbench:latest"
+            )
+            is_goroom_server = "goroom-server" in actual_server_image
 
-            # 4. Create server deployment and service
-            # Use server_image if specified, otherwise fall back to image
-            actual_server_image = server_image or image
+            if is_goroom_server:
+                logger.info(
+                    f"Detected goroom-server image: {actual_server_image} "
+                    "- will create server-only config"
+                )
+
+            # 4. Create workload configuration
+            # For goroom-server, create config without benchmark stages to prevent auto-execution
+            self.create_workload_config(benchmark_config, server_only=is_goroom_server)
+
+            # 5. Create server deployment and service
             self.create_server_deployment(
                 image=actual_server_image, resource_limits=server_resource_limits
             )
