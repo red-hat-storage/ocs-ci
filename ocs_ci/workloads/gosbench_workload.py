@@ -132,13 +132,14 @@ class GOSBenchWorkload:
 
     def create_s3_bucket(self):
         """
-        Create S3 bucket for GOSBENCH workload.
+        Create S3 bucket for GOSBENCH workload with health verification.
 
         Returns:
             str: The created bucket name
         """
         from ocs_ci.ocs.resources.mcg import MCG
         from ocs_ci.ocs.bucket_utils import s3_create_bucket
+        import time
 
         try:
             # Get MCG object
@@ -149,12 +150,52 @@ class GOSBenchWorkload:
             s3_create_bucket(mcg_obj, bucket_name)
 
             logger.info(f"Created S3 bucket: {bucket_name}")
+
+            # Verify bucket health and readiness
+            logger.info(f"Verifying bucket health for: {bucket_name}")
+            time.sleep(2)  # Brief initial wait for bucket initialization
+
+            # Wait for bucket to be fully ready
+            max_attempts = 10
+            for attempt in range(max_attempts):
+                try:
+                    # Check if bucket exists and is accessible
+                    if mcg_obj.s3_verify_bucket_exists(bucket_name):
+                        # Try a simple list operation to verify accessibility
+                        list(mcg_obj.s3_list_all_objects_in_bucket(bucket_name))
+                        logger.info(
+                            f"✓ Bucket {bucket_name} verified healthy and ready"
+                        )
+                        return bucket_name
+                except Exception as e:
+                    if attempt < max_attempts - 1:
+                        logger.debug(
+                            f"Bucket not ready yet (attempt {attempt+1}/{max_attempts}): {e}"
+                        )
+                        time.sleep(3)
+                    else:
+                        logger.warning(
+                            f"Bucket health verification incomplete after {max_attempts} attempts: {e}"
+                        )
+                        # Return anyway - bucket might still work
+                        return bucket_name
+
             return bucket_name
 
         except Exception as e:
             # Bucket might already exist, which is fine
             logger.info(f"S3 bucket creation note: {e}")
-            return f"{self.workload_name}-bucket"
+            bucket_name = f"{self.workload_name}-bucket"
+
+            # Even if bucket exists, verify it's healthy
+            try:
+                mcg_obj = MCG()
+                if mcg_obj.s3_verify_bucket_exists(bucket_name):
+                    logger.info(f"✓ Existing bucket {bucket_name} verified")
+            except Exception as verify_error:
+                logger.warning(f"Could not verify existing bucket: {verify_error}")
+
+            return bucket_name
 
     def delete_s3_bucket(self):
         """
@@ -387,10 +428,13 @@ class GOSBenchWorkload:
             current_image = container.get("image", "")
 
             if "goroom-server" in current_image:
-                # For goroom-server image, use /app/main without server subcommand
+                # For goroom-server image, run as server (no config file)
+                # The server listens for HTTP requests from workers
                 container["command"] = ["/app/main"]
-                container["args"] = ["-c", "/cfg/gosbench.yaml"]
-                logger.info("Fixed server container args for goroom-server image")
+                container["args"] = []  # No args - server mode
+                logger.info(
+                    "Fixed server container args for goroom-server image (server mode)"
+                )
 
             deploy_temp_file = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="gosbench_server_deployment", delete=False
@@ -463,6 +507,8 @@ class GOSBenchWorkload:
             if "goroom-worker" in current_image:
                 # For goroom-worker image, use /app/main without worker subcommand
                 server_endpoint = worker_template_vars["server_endpoint"]
+                # goroom-worker expects pure host:port (NO http:// prefix)
+                # The Go net.Dial() function cannot parse URLs with protocols
                 worker_port = worker_template_vars.get(
                     "worker_port", 8888
                 )  # Default port from help is 8888
@@ -471,9 +517,11 @@ class GOSBenchWorkload:
                     "-p",
                     str(worker_port),
                     "-s",
-                    server_endpoint,
+                    server_endpoint,  # Just host:port, no protocol
                 ]
-                logger.info("Fixed worker container args for goroom-worker image")
+                logger.info(
+                    f"Fixed worker container args for goroom-worker image: {server_endpoint}"
+                )
 
             # Create temporary YAML file for the Deployment data
             import tempfile
@@ -1022,9 +1070,14 @@ class GOSBenchWorkload:
 
         return results
 
-    def stop_workload(self):
+    def stop_workload(self, delete_bucket=True, grace_period=5):
         """
         Stop and cleanup the GOSBench workload.
+
+        Args:
+            delete_bucket (bool): Whether to delete the S3 bucket (default: True)
+            grace_period (int): Seconds to wait before deleting bucket to allow
+                               in-flight operations to complete (default: 5)
 
         Returns:
             bool: True if workload stopped successfully
@@ -1077,8 +1130,23 @@ class GOSBenchWorkload:
             except CommandFailed:
                 logger.info(f"Secret {self.secret_name} not found")
 
-            # Delete S3 bucket
-            self.delete_s3_bucket()
+            # Delete S3 bucket with optional grace period
+            if delete_bucket:
+                if grace_period > 0:
+                    import time
+
+                    logger.info(
+                        f"Waiting {grace_period}s grace period before deleting bucket "
+                        f"to allow in-flight operations to complete..."
+                    )
+                    time.sleep(grace_period)
+                self.delete_s3_bucket()
+            else:
+                bucket_name = f"{self.workload_name}-bucket"
+                logger.info(
+                    f"Skipping bucket deletion (delete_bucket=False). "
+                    f"Bucket '{bucket_name}' will remain for inspection."
+                )
 
             logger.info(f"GOSBench workload {self.workload_name} stopped successfully")
             return True
@@ -1251,7 +1319,7 @@ class GOSBenchWorkload:
         logger.info("Starting benchmark run...")
 
         try:
-            # Get server pod
+            # Get server pod and deployment to check image type
             server_pods = get_pods_having_label(
                 label=f"app={self.server_name}", namespace=self.namespace
             )
@@ -1260,20 +1328,159 @@ class GOSBenchWorkload:
 
             server_pod_name = server_pods[0]["metadata"]["name"]
 
-            # Execute benchmark
-            cmd = f"client run --server {self.service_name}.{self.namespace}.svc.cluster.local:2000"
-            pod_ocp = OCP(kind="Pod", namespace=self.namespace)
-            result = pod_ocp.exec_oc_cmd(
-                f"exec {server_pod_name} -- {cmd}",
-                out_yaml_format=False,
-                timeout=timeout,
-            )
+            # Get deployment to check image type
+            deploy_ocp = OCP(kind="Deployment", namespace=self.namespace)
+            deployment = deploy_ocp.get(resource_name=self.server_name)
+            container_image = deployment["spec"]["template"]["spec"]["containers"][
+                0
+            ].get("image", "")
 
-            logger.info("Benchmark completed successfully")
-            return result
+            # Check if using goroom images
+            if "goroom-server" in container_image or "goroom-worker" in container_image:
+                logger.info("Detected goroom image - triggering benchmark via HTTP API")
+                # For goroom images, trigger benchmark via HTTP POST to control API
+                return self._trigger_benchmark_http(server_pod_name, timeout)
+            else:
+                # For standard gosbench image, use client run command
+                logger.info(
+                    "Using standard gosbench image - triggering via client command"
+                )
+                cmd = f"client run --server {self.service_name}.{self.namespace}.svc.cluster.local:2000"
+                pod_ocp = OCP(kind="Pod", namespace=self.namespace)
+                result = pod_ocp.exec_oc_cmd(
+                    f"exec {server_pod_name} -- {cmd}",
+                    out_yaml_format=False,
+                    timeout=timeout,
+                )
+
+                logger.info("Benchmark completed successfully")
+                return result
 
         except Exception as e:
             logger.error(f"Benchmark execution failed: {e}")
+            raise
+
+    def _trigger_benchmark_http(self, server_pod_name, timeout=3600):
+        """
+        Trigger benchmark via HTTP POST to goroom-server control API.
+
+        Args:
+            server_pod_name (str): Name of the server pod
+            timeout (int): Timeout in seconds
+
+        Returns:
+            str: Benchmark results or status
+        """
+        import time
+
+        logger.info(f"Triggering benchmark via HTTP POST to {server_pod_name}")
+
+        try:
+            pod_ocp = OCP(kind="Pod", namespace=self.namespace)
+
+            # Trigger benchmark via HTTP POST to /start endpoint
+            trigger_cmd = (
+                "curl -X POST http://localhost:2000/start "
+                "-H 'Content-Type: application/json' "
+                "-d '{}'"
+            )
+
+            try:
+                result = pod_ocp.exec_oc_cmd(
+                    f'exec {server_pod_name} -- sh -c "{trigger_cmd}"',
+                    out_yaml_format=False,
+                    timeout=30,
+                )
+                logger.info(f"Benchmark trigger response: {result}")
+            except Exception as e:
+                # If curl or /start endpoint doesn't exist, the benchmark might auto-start
+                logger.warning(f"Could not trigger via HTTP POST: {e}")
+                logger.info(
+                    "Benchmark might auto-start with goroom images - monitoring progress..."
+                )
+
+            # Monitor benchmark progress by checking logs
+            start_time = time.time()
+            last_log_check = 0
+            benchmark_started = False
+            benchmark_completed = False
+
+            while time.time() - start_time < timeout:
+                # Check logs every 10 seconds to avoid spam
+                if time.time() - last_log_check < 10:
+                    time.sleep(1)
+                    continue
+
+                last_log_check = time.time()
+
+                try:
+                    # Get recent logs from server pod
+                    logs = pod_ocp.exec_oc_cmd(
+                        f"logs {server_pod_name} --tail=50",
+                        out_yaml_format=False,
+                    )
+
+                    # Check for benchmark activity in logs
+                    if not benchmark_started:
+                        if any(
+                            keyword in logs.lower()
+                            for keyword in [
+                                "benchmark",
+                                "starting",
+                                "workers connected",
+                                "put operation",
+                                "get operation",
+                                "starting stage",
+                            ]
+                        ):
+                            benchmark_started = True
+                            logger.info(
+                                "✓ Benchmark has started - monitoring progress..."
+                            )
+
+                    # Check for completion indicators
+                    if benchmark_started and any(
+                        keyword in logs.lower()
+                        for keyword in [
+                            "completed",
+                            "finished",
+                            "benchmark done",
+                            "all stages complete",
+                        ]
+                    ):
+                        benchmark_completed = True
+                        logger.info("✓ Benchmark appears to have completed")
+                        break
+
+                    # Check for errors
+                    if "error" in logs.lower() or "failed" in logs.lower():
+                        logger.warning(
+                            "Detected error messages in logs, but continuing to monitor..."
+                        )
+
+                except Exception as e:
+                    logger.debug(f"Could not check logs: {e}")
+
+                time.sleep(1)
+
+            if benchmark_completed:
+                logger.info("Benchmark execution completed successfully")
+                return "Benchmark completed (monitored via logs)"
+            elif benchmark_started:
+                logger.warning(
+                    f"Benchmark started but may not have completed within {timeout}s"
+                )
+                return "Benchmark started (monitoring timed out)"
+            else:
+                logger.warning(
+                    "Could not confirm benchmark started. For goroom images, "
+                    "the benchmark should auto-start when workers connect. "
+                    "Check server and worker pod logs for details."
+                )
+                return "Benchmark trigger attempted (status uncertain)"
+
+        except Exception as e:
+            logger.error(f"Failed to trigger/monitor benchmark: {e}")
             raise
 
     def get_workload_status(self):

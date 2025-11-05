@@ -279,7 +279,7 @@ class GOSBenchWorkloadManager:
         finally:
             self._benchmark_running = False
 
-    def stop(self) -> bool:
+    def stop(self, delete_bucket: bool = True, grace_period: int = 5) -> bool:
         """
         Stop and cleanup the GOSBENCH workload.
 
@@ -288,6 +288,12 @@ class GOSBenchWorkloadManager:
         2. Stops server and worker deployments
         3. Cleans up all Kubernetes resources
         4. Waits for background thread to complete (if running)
+        5. Optionally deletes S3 bucket with grace period
+
+        Args:
+            delete_bucket: Whether to delete the S3 bucket (default: True)
+            grace_period: Seconds to wait before deleting bucket to allow
+                         in-flight operations to complete (default: 5)
 
         Returns:
             bool: True if stopped successfully
@@ -306,8 +312,10 @@ class GOSBenchWorkloadManager:
                         "proceeding with cleanup anyway"
                     )
 
-            # Stop the workload
-            self.workload.stop_workload()
+            # Stop the workload with bucket deletion options
+            self.workload.stop_workload(
+                delete_bucket=delete_bucket, grace_period=grace_period
+            )
 
             logger.info(f"✓ GOSBENCH workload stopped: {self.workload_name}")
             return True
