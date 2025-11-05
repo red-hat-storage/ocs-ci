@@ -492,7 +492,7 @@ class BusyBox(DRWorkload):
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             if self.is_placement:
                 clusterset_name = (
-                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name(switch_ctx)[0]
                 )
                 managed_clusterset_binding_yaml_data = templating.load_yaml(
                     self.managed_clusterset_binding_file
