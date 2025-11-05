@@ -3720,3 +3720,4 @@ THANOS_QUERIER_INTERNAL_ADDRESS = "https://thanos-querier.openshift-monitoring.s
 CLUSTER_MONITORING_VIEW_ROLE = "cluster-monitoring-view"
 CEPHOBJECTSTORE_NAME = f"{DEFAULT_STORAGE_CLUSTER}-{CEPHOBJECTSTORE}"
 ENABLE_RGW_HPA_ANNOTATION_KEY = "ocs.openshift.io/enable-rgw-autoscale"
+
