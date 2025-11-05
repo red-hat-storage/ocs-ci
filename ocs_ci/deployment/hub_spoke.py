@@ -1541,16 +1541,32 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("disable_default_sources", True)
         )
-        return self.create_kubevirt_ocp_cluster(
-            name=self.name,
-            nodepool_replicas=nodepool_replicas,
-            cpu_cores=cpu_cores_per_hosted_cluster,
-            memory=memory_per_hosted_cluster,
-            ocp_version=ocp_version,
-            cp_availability_policy=cp_availability_policy,
-            infra_availability_policy=infra_availability_policy,
-            disable_default_sources=disable_default_sources,
+
+        hosted_cluster_platform = (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("hosted_cluster_platform", "kubevirt")
         )
+        if hosted_cluster_platform == "agent":
+            return self.create_agent_ocp_cluster(
+                name=self.name,
+                nodepool_replicas=nodepool_replicas,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+            )
+        else:
+            return self.create_kubevirt_ocp_cluster(
+                name=self.name,
+                nodepool_replicas=nodepool_replicas,
+                cpu_cores=cpu_cores_per_hosted_cluster,
+                memory=memory_per_hosted_cluster,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+            )
 
     def deploy_dependencies(
         self,
@@ -1623,9 +1639,7 @@ class HypershiftHostedOCP(
             self.update_hcp_binary()
 
         # Enable central infrastructure management service for agent
-        if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
-            # create Provisioning resource if not present
-
+        if config.ENV_DATA.get("enable_infrastructure_management_for_agent"):
             provisioning_obj = OCS(
                 **OCP(kind=constants.PROVISIONING).get().get("items")[0]
             )
@@ -1643,7 +1657,6 @@ class HypershiftHostedOCP(
                 OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True)["items"]
             ):
                 create_agent_service_config()
-                create_host_inventory()
 
     def _compute_target_release_image(self):
         """
