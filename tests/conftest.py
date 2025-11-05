@@ -7614,7 +7614,7 @@ def discovered_apps_dr_workload(request):
     instances = []
 
     def factory(
-        kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL, multi_ns=False
+        kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL, multi_ns=False, workloads=None
     ):
         """
         Args:
@@ -7639,6 +7639,18 @@ def discovered_apps_dr_workload(request):
             raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
+        if workloads:
+            if workloads == "filebrowser":
+                if pvc_interface == constants.CEPHFILESYSTEM:
+                    workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
+                else:
+                    workload_key = "dr_workload_discovered_apps_filebrowser_rbd"
+            elif workloads == "mongodb":
+                if pvc_interface == constants.CEPHFILESYSTEM:
+                    workload_key = "dr_workload_discovered_apps_mongodb_cephfs"
+                else:
+                    workload_key = "dr_workload_discovered_apps_mongod_rbd"
+
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
 
         if bool(kubeobject):
