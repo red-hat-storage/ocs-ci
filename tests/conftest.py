@@ -7327,16 +7327,11 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
     return factory
 
 
-@pytest.fixture()
-def dr_workload(request):
-    """
-    Setup Busybox workload for DR setup
-
-    """
+def create_workload_factory():
     instances = []
     ctx = []
 
-    def factory(
+    def _create_resources(
         num_of_subscription=1,
         num_of_appset=0,
         appset_model=None,
@@ -7417,7 +7412,7 @@ def dr_workload(request):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
 
-    def teardown():
+    def _teardown():
         failed_to_delete = []
         for instance in instances:
             try:
@@ -7429,6 +7424,57 @@ def dr_workload(request):
             raise ResourceNotDeleted(
                 f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
             )
+
+    def factory(
+        num_of_subscription=1,
+        num_of_appset=0,
+        appset_model=None,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        switch_ctx=None,
+    ):
+        return _create_resources(
+            num_of_subscription, num_of_appset, appset_model, pvc_interface, switch_ctx
+        )
+
+    return factory, _teardown
+
+
+@pytest.fixture(autouse=True, scope="session")
+def dr_workload_end_to_end(request):
+    """
+    Run dr workloads throug out the session, used mostly in the case of
+    DR upgrades. Starts at the beginning of session and ends once all tests
+    are done
+    """
+
+    log.info("Setting up dr workloads running along the session")
+    factory, teardown = create_workload_factory()
+    log.info("Deploying the DR workloads")
+    try:
+        factory()
+    except Exception:  # TODO: If possible find specific exceptions
+        log.info("DR workload factory invocation failed at session start")
+
+    def _finalizer():
+        try:
+            teardown()
+        except Exception as e:
+            log.exception("Failed to teardown DR workloads")
+            raise e
+
+    request.add_finalizer(_finalizer)
+
+    return factory
+
+
+@pytest.fixture()
+def dr_workload(request):
+    """
+    Setup Busybox workload for DR setup
+
+    """
+
+    factory, teardown = create_workload_factory()
 
     request.addfinalizer(teardown)
     return factory
