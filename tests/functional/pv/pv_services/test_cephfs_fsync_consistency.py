@@ -24,7 +24,7 @@ class TestCephfsFsyncConsistency(ManageTest):
         """ """
         filename = "/mnt/shared_filed.html"
         data = "Test fsync "
-        lines_to_write = [f"{data}{i}\n" for i in range(1, 2500)]
+        lines_to_write = [f"{data}{i}\n" for i in range(1, 2501)]
         logger.info("Writing lines and syncing...")
         try:
             for line in lines_to_write:
