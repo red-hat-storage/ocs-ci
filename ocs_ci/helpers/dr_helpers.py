@@ -2603,8 +2603,45 @@ def mdr_post_failover_check(namespace, timeout=1200):
         helpers.wait_for_resource_state(
             resource=pvc_obj, state=constants.STATUS_TERMINATING, timeout=timeout
         )
-def verify_mirroring_status_on_primary(
-    kind, namespace, state="primary", resource_name=""
+
+
+def fetch_mirroring_health_for_the_cluster(
+    cluster_name, cephbpradosns=None, timeout=600
+):
+    """
+    This method is for fetching mirroring health for a cluster
+
+    Args:
+        cluster_name (str): Name of specific cluster
+        cephbpradosns (str): cephblockpoolradosnamespaces name
+
+    Returns:
+        mirroring health (str): mirroring health
+
+    """
+    logger.info(f"Fetching mirroring health on cluster {cluster_name}")
+    if not cephbpradosns:
+        cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+        cbp_obj = ocp.OCP(
+            kind=constants.CEPHBLOCKPOOLRADOSNS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=cephbpradosns,
+        )
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOLRADOSNS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=cephbpradosns,
+    )
+    # fetch mirroring status
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
+    logger.info(f"Mirroring status: {mirroring_status}")
+    mirroring_health = mirroring_status.get("health")
+
+    return mirroring_health
+
+
+def fetch_status_and_type_reflecting_on_vr_or_vgr(
+    namespace, kind=constants.VOLUME_REPLICATION, resource_name="", timeout=600
 ):
     """
     This method is for validating the status message updated to reflect the current mirroring status
