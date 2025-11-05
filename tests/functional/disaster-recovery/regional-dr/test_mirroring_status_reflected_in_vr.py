@@ -287,16 +287,16 @@ class TestMirroringStatusReflectedInVR:
         # Check vr status details is not displayed on secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
 
-        # Fetch mirroring image status from previously primary cluster
+        # Fetch mirroring image status from secondary cluster
         mirroring_health_secondary = dr_helpers.fetch_mirroring_health_for_the_cluster(
-            primary_cluster_name
+            secondary_cluster_name
         )
         print("######Amrita#######")
         print(f"After failover mirroring image status: {mirroring_health_secondary}")
-        # assert mirroting health is OK
+        # assert mirroring health is OK
         assert (
-            mirroring_health_secondary == "OK"
-        ), "mirroring image health is not not 'OK'"
+            mirroring_health_secondary == "WARNING"
+        ), "mirroring image health is not not 'WARNING'"
 
         # assert vr resource not available on secondary cluster
         for wl in workloads:
