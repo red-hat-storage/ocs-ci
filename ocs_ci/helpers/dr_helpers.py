@@ -2601,6 +2601,7 @@ def verify_volsync():
         )
     config.switch_ctx(restore_index)
 
+
 def verify_cluster_data_protected_status(
     workload_type, namespace, workload_placement_name=None
 ):
@@ -2648,6 +2649,7 @@ def mdr_post_failover_check(namespace, timeout=1200):
             resource=pvc_obj, state=constants.STATUS_TERMINATING, timeout=timeout
         )
 
+
 def get_vgs_name(vgs_namespace):
     """
     Fetches the name of Volume Group Snapshot from Replication Group Source
@@ -2687,6 +2689,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
     )
     if not sample.wait_for_func_status(result=True):
         raise Exception("VolumeGroupSnapshot has not been created..")
+
 
 def is_cg_cephfs_enabled():
     """
