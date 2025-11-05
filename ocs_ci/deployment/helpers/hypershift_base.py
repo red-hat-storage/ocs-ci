@@ -867,14 +867,16 @@ class HyperShiftBase:
             ssh_pub_key = ssh_key.read().strip()
         # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
         #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
+
+        infra_env_namespace = infra_env_name
+
+        # Create project
+        create_project(project_name=infra_env_namespace)
+
         for data in infra_env_data:
             if data["kind"] == constants.INFRA_ENV:
                 data["spec"]["sshAuthorizedKey"] = ssh_pub_key
                 data["metadata"]["name"] = infra_env_name
-                infra_env_namespace = f"clusters-{infra_env_name}"
-                data["metadata"]["namespace"] = infra_env_namespace
-                # Create project
-                create_project(project_name=infra_env_namespace)
                 # Create new secret in the namespace using the existing secret
                 secret_obj = OCP(
                     kind=constants.SECRET,
@@ -894,6 +896,7 @@ class HyperShiftBase:
                 templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
                 # Create secret like this to avoid printing in logs
                 exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
+            data["metadata"]["namespace"] = infra_env_namespace
             resource_obj = create_resource(**data)
             if data["kind"] == constants.INFRA_ENV:
                 infra_env = resource_obj
