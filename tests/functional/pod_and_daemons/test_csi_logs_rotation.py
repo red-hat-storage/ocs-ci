@@ -18,7 +18,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
-WAIT_FOR_ROTATION_TIME = 1200  # seconds
+WAIT_FOR_ROTATION_TIME = 1500  # seconds
 SLEEP_BETWEEN_TRIES = 300  # seconds
 
 
