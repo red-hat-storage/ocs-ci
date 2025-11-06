@@ -122,6 +122,7 @@ class TestRGWAndKafkaNotifications(E2ETest):
         s3_resource = boto3.resource(
             "s3",
             verify=retrieve_verification_mode(),
+            region_name=config.ENV_DATA["region"],
             endpoint_url=rgw_endpoint,
             aws_access_key_id=obc_obj.access_key_id,
             aws_secret_access_key=obc_obj.access_key,
@@ -172,10 +173,10 @@ class TestRGWAndKafkaNotifications(E2ETest):
             pod_list = get_pod_name_by_pattern(
                 pattern="my-cluster-controller", namespace=constants.AMQ_NAMESPACE
             )
-            zookeeper_obj = get_pod_obj(
+            controller_obj = get_pod_obj(
                 name=pod_list[0], namespace=constants.AMQ_NAMESPACE
             )
-            event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
+            event_obj = controller_obj.exec_cmd_on_pod(command=cmd)
             log.info(f"Event obj: {event_obj}")
             event_time = event_obj.get("Records")[0].get("eventTime")
             format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
