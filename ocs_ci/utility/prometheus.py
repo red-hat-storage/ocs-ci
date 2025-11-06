@@ -762,7 +762,8 @@ class PrometheusAPI(object):
                 # no need raise Assertion error or Exception here:
                 # 1. It will not lead to a test failure, fixture is in parallel Thread, in SetUp
                 # 2. One bad response should not fail the test
-                # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway on checking alert list
+                # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway
+                #    on checking alert list
                 logger.error(msg)
 
     def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
