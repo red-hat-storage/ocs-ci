@@ -4110,7 +4110,10 @@ def mirror_image(image, cluster_config=None):
     """
     if not cluster_config:
         cluster_config = config
-    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry")
+    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry", "").rstrip("/")
+    mirror_registry_path = cluster_config.DEPLOYMENT.get(
+        "mirror_registry_path", ""
+    ).strip("/")
     if not mirror_registry:
         raise ConfigurationError(
             'DEPLOYMENT["mirror_registry"] parameter not configured!\n'
@@ -4131,7 +4134,12 @@ def mirror_image(image, cluster_config=None):
         else:
             orig_image_full = image_inspect[0]["RepoDigests"][0]
         # prepare mirrored image url
-        mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
+        # normalize and join properly
+        mirror_base = mirror_registry
+        if mirror_registry_path:
+            mirror_base = f"{mirror_registry}/{mirror_registry_path}"
+
+        mirrored_image = mirror_base + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
