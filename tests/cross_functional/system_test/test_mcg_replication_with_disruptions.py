@@ -292,7 +292,7 @@ class TestLogBasedReplicationWithDisruptions:
         mcg_obj_session,
         aws_log_based_replication_setup,
         noobaa_db_backup,
-        noobaa_db_recovery_from_backup,
+        noobaa_db_backup_and_recovery_locally,
         setup_mcg_bg_features,
         validate_mcg_bg_features,
     ):
@@ -366,9 +366,6 @@ class TestLogBasedReplicationWithDisruptions:
             ), f"Deletion sync failed to complete for the objects {objs_to_delete} deleted in the first bucket set"
 
         # Take noobaa db backup and remove deletion replication policy for the second bucket set
-        # Get noobaa pods before execution
-        noobaa_pods = get_noobaa_pods()
-
         # Get noobaa PVC before execution
         noobaa_pvc_obj = get_pvc_objs(pvc_names=[constants.NOOBAA_DB_PVC_NAME])
 
@@ -387,7 +384,7 @@ class TestLogBasedReplicationWithDisruptions:
         ), "Deletion sync was done but not expected"
 
         # Do noobaa db recovery and see if the deletion sync works now
-        noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
+        noobaa_db_backup_and_recovery_locally()
         wait_for_noobaa_pods_running(timeout=420)
 
         assert compare_bucket_object_list(
