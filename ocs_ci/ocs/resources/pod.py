@@ -49,6 +49,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -1779,6 +1780,60 @@ def get_osd_prepare_pods(
     osds = get_pods_having_label(osd_prepare_label, namespace)
     osd_pods = [Pod(**osd) for osd in osds]
     return osd_pods
+
+
+def get_csi_addons_pod():
+    """
+    Find a CSI addon pod that contains the 'csi-addons' container.
+
+    In ODF 4.20, CSI addon functionality is in dedicated pods with the label
+    'app=openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons'.
+
+    Returns:
+        Pod: A Pod object that contains the 'csi-addons' container
+
+    Raises:
+        AssertionError: If no CSI addon pod with 'csi-addons' container is found
+
+    """
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    try:
+        addon_pods = get_pods_having_label(
+            CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        if not addon_pods:
+            raise AssertionError(
+                f"No CSI addon pods found with label '{CSI_RBD_ADDON_NODEPLUGIN_LABEL_420}' "
+                f"in namespace {namespace}"
+            )
+
+        pod_obj = Pod(**addon_pods[0])
+
+        # Verify the pod actually has the 'csi-addons' container
+        csi_addon_container = pod_obj.get_container_data("csi-addons")
+        if not csi_addon_container:
+            raise AssertionError(
+                f"CSI addon pod '{pod_obj.name}' exists but does not contain 'csi-addons' container"
+            )
+
+        logger.info(f"Found CSI addon pod: {pod_obj.name}")
+        return pod_obj
+
+    except Exception as e:
+        # Provide helpful diagnostic information
+        try:
+            all_pods = get_all_pods(namespace=namespace)
+            csi_pod_names = [pod.name for pod in all_pods if "csi" in pod.name.lower()]
+            error_msg = (
+                f"Failed to find CSI addon pod in namespace {namespace}. "
+                f"Error: {str(e)}. Available CSI-related pods: {csi_pod_names}"
+            )
+        except Exception:
+            error_msg = f"Failed to find CSI addon pod in namespace {namespace}. Error: {str(e)}"
+
+        raise AssertionError(error_msg)
 
 
 def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):

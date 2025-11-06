@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
 )
 from ocs_ci.framework.pytest_customization.marks import polarion_id
-from ocs_ci.helpers.helpers import get_csi_addon_pod
+from ocs_ci.ocs.resources.pod import get_csi_addons_pod
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class TestCSIAddonPodSecurity:
         log.info("Validating CSI Addon pod security standards")
 
         # Find a pod with the 'csi-addons' container (handles both old and new pod structures)
-        pod_obj = get_csi_addon_pod()
+        pod_obj = get_csi_addons_pod()
         log.info(f"Using CSI addon pod: {pod_obj.name}")
 
         csi_addon_container = pod_obj.get_container_data("csi-addons")
