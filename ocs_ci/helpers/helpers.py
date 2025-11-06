@@ -6912,7 +6912,7 @@ def verify_socket_permission(node_name, host_path, socket_name):
         at host path on given node.
 
     """
-    ocp = OCP(kind="node")
+    ocp = OCP(kind=constants.NODE)
     result = ocp.exec_oc_debug_cmd(
         node=node_name, cmd_list=[f"stat -c '%a %U:%G %F' {host_path}/{socket_name}"]
     )
