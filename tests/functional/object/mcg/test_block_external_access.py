@@ -5,7 +5,15 @@ import pytest
 
 from time import sleep
 
-from ocs_ci.framework.testlib import MCGTest, red_squad, mcg, tier2
+from ocs_ci.framework.testlib import (
+    MCGTest,
+    red_squad,
+    mcg,
+    tier2,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
+    post_upgrade,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -82,6 +90,9 @@ def save_original_state(request):
 @red_squad
 @mcg
 @pytest.mark.usefixtures("save_original_state")
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
+@post_upgrade
 class TestBlockExternalAccess(MCGTest):
     @pytest.fixture(scope="class", autouse=True)
     def cleanup(self, request):
