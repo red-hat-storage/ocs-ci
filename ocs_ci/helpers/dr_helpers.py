@@ -2405,7 +2405,7 @@ def configure_rdr_hub_recovery():
     return True
 
 
-def get_cluster_set_name():
+def get_cluster_set_name(switch_ctx=None):
     """
     Get Cluster set name from managedcluster
 
@@ -2414,7 +2414,7 @@ def get_cluster_set_name():
     """
     cluster_set = []
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
     current_managed_clusters_list = [
         cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
