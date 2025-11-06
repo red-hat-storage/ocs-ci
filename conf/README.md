@@ -49,6 +49,9 @@ run it belongs here.
 * `ocp_url` - OCP Cluster URL (api or console) used to login to OCP cluster if kubeconfig is not available
 * `cli_params` - Dict that holds onto all CLI parameters
 * `client_version` - OCP client version
+* `use_system_available_oc_client` - if no client avalable in bin dir, use system
+  available client and copy it to bin dir.
+* `skip_oc_client_version_comparison` - do not compare oc client version
 * `bin_dir` - Directory where binaries are downloaded to
 * `google_api_secret` - Filepath to google api secret json file
 * `force_chrome_branch_base` - Chrome base branch for openshift console UI testing
