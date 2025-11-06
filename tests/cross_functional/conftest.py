@@ -1668,7 +1668,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             noobaa_obj.exec_oc_cmd("delete noobaas.noobaa.io  --all")
         except TimeoutExpired:
             params = '{"metadata": {"finalizers":null}}'
-            noobaa_obj.exec_oc_cmd(f"patch noobaas/noobaa --type=merge -p {params}")
+            noobaa_obj.exec_oc_cmd(f"patch noobaas/noobaa --type=merge -p '{params}' ")
 
         logger.info("--------NooBaa resource rebuild verification----------")
         logger.info(
