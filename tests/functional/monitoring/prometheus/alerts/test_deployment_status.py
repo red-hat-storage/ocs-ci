@@ -143,7 +143,7 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd, threading_lock):
             "Disk not responding",
             ["pending", "firing"],
             "error",
-            False,
+            True,
         ),
         (
             constants.ALERT_DATARECOVERYTAKINGTOOLONG,
@@ -157,7 +157,7 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd, threading_lock):
             "Storage cluster is in degraded state",
             ["pending", "firing"],
             "warning",
-            False,
+            True,
         ),
     ]:
         prometheus.check_alert_list(
