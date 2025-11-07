@@ -123,6 +123,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         )
 
         # Create the PVC for VM1
+        pvc_name = (f"pvc-hotplug-vm1-{vm_obj_pvc.name}")[:35]
         pvc_obj = pvc_factory(
             project=proj_obj,
             pvc_name="hotplug-pvc",
@@ -130,6 +131,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
             volume_mode=constants.VOLUME_MODE_BLOCK,
+            pvc_name=pvc_name,
         )
         log.info(f"PVC {pvc_obj.name} created successfully")
 
@@ -141,6 +143,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         )
 
         # Create the PVC for VM2
+        pvc_name = (f"pvc-hotplug-vm2-{vm_obj_dvt.name}")[:35]
         dvt_obj = pvc_factory(
             project=proj_obj,
             pvc_name="hotplug-dvt",
@@ -148,6 +151,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
             volume_mode=constants.VOLUME_MODE_BLOCK,
+            pvc_name=pvc_name,
         )
         log.info(f"PVC {dvt_obj.name} created successfully")
 
