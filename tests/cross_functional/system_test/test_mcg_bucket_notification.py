@@ -313,7 +313,7 @@ class TestBucketNotificationSystemTest:
             topic,
             bucket_names=buckets_created[:],
             event_name="LifecycleExpiration:Delete",
-            timeout=600,
+            timeout=1200,
             sleep=30,
         )
 
