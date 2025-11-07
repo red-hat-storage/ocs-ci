@@ -36,7 +36,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
-from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
+from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1712,16 +1712,27 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         mcg_obj_session.update_s3_creds()
 
         # Verify default backingstore/bucketclass
-        default_bs = OCP(
-            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
-        ).get(resource_name=DEFAULT_NOOBAA_BACKINGSTORE)
+        sample = TimeoutSampler(
+            timeout=500,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get Backingstore noobaa-default-backing-store -n openshift-storage",
+            expected_output_lst={
+                "noobaa-default-backing-store",
+                "s3-compatible",
+                "Ready",
+            },
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception(
+                "Backingstore noobaa-default-backing-store is not recreated"
+            )
+
         default_bc = OCP(
             kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
         ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
         assert (
-            default_bs["status"]["phase"]
-            == default_bc["status"]["phase"]
-            == constants.STATUS_READY
+            default_bc["status"]["phase"] == constants.STATUS_READY
         ), "Failed: Default bs/bc are not in ready state"
 
         # Create OBCs
