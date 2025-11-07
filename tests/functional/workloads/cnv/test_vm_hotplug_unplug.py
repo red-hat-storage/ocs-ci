@@ -92,7 +92,7 @@ class TestVmHotPlugUnplug(E2ETest):
             assert (
                 source_csum == new_csum
             ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
-            pvc_name = (f"pvc-hotplug-1-{vm_obj.name}")[:35]
+            pvc_name = (f"pvc-hotplug-2-{vm_obj.name}")[:35]
             pvc_obj_wout = pvc_factory(
                 project=proj_obj,
                 storageclass=sc_obj,
