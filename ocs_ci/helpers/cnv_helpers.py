@@ -620,3 +620,10 @@ def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
     return "running" in output
+
+
+def setup_kms(pv_encryption_kms_setup_factory):
+    logger.info("Setting up csi-kms-connection-details configmap")
+    kms = pv_encryption_kms_setup_factory(kv_version="v2")
+    logger.info("csi-kms-connection-details setup successful")
+    return kms
