@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.pytest_customization.marks import workloads, magenta_squad
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, setup_kms
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.utility.utils import run_cmd
@@ -20,12 +20,15 @@ class TestCNVVM(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, multi_cnv_workload):
+    def setup(
+        self, project_factory, pv_encryption_kms_setup_factory, multi_cnv_workload
+    ):
         """
         Setting up VMs for tests
 
         """
 
+        kms = setup_kms(pv_encryption_kms_setup_factory)
         # Create a project
         proj_obj = project_factory()
         (
@@ -33,7 +36,7 @@ class TestCNVVM(E2ETest):
             self.vm_objs_aggr,
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
-        ) = multi_cnv_workload(namespace=proj_obj.namespace, encrypted=True)
+        ) = multi_cnv_workload(namespace=proj_obj.namespace, encrypted=True, kms=kms)
 
         logger.info("All vms created successfully")
 

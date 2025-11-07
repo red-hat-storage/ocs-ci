@@ -658,3 +658,11 @@ def generate_vm_password(length=10):
 
     # Join the list into a single string and return
     return "".join(password_parts)
+
+
+def setup_kms(pv_encryption_kms_setup_factory):
+    logger.info("Setting up csi-kms-connection-details configmap")
+    kms = pv_encryption_kms_setup_factory(kv_version="v2")
+    logger.info("csi-kms-connection-details setup successful")
+
+    return kms
