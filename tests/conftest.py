@@ -7327,6 +7327,12 @@ def dr_workload_end_to_end(request):
     are done
     """
 
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
+    ):
+        return
     log.info("Setting up dr workloads running along the session")
     factory, teardown = create_workload_factory()
     log.info("Deploying the DR workloads")
