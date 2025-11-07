@@ -7439,30 +7439,37 @@ def create_workload_factory():
     return factory, _teardown
 
 
-@pytest.fixture(autouse=True, scope="session")
 def dr_workload_end_to_end(request):
     """
+    TODO: Remove this function if pytest_sessionstart hook works
     Run dr workloads throug out the session, used mostly in the case of
     DR upgrades. Starts at the beginning of session and ends once all tests
     are done
     """
 
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
+    ):
+        return
     log.info("Setting up dr workloads running along the session")
     factory, teardown = create_workload_factory()
     log.info("Deploying the DR workloads")
     try:
         factory()
     except Exception:  # TODO: If possible find specific exceptions
-        log.info("DR workload factory invocation failed at session start")
+        log.warning("DR workload factory invocation failed at session start")
 
     def _finalizer():
         try:
+            log.info("Teardown session dr workload")
             teardown()
         except Exception as e:
             log.exception("Failed to teardown DR workloads")
             raise e
 
-    request.add_finalizer(_finalizer)
+    request.addfinalizer(_finalizer)
 
     return factory
 
@@ -10221,6 +10228,35 @@ def set_encryption_at_teardown(request):
     request.addfinalizer(teardown)
 
 
+def pytest_sessionstart(session):
+    """
+    Creating this hook to handle session scoped dr workload
+    especially for DR upgrade scenarios
+    """
+    session._dr_workload_teardown = None
+
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
+    ):
+        return
+
+    prev_ctx = ocsci_config.cur_index
+    log.info("Setting up dr workloads running along the session")
+    factory, teardown = create_workload_factory()
+    session._dr_workload_teardown = teardown
+    try:
+        log.info("Deploying the DR workloads")
+        factory()
+    except Exception as e:
+        log.warning(
+            f"DR workload factory invocation failed at session start, not failing the run: {e}"
+        )
+    finally:
+        ocsci_config.switch_ctx(prev_ctx)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """
     Do some session finish teardown functionality
@@ -10231,6 +10267,14 @@ def pytest_sessionfinish(session, exitstatus):
         cluster_load.finish_cluster_load()
     except Exception:
         log.exception("During finishing the Cluster load an exception was hit!")
+
+    # Handle dr workload teardown if its set
+    if session._dr_workload_teardown:
+        try:
+            log.info("Tearing down session DR workloads")
+            session._dr_workload_teardown()
+        except Exception:
+            log.exception("DR workload teardown failed")
 
 
 @pytest.fixture()
