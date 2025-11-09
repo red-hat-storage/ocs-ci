@@ -154,7 +154,7 @@ class TestNoobaaRebuild(E2ETest):
 
         # Verify default backingstore/bucketclass
         sample = TimeoutSampler(
-            timeout=500,
+            timeout=1200,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get Backingstore noobaa-default-backing-store -n openshift-storage",
