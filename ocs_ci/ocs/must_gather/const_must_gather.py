@@ -16,8 +16,8 @@ OCS 4.20 Notes:
 - Significant structural changes: files now organized by API group in subdirectories
   (e.g., apps/, core/, noobaa/, ceph/)
 - The existing os.walk() validation logic handles the new structure automatically
-- Added 43 new CEPH commands (see GATHER_COMMANDS_CEPH_4_20)
-- Added 13 new JSON commands (see GATHER_COMMANDS_JSON_4_20)
+- Added 38 new CEPH commands (see GATHER_COMMANDS_CEPH_4_20)
+- Added 12 new JSON commands (see GATHER_COMMANDS_JSON_4_20)
 - Deprecated commands removed via GATHER_COMMANDS_JSON_4_20_EXCLUDE:
   * ceph_osd_blacklist_ls replaced by ceph_osd_blocklist_ls (terminology change)
   * ceph_balancer_pool_ls no longer collected
@@ -743,7 +743,6 @@ GATHER_COMMANDS_CEPH_4_20 = [
     "ceph_healthcheck_history_ls",
     "ceph_log_last_10000_debug_audit",
     "ceph_log_last_10000_debug_cluster",
-    "ceph_osd_pool_autoscale-status",
     "ceph_progress",
     "ceph_progress_json",
     "ceph_rbd_task_list",
@@ -754,10 +753,6 @@ GATHER_COMMANDS_CEPH_4_20 = [
     "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_dump_ops_in_flight",
     "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_session_ls",
     "cephfs_subvol_and_snap_info",
-    "config_osd.0",
-    "config_osd.1",
-    "config_osd.2",
-    "pools_rbd_ocs-storagecluster-cephblockpool",
     "rados_cephfs_objects",
     "rados_ls_--pool=ocs-storagecluster-cephblockpool",
     "rados_ls_--pool=ocs-storagecluster-cephfilesystem-metadata_--namespace=csi",
@@ -766,8 +761,8 @@ GATHER_COMMANDS_CEPH_4_20 = [
     "radosgw-admin_bucket_list",
     "radosgw-admin_bucket_stats",
     "radosgw-admin_realm_list",
-    "radosgw-admin_zone_list",
-    "radosgw-admin_zonegroup_list",
+    "radosgw-admin_zone_get",
+    "radosgw-admin_zonegroup_get",
     "rbd_ls_ocs-storagecluster-cephblockpool",
     "rbd_mirror_group_snapshot_schedule_ls",
     "rbd_mirror_group_snapshot_schedule_status",
@@ -791,7 +786,6 @@ GATHER_COMMANDS_JSON_4_20 = [
     "ceph_log_last_10000_debug_audit_--format_json-pretty",
     "ceph_log_last_10000_debug_cluster_--format_json-pretty",
     "ceph_osd_blocklist_ls_--format_json-pretty",
-    "ceph_osd_pool_autoscale-status_--format_json-pretty",
     "ceph_rbd_task_list_--format_json-pretty",
     "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_client_ls_--format_json-pretty",
     "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_damage_ls_--format_json-pretty",
