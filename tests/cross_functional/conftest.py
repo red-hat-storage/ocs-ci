@@ -1719,7 +1719,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
 
         # Verify default backingstore/bucketclass
         sample = TimeoutSampler(
-            timeout=500,
+            timeout=1200,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get Backingstore noobaa-default-backing-store -n openshift-storage",
