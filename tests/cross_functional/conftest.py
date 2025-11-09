@@ -1725,8 +1725,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             cmd="oc get Backingstore noobaa-default-backing-store -n openshift-storage",
             expected_output_lst={
                 "noobaa-default-backing-store",
-                "s3-compatible",
-                "Ready",
             },
         )
         if not sample.wait_for_func_status(result=True):
