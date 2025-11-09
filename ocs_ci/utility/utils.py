@@ -469,7 +469,6 @@ def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
         return False
 
     # Base64 alphabet: A-Z, a-z, 0-9, +, /, = (padding)
-    # Must be at least 90% base64 characters
     # Using string module to avoid detect-secrets false positive
     base64_chars = set(string.ascii_letters + string.digits + "+/=")
     non_whitespace = text_block.replace("\n", "").replace("\r", "").replace(" ", "")
@@ -477,10 +476,28 @@ def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
     if not non_whitespace:
         return False
 
+    # Check character composition
     base64_char_count = sum(1 for char in non_whitespace if char in base64_chars)
     ratio = base64_char_count / len(non_whitespace)
 
-    return ratio >= 0.90
+    # Must be 100% base64 characters (no spaces, punctuation, etc.)
+    if ratio < 1.0:
+        return False
+
+    # Additional heuristic: reject if it looks like regular text
+    # Regular text is heavily lowercase-skewed (80%+ lowercase)
+    # Base64 can have any distribution, so we only reject obvious text patterns
+    upper_count = sum(1 for c in non_whitespace if c.isupper())
+    lower_count = sum(1 for c in non_whitespace if c.islower())
+
+    # If there are letters, check if it's heavily lowercase (indicates text)
+    if upper_count + lower_count > 0:
+        lower_ratio = lower_count / (upper_count + lower_count)
+        # Regular text typically has 80%+ lowercase
+        if lower_ratio > 0.85:
+            return False
+
+    return True
 
 
 def _extract_base64_blocks(lines: list) -> list:

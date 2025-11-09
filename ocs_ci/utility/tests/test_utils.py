@@ -248,9 +248,10 @@ def test_truncate_large_base64_single_large_block():
     """
     Check that large base64 block gets truncated.
     """
-    # Create a large base64 block (2000 chars)
-    large_base64 = "A" * 2000 + "=="
-    output = f"image: myapp\ndata: {large_base64}\nname: test"
+    # Create a large base64 block (2000 chars) - realistic multiline base64
+    large_base64_line1 = "iVBORw0KGgoAAAANSUhEUgAAAA" * 40  # ~1200 chars
+    large_base64_line2 = "AAAAASUVORK5CYII1234567890AB" * 40  # ~1200 chars
+    output = f"image: myapp\n{large_base64_line1}\n{large_base64_line2}\nname: test"
 
     result = utils._truncate_large_base64(output, max_base64_size=1024)
 
@@ -260,7 +261,8 @@ def test_truncate_large_base64_single_large_block():
     assert "image: myapp" in result
     assert "name: test" in result
     # Should NOT contain the large base64
-    assert large_base64 not in result
+    assert large_base64_line1 not in result
+    assert large_base64_line2 not in result
 
 
 def test_truncate_large_base64_small_block_preserved():
