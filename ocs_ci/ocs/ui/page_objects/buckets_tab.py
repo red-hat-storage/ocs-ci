@@ -582,3 +582,50 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         logger.info(
             f"Successfully navigated to folder '{folder_name}' and enabled version listing"
         )
+
+    def navigate_to_bucket_permissions(self, bucket_name: str = None):
+        """
+        Navigate to bucket permissions tab.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Returns:
+            BucketsTabPermissions: Instance of BucketsTabPermissions page object.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        if not bucket_name:
+            self.do_click(self.bucket_tab["bucket_list_items"])
+            self.do_click(self.bucket_tab["permissions_tab"])
+            self.do_click(self.bucket_tab["bucket_policy_tab"])
+            from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
+                BucketsTabPermissions,
+            )
+
+            return BucketsTabPermissions()
+
+        bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
+
+        for bucket_element in bucket_elements:
+            if bucket_element.text != bucket_name:
+                continue
+
+            bucket_element.click()
+            break
+        else:
+            available_buckets = [elem.text for elem in bucket_elements]
+            raise NoSuchElementException(
+                f"Bucket '{bucket_name}' not found in bucket list. "
+                f"Available buckets: {available_buckets}. "
+                "Verify bucket name exists and is visible on current page."
+            )
+
+        self.do_click(self.bucket_tab["permissions_tab"])
+        self.do_click(self.bucket_tab["bucket_policy_tab"])
+        from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
+            BucketsTabPermissions,
+        )
+
+        return BucketsTabPermissions()

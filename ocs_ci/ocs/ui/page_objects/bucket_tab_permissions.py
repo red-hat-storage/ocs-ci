@@ -12,26 +12,19 @@ from selenium.common.exceptions import (
     WebDriverException,
 )
 
-from ocs_ci.ocs.exceptions import PolicyApplicationError, PolicyEditorError
+from ocs_ci.ocs.exceptions import PolicyApplicationError
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy_ui_compatible
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ui.views import SUCCESS_TOAST_SELECTORS
 
 logger = logging.getLogger(__name__)
 
 # Module constants
 DEFAULT_UI_WAIT = 10
 QUICK_WAIT = 5
-
-SUCCESS_TOAST_SELECTORS = [
-    "[data-test='success-toast']",
-    "[role='alert'][class*='success']",
-    "[class*='-c-alert'][class*='success']",
-    ".toast-notifications-list-pf .alert-success",
-    ".co-alert--success",
-]
 
 
 class PolicyType(Enum):
@@ -65,12 +58,15 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
     # Policy action button keys to try in order
     _POLICY_ACTION_BUTTONS = ("apply_policy_button", "save_policy_generic_button")
 
-    def navigate_to_bucket_permissions(self, bucket_name: str = None) -> None:
+    def navigate_to_bucket_permissions(self, bucket_name: str = None):
         """
         Navigate to bucket permissions tab.
 
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Returns:
+            BucketsTabPermissions: Self for method chaining.
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -79,7 +75,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             self.do_click(self.bucket_tab["bucket_list_items"])
             self.do_click(self.bucket_tab["permissions_tab"])
             self.do_click(self.bucket_tab["bucket_policy_tab"])
-            return
+            return self
 
         bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
 
@@ -99,6 +95,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
         self.do_click(self.bucket_tab["permissions_tab"])
         self.do_click(self.bucket_tab["bucket_policy_tab"])
+        return self
 
     def activate_policy_editor(self) -> None:
         """
@@ -112,19 +109,15 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             NoSuchElementException: If UI elements are not found.
         """
         try:
-            self.wait_for_element_to_be_visible(
-                self.bucket_tab["edit_policy_button"], timeout=QUICK_WAIT
-            )
-            self.do_click(self.bucket_tab["edit_policy_button"])
+            self.do_click(self.bucket_tab["edit_policy_button"], timeout=QUICK_WAIT)
             return
         except (NoSuchElementException, TimeoutException):
             pass
 
         try:
-            self.wait_for_element_to_be_visible(
+            self.do_click(
                 self.bucket_tab["policy_editor_start_scratch"], timeout=QUICK_WAIT
             )
-            self.do_click(self.bucket_tab["policy_editor_start_scratch"])
             return
         except (NoSuchElementException, TimeoutException):
             pass
@@ -361,16 +354,15 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                     "Failed to set policy JSON in Monaco editor using JavaScript approach. "
                     "Check if Monaco editor is properly loaded and accessible."
                 )
-                logger.error(error_msg)
-                raise PolicyEditorError(error_msg)
+                raise TimeoutException(error_msg)
 
         except WebDriverException as e:
             error_msg = (
                 "Failed to set policy JSON in Monaco editor using JavaScript approach. "
                 "Check if Monaco editor is properly loaded and accessible."
             )
-            logger.error(error_msg)
-            raise PolicyEditorError(error_msg) from e
+            logger.exception(error_msg)
+            raise TimeoutException(error_msg) from e
 
     def _check_for_policy_error_dialog(self) -> tuple[bool, str]:
         """

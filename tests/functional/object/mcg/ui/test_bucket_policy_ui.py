@@ -184,17 +184,18 @@ class TestBucketPolicyUI:
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page()
 
-        buckets = bucket_ui.get_buckets_list()
-        if not buckets:
-            pytest.skip("No buckets available for testing")
+        _, target_bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
 
-        bucket_permissions_ui = BucketsTabPermissions()
+        bucket_ui.navigate_buckets_page()
+        bucket_ui.page_has_loaded(sleep_time=2)
 
-        bucket_permissions_ui.navigate_to_bucket_permissions(bucket_name=None)
+        bucket_permissions_ui = bucket_ui.navigate_to_bucket_permissions(
+            bucket_name=target_bucket_name
+        )
 
         bucket_permissions_ui.activate_policy_editor()
 
-        config = PolicyConfig(buckets[0])
+        config = PolicyConfig(target_bucket_name)
         policy_json = bucket_permissions_ui._build_bucket_policy(
             PolicyType.ALLOW_PUBLIC_READ, config
         )
