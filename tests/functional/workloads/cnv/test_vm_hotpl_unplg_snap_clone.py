@@ -125,7 +125,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         # Create the PVC for VM1
         pvc_obj = pvc_factory(
             project=proj_obj,
-            pvc_name="hotplug-pvc",
             storageclass=sc_obj_def,
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
@@ -144,7 +143,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         # Create the PVC for VM2
         dvt_obj = pvc_factory(
             project=proj_obj,
-            pvc_name="hotplug-dvt",
             storageclass=sc_obj_def,
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
