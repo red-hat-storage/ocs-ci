@@ -17,6 +17,8 @@ from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
+    drain_nodes,
+    schedule_nodes,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -436,6 +438,7 @@ class TestZoneShutdownsAndCrashes:
     def test_arbiter_and_zone_shutdow(
         self,
         node_restart_teardown,
+        node_drain_teardown,
         iteration,
         immediate,
         delay,
@@ -572,6 +575,53 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.get_logwriter_reader_pods(
                 label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
             )
+
+            # randomly select a zone to drain the nodes from
+            zone = random.choice(self.zones)
+            nodes_to_drain = sc_obj.get_nodes_in_zone(zone)
+
+            # drain nodes in the selected zone
+            start_time = datetime.now(timezone.utc)
+            drain_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
+            time.sleep(300)
+            schedule_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
+            end_time = datetime.now(timezone.utc)
+
+            # verify the io after all the nodes are scheduled
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGREADER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
+            )
+
+            sc_obj.post_failure_checks(
+                start_time, end_time, wait_for_read_completion=False
+            )
+
+            # check vm data written before the failure for integrity
+            verify_vm_workload(vm_obj, md5sum_before)
+
+            # stop the VM
+            vm_obj.stop()
+            log.info("Stoped the VM successfully")
+
+            # check for any data loss
+            check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+
+            # check for any data loss through logwriter logs
+            verify_data_loss(sc_obj)
+
+            # check for data corruption through logreader logs
+            sc_obj.cephfs_logreader_job.delete()
+            log.info(sc_obj.cephfs_logreader_pods)
+            for pod in sc_obj.cephfs_logreader_pods:
+                pod.wait_for_pod_delete(timeout=120)
+            log.info("All old CephFS logreader pods are deleted")
+            verify_data_corruption(sc_obj, logreader_workload_factory)
 
             # Fetch the nodes in zone that needs to be shutdown
             zone = random.choice(self.zones)
