@@ -2355,7 +2355,7 @@ class Deployment(object):
             OCP().exec_oc_cmd(command=patch_cmd)
 
             # Mark master nodes schedulable if mark_masters_schedulable: True
-            if config.ENV_DATA.get("mark_masters_schedulable", False):
+            if config.ENV_DATA.get("mark_masters_schedulable", True):
                 path = "/spec/mastersSchedulable"
                 params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
                 scheduler_obj = ocp.OCP(
