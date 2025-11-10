@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.pytest_customization.marks import workloads, magenta_squad
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, setup_kms
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.utility.utils import run_cmd
@@ -20,9 +20,7 @@ class TestCNVVM(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(
-        self, project_factory, pv_encryption_kms_setup_factory, multi_cnv_workload
-    ):
+    def setup(self, project_factory, multi_cnv_workload):
         """
         Setting up VMs for tests
 
@@ -31,13 +29,12 @@ class TestCNVVM(E2ETest):
         # Create a project
         proj_obj = project_factory()
         # Setup KMS for PV encryption
-        kms = setup_kms(pv_encryption_kms_setup_factory)
         (
             self.vm_objs_def,
             self.vm_objs_aggr,
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
-        ) = multi_cnv_workload(namespace=proj_obj.namespace, encrypted=True, kms=kms)
+        ) = multi_cnv_workload(namespace=proj_obj.namespace, encrypted=True)
 
         logger.info("All vms created successfully")
 
@@ -70,7 +67,7 @@ class TestCNVVM(E2ETest):
 
     @workloads
     @pytest.mark.polarion_id("OCS-6298")
-    def test_cnv_vms(self, setup, setup_cnv):
+    def test_cnv_vms(self, setup_cnv, setup):
         """
         Tests to verify configuration for non-GS like environment
 
