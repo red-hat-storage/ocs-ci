@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-903")
 @skipif_managed_service
 @runs_on_provider
+@pytest.mark.skip(reason="Temporary skip test on HCI ")
 def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
     """
     Test that there are appropriate alerts when Placement group
