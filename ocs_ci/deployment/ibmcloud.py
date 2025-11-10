@@ -193,6 +193,13 @@ class IBMCloudIPI(CloudDeploymentBase):
             "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
         )
         logger.info(f"clusterID (UUID): {cluster_id}")
+        # adding odf-qe security group to the instances
+        if config.ENV_DATA.get("existing_vpc"):
+            instance_ids = self.get_instance_ids_by_prefix(
+                f"{config.ENV_DATA['cluster_name']}-{config.ENV_DATA['cluster_id']}"
+            )
+            for instance_id in instance_ids:
+                self.add_security_group_to_vsi(instance_id)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -836,3 +843,122 @@ class IBMCloudIPI(CloudDeploymentBase):
         config.ENV_DATA["vpc_name"] = vpc_name
         config.ENV_DATA["control_plane_subnets"] = control_plane_subnets
         config.ENV_DATA["compute_subnets"] = compute_subnets
+
+    def get_instance_ids_by_prefix(prefix):
+        """
+        Get all instance IDs for instances whose names start with the given prefix.
+
+        Args:
+            prefix (str): The prefix to match instance names against
+
+        Returns:
+            list: List of instance IDs that match the prefix, empty list if none found
+        """
+        try:
+            logger.info(f"Fetching instances with prefix: {prefix}")
+            cmd = "ibmcloud is instances --output json"
+            proc = exec_cmd(cmd)
+            instances = json.loads(proc.stdout)
+
+            # Filter instances by name prefix
+            matching_instances = [
+                inst for inst in instances if inst.get("name", "").startswith(prefix)
+            ]
+
+            if not matching_instances:
+                logger.info(f"No instances found with prefix '{prefix}'")
+                return []
+
+            instance_ids = [inst["id"] for inst in matching_instances]
+            instance_names = [inst["name"] for inst in matching_instances]
+
+            logger.info(
+                f"Found {len(instance_ids)} instance(s) with prefix '{prefix}': "
+                f"{', '.join(instance_names)}"
+            )
+
+            return instance_ids
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve instances by prefix '{prefix}': {e}")
+            return []
+
+    def add_security_group_to_vsi(instance_id, security_group_name="odf-qe-sg"):
+        """
+        Add a security group to a VSI's network interface without removing existing security groups.
+
+        Args:
+            instance_id (str): The VSI instance ID
+            security_group_name (str): Name of the security group to add (default: "odf-qe-sg")
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # First, get the security group ID by name
+            logger.info(f"Looking up security group: {security_group_name}")
+            cmd = "ibmcloud is security-groups --output json"
+            proc = exec_cmd(cmd)
+            security_groups = json.loads(proc.stdout)
+
+            security_group = next(
+                (sg for sg in security_groups if sg["name"] == security_group_name),
+                None,
+            )
+
+            if not security_group:
+                logger.error(f"Security group '{security_group_name}' not found")
+                return False
+
+            new_security_group_id = security_group["id"]
+            logger.info(f"Found security group ID: {new_security_group_id}")
+
+            # Get the network interfaces for the instance
+            logger.info(f"Getting network interfaces for instance: {instance_id}")
+            cmd = f"ibmcloud is instance-network-interfaces {instance_id} --output json"
+            proc = exec_cmd(cmd)
+            network_interfaces = json.loads(proc.stdout)
+
+            if not network_interfaces:
+                logger.error(f"No network interfaces found for instance: {instance_id}")
+                return False
+
+            # Get the primary network interface (usually the first one)
+            primary_nic = network_interfaces[0]
+            nic_id = primary_nic["id"]
+            logger.info(f"Using network interface: {nic_id}")
+
+            # Get existing security groups
+            existing_sgs = primary_nic.get("security_groups", [])
+            existing_sg_ids = [sg["id"] for sg in existing_sgs]
+
+            # Check if the security group is already attached
+            if new_security_group_id in existing_sg_ids:
+                logger.info(
+                    f"Security group '{security_group_name}' is already attached to the instance"
+                )
+                return True
+
+            # IMPORTANT: We need to include ALL security groups (existing + new)
+            all_security_group_ids = existing_sg_ids + [new_security_group_id]
+            security_groups_list = ",".join(all_security_group_ids)
+
+            # Update the network interface with all security groups
+            logger.info(
+                f"Adding security group '{security_group_name}' ({new_security_group_id}) "
+                f"to instance {instance_id} network interface {nic_id}. "
+                f"Total security groups: {len(all_security_group_ids)}"
+            )
+            cmd = (
+                f"ibmcloud is instance-network-interface-update "
+                f"{instance_id} {nic_id} --security-groups {security_groups_list}"
+            )
+            exec_cmd(cmd)
+            logger.info(
+                f"Successfully added security group '{security_group_name}' to instance {instance_id}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to add security group to VSI: {e}")
+            return False
