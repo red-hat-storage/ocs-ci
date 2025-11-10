@@ -844,7 +844,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         config.ENV_DATA["control_plane_subnets"] = control_plane_subnets
         config.ENV_DATA["compute_subnets"] = compute_subnets
 
-    def get_instance_ids_by_prefix(prefix):
+    def get_instance_ids_by_prefix(self, prefix):
         """
         Get all instance IDs for instances whose names start with the given prefix.
 
@@ -883,7 +883,7 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.error(f"Failed to retrieve instances by prefix '{prefix}': {e}")
             return []
 
-    def add_security_group_to_vsi(instance_id, security_group_name="odf-qe-sg"):
+    def add_security_group_to_vsi(self, instance_id, security_group_name="odf-qe-sg"):
         """
         Add a security group to a VSI's network interface without removing existing security groups.
 
