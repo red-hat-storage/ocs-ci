@@ -1838,7 +1838,7 @@ validation_4_9 = {
         By.XPATH,
     ),
     "storage-system-external-status-card-hyperlink": (
-        "//div[@role='dialog']//a[contains(text(),'ocs-external-storagecluster-storagesystem')]",
+        "//div[@role='dialog']//a[contains(text(),'ocs-external-storagecluster')]",
         By.XPATH,
     ),
     "storagesystem-details": (
