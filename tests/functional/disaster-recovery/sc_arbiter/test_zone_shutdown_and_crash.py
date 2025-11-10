@@ -433,7 +433,7 @@ class TestZoneShutdownsAndCrashes:
             "Immediate-Shutdown",
         ],
     )
-    def test_zone_shutdown_and_arbiter_failure(
+    def test_arbiter_and_zone_shutdow(
         self,
         node_restart_teardown,
         iteration,
