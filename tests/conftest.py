@@ -7901,7 +7901,7 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
 def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
-    The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
+    The `pv_encryption_kms_setup_factory_module` fixture is only initialized if `encrypted=True`.
     This fixture sets up multiple VMs with varying storage configurations as specified
     in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
     access mode, and the storage class to be used.
@@ -7913,7 +7913,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
 
     """
 
-    def factory(namespace=None, encrypted=False, kms=None):
+    def factory(namespace=None, encrypted=False):
         """
         Args:
             namespace (str, optional): The namespace to create the vm on.
@@ -7932,7 +7932,6 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
         namespace = (
             namespace if namespace else create_unique_resource_name("vm", "namespace")
         )
-        kms = None
         if encrypted:
             # Setup csi-kms-connection-details configmap
             log.info("Setting up csi-kms-connection-details configmap")
