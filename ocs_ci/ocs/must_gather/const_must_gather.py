@@ -16,7 +16,7 @@ OCS 4.20 Notes:
 - Significant structural changes: files now organized by API group in subdirectories
   (e.g., apps/, core/, noobaa/, ceph/)
 - The existing os.walk() validation logic handles the new structure automatically
-- Added 38 new CEPH commands (see GATHER_COMMANDS_CEPH_4_20)
+- Added 33 new CEPH commands (see GATHER_COMMANDS_CEPH_4_20)
 - Added 12 new JSON commands (see GATHER_COMMANDS_JSON_4_20)
 - Deprecated commands removed via GATHER_COMMANDS_JSON_4_20_EXCLUDE:
   * ceph_osd_blacklist_ls replaced by ceph_osd_blocklist_ls (terminology change)
@@ -758,11 +758,6 @@ GATHER_COMMANDS_CEPH_4_20 = [
     "rados_ls_--pool=ocs-storagecluster-cephfilesystem-metadata_--namespace=csi",
     "rados_lspools",
     "rados_rbd_objects_ocs-storagecluster-cephblockpool",
-    "radosgw-admin_bucket_list",
-    "radosgw-admin_bucket_stats",
-    "radosgw-admin_realm_list",
-    "radosgw-admin_zone_get",
-    "radosgw-admin_zonegroup_get",
     "rbd_ls_ocs-storagecluster-cephblockpool",
     "rbd_mirror_group_snapshot_schedule_ls",
     "rbd_mirror_group_snapshot_schedule_status",
