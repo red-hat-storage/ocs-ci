@@ -450,7 +450,7 @@ def check_mirroring_status_ok(
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
