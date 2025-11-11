@@ -29,15 +29,22 @@ def respin_amq_app_pod(kafka_namespace, pod_pattern):
         300, 10, get_pod_name_by_pattern, pod_pattern, kafka_namespace
     ):
         try:
-            if pod is not None:
-                pod_obj.delete(resource_name=pod[0])
-                assert pod_obj.wait_for_resource(
+            if not pod:
+                # Pod not found yet, keep waiting
+                continue
+
+            # Handle both string and list return types
+            pod_name = pod[0] if isinstance(pod, list) else pod
+
+            log.info(f"Respinning pod {pod_name}")
+            pod_obj.delete(resource_name=pod_name)
+            assert pod_obj.wait_for_resource(
                     condition="Running", resource_count=len(pod_obj_list), timeout=300
                 )
-                break
+            break
         except IndexError as ie:
-            log.error(" pod doesn't exist")
-            raise ie
+            log.error(f"Error while respinning pod for pattern {pod_pattern}: {ie}")
+            raise
 
 
 @magenta_squad
@@ -87,8 +94,8 @@ class TestAMQPodRespin(E2ETest):
         if pod_name == "amq":
             pod_pattern_list = [
                 "cluster-operator",
-                "my-cluster-kafka",
-                "my-cluster-zookeeper",
+                "my-cluster-broker",
+                "my-cluster-controller",
                 "my-connect-cluster-connect",
                 "my-bridge-bridge",
             ]

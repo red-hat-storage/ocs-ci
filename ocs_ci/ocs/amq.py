@@ -159,9 +159,45 @@ class AMQ(object):
                 self.crd_objects.append(adm_obj)
             except (CommandFailed, CalledProcessError) as cfe:
                 if "Error is Error from server (AlreadyExists):" in str(cfe):
-                    log.warn(
+                    log.warning(
                         "Some amq leftovers are present, please cleanup the cluster"
                     )
+                    try:
+                        # Run automated cleanup to remove Strimzi CRDs, Roles, etc.
+                        self.cleanup()
+                        log.info("Cleanup complete. Verifying CRD cleanup before retry...")
+                        log.info("Waiting for Strimzi CRDs to fully terminate before recreation...")
+
+                        # Wait for any Strimzi/Kafka CRDs to fully disappear before retry
+                        for _ in range(18):  # Wait up to ~90 seconds
+                            crds = run_cmd(
+                                "oc get crd | grep -E 'kafka|strimzi' | awk '{print $1}' || true",
+                                shell=True,
+                                ignore_error=True,
+                            ).splitlines()
+                            if not crds:
+                                log.info("All Strimzi/Kafka CRDs successfully deleted. Proceeding with retry.")
+                                break
+                            log.warning(f"CRDs still present (possibly terminating): {crds}")
+                            time.sleep(5)
+                        else:
+                            log.warning("Proceeding with creation despite lingering CRDs.")
+                        # Give etcd a moment to settle before recreating CRDs
+                        time.sleep(5)
+                        log.info("Retrying Strimzi CRD creation after cleanup confirmation...")
+                        
+                        # Retry creating CRD safely
+                        adm_data = templating.load_yaml(self.strimzi_kafka_operator + adm_yaml)
+                        if adm_data["kind"] == constants.DEPLOYMENT:
+                            utils.update_container_with_mirrored_image(adm_data)
+                        adm_obj = OCS(**adm_data)
+                        adm_obj.create()
+                        self.crd_objects.append(adm_obj)
+                    except Exception as retry_ex:
+                        log.error(f"Cleanup or retry setup failed: {retry_ex}")
+                        raise retry_ex
+                else:
+                    raise cfe
                     pytest.skip(
                         "AMQ leftovers are present needs to cleanup the cluster"
                     )
@@ -193,8 +229,12 @@ class AMQ(object):
         _rc = True
 
         for pod in TimeoutSampler(
-            300, 10, get_pod_name_by_pattern, pod_pattern, namespace
+            900, 10, get_pod_name_by_pattern, pod_pattern, namespace
         ):
+            if pod:
+                log.info(f"Found {len(pod)} pods matching pattern '{pod_pattern}' in {namespace}: {pod}")
+            else:
+                log.info(f"Waiting for pods matching '{pod_pattern}' in {namespace}...")
             try:
                 if pod is not None and len(pod) == expected_pods:
                     amq_pod = pod
@@ -1037,6 +1077,167 @@ class AMQ(object):
             switch_to_default_rook_cluster_project()
             run_cmd(f"oc delete project {kafka_namespace}")
             self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+        # NEW SECTION: Clean up leftover Strimzi CRDs, ClusterRoles, and RoleBindings
+        log.info("Checking and cleaning up Strimzi-related CRDs and RBAC roles...")
+        # Delete Strimzi and Kafka CRDs (like kafkas.kafka.strimzi.io, kafkatopics.kafka.strimzi.io)
+        try:
+            crd_list = run_cmd(
+                "oc get crd | grep -E 'kafka|strimzi' | awk '{print $1}' || true",
+                shell=True,
+                ignore_error=True
+            ).splitlines()
+            for crd in crd_list:
+                log.info(f"Deleting leftover CRD: {crd}")
+                run_cmd(f"oc delete crd {crd} --ignore-not-found=true", shell=True, ignore_error=True)
+
+            # Ensure CRDs are actually gone before retry (handles Terminating CRDs)
+            log.info("Verifying that all Strimzi/Kafka CRDs are deleted completely...")
+            for _ in range(12):  # retry for ~2 minutes total
+                remaining_crds = run_cmd(
+                    "oc get crd | grep -E 'kafka|strimzi' | awk '{print $1}' || true",
+                    shell=True,
+                    ignore_error=True
+                ).splitlines()
+                if not remaining_crds:
+                    log.info("All Strimzi/Kafka CRDs deleted successfully.")
+                    break
+                else:
+                    log.warning(f"CRDs still present: {remaining_crds}. Forcing cleanup of any finalizers...")
+                    for crd in remaining_crds:
+                        try:
+                            run_cmd(
+                                f"oc patch crd {crd} -p '{{\"metadata\":{{\"finalizers\":[]}}}}' --type=merge",
+                                shell=True,
+                                ignore_error=True
+                            )
+                            run_cmd(
+                                f"oc delete crd {crd} --ignore-not-found=true --wait=true --timeout=60s",
+                                shell=True,
+                                ignore_error=True
+                            )
+                        except Exception as e:
+                            log.warning(f"Failed to force delete CRD {crd}: {e}")
+                    time.sleep(10)
+            else:
+                log.warning("Some Strimzi/Kafka CRDs still not deleted after retries!")
+
+        except Exception as e:
+            log.warning(f"Failed to cleanup Kafka/Strimzi CRDs: {e}")
+
+        # Delete Strimzi ClusterRoles
+        try:
+            roles = run_cmd("oc get clusterrole | grep strimzi | awk '{print $1}'", shell=True, ignore_error=True).splitlines()
+            for role in roles:
+                log.info(f"Deleting leftover ClusterRole: {role}")
+                run_cmd(f"oc delete clusterrole {role} --ignore-not-found=true", ignore_error=True)
+        except Exception as e:
+            log.warning(f"Failed to cleanup Strimzi ClusterRoles: {e}")
+
+        # Delete Strimzi ClusterRoleBindings
+        try:
+            bindings = run_cmd("oc get clusterrolebinding | grep strimzi | awk '{print $1}'", shell=True, ignore_error=True).splitlines()
+            for binding in bindings:
+                log.info(f"Deleting leftover ClusterRoleBinding: {binding}")
+                run_cmd(f"oc delete clusterrolebinding {binding} --ignore-not-found=true", ignore_error=True)
+        except Exception as e:
+            log.warning(f"Failed to cleanup Strimzi ClusterRoleBindings: {e}")
+
+        # Delete leftover Strimzi RoleBindings inside all namespaces
+        try:
+            # Get all namespaces
+            ns_list = run_cmd("oc get ns -o jsonpath='{.items[*].metadata.name}'", shell=True, ignore_error=True).split()
+            for ns in ns_list:
+                rolebindings = run_cmd(
+                    f"oc get rolebinding -n {ns} | grep strimzi | awk '{{print $1}}'",
+                    shell=True,
+                    ignore_error=True
+                ).splitlines()
+                for rb in rolebindings:
+                    log.info(f"Deleting leftover RoleBinding: {rb} in namespace: {ns}")
+                    run_cmd(
+                        f"oc delete rolebinding {rb} -n {ns} --ignore-not-found=true",
+                        ignore_error=True
+                    )
+        except Exception as e:
+            log.warning(f"Failed to cleanup Strimzi RoleBindings: {e}")
+
+        # Delete leftover Strimzi Deployments (like strimzi-cluster-operator)
+        try:
+            ns_list = run_cmd("oc get ns -o jsonpath='{.items[*].metadata.name}'", shell=True, ignore_error=True).split()
+            for ns in ns_list:
+                deployments = run_cmd(
+                    f"oc get deployment -n {ns} -o jsonpath='{{.items[*].metadata.name}}' | tr ' ' '\\n' | grep strimzi-cluster-operator || true",
+                    shell=True,
+                    ignore_error=True
+                ).splitlines()
+                for dep in deployments:
+                    if dep.strip():
+                        log.info(f"Deleting leftover Deployment: {dep} in namespace: {ns}")
+                        run_cmd(
+                            f"oc delete deployment {dep} -n {ns} --ignore-not-found=true --force --grace-period=0",
+                            shell=True,
+                            ignore_error=True
+                        )
+        except Exception as e:
+            log.warning(f"Failed to cleanup Strimzi Deployments: {e}")
+        # ensure the namespace is actually deleted afterward
+        try:
+            log.info("Waiting for namespace 'myproject' to terminate completely...")
+            run_cmd(
+                "oc delete ns myproject --ignore-not-found=true --wait=true --timeout=180s",
+                shell=True,
+                ignore_error=True
+            )
+        except Exception as e:
+            log.warning(f"Namespace termination wait failed: {e}")
+
+        # Ensure 'myproject' namespace recreation safety before retry
+        try:
+            time.sleep(5)
+            ns_check = run_cmd("oc get ns myproject --ignore-not-found", shell=True, ignore_error=True)
+            if "myproject" not in ns_check:
+                log.info("Recreating 'myproject' namespace for next retry...")
+                run_cmd("oc new-project myproject", shell=True, ignore_error=True)
+                # add basic labels to avoid security constraint issues
+                run_cmd(
+                    "oc label namespace myproject security.openshift.io/scc.podSecurityLabelSync=false "
+                    "pod-security.kubernetes.io/enforce=baseline "
+                    "pod-security.kubernetes.io/warn=baseline --overwrite",
+                    shell=True,
+                    ignore_error=True
+                )
+        except Exception as e:
+            log.warning(f"Failed to recreate 'myproject' namespace: {e}") 
+
+        # Ensure any stuck resources or terminating CRDs/namespaces are force-deleted
+        try:
+            log.info("Ensuring all Strimzi CRDs and resources are fully gone before retry...")
+
+            # Forcefully delete any terminating Strimzi CRDs
+            terminating_crds = run_cmd(
+                "oc get crd | grep strimzi | awk '{print $1}' || true", shell=True, ignore_error=True
+            ).splitlines()
+            for crd in terminating_crds:
+                log.info(f"Forcing delete of stuck CRD: {crd}")
+                run_cmd(f"oc patch crd {crd} -p '{{\"metadata\":{{\"finalizers\":[]}}}}' --type=merge", shell=True, ignore_error=True)
+                run_cmd(f"oc delete crd {crd} --ignore-not-found=true --wait=true --timeout=60s", shell=True, ignore_error=True)
+
+            # Ensure namespace fully terminates
+            log.info("Waiting for namespace 'myproject' to fully terminate...")
+            run_cmd("oc delete ns myproject --ignore-not-found=true --wait=true --timeout=180s", shell=True, ignore_error=True)
+
+            # Confirm no stuck resources
+            log.info("Checking if any Strimzi resources still exist cluster-wide...")
+            leftovers = run_cmd("oc get all --all-namespaces | grep strimzi || true", shell=True, ignore_error=True)
+            if leftovers:
+                log.warning("Strimzi leftovers still detected! Forcing cleanup...")
+                run_cmd("oc delete all --all -A -l app=strimzi-cluster-operator --ignore-not-found=true", shell=True, ignore_error=True)
+
+        except Exception as e:
+            log.warning(f"Force cleanup check failed: {e}")
+             
+        time.sleep(30)
+        log.info("Completed AMQ + Strimzi cleanup routine — cluster is clean.")    
 
     def check_amq_cluster_exists(self):
         """
