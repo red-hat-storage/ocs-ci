@@ -361,7 +361,7 @@ class PrometheusAPI(object):
                 "using threading.Lock object is mandatory for PrometheusAPI class"
             )
         self._cluster_context = cluster_context
-        with self._cluster_context:
+        with self._cluster_context():
             if (
                 config.ENV_DATA["platform"].lower() == "ibm_cloud"
                 and config.ENV_DATA["deployment_type"] == "managed"
@@ -391,7 +391,7 @@ class PrometheusAPI(object):
         """
         Login into OCP, refresh endpoint and token.
         """
-        with self._cluster_context:
+        with self._cluster_context():
             kubeconfig = config.RUN["kubeconfig"]
             ocp = OCP(
                 kind=constants.ROUTE,
@@ -417,7 +417,7 @@ class PrometheusAPI(object):
 
         TODO: find proper way how to generate/load cert files.
         """
-        with self._cluster_context:
+        with self._cluster_context():
             if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
                 cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
                 if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
@@ -466,7 +466,7 @@ class PrometheusAPI(object):
         logger.debug(f"params={payload}")
 
         if timeout:
-            with self._cluster_context:
+            with self._cluster_context():
                 for sample_response in TimeoutIterator(
                     timeout=timeout,
                     sleep=15,
@@ -496,7 +496,7 @@ class PrometheusAPI(object):
                         break
             return response
         else:
-            with self._cluster_context:
+            with self._cluster_context():
                 response = requests.get(
                     self._endpoint + pattern,
                     headers=headers,
@@ -535,7 +535,7 @@ class PrometheusAPI(object):
 
         .. _`instant query`: https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries
         """
-        with self._cluster_context:
+        with self._cluster_context():
             query_payload = {"query": query}
             log_msg = f"Performing prometheus instant query '{query}'"
             if timestamp is not None:
@@ -582,7 +582,7 @@ class PrometheusAPI(object):
 
         .. _`range query`: https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
         """
-        with self._cluster_context:
+        with self._cluster_context():
             query_payload = {"query": query, "start": start, "end": end, "step": step}
             if timeout is not None:
                 query_payload["timeout"] = timeout
@@ -665,7 +665,7 @@ class PrometheusAPI(object):
         Returns:
             list: List of alert records
         """
-        with self._cluster_context:
+        with self._cluster_context():
             while timeout > 0:
                 alerts_response = self.get(
                     "alerts",
@@ -719,7 +719,7 @@ class PrometheusAPI(object):
             time_min (int): Number of seconds to wait for alert to be cleared
                 since measurement end
         """
-        with self._cluster_context:
+        with self._cluster_context():
             time_actual = time.time()
             time_wait = int((measure_end_time + time_min) - time_actual)
             if time_wait > 0:
@@ -748,7 +748,7 @@ class PrometheusAPI(object):
             prometheus_alert_list (list): List to be populated with alerts
         """
 
-        with self._cluster_context:
+        with self._cluster_context():
             alerts_response = self.get(
                 "alerts", payload={"silenced": False, "inhibited": False}
             )
@@ -779,7 +779,7 @@ class PrometheusAPI(object):
 
         """
         logger.info("Logging of all prometheus alerts started")
-        with self._cluster_context:
+        with self._cluster_context():
             alerts_response = self.get(
                 "alerts", payload={"silenced": False, "inhibited": False}
             )
