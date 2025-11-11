@@ -149,6 +149,27 @@ class Submariner(object):
 
             acm_obj.install_submariner_cli(globalnet=global_net)
         else:
+            # W/A for ROKS deployment
+            roks_deployment = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if roks_deployment:
+                # get all cluster configs except acm
+                non_acm_clusters = [
+                    cluster
+                    for cluster in config.clusters
+                    if not cluster.MULTICLUSTER.get("acm_cluster")
+                ]
+                for cluster in non_acm_clusters:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        run_cmd(
+                            f'oc patch --kubeconfig {cluster.RUN["kubeconfig"]} '
+                            '--type=json Installation default -p \'[{"op": "replace", "path":'
+                            ' "/spec/calicoNetwork/ipPools/0/encapsulation", "value": "IPIP"}]\''
+                        )
             acm_obj.install_submariner_ui(globalnet=global_net)
 
         acm_obj.submariner_validation_ui()
