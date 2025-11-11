@@ -5613,6 +5613,21 @@ def load_cluster_info_file(request):
     load_cluster_info()
 
 
+@pytest.fixture(scope="module")
+def pv_encryption_kms_setup_factory_module(request):
+    """
+    Create vault resources and setup csi-kms-connection-details configMap
+    """
+
+    # set the KMS provider based on KMS_PROVIDER env value.
+    if ocsci_config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+        return pv_encryption_hpcs_setup_factory(request)
+    elif ocsci_config.ENV_DATA["KMS_PROVIDER"] == constants.AZURE_KV_PROVIDER_NAME:
+        return pv_encryption_azure_kv_setup_factory(request)
+    else:
+        return pv_encryption_vault_setup_factory(request)
+
+
 @pytest.fixture(scope="function")
 def pv_encryption_kms_setup_factory(request):
     """
@@ -7875,24 +7890,18 @@ def multi_cnv_workload_class(request, storageclass_factory_class, cnv_workload_c
 
 
 @pytest.fixture()
-def multi_cnv_workload(
-    request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-):
+def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
     Class scoped fixture to deploy multiple CNV workload
 
     """
-    return multi_cnv_workload_factory(
-        request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-    )
+    return multi_cnv_workload_factory(request, storageclass_factory, cnv_workload)
 
 
-def multi_cnv_workload_factory(
-    request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-):
+def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
-    The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
+    The `pv_encryption_kms_setup_factory_module` fixture is only initialized if `encrypted=True`.
     This fixture sets up multiple VMs with varying storage configurations as specified
     in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
     access mode, and the storage class to be used.
@@ -7923,13 +7932,14 @@ def multi_cnv_workload_factory(
         namespace = (
             namespace if namespace else create_unique_resource_name("vm", "namespace")
         )
-
-        kms = None
         if encrypted:
+            # Setup csi-kms-connection-details configmap
             log.info("Setting up csi-kms-connection-details configmap")
+            pv_encryption_kms_setup_factory = request.getfixturevalue(
+                "pv_encryption_kms_setup_factory_module"
+            )
             kms = pv_encryption_kms_setup_factory(kv_version="v2")
             log.info("csi-kms-connection-details setup successful")
-
         try:
             kms_id = kms.kmsid
         except (NameError, AttributeError):
