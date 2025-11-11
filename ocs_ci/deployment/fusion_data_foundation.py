@@ -9,6 +9,7 @@ import tempfile
 
 import yaml
 
+from ocs_ci.deployment.deployment import label_and_taint_nodes
 from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
@@ -173,6 +174,8 @@ class FusionDataFoundationDeployment:
                 nodes = node.get_all_nodes()
                 node_objs = node.get_node_objs(nodes)
                 node.label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+            if config.DEPLOYMENT.get("arbiter_deployment"):
+                label_and_taint_nodes()
             self.create_odfcluster()
             odfcluster_status_check()
         else:
