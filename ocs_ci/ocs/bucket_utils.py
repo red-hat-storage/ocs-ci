@@ -2634,7 +2634,7 @@ def delete_all_noobaa_buckets(mcg_obj, request):
         logger.info(f"Deleting {bucket} and its objects")
         s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
         delete_all_objects_in_batches(
-            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket
+            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket.name
         )
         s3_bucket.delete()
 
