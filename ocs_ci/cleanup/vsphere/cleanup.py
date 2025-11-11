@@ -157,7 +157,11 @@ class IPAM(object):
         # IPAM server. In that we have to delete the IP's in IPAM server
         # even though resource pool is not created in Datacenter
         if not nodes:
-            node_type = ["compute", "control-plane", "lb"]
+            node_type = [
+                f"compute-{cluster_name}",
+                f"control-plane-{cluster_name}",
+                "lb",
+            ]
             for each_type in node_type:
                 if each_type == "lb":
                     nodes.append(f"{each_type}-0")
