@@ -18,7 +18,6 @@ from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy_ui_compatible
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.views import SUCCESS_TOAST_SELECTORS
 
 logger = logging.getLogger(__name__)
 
@@ -58,44 +57,14 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
     # Policy action button keys to try in order
     _POLICY_ACTION_BUTTONS = ("apply_policy_button", "save_policy_generic_button")
 
-    def navigate_to_bucket_permissions(self, bucket_name: str = None):
+    def navigate_back_to_buckets_list(self):
         """
-        Navigate to bucket permissions tab.
-
-        Args:
-            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+        Navigate back to buckets list page.
 
         Returns:
-            BucketsTabPermissions: Self for method chaining.
-
-        Raises:
-            NoSuchElementException: If UI elements are not found.
+            BucketsTab: Instance of BucketsTab page object.
         """
-        if not bucket_name:
-            self.do_click(self.bucket_tab["bucket_list_items"])
-            self.do_click(self.bucket_tab["permissions_tab"])
-            self.do_click(self.bucket_tab["bucket_policy_tab"])
-            return self
-
-        bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
-
-        for bucket_element in bucket_elements:
-            if bucket_element.text != bucket_name:
-                continue
-
-            bucket_element.click()
-            break
-        else:
-            available_buckets = [elem.text for elem in bucket_elements]
-            raise NoSuchElementException(
-                f"Bucket '{bucket_name}' not found in bucket list. "
-                f"Available buckets: {available_buckets}. "
-                "Verify bucket name exists and is visible on current page."
-            )
-
-        self.do_click(self.bucket_tab["permissions_tab"])
-        self.do_click(self.bucket_tab["bucket_policy_tab"])
-        return self
+        return self.navigate_buckets_page()
 
     def activate_policy_editor(self) -> None:
         """
@@ -458,7 +427,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """
         Verify that the policy was successfully applied by checking for success toast.
         """
-        combined_selectors = ", ".join(SUCCESS_TOAST_SELECTORS)
+        combined_selectors = ", ".join(self.bucket_tab["success_toast_selectors"])
 
         try:
             self.wait_for_element_to_be_visible(
@@ -504,7 +473,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             )
 
         try:
-            self.navigate_to_bucket_permissions(config.bucket_name)
             self.activate_policy_editor()
 
             policy_json = self._build_bucket_policy(policy_type, config)
@@ -655,11 +623,10 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
         This method orchestrates the complete deletion workflow:
         1. Resolves bucket name
-        2. Navigates to bucket permissions
-        3. Validates policy exists
-        4. Activates policy editor
-        5. Initiates deletion
-        6. Handles confirmation dialog
+        2. Validates policy exists
+        3. Activates policy editor
+        4. Initiates deletion
+        5. Handles confirmation dialog
 
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
@@ -673,7 +640,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
         bucket_name = self._resolve_bucket_name(bucket_name)
 
-        self.navigate_to_bucket_permissions(bucket_name)
         self._validate_policy_exists_for_deletion(bucket_name)
         self.activate_policy_editor()
 

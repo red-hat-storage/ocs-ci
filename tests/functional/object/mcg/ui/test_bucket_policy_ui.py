@@ -11,7 +11,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
-    BucketsTabPermissions,
     PolicyConfig,
     PolicyType,
 )
@@ -133,7 +132,9 @@ class TestBucketPolicyUI:
             bucket_ui.navigate_buckets_page()
             bucket_ui.page_has_loaded(sleep_time=2)
 
-        bucket_permissions_ui = BucketsTabPermissions()
+        bucket_permissions_ui = bucket_ui.navigate_to_bucket_permissions(
+            bucket_name=target_bucket_name
+        )
 
         policy_method = getattr(bucket_permissions_ui, method_name)
         policy_method(bucket_name=target_bucket_name, **params)
@@ -156,12 +157,17 @@ class TestBucketPolicyUI:
         bucket_ui.navigate_buckets_page()
         bucket_ui.page_has_loaded(sleep_time=2)
 
-        bucket_permissions_ui = BucketsTabPermissions()
+        bucket_permissions_ui = bucket_ui.navigate_to_bucket_permissions(
+            bucket_name=bucket_name
+        )
         bucket_permissions_ui.set_bucket_policy_ui(bucket_name=bucket_name)
 
-        bucket_ui.navigate_buckets_page()
+        bucket_ui = bucket_permissions_ui.navigate_back_to_buckets_list()
         bucket_ui.page_has_loaded(sleep_time=2)
 
+        bucket_permissions_ui = bucket_ui.navigate_to_bucket_permissions(
+            bucket_name=bucket_name
+        )
         bucket_permissions_ui.delete_bucket_policy_ui(bucket_name=bucket_name)
 
         logger.info("Successfully completed delete bucket policy test")

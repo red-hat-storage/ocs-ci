@@ -596,14 +596,14 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         Raises:
             NoSuchElementException: If UI elements are not found.
         """
+        from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
+            BucketsTabPermissions,
+        )
+
         if not bucket_name:
             self.do_click(self.bucket_tab["bucket_list_items"])
             self.do_click(self.bucket_tab["permissions_tab"])
             self.do_click(self.bucket_tab["bucket_policy_tab"])
-            from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
-                BucketsTabPermissions,
-            )
-
             return BucketsTabPermissions()
 
         bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
@@ -624,8 +624,4 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         self.do_click(self.bucket_tab["permissions_tab"])
         self.do_click(self.bucket_tab["bucket_policy_tab"])
-        from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
-            BucketsTabPermissions,
-        )
-
         return BucketsTabPermissions()

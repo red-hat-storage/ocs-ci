@@ -8,14 +8,6 @@ logger = logging.getLogger(__name__)
 
 osd_sizes = ("512", "2048", "4096")
 
-SUCCESS_TOAST_SELECTORS = [
-    "[data-test='success-toast']",
-    "[role='alert'][class*='success']",
-    "[class*='-c-alert'][class*='success']",
-    ".toast-notifications-list-pf .alert-success",
-    ".co-alert--success",
-]
-
 OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
 LOCAL_STORAGE = "Local Storage"
@@ -2614,6 +2606,13 @@ bucket_tab = {
         "[class*='-c-button'][class*='pf-m-primary']",
         By.CSS_SELECTOR,
     ),
+    "success_toast_selectors": [
+        "[data-test='success-toast']",
+        "[role='alert'][class*='success']",
+        "[class*='-c-alert'][class*='success']",
+        ".toast-notifications-list-pf .alert-success",
+        ".co-alert--success",
+    ],
 }
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
