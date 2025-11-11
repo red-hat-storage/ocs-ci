@@ -5,9 +5,19 @@ import pytest
 
 from time import sleep
 
-from ocs_ci.framework.testlib import MCGTest, red_squad, mcg, tier2
+from ocs_ci.framework.testlib import (
+    MCGTest,
+    red_squad,
+    mcg,
+    tier2,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
+    post_upgrade,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
+from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +90,9 @@ def save_original_state(request):
 @red_squad
 @mcg
 @pytest.mark.usefixtures("save_original_state")
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
+@post_upgrade
 class TestBlockExternalAccess(MCGTest):
     @pytest.fixture(scope="class", autouse=True)
     def cleanup(self, request):
@@ -129,7 +142,7 @@ class TestBlockExternalAccess(MCGTest):
         request.addfinalizer(finalizer)
 
     def test_block_access_from_storagecluster(
-        self,
+        self, awscli_pod_session, bucket_factory, mcg_obj
     ):
         """
         This method validates that
@@ -156,11 +169,42 @@ class TestBlockExternalAccess(MCGTest):
 
         self.check_disable_routes(False)
 
+        bucket_name = bucket_factory(
+            1,
+            interface="CLI",
+            bucketclass={
+                "interface": "CLI",
+                "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            },
+        )[0].name
+
+        standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
+            f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
+        ).split(" ")
+        file_name = standard_test_obj_list[0]
+        logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
+        awscli_pod_session.exec_cmd_on_pod(
+            command=craft_s3_command(
+                f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}",
+                mcg_obj=mcg_obj,
+            ),
+            out_yaml_format=False,
+        )
+
         self.set_disable_routes_value(storagecluster_obj, True, True)
         self.check_disable_routes(True)
 
         self.set_disable_routes_value(storagecluster_obj, True, False)
         self.check_disable_routes(False)
+
+        logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
+        awscli_pod_session.exec_cmd_on_pod(
+            command=craft_s3_command(
+                f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}",
+                mcg_obj=mcg_obj,
+            ),
+            out_yaml_format=False,
+        )
 
     def check_disable_routes(self, disable_routes_val):
         """
