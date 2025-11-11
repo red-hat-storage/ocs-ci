@@ -347,6 +347,7 @@ class AwsClient(S3Client):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self,
         auth_dict,
@@ -417,6 +418,7 @@ class RgwClient(S3Client):
     Implementation of a S3 Client using the S3 API for RGW buckets
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self,
         auth_dict=None,
@@ -727,6 +729,8 @@ class AzureWithLogsClient(AzureClient):
 
 
 class AwsSTSClient(S3Client):
+
+    @config.run_with_provider_context_if_available
     def __init__(
         self,
         auth_dict,
