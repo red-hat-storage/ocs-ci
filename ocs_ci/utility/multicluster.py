@@ -40,6 +40,7 @@ class MultiClusterUpgradeParametrize(object):
         "post_ocp_upgrade",
         "mco_upgrade",
         "mce_upgrade",
+        "kubevirt_cluster_upgrade",
         "dr_hub_upgrade",
         "dr_cluster_operator_upgrade",
         "acm_upgrade",

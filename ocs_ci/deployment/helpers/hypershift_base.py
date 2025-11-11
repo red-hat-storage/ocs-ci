@@ -377,12 +377,12 @@ def delete_hcp_podman_container():
         )
 
 
-def get_latest_supported_hypershift_version() -> str:
+def get_latest_supported_hypershift_version() -> str | None:
     """
     Get the latest supported Hypershift version from the hub cluster
 
     Returns:
-        str: latest supported Hypershift version in 'major.minor' format, e.g. '4.18'
+        str: latest supported Hypershift version in 'major.minor' format, e.g. '4.18' or None in case of failure
 
     """
 
@@ -472,6 +472,9 @@ class HyperShiftBase:
             # If Hypershift is already installed on the hub (namespace exists), pick the latest supported version
             # from the supported-versions configmap. Otherwise, use the configured hcp_version.
             hcp_version = get_latest_supported_hypershift_version()
+            if not hcp_version:
+                logger.error("Falling back to configured hcp_version.")
+                return self.install_hcp_and_hypershift_from_git(install_latest=False)
         else:
             hcp_version = config.ENV_DATA.get("hcp_version")
             logger.info(
