@@ -251,6 +251,7 @@ def create_optional_operators_catalogsource_non_ga(force=False):
     Creating optional operators CatalogSource and ImageContentSourcePolicy
     for non-ga OCP. If platform is hci_baremetal then force delete static pods
     to apply the changes and wait machines in machineconfig pool are ready.
+    If the platform is hci_baremetal we force-delete vm and hcp pods if wait for ready Machines is not successful.
 
     Args:
         force (bool): enable/disable lso catalog setup

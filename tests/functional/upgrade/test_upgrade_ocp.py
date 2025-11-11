@@ -119,6 +119,7 @@ class TestUpgradeOCP(ManageTest):
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
         if (
             config.multicluster
+            and config.MULTICLUSTER.get("multicluster_mode")
             and config.MULTICLUSTER["multicluster_mode"] in ["metro-dr", "regional-dr"]
             and is_acm_cluster(config)
         ):

@@ -1240,6 +1240,10 @@ def verify_last_heartbeat_timestamp(cluster_name):
     Verify that the last heartbeat timestamp of the storage consumer for `cluster_name`
     is recent (not older than 4 minutes). Uses `get_storage_consumer_name` to map
     consumer resources to the given cluster name.
+
+    Args:
+        cluster_name (str): Name of the cluster to verify the storage consumer heartbeat.
+
     """
     try:
         consumer_names = get_consumer_names()
