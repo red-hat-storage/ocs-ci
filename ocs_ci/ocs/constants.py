@@ -2303,23 +2303,6 @@ ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
-# GOSBench workload templates
-GOSBENCH_SERVER_DEPLOYMENT_YAML = os.path.join(
-    TEMPLATE_DIR, "workloads", "gosbench", "server-deployment.yaml.j2"
-)
-GOSBENCH_SERVER_SERVICE_YAML = os.path.join(
-    TEMPLATE_DIR, "workloads", "gosbench", "server-service.yaml.j2"
-)
-GOSBENCH_WORKER_DEPLOYMENT_YAML = os.path.join(
-    TEMPLATE_DIR, "workloads", "gosbench", "worker-deployment.yaml.j2"
-)
-GOSBENCH_CONFIGMAP_YAML = os.path.join(
-    TEMPLATE_DIR, "workloads", "gosbench", "configmap.yaml.j2"
-)
-GOSBENCH_SECRET_YAML = os.path.join(
-    TEMPLATE_DIR, "workloads", "gosbench", "secret.yaml.j2"
-)
-
 # Storage classes provisioners
 OCS_PROVISIONERS = [
     "openshift-storage.rbd.csi.ceph.com",

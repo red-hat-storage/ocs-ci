@@ -213,19 +213,28 @@ ENV_DATA:
       encrypted: true
 ```
 
-#### 3. GOSBENCH
-- **Description**: S3 performance testing workload
-- **Background Operations**: ✅ Fully integrated - validates S3 operations
-- **Use Case**: NooBaa/RGW resilience and performance testing
+#### 3. RGW Workload
+- **Description**: RGW S3 workload for object storage stress testing
+- **Background Operations**: ✅ Fully integrated - validates S3 operations on RGW
+- **Use Case**: RADOS Gateway resilience and performance testing
+- **Platform**: On-prem only (vSphere, Baremetal)
 - **Configuration Example**:
 ```yaml
 ENV_DATA:
   krkn_config:
-    workloads: ["GOSBENCH"]
-    gosbench_config:
-      worker_replicas: 5
-      benchmark_duration: 300
-      object_size: "1MiB"
+    workloads: ["RGW_WORKLOAD"]
+    rgw_config:
+      num_buckets: 3
+      iteration_count: 10
+      operation_types:
+        - upload
+        - download
+        - list
+        - delete
+      upload_multiplier: 1
+      metadata_ops_enabled: false
+      delay_between_iterations: 30
+      delete_bucket_on_cleanup: true  # Delete buckets when workload completes
 ```
 
 #### 4. Multiple Workloads
@@ -236,7 +245,7 @@ ENV_DATA:
 ```yaml
 ENV_DATA:
   krkn_config:
-    workloads: ["VDBENCH", "GOSBENCH", "CNV_WORKLOAD"]
+    workloads: ["VDBENCH", "CNV_WORKLOAD", "RGW_WORKLOAD"]
 ```
 
 ### Background Operations Configuration

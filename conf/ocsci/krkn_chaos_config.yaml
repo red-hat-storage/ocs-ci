@@ -2,10 +2,10 @@
 
 ENV_DATA:
   krkn_config:
-    # Workload types: VDBENCH, CNV_WORKLOAD, GOSBENCH, FIO
+    # Workload types: VDBENCH, CNV_WORKLOAD, RGW_WORKLOAD, FIO
     workloads:
       - VDBENCH
-      - GOSBENCH
+      - RGW_WORKLOAD
 
     # Run workloads during chaos testing
     run_workload: true
@@ -81,25 +81,19 @@ ENV_DATA:
             xfersize: "4k"
             skew: 0
 
-    # GOSBENCH configuration
-    gosbench_config:
-      worker_replicas: 1
-      benchmark_duration: 2700
-      object_size: "4MiB"
-      object_count: 100000
-      concurrency: 2
-      server_image: "quay.io/mulbc/goroom-server:latest"
-      worker_image: "quay.io/mulbc/goroom-worker:latest"
-      server_resources:
-        memory_request: "256Mi"
-        memory_limit: "512Mi"
-        cpu_request: "100m"
-        cpu_limit: "500m"
-      worker_resources:
-        memory_request: "128Mi"
-        memory_limit: "256Mi"
-        cpu_request: "50m"
-        cpu_limit: "200m"
+    # RGW Workload configuration (S3 workload on RADOS Gateway)
+    rgw_config:
+      num_buckets: 5
+      iteration_count: 10
+      upload_multiplier: 1
+      metadata_ops_enabled: false
+      delay_between_iterations: 30
+      delete_bucket_on_cleanup: true  # Automatically delete buckets after workload completes
+      operation_types:
+        - upload
+        - download
+        - list
+        - delete
 
     # Background Cluster Operations Configuration
     background_cluster_operations:
