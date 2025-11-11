@@ -1558,7 +1558,8 @@ class BusyboxDiscoveredApps(DRWorkload):
                 vrg_name=self.discovered_apps_placement_name,
                 skip_vrg_check=skip_vrg_check,
             )
-            run_cmd(f"oc delete project {self.workload_namespace}")
+            ocp_obj = ocp.OCP()
+            ocp_obj.delete_project(project_name=self.workload_namespace)
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
@@ -1663,13 +1664,6 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self._deploy_prereqs()
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            if not shared_drpc_protection:
-                self.create_namespace()
-            else:
-                # Shared=False means namespace exists, so skip creation
-                log.info(
-                    f"Namespace in use: {self.workload_namespace} for Shared Protection type"
-                )
         self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
@@ -1722,6 +1716,11 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 except CommandFailed as ex:
                     if "(AlreadyExists)" in str(ex):
                         log.warning("The namespace already exists!")
+            else:
+                # Shared=False means namespace exists, so skip creation
+                log.info(
+                    f"Namespace in use: {self.workload_namespace} for Shared Protection type"
+                )
 
             # Create or recreate the secret for ssh access
             try:
@@ -1908,5 +1907,6 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                     discovered_apps=True,
                     workload_cleanup=True,
                 )
-                run_cmd(f"oc delete project {self.workload_namespace}")
+                ocp_obj = ocp.OCP()
+                ocp_obj.delete_project(project_name=self.workload_namespace)
                 log.info(f"Project {self.workload_namespace} deleted successfully")
