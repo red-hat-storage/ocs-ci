@@ -325,7 +325,7 @@ generic_locators = {
     ),
     "actions": (
         '//button[@aria-label="Actions"]| //div[@data-test-id="details-actions"]//button[normalize-space()="Actions"]| '
-        '//span[contains(@class,"dropdown__toggle-text") and text()="Actions"]/..',
+        '//span[contains(@class,"c-dropdown__toggle-text") and text()="Actions"]/..',
         By.XPATH,
     ),
     "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
@@ -2054,7 +2054,7 @@ validation_4_17 = {
         By.XPATH,
     ),
     "select_administrator": (
-        "//a[contains(@class,'m-icon') and contains(@class,'dropdown__menu-item')]"
+        "//a[contains(@class,'m-icon') and contains(@class,'c-dropdown__menu-item')]"
         "//h2[normalize-space()='Administrator'] | "
         "//h2[.='Administrator']/ancestor::button[contains(@class, 'c-menu__item')]",
         By.XPATH,
@@ -2315,7 +2315,7 @@ topology = {
     "topology_search_bar_enter_arrow": ("//button[@aria-label='Search']", By.XPATH),
     "topology_search_bar_reset_search": ("//button[@aria-label='Reset']", By.XPATH),
     "node_filter_toggle_icon_from_node_filtering_bar": (
-        "//*[contains(@class,'options-menu__toggle-icon')]/..",
+        "//*[contains(@class,'c-options-menu__toggle-icon')]/..",
         By.XPATH,
     ),
     # node_selector_node_filtering_bar accessible only from deployment level view of Topology
@@ -2324,7 +2324,7 @@ topology = {
         By.XPATH,
     ),
     "current_node_from_node_filtering_bar": (
-        "//span[contains(@class,'options-menu__toggle-text')]",
+        "//span[contains(@class,'c-options-menu__toggle-text')]",
         By.XPATH,
     ),
 }
@@ -2432,7 +2432,7 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),  # Input field for bucket name confirmation
     "properties_tab": (
-        "button[id*='s3-overview'] span[class*='c-tabs__item-text']",
+        "button[id*='tab-2-s3-overview'] span[class*='c-tabs__item-text']",
         By.CSS_SELECTOR,
     ),
     "versioning_toggle": (
