@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 import time
@@ -157,8 +157,18 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Configuring storage.")
         self.patch_catalogsource()
-        self.create_odfcluster()
-        odfcluster_status_check()
+
+        fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")
+        fusion_version = version.get_semantic_version(fusion_version, True)
+
+        # Storage configuration method changed in Fusion 2.11
+        if fusion_version < version.VERSION_2_11:
+            self.create_odfcluster()
+            odfcluster_status_check()
+        else:
+            logger.warning(
+                "Storage configuration for Fusion 2.11 or greater not yet implemented"
+            )
 
     def patch_catalogsource(self):
         """

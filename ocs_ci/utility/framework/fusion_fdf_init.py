@@ -69,6 +69,8 @@ class Initializer(object):
         """
         framework.config.init_cluster_configs()
         load_config(args.conf)
+        # Updating resource_checker to False since it's not needed for FDF deployment
+        config.RUN["resource_checker"] = False
         logger.debug("Verifying cluster_name and cluster_path")
         cluster_name = args.cluster_name
         cluster_path = os.path.expanduser(args.cluster_path)
@@ -82,6 +84,8 @@ class Initializer(object):
                 config.ENV_DATA["cluster_name"] = get_cluster_name(cluster_path)
             except FileNotFoundError:
                 raise ClusterNameNotProvidedError()
+        else:
+            config.ENV_DATA["cluster_name"] = cluster_name
 
         config.REPORTING["report_path"] = args.report
 
@@ -316,6 +320,7 @@ def create_junit_report(
             test_suite = TestSuite(suite_name)
             _suite_props = suite_props or {}
             _case_props = case_props or {}
+            exit_code = 0
 
             logger.debug(f"TestSuite Props: {_suite_props}")
             logger.debug(f"TestCase Props: {_case_props}")
@@ -331,22 +336,25 @@ def create_junit_report(
             except Exception as e:
                 logger.exception(e)
                 test_case.result = [Failure(e)]
+                exit_code = 1
+            finally:
+                add_post_deployment_props(test_suite)
 
-            add_post_deployment_props(test_suite)
+                test_suite.add_testcase(test_case)
+                xml = JUnitXml()
+                xml.add_testsuite(test_suite)
 
-            test_suite.add_testcase(test_case)
-            xml = JUnitXml()
-            xml.add_testsuite(test_suite)
+                if config.REPORTING.get("report_path"):
+                    filepath = config.REPORTING.get("report_path")
+                else:
+                    log_dir = os.path.expanduser(config.RUN["log_dir"])
+                    run_id = config.RUN["run_id"]
+                    filepath = os.path.join(log_dir, f"{case_name}_{run_id}.xml")
 
-            if config.REPORTING.get("report_path"):
-                filepath = config.REPORTING.get("report_path")
-            else:
-                log_dir = os.path.expanduser(config.RUN["log_dir"])
-                run_id = config.RUN["run_id"]
-                filepath = os.path.join(log_dir, f"{case_name}_{run_id}.xml")
+                logger.info(f"Writing report to {filepath}")
+                xml.write(filepath, pretty=True)
 
-            logger.info(f"Writing report to {filepath}")
-            xml.write(filepath, pretty=True)
+                return exit_code
 
         return wrapper
 

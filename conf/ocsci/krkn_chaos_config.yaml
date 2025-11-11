@@ -1,0 +1,119 @@
+# Krkn chaos testing configuration
+
+ENV_DATA:
+  krkn_config:
+    # Workload types: VDBENCH, CNV_WORKLOAD, RGW_WORKLOAD, FIO
+    workloads:
+      - VDBENCH
+      - RGW_WORKLOAD
+
+    # Run workloads during chaos testing
+    run_workload: true
+
+    # Enable data verification after chaos
+    enable_verification: true
+
+    # VDBENCH Configuration
+    vdbench_config:
+      enable_parallel_verification: true
+      max_verification_threads: 16
+      max_workload_restarts: 10
+      workload_monitor_interval: 30
+      workload_loop: 20  # Number of times to run workload (1 = run once, 20 = run 20 times)
+
+      # Deployment configuration
+      num_pvcs_per_interface: 5  # Number of PVCs to create per storage interface (CephFS, CephBlockPool)
+      pvc_size: 50  # PVC size in GiB
+
+      # Common workload parameters
+      threads: 16
+      elapsed: 600
+      interval: 60
+
+      # Block workloads (RBD)
+      block:
+        size: "15g"
+
+        patterns:
+          - name: "random_write"
+            rdpct: 0      # Write-only
+            seekpct: 100  # Random I/O
+            xfersize: "4k"
+            skew: 0
+
+          - name: "random_read"
+            rdpct: 100    # Read-only
+            seekpct: 100  # Random I/O
+            xfersize: "8k"
+            skew: 0
+
+          - name: "mixed_workload"
+            rdpct: 50     # 50% reads, 50% writes
+            seekpct: 100  # Random I/O
+            xfersize: "64k"
+            skew: 0
+
+      # Filesystem workloads (CephFS)
+      filesystem:
+        size: "10m"
+        depth: 4
+        width: 5
+        files: 10
+        file_size: "1m"
+        group_all_fwds_in_one_rd: true
+
+        patterns:
+          - name: "sequential_write"
+            rdpct: 0      # Write-only
+            seekpct: 0    # Sequential I/O
+            xfersize: "1m"
+            skew: 0
+
+          - name: "random_mixed"
+            rdpct: 70     # 70% reads, 30% writes
+            seekpct: 100  # Random I/O
+            xfersize: "256k"
+            skew: 0
+
+          - name: "small_file_ops"
+            rdpct: 50     # 50% reads, 50% writes
+            seekpct: 100  # Random I/O
+            xfersize: "4k"
+            skew: 0
+
+    # RGW Workload configuration (S3 workload on RADOS Gateway)
+    rgw_config:
+      num_buckets: 5
+      iteration_count: 10
+      upload_multiplier: 1
+      metadata_ops_enabled: false
+      delay_between_iterations: 30
+      delete_bucket_on_cleanup: true  # Automatically delete buckets after workload completes
+      operation_types:
+        - upload
+        - download
+        - list
+        - delete
+
+    # Background Cluster Operations Configuration
+    background_cluster_operations:
+      # Enable background ODF validation operations during chaos
+      enabled: true
+
+      # Operation interval in seconds (time between operations)
+      operation_interval: 60
+
+      # Maximum concurrent background operations
+      max_concurrent_operations: 3
+
+      # Enabled operation types (comment out to disable specific operations)
+      enabled_operations:
+        - snapshot_lifecycle      # PVC snapshot create/restore/delete/verify
+        - clone_lifecycle         # PVC clone create/attach/verify/delete
+        - node_taint_churn       # Node taints for pod rescheduling
+        - osd_operations         # OSD noout flag operations
+        - mds_failover           # MDS daemon failover (CephFS)
+        - rgw_restart            # RGW pod restart (ObjectStore)
+        - reclaim_space          # CSI-Addons ReclaimSpace on RBD volumes
+        - longevity_operations   # Comprehensive snapshot/restore/expand testing
+        # - volume_replication   # CSI-Addons VolumeReplication (requires DR)

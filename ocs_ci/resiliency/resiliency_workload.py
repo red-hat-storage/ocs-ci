@@ -16,6 +16,7 @@ import fauxfactory
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.workloads.vdbench import VdbenchWorkload as VdbenchWorkloadImpl
+from ocs_ci.workloads.rgw_workload import RGWWorkload as RGWWorkloadImpl
 
 log = logging.getLogger(__name__)
 
@@ -328,6 +329,82 @@ class VdbenchWorkload(Workload):
         """Resume the Vdbench workload."""
         log.info("Resuming Vdbench workload")
         self.workload_impl.resume_workload()
+
+
+class RGWWorkload(Workload):
+    """
+    RGW workload wrapper for resiliency and chaos testing.
+
+    This class provides RGW (RADOS Gateway) S3 workload operations for stress testing.
+
+    Args:
+        rgw_bucket: RGW bucket object
+        awscli_pod: Pod with AWS CLI for S3 operations
+        namespace (str): Kubernetes namespace
+        workload_config (dict): Configuration for RGW operations
+    """
+
+    def __init__(
+        self,
+        rgw_bucket,
+        awscli_pod,
+        namespace=None,
+        workload_config=None,
+        delete_bucket_on_cleanup=True,
+    ):
+        super().__init__(namespace=namespace or constants.OPENSHIFT_STORAGE_NAMESPACE)
+        self.rgw_bucket = rgw_bucket
+        self.awscli_pod = awscli_pod
+        self.workload_config = workload_config or {}
+
+        self.workload_impl = RGWWorkloadImpl(
+            rgw_bucket=rgw_bucket,
+            awscli_pod=awscli_pod,
+            namespace=namespace,
+            workload_config=workload_config,
+            delete_bucket_on_cleanup=delete_bucket_on_cleanup,
+        )
+
+        log.info(
+            f"Initialized RGW workload for resiliency testing: {self.workload_impl.bucket_name}"
+        )
+
+    def start_workload(self):
+        """Start the RGW workload."""
+        log.info(f"Starting RGW workload for bucket: {self.rgw_bucket.name}")
+        self.workload_impl.start_workload()
+
+    def scale_up_pods(self, desired_count):
+        """RGW workload doesn't support pod scaling."""
+        log.warning("RGW workload does not support pod scaling")
+
+    def scale_down_pods(self, desired_count):
+        """RGW workload doesn't support pod scaling."""
+        log.warning("RGW workload does not support pod scaling")
+
+    def stop_workload(self):
+        """Stop the RGW workload."""
+        log.info("Stopping RGW workload")
+        self.workload_impl.stop_workload()
+
+    def cleanup_workload(self):
+        """Cleanup RGW workload resources."""
+        log.info("Cleaning up RGW workload")
+        self.workload_impl.cleanup_workload()
+
+    def pause_workload(self):
+        """Pause the RGW workload."""
+        log.info("Pausing RGW workload")
+        self.workload_impl.pause_workload()
+
+    def resume_workload(self):
+        """Resume the RGW workload."""
+        log.info("Resuming RGW workload")
+        self.workload_impl.resume_workload()
+
+    def is_running(self):
+        """Check if workload is running."""
+        return self.workload_impl.is_workload_running()
 
     def get_workload_status(self):
         """Get workload status."""

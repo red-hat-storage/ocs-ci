@@ -57,6 +57,7 @@ TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_COUCHBASE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "pillowfight")
+TEMPLATE_CEPHFS_STRESS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cephfs_stress")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_RGW_DIR = os.path.join(TEMPLATE_DIR, "rgw")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
@@ -110,6 +111,9 @@ AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
 )
 MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses")
 AUTO_SCALING_DIR = os.path.join(TEMPLATE_DIR, "storage-auto-scaling")
+PARTITIONED_DISK_MC = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "98-osd-partition-worker.yaml"
+)
 
 # Statuses
 STATUS_READY = "Ready"
@@ -751,6 +755,7 @@ RBD_NODEPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
 CEPHFS_CTRLPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
 RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
+ROOK_OPERATOR_PODS = "app.kubernetes.io/created-by=rook-ceph-operator"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -894,6 +899,8 @@ PGSQL_BENCHMARK_YAML = os.path.join(TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark.yaml")
 JENKINS_BUILDCONFIG_YAML = os.path.join(TEMPLATE_JENKINS_DIR, "buildconfig.yaml")
 
 SMALLFILE_BENCHMARK_YAML = os.path.join(TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml")
+
+CEPHFS_STRESS_YAML = os.path.join(TEMPLATE_CEPHFS_STRESS_DIR, "cephfs_stress.yaml")
 
 OSD_SCALE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_OSD_SCALE_DIR, "osd_scale_benchmark.yaml"
@@ -3595,4 +3602,25 @@ MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
 
+# chaos Tests constants
+KRKN_REPO_URL = "https://github.com/redhat-chaos/krkn.git"
+KRKN_VERSION = "v4.0.11"
+KRKN_DIR = os.path.join(DATA_DIR, "krkn")
+KRKN_CHAOS_DIR = os.path.join(TOP_DIR, "ocs_ci", "krkn_chaos")
+KRKN_SCENARIO_TEMPLATE_DIR = os.path.join(KRKN_CHAOS_DIR, "template")
+KRKN_GLOBAL_CONFIG_TEMPLATE = os.path.join(
+    KRKN_SCENARIO_TEMPLATE_DIR, "krkn_global_config.yaml.j2"
+)
+KRKN_CHAOS_SCENARIO_LIST = os.path.join(
+    KRKN_CHAOS_DIR, "config", "chaos_scenarios.yaml"
+)
+KRKN_CHAOS_SCENARIO_DIR = os.path.join(DATA_DIR, "krkn_scenarios")
+KRKN_OUTPUT_DIR = os.path.join(DATA_DIR, "krkn_output")
+KRKN_RUN_CMD = os.path.join(KRKN_DIR, "run_kraken.py")
+KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
+
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
+RBD_CSI_ADDONS_PLUGIN_DIR = (
+    "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
+)
+RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"

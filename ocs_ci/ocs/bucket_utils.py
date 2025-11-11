@@ -2142,6 +2142,7 @@ def write_random_test_objects_to_bucket(
     return obj_lst
 
 
+@config.run_with_provider_context_if_available
 def patch_replication_policy_to_bucket(
     bucket_name, rule_id, destination_bucket_name, prefix=""
 ):
@@ -2184,6 +2185,7 @@ def patch_replication_policy_to_bucket(
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+@config.run_with_provider_context_if_available
 def update_replication_policy(bucket_name, replication_policy_dict):
     """
     Updates the replication policy of a bucket
@@ -2211,6 +2213,7 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+@config.run_with_provider_context_if_available
 def get_replication_policy(bucket_name):
     """
     Get the replication policy on a bucket
@@ -2229,6 +2232,7 @@ def get_replication_policy(bucket_name):
     ).get()["spec"]["additionalConfig"]["replicationPolicy"]
 
 
+@config.run_with_provider_context_if_available
 def patch_replication_policy_to_bucketclass(
     bucketclass_name, rule_id, destination_bucket_name
 ):
@@ -2630,7 +2634,7 @@ def delete_all_noobaa_buckets(mcg_obj, request):
         logger.info(f"Deleting {bucket} and its objects")
         s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
         delete_all_objects_in_batches(
-            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket
+            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket.name
         )
         s3_bucket.delete()
 

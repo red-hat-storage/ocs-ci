@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 
 import boto3
+from botocore.client import Config
 import google.api_core.exceptions as GoogleExceptions
 from azure.core.exceptions import ResourceNotFoundError, AzureError
 from azure.storage.blob import BlobServiceClient
@@ -111,7 +112,7 @@ class CloudManager(ABC):
                 endpoint, access_key, secret_key = rgw_conn.get_credentials()
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
-                "DATA_PREFIX": "AWS",
+                "DATA_PREFIX": "RGW",
                 "ENDPOINT": endpoint,
                 "S3_INTERNAL_ENDPOINT": rgw_conn.s3_internal_endpoint,
                 "RGW_ACCESS_KEY_ID": access_key,
@@ -243,14 +244,25 @@ class S3Client(CloudClient):
         self.access_key = key_id
         self.secret_key = access_key
 
-        self.client = boto3.resource(
-            "s3",
-            verify=verify,
-            endpoint_url=self.endpoint,
-            region_name=config.ENV_DATA["region"],
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-        )
+        boto3_kwargs = {
+            "verify": verify,
+            "endpoint_url": self.endpoint,
+            "aws_access_key_id": self.access_key,
+            "aws_secret_access_key": self.secret_key,
+        }
+        if self.data_prefix == "AWS":
+            boto3_kwargs.update(
+                {
+                    "endpoint_url": None,  # lets boto3 pick the endpoint dynamically
+                    "region_name": "us-east-1",  # the only region that allows cross-region bucket operations
+                    "config": Config(
+                        s3={"addressing_style": "virtual"}
+                    ),  # supports cross-region bucket operation
+                }
+            )
+            self.region = "us-east-1"
+
+        self.client = boto3.resource("s3", **boto3_kwargs)
         self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
 
         self.nss_creds = {
@@ -273,7 +285,7 @@ class S3Client(CloudClient):
            the default region for AWS
 
         """
-        if region is None:
+        if region is None or region == "us-east-1":
             self.client.create_bucket(Bucket=name)
         else:
             self.client.create_bucket(

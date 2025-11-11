@@ -497,3 +497,23 @@ class PageNavigator(BaseUI):
             locator=self.page_nav["storageclients_page"], enable_screenshot=False
         )
         return StorageClients()
+
+    def nav_external_systems_page(self):
+        """
+        Navigate to External Storage Systems Page
+
+        Returns:
+            ExternalStorageSystems: External Storage Systems page object
+        """
+        from ocs_ci.ocs.ui.page_objects.external_storage_systems import (
+            ExternalSystems,
+        )
+
+        logger.info("Navigate to External Storage Systems Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=120)
+        self.do_click(
+            locator=self.page_nav["external_systems_page"],
+            enable_screenshot=False,
+        )
+        return ExternalSystems()

@@ -263,7 +263,7 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
             str: Names of downscaled deployments
         """
         # run_time of operation
-        run_time = 60 * 16
+        run_time = 60 * 19
         nonlocal oc
         nonlocal osd_to_stop
         logger.info(f"Downscaling deployment {osd_to_stop} to 0")
@@ -274,12 +274,9 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
 
     test_file = os.path.join(measurement_dir, "measure_stop_ceph_osd.json")
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-        # It seems that it takes longer to propagate incidents to PagerDuty.
-        # Adding 3 extra minutes
         measured_op = measure_operation(
             stop_osd,
             test_file,
-            minimal_time=60 * 19,
             pagerduty_service_ids=[get_pagerduty_service_id()],
             threading_lock=threading_lock,
         )

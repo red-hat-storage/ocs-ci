@@ -28,6 +28,7 @@ class TestCNVVM(E2ETest):
 
         # Create a project
         proj_obj = project_factory()
+        # Setup KMS for PV encryption
         (
             self.vm_objs_def,
             self.vm_objs_aggr,
@@ -66,7 +67,7 @@ class TestCNVVM(E2ETest):
 
     @workloads
     @pytest.mark.polarion_id("OCS-6298")
-    def test_cnv_vms(self, setup, setup_cnv):
+    def test_cnv_vms(self, setup_cnv, setup):
         """
         Tests to verify configuration for non-GS like environment
 

@@ -30,33 +30,39 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
 
-    def create_bucket_ui(self, method: str) -> ObjectStorage:
+    def create_bucket_ui(self, method: str, return_name: bool = False):
         """
         Creates a bucket via UI using specified method.
 
         Args:
             method (str): Creation method, either 'obc' or 's3'.
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
 
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             ValueError: If method is not 'obc' or 's3'.
         """
         self.do_click(self.bucket_tab["create_bucket_button"])
         if method == "obc":
-            return self.create_bucket_via_obc()
+            return self.create_bucket_via_obc(return_name)
         elif method == "s3":
-            return self.create_bucket_via_s3()
+            return self.create_bucket_via_s3(return_name)
         else:
             raise ValueError(f"Invalid method: {method}")
 
-    def create_bucket_via_obc(self) -> ObjectStorage:
+    def create_bucket_via_obc(self, return_name: bool = False):
         """
         Creates bucket via OBC with improved dropdown handling.
 
+        Args:
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
+
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -89,14 +95,21 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["submit_button_obc"])
 
         logger.info("Waiting for OBC to be created")
+
+        if return_name:
+            return ObjectStorage(), name_generator
         return ObjectStorage()
 
-    def create_bucket_via_s3(self) -> ObjectStorage:
+    def create_bucket_via_s3(self, return_name: bool = False):
         """
         Creates bucket via S3 method.
 
+        Args:
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
+
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -106,6 +119,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["create_bucket_button_s3"])
         self.do_send_keys(self.bucket_tab["s3_bucket_name_input"], name_generator)
         self.do_click(self.bucket_tab["submit_button_obc"])
+
+        if return_name:
+            return ObjectStorage(), name_generator
         return ObjectStorage()
 
     def create_folder_in_bucket(
@@ -499,3 +515,68 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             self.driver.refresh()
             self.page_has_loaded(sleep_time=2)
             _check_three_dots_disabled("check three dots inactive after refresh")
+
+    def upload_folder_to_bucket(self, folder_path: str, wait_time: int = 2) -> None:
+        """
+        Upload a folder to the bucket.
+
+        Args:
+            folder_path (str): Path to the folder to upload.
+            wait_time (int): Time to wait after upload (default: 2 seconds).
+        """
+        file_input = self.driver.find_element(
+            self.bucket_tab["file_input_directory"][1],
+            self.bucket_tab["file_input_directory"][0],
+        )
+        self.driver.execute_script(
+            "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
+            file_input,
+        )
+        file_input.clear()
+        file_input.send_keys(folder_path)
+        time.sleep(wait_time)
+
+    def navigate_to_bucket(self, bucket_name: str) -> None:
+        """
+        Navigate to object storage and select the specific test bucket by name.
+
+        Args:
+            bucket_name (str): Name of the bucket to navigate to.
+        """
+        self.nav_object_storage_page()
+        logger.info(f"Navigating to bucket: {bucket_name}")
+        logger.info(f"Looking for bucket link with text: {bucket_name}")
+        bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
+        self.do_click((bucket_link_locator, By.XPATH))
+        logger.info(f"Successfully navigated into bucket: {bucket_name}")
+
+    def navigate_to_folder_and_enable_versions(
+        self,
+        folder_name: str,
+        bucket_name: str,
+        navigation_wait_time: int = 2,
+        versions_load_wait_time: int = 3,
+    ) -> None:
+        """
+        Navigate to the test folder and enable version listing.
+
+        Args:
+            folder_name (str): Name of the folder to navigate to.
+            bucket_name (str): Name of the bucket to work with.
+            navigation_wait_time (int): Time to wait after navigation (default: 2 seconds).
+            versions_load_wait_time (int): Time to wait for versions to load (default: 3 seconds).
+        """
+        logger.info("Navigating to folder and showing versions")
+        self.navigate_to_bucket(bucket_name)
+
+        logger.info(f"Clicking on folder link to navigate into folder: {folder_name}")
+        self.do_click(self.bucket_tab["first_folder_link"])
+
+        time.sleep(navigation_wait_time)
+        logger.info("Clicking 'List all versions' toggle")
+        self.do_click(self.bucket_tab["list_all_versions_toggle"])
+
+        time.sleep(versions_load_wait_time)
+        logger.info(
+            f"Successfully navigated to folder '{folder_name}' and enabled version listing"
+        )

@@ -2119,8 +2119,10 @@ def query_nb_db_psql_version():
 
     try:
         raw_output = exec_nb_db_query("SELECT version();")[0]
-    except IndexError:
-        raise UnexpectedBehaviour("Failed to query the NooBaa DB for its version")
+    except (IndexError, CommandFailed) as ex:
+        raise UnexpectedBehaviour(
+            f"Failed to query the NooBaa DB for its version. Exception: {ex}"
+        )
     return re.search(r"PostgreSQL (\S+)", raw_output).group(1)
 
 

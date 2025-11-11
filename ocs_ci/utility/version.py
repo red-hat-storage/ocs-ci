@@ -70,6 +70,9 @@ VERSION_4_18 = get_semantic_version("4.18", True)
 VERSION_4_19 = get_semantic_version("4.19", True)
 VERSION_4_20 = get_semantic_version("4.20", True)
 
+# Fusion version constants
+VERSION_2_11 = get_semantic_version("2.11", True)
+
 
 def get_semantic_ocs_version_from_config(cluster_config=None):
     """

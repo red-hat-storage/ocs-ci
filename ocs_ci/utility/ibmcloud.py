@@ -796,7 +796,7 @@ class IBMCloudIPI(object):
             force (bool): True for force instance stop, False otherwise
             timeout (int): Timeout for the command, defaults to 300 seconds.
         """
-        logger.info(f"Stopping instances {list(node.name for node in nodes )}")
+        logger.info(f"Stopping instances {list(node.name for node in nodes)}")
         self.stop_nodes(nodes=nodes, force=force)
         if wait:
             for node in nodes:
@@ -808,7 +808,7 @@ class IBMCloudIPI(object):
                     node_status=constants.STATUS_STOPPED,
                 )
                 sample.wait_for_func_status(result=True)
-        logger.info(f"Starting instances {list(node.name for node in nodes )}")
+        logger.info(f"Starting instances {list(node.name for node in nodes)}")
 
         self.start_nodes(nodes=nodes)
         if wait:
@@ -1166,16 +1166,140 @@ def create_vpc(cluster_name, resource_group):
     )
 
 
-def get_used_subnets():
+def get_used_subnets(vpc_id=""):
     """
     Get currently used subnets in IBM Cloud
+
+    Args:
+        vpc_id (str): VPC ID to filter subnets. Empty string means all VPCs.
 
     Returns:
         list: subnets
 
     """
-    subnets_data = json.loads(run_ibmcloud_cmd("ibmcloud is subnets --output json"))
+    subnets_data = json.loads(
+        run_ibmcloud_cmd(f"ibmcloud is subnets --vpc '{vpc_id}' --output json")
+    )
     return [subnet["ipv4_cidr_block"] for subnet in subnets_data]
+
+
+def get_security_groups(vpc_id="", resource_group_id="", resource_group_name=""):
+    """
+    Get security groups in IBM Cloud
+
+    Args:
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups.
+
+    Returns:
+        list: security groups
+
+    """
+    cmd = "ibmcloud is security-groups --output json"
+    if vpc_id:
+        cmd += f" --vpc '{vpc_id}'"
+    if resource_group_id:
+        cmd += f" --resource-group-id '{resource_group_id}'"
+    if resource_group_name:
+        cmd += f" --resource-group-name '{resource_group_name}'"
+    sg_data = json.loads(run_ibmcloud_cmd(cmd))
+    return sg_data
+
+
+def get_security_group_id(
+    sg_name, vpc_id="", resource_group_id="", resource_group_name=""
+):
+    """
+    Get security group ID by name
+
+    Args:
+        sg_name (str): security group name
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups
+
+    Returns:
+        str: security group ID or empty string if not found
+
+    """
+    sgs = get_security_groups(vpc_id, resource_group_id, resource_group_name)
+    for sg in sgs:
+        if sg["name"] == sg_name:
+            return sg["id"]
+    return ""
+
+
+def add_security_group_rule(
+    security_group, direction, protocol, port_min, port_max, **kwargs
+):
+    """
+    Add security group rule
+
+    Args:
+        security_group (str): security group ID or Name
+        direction (str): inbound or outbound
+        protocol (str): protocol, e.g. tcp, udp, icmp, all
+        port_min (int): minimum port number
+        port_max (int): maximum port number
+        **kwargs: other arguments to be passed to command, e.g.
+            --vpc ID or name of the VPC. It is required to specify only the unique resource by name inside this VPC.
+
+    """
+    cmd = (
+        f"ibmcloud is security-group-rule-add {security_group} {direction} {protocol} "
+        f"--port-min {port_min} --port-max {port_max}"
+    )
+    for key, value in kwargs.items():
+        cmd += f" {key} '{value}'"
+    run_ibmcloud_cmd(cmd)
+
+
+def get_security_group_name_by_pattern(
+    sg_name_pattern, vpc_id="", resource_group_id="", resource_group_name=""
+):
+    """
+    Get security group name by pattern
+
+    Args:
+        sg_name_pattern (str): security group name pattern (regular expression)
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs
+        resource_group_id (str): Resource group ID to filter security groups
+        resource_group_name (str): Resource group name to filter security groups
+
+    Returns:
+        str: security group name or empty string if not found
+
+    """
+    sgs = get_security_groups(vpc_id, resource_group_id, resource_group_name)
+    for sg in sgs:
+        if re.search(sg_name_pattern, sg["name"]):
+            return sg["name"]
+    return ""
+
+
+def open_ports_on_ibmcloud_hub_cluster():
+    """
+    Add the inbound rules for these cluster security configs `-cluster-wide` and `-openshift-net` to open the
+    following ports: 3300, 6789, 9283, 6800-7300 and 31659
+    """
+    rg_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+    sg_names = [
+        get_security_group_name_by_pattern(
+            r"cluster-wide$", resource_group_name=rg_name
+        ),
+        get_security_group_name_by_pattern(
+            r"openshift-net$", resource_group_name=rg_name
+        ),
+    ]
+
+    for sg_name in sg_names:
+        add_security_group_rule(sg_name, "inbound", "tcp", 3300, 3300)
+        add_security_group_rule(sg_name, "inbound", "tcp", 6789, 6789)
+        add_security_group_rule(sg_name, "inbound", "tcp", 9283, 9283)
+        add_security_group_rule(sg_name, "inbound", "tcp", 6800, 7300)
+        add_security_group_rule(sg_name, "inbound", "tcp", 31659, 31659)
+    logger.info("Inbound rules added successfully")
 
 
 def create_address_prefix(prefix_name, vpc, zone, cidr):

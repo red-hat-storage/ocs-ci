@@ -20,7 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.utility import version
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,20 +50,16 @@ class TestUserInterfaceValidation(object):
         """
         setup_ui_class_factory()
 
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_13:
-            logger.info(
-                "Verify GET requests initiated by kube-probe on odf-console pod"
+        logger.info("Verify GET requests initiated by kube-probe on odf-console pod")
+        pod_odf_console_name = get_pod_name_by_pattern("odf-console")
+        pod_odf_console_logs = get_pod_logs(pod_name=pod_odf_console_name[0])
+        if (
+            re.search(
+                "GET /plugin-manifest.json HTTP.*kube-probe", pod_odf_console_logs
             )
-            pod_odf_console_name = get_pod_name_by_pattern("odf-console")
-            pod_odf_console_logs = get_pod_logs(pod_name=pod_odf_console_name[0])
-            if (
-                re.search(
-                    "GET /plugin-manifest.json HTTP.*kube-probe", pod_odf_console_logs
-                )
-                is None
-            ):
-                raise ValueError("GET request initiated by kube-probe does not exist")
+            is None
+        ):
+            raise ValueError("GET request initiated by kube-probe does not exist")
 
         validation_ui_obj = ValidationUI()
         validation_ui_obj.odf_overview_ui()

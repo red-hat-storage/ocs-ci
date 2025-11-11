@@ -443,11 +443,14 @@ def add_disk_for_vsphere_platform():
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
+            ssd_disk = True
+            if config.ENV_DATA.get("hdd_disks"):
+                ssd_disk = False
             logger.info(f"LSO Deployment type: {constants.VMDK}")
             vsphere_base.attach_disk(
                 config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
                 config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
-                ssd=True,
+                ssd=ssd_disk,
             )
 
         if lso_type == constants.DIRECTPATH:
@@ -486,7 +489,7 @@ def cleanup_nodes_for_lso_install():
     """
     Cleanup before installing lso
     """
-    from ocs_ci.deployment.baremetal import clean_disk
+    from ocs_ci.deployment.baremetal import clean_disks
 
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
@@ -499,7 +502,7 @@ def cleanup_nodes_for_lso_install():
         logger.info(out)
         logger.info(f"Mount data cleared from node, {node}")
     for node_obj in node_objs:
-        clean_disk(node_obj)
+        clean_disks(node_obj)
     logger.info("All nodes are wiped")
 
 

@@ -60,3 +60,22 @@ class DataFoundationOverview(PageNavigator):
         ) and self.wait_for_element_to_be_visible(
             self.data_foundation_overview["available_capacity_legend"]
         )
+
+    def navigate_to_external_storage_systems(self):
+        """
+        Navigate to External Storage Systems page via External Storage Systems link.
+
+        Returns:
+            ExternalStorageSystems: ExternalStorageSystems page object
+        """
+        logger.info("Navigate to External Storage Systems page via link")
+        self.do_click(
+            self.data_foundation_overview["external_storage_systems_link"],
+            enable_screenshot=True,
+        )
+
+        from ocs_ci.ocs.ui.page_objects.external_storage_systems import (
+            ExternalSystems,
+        )
+
+        return ExternalSystems()

@@ -1,42 +1,58 @@
 repos:
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        language_version: python3.11
 
-- repo: https://github.com/psf/black
-  rev: 24.3.0
-  hooks:
-    - id: black
-      language_version: python3.11
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.0.1
+    hooks:
+      - id: check-json
+      - id: check-yaml
+        args: [--multi]
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
 
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.0.1
-  hooks:
-    - id: check-json
-    - id: check-yaml
-      args: [--multi]
-    - id: debug-statements
-    - id: end-of-file-fixer
-    - id: trailing-whitespace
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.1.0
+    hooks:
+      - id: flake8
 
-- repo: https://github.com/pycqa/flake8
-  rev: 6.1.0
-  hooks:
-    - id: flake8
-
-- repo: https://github.com/gklein/check_signoff
-  rev: v1.0.5
-  hooks:
-    - id: check-signoff
-      language_version: python3.11
-
-- repo: local
-  hooks:
-    - id: validate-retry-usage
-      name: Validate Retry Usage
-      entry: python scripts/python/checks/validate_retry_usage.py
-      language: system
-      types: [python]
-      files: \.py$
-- repo: https://github.com/ibm/detect-secrets
-  rev: 0.13.1+ibm.64.dss
-  hooks:
-    - id: detect-secrets
-      args: [--baseline, .secrets.baseline, --use-all-plugins]
+  - repo: https://github.com/gklein/check_signoff
+    rev: v1.0.5
+    hooks:
+      - id: check-signoff
+        language_version: python3.11
+  - repo: local
+    hooks:
+      - id: validate-retry-usage
+        name: Validate Retry Usage
+        entry: python scripts/python/checks/validate_retry_usage.py
+        language: system
+        types: [python]
+        files: \.py$
+  - repo: https://github.com/ibm/detect-secrets
+    rev: 0.13.1+ibm.64.dss
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline, --use-all-plugins]
+  # Local wrapper to strip "generated_at" after detect-secrets runs
+  - repo: local
+    hooks:
+      - id: strip-generated-at
+        name: Strip generated_at from detect-secrets baseline
+        entry: >
+          bash -c '
+          if [ -f .secrets.baseline ]; then
+            if command -v jq >/dev/null 2>&1; then
+              tmp=$(mktemp)
+              jq "del(.generated_at)" .secrets.baseline > "$tmp" && mv "$tmp" .secrets.baseline
+            else
+              echo "jq not found: skipping generated_at cleanup" >&2
+            fi
+          fi
+          '
+        language: system
+        pass_filenames: false

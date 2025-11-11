@@ -149,10 +149,11 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
             new_csum[vm_obj.name] = cal_md5sum_vm(
                 vm_obj=vm_obj, file_path=file_paths[0]
             )
+
             assert source_csum[vm_obj.name] == new_csum[vm_obj.name], (
                 f"Failed: MD5 comparison failed in VM {vm_obj.name} before "
                 f"{source_csum[vm_obj.name]}"
                 f"and after {new_csum[vm_obj.name]} worker node failure"
             )
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
-            vm_obj.stop()
+        log.info("Successfully completed I/O on all VMs after worker node failure")

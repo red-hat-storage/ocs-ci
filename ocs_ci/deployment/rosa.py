@@ -87,6 +87,9 @@ class ROSAOCP(BaseOCPDeployment):
             log_level (str): openshift installer's log level
 
         """
+        # AWS does not guarantee machines provisioning time,
+        # we need to wait up to 3 hours (observed time)
+        wait_replicas_ready_timeout = 60 * 60 * 3
         if (
             config.ENV_DATA.get("appliance_mode", False)
             and config.ENV_DATA.get("cluster_type", "") == "provider"
@@ -99,7 +102,8 @@ class ROSAOCP(BaseOCPDeployment):
                 self.cluster_name, config.ENV_DATA["machine_pool"]
             )
             machinepool_details.wait_replicas_ready(
-                target_replicas=config.ENV_DATA["worker_replicas"], timeout=2400
+                target_replicas=config.ENV_DATA["worker_replicas"],
+                timeout=wait_replicas_ready_timeout,
             )
             if node_labels := config.ENV_DATA.get("node_labels"):
                 if machinepool_id := config.ENV_DATA.get("machine_pool"):
@@ -150,7 +154,15 @@ class ROSAOCP(BaseOCPDeployment):
             oidc_config_id = (
                 get_associated_oidc_config_id(self.cluster_name) if rosa_hcp else None
             )
-            cluster_id = ocm.get_cluster_details(self.cluster_name).get("id")
+            try:
+                cluster_id = ocm.get_cluster_details(self.cluster_name).get("id")
+            except CommandFailed as e:
+                if "Cluster was Deprovisioned" in str(e):
+                    logger.warning(
+                        f"Cluster {self.cluster_name} is already deprovisioned, {e}"
+                    )
+                    return
+                raise
             subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
             log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)

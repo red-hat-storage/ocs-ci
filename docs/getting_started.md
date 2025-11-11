@@ -91,10 +91,10 @@ necessary dependencies
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
 5. Install requirements with `pip install -r requirements.txt`
-6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
+6. Install pre-commit hooks to enforce commits sign-offs, flake8, black and more compliance
 
    * `pip install -r requirements-dev.txt`
-   * `pre-commit install --hook-type pre-commit --hook-type commit-msg`
+   * `pre-commit install --hook-type pre-commit --hook-type commit-msg --install-hooks`
 
 ## Initial Setup
 

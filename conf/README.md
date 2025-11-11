@@ -49,6 +49,9 @@ run it belongs here.
 * `ocp_url` - OCP Cluster URL (api or console) used to login to OCP cluster if kubeconfig is not available
 * `cli_params` - Dict that holds onto all CLI parameters
 * `client_version` - OCP client version
+* `use_system_available_oc_client` - if no client avalable in bin dir, use system
+  available client and copy it to bin dir.
+* `skip_oc_client_version_comparison` - do not compare oc client version
 * `bin_dir` - Directory where binaries are downloaded to
 * `google_api_secret` - Filepath to google api secret json file
 * `force_chrome_branch_base` - Chrome base branch for openshift console UI testing
@@ -181,6 +184,7 @@ version.
 * `enable_data_replication_separation` - Set to True to label worker nodes with `network.rook.io/mon-ip: <IPAddress>` and enable data replication separation.
 * `enable_nested_virtualization` - Enable nested virtualization for vSphere platform primarily. Used for kubevirt on HCP Clusters. It sets options kvm_intel nested=1 options kvm_amd nested=1 in MachineConfig
 * `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
+* `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
 
 #### REPORTING
 
@@ -323,6 +327,7 @@ higher priority).
     * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
     * `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
     * `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
+    * `root_disk_common_path` - path to root disk where an additional partition should be created common for all worker nodes (see `partitioned_disk_on_workers` option)
     * `servers` - definition of the servers in the BM environment (map where key is the name of the server)
         * `<server-name>`
             * `mgmt_provider` - defines how the server should be managed (`ipmitool` or `ibmcloud`)
@@ -382,11 +387,13 @@ higher priority).
 * `continue_upgrade_after_checks_even_if_not_healthy` -  if set to true Rook will continue the OSD daemon upgrade process even if the PGs are not clean.
 * `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
 * `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
+* `hdd_disks` - If set to true, ocs-ci will create HDD disks for LSO cluster.
 * `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 * `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
+* `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
 
 #### UPGRADE
 
