@@ -3352,9 +3352,9 @@ def clone_repo(
     if not os.path.isdir(location) or (tmp_repo and os.path.isdir(location)):
         log.info("Cloning repository into %s", location)
         if clone_token:
-            safe_token = config.AUTH["github_ibm_odf_qe_ocs_workloads"]["gh_token"]
-            url = url.replace("https://", f"https://{safe_token}@")
-        run_cmd(f"git clone {git_params} {url} {location}")
+            url = url.replace("https://", f"https://{clone_token}@")
+            clone_token = [clone_token]
+        run_cmd(cmd=f"git clone {git_params} {url} {location}", secrets=clone_token)
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
