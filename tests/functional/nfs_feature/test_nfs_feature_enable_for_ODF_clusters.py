@@ -33,6 +33,9 @@ from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+)
 
 
 log = logging.getLogger(__name__)
@@ -61,7 +64,7 @@ class TestDefaultNfsDisabled(ManageTest):
 
         Steps:
         1:- Check cephnfs resources not available by default
-
+        2:- Validate no NFS pods exist
         """
         storage_cluster_obj = ocp.OCP(
             kind="Storagecluster", namespace=config.ENV_DATA["cluster_namespace"]
@@ -70,6 +73,20 @@ class TestDefaultNfsDisabled(ManageTest):
         cephnfs_resource = storage_cluster_obj.exec_oc_cmd("get cephnfs")
         if cephnfs_resource is None:
             log.info("No resources found in openshift-storage namespace.")
+            log.info("Checking that no NFS-related pods exist in the cluster")
+
+            pod_objs = get_all_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+
+            nfs_pod_patterns = (
+                "openshift-storage.nfs",
+            )
+
+            nfs_pods = [p.name for p in pod_objs if p.name.startswith(nfs_pod_patterns)]
+
+            if nfs_pods:
+                log.error(f"NFS pods found when NFS should be disabled: {nfs_pods}")
+            else:
+                log.info("No NFS pods found. NFS is correctly disabled.")
         else:
             log.error("nfs feature is enabled by default")
 
