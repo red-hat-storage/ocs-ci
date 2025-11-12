@@ -841,7 +841,13 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
         exec_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
-        wait_for_machineconfigpool_status(node_type="all")
+        if config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
+            force_delete_pods = True
+        else:
+            force_delete_pods = False
+        wait_for_machineconfigpool_status(
+            node_type="all", force_delete_pods=force_delete_pods
+        )
         logger.info("IDMS applied successfully")
         return self.idms_brew_registry_exists()
 
