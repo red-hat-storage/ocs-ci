@@ -13,6 +13,7 @@ from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.elasticsearch import ElasticSearch
+from ocs_ci.helpers.helpers import set_configmap_log_level_csi_sidecar
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.perftests import PASTest
@@ -101,6 +102,7 @@ class TestPvcSnapshotPerformance(PASTest):
         super(TestPvcSnapshotPerformance, self).setup()
         self.benchmark_name = "pvc_snaspshot_performance"
         self.tests_numbers = 3  # number of tests to run
+        set_configmap_log_level_csi_sidecar(value=5)
 
     def init_full_results(self, full_results):
         """
@@ -403,6 +405,7 @@ class TestPvcSnapshotPerformance(PASTest):
         self.pod_object.delete()
         self.pvc_obj.delete()
         self.delete_test_project()
+        set_configmap_log_level_csi_sidecar(value=1)
 
         # logging the test summary, all info in one place for easy log reading
         c_speed, c_runtime, c_csi_runtime, r_speed, r_runtime, r_csi_runtime = (
@@ -670,6 +673,8 @@ class TestPvcSnapshotPerformance(PASTest):
 
             # Sleep for 1 Min. between test samples
             time.sleep(60)
+
+        set_configmap_log_level_csi_sidecar(value=1)
 
         # Cleanup the elasticsearch instance, if needed.
         if isinstance(self.es, ElasticSearch):
