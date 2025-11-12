@@ -5,11 +5,11 @@ All provider client operator upgrades implemented here
 
 import logging
 
-from ocs_ci.deployment.hub_spoke import HostedODF
+from ocs_ci.deployment.hub_spoke import HostedODF, HostedClients
 from ocs_ci.ocs.dr_upgrade import DRUpgrade
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocs_upgrade
-from ocs_ci.ocs.ocs_upgrade import OCSUpgrade
+from ocs_ci.ocs.ocs_upgrade import OCSUpgrade, prune_old_df_repo_idms
 from ocs_ci.ocs import constants
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.cnv import CNVInstaller
@@ -189,9 +189,15 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
         try:
             log.info("Starting the operator upgrade process...")
             operator_upgrade = OperatorUpgrade()
+            # delete old idms, if exist from the previous upgrades
+            prune_old_df_repo_idms(force_delete_pods=True)
             # Bump OCS version on clients. This function will not fail upgrade if bump of any client fails
             operator_upgrade.bump_ocs_version_on_clients()
             ocs_upgrade.run_ocs_upgrade()
+
+            hosted_clients = HostedClients()
+            hosted_clients.apply_idms_to_hosted_clusters()
+
             operator_upgrade.run_operators_upgrade()
             log.info("Operator upgrade completed successfully.")
         except Exception as e:

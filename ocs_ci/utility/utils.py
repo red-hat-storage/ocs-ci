@@ -6020,3 +6020,21 @@ def get_acm_mce_build_tag(quay_path, version):
     ]
 
     return downstream_tag[0]
+
+
+def parse_k8s_timestamp(ts: str) -> datetime:
+    """
+    Parse RFC3339 timestamp like '2024-10-30T12:34:56Z' to a datetime.
+
+    Args:
+        ts (str): Timestamp string in RFC3339 format.
+
+    Returns:
+        datetime: Parsed datetime object, or datetime.min if parsing fails.
+
+    """
+    # K8s typically uses Zulu time; fallback to min if missing
+    try:
+        return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, TypeError):
+        return datetime.min
