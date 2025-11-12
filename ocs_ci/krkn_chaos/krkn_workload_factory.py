@@ -1,7 +1,8 @@
 import logging
+import subprocess
 import tempfile
+import time
 from contextlib import suppress
-import fauxfactory
 from ocs_ci.ocs import constants
 from ocs_ci.krkn_chaos.krkn_workload_config import KrknWorkloadConfig
 
@@ -23,7 +24,7 @@ class WorkloadOps:
         Args:
             project: OCS project object
             workloads: List of workload objects or dict of {workload_type: [workload_objects]}
-            workload_types: List of workload types (VDBENCH, CNV_WORKLOAD, GOSBENCH, etc.)
+            workload_types: List of workload types (VDBENCH, CNV_WORKLOAD, etc.)
         """
         self.project = project
         self.namespace = project.namespace
@@ -66,10 +67,10 @@ class WorkloadOps:
 
                 if workload_type == KrknWorkloadConfig.VDBENCH:
                     self._validate_vdbench_workload(workload)
-                elif workload_type == KrknWorkloadConfig.GOSBENCH:
-                    self._validate_gosbench_workload(workload)
                 elif workload_type == KrknWorkloadConfig.CNV_WORKLOAD:
                     self._validate_cnv_workload(workload)
+                elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
+                    self._validate_rgw_workload(workload)
 
                 ready_count += 1
             except Exception as e:
@@ -150,8 +151,8 @@ class WorkloadOps:
                     self._validate_vdbench_workload(workload)
                 elif workload_type == KrknWorkloadConfig.CNV_WORKLOAD:
                     self._validate_cnv_workload(workload)
-                elif workload_type == KrknWorkloadConfig.GOSBENCH:
-                    self._validate_gosbench_workload(workload)
+                elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
+                    self._validate_rgw_workload(workload)
                 else:
                     log.warning(f"Unknown workload type: {workload_type}")
 
@@ -203,12 +204,12 @@ class WorkloadOps:
             return workload.workload_type
         elif hasattr(workload, "__class__"):
             class_name = workload.__class__.__name__.lower()
-            if "gosbench" in class_name:
-                return KrknWorkloadConfig.GOSBENCH
-            elif "cnv" in class_name or "vm" in class_name:
+            if "cnv" in class_name or "vm" in class_name:
                 return KrknWorkloadConfig.CNV_WORKLOAD
             elif "vdbench" in class_name:
                 return KrknWorkloadConfig.VDBENCH
+            elif "rgw" in class_name:
+                return KrknWorkloadConfig.RGW_WORKLOAD
 
         return (
             self.workload_types[0]
@@ -251,29 +252,24 @@ class WorkloadOps:
             if vm_status != "Running":
                 log.warning(f"CNV VM is not running. Status: {vm_status}")
 
-    def _validate_gosbench_workload(self, workload):
-        """Validate GOSBENCH workload health."""
-        # Check if GOSBENCH workload is still running
+    def _validate_rgw_workload(self, workload):
+        """Validate RGW workload health."""
+        # Check if RGW workload is still running
+        if hasattr(workload, "is_running") and callable(workload.is_running):
+            if not workload.is_running():
+                log.warning("RGW workload is not running")
+
+        # Check workload status
         if hasattr(workload, "get_workload_status") and callable(
             workload.get_workload_status
         ):
             try:
                 status = workload.get_workload_status()
-                if not status.get("server_ready", False):
-                    log.warning("GOSBENCH server is not ready")
-                if status.get("worker_count", 0) == 0:
-                    log.warning("GOSBENCH has no active workers")
+                log.info(f"RGW workload status: {status}")
+                if not status.get("is_running", False):
+                    log.warning("RGW workload reports as not running")
             except Exception as e:
-                log.warning(f"Failed to get GOSBENCH workload status: {e}")
-
-        # Check if workload pods are running
-        if hasattr(workload, "wait_for_workload_ready") and callable(
-            workload.wait_for_workload_ready
-        ):
-            try:
-                workload.wait_for_workload_ready(timeout=30)
-            except Exception as e:
-                log.warning(f"GOSBENCH workload readiness check failed: {e}")
+                log.warning(f"Failed to get RGW workload status: {e}")
 
 
 class KrknWorkloadFactory:
@@ -629,26 +625,92 @@ class KrknWorkloadFactory:
         )
 
         for interface, cfg in interface_configs.items():
-            pvcs = multi_pvc_factory(
-                interface=interface,
-                project=proj_obj,
-                access_modes=cfg["access_modes"],
-                size=pvc_size,
-                num_of_pvc=num_pvcs,
-                timeout=600,
-            )
-            config_file = cfg["config_file"]()
-            for pvc in pvcs:
-                wl = resiliency_workload(
-                    "VDBENCH", pvc, vdbench_config_file=config_file
+            try:
+                log.info(f"Creating {num_pvcs} PVCs for {interface} interface...")
+                pvcs = multi_pvc_factory(
+                    interface=interface,
+                    project=proj_obj,
+                    access_modes=cfg["access_modes"],
+                    size=pvc_size,
+                    num_of_pvc=num_pvcs,
+                    timeout=600,
                 )
-                wl.start_workload()
-                workloads.append(wl)
+                config_file = cfg["config_file"]()
+                for pvc in pvcs:
+                    wl = resiliency_workload(
+                        "VDBENCH", pvc, vdbench_config_file=config_file
+                    )
+                    wl.start_workload()
+                    workloads.append(wl)
+                log.info(
+                    f"✓ Successfully created {len(pvcs)} VDBENCH workloads for {interface}"
+                )
+            except subprocess.TimeoutExpired as e:
+                log.error(f"PVC binding timeout for {interface} interface after 600s")
+
+                # Extract PVC name from the timeout error
+                pvc_name = None
+                cmd_str = str(e.cmd) if hasattr(e, "cmd") else str(e)
+                if "PersistentVolumeClaim" in cmd_str:
+                    # Extract PVC name from command
+                    parts = cmd_str.split("PersistentVolumeClaim")
+                    if len(parts) > 1:
+                        # Get next element after 'PersistentVolumeClaim'
+                        remaining = parts[1].strip().strip("',[]")
+                        pvc_name = remaining.split("'")[0].split(",")[0].strip()
+
+                # Get PVC describe output for debugging
+                if pvc_name:
+                    try:
+                        from ocs_ci.ocs.ocp import OCP
+
+                        pvc_obj = OCP(
+                            kind="PersistentVolumeClaim",
+                            namespace=proj_obj.namespace,
+                            resource_name=pvc_name,
+                        )
+                        describe_output = pvc_obj.exec_oc_cmd(
+                            f"describe pvc {pvc_name}"
+                        )
+                        log.error(f"PVC {pvc_name} details:\n{describe_output}")
+                    except Exception as desc_err:
+                        log.warning(f"Could not get PVC describe output: {desc_err}")
+                else:
+                    log.warning("Could not extract PVC name from timeout error")
+
+                log.warning(
+                    f"Skipping {interface} workloads - this may indicate cluster storage issues"
+                )
+                continue
+            except Exception as e:
+                log.error(f"Failed to create VDBENCH workloads for {interface}: {e}")
+                log.warning("Continuing with other interfaces...")
+                continue
 
         log.info(
             f"Created {len(workloads)} total vdbench workloads "
             f"({num_pvcs} per interface x 2 interfaces)"
         )
+
+        if not workloads:
+            log.error("Failed to create any VDBENCH workloads")
+            log.error(
+                "All PVC bindings failed. This indicates serious cluster storage issues."
+            )
+            log.error(
+                "Check: 1) Storage provisioner health, "
+                "2) Available storage capacity, "
+                "3) StorageClass configuration"
+            )
+            raise RuntimeError(
+                "Failed to create any VDBENCH workloads - all PVCs failed to bind"
+            )
+        elif len(workloads) < (num_pvcs * 2):  # 2 interfaces
+            log.warning(
+                f"Only created {len(workloads)} workloads out of "
+                f"{num_pvcs * 2} expected. Some PVCs failed to bind."
+            )
+
         return workloads
 
     def _create_cnv_workloads(
@@ -692,189 +754,196 @@ class KrknWorkloadFactory:
 
         return all_vms
 
-    def _create_gosbench_workloads_for_project(self, proj_obj, multi_pvc_factory):
+    def _create_rgw_workloads_for_project(
+        self, proj_obj, multi_pvc_factory, awscli_pod
+    ):
         """
-        Create multiple GOSBENCH workloads with different configurations.
+        Create multiple RGW workloads with different configurations.
 
         Args:
             proj_obj: Project object
-            multi_pvc_factory: Multi-PVC factory (not used by GOSBENCH, but required for consistency)
+            multi_pvc_factory: Multi-PVC factory (not used by RGW, but required for consistency)
+            awscli_pod: Pod with AWS CLI for S3 operations
 
         Returns:
-            List of GOSBENCH workload objects
+            List of RGW workload objects
         """
-        from ocs_ci.workloads.gosbench_workload import GOSBenchWorkload
+        from ocs_ci.resiliency.resiliency_workload import RGWWorkload
 
-        # Get GOSBENCH configuration from krkn_config
-        gosbench_config = self.config.get_gosbench_config()
+        # Get RGW configuration from krkn_config
+        rgw_config = self.config.get_rgw_config()
 
         # Configure workload parameters from config
-        worker_replicas = gosbench_config.get("worker_replicas", 3)
-        benchmark_duration = gosbench_config.get("benchmark_duration", 300)
-        base_concurrency = gosbench_config.get("concurrency", 32)
-
-        # Resource configuration
-        server_resources = gosbench_config.get("server_resources", {})
-        worker_resources = gosbench_config.get("worker_resources", {})
-
-        # Image configuration
-        custom_image = gosbench_config.get("image", None)
-        server_image = gosbench_config.get("server_image", None)
-        worker_image = gosbench_config.get("worker_image", None)
-
-        # Define workload configurations (similar to VDBENCH's multiple PVCs)
-        # Creating 3 workloads with different object sizes and patterns
-        workload_configs = [
-            {
-                "name_suffix": "small-mixed",
-                "object_size": "16KiB",
-                "object_count": 5000,
-                "pattern": "mixed",
-                "concurrency": base_concurrency,
-            },
-            {
-                "name_suffix": "medium-readheavy",
-                "object_size": "1MiB",
-                "object_count": 1000,
-                "pattern": "read-heavy",
-                "concurrency": base_concurrency * 2,
-            },
-            {
-                "name_suffix": "large-writeheavy",
-                "object_size": "10MiB",
-                "object_count": 500,
-                "pattern": "write-heavy",
-                "concurrency": base_concurrency,
-            },
-        ]
+        num_buckets = rgw_config.get("num_buckets", 3)
+        iteration_count = rgw_config.get("iteration_count", 10)
+        operation_types = rgw_config.get(
+            "operation_types", ["upload", "download", "list", "delete"]
+        )
+        upload_multiplier = rgw_config.get("upload_multiplier", 1)
+        metadata_ops_enabled = rgw_config.get("metadata_ops_enabled", False)
+        delay_between_iterations = rgw_config.get("delay_between_iterations", 30)
+        delete_bucket_on_cleanup = rgw_config.get("delete_bucket_on_cleanup", True)
 
         workloads = []
 
-        for config in workload_configs:
-            try:
-                # Create unique workload name
-                workload_name = f"gosbench-{config['name_suffix']}-{fauxfactory.gen_alpha(4).lower()}"
-                log.info(f"Creating GOSBENCH workload: {workload_name}")
+        log.info(f"Creating {num_buckets} RGW workloads")
 
-                gosbench_workload = GOSBenchWorkload(
-                    workload_name=workload_name, namespace=proj_obj.namespace
+        # Pre-flight check: Verify RGW pods are running
+        try:
+            from ocs_ci.ocs.ocp import OCP
+            from ocs_ci.ocs import constants
+
+            log.info("Checking RGW pod health before creating buckets...")
+            rgw_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector="app=rook-ceph-rgw")
+
+            if not rgw_pods or "items" not in rgw_pods or not rgw_pods["items"]:
+                log.warning(
+                    "No RGW pods found - RGW may not be deployed on this cluster"
                 )
-
-                # Create stage configuration based on pattern
-                if config["pattern"] == "read-heavy":
-                    stages = [
-                        {"name": "ramp", "duration": "20s", "op": "none"},
-                        {
-                            "name": "put",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "put",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                        {
-                            "name": "get",
-                            "duration": f"{benchmark_duration * 2 // 3}s",
-                            "op": "get",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "delete",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "delete",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                    ]
-                elif config["pattern"] == "write-heavy":
-                    stages = [
-                        {"name": "ramp", "duration": "20s", "op": "none"},
-                        {
-                            "name": "put",
-                            "duration": f"{benchmark_duration * 2 // 3}s",
-                            "op": "put",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "get",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "get",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                        {
-                            "name": "delete",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "delete",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                    ]
-                else:  # mixed
-                    stages = [
-                        {"name": "ramp", "duration": "20s", "op": "none"},
-                        {
-                            "name": "put",
-                            "duration": f"{benchmark_duration // 3}s",
-                            "op": "put",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "get",
-                            "duration": f"{benchmark_duration // 3}s",
-                            "op": "get",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "delete",
-                            "duration": f"{benchmark_duration // 3}s",
-                            "op": "delete",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                    ]
-
-                # Create benchmark configuration
-                benchmark_config = {
-                    "s3": {"bucket": f"{workload_name}-bucket", "insecure_tls": False},
-                    "benchmark": {
-                        "name": f"{workload_name}-chaos-test",
-                        "object": {
-                            "size": config["object_size"],
-                            "count": config["object_count"],
-                        },
-                        "stages": stages,
-                    },
-                }
-
-                # Start the GOSBENCH workload
-                gosbench_workload.start_workload(
-                    benchmark_config=benchmark_config,
-                    worker_replicas=worker_replicas,
-                    image=custom_image,
-                    server_image=server_image,
-                    worker_image=worker_image,
-                    server_resource_limits=server_resources,
-                    worker_resource_limits=worker_resources,
+                log.warning("RGW workload requires RGW to be enabled in ODF deployment")
+            else:
+                running_pods = sum(
+                    1
+                    for pod in rgw_pods["items"]
+                    if pod.get("status", {}).get("phase") == "Running"
                 )
+                total_pods = len(rgw_pods["items"])
+                log.info(f"RGW pods: {running_pods}/{total_pods} running")
 
-                # Wait for workload to be ready
-                gosbench_workload.wait_for_workload_ready(timeout=300)
+                if running_pods == 0:
+                    log.error("No RGW pods are running - cannot create RGW workloads")
+                    raise RuntimeError(
+                        "RGW service is not available. "
+                        "Ensure RGW is enabled in your ODF deployment."
+                    )
+                elif running_pods < total_pods:
+                    log.warning(
+                        f"Only {running_pods}/{total_pods} RGW pods are running. "
+                        f"This may cause bucket creation failures."
+                    )
+        except Exception as e:
+            log.warning(f"Could not verify RGW pod health: {e}")
+            log.warning("Proceeding with bucket creation anyway...")
 
-                workloads.append(gosbench_workload)
-                log.info(
-                    f"✓ Created GOSBENCH workload: {workload_name} "
-                    f"({config['object_size']} objects, {config['pattern']} pattern)"
-                )
+        # Get rgw_bucket_factory from conftest dynamically
+        try:
+            # This requires the rgw_bucket_factory fixture to be available
+            # For now, we'll create buckets using the project's RGW capabilities
+            log.info("Creating RGW buckets for workload testing")
 
-            except Exception as e:
-                log.error(
-                    f"Failed to create GOSBENCH workload {config['name_suffix']}: {e}"
-                )
-                # Clean up on failure
+            for i in range(num_buckets):
                 try:
-                    gosbench_workload.stop_workload()
-                except Exception:
-                    pass
-                # Continue with next workload instead of failing completely
-                continue
+                    # Create RGW bucket
+                    from ocs_ci.ocs.resources.objectbucket import RGWOCBucket
+                    import fauxfactory
+
+                    bucket_name = f"rgw-workload-{fauxfactory.gen_alpha(4).lower()}"
+                    log.info(f"Creating RGW bucket: {bucket_name}")
+
+                    # Create RGW bucket - it creates the OBC
+                    rgw_bucket = RGWOCBucket(bucket_name)
+
+                    # Give OBC a moment to be reconciled by the operator
+                    log.info(f"Waiting 15s for OBC {bucket_name} to be reconciled...")
+                    time.sleep(15)
+
+                    # Wait for bucket to be bound and ready (timeout 300s)
+                    log.info(
+                        f"Waiting for bucket {bucket_name} to be ready (up to 5 minutes)..."
+                    )
+                    try:
+                        rgw_bucket.verify_health(timeout=300)
+                        log.info(f"✓ Bucket {bucket_name} is ready")
+                    except KeyError as e:
+                        log.error(
+                            f"OBC {bucket_name} missing status field after 300s: {e}"
+                        )
+                        log.error(
+                            "The OBC controller has not added status field. "
+                            "This indicates the controller is not processing OBC requests."
+                        )
+
+                        # Show OBC describe output
+                        try:
+                            from ocs_ci.ocs.ocp import OCP
+
+                            obc_obj = OCP(
+                                kind="obc",
+                                namespace=rgw_bucket.namespace,
+                                resource_name=bucket_name,
+                            )
+                            describe_out = obc_obj.exec_oc_cmd(
+                                f"describe obc {bucket_name}"
+                            )
+                            log.error(f"OBC {bucket_name} details:\n{describe_out}")
+                        except Exception as desc_err:
+                            log.warning(f"Could not get OBC describe: {desc_err}")
+
+                        # Don't raise - continue with next bucket
+                        continue
+                    except Exception as e:
+                        log.error(f"Bucket {bucket_name} failed to become healthy: {e}")
+                        # Check if this is due to cluster health issues
+                        if "did not reach a healthy state" in str(e):
+                            log.warning(
+                                "OBC binding timeout - possible RGW service issue. "
+                                "Check cluster health before creating more buckets."
+                            )
+                        # Continue with next bucket instead of failing completely
+                        continue
+
+                    # Workload configuration
+                    workload_config = {
+                        "iteration_count": iteration_count,
+                        "operation_types": operation_types,
+                        "upload_multiplier": upload_multiplier,
+                        "metadata_ops_enabled": metadata_ops_enabled,
+                        "delay_between_iterations": delay_between_iterations,
+                    }
+
+                    # Create RGW workload
+                    rgw_workload = RGWWorkload(
+                        rgw_bucket=rgw_bucket,
+                        awscli_pod=awscli_pod,
+                        namespace=proj_obj.namespace,
+                        workload_config=workload_config,
+                        delete_bucket_on_cleanup=delete_bucket_on_cleanup,
+                    )
+
+                    # Start the workload
+                    rgw_workload.start_workload()
+
+                    workloads.append(rgw_workload)
+                    log.info(f"✓ Created and started RGW workload: {bucket_name}")
+
+                except Exception as e:
+                    log.error(f"Failed to create RGW workload {i + 1}: {e}")
+                    import traceback
+
+                    log.error(traceback.format_exc())
+                    # Continue with next workload instead of failing completely
+                    continue
+
+        except Exception as e:
+            log.error(f"Failed to create RGW workloads: {e}")
+            raise RuntimeError(f"Failed to create any RGW workloads: {e}")
 
         if not workloads:
-            raise RuntimeError("Failed to create any GOSBENCH workloads")
+            log.error("Failed to create any RGW workloads")
+            log.error(
+                "This may be due to cluster health issues. "
+                "Check RGW pod status and OBC controller health."
+            )
+            raise RuntimeError("Failed to create any RGW workloads")
 
-        log.info(f"✓ Created {len(workloads)} GOSBENCH workloads")
+        if len(workloads) < num_buckets:
+            log.warning(
+                f"Only created {len(workloads)} out of {num_buckets} requested RGW workloads. "
+                f"Some buckets failed to bind - check cluster health."
+            )
+        else:
+            log.info(f"✓ Successfully created all {len(workloads)} RGW workloads")
+
         return workloads

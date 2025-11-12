@@ -43,9 +43,13 @@ class ODFCLIRetriever:
             return False
 
         # Check if the binary's version matches the cluster's in upgrade runs
-        if not xattr.getxattr(path, self.version_attribute_name).decode() == str(
-            self.semantic_version
-        ):
+        try:
+            binary_version = xattr.getxattr(path, self.version_attribute_name).decode()
+        except OSError:
+            log.warning("ODF CLI binary is not tagged with a version attribute")
+            return False
+
+        if binary_version != str(self.semantic_version):
             log.warning(
                 f"ODF CLI binary is not tagged with the correct version {self.semantic_version}"
             )

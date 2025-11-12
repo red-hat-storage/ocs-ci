@@ -75,15 +75,15 @@ class KrknWorkloadConfig:
         krkn_config = self.config.ENV_DATA.get("krkn_config", {})
         return krkn_config.get("vdbench_config", {})
 
-    def get_gosbench_config(self) -> Dict[str, Any]:
+    def get_rgw_config(self) -> Dict[str, Any]:
         """
-        Get GOSBENCH configuration.
+        Get RGW configuration.
 
         Returns:
-            dict: GOSBENCH configuration
+            dict: RGW configuration
         """
         krkn_config = self.config.ENV_DATA.get("krkn_config", {})
-        return krkn_config.get("gosbench_config", {})
+        return krkn_config.get("rgw_config", {})
 
     def get_cnv_config(self) -> Dict[str, Any]:
         """
@@ -357,5 +357,5 @@ class KrknWorkloadConfig:
 
     # Workload type constants
     VDBENCH = "VDBENCH"
-    GOSBENCH = "GOSBENCH"
     CNV_WORKLOAD = "CNV_WORKLOAD"
+    RGW_WORKLOAD = "RGW_WORKLOAD"

@@ -1487,6 +1487,22 @@ def pvc_factory_fixture(request, project_factory):
 
         pv_objs = []
 
+        # Wait for volumes to detach before PVC deletion for encrypted volumes.
+        # For encrypted volumes, deleting PVCs too early can remove the secret
+        # before detachment, causing volume deletion errors.
+        non_deleted_instances = [
+            instance for instance in instances if not instance.is_deleted
+        ]
+        encrypted_pvcs = [
+            pvc for pvc in non_deleted_instances if helpers.is_pvc_encrypted(pvc)
+        ]
+        if encrypted_pvcs:
+            log.info(
+                f"Waiting for {len(encrypted_pvcs)} encrypted volume(s) to detach "
+                "before PVC deletion"
+            )
+            helpers.wait_for_volume_detachment(pvc_objs=encrypted_pvcs, timeout=180)
+
         # Get PV form PVC instances and delete PVCs
         for instance in instances:
             if not instance.is_deleted:
@@ -5597,6 +5613,21 @@ def load_cluster_info_file(request):
     load_cluster_info()
 
 
+@pytest.fixture(scope="module")
+def pv_encryption_kms_setup_factory_module(request):
+    """
+    Create vault resources and setup csi-kms-connection-details configMap
+    """
+
+    # set the KMS provider based on KMS_PROVIDER env value.
+    if ocsci_config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+        return pv_encryption_hpcs_setup_factory(request)
+    elif ocsci_config.ENV_DATA["KMS_PROVIDER"] == constants.AZURE_KV_PROVIDER_NAME:
+        return pv_encryption_azure_kv_setup_factory(request)
+    else:
+        return pv_encryption_vault_setup_factory(request)
+
+
 @pytest.fixture(scope="function")
 def pv_encryption_kms_setup_factory(request):
     """
@@ -7859,24 +7890,18 @@ def multi_cnv_workload_class(request, storageclass_factory_class, cnv_workload_c
 
 
 @pytest.fixture()
-def multi_cnv_workload(
-    request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-):
+def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
     Class scoped fixture to deploy multiple CNV workload
 
     """
-    return multi_cnv_workload_factory(
-        request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-    )
+    return multi_cnv_workload_factory(request, storageclass_factory, cnv_workload)
 
 
-def multi_cnv_workload_factory(
-    request, pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-):
+def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
-    The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
+    The `pv_encryption_kms_setup_factory_module` fixture is only initialized if `encrypted=True`.
     This fixture sets up multiple VMs with varying storage configurations as specified
     in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
     access mode, and the storage class to be used.
@@ -7907,13 +7932,14 @@ def multi_cnv_workload_factory(
         namespace = (
             namespace if namespace else create_unique_resource_name("vm", "namespace")
         )
-
-        kms = None
         if encrypted:
+            # Setup csi-kms-connection-details configmap
             log.info("Setting up csi-kms-connection-details configmap")
+            pv_encryption_kms_setup_factory = request.getfixturevalue(
+                "pv_encryption_kms_setup_factory_module"
+            )
             kms = pv_encryption_kms_setup_factory(kv_version="v2")
             log.info("csi-kms-connection-details setup successful")
-
         try:
             kms_id = kms.kmsid
         except (NameError, AttributeError):
@@ -8262,25 +8288,34 @@ def change_the_noobaa_log_level(request):
     """
     This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
     """
-    noobaa_cm = OCP(
-        kind="configmap",
-        resource_name="noobaa-config",
-        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-    )
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        noobaa_cm = OCP(
+            kind="configmap",
+            resource_name="noobaa-config",
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        )
 
     def factory(level="all"):
-        assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
-        noobaa_cm.patch(
-            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
-        )
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
+            noobaa_cm.patch(
+                params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}',
+                format_type="merge",
+            )
+            wait_for_pods_to_be_running(
+                pod_names=[pod.name for pod in get_noobaa_pods()]
+            )
 
     def finalizer():
-        level = "default_level"
-        noobaa_cm.patch(
-            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
-        )
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            level = "default_level"
+            noobaa_cm.patch(
+                params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}',
+                format_type="merge",
+            )
+            wait_for_pods_to_be_running(
+                pod_names=[pod.name for pod in get_noobaa_pods()]
+            )
 
     request.addfinalizer(finalizer)
     return factory

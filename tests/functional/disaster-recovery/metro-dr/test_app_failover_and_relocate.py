@@ -23,6 +23,9 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_creation,
     wait_for_all_resources_deletion,
     gracefully_reboot_ocp_nodes,
+    verify_cluster_data_protected_status,
+    verify_fence_state,
+    mdr_post_failover_check,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
@@ -30,7 +33,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     verify_failover_relocate_status_ui,
 )
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
-from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -119,15 +121,11 @@ class TestApplicationFailoverAndRelocate:
         pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
         """
 
-        if config.RUN.get("mdr_failover_via_ui"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version <= version.VERSION_4_12:
-                logger.error(
-                    "ODF/ACM version isn't supported for Failover/Relocate operation"
-                )
-                raise NotImplementedError
+        self.primary_cluster_name = ""
 
-        acm_obj = AcmAddClusters()
+        if config.RUN.get("mdr_failover_via_ui"):
+            acm_obj = AcmAddClusters()
+
         if workload_type == constants.SUBSCRIPTION:
             workload = dr_workload(num_of_subscription=1)[0]
         else:
@@ -141,6 +139,23 @@ class TestApplicationFailoverAndRelocate:
         self.primary_cluster_name = get_current_primary_cluster_name(
             namespace=workload.workload_namespace, workload_type=workload_type
         )
+
+        # Verify that the cluster dataProtected is True and peerReady is True
+        verify_cluster_data_protected_status(
+            workload_type=workload_type,
+            namespace=self.namespace,
+            workload_placement_name=(
+                workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None
+            ),
+        )
+
+        wait_time = 120
+        logger.info(
+            f"Wait for {wait_time} seconds before starting Failover of application"
+        )
+        time.sleep(wait_time)
 
         # Stop primary cluster nodes
         if primary_cluster_down:
@@ -160,6 +175,9 @@ class TestApplicationFailoverAndRelocate:
 
         # Fenced the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
 
         # Application Failover to Secondary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
@@ -205,7 +223,6 @@ class TestApplicationFailoverAndRelocate:
             verify_failover_relocate_status_ui(acm_obj)
 
         # Start nodes if cluster is down
-        wait_time = 120
         if primary_cluster_down:
             logger.info(
                 f"Waiting for {wait_time} seconds before starting nodes of previous primary cluster"
@@ -224,23 +241,36 @@ class TestApplicationFailoverAndRelocate:
                 timeout=720
             ), "Not all the pods reached running state"
 
+        # Validate data integrity
+        set_current_primary_cluster_context(workload.workload_namespace, workload_type)
+        validate_data_integrity(workload.workload_namespace)
+
+        # Verify application are deleted from old cluster
+        set_current_secondary_cluster_context(
+            workload.workload_namespace, workload_type
+        )
+        mdr_post_failover_check(namespace=workload.workload_namespace)
+
+        # Un-fence the managed cluster which was Fenced earlier
+        enable_unfence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_UNFENCE} state"
+
+        # Reboot the nodes which unfenced
+        gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
+
         # Verify application are deleted from old cluster
         set_current_secondary_cluster_context(
             workload.workload_namespace, workload_type
         )
         wait_for_all_resources_deletion(workload.workload_namespace)
 
-        # Validate data integrity
-        set_current_primary_cluster_context(workload.workload_namespace, workload_type)
-        validate_data_integrity(workload.workload_namespace)
-
-        # Un-fence the managed cluster which was Fenced earlier
-        enable_unfence(drcluster_name=self.primary_cluster_name)
-
-        # Reboot the nodes which unfenced
-        gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
-
         # Application Relocate to Primary managed cluster
+        logger.info(
+            f"Wait for {wait_time} seconds before starting Relocate of application"
+        )
+        time.sleep(wait_time)
         secondary_cluster_name = get_current_secondary_cluster_name(
             workload.workload_namespace, workload_type
         )

@@ -20,6 +20,7 @@ from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     create_pods,
     get_snapshot_content_obj,
+    wait_for_volume_detachment,
 )
 from ocs_ci.ocs.exceptions import (
     KMSResourceCleaneupError,
@@ -248,6 +249,9 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
         log.info("Deleted all the pods")
 
+        # Wait for encrypted volumes to detach from nodes before PVC deletion
+        wait_for_volume_detachment(pvc_objs=self.pvc_objs, timeout=180)
+
         # Delete parent PVCs to verify snapshot is independent
         log.info("Deleting parent PVCs")
         for pvc_obj in self.pvc_objs:
@@ -258,7 +262,8 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
                 f"Deleted PVC {pvc_obj.name}. Verifying whether PV "
                 f"{pv_obj.name} is deleted."
             )
-            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
+            # Increased timeout for encrypted volume deletion
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
         log.info("All parent PVCs and PVs are deleted before restoring snapshot.")
 
         restore_pvc_objs, restore_vol_handles = ([] for i in range(2))
@@ -360,11 +365,15 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
+        # Wait for encrypted volumes to detach from nodes before PVC deletion
+        wait_for_volume_detachment(pvc_objs=restore_pvc_objs, timeout=180)
+
         log.info("Deleting restored PVCs")
         for pvc_obj in restore_pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             pvc_obj.delete()
-            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
+            # Increased timeout for encrypted volume deletion
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
 
         log.info("Deleting the snapshots")
         for snap_obj in snap_objs:

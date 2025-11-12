@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     blue_squad,
     provider_mode,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 
 
 @blue_squad
+@runs_on_provider
 def test_alerting_works(threading_lock):
     """
     If alerting works then there is at least one alert.
@@ -36,6 +38,7 @@ def test_alerting_works(threading_lock):
 @blue_squad
 @pytest.mark.polarion_id("OCS-2503")
 @tier1
+@runs_on_provider
 @flaky(max_runs=3)
 def test_prometheus_rule_failures(threading_lock):
     """

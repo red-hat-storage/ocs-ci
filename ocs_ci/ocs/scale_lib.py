@@ -1814,6 +1814,7 @@ def validate_node_and_oc_services_are_up_after_reboot(wait_time=40):
             ),
             tries=60,
             delay=15,
+            backoff=1,
         )(wait_for_cluster_connectivity)(tries=400)
         retry(
             (
@@ -1824,6 +1825,7 @@ def validate_node_and_oc_services_are_up_after_reboot(wait_time=40):
             ),
             tries=60,
             delay=15,
+            backoff=1,
         )(wait_for_nodes_status)(timeout=900)
         return True
     except Exception as e:

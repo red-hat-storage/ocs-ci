@@ -54,13 +54,14 @@ class TestVmHotPlugUnplug(E2ETest):
             sc_obj = sc_objs_def if vm_obj in vm_objs_def else sc_objs_aggr
             before_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
             log.info(f"Disks before hotplug:\n{before_disks}")
-
+            pvc_name = (f"pvc-hotplug-1-{vm_obj.name}")[:35]
             pvc_obj = pvc_factory(
                 project=proj_obj,
                 storageclass=sc_obj,
                 size=20,
                 access_mode=constants.ACCESS_MODE_RWX,
                 volume_mode=constants.VOLUME_MODE_BLOCK,
+                pvc_name=pvc_name,
             )
             log.info(f"PVC {pvc_obj.name} created successfully")
 
@@ -91,13 +92,14 @@ class TestVmHotPlugUnplug(E2ETest):
             assert (
                 source_csum == new_csum
             ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
-
+            pvc_name = (f"pvc-hotplug-2-{vm_obj.name}")[:35]
             pvc_obj_wout = pvc_factory(
                 project=proj_obj,
                 storageclass=sc_obj,
                 size=20,
                 access_mode=constants.ACCESS_MODE_RWX,
                 volume_mode=constants.VOLUME_MODE_BLOCK,
+                pvc_name=pvc_name,
             )
             log.info(f"PVC {pvc_obj_wout.name} created successfully")
             before_disks_wout = vm_obj.run_ssh_cmd(

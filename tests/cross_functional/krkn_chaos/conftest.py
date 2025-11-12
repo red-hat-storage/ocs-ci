@@ -194,7 +194,6 @@ def workload_ops(request, project_factory, multi_pvc_factory):
     Supported workload types:
     - VDBENCH: Traditional VDBENCH workloads on CephFS and RBD
     - CNV_WORKLOAD: CNV-based virtual machine workloads
-    - GOSBENCH: S3 performance testing workload against NooBaa/RGW
 
     Background cluster operations handle validation during chaos testing,
     eliminating the need for separate verification logic.

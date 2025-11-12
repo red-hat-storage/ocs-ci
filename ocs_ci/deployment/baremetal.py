@@ -7,6 +7,8 @@ import tempfile
 import time
 from datetime import datetime
 from time import sleep
+from pathlib import Path
+import base64
 
 import yaml
 import requests
@@ -17,7 +19,6 @@ from .flexy import FlexyBaremetalPSI
 from ocs_ci.utility import psiutils, aws, version
 
 from ocs_ci.deployment.deployment import Deployment
-from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -45,6 +46,7 @@ from ocs_ci.utility.utils import (
     add_chrony_to_ocp_deployment,
     replace_content_in_file,
 )
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -1541,6 +1543,219 @@ def clean_disk(
             namespace=namespace,
         )
         logger.info(out)
+
+
+def detect_simulation_disk_on_node(wnode, namespace="default", timeout=300):
+    """
+    Detects the last available /dev/sd* disk on a given worker node.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the command execution.
+
+    Returns:
+        str or None: The detected disk path (e.g., "/dev/sdb") or None if not found.
+
+    """
+    logger.info(
+        f"Attempting to auto-detect a suitable /dev/sd* disk on worker node: {wnode.name}."
+    )
+    cmd = ['lsblk -dn -o NAME | grep -E "^sd[a-z]$" | sed "s#^#/dev/#" | tail -1']
+    ocp_obj = ocp.OCP()
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    logger.info(f"Disk detection command output: {out}")
+    disk_name = out.strip()
+
+    if not disk_name:
+        logger.warning(
+            f"No suitable disk found for BlueStore simulation on worker node: {wnode.name}."
+        )
+        return None
+
+    logger.info(f"Detected disk for simulation: {disk_name}")
+    return disk_name
+
+
+def upload_script_to_node(
+    wnode,
+    script_src_path: str,
+    script_dest_path: str,
+    namespace: str = "default",
+    timeout: int = 300,
+):
+    """
+    Upload a shell script to a node using base64 encoding via `oc debug`.
+
+    The script is read locally, base64-encoded, and decoded on the node
+    using `echo | base64 -d`.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
+        script_src_path (str): Local path to the script.
+        script_dest_path (str): Destination path on the node.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the oc debug command (in seconds).
+
+    Returns:
+        str: Output of the command execution.
+
+    Raises:
+        FileNotFoundError: If the local script file does not exist.
+
+    """
+    ocp_obj = ocp.OCP()
+
+    if not os.path.exists(script_src_path):
+        raise FileNotFoundError(f"Script not found at {script_src_path}")
+
+    # Read and encode the script
+    with open(script_src_path, "rb") as f:
+        script_content = f.read()
+    script_b64 = base64.b64encode(script_content).decode("utf-8").replace("\n", "")
+
+    logger.info(
+        f"Uploading script from '{script_src_path}' to node '{wnode.name}' at '{script_dest_path}'"
+    )
+
+    # Build the shell command
+    upload_cmd = [
+        (
+            f"set -euo pipefail; "
+            f'echo "{script_b64}" | base64 -d > {script_dest_path} && '
+            f"chmod 755 {script_dest_path} && "
+            f'echo "Script written to {script_dest_path}" && ls -l {script_dest_path}'
+        )
+    ]
+
+    # Execute the command on the node
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=upload_cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
+def run_script_on_node(
+    wnode,
+    script_path: str,
+    args: str = "",
+    namespace: str = "default",
+    timeout: int = 600,
+):
+    """
+    Execute a shell script directly on a node (inside chroot /host)
+    using oc debug.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
+        script_path (str): Full path to the script on the node.
+        args (str): Optional arguments to pass to the script.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the command execution (in seconds).
+
+    Returns:
+        str: Output of the script execution.
+    """
+    ocp_obj = ocp.OCP()
+
+    logger.info(
+        f"Running the script {script_path} with the args '{args}' "
+        f"on the worker node {wnode.name}"
+    )
+    # Build the command — single element, no single quotes inside
+    cmd = [f"set -euo pipefail; " f"bash {script_path} {args} "]
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
+def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="default"):
+    """
+    Simulates a Ceph BlueStore label on a specified disk of a given worker node.
+
+
+    This function uploads a local shell script to the node using base64 encoding,
+    verifies its integrity via SHA256 checksum, and executes it to simulate a
+    BlueStore label on the specified disk. If no disk is specified, the function
+    attempts to auto-detect a suitable disk. The output is parsed to determine
+    whether the simulation was successful.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object where the simulation
+            should be performed.
+        disk_name (str, optional): The disk device name to simulate the label on.
+            If not provided, the function auto-detects the last /dev/sd* disk on the node.
+        namespace (str): Namespace for the debug pod.
+
+    Returns:
+        bool: True if the simulation succeeded (BlueStore label detected), False otherwise.
+
+    """
+    if not disk_name:
+        disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+
+    if not disk_name:
+        logger.error("Disk detection failed. Aborting BlueStore simulation.")
+        return False
+
+    script_name = "simulate_bluestore_label.sh"
+    current_dir = Path(__file__).parent.parent.parent
+    script_src_path = os.path.join(current_dir, "scripts", "bash", script_name)
+    script_dest_path = f"/tmp/{script_name}"
+
+    # Step 3: Download the script directly on the node
+    logger.info(
+        f"Uploading BlueStore simulation script to the worker node {wnode.name}"
+    )
+    upload_script_to_node(
+        wnode=wnode,
+        script_src_path=script_src_path,
+        script_dest_path=script_dest_path,
+        namespace=namespace,
+        timeout=300,
+    )
+
+    # Step 5: Run the script on the node
+    logger.info(f"Running BlueStore simulation script on disk: {disk_name}")
+    out = run_script_on_node(
+        wnode=wnode,
+        script_path=script_dest_path,
+        args=disk_name,
+        namespace=namespace,
+        timeout=300,
+    )
+
+    logger.info("Script output:\n" + out)
+    result = "Verification PASSED" in out or ">>> BlueStore UUID:" in out
+    if result:
+        logger.info(
+            f"BlueStore label simulation succeeded on the worker node {wnode.name}"
+        )
+    else:
+        logger.warning(
+            f"BlueStore label simulation failed.on the worker node {wnode.name}"
+        )
+    return result
 
 
 class BaremetalPSIUPI(Deployment):

@@ -132,14 +132,14 @@ KrknWorkloadRegistry.register(
     )
 )
 
-# GOSBENCH Workload (no fixtures needed - self-contained)
+# RGW Workload (S3 workload on RGW buckets)
 KrknWorkloadRegistry.register(
     WorkloadTypeConfig(
-        name="GOSBENCH",
-        required_fixtures=[],  # No fixtures required
-        factory_method="_create_gosbench_workloads_for_project",
-        fixture_params=[],  # No fixture params
-        description="S3 performance testing workload against NooBaa/RGW",
+        name="RGW_WORKLOAD",
+        required_fixtures=["awscli_pod"],
+        factory_method="_create_rgw_workloads_for_project",
+        fixture_params=["awscli_pod"],
+        description="RGW/S3 workload for object storage stress testing",
     )
 )
 

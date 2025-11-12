@@ -45,7 +45,6 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CephHealthRecoveredException,
     CephHealthNotRecoveredException,
-    ClientDownloadError,
     CommandFailed,
     ConfigurationError,
     ResourceNotFoundError,
@@ -1066,9 +1065,7 @@ def extract_ocp_binary_from_image(binary, image, bin_dir):
             shutil.move(temp_binary, binary_path)
 
 
-def get_openshift_client(
-    version=None, bin_dir=None, force_download=False, skip_comparison=False
-):
+def get_openshift_client(version=None, bin_dir=None, force_download=False):
     """
     Download the OpenShift client binary, if not already present.
     Update env. PATH and get path of the oc binary.
@@ -1078,8 +1075,6 @@ def get_openshift_client(
             (default: config.RUN['client_version'])
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
         force_download (bool): Force client download even if already present
-        skip_comparison (bool): Skip the comparison between the existing OCP client
-            version and the configured one.
 
     Returns:
         str: Path to the client binary
@@ -1088,10 +1083,22 @@ def get_openshift_client(
     version = version or config.RUN["client_version"]
     bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     bin_dir = os.path.abspath(bin_dir_rel_path)
+    prepare_bin_dir(bin_dir)
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
-    download_client = True
+    client_exist = os.path.isfile(client_binary_path)
+    use_system_available_oc_client = config.RUN.get(
+        "use_system_available_oc_client", False
+    )
+    if use_system_available_oc_client and not client_exist:
+        if use_system_available_client_and_kubectl(
+            client_binary_path, kubectl_binary_path
+        ):
+            download_client = False
+    else:
+        download_client = True
     client_version = None
+    skip_comparison = config.RUN.get("skip_oc_client_version_comparison", False)
     try:
         version = expose_ocp_version(version)
     except Exception:
@@ -1100,7 +1107,6 @@ def get_openshift_client(
         download_client = False
         force_download = False
 
-    client_exist = os.path.isfile(client_binary_path)
     custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
     skip_if_client_downloaded_from_installer = config.RUN.get(
         "custom_client_downloaded_from_installer"
@@ -1133,15 +1139,16 @@ def get_openshift_client(
         client_binary_backup = f"{client_binary_path}.bak"
         kubectl_binary_backup = f"{kubectl_binary_path}.bak"
 
+        backup_created = False
         try:
             os.rename(client_binary_path, client_binary_backup)
             os.rename(kubectl_binary_path, kubectl_binary_backup)
+            backup_created = True
         except FileNotFoundError:
             pass
 
         # Download the client
         log.info(f"Downloading openshift client ({version}).")
-        prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
@@ -1172,15 +1179,15 @@ def get_openshift_client(
             except FileNotFoundError:
                 pass
         else:
-            try:
+            if backup_created:
                 os.rename(client_binary_backup, client_binary_path)
                 os.rename(kubectl_binary_backup, kubectl_binary_path)
                 log.info("Restored backup binaries to their original location.")
-            except FileNotFoundError:
-                raise ClientDownloadError(
-                    "No backups exist and new binary was unable to be verified."
-                )
-
+            else:
+                if not use_system_available_client_and_kubectl(
+                    client_binary_path, kubectl_binary_path
+                ):
+                    raise FileNotFoundError("No system oc client exist to copy from!")
         if not os.path.exists("kubectl"):
             log.info("Creating kubectl link to oc binary.")
             os.link("oc", "kubectl")
@@ -1190,6 +1197,28 @@ def get_openshift_client(
 
     log.info(f"OpenShift Client version: {client_version}")
     return client_binary_path
+
+
+def use_system_available_client_and_kubectl(client_binary_path, kubectl_binary_path):
+    """
+    Use system available client and kubectl binaries.
+
+    Args:
+        client_binary_path (str): Path to the client binary
+        kubectl_binary_path (str): Path to the kubectl binary
+
+    Returns:
+        bool: True if system available client and kubectl binaries are available and used
+    """
+    system_available_client = shutil.which("oc")
+    system_available_kubectl = shutil.which("kubectl")
+    if system_available_client and system_available_kubectl:
+        shutil.copy2(system_available_client, client_binary_path)
+        shutil.copy2(system_available_kubectl, kubectl_binary_path)
+        log.info("Restored system available client and kubectl.")
+        return True
+    else:
+        return False
 
 
 def is_ocp_version_gaed(version):
@@ -4081,7 +4110,10 @@ def mirror_image(image, cluster_config=None):
     """
     if not cluster_config:
         cluster_config = config
-    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry")
+    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry", "").rstrip("/")
+    mirror_registry_path = cluster_config.DEPLOYMENT.get(
+        "mirror_registry_path", ""
+    ).strip("/")
     if not mirror_registry:
         raise ConfigurationError(
             'DEPLOYMENT["mirror_registry"] parameter not configured!\n'
@@ -4102,7 +4134,12 @@ def mirror_image(image, cluster_config=None):
         else:
             orig_image_full = image_inspect[0]["RepoDigests"][0]
         # prepare mirrored image url
-        mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
+        # normalize and join properly
+        mirror_base = mirror_registry
+        if mirror_registry_path:
+            mirror_base = f"{mirror_registry}/{mirror_registry_path}"
+
+        mirrored_image = mirror_base + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
@@ -5326,6 +5363,7 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
+@config.run_with_provider_context_if_available
 def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get the NooBaa DB pod that has been assigned the
@@ -5355,6 +5393,7 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     return nb_db_pod
 
 
+@config.run_with_provider_context_if_available
 def exec_nb_db_query(query):
     """
     Send a psql query to the Noobaa DB

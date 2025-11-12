@@ -48,6 +48,7 @@ from ocs_ci.helpers.helpers import (
     find_cephfilesystemsubvolumegroup,
     create_unique_resource_name,
 )
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -575,6 +576,10 @@ def is_cg_enabled():
         bool: True if CG is enabled, False otherwise
 
     """
+    # CG is applicable for Regional-DR mode only
+    if config.MULTICLUSTER["multicluster_mode"] != constants.RDR_MODE:
+        return False
+
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_20:
         return config.ENV_DATA.get("cg_enabled", True)
@@ -1077,10 +1082,7 @@ def wait_for_all_resources_deletion(
         namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
     )
 
-    if workload_cleanup or not (
-        config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
-        and "cephfs" in namespace
-    ):
+    if workload_cleanup or "cephfs" not in namespace:
         logger.info("Waiting for all PVCs to be deleted")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
 
@@ -1700,18 +1702,20 @@ def verify_fence_state(drcluster_name, state, switch_ctx=None):
         state (str): The fence state it is either constants.ACTION_FENCE or constants.ACTION_UNFENCE
         switch_ctx (int): The cluster index by the cluster name
 
+    Returns:
+        True (bool) if the drcluster is in expected state
+
     Raises:
         Raises exception Unexpected-behaviour if the specified drcluster is not in the given state condition
     """
     sample = get_fence_state(drcluster_name=drcluster_name, switch_ctx=switch_ctx)
     if sample == state:
-        logger.info(f"Primary managed cluster {drcluster_name} reached {state} state")
+        logger.info(f"DR cluster {drcluster_name} reached {state} state")
+        return True
     else:
-        logger.error(
-            f"Primary managed cluster {drcluster_name} not reached {state} state"
-        )
+        logger.error(f"DR cluster {drcluster_name} not reached {state} state")
         raise UnexpectedBehaviour(
-            f"Primary managed cluster {drcluster_name} not reached {state} state"
+            f"DR cluster {drcluster_name} not reached {state} state"
         )
 
 
@@ -2401,7 +2405,7 @@ def configure_rdr_hub_recovery():
     return True
 
 
-def get_cluster_set_name():
+def get_cluster_set_name(switch_ctx=None):
     """
     Get Cluster set name from managedcluster
 
@@ -2410,7 +2414,7 @@ def get_cluster_set_name():
     """
     cluster_set = []
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
     current_managed_clusters_list = [
         cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
@@ -2551,3 +2555,51 @@ def verify_volsync():
             timeout=600,
         )
     config.switch_ctx(restore_index)
+
+
+def verify_cluster_data_protected_status(
+    workload_type, namespace, workload_placement_name=None
+):
+    """
+    Verify that the cluster dataProtected is True
+
+    Args:
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        namespace (str): the namespace of the drpc resources
+        workload_placement_name (str): Placement name
+    """
+
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+    drpc_obj.wait_for_clusterdataprotected_status()
+
+
+def mdr_post_failover_check(namespace, timeout=1200):
+    """
+    Post the failover verify that Pod is been deleted
+    from primary cluster and PVCs are in terminating state
+
+    Args:
+        namespace (str): Namespace of the application
+        timeout (int): time in seconds to wait for resource deletion
+
+    """
+    logger.info("Waiting for all pods to be deleted")
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        pod_obj.ocp.wait_for_delete(
+            resource_name=pod_obj.name, timeout=timeout, sleep=5
+        )
+
+    logger.info("Waiting for all PVCs to be deleted")
+    all_pvcs = get_all_pvc_objs(namespace=namespace)
+    for pvc_obj in all_pvcs:
+        helpers.wait_for_resource_state(
+            resource=pvc_obj, state=constants.STATUS_TERMINATING, timeout=timeout
+        )
