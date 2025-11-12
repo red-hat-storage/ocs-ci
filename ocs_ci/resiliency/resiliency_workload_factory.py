@@ -257,6 +257,7 @@ class ResiliencyWorkloadFactory:
         resiliency_workload,
         vdbench_block_config,
         vdbench_filesystem_config,
+        awscli_pod=None,
         scaling_helper=None,
         timeout=180,
     ):
@@ -269,6 +270,7 @@ class ResiliencyWorkloadFactory:
             resiliency_workload: Resiliency workload fixture
             vdbench_block_config: VDBENCH block config fixture
             vdbench_filesystem_config: VDBENCH filesystem config fixture
+            awscli_pod: AWS CLI pod fixture (required for RGW workloads)
             scaling_helper: Optional WorkloadScalingHelper instance
             timeout: Timeout for operations
 
@@ -293,6 +295,12 @@ class ResiliencyWorkloadFactory:
                     vdbench_block_config,
                     vdbench_filesystem_config,
                 )
+                all_workloads.extend(workloads)
+            elif workload_type == "RGW_WORKLOAD":
+                if awscli_pod is None:
+                    log.error("RGW workload requires awscli_pod fixture")
+                    raise ValueError("awscli_pod fixture is required for RGW workloads")
+                workloads = self._create_rgw_workloads(proj_obj, awscli_pod)
                 all_workloads.extend(workloads)
             elif workload_type == "CNV_WORKLOAD":
                 log.warning("CNV workloads not yet implemented for resiliency tests")
@@ -426,4 +434,181 @@ class ResiliencyWorkloadFactory:
                 workloads.append(workload)
 
         log.info(f"Created {len(workloads)} VDBENCH workloads")
+        return workloads
+
+    def _create_rgw_workloads(self, project, awscli_pod):
+        """
+        Create RGW workloads for resiliency testing.
+
+        Args:
+            project: OCS project object
+            awscli_pod: Pod with AWS CLI for S3 operations
+
+        Returns:
+            list: List of RGW workload objects
+        """
+        import time
+        from ocs_ci.resiliency.resiliency_workload import RGWWorkload
+        from ocs_ci.ocs.resources.objectbucket import RGWOCBucket
+        from ocs_ci.ocs.ocp import OCP
+
+        log.info("Creating RGW workloads for resiliency testing")
+
+        # Get RGW configuration from resiliency config
+        rgw_config = self.config.get_rgw_config()
+
+        # Configure workload parameters from config
+        num_buckets = rgw_config.get("num_buckets", 3)
+        iteration_count = rgw_config.get("iteration_count", 10)
+        operation_types = rgw_config.get(
+            "operation_types", ["upload", "download", "list", "delete"]
+        )
+        upload_multiplier = rgw_config.get("upload_multiplier", 1)
+        metadata_ops_enabled = rgw_config.get("metadata_ops_enabled", False)
+        delay_between_iterations = rgw_config.get("delay_between_iterations", 30)
+        delete_bucket_on_cleanup = rgw_config.get("delete_bucket_on_cleanup", True)
+
+        workloads = []
+
+        log.info(f"Creating {num_buckets} RGW workloads")
+
+        # Pre-flight check: Verify RGW pods are running
+        try:
+            log.info("Checking RGW pod health before creating buckets...")
+            rgw_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector="app=rook-ceph-rgw")
+
+            if not rgw_pods or "items" not in rgw_pods or not rgw_pods["items"]:
+                log.warning(
+                    "No RGW pods found - RGW may not be deployed on this cluster"
+                )
+                log.warning("RGW workload requires RGW to be enabled in ODF deployment")
+            else:
+                running_pods = sum(
+                    1
+                    for pod in rgw_pods["items"]
+                    if pod.get("status", {}).get("phase") == "Running"
+                )
+                total_pods = len(rgw_pods["items"])
+                log.info(f"RGW pods: {running_pods}/{total_pods} running")
+
+                if running_pods == 0:
+                    log.error("No RGW pods are running - cannot create RGW workloads")
+                    raise RuntimeError(
+                        "RGW service is not available. "
+                        "Ensure RGW is enabled in your ODF deployment."
+                    )
+                elif running_pods < total_pods:
+                    log.warning(
+                        f"Only {running_pods}/{total_pods} RGW pods are running. "
+                        f"This may cause bucket creation failures."
+                    )
+        except Exception as e:
+            log.warning(f"Could not verify RGW pod health: {e}")
+            log.warning("Proceeding with bucket creation anyway...")
+
+        # Create RGW workloads
+        for i in range(num_buckets):
+            try:
+                # Create RGW bucket
+                bucket_name = f"rgw-workload-{fauxfactory.gen_alpha(4).lower()}"
+                log.info(f"Creating RGW bucket: {bucket_name}")
+
+                # Create RGW bucket - it creates the OBC
+                rgw_bucket = RGWOCBucket(bucket_name)
+
+                # Give OBC a moment to be reconciled by the operator
+                log.info(f"Waiting 15s for OBC {bucket_name} to be reconciled...")
+                time.sleep(15)
+
+                # Wait for bucket to be bound and ready (timeout 300s)
+                log.info(
+                    f"Waiting for bucket {bucket_name} to be ready (up to 5 minutes)..."
+                )
+                try:
+                    rgw_bucket.verify_health(timeout=300)
+                    log.info(f"✓ Bucket {bucket_name} is ready")
+                except KeyError as e:
+                    log.error(f"OBC {bucket_name} missing status field after 300s: {e}")
+                    log.error(
+                        "The OBC controller has not added status field. "
+                        "This indicates the controller is not processing OBC requests."
+                    )
+
+                    # Show OBC describe output
+                    try:
+                        obc_obj = OCP(
+                            kind="obc",
+                            namespace=rgw_bucket.namespace,
+                            resource_name=bucket_name,
+                        )
+                        describe_out = obc_obj.exec_oc_cmd(
+                            f"describe obc {bucket_name}"
+                        )
+                        log.error(f"OBC {bucket_name} details:\n{describe_out}")
+                    except Exception as desc_err:
+                        log.warning(f"Could not get OBC describe: {desc_err}")
+
+                    # Don't raise - continue with next bucket
+                    continue
+                except Exception as e:
+                    log.error(f"Bucket {bucket_name} failed to become healthy: {e}")
+                    # Check if this is due to cluster health issues
+                    if "did not reach a healthy state" in str(e):
+                        log.warning(
+                            "OBC binding timeout - possible RGW service issue. "
+                            "Check cluster health before creating more buckets."
+                        )
+                    # Continue with next bucket instead of failing completely
+                    continue
+
+                # Workload configuration
+                workload_config = {
+                    "iteration_count": iteration_count,
+                    "operation_types": operation_types,
+                    "upload_multiplier": upload_multiplier,
+                    "metadata_ops_enabled": metadata_ops_enabled,
+                    "delay_between_iterations": delay_between_iterations,
+                }
+
+                # Create RGW workload
+                rgw_workload = RGWWorkload(
+                    rgw_bucket=rgw_bucket,
+                    awscli_pod=awscli_pod,
+                    namespace=project.namespace,
+                    workload_config=workload_config,
+                    delete_bucket_on_cleanup=delete_bucket_on_cleanup,
+                )
+
+                # Start the workload
+                rgw_workload.start_workload()
+
+                workloads.append(rgw_workload)
+                log.info(f"✓ Created and started RGW workload: {bucket_name}")
+
+            except Exception as e:
+                log.error(f"Failed to create RGW workload {i + 1}: {e}")
+                import traceback
+
+                log.error(traceback.format_exc())
+                # Continue with next workload instead of failing completely
+                continue
+
+        if not workloads:
+            log.error("Failed to create any RGW workloads")
+            log.error(
+                "This may be due to cluster health issues. "
+                "Check RGW pod status and OBC controller health."
+            )
+            raise RuntimeError("Failed to create any RGW workloads")
+
+        if len(workloads) < num_buckets:
+            log.warning(
+                f"Only created {len(workloads)} out of {num_buckets} requested RGW workloads. "
+                f"Some buckets failed to bind - check cluster health."
+            )
+        else:
+            log.info(f"✓ Successfully created all {len(workloads)} RGW workloads")
+
         return workloads

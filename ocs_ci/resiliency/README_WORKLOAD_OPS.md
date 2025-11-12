@@ -10,7 +10,7 @@ The resiliency tests now use a unified workload management system that provides:
 - **Configuration-driven testing** - All workload settings in a single YAML config file
 - **Background cluster operations** - Automated validation during test execution
 - **Optional workload scaling** - Configurable scaling operations in parallel with failure injection
-- **Multiple workload types** - Support for VDBENCH, CNV, and FIO workloads
+- **Multiple workload types** - Support for VDBENCH, RGW_WORKLOAD, CNV, and FIO workloads
 
 ## Architecture
 
@@ -38,6 +38,7 @@ ENV_DATA:
     # Workload types to run
     workloads:
       - VDBENCH
+      - RGW_WORKLOAD
 
     # Run workloads during testing
     run_workload: true
@@ -68,6 +69,20 @@ ENV_DATA:
             fileio: "random"
             rdpct: 0
             xfersize: "4k"
+
+    # RGW Configuration (S3 workload on RADOS Gateway)
+    rgw_config:
+      num_buckets: 3
+      iteration_count: 10
+      upload_multiplier: 1
+      metadata_ops_enabled: false
+      delay_between_iterations: 30
+      delete_bucket_on_cleanup: true
+      operation_types:
+        - upload
+        - download
+        - list
+        - delete
 
     # Scaling Configuration
     scaling_config:
@@ -211,7 +226,7 @@ The resiliency workload mechanism follows the same pattern as krkn tests:
 | Config Class | `KrknWorkloadConfig` | `ResiliencyWorkloadConfig` |
 | Factory Class | `KrknWorkloadFactory` | `ResiliencyWorkloadFactory` |
 | Fixture Name | `workload_ops` | `workload_ops` |
-| Workload Types | VDBENCH, CNV | VDBENCH, CNV, FIO |
+| Workload Types | VDBENCH, RGW_WORKLOAD, CNV | VDBENCH, RGW_WORKLOAD, CNV, FIO |
 | Background Ops | ✅ | ✅ |
 | Scaling | ✅ | ✅ |
 

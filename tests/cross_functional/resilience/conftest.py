@@ -39,12 +39,13 @@ def workload_ops(
     resiliency_workload,
     vdbench_block_config,
     vdbench_filesystem_config,
+    awscli_pod,
 ):
     """
     Workload ops fixture for resiliency testing.
 
     This fixture provides a unified interface for creating and managing workloads
-    during resiliency testing. It supports multiple workload types (VDBENCH, CNV, FIO, etc.)
+    during resiliency testing. It supports multiple workload types (VDBENCH, RGW_WORKLOAD, CNV, FIO, etc.)
     and optional background scaling operations.
 
     Configuration is loaded from resiliency_tests_config.yaml via --ocsci-conf parameter.
@@ -116,6 +117,7 @@ def workload_ops(
         resiliency_workload,
         vdbench_block_config,
         vdbench_filesystem_config,
+        awscli_pod=awscli_pod,
         scaling_helper=scaling_helper,
     )
 
