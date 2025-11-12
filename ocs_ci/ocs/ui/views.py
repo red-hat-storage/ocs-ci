@@ -359,8 +359,7 @@ generic_locators = {
     "text_input_popup_rules": (
         "//div[contains(@class, 'helper-text__item-text')] | "
         "//div[@data-test='field-requirements-popover']//div[contains(@class, 'helper-text__item-text')] | "
-        "//ul//span[contains(@class, 'helper-text__item-text')] | "
-        "//ul[contains(@class, 'helper-text')]",
+        "//ul//span[contains(@class, 'helper-text__item-text')]",
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-btn": (
@@ -1696,8 +1695,12 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "input_value_validator_icon": (
-        "button[aria-label='Validation'], [class*='c-icon']",
-        By.CSS_SELECTOR,
+        "//button[@aria-label='Validation']/child::*[contains(@class, 'c-icon')]",
+        By.XPATH,
+    ),
+    "input_validation_popup_container": (
+        By.XPATH,
+        "//ul[contains(@class, 'c-helper-text')]",
     ),
     "text_input_field_error_improvements": (
         "input[data-ouia-component-id='OUIA-Generated-TextInputBase-1']",
