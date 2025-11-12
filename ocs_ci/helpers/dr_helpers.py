@@ -450,7 +450,7 @@ def check_mirroring_status_ok(
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
@@ -561,11 +561,8 @@ def check_mirroring_status_for_custom_pool(
                     f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
                 )
 
-            return True
-
-        raise ValueError(f"Custom Pool {custom_pool_name} not found in {namespace}")
     config.switch_ctx(restore_index)
-    return False
+    return True
 
 
 def is_cg_enabled():

@@ -7668,7 +7668,7 @@ def discovered_apps_dr_workload(request):
 
 
 @pytest.fixture()
-def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
+def discovered_apps_dr_workload_cnv(request):
     """
     Deploys CNV Discovered App based workload for DR setup
 
@@ -7700,8 +7700,6 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         if shared_drpc_protection:
             workload_key = "dr_cnv_discovered_apps_shared"
         if custom_sc:
-            log.info("Calling fixture to create Custom Pool/SC..")
-            cnv_custom_storage_class()
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
