@@ -335,65 +335,81 @@ class PrometheusAPI(object):
     _endpoint = None
     _cacert = False
     _threading_lock = None
+    _cluster_context = None
 
-    def __init__(self, user=None, password=None, threading_lock=None):
+    def __init__(
+        self,
+        user=None,
+        password=None,
+        threading_lock=None,
+        cluster_context=config.RunWithProviderConfigContextIfAvailable,
+    ):
         """
         Constructor for PrometheusAPI class.
 
         Args:
             user (str): OpenShift username used to connect to API
+            password (str): Password for the OpenShift username used to connect to API
+            threading_lock (threading.RLock): Lock used for synchronization of the
+                threads in Prometheus calls
+            cluster_context (object): context object in which the bucket will be created.
+                Default is provider context.
+
         """
         if threading_lock is None:
             raise NoThreadingLockUsedError(
                 "using threading.Lock object is mandatory for PrometheusAPI class"
             )
-
-        if (
-            config.ENV_DATA["platform"].lower() == "ibm_cloud"
-            and config.ENV_DATA["deployment_type"] == "managed"
-        ):
-            self._user = user or "apikey"
-            self._password = password or config.AUTH["ibmcloud"]["api_key"]
-        else:
-            self._user = user or config.RUN["username"]
-            if not password:
-                filename = os.path.join(
-                    config.ENV_DATA["cluster_path"], config.RUN["password_location"]
-                )
-                with open(filename) as f:
-                    password = f.read().rstrip("\n")
-            self._password = password
-        self._threading_lock = threading_lock
-        self.refresh_connection()
-        if (
-            not config.ENV_DATA["platform"].lower() == "ibm_cloud"
-            and not config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
-        ):
-            self.generate_cert()
+        self._cluster_context = cluster_context
+        with self._cluster_context():
+            if (
+                config.ENV_DATA["platform"].lower() == "ibm_cloud"
+                and config.ENV_DATA["deployment_type"] == "managed"
+            ):
+                self._user = user or "apikey"
+                self._password = password or config.AUTH["ibmcloud"]["api_key"]
+            else:
+                self._user = user or config.RUN["username"]
+                if not password:
+                    filename = os.path.join(
+                        config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+                    )
+                    with open(filename) as f:
+                        password = f.read().rstrip("\n")
+                self._password = password
+            self._threading_lock = threading_lock
+            self.refresh_connection()
+            if (
+                not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+                and not config.ENV_DATA["platform"].lower()
+                == constants.ROSA_HCP_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            ):
+                self.generate_cert()
 
     def refresh_connection(self):
         """
         Login into OCP, refresh endpoint and token.
         """
-        kubeconfig = config.RUN["kubeconfig"]
-        ocp = OCP(
-            kind=constants.ROUTE,
-            namespace=defaults.OCS_MONITORING_NAMESPACE,
-            threading_lock=self._threading_lock,
-            cluster_kubeconfig=kubeconfig,
-        )
-        kube_data = ""
-        with open(kubeconfig, "r") as kube_file:
-            kube_data = kube_file.readlines()
-        login_ok = ocp.login(self._user, self._password)
-        if not login_ok:
-            raise AuthError("Login to OCP failed")
-        self._token = ocp.get_user_token()
-        with open(kubeconfig, "w") as kube_file:
-            kube_file.writelines(kube_data)
-        route_obj = ocp.get(resource_name=defaults.PROMETHEUS_ROUTE)
-        self._endpoint = "https://" + route_obj["spec"]["host"]
+        with self._cluster_context():
+            kubeconfig = config.RUN["kubeconfig"]
+            ocp = OCP(
+                kind=constants.ROUTE,
+                namespace=defaults.OCS_MONITORING_NAMESPACE,
+                threading_lock=self._threading_lock,
+                cluster_kubeconfig=kubeconfig,
+            )
+            kube_data = ""
+            with open(kubeconfig, "r") as kube_file:
+                kube_data = kube_file.readlines()
+            login_ok = ocp.login(self._user, self._password)
+            if not login_ok:
+                raise AuthError("Login to OCP failed")
+            self._token = ocp.get_user_token()
+            with open(kubeconfig, "w") as kube_file:
+                kube_file.writelines(kube_data)
+            route_obj = ocp.get(resource_name=defaults.PROMETHEUS_ROUTE)
+            self._endpoint = "https://" + route_obj["spec"]["host"]
 
     def generate_cert(self):
         """
@@ -401,28 +417,29 @@ class PrometheusAPI(object):
 
         TODO: find proper way how to generate/load cert files.
         """
-        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
-            cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
-            if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
-                self._cacert = get_root_ca_cert()
-                return
-            elif cert_provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
-                self._cacert = True
-                return
-        kubeconfig_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
-        )
-        with open(kubeconfig_path, "r") as f:
-            kubeconfig = yaml.load(f, yaml.Loader)
-        cert_file = tempfile.NamedTemporaryFile(delete=False)
-        cert_file.write(
-            base64.b64decode(
-                kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"]
+        with self._cluster_context():
+            if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+                cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
+                if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
+                    self._cacert = get_root_ca_cert()
+                    return
+                elif cert_provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
+                    self._cacert = True
+                    return
+            kubeconfig_path = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
             )
-        )
-        cert_file.close()
-        self._cacert = cert_file.name
-        logger.info(f"Generated CA certification file: {self._cacert}")
+            with open(kubeconfig_path, "r") as f:
+                kubeconfig = yaml.load(f, yaml.Loader)
+            cert_file = tempfile.NamedTemporaryFile(delete=False)
+            cert_file.write(
+                base64.b64decode(
+                    kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"]
+                )
+            )
+            cert_file.close()
+            self._cacert = cert_file.name
+            logger.info(f"Generated CA certification file: {self._cacert}")
 
     def get(self, resource, payload=None, timeout=300):
         """
@@ -449,39 +466,44 @@ class PrometheusAPI(object):
         logger.debug(f"params={payload}")
 
         if timeout:
-            for sample_response in TimeoutIterator(
-                timeout=timeout,
-                sleep=15,
-                func=requests.get,
-                func_kwargs={
-                    "url": self._endpoint + pattern,
-                    "headers": headers,
-                    "verify": self._cacert,
-                    "params": payload,
-                },
-            ):
-                response = sample_response
-                if not response.ok:
-                    logger.warning(f"There was an error in response: {response.text}")
-                    logger.warning("Refreshing connection")
-                    self.refresh_connection()
-                    if (
-                        not config.ENV_DATA["platform"].lower() == "ibm_cloud"
-                        and config.ENV_DATA["deployment_type"] == "managed"
-                    ):
-                        logger.warning("Generating new certificate")
-                        self.generate_cert()
-                    logger.warning("Connection refreshed")
-                else:
-                    break
+            with self._cluster_context():
+                for sample_response in TimeoutIterator(
+                    timeout=timeout,
+                    sleep=15,
+                    func=requests.get,
+                    func_kwargs={
+                        "url": self._endpoint + pattern,
+                        "headers": headers,
+                        "verify": self._cacert,
+                        "params": payload,
+                    },
+                ):
+                    response = sample_response
+                    if not response.ok:
+                        logger.warning(
+                            f"There was an error in response: {response.text}"
+                        )
+                        logger.warning("Refreshing connection")
+                        self.refresh_connection()
+                        if (
+                            not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+                            and config.ENV_DATA["deployment_type"] == "managed"
+                        ):
+                            logger.warning("Generating new certificate")
+                            self.generate_cert()
+                        logger.warning("Connection refreshed")
+                    else:
+                        break
             return response
         else:
-            return requests.get(
-                self._endpoint + pattern,
-                headers=headers,
-                verify=self._cacert,
-                params=payload,
-            )
+            with self._cluster_context():
+                response = requests.get(
+                    self._endpoint + pattern,
+                    headers=headers,
+                    verify=self._cacert,
+                    params=payload,
+                )
+            return response
 
     def query(
         self,
@@ -513,27 +535,28 @@ class PrometheusAPI(object):
 
         .. _`instant query`: https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries
         """
-        query_payload = {"query": query}
-        log_msg = f"Performing prometheus instant query '{query}'"
-        if timestamp is not None:
-            query_payload["time"] = timestamp
-            log_msg += f" for timestamp {timestamp}"
-        if timeout is not None:
-            query_payload["timeout"] = timeout
-        # Log human readable summary of the query
-        if not mute_logs:
-            if log_debug:
-                logger.debug(log_msg)
-            else:
-                logger.info(log_msg)
-        resp = self.get("query", payload=query_payload)
-        try:
-            content = yaml.safe_load(resp.content)
-        except Exception as ex:
-            log_parsing_error(query_payload, resp.content, ex)
-            raise
-        if validate:
-            validate_status(content)
+        with self._cluster_context():
+            query_payload = {"query": query}
+            log_msg = f"Performing prometheus instant query '{query}'"
+            if timestamp is not None:
+                query_payload["time"] = timestamp
+                log_msg += f" for timestamp {timestamp}"
+            if timeout is not None:
+                query_payload["timeout"] = timeout
+            # Log human readable summary of the query
+            if not mute_logs:
+                if log_debug:
+                    logger.debug(log_msg)
+                else:
+                    logger.info(log_msg)
+            resp = self.get("query", payload=query_payload)
+            try:
+                content = yaml.safe_load(resp.content)
+            except Exception as ex:
+                log_parsing_error(query_payload, resp.content, ex)
+                raise
+            if validate:
+                validate_status(content)
         # return actual result of the query
         return content["data"]["result"]
 
@@ -559,66 +582,67 @@ class PrometheusAPI(object):
 
         .. _`range query`: https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
         """
-        query_payload = {"query": query, "start": start, "end": end, "step": step}
-        if timeout is not None:
-            query_payload["timeout"] = timeout
-        # Human readable summary of the query (details are logged by get
-        # method itself with debug level).
-        logger.info(
-            (
-                f"Performing prometheus range query '{query}' "
-                f"over a time range ({start}, {end})"
+        with self._cluster_context():
+            query_payload = {"query": query, "start": start, "end": end, "step": step}
+            if timeout is not None:
+                query_payload["timeout"] = timeout
+            # Human readable summary of the query (details are logged by get
+            # method itself with debug level).
+            logger.info(
+                (
+                    f"Performing prometheus range query '{query}' "
+                    f"over a time range ({start}, {end})"
+                )
             )
-        )
-        resp = self.get("query_range", payload=query_payload)
-        try:
-            content = yaml.safe_load(resp.content)
-        except Exception as ex:
-            log_parsing_error(query_payload, resp.content, ex)
-            raise
-        if validate:
-            # If this fails, Prometheus instance is so broken that test can't
-            # be performed.
-            validate_status(content)
-            # For a range query, we should always get a matrix result type, as
-            # noted in Prometheus documentation, see:
-            # https://prometheus.io/docs/prometheus/latest/querying/api/#range-vectors
-            result_type = content["data"].get("resultType")
-            if result_type != "matrix":
-                logger.error("unexpected resultType: %s", result_type)
-                raise ValueError("resultType is not matrix but %s", result_type)
-            # All metric sample series has the same size.
-            sizes = []
-            for metric in content["data"]["result"]:
-                sizes.append(len(metric["values"]))
-            if not all(size == sizes[0] for size in sizes):
-                msg = "Metric sample series doesn't have the same size."
-                logger.error(msg)
-                raise ValueError(msg)
-            # Check if the query result is empty (which is a valid answer from
-            # validation standpoint).
-            if len(sizes) == 0:
-                logger.warning("prometheus query result is empty")
-            else:
-                # Check that we don't have holes in the response. If this
-                # fails, our Prometheus instance is missing some part of the
-                # data we are asking it about. For positive test cases, this is
-                # most likely a test blocker product bug.
-                start_dt = datetime.utcfromtimestamp(start)
-                end_dt = datetime.utcfromtimestamp(end)
-                duration = end_dt - start_dt
-                exp_samples = duration.seconds / step
-                if exp_samples - 1 <= sizes[0] <= exp_samples + 1:
-                    logger.debug("there are no holes in the data")
-                else:
-                    msg = "there are holes in prometheus data"
-                    logger.error(
-                        msg
-                        + ": result size is %d while expected sample size is %d +-1",
-                        sizes[0],
-                        exp_samples,
-                    )
+            resp = self.get("query_range", payload=query_payload)
+            try:
+                content = yaml.safe_load(resp.content)
+            except Exception as ex:
+                log_parsing_error(query_payload, resp.content, ex)
+                raise
+            if validate:
+                # If this fails, Prometheus instance is so broken that test can't
+                # be performed.
+                validate_status(content)
+                # For a range query, we should always get a matrix result type, as
+                # noted in Prometheus documentation, see:
+                # https://prometheus.io/docs/prometheus/latest/querying/api/#range-vectors
+                result_type = content["data"].get("resultType")
+                if result_type != "matrix":
+                    logger.error("unexpected resultType: %s", result_type)
+                    raise ValueError("resultType is not matrix but %s", result_type)
+                # All metric sample series has the same size.
+                sizes = []
+                for metric in content["data"]["result"]:
+                    sizes.append(len(metric["values"]))
+                if not all(size == sizes[0] for size in sizes):
+                    msg = "Metric sample series doesn't have the same size."
+                    logger.error(msg)
                     raise ValueError(msg)
+                # Check if the query result is empty (which is a valid answer from
+                # validation standpoint).
+                if len(sizes) == 0:
+                    logger.warning("prometheus query result is empty")
+                else:
+                    # Check that we don't have holes in the response. If this
+                    # fails, our Prometheus instance is missing some part of the
+                    # data we are asking it about. For positive test cases, this is
+                    # most likely a test blocker product bug.
+                    start_dt = datetime.utcfromtimestamp(start)
+                    end_dt = datetime.utcfromtimestamp(end)
+                    duration = end_dt - start_dt
+                    exp_samples = duration.seconds / step
+                    if exp_samples - 1 <= sizes[0] <= exp_samples + 1:
+                        logger.debug("there are no holes in the data")
+                    else:
+                        msg = "there are holes in prometheus data"
+                        logger.error(
+                            msg
+                            + ": result size is %d while expected sample size is %d +-1",
+                            sizes[0],
+                            exp_samples,
+                        )
+                        raise ValueError(msg)
         # return actual result of the query
         return content["data"]["result"]
 
@@ -641,47 +665,48 @@ class PrometheusAPI(object):
         Returns:
             list: List of alert records
         """
-        while timeout > 0:
-            alerts_response = self.get(
-                "alerts",
-                payload={
-                    "silenced": False,
-                    "inhibited": False,
-                },
-            )
-            msg = f"Request {alerts_response.request.url} failed"
-            if not alerts_response.ok:
-                logger.error(msg)
-                raise AlertingError(msg)
-            if state:
-                alerts = [
-                    alert
-                    for alert in alerts_response.json().get("data").get("alerts")
-                    if alert.get("labels").get("alertname") == name
-                    and alert.get("state") == state
-                ]
-                logger.info(
-                    f"Checking for {name} alerts with state {state}... "
-                    f"{len(alerts)} found"
+        with self._cluster_context():
+            while timeout > 0:
+                alerts_response = self.get(
+                    "alerts",
+                    payload={
+                        "silenced": False,
+                        "inhibited": False,
+                    },
                 )
-                if len(alerts) > 0:
-                    break
-            else:
-                # search for missing alerts, search is completed when
-                # there are no alerts with given name
-                alerts = [
-                    alert
-                    for alert in alerts_response.json().get("data").get("alerts")
-                    if alert.get("labels").get("alertname") == name
-                ]
-                logger.info(
-                    f"Checking for {name} alerts. There should be no alerts ... "
-                    f"{len(alerts)} found"
-                )
-                if len(alerts) == 0:
-                    break
-            time.sleep(sleep)
-            timeout -= sleep
+                msg = f"Request {alerts_response.request.url} failed"
+                if not alerts_response.ok:
+                    logger.error(msg)
+                    raise AlertingError(msg)
+                if state:
+                    alerts = [
+                        alert
+                        for alert in alerts_response.json().get("data").get("alerts")
+                        if alert.get("labels").get("alertname") == name
+                        and alert.get("state") == state
+                    ]
+                    logger.info(
+                        f"Checking for {name} alerts with state {state}... "
+                        f"{len(alerts)} found"
+                    )
+                    if len(alerts) > 0:
+                        break
+                else:
+                    # search for missing alerts, search is completed when
+                    # there are no alerts with given name
+                    alerts = [
+                        alert
+                        for alert in alerts_response.json().get("data").get("alerts")
+                        if alert.get("labels").get("alertname") == name
+                    ]
+                    logger.info(
+                        f"Checking for {name} alerts. There should be no alerts ... "
+                        f"{len(alerts)} found"
+                    )
+                    if len(alerts) == 0:
+                        break
+                time.sleep(sleep)
+                timeout -= sleep
         return alerts
 
     def check_alert_cleared(self, label, measure_end_time, time_min=120):
@@ -694,23 +719,26 @@ class PrometheusAPI(object):
             time_min (int): Number of seconds to wait for alert to be cleared
                 since measurement end
         """
-        time_actual = time.time()
-        time_wait = int((measure_end_time + time_min) - time_actual)
-        if time_wait > 0:
-            logger.info(
-                f"Waiting for approximately {time_wait} seconds for alerts "
-                f"to be cleared ({time_min} seconds since measurement end)"
+        with self._cluster_context():
+            time_actual = time.time()
+            time_wait = int((measure_end_time + time_min) - time_actual)
+            if time_wait > 0:
+                logger.info(
+                    f"Waiting for approximately {time_wait} seconds for alerts "
+                    f"to be cleared ({time_min} seconds since measurement end)"
+                )
+            else:
+                time_wait = 1
+            cleared_alerts = self.wait_for_alert(
+                name=label, state=None, timeout=time_wait
             )
-        else:
-            time_wait = 1
-        cleared_alerts = self.wait_for_alert(name=label, state=None, timeout=time_wait)
-        logger.info(f"Cleared alerts: {cleared_alerts}")
-        if len(cleared_alerts) == 0:
-            logger.info(f"{label} alerts were cleared")
-        else:
-            error_msg = f"{label} alerts were not cleared"
-            logger.error(error_msg)
-            raise AlertingError(error_msg)
+            logger.info(f"Cleared alerts: {cleared_alerts}")
+            if len(cleared_alerts) == 0:
+                logger.info(f"{label} alerts were cleared")
+            else:
+                error_msg = f"{label} alerts were not cleared"
+                logger.error(error_msg)
+                raise AlertingError(error_msg)
 
     def prometheus_log(self, prometheus_alert_list):
         """
@@ -720,21 +748,23 @@ class PrometheusAPI(object):
             prometheus_alert_list (list): List to be populated with alerts
         """
 
-        alerts_response = self.get(
-            "alerts", payload={"silenced": False, "inhibited": False}
-        )
-        msg = f"Request {alerts_response.request.url} failed"
-        if alerts_response.ok:
-            for alert in alerts_response.json().get("data").get("alerts"):
-                if alert not in prometheus_alert_list:
-                    logger.info(f"Adding {alert} to alert list")
-                    prometheus_alert_list.append(alert)
-        else:
-            # no need raise Assertion error or Exception here:
-            # 1. It will not lead to a test failure, fixture is in parallel Thread, in SetUp
-            # 2. One bad response should not fail the test
-            # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway on checking alert list
-            logger.error(msg)
+        with self._cluster_context():
+            alerts_response = self.get(
+                "alerts", payload={"silenced": False, "inhibited": False}
+            )
+            msg = f"Request {alerts_response.request.url} failed"
+            if alerts_response.ok:
+                for alert in alerts_response.json().get("data").get("alerts"):
+                    if alert not in prometheus_alert_list:
+                        logger.info(f"Adding {alert} to alert list")
+                        prometheus_alert_list.append(alert)
+            else:
+                # no need raise Assertion error or Exception here:
+                # 1. It will not lead to a test failure, fixture is in parallel Thread, in SetUp
+                # 2. One bad response should not fail the test
+                # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway
+                #    on checking alert list
+                logger.error(msg)
 
     def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
         """
@@ -749,9 +779,10 @@ class PrometheusAPI(object):
 
         """
         logger.info("Logging of all prometheus alerts started")
-        alerts_response = self.get(
-            "alerts", payload={"silenced": False, "inhibited": False}
-        )
+        with self._cluster_context():
+            alerts_response = self.get(
+                "alerts", payload={"silenced": False, "inhibited": False}
+            )
         actual_alerts = list()
         for alert in alerts_response.json().get("data").get("alerts"):
             actual_alerts.append(alert.get("labels").get("alertname"))
