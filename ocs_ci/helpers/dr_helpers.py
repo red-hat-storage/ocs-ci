@@ -2654,8 +2654,7 @@ def fetch_status_and_type_reflecting_on_vr_or_vgr(
         timeout (int): time in seconds to wait for resource to reach at desired state
 
     Returns:
-        str: value of vr.spec.kind
-        dict: returns latest condition details
+        tuple[str, dict]: The VR spec kind and the latest condition details.
     """
     resource_obj = ocp.OCP(kind=kind, namespace=namespace)
 
