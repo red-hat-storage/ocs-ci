@@ -206,6 +206,8 @@ class MustGather(object):
             r"^vmware-*",
             "^must-gather",
             r"-debug$",
+            r"-debug-",
+            r"status-reporter",
             # https://bugzilla.redhat.com/show_bug.cgi?id=2245246
             r"^csi-addons-controller-manager*",
         ]
