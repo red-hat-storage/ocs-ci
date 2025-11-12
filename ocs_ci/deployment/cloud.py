@@ -4,6 +4,7 @@ This module contains common code and a base class for any cloud platform
 deployment.
 """
 
+import json
 import logging
 import os
 import subprocess
@@ -15,7 +16,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.deployment import get_cluster_prefix
-from ocs_ci.utility.utils import get_cluster_name, run_cmd, TimeoutSampler
+from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd, set_target_region
+from ocs_ci.utility.utils import get_cluster_name, get_infra_id, run_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +130,34 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     "COS instance not found for destroy bootstrap, related to bug: "
                     "https://issues.redhat.com/browse/OCPBUGS-63723, continuing..."
                 )
+                logger.warning("Deleting bootstrap leftovers")
+                set_target_region()
+                infra_id = get_infra_id(config.ENV_DATA["cluster_name"])
+                try:
+                    run_ibmcloud_cmd(f"ibmcloud is instance {infra_id}-bootstrap")
+                    run_ibmcloud_cmd(
+                        f"ibmcloud is instance-delete --force {infra_id}-bootstrap"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to delete bootstrap VSI leftovers: {e}")
+                try:
+                    cos_instances = json.loads(
+                        run_ibmcloud_cmd(
+                            f"ibmcloud resource service-instance  --output json {infra_id}-cos"
+                        )
+                    )
+                    for cos_instance in cos_instances:
+                        buckets = json.loads(
+                            run_ibmcloud_cmd(
+                                f"ibmcloud cos buckets --output json --ibm-service-instance-id {cos_instance['guid']}"
+                            )
+                        )["Buckets"]
+                        if len(buckets) == 1 and "bootstrap" in buckets[0]["Name"]:
+                            run_ibmcloud_cmd(
+                                f"ibmcloud resource service-instance-delete -f {cos_instance['guid']}"
+                            )
+                except Exception as e:
+                    logger.error(f"Failed to delete bootstrap COS leftovers: {e}")
                 cluster_operators = ocp.get_all_cluster_operators()
                 for ocp_operator in cluster_operators:
                     logger.info(f"Checking cluster status of {ocp_operator}")
