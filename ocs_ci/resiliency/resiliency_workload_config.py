@@ -102,16 +102,6 @@ class ResiliencyWorkloadConfig:
         vdbench_config = self.get_vdbench_config()
         return vdbench_config.get("pvc_size", 50)
 
-    def get_gosbench_config(self) -> Dict[str, Any]:
-        """
-        Get GOSBENCH configuration.
-
-        Returns:
-            dict: GOSBENCH configuration dictionary
-        """
-        resiliency_config = self.config.ENV_DATA.get("resiliency_config", {})
-        return resiliency_config.get("gosbench_config", {})
-
     def get_background_operations_config(self) -> Dict[str, Any]:
         """
         Get background cluster operations configuration.
@@ -316,6 +306,5 @@ class ResiliencyWorkloadConfig:
 
     # Workload type constants
     VDBENCH = "VDBENCH"
-    GOSBENCH = "GOSBENCH"
     CNV_WORKLOAD = "CNV_WORKLOAD"
     FIO = "FIO"

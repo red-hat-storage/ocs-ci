@@ -44,7 +44,7 @@ def workload_ops(
     Workload ops fixture for resiliency testing.
 
     This fixture provides a unified interface for creating and managing workloads
-    during resiliency testing. It supports multiple workload types (VDBENCH, GOSBENCH, etc.)
+    during resiliency testing. It supports multiple workload types (VDBENCH, CNV, FIO, etc.)
     and optional background scaling operations.
 
     Configuration is loaded from resiliency_tests_config.yaml via --ocsci-conf parameter.

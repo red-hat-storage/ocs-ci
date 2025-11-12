@@ -31,7 +31,7 @@ class ResiliencyWorkloadOps:
         Args:
             project: OCS project object
             workloads: List of workload objects or dict of {workload_type: [workload_objects]}
-            workload_types: List of workload types (VDBENCH, CNV_WORKLOAD, GOSBENCH, etc.)
+            workload_types: List of workload types (VDBENCH, CNV_WORKLOAD, FIO, etc.)
             scaling_helper: Optional WorkloadScalingHelper instance
         """
         self.project = project
@@ -118,8 +118,7 @@ class ResiliencyWorkloadOps:
             return
 
         # Filter workloads eligible for scaling (RWX access modes)
-        # Only VDBENCH workloads with RWX PVCs can be scaled
-        # GOSBENCH workloads don't have PVCs and are not scaled
+        # Only workloads with RWX PVCs can be scaled
         scale_workloads = [
             wl
             for wl in self.workloads
@@ -192,7 +191,6 @@ class ResiliencyWorkloadOps:
 
                 # Get workload results (if available)
                 # VDBENCH workloads have workload_impl with logs
-                # GOSBENCH workloads handle validation differently
                 if hasattr(workload, "workload_impl"):
                     result = workload.workload_impl.get_all_deployment_pod_logs()
 
@@ -206,7 +204,7 @@ class ResiliencyWorkloadOps:
                             f"Workload {workload.workload_impl.deployment_name} failed"
                         )
                 else:
-                    # For GOSBENCH and other workloads, just log that they completed
+                    # For other workloads, just log that they completed
                     log.info(
                         f"Workload {workload} completed - detailed validation not available"
                     )
@@ -295,9 +293,6 @@ class ResiliencyWorkloadFactory:
                     vdbench_block_config,
                     vdbench_filesystem_config,
                 )
-                all_workloads.extend(workloads)
-            elif workload_type == "GOSBENCH":
-                workloads = self._create_gosbench_workloads(proj_obj)
                 all_workloads.extend(workloads)
             elif workload_type == "CNV_WORKLOAD":
                 log.warning("CNV workloads not yet implemented for resiliency tests")
@@ -431,194 +426,4 @@ class ResiliencyWorkloadFactory:
                 workloads.append(workload)
 
         log.info(f"Created {len(workloads)} VDBENCH workloads")
-        return workloads
-
-    def _create_gosbench_workloads(self, project):
-        """
-        Create GOSBENCH workloads for resiliency testing.
-
-        Args:
-            project: OCS project object
-
-        Returns:
-            list: List of GOSBENCH workload objects
-        """
-        import fauxfactory
-        from ocs_ci.workloads.gosbench_workload import GOSBenchWorkload
-
-        log.info("Creating GOSBENCH workloads for resiliency testing")
-
-        # Get GOSBENCH configuration from resiliency config
-        gosbench_config = self.config.get_gosbench_config()
-
-        # Configure workload parameters from config
-        worker_replicas = gosbench_config.get("worker_replicas", 1)
-        benchmark_duration = gosbench_config.get("benchmark_duration", 2700)
-        object_size = gosbench_config.get("object_size", "4MiB")
-        object_count = gosbench_config.get("object_count", 100000)
-        base_concurrency = gosbench_config.get("concurrency", 2)
-
-        # Resource configuration
-        server_resources = gosbench_config.get("server_resources", {})
-        worker_resources = gosbench_config.get("worker_resources", {})
-
-        # Image configuration
-        custom_image = gosbench_config.get("image", None)
-        server_image = gosbench_config.get("server_image", None)
-        worker_image = gosbench_config.get("worker_image", None)
-
-        # Define workload configurations with different patterns
-        workload_configs = [
-            {
-                "name_suffix": "small-mixed",
-                "object_size": "16KiB",
-                "object_count": 5000,
-                "pattern": "mixed",
-                "concurrency": base_concurrency,
-            },
-            {
-                "name_suffix": "medium-readheavy",
-                "object_size": object_size,
-                "object_count": object_count // 2,
-                "pattern": "read-heavy",
-                "concurrency": base_concurrency * 2,
-            },
-            {
-                "name_suffix": "large-writeheavy",
-                "object_size": "10MiB",
-                "object_count": 500,
-                "pattern": "write-heavy",
-                "concurrency": base_concurrency,
-            },
-        ]
-
-        workloads = []
-
-        for config in workload_configs:
-            try:
-                # Create unique workload name
-                workload_name = f"gosbench-{config['name_suffix']}-{fauxfactory.gen_alpha(4).lower()}"
-                log.info(f"Creating GOSBENCH workload: {workload_name}")
-
-                gosbench_workload = GOSBenchWorkload(
-                    workload_name=workload_name, namespace=project.namespace
-                )
-
-                # Create stage configuration based on pattern
-                if config["pattern"] == "read-heavy":
-                    stages = [
-                        {"name": "ramp", "duration": "20s", "op": "none"},
-                        {
-                            "name": "put",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "put",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                        {
-                            "name": "get",
-                            "duration": f"{benchmark_duration * 2 // 3}s",
-                            "op": "get",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "delete",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "delete",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                    ]
-                elif config["pattern"] == "write-heavy":
-                    stages = [
-                        {"name": "ramp", "duration": "20s", "op": "none"},
-                        {
-                            "name": "put",
-                            "duration": f"{benchmark_duration * 2 // 3}s",
-                            "op": "put",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "get",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "get",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                        {
-                            "name": "delete",
-                            "duration": f"{benchmark_duration // 6}s",
-                            "op": "delete",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                    ]
-                else:  # mixed
-                    stages = [
-                        {"name": "ramp", "duration": "20s", "op": "none"},
-                        {
-                            "name": "put",
-                            "duration": f"{benchmark_duration // 3}s",
-                            "op": "put",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "get",
-                            "duration": f"{benchmark_duration // 3}s",
-                            "op": "get",
-                            "concurrency": config["concurrency"],
-                        },
-                        {
-                            "name": "delete",
-                            "duration": f"{benchmark_duration // 3}s",
-                            "op": "delete",
-                            "concurrency": config["concurrency"] // 2,
-                        },
-                    ]
-
-                # Create benchmark configuration
-                benchmark_config = {
-                    "s3": {"bucket": f"{workload_name}-bucket", "insecure_tls": False},
-                    "benchmark": {
-                        "name": f"{workload_name}-resiliency-test",
-                        "object": {
-                            "size": config["object_size"],
-                            "count": config["object_count"],
-                        },
-                        "stages": stages,
-                    },
-                }
-
-                # Start the GOSBENCH workload
-                gosbench_workload.start_workload(
-                    benchmark_config=benchmark_config,
-                    worker_replicas=worker_replicas,
-                    image=custom_image,
-                    server_image=server_image,
-                    worker_image=worker_image,
-                    server_resource_limits=server_resources,
-                    worker_resource_limits=worker_resources,
-                )
-
-                # Wait for workload to be ready
-                gosbench_workload.wait_for_workload_ready(timeout=300)
-
-                workloads.append(gosbench_workload)
-                log.info(
-                    f"✓ Created GOSBENCH workload: {workload_name} "
-                    f"({config['object_size']} objects, {config['pattern']} pattern)"
-                )
-
-            except Exception as e:
-                log.error(
-                    f"Failed to create GOSBENCH workload {config['name_suffix']}: {e}"
-                )
-                # Clean up on failure
-                try:
-                    gosbench_workload.stop_workload()
-                except Exception:
-                    pass
-                # Continue with next workload instead of failing completely
-                continue
-
-        if not workloads:
-            raise RuntimeError("Failed to create any GOSBENCH workloads")
-
-        log.info(f"Created {len(workloads)} GOSBENCH workloads")
         return workloads
