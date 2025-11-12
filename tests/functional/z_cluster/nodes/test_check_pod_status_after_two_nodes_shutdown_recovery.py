@@ -3,6 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4b,
@@ -16,7 +17,12 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
-from ocs_ci.ocs.resources.pod import wait_for_storage_pods, list_of_nodes_running_pods
+from ocs_ci.ocs.resources.pod import (
+    wait_for_storage_pods,
+    list_of_nodes_running_pods,
+    get_csi_addons_pod,
+    wait_for_pods_to_be_running,
+)
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +107,9 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         cephfs_provisioner_running_nodes_after_recovery = list_of_nodes_running_pods(
             selector="csi-cephfsplugin-provisioner"
         )
+        # get the csi_addon_pods_after nodes are recover
+        rbd_csi_addon_pods_obj_after_node_recovery = get_csi_addons_pod()
+        worker_nodes_names = nodes.get_worker_nodes()
 
         assert len(set(mds_running_nodes_after_recovery)) == len(
             mds_running_nodes_after_recovery
@@ -116,3 +125,27 @@ class TestOCSWorkerNodeShutdown(ManageTest):
             cephfs_provisioner_running_nodes_after_recovery
         ), "cephfs plugin provisioner pods running on Same node, Not expected"
         log.info("CEPHFS plugin provisioner pods not running on same node")
+
+        # CSI-addons pods are in running status and mapped to worker Node
+        assert wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            pod_names=[
+                pod_data["metadata"]["name"]
+                for pod_data in rbd_csi_addon_pods_obj_after_node_recovery
+            ],
+        ), "CSI-addons pod didn't came up is running status "
+
+        # verify csi addons pods mapped to each worker node after node recovery
+        csi_pod_running_nodes_name = []
+        for pod_obj in rbd_csi_addon_pods_obj_after_node_recovery:
+            csi_pod_running_node_name = pod_obj.get("spec").get("nodeName")
+            assert csi_pod_running_node_name in worker_nodes_names, (
+                f"CSI addons pod {pod_obj['metadata']['name']} is running on "
+                f"node {csi_pod_running_nodes_name} which is not a worker node"
+            )
+            csi_pod_running_nodes_name.append(csi_pod_running_node_name)
+
+        pod_missed_node = set(worker_nodes_names) - set(csi_pod_running_nodes_name)
+        assert (
+            not pod_missed_node
+        ), f"worker node {pod_missed_node} do not have CSI addon pods"
