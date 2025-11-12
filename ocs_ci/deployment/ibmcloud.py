@@ -196,7 +196,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         # adding odf-qe security group to the instances
         if config.ENV_DATA.get("existing_vpc"):
             instance_names = self.get_instance_names_by_prefix(
-                f"{config.ENV_DATA['cluster_name']}-{config.ENV_DATA['cluster_id']}"
+                f"{config.ENV_DATA['cluster_name']}"
             )
             for instance_name in instance_names:
                 self.add_security_group_to_vsi(instance_name)
