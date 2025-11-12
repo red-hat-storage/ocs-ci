@@ -364,7 +364,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             logger.error(f"Policy error dialog found: {message}")
             return True, message
 
-        except (NoSuchElementException, TimeoutException):
+        except (
+            NoSuchElementException,
+            TimeoutException,
+            StaleElementReferenceException,
+        ):
             return False, ""
 
     def _extract_error_message(self, error_element) -> str:
@@ -418,6 +422,9 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             timeout=DEFAULT_UI_WAIT,
         )
         self.do_click(self.bucket_tab["update_policy_modal_button"])
+
+        # Wait for modal to close and DOM to stabilize before checking for errors
+        self.page_has_loaded(sleep_time=3)
 
         error_found, error_message = self._check_for_policy_error_dialog()
         if error_found:
