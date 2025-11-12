@@ -1393,8 +1393,8 @@ RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
-RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool-2way"
-RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc-r2"
+RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
+RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
 
 # constants
 RBD_INTERFACE = "rbd"
