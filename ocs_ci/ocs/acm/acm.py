@@ -619,6 +619,7 @@ def login_to_acm():
     else:
         log.warning(
             "Neither 'local-cluster' nor 'Administrator' dropdown found, view is expected to be on the ACM console"
+            "Check if login to OCP console is successful or not"
         )
 
     if compare_versions(cmp_str):

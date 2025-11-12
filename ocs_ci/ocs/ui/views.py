@@ -1375,6 +1375,7 @@ acm_configuration_4_20 = {
     ),
     "submariner-custom-source": ("//input[@id='source']", By.XPATH),
     "submariner-custom-channel": ("//input[@id='channel']", By.XPATH),
+    "select-dr-policy": ('//*[text()="{}"]', By.XPATH),
 }
 
 add_capacity = {

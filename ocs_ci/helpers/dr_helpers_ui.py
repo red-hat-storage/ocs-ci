@@ -312,7 +312,7 @@ def failover_relocate_ui(
             acm_obj.do_click(acm_loc["policy-dropdown"], enable_screenshot=True)
             log.info("Select policy from policy dropdown")
             acm_obj.do_click(
-                format_locator(acm_loc["select-policy"], policy_name),
+                format_locator(acm_loc["select-dr-policy"], policy_name),
                 enable_screenshot=True,
             )
             log.info("Click on target cluster dropdown")
