@@ -5480,6 +5480,9 @@ def setup_ui_fixture(request):
 
 @pytest.fixture(scope="session")
 def setup_acm_ui(request):
+    via_ui = False
+    if not via_ui:
+        return None
     return setup_acm_ui_fixture(request)
 
 
