@@ -1,4 +1,6 @@
 ENV_DATA:
+  deploy_via_cli: True
+  cg_enabled: True
   deploy_via_git: True
   deploy_via_cli: True
   cg_enabled: False
