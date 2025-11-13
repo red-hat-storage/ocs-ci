@@ -1,8 +1,8 @@
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: sub-placement-34664f2d513
-  namespace: sub-workload-45cf739321d7
+  name: PLACEHOLDER
+  namespace: PLACEHOLDER
 spec:
   clusterSets:
   - submariner
@@ -14,4 +14,4 @@ spec:
         - key: name
           operator: In
           values:
-          - ibm-baremetal3
+          - PLACEHOLDER
