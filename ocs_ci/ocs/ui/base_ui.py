@@ -909,6 +909,10 @@ class SeleniumDriver(WebDriver):
                     raise NotSupportedProxyConfiguration(
                         "Unable to configure authenticated proxy in headless browser mode!"
                     )
+            else:
+                logger.info("No proxy configuration for browser")
+                # to bypass http_proxy / https_proxy env variables and connect directly to internal WebDriver endpoint
+                chrome_options.add_argument("--no-proxy-server")
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
             chrome_service = Service(
