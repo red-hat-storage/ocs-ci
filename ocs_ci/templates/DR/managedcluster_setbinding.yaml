@@ -2,6 +2,6 @@ apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSetBinding
 metadata:
   name: submariner
-  namespace: sub-workload-45cf739321d7
+  namespace: PLACEHOLDER
 spec:
   clusterSet: submariner
