@@ -3,6 +3,7 @@ import logging
 
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
@@ -30,12 +31,12 @@ class TestDisableMCGExternalService:
         storagecluster_obj = OCP(
             kind="storagecluster",
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name="ocs-storagecluster",
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
         )
 
         # patch storagecluster object
         storagecluster_obj.patch(
-            resource_name="ocs-storagecluster",
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
             params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": true }}}',
             format_type="merge",
         )
@@ -50,7 +51,7 @@ class TestDisableMCGExternalService:
         def finalizer():
 
             storagecluster_obj.patch(
-                resource_name="ocs-storagecluster",
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
                 params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": false }}}',
                 format_type="merge",
             )
