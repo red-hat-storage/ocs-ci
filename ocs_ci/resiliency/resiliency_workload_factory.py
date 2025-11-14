@@ -191,7 +191,9 @@ class ResiliencyWorkloadOps:
 
                 # Get workload results (if available)
                 # VDBENCH workloads have workload_impl with logs
-                if hasattr(workload, "workload_impl"):
+                if hasattr(workload, "workload_impl") and hasattr(
+                    workload.workload_impl, "get_all_deployment_pod_logs"
+                ):
                     result = workload.workload_impl.get_all_deployment_pod_logs()
 
                     # Validate results
