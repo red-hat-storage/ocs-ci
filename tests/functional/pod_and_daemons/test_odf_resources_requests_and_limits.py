@@ -43,7 +43,6 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
         pod_name_exclude_patterns = [
             "storageclient-",
             "rook-ceph-osd-prepare-ocs-deviceset-",
-            "pod-test-"
         ]
         log.info(
             f"Retrieving live pod objects from the cluster, "

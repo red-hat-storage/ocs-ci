@@ -77,9 +77,7 @@ class TestDefaultNfsDisabled(ManageTest):
             log.info("No cephnfs resources found. NFS should be disabled.")
             pod_objs = get_all_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
-            nfs_pod_patterns = (
-                "openshift-storage.nfs",
-            )
+            nfs_pod_patterns = ("openshift-storage.nfs",)
 
             nfs_pods = [p.name for p in pod_objs if p.name.startswith(nfs_pod_patterns)]
 
@@ -88,7 +86,9 @@ class TestDefaultNfsDisabled(ManageTest):
             else:
                 log.info("No NFS pods found. NFS is correctly disabled.")
         else:
-            pytest.fail("cephnfs resources exist. NFS is unexpectedly enabled by default.")
+            pytest.fail(
+                "cephnfs resources exist. NFS is unexpectedly enabled by default."
+            )
 
 
 @brown_squad
