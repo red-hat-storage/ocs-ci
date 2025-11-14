@@ -225,9 +225,10 @@ def noobaa_db_backup_and_recovery_locally(
             logger.info("Cleaned up potential database clients to nbcore!")
 
         # Delete the existing cnpg cluster
-        OCP(kind=constants.CNPG_CLUSTER_KIND).delete(
-            resource_name=constants.NB_DB_CNPG_CLUSTER_NAME
-        )
+        OCP(
+            kind=constants.CNPG_CLUSTER_KIND,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).delete(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
 
         # Ensure the the cnpg cluster yaml uses the correct bootstrap object
         cnpg_cluster_yaml["bootstrap"] = {
@@ -247,7 +248,9 @@ def noobaa_db_backup_and_recovery_locally(
             f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
             f"{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
         )
-        OCP(kind=constants.POD).wait_for_resource(
+        OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        ).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=selector,
             resource_count=original_db_replica_count,
