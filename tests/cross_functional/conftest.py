@@ -2,11 +2,13 @@ import os
 import logging
 import boto3
 import pytest
-
+import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
+from subprocess import TimeoutExpired
 
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
@@ -34,7 +36,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
-from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
+from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.ocs import OCS
@@ -54,8 +56,12 @@ from ocs_ci.helpers.helpers import (
     default_storage_class,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.kms import is_kms_enabled
-from ocs_ci.utility.utils import clone_notify, exec_nb_db_query, get_primary_nb_db_pod
+from ocs_ci.utility.utils import (
+    clone_notify,
+    exec_nb_db_query,
+    get_primary_nb_db_pod,
+    TimeoutSampler,
+)
 
 from ocs_ci.resiliency.resiliency_workload import workload_object
 from ocs_ci.resiliency.platform_stress import PlatformStress
@@ -1640,103 +1646,54 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
     """
     This function is to verify noobaa rebuild. Verifies KCS: https://access.redhat.com/solutions/5948631
 
-    1. Stop the noobaa-operator by setting the replicas of noobaa-operator deployment to 0.
-    2. Delete the noobaa deployments/statefulsets.
-    3. Delete the PVC db-noobaa-db-0.
-    4. Patch existing backingstores and bucketclasses to remove finalizer
-    5. Delete the backingstores/bucketclass.
-    6. Delete the noobaa secrets.
-    7. Restart noobaa-operator by setting the replicas back to 1.
-    8. Monitor the pods in openshift-storage for noobaa pods to be Running.
+        1.Patch noobaa resource and set up cleanup policy as true
+        2.Delete NooBaa/Multcloud Gateway (MCG)
+        3.Waiting some time for the termination/re-creation of all NooBaa resource
+        4.validate the new age of all MCG resources
 
     """
 
     def factory(bucket_factory_session, mcg_obj_session):
-        dep_ocp = OCP(
-            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        state_ocp = OCP(
-            kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        noobaa_pvc_obj = get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
 
-        # Scale down noobaa operator
+        noobaa_obj = OCP(
+            kind=constants.NOOBAA_RESOURCE_NAME,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+
+        params = '{"spec":{"cleanupPolicy":{"allowNoobaaDeletion":true}}}'
+        noobaa_obj.patch(
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            params=params,
+            format_type="merge",
+        )
+
+        try:
+            noobaa_obj.exec_oc_cmd("delete noobaas.noobaa.io  --all")
+        except TimeoutExpired:
+            params = '{"metadata": {"finalizers":null}}'
+            noobaa_obj.exec_oc_cmd(f"patch noobaas/noobaa --type=merge -p '{params}' ")
+
+        logger.info("--------NooBaa resource rebuild verification----------")
         logger.info(
-            f"Scaling down {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 0"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=0"
+            "waiting for some time for deletion and recreation of all noobaa resources"
         )
 
-        # Delete noobaa deployments and statefulsets
-        logger.info("Deleting noobaa deployments and statefulsets")
-        dep_ocp.delete(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
-        state_ocp.delete(resource_name=constants.NOOBAA_DB_STATEFULSET)
-        state_ocp.delete(resource_name=constants.NOOBAA_CORE_STATEFULSET)
-
-        # Delete noobaa-db pvc
+        time.sleep(60)
         pvc_obj = OCP(
             kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        logger.info("Deleting noobaa-db pvc")
-        pvc_obj.delete(resource_name=noobaa_pvc_obj[0].name, wait=True)
-        pvc_obj.wait_for_delete(resource_name=noobaa_pvc_obj[0].name, timeout=300)
-
-        # Patch and delete existing backingstores
-        params = '{"metadata": {"finalizers":null}}'
-        bs_obj = OCP(
-            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        for bs in bs_obj.get()["items"]:
-            assert bs_obj.patch(
-                resource_name=bs["metadata"]["name"],
-                params=params,
-                format_type="merge",
-            ), "Failed to change the parameter in backingstore"
-            logger.info(f"Deleting backingstore: {bs['metadata']['name']}")
-            bs_obj.delete(resource_name=bs["metadata"]["name"])
-
-        # Patch and delete existing bucketclass
-        bc_obj = OCP(
-            kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        for bc in bc_obj.get()["items"]:
-            assert bc_obj.patch(
-                resource_name=bc["metadata"]["name"],
-                params=params,
-                format_type="merge",
-            ), "Failed to change the parameter in bucketclass"
-            logger.info(f"Deleting bucketclass: {bc['metadata']['name']}")
-            bc_obj.delete(resource_name=bc["metadata"]["name"])
-
-        # Delete noobaa secrets
-        logger.info("Deleting noobaa related secrets")
-        if is_kms_enabled():
-            dep_ocp.exec_oc_cmd(
-                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server"
-            )
-        else:
-            dep_ocp.exec_oc_cmd(
-                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator "
-                "noobaa-server noobaa-root-master-key-backend noobaa-root-master-key-volume"
-            )
-
-        # Scale back noobaa-operator deployment
-        logger.info(
-            f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
-        )
-        dep_ocp.exec_oc_cmd(
-            f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
+        noobaa_pvc_obj = get_pvc_objs(
+            pvc_names=["noobaa-db-pg-cluster-1", "noobaa-db-pg-cluster-2"]
         )
 
         # Wait and validate noobaa PVC is in bound state
-        pvc_obj.wait_for_resource(
-            condition=constants.STATUS_BOUND,
-            resource_name=noobaa_pvc_obj[0].name,
-            timeout=600,
-            sleep=120,
-        )
-
+        for pvc_index in range(len(noobaa_pvc_obj)):
+            pvc_obj.wait_for_resource(
+                condition=constants.STATUS_BOUND,
+                resource_name=noobaa_pvc_obj[pvc_index].name,
+                timeout=600,
+                sleep=120,
+            )
         # Validate noobaa pods are up and running
         pod_obj = OCP(
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
@@ -1748,22 +1705,41 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             selector=constants.NOOBAA_APP_LABEL,
             timeout=900,
         )
+        # verify noobaa statefulset is present
+        sample = TimeoutSampler(
+            timeout=500,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get sts noobaa-core -n openshift-storage",
+            expected_output_lst={"noobaa-core", "1/1"},
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception("Statefulset noobaa-core is not recreated")
 
         # Since the rebuild changed the noobaa-admin secret, update
         # the s3 credentials in mcg_object_session
         mcg_obj_session.update_s3_creds()
 
         # Verify default backingstore/bucketclass
-        default_bs = OCP(
-            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
-        ).get(resource_name=DEFAULT_NOOBAA_BACKINGSTORE)
+        sample = TimeoutSampler(
+            timeout=1200,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get Backingstore noobaa-default-backing-store -n openshift-storage",
+            expected_output_lst={
+                "noobaa-default-backing-store",
+            },
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception(
+                "Backingstore noobaa-default-backing-store is not recreated"
+            )
+
         default_bc = OCP(
             kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
         ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
         assert (
-            default_bs["status"]["phase"]
-            == default_bc["status"]["phase"]
-            == constants.STATUS_READY
+            default_bc["status"]["phase"] == constants.STATUS_READY
         ), "Failed: Default bs/bc are not in ready state"
 
         # Create OBCs
