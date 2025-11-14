@@ -71,17 +71,19 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
         # Start IO
         log.info("Starting IO on all pods")
         for pod_obj in self.pods:
-            storage_type = (
-                "block"
-                if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
-                else "fs"
-            )
+            if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK:
+                storage_type = "block"
+                io_direct = 1
+            else:
+                storage_type = "filesystem"
+                io_direct = 0
             pod_obj.run_io(
                 storage_type=storage_type,
                 size="1G",
                 runtime=20,
                 fio_filename=file_name,
                 end_fsync=1,
+                direct=io_direct,
             )
             log.info(f"IO started on pod {pod_obj.name}")
         log.info("Started IO on all pods")
