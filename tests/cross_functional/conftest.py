@@ -153,23 +153,15 @@ def noobaa_db_backup_and_recovery_locally(
         ocp_secret_obj = OCP(
             kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
         )
-        if is_kms_enabled():
-            secrets = [
-                "noobaa-root-master-key-volume",
-                "noobaa-admin",
-                "noobaa-operator",
-                "noobaa-server",
-                "noobaa-endpoints",
-            ]
-        else:
-            secrets = [
-                "noobaa-root-master-key-volume",
-                "noobaa-root-master-key-backend",
-                "noobaa-admin",
-                "noobaa-operator",
-                "noobaa-server",
-                "noobaa-endpoints",
-            ]
+        secrets = [
+            "noobaa-root-master-key-volume",
+            "noobaa-admin",
+            "noobaa-operator",
+            "noobaa-server",
+            "noobaa-endpoints",
+        ]
+        if not is_kms_enabled():
+            secrets.append("noobaa-root-master-key-backend")
 
         secrets_yaml = [
             ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
@@ -257,9 +249,7 @@ def noobaa_db_backup_and_recovery_locally(
             f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
             f"{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
         )
-        OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        ).wait_for_resource(
+        OCP(kind=constants.POD).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=selector,
             resource_count=original_db_replica_count,
