@@ -18,6 +18,7 @@ from ocs_ci.helpers.pod_helpers import (
     validate_all_pods_container_resources,
 )
 from ocs_ci.ocs.resources.pod import is_pod_owned_by_job
+
 log = logging.getLogger(__name__)
 
 
@@ -69,7 +70,9 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
         log.info(f"Found {len(filtered_pods)} pods after filtering.")
 
         log.info("Extracting live resource details for validation.")
-        pods_resources_details_dict = get_all_pods_container_resource_details(filtered_pods)
+        pods_resources_details_dict = get_all_pods_container_resource_details(
+            filtered_pods
+        )
 
         log.info("Checking live pod resource values (exist + start with digit).")
         validation = validate_all_pods_container_resources(pods_resources_details_dict)
