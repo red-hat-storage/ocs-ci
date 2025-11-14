@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_proxy_cluster,
     skipif_noobaa_external_pgsql,
     skipif_external_mode,
+    jira,
 )
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
@@ -48,6 +49,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 @skipif_external_mode
 @magenta_squad
 @ignore_leftover_label(constants.CUSTOM_MCG_LABEL)
+@jira("DFBUGS-4469")
 class TestBucketNotificationSystemTest:
 
     @pytest.fixture(autouse=True, scope="class")
