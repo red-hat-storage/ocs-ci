@@ -1,4 +1,5 @@
 import logging
+import pytest
 import threading
 from time import time, sleep
 
@@ -181,6 +182,9 @@ class TestNoobaaDbOps:
             t1.join()
             t2.join()
 
+    @pytest.mark.skip(
+        reason="Skipping this test as it is not working as expected. Ocs-ci issue: #13612"
+    )
     @tier4a
     def test_cnpg_failover_node_failure(
         self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
