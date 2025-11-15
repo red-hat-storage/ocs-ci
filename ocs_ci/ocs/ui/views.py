@@ -1369,6 +1369,17 @@ acm_configuration_4_20 = {
     ),
     "submariner-custom-source": ("//input[@id='source']", By.XPATH),
     "submariner-custom-channel": ("//input[@id='channel']", By.XPATH),
+    "switch-perspective": (
+        "//button[@data-test-id='perspective-switcher-toggle']",
+        By.XPATH,
+    ),
+    "fleet-virtual": ("//h2[text()='Fleet Virtualization']", By.XPATH),
+    "nav-bar-vms-page": ("//a[@data-test-id='virtualmachines-nav-item']", By.XPATH),
+    "all-clusters": ("//button[text()='All clusters']", By.XPATH),
+    "managed-cluster-name": ("//button[text()='{}']", By.XPATH),
+    "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
+    "cnv-vm-name": ('//a[@data-test-id="{}"]', By.XPATH),
+    "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
 }
 
 add_capacity = {
