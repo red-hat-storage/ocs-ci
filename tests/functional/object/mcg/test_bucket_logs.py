@@ -119,7 +119,7 @@ class TestBucketLogs(MCGTest):
 
         # 3. Wait for the nb pods to have mounts to logs PVC
         assert logs_manager.wait_for_logs_pvc_mount_status(
-            mount_status_expected=True, timeout=120
+            mount_status_expected=True,
         ), "One of the noobaa pods failed to mount the logs PVC"
 
         # 4. Create two buckets: source bucket and logs bucket
@@ -157,7 +157,7 @@ class TestBucketLogs(MCGTest):
 
         # 11. Wait for the nb pods to restart without the mounts
         assert logs_manager.wait_for_logs_pvc_mount_status(
-            mount_status_expected=False, timeout=120
+            mount_status_expected=False,
         ), "One of the noobaa pods failed to unmount the logs PVC"
 
         # 12. Validate that the logs PVC hasn't been deleted
