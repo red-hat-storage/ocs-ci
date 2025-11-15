@@ -18,6 +18,7 @@ from ocs_ci.ocs.node import (
     get_compute_node_names,
     get_all_nodes,
     get_node_objs,
+    get_master_nodes,
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
@@ -127,16 +128,21 @@ def setup_local_storage(storageclass):
         # Set local-volume-discovery namespace
         lvd_data["metadata"]["namespace"] = lso_namespace
 
-        worker_nodes = get_compute_node_names(no_replace=True)
+        storage_node_names = get_compute_node_names(no_replace=True)
+
+        if config.ENV_DATA.get(
+            "odf_provider_mode_deployment", False
+        ) and config.ENV_DATA.get("mark_masters_schedulable", True):
+            storage_node_names.extend(get_master_nodes())
 
         # Update local volume discovery data with Worker node Names
         logger.info(
             "Updating LocalVolumeDiscovery CR data with worker nodes Name: %s",
-            worker_nodes,
+            storage_node_names,
         )
         lvd_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
             "values"
-        ] = worker_nodes
+        ] = storage_node_names
         lvd_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="local_volume_discovery", delete=False
         )
@@ -165,11 +171,12 @@ def setup_local_storage(storageclass):
 
         # Update local volume set data with Worker node Names
         logger.info(
-            "Updating LocalVolumeSet CR data with worker nodes Name: %s", worker_nodes
+            "Updating LocalVolumeSet CR data with storage nodes Name: %s",
+            storage_node_names,
         )
         lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
             "values"
-        ] = worker_nodes
+        ] = storage_node_names
 
         # Set storage class
         logger.info(
