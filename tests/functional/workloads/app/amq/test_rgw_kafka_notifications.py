@@ -20,7 +20,6 @@ from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -118,20 +117,20 @@ class TestRGWAndKafkaNotifications(E2ETest):
 
         # Initialise to put objects
         data = "A random string data to write on created rgw bucket"
-        obc_obj = OBC(bucketname)
         s3_resource = boto3.resource(
             "s3",
             verify=retrieve_verification_mode(),
+            region_name=config.ENV_DATA["region"],
             endpoint_url=rgw_endpoint,
-            aws_access_key_id=obc_obj.access_key_id,
-            aws_secret_access_key=obc_obj.access_key,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
         )
         s3_client = s3_resource.meta.client
 
         # Initialize notify command to run
         notify_cmd = (
-            f"python {notify_path} -e {rgw_endpoint} -a {obc_obj.access_key_id} "
-            f"-s {obc_obj.access_key} -b {bucketname} -ke {constants.KAFKA_ENDPOINT} -t {self.kafka_topic.name}"
+            f"python {notify_path} -e {rgw_endpoint} -a {access_key} "
+            f"-s {secret_key} -b {bucketname} -ke {constants.KAFKA_ENDPOINT} -t {self.kafka_topic.name}"
         )
         log.info(f"Running cmd {notify_cmd}")
 
@@ -170,12 +169,12 @@ class TestRGWAndKafkaNotifications(E2ETest):
                 f"--topic {self.kafka_topic.name} --from-beginning --timeout-ms 20000"
             )
             pod_list = get_pod_name_by_pattern(
-                pattern="my-cluster-zookeeper", namespace=constants.AMQ_NAMESPACE
+                pattern="my-cluster-controller", namespace=constants.AMQ_NAMESPACE
             )
-            zookeeper_obj = get_pod_obj(
+            controller_obj = get_pod_obj(
                 name=pod_list[0], namespace=constants.AMQ_NAMESPACE
             )
-            event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
+            event_obj = controller_obj.exec_cmd_on_pod(command=cmd)
             log.info(f"Event obj: {event_obj}")
             event_time = event_obj.get("Records")[0].get("eventTime")
             format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
