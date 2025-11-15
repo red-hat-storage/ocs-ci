@@ -300,6 +300,10 @@ class ExternalClusterRBDNamespaceCreationFailed(Exception):
     pass
 
 
+class ExternalClusterDisableCertificateCheckFailed(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
