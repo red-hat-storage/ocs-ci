@@ -1360,6 +1360,7 @@ acm_configuration_4_19 = {
     "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
     "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
+    "kebab-action": ("//button[@aria-label='Actions']", By.XPATH),
 }
 
 acm_configuration_4_20 = {
