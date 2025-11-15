@@ -77,6 +77,7 @@ class BusyBox(DRWorkload):
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.pvc_interface = kwargs.get("pvc_interface", None)
         self.app_name = kwargs.get("app_name", None)
+        self.workload_path = kwargs.get("workload_path")
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
@@ -106,29 +107,51 @@ class BusyBox(DRWorkload):
         workload_details = kwargs.get("workload_details")
         self.is_placement = workload_details.get("is_placement")
         if self.is_placement:
-            self.placement_yaml_file = os.path.join(
-                self.workload_subscription_dir, self.workload_name, "placement.yaml"
-            )
+
+            if not config.ENV_DATA.get("deploy_via_cli"):
+                self.placement_yaml_file = os.path.join(
+                    self.workload_subscription_dir, self.workload_name, "placement.yaml"
+                )
+                self.managed_clusterset_binding_file = os.path.join(
+                    self.workload_subscription_dir,
+                    self.workload_name,
+                    "managedclustersetbinding.yaml",
+                )
+            else:
+                self.placement_yaml_file = os.path.join(
+                    constants.PLACEMENT_SUBSCRIPTION_PATH
+                )
+                self.managed_clusterset_binding_file = os.path.join(
+                    constants.MANAGEDCLUSTER_SETBINDING_PATH
+                )
             self.workload_pvc_selector = workload_details.get(
                 "dr_workload_app_pvc_selector"
             )
-            self.managed_clusterset_binding_file = os.path.join(
-                self.workload_subscription_dir,
-                self.workload_name,
-                "managedclustersetbinding.yaml",
-            )
-        self.channel_yaml_file = os.path.join(
-            self.workload_subscription_dir, "channel.yaml"
-        )
+
         self.git_repo_kustomization_yaml_file = os.path.join(
             self.workload_subscription_dir, "kustomization.yaml"
         )
         self.git_repo_namespace_yaml_file = os.path.join(
             self.workload_subscription_dir, "namespace.yaml"
         )
-        self.drpc_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "drpc.yaml"
-        )
+        if not config.ENV_DATA.get("deploy_via_cli"):
+            self.drpc_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "drpc.yaml"
+            )
+            self.channel_yaml_file = os.path.join(
+                self.workload_subscription_dir, "channel.yaml"
+            )
+        else:
+            self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+            self.channel_yaml_file = os.path.join(constants.CHANNEL_PATH)
+            self.subscription_app_file = os.path.join(constants.SUBSCRIPTION_APP_PATH)
+            self.subscription_workload_file = os.path.join(
+                constants.SUBSCRIPTION_WORKLOAD_TEMPLATE_PATH
+            )
+            self.subscription_namespace_file = os.path.join(
+                constants.SUBSCRIPTION_NAMESPACE_TEMPLATE_PATH
+            )
+
         self.app_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "app.yaml"
         )
@@ -149,37 +172,50 @@ class BusyBox(DRWorkload):
         """
         Deployment specific to busybox workload
         """
-        self._deploy_prereqs()
-        self.workload_namespace = self._get_workload_namespace()
+
+        if not config.ENV_DATA.get("deploy_via_cli"):
+            self._deploy_prereqs()
+            self.workload_namespace = self._get_workload_namespace()
+        else:
+            self.workload_namespace = create_unique_resource_name("workload", "sub")[
+                :25
+            ]
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
-        templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
         if self.is_placement:
             # load placement.yaml
+            self.sub_placement_name = create_unique_resource_name("placement", "sub")[
+                :25
+            ]
             clusterset_name = (
                 config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
             )
             placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
+            log.info(yaml.dump(placement_yaml_data))
             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                 "labelSelector"
             ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
             placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
+            if config.ENV_DATA.get("deploy_via_cli"):
+                self.sub_placement_name = create_unique_resource_name(
+                    "placement", "sub"
+                )[:25]
+                placement_yaml_data["metadata"]["name"] = self.sub_placement_name
+                placement_yaml_data["metadata"]["namespace"] = self.workload_namespace
+            else:
+                self.sub_placement_name = placement_yaml_data["metadata"]["name"]
 
-            self.sub_placement_name = placement_yaml_data["metadata"]["name"]
-            templating.dump_data_to_temp_yaml(
-                placement_yaml_data, self.placement_yaml_file
-            )
             managed_clusterset_binding_yaml_data = templating.load_yaml(
                 self.managed_clusterset_binding_file
             )
             managed_clusterset_binding_yaml_data["metadata"]["name"] = clusterset_name
             managed_clusterset_binding_yaml_data["spec"]["clusterSet"] = clusterset_name
-            templating.dump_data_to_temp_yaml(
-                managed_clusterset_binding_yaml_data,
-                self.managed_clusterset_binding_file,
-            )
+            if config.ENV_DATA.get("deploy_via_cli"):
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
             if placement_yaml_data["kind"] == "Placement":
                 drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
                 drpc_yaml_data["metadata"]["name"] = f"{self.sub_placement_name}-drpc"
@@ -212,12 +248,90 @@ class BusyBox(DRWorkload):
         # load channel.yaml
         channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
         channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
-        templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
+        if config.ENV_DATA.get("deploy_via_cli"):
+            channel_yaml_data["metadata"]["namespace"] = self.workload_namespace
+
+        if config.ENV_DATA.get("deploy_via_cli"):
+            subscription_app_yaml_data = templating.load_yaml(
+                self.subscription_app_file
+            )
+            subscription_app_yaml_data["metadata"]["name"] = self.workload_namespace
+            subscription_app_yaml_data["metadata"][
+                "namespace"
+            ] = self.workload_namespace
+            subscription_app_yaml_data["spec"]["selector"]["matchExpressions"][0][
+                "values"
+            ][0] = self.workload_namespace
+
+            subscription_workload_yaml_data = templating.load_yaml(
+                self.subscription_workload_file
+            )
+            subscription_workload_yaml_data["metadata"][
+                "name"
+            ] = self.workload_namespace
+            subscription_workload_yaml_data["metadata"][
+                "namespace"
+            ] = self.workload_namespace
+            subscription_workload_yaml_data["metadata"]["labels"][
+                "app"
+            ] = self.workload_namespace
+            subscription_workload_yaml_data["metadata"]["annotations"][
+                "apps.open-cluster-management.io/git-path"
+            ] = self.workload_path
+            subscription_workload_yaml_data["metadata"]["annotations"][
+                "apps.open-cluster-management.io/git-branch"
+            ] = self.workload_repo_branch
+            subscription_workload_yaml_data["spec"][
+                "channel"
+            ] = f"{self.workload_namespace}/ramen-gitops"
+            subscription_workload_yaml_data["spec"]["placement"]["placementRef"][
+                "name"
+            ] = self.sub_placement_name
+
+            subscription_namespace_yaml_data = templating.load_yaml(
+                self.subscription_namespace_file
+            )
+            subscription_namespace_yaml_data["metadata"][
+                "name"
+            ] = self.workload_namespace
+
+            ss_list = []
+            ss_list.extend(
+                [
+                    subscription_namespace_yaml_data,
+                    channel_yaml_data,
+                    subscription_app_yaml_data,
+                    subscription_workload_yaml_data,
+                    placement_yaml_data,
+                    managed_clusterset_binding_yaml_data,
+                ]
+            )
+
+            self.deploy_subscription_workload_yaml_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="sub_workload", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                ss_list,
+                self.deploy_subscription_workload_yaml_file.name,
+            )
+
         # Create the resources on Hub cluster
         config.switch_acm_ctx()
-        run_cmd(f"oc create -k {self.workload_subscription_dir}")
-        run_cmd(f"oc create -k {self.workload_subscription_dir}/{self.workload_name}")
-
+        if not config.ENV_DATA.get("deploy_via_cli"):
+            templating.dump_data_to_temp_yaml(
+                placement_yaml_data, self.placement_yaml_file
+            )
+            templating.dump_data_to_temp_yaml(
+                managed_clusterset_binding_yaml_data,
+                self.managed_clusterset_binding_file,
+            )
+            templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
+            run_cmd(f"oc create -k {self.workload_subscription_dir}")
+            run_cmd(
+                f"oc create -k {self.workload_subscription_dir}/{self.workload_name}"
+            )
+        else:
+            run_cmd(f"oc create -f {self.deploy_subscription_workload_yaml_file.name}")
         if self.is_placement:
             self.add_annotation_to_placement()
             run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
@@ -417,8 +531,11 @@ class BusyBox(DRWorkload):
         Get the workload namespace
 
         """
-        namespace_yaml_data = templating.load_yaml(self.namespace_yaml_file)
-        return namespace_yaml_data["metadata"]["name"]
+        if config.ENV_DATA.get("deploy_via_cli"):
+            return self.workload_namespace
+        else:
+            namespace_yaml_data = templating.load_yaml(self.namespace_yaml_file)
+            return namespace_yaml_data["metadata"]["name"]
 
     def add_annotation_to_placement(self):
         """
@@ -508,9 +625,14 @@ class BusyBox(DRWorkload):
                     managed_clusterset_binding_yaml_data,
                     self.managed_clusterset_binding_file,
                 )
-            run_cmd(
-                f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
-            )
+            if not config.ENV_DATA.get("deploy_via_cli"):
+                run_cmd(
+                    f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
+                )
+            else:
+                run_cmd(
+                    f"oc delete -f {self.deploy_subscription_workload_yaml_file.name}"
+                )
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -537,8 +659,9 @@ class BusyBox(DRWorkload):
             raise ResourceNotDeleted(err_msg)
 
         finally:
-            config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            run_cmd(f"oc delete -k {self.workload_subscription_dir}")
+            if not config.ENV_DATA.get("deploy_via_cli"):
+                config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+                run_cmd(f"oc delete -k {self.workload_subscription_dir}")
 
 
 class BusyBox_AppSet(DRWorkload):
@@ -557,6 +680,7 @@ class BusyBox_AppSet(DRWorkload):
         self.pvc_interface = kwargs.get("pvc_interface", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
+        self.workload_path = kwargs.get("workload_path")
         self.dr_policy_name = kwargs.get(
             "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
         ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
@@ -572,11 +696,20 @@ class BusyBox_AppSet(DRWorkload):
         self.workload_appset_dir = os.path.join(
             self.target_clone_dir, kwargs.get("workload_dir")
         )
-        self.appset_yaml_file = os.path.join(
-            self.workload_appset_dir,
-        )
+        if not config.ENV_DATA.get("deploy_via_cli"):
+            self.appset_yaml_file = os.path.join(
+                self.workload_appset_dir,
+            )
+            self.appset_placement_name = kwargs.get("workload_placement_name")
+        else:
+            self.appset_yaml_file = os.path.join(
+                constants.APPSET_WORKLOAD_TEMPLATE,
+            )
+            self.appset_placement_name = create_unique_resource_name(
+                "placement", "appset"
+            )[:25]
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
-        self.appset_placement_name = kwargs.get("workload_placement_name")
+
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
         self.appset_model = kwargs.get("appset_model")
 
@@ -585,8 +718,14 @@ class BusyBox_AppSet(DRWorkload):
         Deployment specific to busybox workload
 
         """
-        self._deploy_prereqs()
-        self.workload_namespace = self._get_workload_namespace()
+
+        if not config.ENV_DATA.get("deploy_via_cli"):
+            self._deploy_prereqs()
+            self.workload_namespace = self._get_workload_namespace()
+        else:
+            self.workload_namespace = create_unique_resource_name("workload", "appset")[
+                :25
+            ]
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
@@ -612,6 +751,8 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["clusterSets"][0] = (
                     config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
                 )
+                if config.ENV_DATA.get("deploy_via_cli"):
+                    app_set_yaml_data["metadata"]["name"] = self.appset_placement_name
 
             elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
                 if self.appset_model == "pull":
@@ -630,9 +771,42 @@ class BusyBox_AppSet(DRWorkload):
                     app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
                         "apps.open-cluster-management.io/pull-to-ocm-managed-cluster"
                     ] = "true"
+                    if config.ENV_DATA.get("deploy_via_cli"):
+                        app_set_yaml_data["spec"]["template"]["spec"]["destination"][
+                            "namespace"
+                        ] = self.workload_namespace
+                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0][
+                            "repoURL"
+                        ] = self.workload_repo_url
+                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0][
+                            "targetRevision"
+                        ] = self.workload_repo_branch
+                        app_set_yaml_data["spec"]["template"]["spec"]["sources"][0][
+                            "path"
+                        ] = self.workload_path
+                        app_set_yaml_data["spec"]["template"]["metadata"][
+                            "name"
+                        ] = f"{self.workload_namespace}-{{{{name}}}}"
+                        app_set_yaml_data["spec"]["generators"][0][
+                            "clusterDecisionResource"
+                        ]["labelSelector"]["matchLabels"][
+                            "cluster.open-cluster-management.io/placement"
+                        ] = self.appset_placement_name
+                        app_set_yaml_data["metadata"]["name"] = self.workload_namespace
 
-        log.info(yaml.dump(app_set_yaml_data_list))
-        templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
+        if config.ENV_DATA.get("deploy_via_cli"):
+            self.appset_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="appset", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                app_set_yaml_data_list, self.appset_data_yaml.name
+            )
+            self.appset_yaml_file = self.appset_data_yaml.name
+        else:
+            templating.dump_data_to_temp_yaml(
+                app_set_yaml_data_list, self.appset_yaml_file
+            )
+
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {self.appset_yaml_file}")
         self.check_pod_pvc_status(skip_replication_resources=True)
@@ -1181,6 +1355,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         super().__init__("busybox", workload_repo_url, workload_repo_branch)
         self.workload_type = kwargs.get("workload_type", constants.DISCOVERED_APPS)
         self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
+        if config.ENV_DATA.get("deploy_via_cli"):
+            self.discovered_apps_placement_name = self.workload_namespace
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
@@ -1190,7 +1367,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             get_primary_cluster_config().ENV_DATA["cluster_name"]
         )
         self.workload_dir = kwargs.get("workload_dir")
-        self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
+
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.drpc_recipe_yaml_file = os.path.join(constants.DRPC_RECIPE_PATH)
         self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
@@ -1360,7 +1537,7 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
         placement_yaml_data["metadata"]["name"] = (
-            placement_name or self.discovered_apps_placement_name + "-placement-1"
+            placement_name or self.discovered_apps_placement_name + "-plmnt-1"
         )
         placement_yaml_data["metadata"].setdefault("annotations", {})
         placement_yaml_data["metadata"]["annotations"][
@@ -1409,7 +1586,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
-            placement_name or self.discovered_apps_placement_name + "-placement-1"
+            placement_name or self.discovered_apps_placement_name + "-plmnt-1"
         )
         drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
         drcp_data_yaml = tempfile.NamedTemporaryFile(
@@ -1463,7 +1640,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
-            self.discovered_apps_placement_name + "-placement-1"
+            self.discovered_apps_placement_name + "-plmnt-1"
         )
         drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
         drpc_data_yaml = tempfile.NamedTemporaryFile(
@@ -1530,7 +1707,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             log.info("Deleting Placement")
             run_cmd(
                 f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} "
-                f"{self.discovered_apps_placement_name}-placement-1 {ignore_not_found_param}"
+                f"{self.discovered_apps_placement_name}-plmnt-1 {ignore_not_found_param}"
             )
 
         for cluster in get_non_acm_cluster_config():
@@ -1627,6 +1804,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.workload_dir = kwargs.get("workload_dir")
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
+        if config.ENV_DATA.get("deploy_via_cli"):
+            self.discovered_apps_placement_name = self.workload_namespace
         self.cnv_workload_pvc_selector = kwargs.get("workload_pvc_selector")
         self.appset_model = kwargs.get("appset_model", None)
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
@@ -1758,7 +1937,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
         placement_yaml_data["metadata"]["name"] = (
-            self.discovered_apps_placement_name + "-placement-1"
+            self.discovered_apps_placement_name + "-plmnt-1"
         )
         placement_yaml_data["metadata"].setdefault("annotations", {})
         placement_yaml_data["metadata"]["annotations"][
@@ -1791,7 +1970,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
-            self.discovered_apps_placement_name + "-placement-1"
+            self.discovered_apps_placement_name + "-plmnt-1"
         )
         drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
         drcp_data_yaml = tempfile.NamedTemporaryFile(
@@ -1891,7 +2070,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 log.info("DRPC deleted")
             log.info("Deleting Placement")
             run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
+                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-plmnt-1"
             )
 
         for cluster in get_non_acm_cluster_config():
