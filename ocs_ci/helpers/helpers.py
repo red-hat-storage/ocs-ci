@@ -6841,3 +6841,29 @@ def verify_socket_on_node(node_name, host_path, socket_name):
         node=node_name, cmd_list=[f"ls -l {host_path}/{socket_name}"]
     )
     return socket_name in debug_node_output
+
+
+def verify_socket_permission(node_name, host_path, socket_name):
+    """
+    Verify the permission of socket at host path on node.
+
+    Args:
+        node_name (str): The name of specific node
+        host_path (str): The host path where socket exist
+        socket_name (str): The name of socket file
+
+    Returns:
+        bool: True if the socket file exist with valid file attribute
+        at host path on given node.
+
+    """
+    ocp = OCP(kind=constants.NODE)
+    result = ocp.exec_oc_debug_cmd(
+        node=node_name, cmd_list=[f"stat -c '%a %U:%G %F' {host_path}/{socket_name}"]
+    )
+    perms, owner, file_type = result.strip().split()
+    assert "660" in perms or "666" in perms, f"Invalid permissions: {perms}"
+    assert "socket" in file_type, f"Invalid file type: {file_type}"
+    assert "root:root" in owner or "kubelet:kubelet" in owner, f"Invalid owner: {owner}"
+    logger.info(f"Socket {host_path}/{socket_name} has valid permissions on {node}")
+    return True
