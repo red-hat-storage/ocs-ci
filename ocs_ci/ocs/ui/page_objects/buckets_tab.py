@@ -86,8 +86,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             logger.info("Selecting noobaa storage class option")
             self.do_click(self.bucket_tab["storage_class_noobaa_option"])
 
-        except NoSuchElementException as e:
-            logger.error(f"Failed to select storage class: {str(e)}")
+        except NoSuchElementException:
+            logger.exception("Failed to select storage class")
             raise
 
         logger.info("Clicking submit button to create OBC")
@@ -204,8 +204,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
             return folder_name
 
-        except NoSuchElementException as e:
-            logger.error(f"Error during file upload: {str(e)}")
+        except NoSuchElementException:
+            logger.exception("Error during file upload")
             raise
 
     def get_buckets_list(self) -> list:
@@ -218,7 +218,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         buckets = self.get_elements(self.bucket_tab["bucket_list_items"])
         # Extract text from elements immediately to avoid stale element references later
         bucket_names = [bucket.text for bucket in buckets]
-        logger.info(f"Found {len(bucket_names)} buckets")
+        logger.debug(f"Found {len(bucket_names)} buckets")
         return bucket_names
 
     def create_multiple_buckets_ui(
@@ -243,12 +243,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         created_buckets = []
 
         self.navigate_buckets_page()
-        self.driver.refresh()
+        self.refresh_page()
         self.page_has_loaded(sleep_time=2)
 
         # Create S3 buckets
         for i in range(s3_buckets):
-            logger.info(f"Creating S3 bucket #{i + 1}")
+            logger.debug(f"Creating S3 bucket #{i + 1}")
             bucket = self.create_bucket_ui(method="s3")
             created_buckets.append(bucket)
 
@@ -259,7 +259,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         # Create OBC buckets
         for i in range(obc_buckets):
-            logger.info(f"Creating OBC bucket #{i + 1}")
+            logger.debug(f"Creating OBC bucket #{i + 1}")
             bucket = self.create_bucket_ui(method="obc")
             created_buckets.append(bucket)
 
@@ -286,8 +286,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 f"Pagination controls {'found' if element_found else 'not found'}"
             )
             return element_found
-        except Exception as e:
-            logger.error(f"Error checking pagination controls: {str(e)}")
+        except (NoSuchElementException, TimeoutException):
+            logger.exception("Error checking pagination controls")
             return False
 
     def navigate_to_next_page(self) -> bool:
@@ -329,8 +329,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             NoSuchElementException,
             TimeoutException,
             StaleElementReferenceException,
-        ) as e:
-            logger.error(f"Error navigating to next page: {str(e)}")
+        ):
+            logger.exception("Error navigating to next page")
             return False
 
     def navigate_to_previous_page(self) -> bool:
@@ -373,8 +373,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             NoSuchElementException,
             TimeoutException,
             StaleElementReferenceException,
-        ) as e:
-            logger.error(f"Error navigating to previous page: {str(e)}")
+        ):
+            logger.exception("Error navigating to previous page")
             return False
 
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
@@ -426,8 +426,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     logger.info(
                         "Successfully entered bucket name in confirmation dialog"
                     )
-                except Exception as e:
-                    logger.warning(f"Failed to enter bucket name: {str(e)}")
+                except (NoSuchElementException, StaleElementReferenceException):
+                    logger.exception("Failed to enter bucket name")
                     self.take_screenshot()
                     self.copy_dom()
 
@@ -440,8 +440,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 )
                 time.sleep(5)
 
-            except Exception as e:
-                logger.error(f"Error during bucket deletion: {str(e)}")
+            except (
+                NoSuchElementException,
+                TimeoutException,
+                StaleElementReferenceException,
+            ):
+                logger.exception("Error during bucket deletion")
                 self.take_screenshot()
                 self.copy_dom()
 
@@ -449,10 +453,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     logger.info("Falling back to standard deletion method")
                     try:
                         self.delete_resource(delete_via, resource_name)
-                    except Exception as fallback_e:
-                        logger.error(
-                            f"Fallback deletion also failed: {str(fallback_e)}"
-                        )
+                    except Exception:
+                        logger.exception("Fallback deletion also failed")
                         if not expect_fail:
                             raise
         else:
@@ -512,7 +514,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     ), f"No expected Popup. See full response: \n {json.dumps(json_resp)}"
 
             _check_three_dots_disabled("check three dots inactive automatically")
-            self.driver.refresh()
+            self.refresh_page()
             self.page_has_loaded(sleep_time=2)
             _check_three_dots_disabled("check three dots inactive after refresh")
 
@@ -580,3 +582,46 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         logger.info(
             f"Successfully navigated to folder '{folder_name}' and enabled version listing"
         )
+
+    def navigate_to_bucket_permissions(self, bucket_name: str = None):
+        """
+        Navigate to bucket permissions tab.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Returns:
+            BucketsTabPermissions: Instance of BucketsTabPermissions page object.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
+            BucketsTabPermissions,
+        )
+
+        if not bucket_name:
+            self.do_click(self.bucket_tab["bucket_list_items"])
+            self.do_click(self.bucket_tab["permissions_tab"])
+            self.do_click(self.bucket_tab["bucket_policy_tab"])
+            return BucketsTabPermissions()
+
+        bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
+
+        for bucket_element in bucket_elements:
+            if bucket_element.text != bucket_name:
+                continue
+
+            bucket_element.click()
+            break
+        else:
+            available_buckets = [elem.text for elem in bucket_elements]
+            raise NoSuchElementException(
+                f"Bucket '{bucket_name}' not found in bucket list. "
+                f"Available buckets: {available_buckets}. "
+                "Verify bucket name exists and is visible on current page."
+            )
+
+        self.do_click(self.bucket_tab["permissions_tab"])
+        self.do_click(self.bucket_tab["bucket_policy_tab"])
+        return BucketsTabPermissions()
