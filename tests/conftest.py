@@ -6528,6 +6528,7 @@ def nsfs_bucket_factory_fixture(
             name=f"nsfs-integrity-test-{random.randrange(100)}",
             default_resource=nsfs_obj.nss.name,
             nsfs_account_config=True,
+            nsfs_only=nsfs_obj.nsfs_only,
             gid=nsfs_obj.gid,
             uid=nsfs_obj.uid,
             ssl=False,

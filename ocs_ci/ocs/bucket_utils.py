@@ -1815,7 +1815,7 @@ def compare_directory(
     return all(comparisons)
 
 
-def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
+def s3_copy_object(s3_obj, bucketname, source, object_key, **kwargs):
     """
     Boto3 client based copy object
 
@@ -1824,17 +1824,15 @@ def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
         bucketname (str): Name of the bucket
         source (str): Source object key. eg: '<bucket>/<key>
         object_key (str): Unique object Identifier for copied object
-        metadata (dict): Metadata to be updated with the object
+        **kwargs: Additional arguments to pass to boto3's copy_object method
+                  (e.g., Metadata, MetadataDirective, ACL, ServerSideEncryption, etc.)
 
     Returns:
         dict : Copy object response
 
     """
-    # default to None; metadata={} in the signature would be shared across calls
-    metadata = {} if metadata is None else metadata
-
     return s3_obj.s3_client.copy_object(
-        Bucket=bucketname, CopySource=source, Key=object_key, Metadata=metadata
+        Bucket=bucketname, CopySource=source, Key=object_key, **kwargs
     )
 
 
