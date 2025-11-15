@@ -1270,6 +1270,10 @@ class Deployment(object):
                 log_step("Deploy and setup Local Storage Operator")
                 setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
+        timeout_before_odf_create = 1200
+        logger.info(f"Wait {timeout_before_odf_create}")
+        time.sleep(timeout_before_odf_create)
+
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
         olm_ns_op_group_data = list(templating.load_yaml(constants.OLM_YAML, True))
