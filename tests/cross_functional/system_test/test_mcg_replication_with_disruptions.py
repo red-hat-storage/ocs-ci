@@ -6,7 +6,6 @@ import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     E2ETest,
     skipif_ocs_version,
@@ -36,7 +35,6 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_object_versions_match,
 )
 from ocs_ci.ocs import ocp
-from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.resources.pod import (
     delete_pods,
@@ -291,8 +289,8 @@ class TestLogBasedReplicationWithDisruptions:
         self,
         mcg_obj_session,
         aws_log_based_replication_setup,
-        noobaa_db_backup,
-        noobaa_db_recovery_from_backup,
+        noobaa_db_backup_locally,
+        noobaa_db_recovery_from_local,
         setup_mcg_bg_features,
         validate_mcg_bg_features,
     ):
@@ -365,14 +363,10 @@ class TestLogBasedReplicationWithDisruptions:
                 timeout=600,
             ), f"Deletion sync failed to complete for the objects {objs_to_delete} deleted in the first bucket set"
 
-        # Take noobaa db backup and remove deletion replication policy for the second bucket set
-        # Get noobaa pods before execution
-        noobaa_pods = get_noobaa_pods()
-
-        # Get noobaa PVC before execution
-        noobaa_pvc_obj = get_pvc_objs(pvc_names=[constants.NOOBAA_DB_PVC_NAME])
-
-        _, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
+        logger.info("Taking backup of noobaa db")
+        cnpg_cluster_yaml, original_db_replica_count, secrets_obj = (
+            noobaa_db_backup_locally()
+        )
 
         disable_deletion_sync = source_bucket.replication_policy
         disable_deletion_sync["rules"][0]["sync_deletions"] = False
@@ -387,7 +381,10 @@ class TestLogBasedReplicationWithDisruptions:
         ), "Deletion sync was done but not expected"
 
         # Do noobaa db recovery and see if the deletion sync works now
-        noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
+        logger.info("Recovering noobaa db from backup")
+        noobaa_db_recovery_from_local(
+            cnpg_cluster_yaml, original_db_replica_count, secrets_obj
+        )
         wait_for_noobaa_pods_running(timeout=420)
 
         assert compare_bucket_object_list(
