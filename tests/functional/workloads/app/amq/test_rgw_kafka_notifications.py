@@ -170,7 +170,7 @@ class TestRGWAndKafkaNotifications(E2ETest):
                 f"--topic {self.kafka_topic.name} --from-beginning --timeout-ms 20000"
             )
             pod_list = get_pod_name_by_pattern(
-                pattern="my-cluster-zookeeper", namespace=constants.AMQ_NAMESPACE
+                pattern="my-cluster-controller", namespace=constants.AMQ_NAMESPACE
             )
             zookeeper_obj = get_pod_obj(
                 name=pod_list[0], namespace=constants.AMQ_NAMESPACE
