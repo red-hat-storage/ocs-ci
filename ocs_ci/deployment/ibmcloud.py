@@ -177,6 +177,8 @@ class IBMCloudIPI(CloudDeploymentBase):
                 ibmcloud.login()
         if config.ENV_DATA.get("custom_vpc"):
             self.prepare_custom_vpc_and_network()
+        if config.ENV_DATA.get("existing_vpc"):
+            self.prepare_existing_vpc_and_network()
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 
@@ -191,6 +193,13 @@ class IBMCloudIPI(CloudDeploymentBase):
             "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
         )
         logger.info(f"clusterID (UUID): {cluster_id}")
+        # adding odf-qe security group to the instances
+        if config.ENV_DATA.get("existing_vpc"):
+            instance_names = self.get_instance_names_by_prefix(
+                f"{config.ENV_DATA['cluster_name']}"
+            )
+            for instance_name in instance_names:
+                self.add_security_group_to_vsi(instance_name)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -774,3 +783,208 @@ class IBMCloudIPI(CloudDeploymentBase):
                 ibmcloud.attach_subnet_to_public_gateway(
                     subnet_name, gateway_name, vpc_name
                 )
+
+    def prepare_existing_vpc_and_network(self):
+        """
+        Prepare to use existing VPC, resource group, and subnets for IBM Cloud IPI deployment.
+        This function allows you to use your own pre-existing VPC infrastructure.
+
+        Required ENV_DATA configuration:
+        - existing_vpc: true
+        - resource_group_name: name of existing resource group
+        - network_resource_group_name: name of existing network resource group (can be same as resource_group_name)
+        - vpc_name: name of existing VPC
+        - control_plane_subnets: list of existing control plane subnet names
+        - compute_subnets: list of existing compute subnet names
+        """
+        cluster_id = get_random_str(size=5)
+        config.ENV_DATA["cluster_id"] = cluster_id
+
+        # Use existing resource group and VPC names from config
+        resource_group = config.ENV_DATA.get("resource_group_name")
+        network_resource_group = config.ENV_DATA.get(
+            "network_resource_group_name", resource_group
+        )
+        vpc_name = config.ENV_DATA.get("vpc_name")
+
+        # Validate required configuration
+        if not resource_group:
+            raise ValueError(
+                "resource_group_name must be specified in ENV_DATA when using existing VPC"
+            )
+        if not vpc_name:
+            raise ValueError(
+                "vpc_name must be specified in ENV_DATA when using existing VPC"
+            )
+
+        # Get existing subnet names from config
+        control_plane_subnets = config.ENV_DATA.get("control_plane_subnets", [])
+        compute_subnets = config.ENV_DATA.get("compute_subnets", [])
+
+        if not control_plane_subnets:
+            raise ValueError(
+                "control_plane_subnets must be specified in ENV_DATA when using existing VPC"
+            )
+        if not compute_subnets:
+            raise ValueError(
+                "compute_subnets must be specified in ENV_DATA when using existing VPC"
+            )
+
+        logger.info(f"Using existing VPC: {vpc_name}")
+        logger.info(f"Using existing resource group: {resource_group}")
+        logger.info(f"Using existing network resource group: {network_resource_group}")
+        logger.info(f"Using existing control plane subnets: {control_plane_subnets}")
+        logger.info(f"Using existing compute subnets: {compute_subnets}")
+
+        # Set the configuration for the installer
+        config.ENV_DATA["existing_vpc"] = True
+        config.ENV_DATA["resource_group_name"] = resource_group
+        config.ENV_DATA["network_resource_group_name"] = network_resource_group
+        config.ENV_DATA["vpc_name"] = vpc_name
+        config.ENV_DATA["control_plane_subnets"] = control_plane_subnets
+        config.ENV_DATA["compute_subnets"] = compute_subnets
+
+    def get_instance_names_by_prefix(self, prefix):
+        """
+        Get all instance names for instances whose names start with the given prefix.
+
+        Args:
+            prefix (str): The prefix to match instance names against
+
+        Returns:
+            list: List of instance names that match the prefix, empty list if none found
+        """
+        try:
+            logger.info(f"Fetching instances with prefix: {prefix}")
+            cmd = "ibmcloud is instances --output json"
+            proc = exec_cmd(cmd)
+            instances = json.loads(proc.stdout)
+
+            # Filter instances by name prefix
+            matching_instances = [
+                inst for inst in instances if inst.get("name", "").startswith(prefix)
+            ]
+
+            if not matching_instances:
+                logger.info(f"No instances found with prefix '{prefix}'")
+                return []
+
+            instance_names = [inst["name"] for inst in matching_instances]
+
+            logger.info(
+                f"Found {len(instance_names)} instance(s) with prefix '{prefix}': "
+                f"{', '.join(instance_names)}"
+            )
+
+            return instance_names
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve instances by prefix '{prefix}': {e}")
+            return []
+
+    def add_security_group_to_vsi(self, instance_name, security_group_name=None):
+        """
+        Add a security group to a VSI's network interface using security-group-target-add command.
+        This is safer than update command as it doesn't require listing all existing security groups.
+
+        Args:
+            instance_name (str): The VSI instance name
+            security_group_name (str): Name of the security group to add (if None, it will be fetched from ENV_DATA)
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Get security group name from config if not provided
+            if security_group_name is None:
+                security_group_name = config.ENV_DATA.get("security_group_name")
+                if not security_group_name:
+                    logger.error(
+                        "Security group name not provided and not found in ENV_DATA. "
+                        "Please provide security_group_name parameter or set it in ENV_DATA."
+                    )
+                    return False
+
+            # Get instance details to retrieve VPC name
+            logger.info(f"Getting instance details for instance: {instance_name}")
+            cmd = f"ibmcloud is instance {instance_name} --output json"
+            proc = exec_cmd(cmd)
+            instance_data = json.loads(proc.stdout)
+
+            # Get VPC name from instance data or config
+            vpc_data = instance_data.get("vpc")
+            if vpc_data:
+                vpc_name = vpc_data.get("name")
+            else:
+                # Fallback to config if VPC name not in instance data
+                vpc_name = config.ENV_DATA.get("vpc_name")
+                if not vpc_name:
+                    logger.error(
+                        f"Could not determine VPC name for instance {instance_name}. "
+                        "Please ensure vpc_name is set in ENV_DATA."
+                    )
+                    return False
+
+            logger.info(
+                f"Instance name: {instance_name}, VPC name: {vpc_name}, Security group: {security_group_name}"
+            )
+
+            # Get the network interfaces for the instance
+            logger.info(f"Getting network interfaces for instance: {instance_name}")
+            cmd = (
+                f"ibmcloud is instance-network-interfaces {instance_name} --output json"
+            )
+            proc = exec_cmd(cmd)
+            network_interfaces = json.loads(proc.stdout)
+
+            if not network_interfaces:
+                logger.error(
+                    f"No network interfaces found for instance: {instance_name}"
+                )
+                return False
+
+            # Get the primary network interface (usually the first one)
+            primary_nic = network_interfaces[0]
+            nic_name = primary_nic.get("name")
+            nic_id = primary_nic.get("id")
+
+            if not nic_name:
+                logger.error(
+                    f"Could not retrieve network interface name for instance {instance_name}. "
+                    f"Network interface ID: {nic_id}"
+                )
+                return False
+
+            logger.info(f"Using network interface: {nic_name} (ID: {nic_id})")
+
+            # Check if the security group is already attached
+            existing_sgs = primary_nic.get("security_groups", [])
+            existing_sg_names = [
+                sg.get("name") for sg in existing_sgs if sg.get("name")
+            ]
+            if security_group_name in existing_sg_names:
+                logger.info(
+                    f"Security group '{security_group_name}' is already attached to "
+                    f"instance {instance_name} network interface {nic_name}"
+                )
+                return True
+
+            # Use the new security-group-target-add command
+            logger.info(
+                f"Adding security group '{security_group_name}' to instance {instance_name} "
+                f"network interface {nic_name} in VPC {vpc_name}"
+            )
+            cmd = (
+                f"ibmcloud is security-group-target-add {security_group_name} {nic_name} "
+                f"--vpc {vpc_name} --in {instance_name}"
+            )
+            exec_cmd(cmd)
+            logger.info(
+                f"Successfully added security group '{security_group_name}' to instance "
+                f"{instance_name} network interface {nic_name}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to add security group to VSI: {e}")
+            return False
