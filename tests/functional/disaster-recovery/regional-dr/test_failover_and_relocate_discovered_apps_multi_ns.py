@@ -77,6 +77,26 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the creation of ReplicationDestination resources on secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            for wl in rdr_workload:
+                # Verifying the existence of replication group destination and volume snapshots
+                if dr_helpers.is_cg_cephfs_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
         logger.info("Checking for lastKubeObjectProtectionTime")
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, rdr_workload[0].kubeobject_capture_interval_int
@@ -108,6 +128,45 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 vrg_name=rdr_workload[index].discovered_apps_placement_name,
                 skip_vrg_check=True,
             )
+
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                for wl in rdr_workload:
+                    # Verify the deletion of Replication Group Destination resources
+                    # on the old secondary cluster
+                    config.switch_to_cluster_by_name(secondary_cluster_name)
+                    dr_helpers.wait_for_replication_destinations_deletion(
+                        wl.workload_namespace
+                    )
+                    cg_enabled = dr_helpers.is_cg_cephfs_enabled()
+
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=wl.workload_namespace,
+                            should_exist=False,
+                        )
+
+                    # Verify the deletion of Replication Group Destination resources
+                    # on the current secondary cluster
+                    config.switch_to_cluster_by_name(
+                        primary_cluster_name_before_failover
+                    )
+                    dr_helpers.wait_for_replication_destinations_creation(
+                        wl.workload_pvc_count, wl.workload_namespace
+                    )
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=wl.workload_namespace,
+                            should_exist=False,
+                        )
+
+                        # Verify the creation of Volume Snapshot
+                        dr_helpers.wait_for_resource_count(
+                            kind=constants.VOLUMESNAPSHOT,
+                            namespace=wl.workload_namespace,
+                            expected_count=wl.workload_pvc_count,
+                        )
 
         wait_for_vrg_state(
             vrg_state="primary",
@@ -154,6 +213,64 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             old_primary=primary_cluster_name_after_failover,
             workload_instance=rdr_workload,
             multi_ns=True,
+        )
+        for index in range(len(rdr_workload)):
+            dr_helpers.wait_for_all_resources_creation(
+                pvc_count=rdr_workload[index].workload_pvc_count,
+                pod_count=rdr_workload[index].workload_pod_count,
+                namespace=rdr_workload[index].workload_namespace,
+                discovered_apps=True,
+                skip_replication_resources=False,
+                vrg_name=rdr_workload[index].discovered_apps_placement_name,
+                skip_vrg_check=True,
+            )
+
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                for wl in rdr_workload:
+                    # Verify the deletion of Replication Group Destination resources
+                    # on the old secondary cluster
+                    config.switch_to_cluster_by_name(
+                        primary_cluster_name_after_failover
+                    )
+                    dr_helpers.wait_for_replication_destinations_deletion(
+                        wl.workload_namespace
+                    )
+                    cg_enabled = dr_helpers.is_cg_cephfs_enabled()
+
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=wl.workload_namespace,
+                            should_exist=False,
+                        )
+
+                    # Verify the creation of Replication Group Destination resources
+                    # on the current secondary cluster
+                    config.switch_to_cluster_by_name(
+                        primary_cluster_name_after_failover
+                    )
+                    dr_helpers.wait_for_replication_destinations_creation(
+                        wl.workload_pvc_count, wl.workload_namespace
+                    )
+
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=wl.workload_namespace,
+                            should_exist=True,
+                        )
+
+                        # Verify the creation of Volume Snapshot
+                        dr_helpers.wait_for_resource_count(
+                            kind=constants.VOLUMESNAPSHOT,
+                            namespace=wl.workload_namespace,
+                            expected_count=wl.workload_pvc_count,
+                        )
+
+        wait_for_vrg_state(
+            vrg_state="primary",
+            vrg_namespace=constants.DR_OPS_NAMESAPCE,
+            resource_name=rdr_workload[index].discovered_apps_placement_name,
         )
 
         logger.info("Checking for lastKubeObjectProtectionTime post Relocate Operation")
