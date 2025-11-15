@@ -14,22 +14,34 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import version
+from semantic_version import Version
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
-interface_data = {
-    constants.CEPHBLOCKPOOL: {
-        "prov": "csi-rbdplugin-provisioner",
-        "csi_cnt": "csi-rbdplugin",
-    },
-    constants.CEPHFILESYSTEM: {
-        "prov": "csi-cephfsplugin-provisioner",
-        "csi_cnt": "csi-cephfsplugin",
-    },
-}
-
-
+ocs_version = config.ENV_DATA["ocs_version"]
+if Version.coerce(ocs_version) <= Version.coerce("4.18"):
+    interface_data = {
+        constants.CEPHBLOCKPOOL: {
+            "prov": "csi-rbdplugin-provisioner",
+            "csi_cnt": "csi-rbdplugin",
+        },
+        constants.CEPHFILESYSTEM: {
+            "prov": "csi-cephfsplugin-provisioner",
+            "csi_cnt": "csi-cephfsplugin",
+        },
+    }
+else:
+    interface_data = {
+        constants.CEPHBLOCKPOOL: {
+            "prov": "openshift-storage.rbd.csi.ceph.com-ctrlplugin",
+            "csi_cnt": "csi-rbdplugin",
+        },
+        constants.CEPHFILESYSTEM: {
+            "prov": "openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
+            "csi_cnt": "csi-cephfsplugin",
+        },
+    }
 def write_fio_on_pod(pod_obj, file_size):
     """
     Writes IO of file_size size to a pod
@@ -184,7 +196,6 @@ def get_logfile_names(interface, provisioning=True):
 
     provisioning_name = interface_data[interface]["prov"]
     csi_name = interface_data[interface]["csi_cnt"]
-
     for line in pods:
         if provisioning:
             if provisioning_name in line:
@@ -192,8 +203,7 @@ def get_logfile_names(interface, provisioning=True):
         else:
             if csi_name in line and provisioning_name not in line:
                 log_names.append(line.split()[0])
-
-    logger.info(f"The logs pods are : {log_names}")
+    logger.info(f"The log pods are : {log_names}")
     return log_names
 
 
@@ -248,9 +258,9 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
     # time), the earliest start time and the latest end time are taken
     for sublog in logs:
         for line in sublog:
-            if st is None and "Started" in line and pvc_name in line:
+            if st is None and "started" in line.lower() and pvc_name in line:
                 st = string_to_time(line.split(" ")[1])
-            elif pvc_name in line and "Succeeded" in line:
+            elif pvc_name in line and "succeeded" in line.lower():
                 et = string_to_time(line.split(" ")[1])
     del logs
     if st is None:
