@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_lean_deployment,
 )
 from ocs_ci.ocs.ocp import OCP
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @mcg
 @runs_on_provider
 @red_squad
+@skipif_lean_deployment
 class TestNoobaaDbNFSMount:
     @pytest.fixture()
     def mount_ngix_pod(self, request):
