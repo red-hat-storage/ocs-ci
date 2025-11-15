@@ -1454,7 +1454,7 @@ class Deployment(object):
                 selector=operator_selector,
                 subscription_plan_approval=subscription_plan_approval,
             )
-            package_manifest.wait_for_resource(timeout=300)
+            package_manifest.wait_for_resource(timeout=600)
             csv_name = package_manifest.get_current_csv(channel=channel)
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
             if managed_ibmcloud and not live_deployment:
