@@ -41,6 +41,7 @@ class DeploymentFactory(object):
                     "vsphere_ipi": VSPHEREIPI,
                     "vsphere_upi_flexy": VSPHEREUPIFlexy,
                     "vsphere_ai": VSPHEREAI,
+                    "hci_vsphere_ai": VSPHEREAI,
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:
