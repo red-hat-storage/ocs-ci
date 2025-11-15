@@ -94,6 +94,19 @@ class TestPvcExpansionWhenFull(ManageTest):
         log_step(
             "Run IO on PVCs to utilize 96% of available storage. Check PersistentVolumeUsageCritical alert."
         )
+
+        # Temporary change for debugging
+        for pod_obj in self.pods:
+            mount_point = pod_obj.exec_cmd_on_pod(command="df -kh /var/lib/www/html")
+            log.warning(
+                f"Used space on pod {pod_obj.name} in Gi before filling up 96% of available storage."
+            )
+            log.warning(mount_point)
+            mount_point = pod_obj.exec_cmd_on_pod(command="df -m /var/lib/www/html")
+            log.warning(
+                f"Used space on pod {pod_obj.name} in 1M-blocks before filling up 96% of available storage."
+            )
+            log.warning(mount_point)
         self._run_io_and_check_alerts(
             fill_up_critical_full_mb,
             prometheus_api,
@@ -103,6 +116,18 @@ class TestPvcExpansionWhenFull(ManageTest):
         )
 
         log_step("Run IO on all to utilize 100% of PVCs storage capacity.")
+        # Temporary change for debugging
+        for pod_obj in self.pods:
+            mount_point = pod_obj.exec_cmd_on_pod(command="df -kh /var/lib/www/html")
+            log.warning(
+                f"Used space on pod {pod_obj.name} in Gi before filling up 100% of available storage."
+            )
+            log.warning(mount_point)
+            mount_point = pod_obj.exec_cmd_on_pod(command="df -m /var/lib/www/html")
+            log.warning(
+                f"Used space on pod {pod_obj.name} in 1M-blocks before filling up 100% of available storage."
+            )
+            log.warning(mount_point)
         self.fill_up_pvcs(fill_up_full_mb, pvc_full_error_expected=True)
 
         log_step("Verify used space on pods is 100%.")
