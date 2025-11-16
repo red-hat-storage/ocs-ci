@@ -38,6 +38,19 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         Initialize Sanity instance
 
         """
+        # Verify all nodes are Ready before starting test
+        not_ready_nodes = [
+            n.name
+            for n in get_node_objs()
+            if n.ocp.get_resource_status(n.name) != NODE_READY
+        ]
+        if not_ready_nodes:
+            pytest.skip(
+                f"Skipping test due to pre-existing node issues. "
+                f"Not Ready nodes: {not_ready_nodes}"
+            )
+
+        log.info("All cluster nodes are Ready. Proceeding with test.")
 
         self.sanity_helpers = Sanity()
 
@@ -54,21 +67,6 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         pods not running on same node post shutdown and recovery node
 
         """
-
-        # Verify all nodes are Ready before starting test
-        not_ready_nodes = [
-            n.name
-            for n in get_node_objs()
-            if n.ocp.get_resource_status(n.name) != NODE_READY
-        ]
-        if not_ready_nodes:
-            pytest.skip(
-                f"Skipping test due to pre-existing node issues. "
-                f"Not Ready nodes: {not_ready_nodes}"
-            )
-
-        log.info("All cluster nodes are Ready. Proceeding with test.")
-
         # Get MDS, rbd, cephfs plugin provisioner pods running nodes
         # before shutdown
 
