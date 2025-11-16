@@ -80,6 +80,29 @@ class TestDisableDR:
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             rdr_workloads[0].workload_namespace,
         )
+        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
+            rdr_workloads[0].workload_namespace, rdr_workloads[0].workload_type
+        )
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the creation of ReplicationDestination resources on secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            for wl in rdr_workloads:
+                # Verifying the existence of replication group destination and volume snapshots
+                cg_enabled = dr_helpers.is_cg_cephfs_enabled()
+                if cg_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
 
         # Disable DR
         dr_helpers.disable_dr_rdr(discovered_apps=discovered_apps)
@@ -107,3 +130,18 @@ class TestDisableDR:
                 workload.workload_namespace,
                 skip_replication_resources=True,
             )
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the deletion of ReplicationDestination resources on secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            dr_helpers.wait_for_replication_destinations_deletion(wl.workload_namespace)
+
+            for wl in rdr_workloads:
+                # Verifying the existence of replication group destination
+                cg_enabled = dr_helpers.is_cg_cephfs_enabled()
+                if cg_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=False,
+                    )

@@ -86,6 +86,19 @@ class TestFailoverAfterMultiplePodsFailure:
                 dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
+                # Verifying the existence of replication group destination and volume snapshots
+                # in case of CG enabled for CephFS
+                if dr_helpers.is_cg_cephfs_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
 
         scheduling_interval = get_scheduling_interval(
             rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
@@ -154,11 +167,32 @@ class TestFailoverAfterMultiplePodsFailure:
                 dr_helpers.wait_for_replication_destinations_deletion(
                     wl.workload_namespace
                 )
+                cg_enabled = dr_helpers.is_cg_cephfs_enabled()
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=False,
+                    )
                 # Verify the creation of ReplicationDestination resources on primary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
                 dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
+
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+
+                    # Verify the creation of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
 
         dr_helpers.wait_for_mirroring_status_ok(
             replaying_images=sum(

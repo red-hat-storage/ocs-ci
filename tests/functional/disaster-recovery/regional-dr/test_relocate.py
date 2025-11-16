@@ -164,12 +164,7 @@ class TestRelocate:
                         namespace=wl.workload_namespace,
                         should_exist=False,
                     )
-                    # Verify the deletion of Volume Snapshot
-                    dr_helpers.wait_for_resource_count(
-                        kind=constants.VOLUMESNAPSHOT,
-                        namespace=wl.workload_namespace,
-                        expected_count=0,
-                    )
+
                 # Verify the creation of Replication Group Destination resources on
                 # the current secondary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)

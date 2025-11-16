@@ -2669,7 +2669,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
     Validates Volume Group Snapshot resource creation from odf external snapshotter
 
     Args:
-        namespace (str): the namespace of the Volume snapshot resources
+        namespace (str): the namespace of the Volume Group snapshot resources
 
     """
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
