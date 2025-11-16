@@ -32,6 +32,7 @@ RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be paralleli
 @runs_on_provider
 @flaky
 @skipif_managed_service
+@skipif_disconnected_cluster
 class TestObjectIntegrity(MCGTest):
     """
     Test data integrity of various objects
@@ -54,15 +55,15 @@ class TestObjectIntegrity(MCGTest):
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier2, skipif_disconnected_cluster],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier2, skipif_disconnected_cluster],
+                marks=[tier2],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier2, skipif_disconnected_cluster, skipif_fips_enabled],
+                marks=[tier2, skipif_fips_enabled],
             ),
             pytest.param(
                 {
