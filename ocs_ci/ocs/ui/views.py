@@ -2379,7 +2379,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "create_folder_button": (
-        "//div[contains(@class, 'u-w-50')]//div//button[contains(@class, 'c-button')]",
+        "//button[normalize-space()='Create folder']",
         By.XPATH,
     ),
     "folder_name_input": (
