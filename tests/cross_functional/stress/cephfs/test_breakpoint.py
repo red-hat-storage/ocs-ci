@@ -21,7 +21,7 @@ class TestCephfsStress(E2ETest):
     CephFS break point test - without failures
     """
 
-    def test_cephfs_breakpoint(self):
+    def test_cephfs_breakpoint(self, threading_lock):
         """
         The primary objective of this test is to find the system's breaking point which is the critical
         threshold at which ODF operations cease to complete successfully within the defined resource limits
@@ -45,7 +45,7 @@ class TestCephfsStress(E2ETest):
         POD_INTERVAL_SECONDS = 300
         stress_checks_thread = threading.Thread(
             target=continuous_checks_runner,
-            args=(CHECKS_RUNNER_INTERVAL_MINUTES,),
+            args=(CHECKS_RUNNER_INTERVAL_MINUTES, threading_lock),
             name="StressCheckRunnerThread",
             daemon=True,
         )

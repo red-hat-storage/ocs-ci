@@ -1,7 +1,7 @@
 import logging
-import tabulate
-import textwrap
 import threading
+
+from prettytable import PrettyTable
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
@@ -144,24 +144,23 @@ def check_prometheus_alerts(threading_lock=None):
     prometheus_alert_list = list()
     prometheus_api = PrometheusAPI(threading_lock=threading_lock)
     prometheus_api.prometheus_log(prometheus_alert_list)
-    alert_tab = ["Alert Name", "Description", "State"]
+    table = PrettyTable()
+    table.field_names = ["Alert Name", "Description", "State"]
+    table.align = "l"
+    table.max_width["Description"] = 50
     alert_names_seen = set()
     for alert in prometheus_alert_list:
         alert_name = alert["labels"]["alertname"].strip()
         if alert_name in alert_names_seen:
             continue
-
-        description = "\n".join(
-            textwrap.wrap(alert["annotations"]["description"], width=50)
-        )
-
-        alert_tab.append([alert_name, description, alert["state"]])
+        description = alert["annotations"]["description"]
+        table.add_row([alert_name, description, alert["state"]])
         alert_names_seen.add(alert_name)
     logger.info(
         "\n=================================================="
         "\n         CLUSTER CHECK: prometheus alerts         "
         "\n=================================================="
-        f"\n{tabulate(alert_tab[1:], headers=alert_tab[0], tablefmt='grid')}"
+        f"\n{table}"
         "\n"
     )
 
@@ -256,7 +255,7 @@ def get_osd_disk_utilization():
     )
 
 
-def run_cluster_checks():
+def run_cluster_checks(threading_lock=None):
     """
     Runs stress specific cluster checks
 
@@ -269,19 +268,19 @@ def run_cluster_checks():
     )
 
     checks_to_run = [
-        check_prometheus_alerts,
-        check_mds_pods_resource_utilization,
-        get_mon_db_usage,
-        get_nodes_resource_utilization,
-        get_pods_resource_utilization,
-        get_osd_disk_utilization,
+        (check_prometheus_alerts, {"threading_lock": threading_lock}),
+        (check_mds_pods_resource_utilization, {}),
+        (get_mon_db_usage, {}),
+        (get_nodes_resource_utilization, {}),
+        (get_pods_resource_utilization, {}),
+        (get_osd_disk_utilization, {}),
     ]
-
-    for check_func in checks_to_run:
+    for check_func, kwargs in checks_to_run:
         func_name = check_func.__name__
+        logger.debug(f"Running check: {func_name}")
+
         try:
-            logger.debug(f"Running Cluster check: {func_name}")
-            check_func()
+            check_func(**kwargs)
             logger.info(f"CLUSTER CHECK {func_name} PASSED")
         except Exception as e:
             logger.error(f"CLUSTER CHECK {func_name} FAILED: {e}", exc_info=True)
@@ -328,20 +327,29 @@ def verify_openshift_storage_ns_pods_in_running_state():
     logger.info("All the Pods in the openshift-storage namespace are in Running state")
 
 
-def get_filtered_pods_for_validation():
+def get_filtered_pods():
     """
-    Get's a list of all pods running in the openshift-storage namespace, excluding 'noobaa',
-    'rook-ceph-osd-prepare', and 'rook-ceph-drain-canary'
+    Get's a list of all pods running in the openshift-storage namespace, ignoring few set of pods
 
     Returns:
-        list: Filtered list of all pods
+        list (pods_obj): list of all filtered pods object
 
     """
-    return get_all_pods(
-        namespace=config.ENV_DATA["cluster_namespace"],
-        selector=["noobaa", "rook-ceph-osd-prepare", "rook-ceph-drain-canary"],
-        exclude_selector=True,
-    )
+    list_of_all_pods = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+    ignore_pods = [
+        constants.ROOK_CEPH_OSD_PREPARE,
+        constants.ROOK_CEPH_DRAIN_CANARY,
+        "debug",
+        constants.REPORT_STATUS_TO_PROVIDER_POD,
+        constants.STATUS_REPORTER,
+        "ceph-file-controller-detect-version",
+    ]
+    filtered_list_objs = [
+        pod_obj
+        for pod_obj in list_of_all_pods
+        if not any(pod_name in pod_obj.name for pod_name in ignore_pods)
+    ]
+    return filtered_list_objs
 
 
 def verify_openshift_storage_ns_pods_health():
@@ -362,7 +370,7 @@ def verify_openshift_storage_ns_pods_health():
         "\n===================================================="
         "\n"
     )
-    pod_objs = get_filtered_pods_for_validation()
+    pod_objs = get_filtered_pods()
     pod_restarts = []
     oomkilled_pods = []
     for pod_obj in pod_objs:
@@ -396,7 +404,7 @@ def verify_openshift_storage_ns_pods_health():
 
 def run_verification_checks():
     """
-    Function to runs verification checks
+    Function to run verification checks
 
     If any verification function raises an AssertionError, this function
     catches it, logs the failure, records it in the 'validation_failures'
@@ -444,7 +452,7 @@ def run_verification_checks():
         # catch any other verification check script crash
         logger.error(f"Verification check FAILED: {e}", exc_info=True)
         with verification_lock:
-            verification_func.append(f"Verification script {func_name} failed: {e}")
+            verification_failures.append(f"Verification script {func_name} failed: {e}")
         stop_event.set()
 
     logger.info(
@@ -455,7 +463,7 @@ def run_verification_checks():
     )
 
 
-def continuous_checks_runner(interval_minutes):
+def continuous_checks_runner(interval_minutes, threading_lock=None):
     """
     This function runs in a background thread, continuously checking for a 'stop_event'.
 
@@ -480,7 +488,7 @@ def continuous_checks_runner(interval_minutes):
             break
 
         logger.info(f"Running periodic checks loop (Interval: {interval_minutes} min)")
-        run_cluster_checks()
+        run_cluster_checks(threading_lock=threading_lock)
         run_verification_checks()
 
     logger.info("Check Runner thread: Stop signal received, exiting")
