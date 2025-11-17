@@ -1,4 +1,5 @@
 import logging
+from types import SimpleNamespace
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -8,7 +9,6 @@ from ocs_ci.ocs.bucket_utils import (
     write_individual_s3_objects,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.namespacestore import (
     cli_create_namespacestore,
     NamespaceStore,
@@ -55,12 +55,25 @@ class TestNamespaceStore:
         # Create OBC and CloudManager object for the above bucket, hence it
         # can be used to create NS
         rgw_obc_object = OBC(rgw_bucket.name)
-        cld_mgr = CloudManager(obc_obj=rgw_obc_object)
 
         # Create the Namespacestore using the credentials
         # of rgw bucket
+
+        # Build a lightweight adapter that mimics the CloudManager interface.
+        # cli_create_namespacestore() only cares that cld_mgr.rgw_client.* exists,
+        # so we wrap the needed fields into a SimpleNamespace instead of creating
+        # a full CloudManager instance.
+        cld_mgr_substitute = SimpleNamespace(
+            rgw_client=SimpleNamespace(
+                s3_internal_endpoint=rgw_obc_object.s3_external_endpoint,
+                access_key=rgw_obc_object.access_key_id,
+                secret_key=rgw_obc_object.access_key,
+            ),
+        )
         nss_name = create_unique_resource_name(constants.MCG_NSS, resource_type="rgw")
-        cli_create_namespacestore(nss_name, "rgw", mcg_obj, rgw_bucket.name, cld_mgr)
+        cli_create_namespacestore(
+            nss_name, "rgw", mcg_obj, rgw_bucket.name, cld_mgr_substitute
+        )
         nss_obj = OCP(
             kind=constants.NAMESPACESTORE,
             resource_name=nss_name,
