@@ -89,7 +89,7 @@ class TestDisableDR:
             for wl in rdr_workloads:
                 # Verifying the existence of replication group destination and volume snapshots
                 cg_enabled = dr_helpers.is_cg_cephfs_enabled()
-                if cg_enabled():
+                if cg_enabled:
                     dr_helpers.wait_for_resource_existence(
                         kind=constants.REPLICATION_GROUP_DESTINATION,
                         namespace=wl.workload_namespace,
@@ -139,7 +139,7 @@ class TestDisableDR:
             for wl in rdr_workloads:
                 # Verifying the existence of replication group destination
                 cg_enabled = dr_helpers.is_cg_cephfs_enabled()
-                if cg_enabled():
+                if cg_enabled:
                     dr_helpers.wait_for_resource_existence(
                         kind=constants.REPLICATION_GROUP_DESTINATION,
                         namespace=wl.workload_namespace,
