@@ -369,7 +369,7 @@ CLUSTER_OBSERVABILITY_SUBSCRIPTION = "cluster-observability-operator"
 ELASTICSEARCH_SUBSCRIPTION = "elasticsearch-operator"
 LOKISTACK_SUBSCRIPTION = "loki-operator"
 OBJECT_BUCKET_CLAIM = "loki-bucket-rgw"
-LOKISTACK_SECRET = "logging-loki-s3"
+LOKISTACK_SEC = "logging-loki-s3"
 CLUSTER_OBSERVABILITY_OPERATOR = "cluster-observability-operator"
 START = "START"
 END = "END"
@@ -1092,6 +1092,9 @@ CO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-namespace.yaml")
 CO_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-og.yaml")
 CO_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-sub.yaml")
 CO_UI_PLUGIN_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-ui-plugin.yaml")
+
+EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
+EO_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-og.yaml")
 
 OLM_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml")
 CERT_MANAGER_NS_YAML = os.path.join(

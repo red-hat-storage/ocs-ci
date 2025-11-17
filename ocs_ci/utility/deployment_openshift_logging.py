@@ -229,7 +229,7 @@ def get_secret_to_lokistack():
     )
     lo_secret.get(out_yaml_format=True)
     ls_secret = lo_secret.check_resource_existence(
-        resource_name=constants.LOKISTACK_SECRET,
+        resource_name=constants.LOKISTACK_SEC,
         timeout=120,
         should_exist=True,
     )
