@@ -23,7 +23,8 @@ from ocs_ci.ocs.constants import (
     REPLICA1_STORAGECLASS,
     PVC,
 )
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 log = getLogger(__name__)
@@ -79,6 +80,59 @@ def get_failures_domain_name() -> list[str]:
     log.info(f"Failure domains:{failure_domains}")
 
     return failure_domains
+
+
+def check_osds_down(osd_ids: list[str]) -> bool:
+    """
+    Check if specified OSDs are marked as 'down' in Ceph
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to check
+
+    Returns:
+        bool: True if all OSDs are down, False otherwise
+    """
+    ceph_pod = get_ceph_tools_pod()
+    osd_dump = ceph_pod.exec_ceph_cmd("ceph osd dump")
+
+    osds_status = {}
+    for osd in osd_dump["osds"]:
+        osd_id = str(osd["osd"])
+        if osd_id in osd_ids:
+            osds_status[osd_id] = {"up": osd["up"], "in": osd["in"]}
+
+    for osd_id, status in osds_status.items():
+        state = "up" if status["up"] == 1 else "down"
+        log.info(f"OSD {osd_id}: {state}")
+
+    all_down = all(status["up"] == 0 for status in osds_status.values())
+    return all_down
+
+
+def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) -> None:
+    """
+    Wait for OSDs to be marked as 'down' in Ceph using polling
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to wait for
+        timeout (int): Timeout in seconds (default: 300)
+        sleep (int): Sleep interval between checks (default: 10)
+
+    Raises:
+        TimeoutExpiredError: If OSDs don't go down within timeout
+    """
+    log.info(f"Waiting for OSDs {osd_ids} to be marked as 'down' in Ceph")
+
+    sample = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_osds_down, osd_ids=osd_ids
+    )
+
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"OSDs {osd_ids} did not go down within {timeout} seconds"
+        )
+
+    log.info(f"All OSDs {osd_ids} are now marked as 'down'")
 
 
 def get_replica_1_osds(failure_domains: list[str] = None) -> dict:
@@ -291,26 +345,9 @@ def sequential_remove_replica1_osds(failure_domains: list[str] = None) -> dict:
 
     # PHASE 2: Wait for OSDs to go "down" in Ceph
     log.info("PHASE 2: Waiting for OSDs to be marked as 'down' in Ceph")
-    sleep(30)
-
-    # State verification: Check Ceph OSD status after deployment scaling
-    log.info("Verifying Ceph OSD status after deployment scaling")
-    try:
-        ceph_pod = get_ceph_tools_pod()
-        osd_tree = ceph_pod.exec_cmd_on_pod("ceph osd tree")
-        log.info(f"Current Ceph OSD tree after scaling:\n{osd_tree}")
-
-        osd_status = ceph_pod.exec_cmd_on_pod("ceph osd status")
-        log.info(f"Current Ceph OSD status after scaling:\n{osd_status}")
-
-        # Check if our target OSDs are now "down"
-        target_osd_ids = list(replica1_osds.values())
-        log.info(f"Verifying target OSDs {target_osd_ids} are marked as 'down'")
-
-    except CommandFailed as e:
-        log.warning(f"Could not verify Ceph OSD status: {e}")
-
-    log.info("All deployments scaled down - OSDs should now be 'down' and removable")
+    target_osd_ids = list(replica1_osds.values())
+    wait_for_osds_down(osd_ids=target_osd_ids, timeout=300, sleep=10)
+    log.info("All deployments scaled down - OSDs are now 'down' and removable")
 
     # PHASE 3: Sequential OSD removal with comprehensive job cleanup
     log.info("PHASE 3: Starting sequential OSD removal")
