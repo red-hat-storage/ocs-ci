@@ -65,14 +65,14 @@ def retry(
         def f_retry(*args, **kwargs):
             mtries, mdelay = tries, delay
             attempts = 0
-            if attempts > 1:
-                # Skip log for first attempt
-                logger.debug(
-                    f"Executing {f.__name__}. Tries: {mtries}. Delay: {mdelay}. Backoff: {backoff}"
-                )
             exception_summary = set()
             while mtries > 1:
                 attempts += 1
+                if attempts == 2:
+                    # Show log only for second attempt
+                    logger.debug(
+                        f"Executing {f.__name__}. Tries: {mtries}. Delay: {mdelay}. Backoff: {backoff}"
+                    )
                 try:
                     if func is not None:
                         func()
