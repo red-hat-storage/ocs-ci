@@ -248,7 +248,13 @@ class BackingStore:
                 _wait_for_pv_backingstore_resource_deleted()
 
 
-def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
+def backingstore_factory(
+    request,
+    cld_mgr,
+    mcg_obj,
+    cloud_uls_factory,
+    cluster_context=config.RunWithProviderConfigContextIfAvailable,
+):
     """
     Create a Backing Store factory.
     Calling this fixture creates a new Backing Store(s).
@@ -260,33 +266,36 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
         mcg_obj (MCG): MCG object containing data and utils
             related to MCG
         cloud_uls_factory: Factory for underlying storage creation
+        cluster_context (object): context object in which the bucket will be created.
+            Default is provider context.
 
     Returns:
         func: Factory method - each call to this function creates
             a backingstore
 
     """
-    created_backingstores = []
+    with cluster_context():
+        created_backingstores = []
 
-    cmdMap = {
-        "oc": {
-            "aws": oc_create_aws_backingstore,
-            "gcp": oc_create_google_backingstore,
-            "azure": oc_create_azure_backingstore,
-            "ibmcos": oc_create_ibmcos_backingstore,
-            "rgw": oc_create_rgw_backingstore,
-            "pv": oc_create_pv_backingstore,
-        },
-        "cli": {
-            "aws": cli_create_aws_backingstore,
-            "gcp": cli_create_google_backingstore,
-            "azure": cli_create_azure_backingstore,
-            "ibmcos": cli_create_ibmcos_backingstore,
-            "rgw": cli_create_rgw_backingstore,
-            "pv": cli_create_pv_backingstore,
-            "aws-sts": cli_create_aws_sts_backingstore,
-        },
-    }
+        cmdMap = {
+            "oc": {
+                "aws": oc_create_aws_backingstore,
+                "gcp": oc_create_google_backingstore,
+                "azure": oc_create_azure_backingstore,
+                "ibmcos": oc_create_ibmcos_backingstore,
+                "rgw": oc_create_rgw_backingstore,
+                "pv": oc_create_pv_backingstore,
+            },
+            "cli": {
+                "aws": cli_create_aws_backingstore,
+                "gcp": cli_create_google_backingstore,
+                "azure": cli_create_azure_backingstore,
+                "ibmcos": cli_create_ibmcos_backingstore,
+                "rgw": cli_create_rgw_backingstore,
+                "pv": cli_create_pv_backingstore,
+                "aws-sts": cli_create_aws_sts_backingstore,
+            },
+        }
 
     def _create_backingstore(method, uls_dict, timeout=600):
         """
@@ -305,74 +314,47 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             list: A list of backingstore names.
 
         """
-        current_call_created_backingstores = []
-        if method.lower() not in cmdMap:
-            raise RuntimeError(
-                f"Invalid method type received: {method}. "
-                f'available types: {", ".join(cmdMap.keys())}'
-            )
-        for cloud, uls_lst in uls_dict.items():
-            for uls_tup in uls_lst:
-                # Todo: Replace multiple .append calls, create names in advance, according to amountoc
-                if cloud.lower() not in cmdMap[method.lower()]:
-                    raise RuntimeError(
-                        f"Invalid cloud type received: {cloud}. "
-                        f'available types: {", ".join(cmdMap[method.lower()].keys())}'
-                    )
-                if cloud == "pv":
-                    if len(uls_tup) == 3:
-                        vol_num, size, storagecluster = uls_tup
-                        req_cpu, req_mem, lim_cpu, lim_mem = (None, None, None, None)
-                    else:
-                        (
-                            vol_num,
-                            size,
-                            storagecluster,
-                            req_cpu,
-                            req_mem,
-                            lim_cpu,
-                            lim_mem,
-                        ) = uls_tup
-                    if (
-                        storagecluster == constants.DEFAULT_STORAGECLASS_RBD
-                        and storagecluster_independent_check()
-                    ):
-                        storagecluster = (
-                            constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        with cluster_context():
+            current_call_created_backingstores = []
+            if method.lower() not in cmdMap:
+                raise RuntimeError(
+                    f"Invalid method type received: {method}. "
+                    f'available types: {", ".join(cmdMap.keys())}'
+                )
+            for cloud, uls_lst in uls_dict.items():
+                for uls_tup in uls_lst:
+                    # Todo: Replace multiple .append calls, create names in advance, according to amountoc
+                    if cloud.lower() not in cmdMap[method.lower()]:
+                        raise RuntimeError(
+                            f"Invalid cloud type received: {cloud}. "
+                            f'available types: {", ".join(cmdMap[method.lower()].keys())}'
                         )
-                    backingstore_name = create_unique_resource_name(
-                        resource_description="backingstore", resource_type=cloud.lower()
-                    )
-                    backingstore_obj = BackingStore(
-                        name=backingstore_name,
-                        method=method.lower(),
-                        type="pv",
-                        mcg_obj=mcg_obj,
-                        vol_num=vol_num,
-                        vol_size=size,
-                    )
-                    current_call_created_backingstores.append(backingstore_obj)
-                    created_backingstores.append(backingstore_obj)
-                    if method.lower() == "cli":
-                        cmdMap[method.lower()][cloud.lower()](
-                            mcg_obj,
-                            backingstore_name,
-                            vol_num,
-                            size,
-                            storagecluster,
-                            req_cpu=req_cpu,
-                            req_mem=req_mem,
-                            lim_cpu=lim_cpu,
-                            lim_mem=lim_mem,
-                        )
-                    else:
-                        cmdMap[method.lower()][cloud.lower()](
-                            backingstore_name, vol_num, size, storagecluster
-                        )
-                else:
-                    _, region = uls_tup
-                    uls_dict = cloud_uls_factory({cloud: [uls_tup]})
-                    for uls_name in uls_dict[cloud.lower()]:
+                    if cloud == "pv":
+                        if len(uls_tup) == 3:
+                            vol_num, size, storagecluster = uls_tup
+                            req_cpu, req_mem, lim_cpu, lim_mem = (
+                                None,
+                                None,
+                                None,
+                                None,
+                            )
+                        else:
+                            (
+                                vol_num,
+                                size,
+                                storagecluster,
+                                req_cpu,
+                                req_mem,
+                                lim_cpu,
+                                lim_mem,
+                            ) = uls_tup
+                        if (
+                            storagecluster == constants.DEFAULT_STORAGECLASS_RBD
+                            and storagecluster_independent_check()
+                        ):
+                            storagecluster = (
+                                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+                            )
                         backingstore_name = create_unique_resource_name(
                             resource_description="backingstore",
                             resource_type=cloud.lower(),
@@ -380,45 +362,85 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                         backingstore_obj = BackingStore(
                             name=backingstore_name,
                             method=method.lower(),
-                            type="cloud",
-                            uls_name=uls_name,
+                            type="pv",
                             mcg_obj=mcg_obj,
+                            vol_num=vol_num,
+                            vol_size=size,
                         )
                         current_call_created_backingstores.append(backingstore_obj)
                         created_backingstores.append(backingstore_obj)
                         if method.lower() == "cli":
                             cmdMap[method.lower()][cloud.lower()](
-                                mcg_obj, cld_mgr, backingstore_name, uls_name, region
+                                mcg_obj,
+                                backingstore_name,
+                                vol_num,
+                                size,
+                                storagecluster,
+                                req_cpu=req_cpu,
+                                req_mem=req_mem,
+                                lim_cpu=lim_cpu,
+                                lim_mem=lim_mem,
                             )
-                        elif method.lower() == "oc":
+                        else:
                             cmdMap[method.lower()][cloud.lower()](
-                                cld_mgr, backingstore_name, uls_name, region
+                                backingstore_name, vol_num, size, storagecluster
                             )
-                        mcg_obj.check_backingstore_state(
-                            backingstore_name, constants.BS_OPTIMAL, timeout=timeout
-                        )
-                        # TODO: Verify OC\CLI BS health by using the appropriate methods
+                    else:
+                        _, region = uls_tup
+                        uls_dict = cloud_uls_factory({cloud: [uls_tup]})
+                        for uls_name in uls_dict[cloud.lower()]:
+                            backingstore_name = create_unique_resource_name(
+                                resource_description="backingstore",
+                                resource_type=cloud.lower(),
+                            )
+                            backingstore_obj = BackingStore(
+                                name=backingstore_name,
+                                method=method.lower(),
+                                type="cloud",
+                                uls_name=uls_name,
+                                mcg_obj=mcg_obj,
+                            )
+                            current_call_created_backingstores.append(backingstore_obj)
+                            created_backingstores.append(backingstore_obj)
+                            if method.lower() == "cli":
+                                cmdMap[method.lower()][cloud.lower()](
+                                    mcg_obj,
+                                    cld_mgr,
+                                    backingstore_name,
+                                    uls_name,
+                                    region,
+                                )
+                            elif method.lower() == "oc":
+                                cmdMap[method.lower()][cloud.lower()](
+                                    cld_mgr, backingstore_name, uls_name, region
+                                )
+                            mcg_obj.check_backingstore_state(
+                                backingstore_name, constants.BS_OPTIMAL, timeout=timeout
+                            )
+                            # TODO: Verify OC\CLI BS health by using the appropriate methods
 
         return current_call_created_backingstores
 
     def backingstore_cleanup():
-        for backingstore in created_backingstores:
-            try:
-                backingstore.delete()
-            except CommandFailed as e:
-                if "not found" in str(e).lower():
-                    log.warning(
-                        f"Backingstore {backingstore.name} could not be found in cleanup."
-                        "\nSkipping deletion."
-                    )
-                else:
-                    raise
+        with cluster_context():
+            for backingstore in created_backingstores:
+                try:
+                    backingstore.delete()
+                except CommandFailed as e:
+                    if "not found" in str(e).lower():
+                        log.warning(
+                            f"Backingstore {backingstore.name} could not be found in cleanup."
+                            "\nSkipping deletion."
+                        )
+                    else:
+                        raise
 
     request.addfinalizer(backingstore_cleanup)
 
     return _create_backingstore
 
 
+@config.run_with_provider_context_if_available
 def clone_bs_dict_from_backingstore(
     protype_backingstore_name,
     namespace=None,
@@ -495,6 +517,7 @@ def clone_bs_dict_from_backingstore(
     return clone_bs_dict
 
 
+@config.run_with_provider_context_if_available
 def get_backingstore():
     """
     Fetches the backingstore
