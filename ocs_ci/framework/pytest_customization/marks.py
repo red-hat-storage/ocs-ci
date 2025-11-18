@@ -42,6 +42,7 @@ from ocs_ci.ocs.constants import (
     VAULT_KMS_PROVIDER,
     NFS_OUTCLUSTER_TEST_PLATFORMS,
     DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+    ORDER_MCE_UPGRADE,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -133,6 +134,7 @@ order_dr_hub_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 # it's applicable only on the managed clusters
 order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
+order_mce_upgrade = pytest.mark.order(ORDER_MCE_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
@@ -146,8 +148,10 @@ dr_hub_upgrade = compose(order_dr_hub_upgrade, pytest.mark.dr_hub_upgrade)
 dr_cluster_operator_upgrade = compose(
     order_dr_cluster_operator_upgrade, pytest.mark.dr_cluster_operator_upgrade
 )
-# acm operator
+# acm or mce operator
 acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
+mce_upgrade = compose(order_mce_upgrade, pytest.mark.mce_upgrade)
+
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
 
 # provider operator upgrade
