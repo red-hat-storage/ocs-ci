@@ -188,3 +188,5 @@ class TestRelocate:
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
+
+        # TODO: Refer PR 13305 and add the UI verification steps when DFBUGS-4314 is fixed

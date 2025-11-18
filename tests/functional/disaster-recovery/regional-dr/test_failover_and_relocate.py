@@ -288,6 +288,8 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
+        # TODO: Refer PR 13305 and add the UI verification steps when DFBUGS-4314 is fixed
+
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
@@ -385,6 +387,8 @@ class TestFailoverAndRelocate:
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
+
+        # TODO: Refer PR 13305 and add the UI verification steps when DFBUGS-4314 is fixed
 
         for obj, initial_last_group_sync_time in zip(
             drpc_objs, post_failover_last_group_sync_time
