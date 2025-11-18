@@ -12,21 +12,27 @@ from ocs_ci.framework.testlib import skipif_disconnected_cluster
 
 log = logging.getLogger(__name__)
 
-# Constants
-kmsprovider = constants.VAULT_KMS_PROVIDER
-
-# Parametrize test cases based on environment
-argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
-if config.ENV_DATA.get("vault_hcp"):
+# Set the arg values based on KMS provider
+if config.ENV_DATA.get("KMS_PROVIDER", "").lower() == constants.KMIP_KMS_PROVIDER:
+    kmsprovider = constants.KMIP_KMS_PROVIDER
+    argnames = ["kms_provider"]
     argvalues = [
-        pytest.param("v1", kmsprovider, True),
-        pytest.param("v2", kmsprovider, True),
+        pytest.param(kmsprovider),
     ]
 else:
-    argvalues = [
-        pytest.param("v1", kmsprovider, False),
-        pytest.param("v2", kmsprovider, False),
-    ]
+    # Default to Vault KMS
+    kmsprovider = constants.VAULT_KMS_PROVIDER
+    argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
+    if config.ENV_DATA.get("vault_hcp"):
+        argvalues = [
+            pytest.param("v1", kmsprovider, True),
+            pytest.param("v2", kmsprovider, True),
+        ]
+    else:
+        argvalues = [
+            pytest.param("v1", kmsprovider, False),
+            pytest.param("v2", kmsprovider, False),
+        ]
 
 
 class PVKeyrotationTestBase:
@@ -37,14 +43,13 @@ class PVKeyrotationTestBase:
     @pytest.fixture()
     def setup_common(
         self,
-        kv_version,
-        kms_provider,
+        request,
         pv_encryption_kms_setup_factory,
+        pv_encryption_kmip_setup_factory,
         project_factory,
         storageclass_factory,
         multi_pvc_factory,
         pod_factory,
-        use_vault_namespace,
     ):
         """
         Common setup for CSI-KMS connection details, storage class, and PVCs.
@@ -53,8 +58,20 @@ class PVKeyrotationTestBase:
             "Starting setup: Configuring CSI-KMS connection details and resources."
         )
 
-        # Set up KMS configuration
-        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+        # Determine KMS provider from test parameters
+        kms_provider = request.node.callspec.params.get("kms_provider")
+
+        # Set up KMS configuration based on provider
+        if kms_provider == constants.KMIP_KMS_PROVIDER:
+            # Setup KMIP
+            self.kms = pv_encryption_kmip_setup_factory()
+        else:
+            # Setup Vault KMS
+            kv_version = request.node.callspec.params.get("kv_version", "v1")
+            use_vault_namespace = request.node.callspec.params.get(
+                "use_vault_namespace", False
+            )
+            self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("KMS setup successful.")
 
         # Create a project
@@ -75,10 +92,12 @@ class PVKeyrotationTestBase:
         )
         log.info("Encryption-enabled storage class created.")
 
-        # Create Vault CSI KMS token in tenant namespace
-        self.kms.vault_path_token = self.kms.generate_vault_token()
-        self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
-        log.info("Vault CSI KMS token created.")
+        # Create Vault CSI KMS token in tenant namespace (only for Vault)
+        if kms_provider == constants.VAULT_KMS_PROVIDER:
+            self.kms.vault_path_token = self.kms.generate_vault_token()
+            self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
+            log.info("Vault CSI KMS token created.")
+        # KMIP doesn't require tenant namespace token setup
 
         # Create PVCs with encryption enabled
         self.pvc_objs = multi_pvc_factory(

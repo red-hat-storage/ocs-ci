@@ -28,6 +28,15 @@ if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
     argvalues = [
         pytest.param("v1", kmsprovider),
     ]
+elif config.ENV_DATA["KMS_PROVIDER"].lower() == constants.KMIP_KMS_PROVIDER:
+    kmsprovider = constants.KMIP_KMS_PROVIDER
+    argnames = ["kms_provider"]
+    argvalues = [
+        pytest.param(
+            kmsprovider,
+            marks=[tier1, pytest.mark.polarion_id("OCS-6328")],
+        ),
+    ]
 else:
     kmsprovider = constants.VAULT_KMS_PROVIDER
     argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
@@ -80,16 +89,30 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(
         self,
-        kv_version,
-        use_vault_namespace,
+        request,
         pv_encryption_kms_setup_factory,
+        pv_encryption_kmip_setup_factory,
     ):
         """
         Setup csi-kms-connection-details configmap
 
         """
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+
+        # Determine KMS provider from test parameters
+        kms_provider = request.node.callspec.params.get("kms_provider")
+
+        if kms_provider == constants.KMIP_KMS_PROVIDER:
+            # Setup KMIP
+            self.kms = pv_encryption_kmip_setup_factory()
+        else:
+            # Setup Vault/HPCS
+            kv_version = request.node.callspec.params.get("kv_version", "v1")
+            use_vault_namespace = request.node.callspec.params.get(
+                "use_vault_namespace", False
+            )
+            self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+
         log.info("csi-kms-connection-details setup successful")
 
     @pytest.mark.parametrize(
@@ -135,6 +158,7 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
             # Create ceph-csi-kms-token in the tenant namespace
             self.kms.vault_path_token = self.kms.generate_vault_token()
             self.kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+        # KMIP doesn't require tenant namespace token setup
 
         # Annotate Storageclass for keyrotation.
         pvk_obj = PVKeyrotation(sc_obj)

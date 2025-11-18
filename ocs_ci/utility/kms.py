@@ -1916,6 +1916,88 @@ class KMIP(KMS):
         noobaa_key_id = base64.b64decode(run_cmd(cmd=cmd)).decode()
         return noobaa_key_id
 
+    def get_pv_secret(self, device_handle):
+        """
+        Get the key ID from CipherTrust Manager for a given PV device handle.
+
+        For KMIP/CipherTrust, the "secret" is the key ID used for encryption.
+        This is stored in the rook-ceph-csi secret for the volume.
+
+        Args:
+            device_handle (str): PV device handle string
+
+        Returns:
+            str: key ID from CipherTrust Manager for the given device handle
+        """
+        logger.info(f"Retrieving KMIP key ID for device handle: {device_handle}")
+
+        # For CSI volumes, the key ID is stored in a secret
+        secret_name = f"rook-ceph-csi-{device_handle}"
+        cmd = (
+            f"oc get secret {secret_name} "
+            f"-n {config.ENV_DATA['cluster_namespace']} "
+            "-o jsonpath='{.data.encryptionPassphrase}'"
+        )
+
+        try:
+            key_id_encoded = run_cmd(cmd=cmd)
+            if key_id_encoded:
+                key_id = base64.b64decode(key_id_encoded).decode()
+                logger.info(f"Retrieved KMIP key ID for {device_handle}: {key_id}")
+                return key_id
+            else:
+                logger.warning(f"No key ID found for device handle: {device_handle}")
+                return None
+        except Exception as e:
+            logger.error(f"Failed to retrieve KMIP key ID for {device_handle}: {e}")
+            return None
+
+    def get_osd_secret(self, device_handle):
+        """
+        Get OSD encryption key ID from CipherTrust Manager.
+
+        For KMIP, this retrieves the key ID stored in the OSD encryption secret.
+
+        Args:
+            device_handle (str): The device/PVC handle for the OSD
+
+        Returns:
+            str: The key ID used for OSD encryption
+        """
+        logger.info(f"Retrieving KMIP OSD key ID for device: {device_handle}")
+
+        secret_name = f"rook-ceph-osd-encryption-key-{device_handle}"
+        cmd = (
+            f"oc get secret {secret_name} "
+            f"-n {config.ENV_DATA['cluster_namespace']} "
+            "-o jsonpath='{.data.dmcrypt-key}'"
+        )
+
+        try:
+            key_id_encoded = run_cmd(cmd=cmd)
+            if key_id_encoded:
+                key_id = base64.b64decode(key_id_encoded).decode()
+                logger.info(f"Retrieved KMIP OSD key ID for {device_handle}: {key_id}")
+                return key_id
+            else:
+                logger.warning(f"No OSD key ID found for device: {device_handle}")
+                return None
+        except Exception as e:
+            logger.error(f"Failed to retrieve KMIP OSD key ID for {device_handle}: {e}")
+            return None
+
+    def get_noobaa_secret(self):
+        """
+        Get NooBaa encryption key ID from CipherTrust Manager.
+
+        For KMIP, this retrieves the key ID stored in the NooBaa encryption configuration.
+
+        Returns:
+            str: The key ID used for NooBaa encryption
+        """
+        logger.info("Retrieving KMIP NooBaa key ID")
+        return self.get_noobaa_key_id()
+
     def post_deploy_verification(self):
         """
         Verify ODF deployment using KMIP
