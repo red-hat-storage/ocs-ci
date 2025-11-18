@@ -240,7 +240,7 @@ def run_noobaa_metadata_intense_ops(
                     bucket_name,
                     source=f"{bucket_name}/{obj}",
                     object_key=object_key,
-                    metadata=metadata,
+                    Metadata=metadata,
                 )
                 logger.info(
                     f"METADATA OP: Updated metadata for object {object_key} in bucket {bucket_name}"
