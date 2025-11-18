@@ -1350,9 +1350,7 @@ acm_configuration_4_19 = {
     "name-input-btn": ("#name-input", By.CSS_SELECTOR),
     "vm-page-next-btn": ("button[type='submit']", By.CSS_SELECTOR),
     "dr-policy": ("[id*='select-toggle-id']", By.CSS_SELECTOR),
-    "select-dr-policy": (
-        "(//span[@class='pf-v5-c-select__menu-item-main'])[1]",
-    ),
+    "select-dr-policy": ("(//span[@class='pf-v5-c-select__menu-item-main'])[1]",),
     "selected-protection-type": ("//div[normalize-space()='{}']", By.XPATH),
     "assign": ("button[type='submit']", By.CSS_SELECTOR),
     "conf-msg": ("(//h4[@class='c-alert__title'])[1]", By.XPATH),
