@@ -118,6 +118,7 @@ class TestRelocate:
                     policy_name=wl.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                     action=constants.ACTION_RELOCATE,
+                    workload_type=wl.workload_type,
                 )
             else:
                 # Relocate action via CLI

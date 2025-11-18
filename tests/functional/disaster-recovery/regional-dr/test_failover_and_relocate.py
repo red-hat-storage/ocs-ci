@@ -198,6 +198,7 @@ class TestFailoverAndRelocate:
                     workload_to_move=f"{wl.workload_name}-1",
                     policy_name=wl.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
+                    workload_type=wl.workload_type,
                 )
             else:
                 # Failover action via CLI
@@ -318,6 +319,7 @@ class TestFailoverAndRelocate:
                     policy_name=wl.dr_policy_name,
                     failover_or_preferred_cluster=primary_cluster_name,
                     action=constants.ACTION_RELOCATE,
+                    workload_type=wl.workload_type,
                 )
             else:
                 # Relocate action via CLI
