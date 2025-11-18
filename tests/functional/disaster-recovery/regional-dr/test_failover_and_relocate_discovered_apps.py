@@ -7,6 +7,11 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, tier4, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.dr_helpers import (
+    wait_for_replication_destinations_creation,
+    wait_for_replication_destinations_deletion,
+    is_cg_cephfs_enabled,
+)
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs import constants
@@ -163,7 +168,19 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 if pvc_interface == constants.CEPHFILESYSTEM:
                     # Verify the creation of ReplicationDestination resources on secondary cluster
                     config.switch_to_cluster_by_name(secondary_cluster_name)
-                    dr_helpers.wait_for_replication_destinations_creation(
+                    # Verifying the existence of replication group destination and volume snapshots
+                    if is_cg_cephfs_enabled():
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=rdr_workload.workload_namespace,
+                            should_exist=True,
+                        )
+                        dr_helpers.wait_for_resource_count(
+                            kind=constants.VOLUMESNAPSHOT,
+                            namespace=rdr_workload.workload_namespace,
+                            expected_count=rdr_workload.workload_pvc_count,
+                        )
+                    wait_for_replication_destinations_creation(
                         rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
                     )
 
@@ -233,20 +250,45 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     timeout=1200,
                     discovered_apps=True,
                     vrg_name=rdr_workload.discovered_apps_placement_name,
+                    performed_dr_action=True,
                 )
 
                 if pvc_interface == constants.CEPHFILESYSTEM:
+                    # verify the deletion of replication destination resources
+                    # on the old secondary cluster
                     config.switch_to_cluster_by_name(secondary_cluster_name)
-                    dr_helpers.wait_for_replication_destinations_deletion(
+                    wait_for_replication_destinations_deletion(
                         rdr_workload.workload_namespace
                     )
-                    # Verify the creation of ReplicationDestination resources on primary cluster
+                    cg_enabled = is_cg_cephfs_enabled()
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=rdr_workload.workload_namespace,
+                            should_exist=False,
+                        )
+
+                    # Verify the creation of ReplicationDestination resources on
+                    # the new secondary cluster
                     config.switch_to_cluster_by_name(
                         primary_cluster_name_before_failover
                     )
                     dr_helpers.wait_for_replication_destinations_creation(
                         rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
                     )
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=rdr_workload.workload_namespace,
+                            should_exist=True,
+                        )
+
+                        # Verify the creation of Volume Snapshot
+                        dr_helpers.wait_for_resource_count(
+                            kind=constants.VOLUMESNAPSHOT,
+                            namespace=rdr_workload.workload_namespace,
+                            expected_count=rdr_workload.workload_pvc_count,
+                        )
                 # Doing Relocate
                 primary_cluster_name_after_failover = (
                     dr_helpers.get_current_primary_cluster_name(
@@ -296,21 +338,47 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     timeout=1200,
                     discovered_apps=True,
                     vrg_name=rdr_workload.discovered_apps_placement_name,
+                    performed_dr_action=True,
                 )
 
                 if pvc_interface == constants.CEPHFILESYSTEM:
+                    # Verify the deletion of replication destination resources
+                    # On the old secondary cluster
                     config.switch_to_cluster_by_name(
                         primary_cluster_name_before_failover
                     )
-                    dr_helpers.wait_for_replication_destinations_deletion(
+                    wait_for_replication_destinations_deletion(
                         rdr_workload.workload_namespace
                     )
-                    # Verify the creation of ReplicationDestination resources on primary cluster
+                    cg_enabled = is_cg_cephfs_enabled()
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=rdr_workload.workload_namespace,
+                            should_exist=False,
+                        )
+
+                    # Verify the creation of ReplicationDestination resources on
+                    # the current secondary cluster
                     config.switch_to_cluster_by_name(
                         primary_cluster_name_after_failover
                     )
                     dr_helpers.wait_for_replication_destinations_creation(
                         rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
                     )
+                    if cg_enabled:
+                        dr_helpers.wait_for_resource_existence(
+                            kind=constants.REPLICATION_GROUP_DESTINATION,
+                            namespace=rdr_workload.workload_namespace,
+                            should_exist=True,
+                        )
+
+                        # Verify the creation of Volume Snapshot
+                        dr_helpers.wait_for_resource_count(
+                            kind=constants.VOLUMESNAPSHOT,
+                            namespace=rdr_workload.workload_namespace,
+                            expected_count=rdr_workload.workload_pvc_count,
+                        )
+
             logger.info(f"Iteration {iteration} completed !!!!!!!")
             iteration += 1

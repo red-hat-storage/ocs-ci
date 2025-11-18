@@ -20,7 +20,11 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
-from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+    get_ceph_tools_pod,
+    get_pods_having_label,
+)
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes, get_node_objs
 from ocs_ci.ocs.utils import (
@@ -827,6 +831,7 @@ def wait_for_replication_resources_creation(
     discovered_apps=False,
     vrg_name="",
     skip_vrg_check=False,
+    performed_dr_action=False,
 ):
     """
     Wait for replication resources to be created
@@ -844,6 +849,7 @@ def wait_for_replication_resources_creation(
         TimeoutExpiredError: In case replication resources not created
 
     """
+
     vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
 
     wait_for_resource_existence(
@@ -854,6 +860,7 @@ def wait_for_replication_resources_creation(
         should_exist=True,
     )
 
+    # TODO: Improve the parameter for condition
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         # TODO: Improve the parameter for condition
         if "cephfs" in namespace:
@@ -863,6 +870,28 @@ def wait_for_replication_resources_creation(
                 expected_count=count,
                 timeout=timeout,
             )
+            cg_enabled = is_cg_cephfs_enabled()
+            if cg_enabled:
+                # Validating the creation of ReplicationGroupSource
+                wait_for_resource_existence(
+                    kind=constants.REPLICATION_GROUP_SOURCE,
+                    namespace=namespace,
+                    timeout=timeout,
+                    should_exist=True,
+                )
+                # Validating the creation of VolumeGroupSnapshot
+                validate_volumegroupsnapshot(namespace)
+
+                # Validate VolumeSnapshots
+                if performed_dr_action:
+                    count *= 2
+                wait_for_resource_count(
+                    kind=constants.VOLUMESNAPSHOT,
+                    namespace=namespace,
+                    expected_count=count,
+                    timeout=timeout,
+                )
+
         else:
             cg_enabled = is_cg_enabled()
             if cg_enabled:
@@ -994,6 +1023,14 @@ def wait_for_replication_resources_deletion(
                 should_exist=False,
             )
 
+        if is_cg_cephfs_enabled():
+            wait_for_resource_count(
+                kind=constants.REPLICATION_GROUP_SOURCE,
+                namespace=namespace,
+                expected_count=0,
+                timeout=timeout,
+            )
+
 
 def wait_for_all_resources_creation(
     pvc_count,
@@ -1004,6 +1041,7 @@ def wait_for_all_resources_creation(
     discovered_apps=False,
     vrg_name="",
     skip_vrg_check=False,
+    performed_dr_action=False,
 ):
     """
     Wait for workload and replication resources to be created
@@ -1017,6 +1055,7 @@ def wait_for_all_resources_creation(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        performed_dr_action(bool): It true, VolumeSnapshot count will be validate for CG-CephFS
 
 
     """
@@ -1036,9 +1075,16 @@ def wait_for_all_resources_creation(
         timeout=timeout,
         sleep=5,
     )
+
     if not skip_replication_resources:
         wait_for_replication_resources_creation(
-            pvc_count, namespace, timeout, discovered_apps, vrg_name, skip_vrg_check
+            pvc_count,
+            namespace,
+            timeout,
+            discovered_apps,
+            vrg_name,
+            skip_vrg_check,
+            performed_dr_action,
         )
 
 
@@ -2600,3 +2646,57 @@ def mdr_post_failover_check(namespace, timeout=1200):
         helpers.wait_for_resource_state(
             resource=pvc_obj, state=constants.STATUS_TERMINATING, timeout=timeout
         )
+
+
+def get_vgs_name(vgs_namespace):
+    """
+    Fetches the name of Volume Group Snapshot from Replication Group Source
+
+    Args:
+        namespace (str): the namespace of the Volume Group Snapshot
+
+    """
+    rgs_obj = ocp.OCP(kind=constants.REPLICATION_GROUP_SOURCE, namespace=vgs_namespace)
+    vgs_dict = rgs_obj.get().get("items")[0]
+    vgs_name = vgs_dict["metadata"]["name"]
+    return vgs_name
+
+
+def validate_volumegroupsnapshot(vgs_namespace):
+    """
+    Validates Volume Group Snapshot resource creation from odf external snapshotter
+
+    Args:
+        namespace (str): the namespace of the Volume Group snapshot resources
+
+    """
+    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    odf_external_snapshotter_pod = get_pods_having_label(
+        constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
+    )[0]["metadata"]["name"]
+    vgs_name = get_vgs_name(vgs_namespace)
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=run_cmd_verify_cli_output,
+        cmd=f"oc logs {odf_external_snapshotter_pod} -n {namespace}",
+        expected_output_lst=(
+            f"{vgs_name} was successfully created by the CSI driver",
+            f"{vgs_name} is ready to use",
+        ),
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("VolumeGroupSnapshot has not been created..")
+
+
+def is_cg_cephfs_enabled():
+    """
+    Validate if consistency group is enabled
+
+    Returns: True, if volume group snapshot class exists. False otherwise
+    """
+
+    resource_name = constants.DEFAULT_VOLUMEGROUPSNAPSHOTCLASS
+    vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
+
+    return vgsc.is_exist(resource_name=resource_name)
