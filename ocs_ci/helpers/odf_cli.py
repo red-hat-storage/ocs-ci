@@ -226,63 +226,6 @@ class ODFCliRunner:
         """
         return self.run_set_recovery_profile(HIGH_RECOVERY_OPS)
 
-    def run_noobaa(
-        self,
-        command_args: Union[str, list],
-        namespace: str = None,
-        use_yes: bool = False,
-        ignore_error: bool = False,
-        **kwargs,
-    ) -> str:
-        """
-        Run noobaa subcommand via odf-cli.
-
-        Args:
-            command_args: NooBaa command arguments (without 'noobaa' prefix)
-                         Can be string or list
-            namespace: Override default namespace (if provided)
-            use_yes: If True, pipe 'yes' to the command for auto-confirmation
-            ignore_error: If True, don't raise exception on non-zero exit
-            **kwargs: Additional arguments to pass to exec_cmd
-
-        Returns:
-            Command output from exec_cmd
-
-        Examples:
-            run_noobaa("status")
-            run_noobaa("obc list")
-            run_noobaa(["bucket", "list"], namespace="my-namespace")
-        """
-        # Build the noobaa command
-        if isinstance(command_args, str):
-            noobaa_cmd = f"noobaa {command_args}"
-        else:
-            noobaa_cmd = " ".join(["noobaa"] + command_args)
-
-        # Add namespace if provided (will override the default one in run_command)
-        if namespace:
-            noobaa_cmd += f" -n {namespace}"
-            # Don't let run_command add its default namespace
-            full_command = f"{self.binary_name} {noobaa_cmd}"
-        else:
-            # Let run_command add the default namespace
-            full_command = f"{self.binary_name} -n {config.ENV_DATA['cluster_namespace']} {noobaa_cmd}"
-
-        # Execute with appropriate method based on use_yes
-        if use_yes:
-            output = exec_cmd(
-                [f"yes | {full_command}"],
-                shell=True,
-                ignore_error=ignore_error,
-                **kwargs,
-            )
-        else:
-            output = exec_cmd(full_command, ignore_error=ignore_error, **kwargs)
-
-        log.info(f"output type: {type(output)}")
-        log.info(f"*Command output*: {output}")
-        return output
-
     def run_maintenance_start(self, deployment_name):
         """
         This starts the maintenance mode for the deployment.
