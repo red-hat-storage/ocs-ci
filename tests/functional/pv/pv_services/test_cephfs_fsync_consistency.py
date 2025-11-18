@@ -21,7 +21,15 @@ class TestCephfsFsyncConsistency(ManageTest):
     """
 
     def write_and_read(self, client_pod_obj, server_pod_obj):
-        """ """
+        """
+
+        Function for line-based I/O(write and read) between client and server pods.
+
+        Args:
+            client_pod_obj (obj): Client pod object
+            server_pod_obj (obj): Server pod object
+
+        """
         filename = "/mnt/shared_filed.html"
         data = "Test fsync "
         lines_to_write = [f"{data}{i}\n" for i in range(1, 2501)]
