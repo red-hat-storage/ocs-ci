@@ -13,6 +13,7 @@ from selenium.common.exceptions import (
 
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 
 logger = logging.getLogger(__name__)
 
@@ -69,16 +70,13 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
     A class for bucket lifecycle policy UI operations
     """
 
-    def verify_lifecycle_policy_in_backend(
-        self, bucket_name, mcg_obj, expected_policy=None
-    ):
+    def get_lifecycle_policy_from_backend(self, bucket_name, mcg_obj):
         """
-        Verify lifecycle policy exists in backend S3 API
+        Get lifecycle policy from backend S3 API
 
         Args:
             bucket_name (str): Name of the bucket
             mcg_obj: MCG object with S3 client
-            expected_policy (LifecyclePolicy, optional): Expected policy to compare
 
         Returns:
             dict: The lifecycle configuration from backend
@@ -88,13 +86,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 Bucket=bucket_name
             )
             logger.info(f"Retrieved lifecycle configuration: {response}")
-
-            if expected_policy:
-                expected_dict = expected_policy.as_dict()
-                response.pop("ResponseMetadata", None)
-                assert (
-                    response == expected_dict
-                ), f"Policy mismatch. Expected: {expected_dict}, Got: {response}"
 
             return response
         except SSLError as ssl_e:
@@ -116,13 +107,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 logger.info(
                     f"Retrieved lifecycle configuration with SSL disabled: {response}"
                 )
-
-                if expected_policy:
-                    expected_dict = expected_policy.as_dict()
-                    response.pop("ResponseMetadata", None)
-                    assert (
-                        response == expected_dict
-                    ), f"Policy mismatch. Expected: {expected_dict}, Got: {response}"
 
                 return response
             except (ClientError, BotoCoreError, NoCredentialsError) as retry_e:
@@ -252,8 +236,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         logger.info(f"Deleting lifecycle rule: {rule_name}")
 
         try:
-            from ocs_ci.ocs.ui.helpers_ui import format_locator
-
             kebab_locator = format_locator(
                 self.bucket_tab["rule_kebab_menu"], rule_name
             )
@@ -283,8 +265,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         logger.info(f"Editing lifecycle rule: {rule_name}")
 
         try:
-            from ocs_ci.ocs.ui.helpers_ui import format_locator
-
             kebab_locator = format_locator(
                 self.bucket_tab["rule_kebab_menu"], rule_name
             )

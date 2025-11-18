@@ -47,7 +47,13 @@ class TestBucketLifecycleUI:
         return lifecycle_ui, bucket_name
 
     def _validate_backend_rule(self, our_rule, rules_dict):
-        """Validate that backend rule matches the expected configuration"""
+        """
+        Validate that backend rule matches the expected configuration
+
+        Args:
+            our_rule (dict): Backend rule retrieved from S3 API to validate
+            rules_dict (dict): Expected rule configuration dictionary
+        """
         if "expiration" in rules_dict:
             assert "Expiration" in our_rule, "Expected Expiration in backend rule"
             assert our_rule["Expiration"]["Days"] == rules_dict["expiration"]["days"], (
@@ -104,17 +110,33 @@ class TestBucketLifecycleUI:
 
     @ui
     @tier2
-    @pytest.mark.polarion_id("OCS-6888")
     @pytest.mark.parametrize(
         "rules_dict,description",
         [
-            ({"expiration": {"days": 30}}, "single_expiration"),
-            (
+            pytest.param(
+                {"expiration": {"days": 30}},
+                "single_expiration",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="single_expiration",
+            ),
+            pytest.param(
                 {"noncurrent_version": {"days": 7, "preserve_versions": 2}},
                 "single_noncurrent",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="single_noncurrent",
             ),
-            ({"expired_delete_markers": {}}, "single_expired_markers"),
-            ({"incomplete_multipart": {"days": 5}}, "single_multipart"),
+            pytest.param(
+                {"expired_delete_markers": {}},
+                "single_expired_markers",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="single_expired_markers",
+            ),
+            pytest.param(
+                {"incomplete_multipart": {"days": 5}},
+                "single_multipart",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="single_multipart",
+            ),
         ],
     )
     def test_create_lifecycle_rule_with_multiple_actions(
@@ -133,7 +155,8 @@ class TestBucketLifecycleUI:
         1. Create a bucket via UI
         2. Navigate to lifecycle rules page
         3. Create rule with multiple actions based on parameters
-        4. Verify rule appears in list
+        4. Verify rule appears in UI list
+        5. Verify the rule was processed as expected by the backend
         """
         setup_ui_class_factory()
         lifecycle_ui, bucket_name = self._setup_bucket_and_navigate_to_lifecycle()
@@ -151,7 +174,7 @@ class TestBucketLifecycleUI:
             f"Successfully created lifecycle rule '{rule_name}' with combination: {description}"
         )
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+        backend_policy = lifecycle_ui.get_lifecycle_policy_from_backend(
             bucket_name, mcg_obj
         )
         assert backend_policy, "Failed to retrieve lifecycle policy from backend"
@@ -166,18 +189,37 @@ class TestBucketLifecycleUI:
 
     @ui
     @tier2
-    @pytest.mark.polarion_id("OCS-6890")
     @pytest.mark.parametrize(
         "rules_dict,description,target_prefix",
         [
-            ({"expiration": {"days": 30}}, "targeted_expiration", "logs"),
-            (
+            pytest.param(
+                {"expiration": {"days": 30}},
+                "targeted_expiration",
+                "logs",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="targeted_expiration",
+            ),
+            pytest.param(
                 {"noncurrent_version": {"days": 7, "preserve_versions": 2}},
                 "targeted_noncurrent",
                 "temp",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="targeted_noncurrent",
             ),
-            ({"expired_delete_markers": {}}, "targeted_expired_markers", "data"),
-            ({"incomplete_multipart": {"days": 5}}, "targeted_multipart", "backups"),
+            pytest.param(
+                {"expired_delete_markers": {}},
+                "targeted_expired_markers",
+                "data",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="targeted_expired_markers",
+            ),
+            pytest.param(
+                {"incomplete_multipart": {"days": 5}},
+                "targeted_multipart",
+                "backups",
+                marks=[pytest.mark.polarion_id("OCS-XXXX")],
+                id="targeted_multipart",
+            ),
         ],
     )
     def test_create_targeted_lifecycle_rule_with_multiple_actions(
@@ -219,7 +261,7 @@ class TestBucketLifecycleUI:
             f"Rule combination: {description}"
         )
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+        backend_policy = lifecycle_ui.get_lifecycle_policy_from_backend(
             bucket_name, mcg_obj
         )
         assert backend_policy, "Failed to retrieve lifecycle policy from backend"
@@ -294,7 +336,7 @@ class TestBucketLifecycleUI:
             initial_rule_name in updated_rules
         ), f"Rule {initial_rule_name} not found after edit"
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+        backend_policy = lifecycle_ui.get_lifecycle_policy_from_backend(
             bucket_name, mcg_obj
         )
         assert backend_policy, "Failed to retrieve lifecycle policy from backend"
@@ -340,9 +382,16 @@ class TestBucketLifecycleUI:
             logger.warning("No buckets from previous tests, creating a new one")
             lifecycle_ui, bucket_name = self._setup_bucket_and_navigate_to_lifecycle()
         else:
-            bucket_name = self.created_buckets[0]
-            logger.info(f"Using existing bucket from previous tests: {bucket_name}")
-            lifecycle_ui.navigate_to_bucket_lifecycle(bucket_name)
+            # Validate list is not empty before accessing first element
+            if len(self.created_buckets) == 0:
+                logger.warning("Created buckets list is empty, creating a new bucket")
+                lifecycle_ui, bucket_name = (
+                    self._setup_bucket_and_navigate_to_lifecycle()
+                )
+            else:
+                bucket_name = self.created_buckets[0]
+                logger.info(f"Using existing bucket from previous tests: {bucket_name}")
+                lifecycle_ui.navigate_to_bucket_lifecycle(bucket_name)
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
 
@@ -368,7 +417,7 @@ class TestBucketLifecycleUI:
         logger.info(f"Initial rule count: {initial_rule_count}")
 
         lifecycle_ui.delete_lifecycle_rule(rule_to_delete)
-        time.sleep(3)  # Wait for UI to update
+        time.sleep(5)  # Wait for backend processing and UI to update
 
         updated_rules = lifecycle_ui.get_lifecycle_rules_list()
         assert (
@@ -378,7 +427,7 @@ class TestBucketLifecycleUI:
             len(updated_rules) == initial_rule_count - 1
         ), f"Expected {initial_rule_count - 1} rules after deletion, but found {len(updated_rules)}"
 
-        backend_policy = lifecycle_ui.verify_lifecycle_policy_in_backend(
+        backend_policy = lifecycle_ui.get_lifecycle_policy_from_backend(
             bucket_name, mcg_obj
         )
         if backend_policy and backend_policy.get("Rules"):

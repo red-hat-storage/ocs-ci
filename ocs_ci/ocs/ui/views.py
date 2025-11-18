@@ -2607,7 +2607,7 @@ bucket_tab = {
     ],
     # Lifecycle policy locators
     "management_tab": (
-        "//span[@class='pf-v5-c-tabs__item-text' and text()='Management']/parent::*",
+        "//span[contains(@class, 'c-tabs__item-text') and text()='Management']/parent::*",
         By.XPATH,
     ),
     "create_lifecycle_rule_button": (
@@ -2627,11 +2627,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "edit_rule_option": (
-        "//span[@class='pf-v5-c-menu__item-text' and text()='Edit lifecycle rule']",
+        "//span[contains(@class, 'c-menu__item-text') and text()='Edit lifecycle rule']",
         By.XPATH,
     ),
     "delete_rule_option": (
-        "//span[@class='pf-v5-c-menu__item-text' and text()='Delete rule']",
+        "//span[contains(@class, 'c-menu__item-text') and text()='Delete rule']",
         By.XPATH,
     ),
     # Create lifecycle rule form locators
@@ -2657,7 +2657,7 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "min_object_size_input": (
-        "//input[@id='min-object-size']/ancestor::div[@class='pf-v5-c-form__group-body']//input[@type='number']",
+        "//input[@id='min-object-size']/ancestor::div[contains(@class, 'c-form__group-body')]//input[@type='number']",
         By.XPATH,
     ),
     "max_object_size_checkbox": (
@@ -2665,11 +2665,11 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "max_object_size_input": (
-        "//input[@id='max-object-size']/ancestor::div[@class='pf-v5-c-form__group-body']//input[@type='number']",
+        "//input[@id='max-object-size']/ancestor::div[contains(@class, 'c-form__group-body')]//input[@type='number']",
         By.XPATH,
     ),
     "lifecycle_actions_section": (
-        "//div[contains(@class, 'pf-v5-c-form__section') and .//h3[text()='Lifecycle rule actions']]",
+        "//div[contains(@class, 'c-form__section') and .//h3[text()='Lifecycle rule actions']]",
         By.XPATH,
     ),
     "incomplete_multipart_checkbox": (
