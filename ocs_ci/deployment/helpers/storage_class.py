@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_STORAGE_CLASS_MAP = {
     constants.AWS_PLATFORM: "gp2-csi",
     constants.IBMCLOUD_PLATFORM: "ibmc-vpc-block-10iops-tier",
-    constants.VSPHERE_PLATFORM: "thin-csi",
+    constants.VSPHERE_PLATFORM: "thin-csi-odf",
     constants.AZURE_PLATFORM: "managed-csi",
     constants.GCP_PLATFORM: None,
     constants.ROSA_HCP_PLATFORM: None,
