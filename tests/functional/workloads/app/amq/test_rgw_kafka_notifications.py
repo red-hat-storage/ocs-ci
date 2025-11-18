@@ -130,7 +130,7 @@ class TestRGWAndKafkaNotifications(E2ETest):
 
         # Initialize notify command to run
         notify_cmd = (
-            f"python {notify_path} -e {rgw_endpoint} -a {obc_obj.access_key_id} "
+            f"python {notify_path} -e {rgw_endpoint} -r 'us-east-1' -a {obc_obj.access_key_id} "
             f"-s {obc_obj.access_key} -b {bucketname} -ke {constants.KAFKA_ENDPOINT} -t {self.kafka_topic.name}"
         )
         log.info(f"Running cmd {notify_cmd}")
