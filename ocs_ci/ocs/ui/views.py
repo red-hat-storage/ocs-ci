@@ -2434,6 +2434,7 @@ bucket_tab = {
         "form input[id]",
         By.CSS_SELECTOR,
     ),  # Input field for bucket name confirmation
+    # Versioning locators
     "properties_tab": (
         "button[id*='tab-2-s3-overview'] span[class*='c-tabs__item-text']",
         By.CSS_SELECTOR,
@@ -2530,6 +2531,79 @@ bucket_tab = {
         "//input[@type='checkbox' and @aria-label[starts-with(., 'Select row')] and not(@name='check-all')]",
         By.XPATH,
     ),
+    # Bucket policy locators
+    "permissions_tab": (
+        "[data-test='horizontal-link-Permissions']",
+        By.CSS_SELECTOR,
+    ),
+    "bucket_policy_tab": (
+        "//button[contains(., 'Bucket policy')]",
+        By.XPATH,
+    ),
+    "policy_editor_start_scratch": (
+        "//button[contains(normalize-space(), 'Start from scratch')]",
+        By.XPATH,
+    ),
+    "edit_policy_button": (
+        "//button[normalize-space()='Edit bucket policy']",
+        By.XPATH,
+    ),
+    "apply_policy_button": (
+        "//button[normalize-space()='Apply policy']",
+        By.XPATH,
+    ),
+    "update_policy_modal_button": (
+        "//button[normalize-space()='Update policy']",
+        By.XPATH,
+    ),
+    "policy_code_editor": (
+        "div.view-lines",
+        By.CSS_SELECTOR,
+    ),
+    # Generic fallback selectors for bucket policy buttons
+    "apply_policy_generic_button": (
+        "//button[contains(text(), 'Apply')]",
+        By.XPATH,
+    ),
+    "update_policy_generic_button": (
+        "//button[contains(text(), 'Update')]",
+        By.XPATH,
+    ),
+    "save_policy_generic_button": (
+        "//button[contains(text(), 'Save')]",
+        By.XPATH,
+    ),
+    "delete_policy_button": (
+        "//button[contains(@class, 'm-danger') and normalize-space()='Delete']",
+        By.XPATH,
+    ),
+    "delete_policy_confirmation_modal": (
+        "[role='dialog'][aria-modal='true']",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirmation_input": (
+        "#delete-policy",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirm_button": (
+        "//button[normalize-space()='Confirm delete']",
+        By.XPATH,
+    ),
+    "delete_policy_confirm_button_enabled": (
+        "//button[normalize-space()='Confirm delete' and not(@disabled)]",
+        By.XPATH,
+    ),
+    "primary_button": (
+        "[class*='-c-button'][class*='pf-m-primary']",
+        By.CSS_SELECTOR,
+    ),
+    "success_toast_selectors": [
+        "[data-test='success-toast']",
+        "[role='alert'][class*='success']",
+        "[class*='-c-alert'][class*='success']",
+        ".toast-notifications-list-pf .alert-success",
+        ".co-alert--success",
+    ],
 }
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
