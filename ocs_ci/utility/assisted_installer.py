@@ -68,7 +68,7 @@ class OpenShiftAPI(object):
                 "refresh_token": self.offline_token,
             }
             now = time.time()
-            resp = requests.post(full_sso_url, data=data, headers=headers)
+            resp = requests.post(full_sso_url, data=data, headers=headers, timeout=120)
             resp_json = resp.json()
             self._token = resp_json["access_token"]
             self._token_exp = now + resp_json["expires_in"]
@@ -128,7 +128,7 @@ class OpenShiftAPI(object):
         """
         url = self.get_api_endpoint_url(endpoint)
         logger.debug(f"Sending GET request to '{url}' with parameters: {params}")
-        resp = requests.get(url, params=params, headers=self.headers)
+        resp = requests.get(url, params=params, headers=self.headers, timeout=120)
         logger.debug(f"Response: {resp.status_code} {resp.reason}")
         if not ignore_failure and not resp.ok:
             raise OpenShiftAPIResponseException(resp)
@@ -153,7 +153,7 @@ class OpenShiftAPI(object):
         """
         url = self.get_api_endpoint_url(endpoint)
         logger.debug(f"Sending POST request to '{url}' with data: {data}")
-        resp = requests.post(url, json=data, headers=self.headers)
+        resp = requests.post(url, json=data, headers=self.headers, timeout=120)
         logger.debug(f"Response: {resp.status_code} {resp.reason}")
         if not ignore_failure and not resp.ok:
             raise OpenShiftAPIResponseException(resp)
@@ -202,7 +202,7 @@ class OpenShiftAPI(object):
         """
         url = self.get_api_endpoint_url(endpoint)
         logger.debug(f"Sending DELETE request to '{url}'")
-        resp = requests.delete(url, headers=self.headers)
+        resp = requests.delete(url, headers=self.headers, timeout=120)
         logger.debug(f"Response: {resp.status_code} {resp.reason}")
         if not ignore_failure and not resp.ok:
             raise OpenShiftAPIResponseException(resp)

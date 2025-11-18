@@ -187,7 +187,7 @@ class Submariner(object):
             # This script puts the platform specific binary in ~/.local/bin
             # we need to move the subctl binary to ocs-ci/bin dir
             try:
-                resp = requests.get(constants.SUBMARINER_DOWNLOAD_URL)
+                resp = requests.get(constants.SUBMARINER_DOWNLOAD_URL, timeout=120)
             except requests.ConnectionError:
                 logger.exception(
                     "Failed to download the downloader script from submariner site"

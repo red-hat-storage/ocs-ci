@@ -44,7 +44,7 @@ def get_ocp_ga_version(channel):
     url = "https://api.openshift.com/api/upgrades_info/v1/graph"
     headers = {"Accept": "application/json"}
     payload = {"channel": f"stable-{channel}"}
-    r = requests.get(url, headers=headers, params=payload)
+    r = requests.get(url, headers=headers, params=payload, timeout=120)
     nodes = r.json()["nodes"]
     if nodes:
         versions = [node["version"] for node in nodes]

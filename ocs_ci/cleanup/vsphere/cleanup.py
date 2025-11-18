@@ -196,7 +196,7 @@ class IPAM(object):
         logger.info(f"Removing IP for node {node} from IPAM server")
         endpoint = os.path.join("http://", self.ipam, "api/removeHost.php?")
         payload = {"apiapp": self.apiapp, "apitoken": self.token, "host": node}
-        res = requests.post(endpoint, data=payload)
+        res = requests.post(endpoint, data=payload, timeout=120)
         if res.status_code == "200":
             logger.info(f"Successfully deleted {node} IP from IPAM server")
 

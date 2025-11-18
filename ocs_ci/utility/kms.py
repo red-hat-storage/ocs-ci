@@ -1583,6 +1583,7 @@ class HPCS(KMS):
             headers={"content-type": "application/x-www-form-urlencoded"},
             data=payload,
             verify=True,
+            timeout=120,
         )
         assert r.ok, f"Couldn't get access token! StatusCode: {r.status_code}."
         return "Bearer " + r.json()["access_token"]
@@ -1603,6 +1604,7 @@ class HPCS(KMS):
                 "authorization": access_token,
             },
             verify=True,
+            timeout=120,
         )
         assert r.ok, f"Couldn't list HPCS keys! StatusCode: {r.status_code}."
         return r.json()["resources"]
