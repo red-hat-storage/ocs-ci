@@ -30,6 +30,7 @@ class TestCephfsFsyncConsistency(ManageTest):
             server_pod_obj (obj): Server pod object
 
         """
+
         filename = "/mnt/shared_filed.html"
         data = "Test fsync "
         lines_to_write = [f"{data}{i}\n" for i in range(1, 2501)]
