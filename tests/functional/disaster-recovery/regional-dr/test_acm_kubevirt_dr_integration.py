@@ -2,6 +2,8 @@ import logging
 
 from time import sleep
 
+import pytest
+
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import skipif_ocs_version
@@ -18,6 +20,7 @@ from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
     assign_drpolicy_for_discovered_vms_via_ui,
     verify_drpolicy_ui,
+    navigate_using_fleet_virtulization,
 )
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
@@ -39,26 +42,35 @@ class TestACMKubevirtDRIntergration:
 
     """
 
-    # @pytest.mark.polarion_id("OCS-xxxx")
+    @pytest.mark.parametrize(
+        argnames=["protection_type"],
+        argvalues=[
+            pytest.param(
+                False, id="standalone", marks=pytest.mark.polarion_id("OCS-xxxx")
+            ),
+            pytest.param(True, id="shared", marks=pytest.mark.polarion_id("OCS-yyyy")),
+        ],
+    )
     # TODO: Add Polarion ID when available
-    def test_acm_kubevirt_using_shared_protection(
+    def test_acm_kubevirt_using_different_protection_types(
         self,
         setup_acm_ui,
+        protection_type,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
         node_restart_teardown,
     ):
         """
-        DR operation on discovered VMs using Shared Protection type, both VMs are tied to a single DRPC
-        in the same namespace where same DRPolicy is applied via UI to both the apps.
+        DR operation on discovered VMs using Standalone and Shared Protection type. In shared protection, both VMs are
+        tied to a single DRPC in the same namespace where same DRPolicy is applied via UI to both the apps.
 
         Test steps:
 
         1. Deploy a CNV discovered workload in a test NS via CLI
         2. Deploy another CNV discovered workload in the same namespace via CLI
         3. Using ACM UI, DR protect the 1st workload from the VMs page using Standalone as Protection type
-        4. Then DR protect 2nd workload from the VMs page using Shared option, which will use the existing DRPC
-        of the 1st workload and gets tied to it.
+        4. Then for shared protection, repeat the above steps and DR protect 2nd workload from the VMs page using
+            Shared option, which will use the existing DRPC of the 1st workload and gets tied to it.
         5. Write data, take md5sum, failover this workload via CLI (both VMs) by shutting down the primary managed
         cluster.
         6. After successful failover, check md5sum, recover the down managed cluster and perform cleanup.
@@ -76,34 +88,49 @@ class TestACMKubevirtDRIntergration:
             pvc_vm=1, dr_protect=False, shared_drpc_protection=False
         )
 
-        # Second workload (uses same namespace as first)
-        logger.info("Deploy 2nd CNV workload in the existing namespace")
-        cnv_workloads = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=True
-        )
+        if protection_type == "shared":
+            # Second workload (uses same namespace as first)
+            logger.info("Deploy 2nd CNV workload in the existing namespace")
+            cnv_workloads = discovered_apps_dr_workload_cnv(
+                pvc_vm=1, dr_protect=False, shared_drpc_protection=True
+            )
+
+        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
+
         logger.info(f"CNV workloads instance is {cnv_workloads}")
+        primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
+            cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=resource_name,
+        )
 
         acm_obj = AcmAddClusters()
-
-        logger.info("Navigate to Virtual machines page on the ACM console")
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
         protection_name = cnv_workloads[0].workload_namespace
         logger.info(f"Protection name is {protection_name}")
+        acm_obj.navigate_clusters_page(vms=True)
+        assert navigate_using_fleet_virtulization(
+            acm_obj, managed_cluster_name=primary_cluster_name
+        )
         assert assign_drpolicy_for_discovered_vms_via_ui(
             acm_obj,
             vms=[cnv_workloads[0].vm_name],
             protection_name=protection_name,
             namespace=cnv_workloads[0].workload_namespace,
+            vms_name=[cnv_workloads[0].vm_name],
+            managed_cluster_name=primary_cluster_name,
         )
-        assert assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[cnv_workloads[1].vm_name],
-            standalone=False,
-            namespace=cnv_workloads[0].workload_namespace,
-        )
+        if protection_type == "shared":
+            assert assign_drpolicy_for_discovered_vms_via_ui(
+                acm_obj,
+                vms=[cnv_workloads[1].vm_name],
+                standalone=False,
+                namespace=cnv_workloads[0].workload_namespace,
+                vms_name=[cnv_workloads[0].vm_name],
+                managed_cluster_name=primary_cluster_name,
+            )
 
-        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
         logger.info(
             f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
         )
@@ -128,9 +155,20 @@ class TestACMKubevirtDRIntergration:
         )
 
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+
+        workload_pvc_count = (
+            cnv_workloads[0].workload_pvc_count * 2
+            if protection_type == "shared"
+            else cnv_workloads[0].workload_pvc_count
+        )
+        workload_pod_count = (
+            cnv_workloads[0].workload_pod_count * 2
+            if protection_type == "shared"
+            else cnv_workloads[0].workload_pod_count
+        )
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count * 2,
-            cnv_workloads[0].workload_pod_count * 2,
+            workload_pvc_count,
+            workload_pod_count,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
@@ -195,8 +233,8 @@ class TestACMKubevirtDRIntergration:
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count * 2,
-            cnv_workloads[0].workload_pod_count * 2,
+            workload_pvc_count,
+            workload_pod_count,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
@@ -305,8 +343,8 @@ class TestACMKubevirtDRIntergration:
         # Verify resources creation on primary managed cluster
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count * 2,
-            cnv_workloads[0].workload_pod_count * 2,
+            workload_pvc_count,
+            workload_pod_count,
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
