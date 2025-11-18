@@ -525,7 +525,10 @@ class MultiClusterConfig:
         """
         if index < 0 or index >= self.nclusters:
             raise ClusterNotFoundException(f"Cluster with index {index} not found")
-        return self.clusters[index].ENV_DATA.get("cluster_path") + "auth/kubeconfig"
+        return os.path.join(
+                self.clusters[index].ENV_DATA["cluster_path"],
+                self.clusters[index].RUN.get("kubeconfig_location", "auth/kubeconfig"),
+            )
 
     def run_for_all_clusters(self, func):
         """
