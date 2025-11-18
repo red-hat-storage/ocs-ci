@@ -1108,7 +1108,9 @@ def delete_account_policy(policy_id, token=None):
         token = get_api_token()
     url = f"https://iam.cloud.ibm.com/v1/policies/{policy_id}"
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.delete(url.format("YOUR_POLICY_ID_HERE"), headers=headers)
+    response = requests.delete(
+        url.format("YOUR_POLICY_ID_HERE"), headers=headers, timeout=120
+    )
     if response.status_code == 204:  # 204 means success (No Content)
         logger.info(f"Policy id: {policy_id} deleted successfully.")
     else:

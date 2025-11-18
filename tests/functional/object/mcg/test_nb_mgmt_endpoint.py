@@ -64,4 +64,5 @@ def send_rpc_request_to_mgmt_endpoint(mcg_obj, api, method, params={}):
         url=mcg_obj.mgmt_endpoint,
         data=json.dumps(payload),
         verify=retrieve_verification_mode(),
+        timeout=120,
     )

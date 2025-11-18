@@ -117,7 +117,9 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             str: response status
         """
         headers = {"content-type": "application/json"}
-        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        response = requests.get(
+            url=self.bm_config["bm_status_check"], headers=headers, timeout=60
+        )
         response.encoding = "utf-8-sig"
         return response.json()[0]["status"]
 
@@ -129,7 +131,9 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             str: username
         """
         headers = {"content-type": "application/json"}
-        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        response = requests.get(
+            url=self.bm_config["bm_status_check"], headers=headers, timeout=60
+        )
         return response.json()[0]["user"]
 
     def update_bm_status(self, bm_status):
