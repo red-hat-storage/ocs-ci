@@ -3770,6 +3770,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # Enable MCO console plugin
             enable_mco_console_plugin()
         config.switch_acm_ctx()
+        from ocs_ci.ocs.acm.acm import AcmAddClusters
+
+        # Importing here to avoid circular import error
+        acm_obj = AcmAddClusters()
+        acm_obj.refresh_page()
         odf_running_version = version.get_semantic_ocs_version_from_config()
         if odf_running_version >= version.VERSION_4_19:
             # create service exporter
@@ -3782,10 +3787,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                 self.configure_mirror_peer()
                 self.deploy_dr_policy()
             else:
-                from ocs_ci.ocs.acm.acm import AcmAddClusters
-
-                # Importing here to avoid circular import error
-                acm_obj = AcmAddClusters()
                 first_cluster_name = get_primary_cluster_config().ENV_DATA[
                     "cluster_name"
                 ]
