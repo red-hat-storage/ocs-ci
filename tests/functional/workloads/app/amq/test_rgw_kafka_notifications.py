@@ -22,8 +22,13 @@ from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.rgw import RGW
-from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.resources.pod import (
+    Pod,
+    get_pod_logs,
+    get_pods_having_label,
+    get_rgw_pods,
+    get_pod_obj,
+)
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, run_cmd, clone_notify
 
@@ -94,7 +99,10 @@ class TestRGWAndKafkaNotifications(E2ETest):
         self.amq.setup_amq_cluster(sc.name)
 
         # Create topic
-        self.kafka_topic = self.amq.create_kafka_topic()
+        topic_name = (
+            f"test-rgw-kafka-notifications-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        )
+        self.kafka_topic = self.amq.create_kafka_topic(name=topic_name)
 
         # Create Kafkadrop pod
         (
@@ -130,7 +138,7 @@ class TestRGWAndKafkaNotifications(E2ETest):
 
         # Initialize notify command to run
         notify_cmd = (
-            f"python {notify_path} -e {rgw_endpoint} -r 'us-east-1' -a {obc_obj.access_key_id} "
+            f"python {notify_path} -e {rgw_endpoint} -a {obc_obj.access_key_id} "
             f"-s {obc_obj.access_key} -b {bucketname} -ke {constants.KAFKA_ENDPOINT} -t {self.kafka_topic.name}"
         )
         log.info(f"Running cmd {notify_cmd}")
@@ -169,13 +177,16 @@ class TestRGWAndKafkaNotifications(E2ETest):
                 f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
                 f"--topic {self.kafka_topic.name} --from-beginning --timeout-ms 20000"
             )
-            pod_list = get_pod_name_by_pattern(
-                pattern="my-cluster-zookeeper", namespace=constants.AMQ_NAMESPACE
+            kafka_pods_list = [
+                Pod(**pod_info)
+                for pod_info in get_pods_having_label(
+                    namespace=constants.AMQ_NAMESPACE, label=constants.KAFKA_PODS_LABEL
+                )
+            ]
+            kafka_pod_obj = get_pod_obj(
+                name=kafka_pods_list[0].name, namespace=constants.AMQ_NAMESPACE
             )
-            zookeeper_obj = get_pod_obj(
-                name=pod_list[0], namespace=constants.AMQ_NAMESPACE
-            )
-            event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
+            event_obj = kafka_pod_obj.exec_cmd_on_pod(command=cmd)
             log.info(f"Event obj: {event_obj}")
             event_time = event_obj.get("Records")[0].get("eventTime")
             format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
