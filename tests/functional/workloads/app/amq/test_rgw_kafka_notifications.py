@@ -172,10 +172,10 @@ class TestRGWAndKafkaNotifications(E2ETest):
             pod_list = get_pod_name_by_pattern(
                 pattern="my-cluster-controller", namespace=constants.AMQ_NAMESPACE
             )
-            zookeeper_obj = get_pod_obj(
+            controller_obj = get_pod_obj(
                 name=pod_list[0], namespace=constants.AMQ_NAMESPACE
             )
-            event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
+            event_obj = controller_obj.exec_cmd_on_pod(command=cmd)
             log.info(f"Event obj: {event_obj}")
             event_time = event_obj.get("Records")[0].get("eventTime")
             format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
