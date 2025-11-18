@@ -3828,17 +3828,10 @@ def install_logging(request):
     # Create RGW obc
     obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
 
-    if config.ENV_DATA["platform"].lower() in [
-        constants.ON_PREM_PLATFORMS,
-        constants.BAREMETAL_PLATFORMS,
-    ]:
+    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
-
-    elif config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
-        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
-
     else:
-        log.info("Unsupported platform")
+        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
 
     helpers.create_resource(**obc_yaml)
 
