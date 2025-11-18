@@ -19,7 +19,7 @@ class DataFoundationOverview(PageNavigator):
         Navigate to Storage Cluster page via View Storage link.
 
         Returns:
-            StorageCluster: StorageCluster page object
+            StorageClusterPage: StorageCluster page object
         """
         logger.info("Navigate to Storage Cluster page via View Storage link")
         self.do_click(
