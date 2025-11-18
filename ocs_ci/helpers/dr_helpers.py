@@ -1058,6 +1058,7 @@ def wait_for_all_resources_creation(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        performed_dr_action(bool): It true, VolumeSnapshot count will be validate for CG-CephFS
 
 
     """
