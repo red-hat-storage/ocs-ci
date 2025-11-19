@@ -113,7 +113,7 @@ class CloudManager(ABC):
         # set the client for STS enabled cluster
         try:
             setattr(
-                self, "aws_sts_client", cloud_map["AWS_STS"](auth_dict=cred_dict["AWS"])
+                self, "aws_sts_client", cloud_map["AWS_STS"](full_auth_dict=cred_dict)
             )
         except ClusterNotInSTSModeException:
             setattr(self, "aws_sts_client", None)
@@ -725,16 +725,26 @@ class AwsSTSClient(S3Client):
 
     def __init__(
         self,
-        auth_dict,
+        full_auth_dict,
         verify=True,
         endpoint="https://s3.amazonaws.com",
         *args,
         **kwargs,
     ):
         role_arn = get_role_arn_from_sub()
-        auth_dict["ROLE_ARN"] = role_arn
+        aws_auth_dict = full_auth_dict.get("AWS")
+        if not aws_auth_dict:
+            logger.error(
+                "Cluster is supposed to be in STS mode, but no AWS credentials found"
+            )
+            raise ClusterNotInSTSModeException
+        aws_auth_dict["ROLE_ARN"] = role_arn
         self.role_arn = role_arn
 
         super().__init__(
-            auth_dict=auth_dict, verify=verify, endpoint=endpoint, *args, **kwargs
+            auth_dict=aws_auth_dict,
+            verify=verify,
+            endpoint=endpoint,
+            *args,
+            **kwargs,
         )
