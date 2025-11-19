@@ -2824,6 +2824,39 @@ def get_storageclass_names_from_storagecluster_spec():
     return data
 
 
+def check_underlying_resource_exists(storage_class_type):
+    """
+    Check if the underlying Ceph resource exists for a given storage class type.
+
+    Args:
+        storage_class_type (str): The type of storage class (e.g., "cephFilesystems",
+                                 "cephBlockPools", "cephObjectStores", "nfs", "encryption")
+
+    Returns:
+        bool: True if the underlying resource exists or if it's a type that doesn't
+             need verification (nfs/encryption), False otherwise.
+    """
+    try:
+        namespace = config.ENV_DATA["cluster_namespace"]
+        resource_map = {
+            "cephFilesystems": "CephFilesystem",
+            "cephBlockPools": "CephBlockPool",
+            "cephObjectStores": "CephObjectStore",
+        }
+
+        if storage_class_type in resource_map:
+            kind = resource_map[storage_class_type]
+            resource_obj = OCP(kind=kind, namespace=namespace)
+            resources = resource_obj.get().get("items", [])
+            return len(resources) > 0
+        return True  # For nfs/encryption, assume resource exists
+    except Exception as e:
+        log.error(
+            f"Failed to check if underlying resource exists for storage class type '{storage_class_type}': {e}"
+        )
+        return True  # If we can't check, assume it exists
+
+
 def check_custom_storageclass_presence(interface=None):
     """
     Verify if the custom-defined storage class names are present in the `oc get sc` output.
@@ -2844,16 +2877,36 @@ def check_custom_storageclass_presence(interface=None):
 
     sc_list = get_all_storageclass_names()
 
-    missing_sc = [value for value in sc_from_spec.values() if value not in sc_list]
+    missing_sc = []
+    skipped_sc = []
+
+    for sc_type, sc_name in sc_from_spec.items():
+        if sc_name not in sc_list:
+            # Check if underlying resource exists
+            if not check_underlying_resource_exists(sc_type):
+                log.warning(
+                    f"StorageClass '{sc_name}' of type '{sc_type}' not found, but underlying "
+                    f"Ceph resource is missing. Skipping validation for this storage class."
+                )
+                skipped_sc.append(sc_name)
+            else:
+                missing_sc.append(sc_name)
 
     if missing_sc:
         missing_sc_str = ",".join(missing_sc)
         log.error(
-            f"StorageClasses {missing_sc_str}' mentioned in the spec is not exist in the `oc get sc` output"
+            f"StorageClasses {missing_sc_str}' mentioned in the spec do not exist in the `oc get sc` output"
         )
         return False
 
-    log.info("Custom-defined storage classes are correctly present.")
+    if skipped_sc:
+        log.info(
+            f"Skipped validation for {len(skipped_sc)} storage class(es) due to missing underlying Ceph resources."
+        )
+
+    log.info(
+        "Custom-defined storage classes are correctly present or skipped appropriately."
+    )
     return True
 
 
@@ -2877,41 +2930,69 @@ def patch_storage_cluster_for_custom_storage_class(
     if storage_class_name is None:
         storage_class_name = f"custom-{storage_class_type}"
 
+    if action not in ["add", "remove"]:
+        log.error(f"Not supported action '{action}' to patch StorageCluster spec.")
+        return False
+
     resource_name = (
         constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
         if config.DEPLOYMENT["external_mode"]
         else constants.DEFAULT_CLUSTERNAME
     )
 
-    if storage_class_type in ["nfs", "encryption"]:
-        path = f"/spec/{storage_class_type}/storageClassName"
+    is_managed_resource = storage_class_type not in ["nfs", "encryption"]
+    if is_managed_resource:
+        base_path = "/spec/managedResources"
+        path = f"{base_path}/{storage_class_type}/storageClassName"
     else:
-        path = f"/spec/managedResources/{storage_class_type}/storageClassName"
-
-    patch_data = []
+        base_path = f"/spec/{storage_class_type}"
+        path = f"{base_path}/storageClassName"
 
     if action == "add":
-        patch_data.append(
-            {
-                "op": "add",
-                "path": path,
-                "value": storage_class_name,
-            }
-        )
+        sc_obj = get_storage_cluster()
+        spec_data = sc_obj.get(resource_name=resource_name).get("spec", {})
 
+        if is_managed_resource:
+            managed_res = spec_data.get("managedResources", {})
+            component = managed_res.get(storage_class_type, {})
+            field_exists = component.get("storageClassName") is not None
+
+            if not managed_res:
+                op, op_path, value = (
+                    "add",
+                    base_path,
+                    {storage_class_type: {"storageClassName": storage_class_name}},
+                )
+            elif not component:
+                op, op_path, value = (
+                    "add",
+                    f"{base_path}/{storage_class_type}",
+                    {"storageClassName": storage_class_name},
+                )
+            elif field_exists:
+                op, op_path, value = "replace", path, storage_class_name
+            else:
+                op, op_path, value = "add", path, storage_class_name
+        else:
+            component = spec_data.get(storage_class_type, {})
+            field_exists = component.get("storageClassName") is not None
+
+            if not component:
+                op, op_path, value = (
+                    "add",
+                    base_path,
+                    {"storageClassName": storage_class_name},
+                )
+            elif field_exists:
+                op, op_path, value = "replace", path, storage_class_name
+            else:
+                op, op_path, value = "add", path, storage_class_name
+
+        patch_data = [{"op": op, "path": op_path, "value": value}]
         log_message = f"Added storage class '{storage_class_name}' of type '{storage_class_type}'."
-
-    elif action == "remove":
-        patch_data.append(
-            {
-                "op": "remove",
-                "path": path,
-            }
-        )
-        log_message = f"Removed storage class of type '{storage_class_type}'."
     else:
-        log.error(f"Not supported action '{action}' to patch StorageCluster spec.")
-        return False
+        patch_data = [{"op": "remove", "path": path}]
+        log_message = f"Removed storage class of type '{storage_class_type}'."
 
     try:
         sc_obj = get_storage_cluster()
@@ -2922,39 +3003,41 @@ def patch_storage_cluster_for_custom_storage_class(
         )
         log.info(log_message)
     except CommandFailed as err:
-        log.error(f"Command Failed with an error :{err}")
+        log.error(f"Command Failed with an error: {err}")
         return False
 
-    # Sleeping for 4 seconds to allow the recent patch command to take effect.
-    from time import sleep
-
-    sleep(4)
-
-    # Verify the patch operation has created/deleted the storageClass from the cluster.
     from ocs_ci.helpers.helpers import get_all_storageclass_names
 
-    storageclass_list = get_all_storageclass_names()
-    log.info(f"StorageClasses On the cluster : {','.join(storageclass_list)}")
+    if action == "add" and not check_underlying_resource_exists(storage_class_type):
+        log.warning(
+            f"Underlying Ceph resource for '{storage_class_type}' not found. "
+            f"Storage class '{storage_class_name}' may not be created automatically."
+        )
+        return True
 
-    if action == "remove":
-        if storage_class_name in storageclass_list:
-            log.error(
-                f" StorageClass '{storage_class_name}' not removed from the cluster."
+    def check_storage_class_exists():
+        """Check if storage class exists in the expected state."""
+        sc_exists = storage_class_name in get_all_storageclass_names()
+        expected_state = action == "add"
+        return sc_exists == expected_state
+
+    try:
+        # Retry till 120 seconds for the storage class to be created/removed
+        sample = TimeoutSampler(timeout=120, sleep=5, func=check_storage_class_exists)
+        if sample.wait_for_func_status(result=True):
+            log.info(
+                f"StorageClass '{storage_class_name}' successfully "
+                f"{'created on' if action == 'add' else 'removed from'} the cluster."
             )
-            return False
-        else:
-            log.info(f"StorageClass {storage_class_name} removed from the cluster.")
-    elif action == "add":
-        if storage_class_name not in storageclass_list:
-            log.error(
-                f" StorageClass '{storage_class_name}' not created on the cluster."
-            )
-            return False
-        else:
-            log.info(f"StorageClass '{storage_class_name}' created on the cluster.")
             return True
-    else:
-        log.error(f"Invalid action: '{action}'")
+
+        log.error(
+            f"Timeout: StorageClass '{storage_class_name}' was not "
+            f"{'created on' if action == 'add' else 'removed from'} the cluster after 120s."
+        )
+        return False
+    except Exception as e:
+        log.error(f"Error while waiting for storage class state: {e}")
         return False
 
 
