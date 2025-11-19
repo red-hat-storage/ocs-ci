@@ -11,7 +11,11 @@ from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
-from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    skipif_rosa_hcp,
+    skipif_lean_deployment,
+)
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -47,6 +51,7 @@ ERRMSG = "Error in command"
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @skip_for_provider_if_ocs_version("<4.19")
+@skipif_lean_deployment
 @polarion_id("OCS-4270")
 class TestDefaultNfsDisabled(ManageTest):
     """
@@ -82,6 +87,7 @@ class TestDefaultNfsDisabled(ManageTest):
 @skip_for_provider_if_ocs_version("<4.19")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skipif_lean_deployment
 class TestNfsEnable(ManageTest):
     """
     Test nfs feature enable for ODF 4.11
