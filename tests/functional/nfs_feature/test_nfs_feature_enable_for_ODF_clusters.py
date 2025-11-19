@@ -165,6 +165,7 @@ class TestNfsEnable(ManageTest):
         """
         self = request.node.cls
         log.info("-----Setup-----")
+        self.nfs_app_deployment = "nfs-test-pod"
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.storage_cluster_obj = ocp.OCP(
             kind=constants.STORAGECLUSTER, namespace=self.namespace
@@ -1348,9 +1349,17 @@ class TestNfsEnable(ManageTest):
             assert result.rstrip() == "Before respin" + """\n""" + "After respin"
 
         finally:
-            # Delete deployment
-            cmd_delete_deployment = "delete dc nfs-test-pod"
-            self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment)
+            # Delete deployment if it exists
+            try:
+                run_cmd(
+                    f"oc delete deployment deployment "
+                    f"{self.nfs_app_deployment} "
+                    f"-n {self.namespace} "
+                    f"--ignore-not-found=true"
+                )
+                log.info(f"Deleted deployment: {self.nfs_app_deployment}")
+            except CommandFailed:
+                log.debug("Deployment already deleted or doesn't exist")
 
             pv_obj = nfs_pvc_obj.backed_pv_obj
             log.info(f"pv object-----{pv_obj}")
