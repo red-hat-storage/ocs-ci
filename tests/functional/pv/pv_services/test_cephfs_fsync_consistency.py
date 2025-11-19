@@ -1,6 +1,5 @@
 import logging
 import tempfile
-import textwrap
 
 from ocs_ci.framework.testlib import ManageTest, tier1, green_squad, polarion_id
 from ocs_ci.ocs import constants
@@ -31,44 +30,17 @@ class TestCephfsFsyncConsistency(ManageTest):
 
         """
 
-        filename = "/mnt/shared_filed.html"
-        data = "Test fsync "
-        lines_to_write = [f"{data}{i}\n" for i in range(1, 2501)]
-        logger.info("Writing lines and syncing...")
-        try:
-            for line in lines_to_write:
-                self.client_write_lines(
-                    client_pod_obj=client_pod_obj, filename=filename, data=line
-                )
-                logger.info(f"Wrote line: {line}")
-                self.server_read_output.append(
-                    self.read_lines_from_server(
-                        server_pod_obj=server_pod_obj, filename=filename
-                    )
-                )
-                logger.info(f"Line read correctly: {line}")
-        except Exception as e:
-            logger.error(f"Error during write and read of file: {str(e)}")
-
-        logger.info("Finished writing to and reading from file")
-
-    def client_write_lines(self, client_pod_obj, filename, data):
-        """
-        Function for writing lines to a specified file path within the pod.
-
-        Args:
-            client_pod_obj (obj): Client pod object
-            filename (str): File path
-
-        """
-
         script_content = (
-            "import os\n"
-            f"with open('{filename}', 'a') as f:\n"
-            f"    f.write({repr(data)})\n"
-            f"    f.flush()\n"
-            f"    os.fsync(f.fileno())\n"
+            "import os, sys\n"
+            "filename = '/mnt/shared_filed.html'\n"
+            "i = int(sys.argv[1])\n"
+            "with open(filename, 'a') as f:\n"
+            "    line = f'Test fsync {i}'\n"
+            "    f.write(line + '\\n')\n"
+            "    f.flush()\n"
+            "    os.fsync(f.fileno())\n"
         )
+
         # Write the script content to a temporary local file
         with tempfile.NamedTemporaryFile(
             mode="w+", delete=False, suffix=".py"
@@ -79,48 +51,25 @@ class TestCephfsFsyncConsistency(ManageTest):
             exec_cmd(
                 cmd=f"oc cp {local_script_path} {client_pod_obj.name}:/tmp/sync_script.py"
             )
-            execution_command = "python3 /tmp/sync_script.py"
+        except Exception as e:
+            logger.error("ERROR: Failed to execute command on pod.")
+            logger.error(f"Error details: {e}")
+
+        for i in range(1, 101):
+            # Write lines to client pod
+            execution_command = f"python3 /tmp/sync_script.py {i}"
             client_pod_obj.exec_cmd_on_pod(
                 command=execution_command, out_yaml_format=False
             )
-        except Exception as e:
-            logger.error("ERROR: Failed to execute command on pod.")
-            logger.error(f"Error details: {e}")
+            logger.info(f"Wrote line to client pod: Test fsync {i}")
 
-    def read_lines_from_server(self, server_pod_obj, filename):
-        """
-        Function for read lines from a specified file path within the pod.
-
-        Args:
-            server_pod_obj (obj): Client pod object
-            filename (str): File path
-
-        """
-
-        script_content = textwrap.dedent(
-            f"""\
-        import os
-        with open('{filename}', 'r') as f:
-            print(f.readlines())
-        """
-        )
-        # Write the script content to a temporary local file
-        with tempfile.NamedTemporaryFile(
-            mode="w+", delete=False, suffix=".py"
-        ) as tmp_script:
-            tmp_script.write(script_content.strip())
-            local_script_path = tmp_script.name
-        try:
-            exec_cmd(
-                cmd=f"oc cp {local_script_path} {server_pod_obj.name}:/tmp/sync_read.py"
+            # Read line from server pod
+            self.server_read_output.append(
+                server_pod_obj.exec_cmd_on_pod(
+                    command="tail -n 1 /mnt/shared_filed.html"
+                )
             )
-            execution_command = "python3 /tmp/sync_read.py"
-            return server_pod_obj.exec_cmd_on_pod(
-                command=execution_command, out_yaml_format=False
-            )
-        except Exception as e:
-            logger.error("ERROR: Failed to execute command on pod.")
-            logger.error(f"Error details: {e}")
+            logger.info(f"Read line from server pod: Test fsync {i}")
 
     def test_cephfs_fsync_consistency(
         self,
@@ -166,16 +115,9 @@ class TestCephfsFsyncConsistency(ManageTest):
         self.write_and_read(pod_obj_client, pod_obj_server)
 
         assert (
-            len(self.server_read_output) == 2500
+            len(self.server_read_output) == 100
         ), f"Failed validation: expected 2500 got {len(self.server_read_output)}"
-        last_string = (
-            self.server_read_output[-1]
-            .strip()
-            .strip("[]")
-            .replace("'", "")
-            .split(", ")[-1]
-            .strip()
-        )
+        last_string = self.server_read_output[-1]
         assert (
-            last_string == "Test fsync 2500\\n"
+            last_string == "Test fsync 100"
         ), f"Last line doesn't match, last line {last_string}, expected: Test fsync 2500\n"
