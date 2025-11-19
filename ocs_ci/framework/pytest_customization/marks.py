@@ -838,4 +838,3 @@ skipif_lean_deployment = pytest.mark.skipif(
     or not check_cluster_resources_for_nfs(),
     reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
 )
-
