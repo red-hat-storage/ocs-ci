@@ -1520,6 +1520,14 @@ class TimeoutSampler(object):
         self.func_args = func_args
         self.func_kwargs = func_kwargs
 
+        # In case of underlying func has timeout or sleep parameter, user needs to pass it
+        # as func_timeout or func_sleep to avoid conflict.
+        if "func_timeout" in func_kwargs:
+            func_kwargs["timeout"] = func_kwargs["func_timeout"]
+            del func_kwargs["func_timeout"]
+        if "func_sleep" in func_kwargs:
+            func_kwargs["sleep"] = func_kwargs["func_sleep"]
+            del func_kwargs["func_sleep"]
         # Timestamps of the first and most recent samples
         self.start_time = None
         self.last_sample_time = None
@@ -1628,6 +1636,14 @@ class TimeoutIterator(TimeoutSampler):
             func_args = []
         if func_kwargs is None:
             func_kwargs = {}
+        # In case of underlying func has timeout or sleep parameter, we need to pass it to the super class
+        # so that it can be used in the super class without conflict.
+        if "timeout" in func_kwargs:
+            func_kwargs["func_timeout"] = func_kwargs["timeout"]
+            del func_kwargs["timeout"]
+        if "sleep" in func_kwargs:
+            func_kwargs["func_sleep"] = func_kwargs["sleep"]
+            del func_kwargs["sleep"]
         super().__init__(timeout, sleep, func, *func_args, **func_kwargs)
 
 
