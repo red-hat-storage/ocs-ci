@@ -4,7 +4,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import acceptance, tier1, tier4, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
@@ -27,35 +27,154 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.16")
 class TestFailoverAndRelocateWithDiscoveredApps:
     """
-    Test Failover and Relocate with Discovered Apps
+    Test Failover and Relocate with Discovered Apps and
+    custom CephFS SC and Pool
 
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface"],
+        argnames=[
+            "primary_cluster_down",
+            "pvc_interface",
+            "kubeobject",
+            "recipe",
+            "iterations",
+            "custom_sc",
+            "replica",
+            "compression",
+        ],
         argvalues=[
             pytest.param(
                 False,
                 constants.CEPHBLOCKPOOL,
-                marks=acceptance,
+                1,
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=[tier1, acceptance],
                 id="primary_up-rbd",
             ),
             pytest.param(
                 True,
                 constants.CEPHBLOCKPOOL,
+                1,
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=tier4,
                 id="primary_down-rbd",
             ),
             pytest.param(
                 False,
+                constants.CEPHBLOCKPOOL,
+                1,
+                1,
+                3,
+                False,
+                None,
+                None,
+                marks=tier4,
+                id="primary_up-rbd-multiple-iterations",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHBLOCKPOOL,
+                1,
+                1,
+                3,
+                False,
+                None,
+                None,
+                marks=tier4,
+                id="primary_down-rbd-multiple-iterations",
+            ),
+            pytest.param(
+                False,
                 constants.CEPHFILESYSTEM,
-                marks=[skipif_ocs_version("<4.19"), acceptance],
+                1,
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=[skipif_ocs_version("<4.19"), tier1, acceptance],
                 id="primary_up-cephfs",
             ),
             pytest.param(
                 True,
                 constants.CEPHFILESYSTEM,
-                marks=skipif_ocs_version("<4.19"),
+                1,
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=[skipif_ocs_version("<4.19"), tier4],
                 id="primary_down-cephfs",
+            ),
+            pytest.param(
+                False,
+                constants.CEPHFILESYSTEM,
+                1,
+                1,
+                3,
+                False,
+                None,
+                None,
+                marks=[skipif_ocs_version("<4.19"), tier4],
+                id="primary_up-cephfs-multiple-iterations",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                1,
+                3,
+                False,
+                None,
+                None,
+                marks=[skipif_ocs_version("<4.19"), tier4],
+                id="primary_down-cephfs-multiple-iterations",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                1,
+                True,
+                2,
+                None,
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica2_without_compression_with_primary-down",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                1,
+                True,
+                3,
+                "aggressive",
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica3_with_compression_with_primary-down",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                1,
+                True,
+                2,
+                "aggressive",
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica2_with_compression_with_primary-down",
             ),
         ],
     )
@@ -66,14 +185,29 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         discovered_apps_dr_workload,
         nodes_multicluster,
         node_restart_teardown,
+        kubeobject,
+        recipe,
+        iterations,
+        custom_sc,
+        replica,
+        compression,
+        cephfs_custom_storage_class,
     ):
         """
         Tests to verify application failover and relocate with discovered applications
         Covers primary cluster up or down scenarios.
 
+        Test is parametrized to run with Custom CephFS Storage Class and Pool of Replica-2.
         """
+        if custom_sc:
+            logger.info("Calling fixture to create Custom Pool/SC..")
+            cephfs_custom_storage_class(replica=replica, compression=compression)
+
         rdr_workloads = discovered_apps_dr_workload(
-            pvc_interface=pvc_interface, kubeobject=1, recipe=1
+            pvc_interface=pvc_interface,
+            kubeobject=kubeobject,
+            recipe=recipe,
+            custom_sc=custom_sc,
         )
         first_workload = rdr_workloads[0]
         drpc_objs = [
