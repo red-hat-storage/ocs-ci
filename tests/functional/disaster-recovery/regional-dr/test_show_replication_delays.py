@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from time import sleep
-
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.framework.pytest_customization.marks import (
