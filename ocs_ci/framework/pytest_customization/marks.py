@@ -834,6 +834,6 @@ vault_kms_deployment_required = pytest.mark.skipif(
 ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
 
 skipif_lean_deployment = pytest.mark.skipif(
-    not check_cluster_resources_for_nfs(),
-    reason="Test requires higher cluster resources (insufficient CPU/memory for NFS)",
+    config.ENV_DATA.get("performance_profile") == "lean" or not check_cluster_resources_for_nfs(),
+    reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
 )
