@@ -2,8 +2,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 
-import boto3
-from botocore.exceptions import SSLError, ClientError, BotoCoreError, NoCredentialsError
+from botocore.exceptions import ClientError
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     NoSuchElementException,
@@ -88,32 +87,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             logger.info(f"Retrieved lifecycle configuration: {response}")
 
             return response
-        except SSLError as ssl_e:
-            logger.warning(
-                f"SSL error occurred, trying with SSL verification disabled: {ssl_e}"
-            )
-            try:
-                # Create a new S3 client with SSL verification disabled for testing
-                s3_client_no_ssl = boto3.client(
-                    "s3",
-                    verify=False,
-                    endpoint_url=mcg_obj.s3_endpoint,
-                    aws_access_key_id=mcg_obj.access_key_id,
-                    aws_secret_access_key=mcg_obj.access_key,
-                )
-                response = s3_client_no_ssl.get_bucket_lifecycle_configuration(
-                    Bucket=bucket_name
-                )
-                logger.info(
-                    f"Retrieved lifecycle configuration with SSL disabled: {response}"
-                )
-
-                return response
-            except (ClientError, BotoCoreError, NoCredentialsError) as retry_e:
-                logger.error(
-                    f"Failed to get lifecycle configuration even with SSL disabled: {retry_e}"
-                )
-                return None
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchLifecycleConfiguration":
                 logger.info(
@@ -123,9 +96,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             else:
                 logger.error(f"Failed to get lifecycle configuration: {e}")
                 return None
-        except (BotoCoreError, NoCredentialsError) as e:
-            logger.error(f"Failed to get lifecycle configuration: {e}")
-            return None
 
     def navigate_to_bucket_lifecycle(self, bucket_name):
         """
@@ -140,7 +110,7 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         self.do_send_keys(self.generic_locators["search_resource_field"], bucket_name)
 
-        self.do_click(f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH)
+        self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 
         self.do_click(self.bucket_tab["management_tab"])
 
