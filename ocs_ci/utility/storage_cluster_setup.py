@@ -2,6 +2,7 @@ from ocs_ci.deployment.helpers import storage_class
 import tempfile
 import yaml
 from copy import deepcopy
+from ocs_ci.deployment.helpers.odf_deployment_helpers import is_storage_system_needed
 from ocs_ci.utility import (
     templating,
     kms as KMS,
@@ -22,12 +23,13 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp, defaults, pgsql
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnsupportedFeatureError,
 )
 from ocs_ci.utility.utils import (
+    exec_cmd,
     get_az_count,
     run_cmd,
 )
@@ -40,10 +42,50 @@ class StorageClusterSetup(object):
     def __init__(self):
         self.custom_storage_class_path = None
         self.namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        self.arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
         self.platform = config.ENV_DATA["platform"]
+        self.local_storage = config.DEPLOYMENT.get("local_storage")
         self.storage_class = storage_class.get_storageclass()
+        self.managed_ibmcloud = (
+            config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA.get("deployment_type") == "managed"
+        )
+        self.ocp_version = version.get_semantic_ocp_version_from_config()
+        self.create_public_net = config.ENV_DATA.get("multus_create_public_net")
+        self.create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net")
 
     def setup_storage_cluster(self):
+        if is_storage_system_needed():
+            logger.info("Creating StorageSystem")
+            # change namespace of storage system if needed
+            storage_system_data = templating.load_yaml(
+                constants.STORAGE_SYSTEM_ODF_YAML
+            )
+            storage_system_data["metadata"]["namespace"] = self.namespace
+            storage_system_data["spec"]["namespace"] = self.namespace
+
+            # create storage system
+            templating.dump_data_to_temp_yaml(
+                storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
+            )
+            log_step("Apply StorageSystem CR")
+            exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+
+        if self.managed_ibmcloud:
+            log_step("Patching config map to change KUBLET DIR PATH")
+            config_map = ocp.OCP(
+                kind="configmap",
+                namespace=self.namespace,
+                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+            )
+            config_map.get(retry=10, wait=5)
+            config_map_patch = (
+                '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
+            )
+            exec_cmd(
+                f"oc patch configmap -n {self.namespace} "
+                f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+            )
         if self.custom_storage_class_path is not None:
             self.storage_class = storage_class.create_custom_storageclass(
                 self.custom_storage_class_path
@@ -104,9 +146,7 @@ class StorageClusterSetup(object):
                     )
 
         device_class = config.ENV_DATA.get("device_class")
-        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
-
-        if arbiter_deployment:
+        if self.arbiter_deployment:
             cluster_data["spec"]["arbiter"] = {}
             cluster_data["spec"]["nodeTopologies"] = {}
             cluster_data["spec"]["arbiter"]["enable"] = True
@@ -127,11 +167,9 @@ class StorageClusterSetup(object):
             "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
         )
         zone_num = get_az_count()
-        local_storage = config.DEPLOYMENT.get("local_storage")
-        ocs_version = version.get_semantic_ocs_version_from_config()
         if (
-            local_storage
-            and ocs_version >= version.VERSION_4_7
+            self.local_storage
+            and self.ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
             and not (self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS)
@@ -196,10 +234,7 @@ class StorageClusterSetup(object):
                 "storageClassName"
             ] = self.storage_class
 
-        # StorageCluster tweaks for LSO
-        ocp_version = version.get_semantic_ocp_version_from_config()
-
-        if local_storage:
+        if self.local_storage:
             cluster_data["spec"]["manageNodes"] = False
             cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
             deviceset_data["name"] = constants.DEFAULT_DEVICESET_LSO_PVC_NAME
@@ -216,7 +251,7 @@ class StorageClusterSetup(object):
             # setting resource limits for AWS i3
             # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
             if (
-                ocs_version >= version.VERSION_4_5
+                self.ocs_version >= version.VERSION_4_5
                 and config.ENV_DATA.get("worker_instance_type")
                 == constants.AWS_LSO_WORKER_INSTANCE
             ):
@@ -224,8 +259,8 @@ class StorageClusterSetup(object):
                     "limits": {"cpu": 2, "memory": "5Gi"},
                     "requests": {"cpu": 1, "memory": "5Gi"},
                 }
-            if (ocp_version >= version.VERSION_4_6) and (
-                ocs_version >= version.VERSION_4_6
+            if (self.ocp_version >= version.VERSION_4_6) and (
+                self.ocs_version >= version.VERSION_4_6
             ):
                 cluster_data["metadata"]["annotations"] = {
                     "cluster.ocs.openshift.io/local-devices": "true"
@@ -248,26 +283,26 @@ class StorageClusterSetup(object):
                 "noobaa-core",
                 "noobaa-db",
             ]
-            if ocs_version >= version.VERSION_4_5:
+            if self.ocs_version >= version.VERSION_4_5:
                 resources.append("noobaa-endpoint")
             cluster_data["spec"]["resources"] = {
                 resource: deepcopy(none_resources) for resource in resources
             }
-            if ocs_version >= version.VERSION_4_5:
+            if self.ocs_version >= version.VERSION_4_5:
                 cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
                     "limits": {"cpu": 1, "memory": "500Mi"},
                     "requests": {"cpu": 1, "memory": "500Mi"},
                 }
         else:
             platform = config.ENV_DATA.get("platform", "").lower()
-            if local_storage and platform == "aws":
+            if self.local_storage and platform == "aws":
                 resources = {
                     "mds": {
                         "limits": {"cpu": 3, "memory": "8Gi"},
                         "requests": {"cpu": 1, "memory": "8Gi"},
                     }
                 }
-                if ocs_version < version.VERSION_4_5:
+                if self.ocs_version < version.VERSION_4_5:
                     resources["noobaa-core"] = {
                         "limits": {"cpu": 2, "memory": "8Gi"},
                         "requests": {"cpu": 1, "memory": "8Gi"},
@@ -308,7 +343,7 @@ class StorageClusterSetup(object):
             cluster_data["spec"]["manageNodes"] = False
 
         if config.ENV_DATA.get("encryption_at_rest"):
-            if ocs_version < version.VERSION_4_6:
+            if self.ocs_version < version.VERSION_4_6:
                 error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
                 logger.error(error_message)
                 raise UnsupportedFeatureError(error_message)
@@ -316,7 +351,7 @@ class StorageClusterSetup(object):
             cluster_data["spec"]["encryption"] = {
                 "enable": True,
             }
-            if ocs_version >= version.VERSION_4_10:
+            if self.ocs_version >= version.VERSION_4_10:
                 cluster_data["spec"]["encryption"] = {
                     "clusterWide": True,
                 }
@@ -427,6 +462,30 @@ class StorageClusterSetup(object):
                 cluster_data,
                 {"metadata": {"annotations": api_server_exported_address_annotation}},
             )
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            log_step(
+                "Creating external pgsql DB for NooBaa and correct StorageCluster data"
+            )
+            pgsql_data = config.AUTH["pgsql"]
+            user = pgsql_data["username"]
+            password = pgsql_data["password"]
+            host = pgsql_data["host"]
+            port = pgsql_data["port"]
+            pgsql_manager = pgsql.PgsqlManager(
+                username=user,
+                password=password,
+                host=host,
+                port=port,
+            )
+            cluster_name = config.ENV_DATA["cluster_name"]
+            db_name = f"nbcore_{cluster_name.replace('-', '_')}"
+            pgsql_manager.create_database(
+                db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
+            )
+            create_external_pgsql_secret()
+            cluster_data["spec"]["multiCloudGateway"] = {
+                "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
+            }
 
         # To be able to verify: https://bugzilla.redhat.com/show_bug.cgi?id=2276694
         wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
@@ -600,3 +659,27 @@ class StorageClusterSetup(object):
             )
 
         return arbiter_locations[0]
+
+
+def create_external_pgsql_secret():
+    """
+    Creates secret for external PgSQL to be used by Noobaa
+    """
+    secret_data = templating.load_yaml(constants.EXTERNAL_PGSQL_NOOBAA_SECRET_YAML)
+    secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    pgsql_data = config.AUTH["pgsql"]
+    user = pgsql_data["username"]
+    password = pgsql_data["password"]
+    host = pgsql_data["host"]
+    port = pgsql_data["port"]
+    cluster_name = config.ENV_DATA["cluster_name"].replace("-", "_")
+    secret_data["stringData"][
+        "db_url"
+    ] = f"postgres://{user}:{password}@{host}:{port}/nbcore_{cluster_name}"
+
+    secret_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="external_pgsql_noobaa_secret", delete=False
+    )
+    templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
+    logger.info("Creating external PgSQL Noobaa secret")
+    run_cmd(f"oc create -f {secret_data_yaml.name}")
