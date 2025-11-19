@@ -23,8 +23,8 @@ spec:
           claimName: nfs-pvc
       containers:
       - name: fedora
-        image: fedora:latest
-        command: ['/bin/bash', '-ce', 'tail -f /dev/null']
+        image: quay.io/ocsci/fedora:fio
+        command: ['/bin/bash', '-ce',  'tail -f /dev/null']
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities: {}
