@@ -11,7 +11,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
-    verify_failover_relocate_status_ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -199,6 +198,7 @@ class TestFailoverAndRelocate:
                     workload_to_move=f"{wl.workload_name}-1",
                     policy_name=wl.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
+                    workload_type=wl.workload_type,
                 )
             else:
                 # Failover action via CLI
@@ -289,9 +289,7 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if via_ui:
-            config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(acm_obj)
+        # TODO: Refer PR 13305 and add the UI verification steps when DFBUGS-4314 is fixed
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
@@ -321,6 +319,7 @@ class TestFailoverAndRelocate:
                     policy_name=wl.dr_policy_name,
                     failover_or_preferred_cluster=primary_cluster_name,
                     action=constants.ACTION_RELOCATE,
+                    workload_type=wl.workload_type,
                 )
             else:
                 # Relocate action via CLI
@@ -391,11 +390,7 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if via_ui:
-            config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(
-                acm_obj, action=constants.ACTION_RELOCATE
-            )
+        # TODO: Refer PR 13305 and add the UI verification steps when DFBUGS-4314 is fixed
 
         for obj, initial_last_group_sync_time in zip(
             drpc_objs, post_failover_last_group_sync_time

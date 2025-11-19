@@ -1369,6 +1369,13 @@ acm_configuration_4_20 = {
     ),
     "submariner-custom-source": ("//input[@id='source']", By.XPATH),
     "submariner-custom-channel": ("//input[@id='channel']", By.XPATH),
+    "apply-filter": ("(//button[@id='acm-table-filter-select-undefined'])", By.XPATH),
+    "clear-filter": (
+        "(//button[@type='button'][normalize-space()='Clear all filters'])",
+        By.XPATH,
+    ),
+    "kebab-action": ("//button[@aria-label='Actions']", By.XPATH),
+    "select-dr-policy": ('//*[text()="{}"]', By.XPATH),
 }
 
 add_capacity = {
