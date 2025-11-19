@@ -91,6 +91,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
+from ocs_ci.ocs.resources.keda import KEDA
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 from ocs_ci.ocs.scale_lib import FioPodScale
@@ -11263,3 +11264,18 @@ def install_helm_fixture(request):
     request.addfinalizer(uninstall)
     install()
     return
+
+
+@pytest.fixture(scope="class")
+def keda_class(request, install_helm_class):
+    return keda_fixture(request)
+
+
+def keda_fixture(request):
+    """
+    Install Keda, add a cleanup finalizer and return the KEDA object
+    """
+    keda = KEDA()
+    request.addfinalizer(keda.cleanup)
+    keda.install()
+    return keda
