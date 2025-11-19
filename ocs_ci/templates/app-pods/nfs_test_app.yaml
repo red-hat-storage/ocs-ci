@@ -24,7 +24,7 @@ spec:
       containers:
       - name: fedora
         image: quay.io/ocsci/fedora:fio
-        command: ['/bin/bash', '-ce',  'tail -f /dev/null']
+        command: ['/bin/bash', '-ce', 'tail -f /dev/null']
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities: {}
