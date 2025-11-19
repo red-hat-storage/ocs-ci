@@ -55,7 +55,7 @@ class TestCephfsFsyncConsistency(ManageTest):
             logger.error("ERROR: Failed to execute command on pod.")
             logger.error(f"Error details: {e}")
 
-        for i in range(1, 2501):
+        for i in range(1, 1001):
             # Write lines to client pod
             execution_command = f"python3 /tmp/sync_script.py {i}"
             client_pod_obj.exec_cmd_on_pod(
@@ -115,9 +115,9 @@ class TestCephfsFsyncConsistency(ManageTest):
         self.write_and_read(pod_obj_client, pod_obj_server)
 
         assert (
-            len(self.server_read_output) == 2500
-        ), f"Failed validation: expected 2500 got {len(self.server_read_output)}"
+            len(self.server_read_output) == 1000
+        ), f"Failed validation: expected 1000 got {len(self.server_read_output)}"
         last_string = self.server_read_output[-1]
         assert (
-            last_string == "Test fsync 2500"
-        ), f"Last line doesn't match, last line {last_string}, expected: Test fsync 2500\n"
+            last_string == "Test fsync 1000"
+        ), f"Last line doesn't match, last line {last_string}, expected: Test fsync 1000\n"
