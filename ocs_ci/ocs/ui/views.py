@@ -331,7 +331,7 @@ generic_locators = {
     "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
     "three_dots_specific_resource": (
         "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions'] | "
-        "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
+        "//tr[contains(., '{}')]//button[contains(@data-test, 'kebab-button')]",
         By.XPATH,
     ),
     "resource_link": (
@@ -390,7 +390,7 @@ generic_locators = {
     "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
         "//tr[contains(., '{}')]//button[@aria-label='Kebab toggle'] | "
-        "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
+        "//tr[contains(., '{}')]//button[contains(@data-test,'kebab-button')]",
         By.XPATH,
     ),
     "delete_resource": (
