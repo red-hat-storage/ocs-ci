@@ -98,7 +98,10 @@ class TestRGWAndKafkaNotifications(E2ETest):
         self.amq.setup_amq_cluster(sc.name)
 
         # Create topic
-        self.kafka_topic = self.amq.create_kafka_topic()
+        topic_name = (
+            f"test-rgw-kafka-notifications-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        )
+        self.kafka_topic = self.amq.create_kafka_topic(name=topic_name)
 
         # Create Kafkadrop pod
         (
