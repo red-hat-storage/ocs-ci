@@ -48,6 +48,7 @@ from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
+from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
 
 # tier marks
 
@@ -835,3 +836,9 @@ vault_kms_deployment_required = pytest.mark.skipif(
 )
 
 ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
+
+skipif_lean_deployment = pytest.mark.skipif(
+    config.ENV_DATA.get("performance_profile") == "lean"
+    or not check_cluster_resources_for_nfs(),
+    reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
+)
