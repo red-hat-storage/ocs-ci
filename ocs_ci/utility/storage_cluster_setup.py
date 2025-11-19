@@ -51,6 +51,7 @@ class StorageClusterSetup(object):
             and config.ENV_DATA.get("deployment_type") == "managed"
         )
         self.ocp_version = version.get_semantic_ocp_version_from_config()
+        self.ocs_version = version.get_semantic_ocs_version_from_config()
         self.create_public_net = config.ENV_DATA.get("multus_create_public_net")
         self.create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net")
 
