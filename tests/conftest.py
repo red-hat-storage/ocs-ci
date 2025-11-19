@@ -11278,4 +11278,5 @@ def keda_fixture(request):
     keda = KEDA()
     request.addfinalizer(keda.cleanup)
     keda.install()
+    keda.allow_keda_to_read_thanos_metrics()
     return keda

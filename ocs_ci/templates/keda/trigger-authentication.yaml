@@ -1,0 +1,10 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: prom-auth
+  namespace: keda-demo
+spec:
+  secretTargetRef:
+    - parameter: bearerToken
+      name: prom-bearer
+      key: token
