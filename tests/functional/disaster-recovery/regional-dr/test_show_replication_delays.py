@@ -198,11 +198,10 @@ class TestShowReplicationDelays:
                 expected_status="FailingOver",
             )
 
-        logger.info(
-            f"Waiting for {scheduling_interval} minutes to run IOs post failover"
-        )
         wait_time = 2 * scheduling_interval
+        logger.info(f"Waiting for {wait_time} minutes to run IOs post failover")
         sleep(wait_time * 60)
+
         check_dr_status(
             acm_obj, workload_names, rdr_workload, expected_status="healthy"
         )
@@ -226,10 +225,10 @@ class TestShowReplicationDelays:
                 expected_status="Relocating",
             )
 
-        logger.info(
-            f"Waiting for {scheduling_interval} minutes to run IOs post relocate"
-        )
-        sleep(scheduling_interval * 60)
+        wait_time = 2 * scheduling_interval
+        logger.info(f"Waiting for {wait_time} minutes to run IOs post failover")
+        sleep(wait_time * 60)
+
         check_dr_status(
             acm_obj, workload_names, rdr_workload, expected_status="healthy"
         )

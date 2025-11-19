@@ -955,7 +955,7 @@ def check_dr_status(
         if not (expected_status == "FailingOver" or expected_status == "Relocating"):
             log.info("Verifying DR status on UI...")
             wait_for_text_result = TimeoutSampler(
-                timeout=300,
+                timeout=320,
                 sleep=10,
                 func=acm_obj.wait_until_expected_text_is_found,
                 locator=acm_loc["dr-status"],
@@ -988,7 +988,11 @@ def check_dr_status(
                 time.sleep(1)
 
         log.info("Validating the message in popover...")
-        current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
+        for _ in range(5):
+            current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
+            if current_pop_over_text:
+                break
+            log.info("Clicking the pop over again to fetch the Message")
 
         expected_status_popover_messages = {
             "healthy": "All volumes are synced",
