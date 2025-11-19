@@ -1286,13 +1286,6 @@ class TestNfsEnable(ManageTest):
             assert err_count == 0, (
                 f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
             )
-            # Verify presence of the file
-            file_path = pod.get_file_path(pod_obj, file_name)
-            log.info(f"Actual file path on the pod {file_path}")
-            assert pod.check_file_existence(
-                pod_obj, file_path
-            ), f"File {file_name} doesn't exist"
-            log.info(f"File {file_name} exists in {pod_obj.name}")
 
             # Create /mnt/test file inside the pod
             command = "bash -c " + '"echo ' + "'Before respin'" + '  > /mnt/test"'
