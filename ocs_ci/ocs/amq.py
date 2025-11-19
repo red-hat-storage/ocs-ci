@@ -193,8 +193,12 @@ class AMQ(object):
         _rc = True
 
         for pod in TimeoutSampler(
-            300, 10, get_pod_name_by_pattern, pod_pattern, namespace
+            900, 10, get_pod_name_by_pattern, pod_pattern, namespace
         ):
+            if pod:
+                log.info(f"Found {len(pod)} pods matching pattern '{pod_pattern}' in {namespace}: {pod}")
+            else:
+                log.info(f"Waiting for pods matching '{pod_pattern}' in {namespace}...")
             try:
                 if pod is not None and len(pod) == expected_pods:
                     amq_pod = pod
@@ -977,89 +981,230 @@ class AMQ(object):
         tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
     ):
         """
-        Enhanced AMQ cleanup to ensure no leftover resources remain.
-        Runs full cleanup even if setup failed or partially deployed.
+        Clean up function,
+        will start to delete from amq cluster operator
+        then amq-connector, persistent, bridge, at the end it will delete the created namespace
+
+        Args:
+            kafka_namespace (str): Created namespace for amq
+            tiller_namespace (str): Created namespace for benchmark
+
         """
 
-    # Cleanup for successfully deployed objects
-    if self.amq_is_setup:
-        if self.consumer_pod:
-            self.consumer_pod.delete()
-        if self.producer_pod:
-            self.producer_pod.delete()
-        if self.kafka_user:
-            self.kafka_user.delete()
-        if self.kafka_topic:
-            self.kafka_topic.delete()
+        if self.amq_is_setup:
+            if self.consumer_pod:
+                self.consumer_pod.delete()
+            if self.producer_pod:
+                self.producer_pod.delete()
+            if self.kafka_user:
+                self.kafka_user.delete()
+            if self.kafka_topic:
+                self.kafka_topic.delete()
 
-        if self.benchmark:
-            try:
-                purge_cmd = (
-                    f"linux-amd64/helm delete benchmark --purge "
-                    f"--tiller-namespace {tiller_namespace}"
-                )
-                run(purge_cmd, shell=True, cwd=self.dir, check=True)
-            except (CommandFailed, CalledProcessError) as cf:
-                log.error("Failed to delete helm benchmark app")
-                raise cf
+            if self.benchmark:
+                # Delete the helm app
+                try:
+                    purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
+                    run(purge_cmd, shell=True, cwd=self.dir, check=True)
+                except (CommandFailed, CalledProcessError) as cf:
+                    log.error("Failed to delete help app")
+                    raise cf
+                # Delete the pods and namespace created
+                self.sa_tiller.delete()
+                self.crb_tiller.delete()
+                run_cmd(f"oc delete project {tiller_namespace}")
+                self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
 
-            # Delete tiller resources and namespace
-            self.sa_tiller.delete()
-            self.crb_tiller.delete()
-            run_cmd(f"oc delete project {tiller_namespace}")
-            self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
-
-        if self.kafka_connect:
-            self.kafka_connect.delete()
-        if self.kafka_bridge:
-            self.kafka_bridge.delete()
-
-        for kafkanodepool in self.kafkanodepools:
-            kafkanodepool.delete()
-
-        if self.kafka_persistent:
-            self.kafka_persistent.delete()
-            log.info("Waiting 20 seconds for persistent storage deletion")
-            time.sleep(20)
-
-            ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
-            if ocs_pvc_obj:
-                delete_pvcs(ocs_pvc_obj)
+            if self.kafka_connect:
+                self.kafka_connect.delete()
+            if self.kafka_bridge:
+                self.kafka_bridge.delete()
+            for kafkanodepool in self.kafkanodepools:
+                kafkanodepool.delete()
+            if self.kafka_persistent:
+                self.kafka_persistent.delete()
+                log.info("Waiting for 20 seconds to delete persistent")
+                time.sleep(20)
+                ocs_pvc_obj = get_all_pvc_objs(namespace=kafka_namespace)
+                if ocs_pvc_obj:
+                    delete_pvcs(ocs_pvc_obj)
                 for pvc in ocs_pvc_obj:
+                    log.info(pvc.name)
                     validate_pv_delete(pvc.backed_pv)
 
-        if self.crd_objects:
-            for adm_obj in self.crd_objects:
-                adm_obj.delete()
+            if self.crd_objects:
+                for adm_obj in self.crd_objects:
+                    adm_obj.delete()
+            time.sleep(30)
 
-        time.sleep(30)
+            # Reset namespace to default
+            switch_to_default_rook_cluster_project()
+            run_cmd(f"oc delete project {kafka_namespace}")
+            self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90) 
 
-    # FINAL SAFETY CLEANUP – handles partial or failed deployments
-    log.info("Performing final validation cleanup to remove leftovers")
+    def cleanup_strimzi_resources(self):
+        """
+        Clean up all leftover Strimzi/Kafka resources in the cluster:
+        - CRDs
+        - ClusterRoles
+        - ClusterRoleBindings
+        - Namespaced RoleBindings
+        - Deployments (strimzi-cluster-operator)
+        - Namespace 'myproject' (force-delete if required)
+        """
 
-    # Delete pods
-    pods = get_all_pods(namespace=kafka_namespace)
-    if pods:
-        log.info("Deleting leftover pods")
-        delete_pods(pods)
+        log.info("Starting Strimzi/Kafka cleanup routine...")
 
-    # Delete PVCs and PVs
-    pvcs = get_all_pvc_objs(namespace=kafka_namespace)
-    if pvcs:
-        log.info("Deleting leftover PVCs and associated PVs")
-        delete_pvcs(pvcs)
-        for pvc in pvcs:
-            validate_pv_delete(pvc.backed_pv)
+        #
+        # 1. Delete Strimzi/Kafka CRDs
+        #
+        try:
+            crd_list = run_cmd(
+                "oc get crd | grep -E 'kafka|strimzi' | awk '{print $1}' || true",
+                shell=True,
+                ignore_error=True,
+            ).splitlines()
 
-    # Delete namespace
-    log.info(f"Deleting namespace {kafka_namespace} (ignore errors)")
-    run_cmd(f"oc delete project {kafka_namespace}", ignore_error=True)
-    self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+            for crd in crd_list:
+                log.info(f"Deleting CRD: {crd}")
+                run_cmd(f"oc delete crd {crd} --ignore-not-found=true", shell=True, ignore_error=True)
 
-    # Switch back to default
-    switch_to_default_rook_cluster_project()
+            # ensure terminating CRDs are removed
+            for _ in range(12):  # ~2 minutes
+                remaining = run_cmd(
+                    "oc get crd | grep -E 'kafka|strimzi' | awk '{print $1}' || true",
+                    shell=True,
+                    ignore_error=True,
+                ).splitlines()
+                if not remaining:
+                    break
 
-    log.info("AMQ cleanup completed successfully and verified")
+                log.warning(f"CRDs still terminating: {remaining}")
+                for crd in remaining:
+                    run_cmd(
+                        f"oc patch crd {crd} -p '{{\"metadata\":{{\"finalizers\":[]}}}}' --type=merge'",
+                        shell=True,
+                        ignore_error=True,
+                    )
+                    run_cmd(
+                        f"oc delete crd {crd} --ignore-not-found=true --wait=true --timeout=60s",
+                        shell=True,
+                        ignore_error=True,
+                    )
+
+                time.sleep(10)
+
+        except Exception as e:
+            log.warning(f"Failed CRD cleanup: {e}")
+
+        #
+        # 2. ClusterRoles
+        #
+        try:
+            roles = run_cmd(
+                "oc get clusterrole | grep strimzi | awk '{print $1}'",
+                shell=True,
+                ignore_error=True,
+            ).splitlines()
+
+            for role in roles:
+                log.info(f"Deleting ClusterRole: {role}")
+                run_cmd(f"oc delete clusterrole {role} --ignore-not-found=true", ignore_error=True)
+        except Exception as e:
+            log.warning(f"Failed ClusterRole cleanup: {e}")
+
+        #
+        # 3. ClusterRoleBindings
+        #
+        try:
+            bindings = run_cmd(
+                "oc get clusterrolebinding | grep strimzi | awk '{print $1}'",
+                shell=True,
+                ignore_error=True,
+            ).splitlines()
+
+            for binding in bindings:
+                log.info(f"Deleting ClusterRoleBinding: {binding}")
+                run_cmd(f"oc delete clusterrolebinding {binding} --ignore-not-found=true", ignore_error=True)
+        except Exception as e:
+            log.warning(f"Failed ClusterRoleBinding cleanup: {e}")
+
+        #
+        # 4. Namespaced RoleBindings
+        #
+        try:
+            ns_list = run_cmd(
+                "oc get ns -o jsonpath='{.items[*].metadata.name}'",
+                shell=True,
+                ignore_error=True,
+            ).split()
+
+            for ns in ns_list:
+                ns_rbs = run_cmd(
+                    f"oc get rolebinding -n {ns} | grep strimzi | awk '{{print $1}}' || true",
+                    shell=True,
+                    ignore_error=True,
+                ).splitlines()
+
+                for rb in ns_rbs:
+                    log.info(f"Deleting namespaced RoleBinding: {rb} in {ns}")
+                    run_cmd(f"oc delete rolebinding {rb} -n {ns} --ignore-not-found=true", ignore_error=True)
+
+        except Exception as e:
+            log.warning(f"Failed RoleBinding cleanup: {e}")
+
+        #
+        # 5. Delete strimzi-cluster-operator deployments in any namespace
+        #
+        try:
+            ns_list = run_cmd(
+                "oc get ns -o jsonpath='{.items[*].metadata.name}'",
+                shell=True,
+                ignore_error=True,
+            ).split()
+
+            for ns in ns_list:
+                deployments = run_cmd(
+                    f"oc get deployment -n {ns} -o jsonpath='{{.items[*].metadata.name}}' | tr ' ' '\\n' | grep strimzi-cluster-operator || true",
+                    shell=True,
+                    ignore_error=True,
+                ).splitlines()
+
+                for dep in deployments:
+                    log.info(f"Deleting leftover deployment {dep} in namespace {ns}")
+                    run_cmd(
+                        f"oc delete deployment {dep} -n {ns} --ignore-not-found=true --force --grace-period=0",
+                        shell=True,
+                        ignore_error=True,
+                    )
+        except Exception as e:
+            log.warning(f"Failed Deployment cleanup: {e}")
+
+        #
+        # 6. Delete namespace 'myproject' (simple + forced delete)
+        #
+        try:
+            log.info("Deleting namespace 'myproject' ...")
+            run_cmd(
+                "oc delete ns myproject --ignore-not-found=true --wait=true --timeout=180s",
+                shell=True,
+                ignore_error=True,
+            )
+        except Exception:
+            log.warning("Namespace myproject did not delete normally. Forcing delete.")
+            run_cmd(
+                "oc patch ns myproject -p '{\"metadata\":{\"finalizers\":[]}}' --type=merge'",
+                shell=True,
+                ignore_error=True,
+            )
+            run_cmd(
+                "oc delete ns myproject --ignore-not-found=true --force --grace-period=0",
+                shell=True,
+                ignore_error=True,
+            )
+
+        log.info("Completed Strimzi/Kafka cleanup.")
+    
 
     def check_amq_cluster_exists(self):
         """
