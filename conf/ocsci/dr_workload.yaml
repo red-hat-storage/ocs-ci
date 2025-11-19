@@ -162,6 +162,24 @@ ENV_DATA:
       multi_ns_dr_workload_app_pvc_selector_value: "simple_io_pvc",
     },
   ]
+  dr_workload_discovered_apps_cephfs_custom_pool_and_sc: [
+    { name: "busybox-dict-1-cephfs_custom_sc", workload_dir: "rdr/busybox/cephfs/custom_sc_resources/app-busybox-1",
+      pod_count: 10, pvc_count: 10,
+      dr_workload_app_pod_selector_key: "workloadpattern",
+      dr_workload_app_pod_selector_value: "simple_io",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "busybox_app1_cephfs",
+      workload_namespace: "busybox-dict-1-cephfs",
+      dr_workload_app_placement_name: "busybox-dict-1-cephfs",
+      multi_ns_dr_workload_app_pvc_selector_key: "workloadpattern",
+      multi_ns_dr_workload_app_pvc_selector_value: "simple_io_pvc",
+      dr_workload_app_recipe_name_key: "name",
+      dr_workload_app_recipe_name_value: "busybox-dict-1",
+      dr_workload_app_recipe_namespace_key: "namespace",
+      dr_workload_app_recipe_namespace_value: "busybox-dict-1",
+      dr_workload_app_recipe_name_selector_value: "busybox-*",
+    },
+  ]
   dr_workload_subscription_placement_rbd: [
     { name: "busybox-1", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-1",
       pod_count: 10, pvc_count: 10, is_placement: True,
