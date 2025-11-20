@@ -210,42 +210,50 @@ class IBMCloudIPI(CloudDeploymentBase):
 
         """
         self.export_api_key()
-        resource_group = self.get_resource_group()
-        if resource_group:
-            try:
-                self.delete_bucket()
-                scale_down_pods_and_remove_pvcs(self.storage_class)
-            except Exception as err:
-                logger.warning(
-                    f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
-                )
+        if config.ENV_DATA.get("existing_vpc"):
             logger.info("Destroying the IBM Cloud cluster")
             super(IBMCloudIPI, self).destroy_cluster(log_level)
-
+            self.destroy_cluster_from_existing_vpc()
+            return
         else:
-            logger.warning(
-                "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
-            )
-        try:
-            # Make sure ccoctl is downloaded before using it in destroy job.
-            cco.configure_cloud_credential_operator()
-            cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
+            resource_group = self.get_resource_group()
             if resource_group:
-                resource_group = self.get_resource_group()
-            # Based on docs:
-            # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
-            # The volumes should be removed before running openshift-installer for destroy, but it's not
-            # working and failing, hence moving this step back after openshift-installer.
-            self.delete_volumes(resource_group)
-            self.delete_leftover_resources(resource_group)
-            self.delete_resource_group(resource_group)
-            ibmcloud.delete_dns_records(self.cluster_name)
-        except Exception as ex:
-            logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
-            raise
-        finally:
-            logger.info("Force cleaning up Service IDs and Account Policies leftovers")
-            ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+                try:
+                    self.delete_bucket()
+                    scale_down_pods_and_remove_pvcs(self.storage_class)
+                except Exception as err:
+                    logger.warning(
+                        f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
+                    )
+                logger.info("Destroying the IBM Cloud cluster")
+                super(IBMCloudIPI, self).destroy_cluster(log_level)
+
+            else:
+                logger.warning(
+                    "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
+                )
+            try:
+                # Make sure ccoctl is downloaded before using it in destroy job.
+                cco.configure_cloud_credential_operator()
+                cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
+                if resource_group:
+                    resource_group = self.get_resource_group()
+                # Based on docs:
+                # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
+                # The volumes should be removed before running openshift-installer for destroy, but it's not
+                # working and failing, hence moving this step back after openshift-installer.
+                self.delete_volumes(resource_group)
+                self.delete_leftover_resources(resource_group)
+                self.delete_resource_group(resource_group)
+                ibmcloud.delete_dns_records(self.cluster_name)
+            except Exception as ex:
+                logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
+                raise
+            finally:
+                logger.info(
+                    "Force cleaning up Service IDs and Account Policies leftovers"
+                )
+                ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
 
     def delete_bucket(self):
         """
@@ -988,3 +996,591 @@ class IBMCloudIPI(CloudDeploymentBase):
         except Exception as e:
             logger.error(f"Failed to add security group to VSI: {e}")
             return False
+
+    def _wait_for_resource_deletion(
+        self, resource_type, resource_id, max_attempts=30, wait_time=5
+    ):
+        """
+        Wait for resource deletion with retry.
+
+        Args:
+            resource_type (str): The type of resource to check for deletion
+                (e.g., "instance", "load-balancer", "volume", etc.).
+            resource_id (str): The unique identifier of the resource to check.
+            max_attempts (int, optional): Maximum number of attempts to check for deletion. Default is 30.
+            wait_time (int, optional): Time in seconds to wait between checks. Default is 5.
+
+        Returns:
+            bool: True if the resource is deleted within the specified attempts, False otherwise.
+        """
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if resource_type == "instance":
+                    cmd = f"ibmcloud is instance {resource_id} --output json"
+                elif resource_type == "load-balancer":
+                    cmd = f"ibmcloud is load-balancer {resource_id} --output json"
+                elif resource_type == "volume":
+                    cmd = f"ibmcloud is volume {resource_id} --output json"
+                elif resource_type == "security-group":
+                    cmd = f"ibmcloud is security-group {resource_id} --output json"
+                elif resource_type == "floating-ip":
+                    cmd = f"ibmcloud is floating-ip {resource_id} --output json"
+                else:
+                    return True
+                exec_cmd(cmd)
+            except CommandFailed:
+                return True
+            if attempt < max_attempts:
+                time.sleep(wait_time)
+        logger.warning(
+            f"Timeout waiting for {resource_type} {resource_id} to be deleted"
+        )
+        return False
+
+    @retry(CommandFailed, tries=3, delay=5, backoff=2)
+    def _execute_command(self, cmd):
+        """
+        Execute delete command with retry decorator.
+
+        Args:
+            cmd (str): The command to execute.
+        Raises:
+            CommandFailed: If the command fails to execute.
+        """
+        try:
+            exec_cmd(cmd)
+        except CommandFailed as e:
+            logger.error(f"Failed to execute command: {e}")
+            raise CommandFailed(f"Failed to execute command: {e}")
+
+    def delete_vsis(self, prefix):
+        """
+        Delete Virtual Server Instances matching the provided prefix.
+
+        Args:
+            prefix (str): The prefix string to match VSI names.
+
+        Returns:
+            tuple: A tuple containing the count of matched VSIs and the number of errors occurred during
+            deletion. Errors are raised as CommandFailed exceptions.
+        """
+        logger.info("Discovering Virtual Server Instances...")
+        errors = 0
+        count = 0
+        try:
+            cmd = "ibmcloud is instances --output json"
+            proc = exec_cmd(cmd)
+            instances = json.loads(proc.stdout)
+            vsi_list = [
+                inst for inst in instances if inst.get("name", "").startswith(prefix)
+            ]
+            count = len(vsi_list)
+
+            if count > 0:
+                logger.info(f"Found {count} Virtual Server Instance(s)")
+                for inst in vsi_list:
+                    logger.info(
+                        f"Name: {inst.get('name')}, ID: {inst.get('id')}, \
+                        VPC: {inst.get('vpc', {}).get('name', 'N/A')}"
+                    )
+
+                logger.info("Deleting Virtual Server Instances...")
+                vsi_ids = []
+                for inst in vsi_list:
+                    inst_name = inst.get("name")
+                    inst_id = inst.get("id")
+                    logger.info(f"Deleting VSI '{inst_name}'...")
+                    cmd = f"ibmcloud is instance-delete {inst_id} --force"
+                    try:
+                        self._execute_command(cmd)
+                        logger.info(f"Successfully deleted VSI '{inst_name}'")
+                        vsi_ids.append(inst_id)
+                    except CommandFailed:
+                        logger.error(f"Failed to delete VSI '{inst_name}'")
+                        errors += 1
+
+                # Wait for VSIs to be fully deleted
+                if vsi_ids:
+                    logger.info("Waiting for VSIs to fully terminate...")
+                    for vsi_id in vsi_ids:
+                        self._wait_for_resource_deletion("instance", vsi_id, 40, 5)
+                    logger.info(
+                        "Waiting for network interfaces to be fully released..."
+                    )
+                    time.sleep(15)
+            else:
+                logger.info("No Virtual Server Instances found")
+        except Exception as e:
+            logger.error(f"Error processing VSIs: {e}")
+            errors += 1
+        return count, errors
+
+    def delete_floating_ips(self, prefix):
+        """
+        Delete Floating IPs matching the provided prefix.
+
+        Args:
+            prefix (str): The prefix string to match floating IP names.
+
+        Returns:
+            tuple: A tuple containing the count of matched floating IPs and the number of errors occurred during
+            deletion. Errors are raised as CommandFailed exceptions.
+        """
+        logger.info("Discovering Floating IPs...")
+        errors = 0
+        count = 0
+        try:
+            cmd = "ibmcloud is floating-ips --output json"
+            proc = exec_cmd(cmd)
+            floating_ips = json.loads(proc.stdout)
+            fip_list = [
+                fip for fip in floating_ips if fip.get("name", "").startswith(prefix)
+            ]
+            count = len(fip_list)
+
+            if count > 0:
+                logger.info(f"Found {count} Floating IP(s)")
+                for fip in fip_list:
+                    target_name = (
+                        fip.get("target", {}).get("name", "unbound")
+                        if fip.get("target")
+                        else "unbound"
+                    )
+                    logger.info(
+                        f"Name: {fip.get('name')}, ID: {fip.get('id')}, \
+                        Address: {fip.get('address')}, Target: {target_name}"
+                    )
+
+                logger.info("Deleting Floating IPs...")
+                for fip in fip_list:
+                    fip_name = fip.get("name")
+                    fip_id = fip.get("id")
+                    logger.info(f"Deleting Floating IP '{fip_name}'...")
+
+                    # Special handling for Floating IPs - they often need multiple attempts
+                    deleted = False
+                    for attempt in range(1, 9):
+                        try:
+                            cmd = f"ibmcloud is floating-ip-release {fip_id} --force"
+                            exec_cmd(cmd)
+                            deleted = True
+                            break
+                        except CommandFailed:
+                            # Check if it still exists
+                            try:
+                                cmd = f"ibmcloud is floating-ip {fip_id} --output json"
+                                exec_cmd(cmd)
+                            except CommandFailed:
+                                deleted = True
+                                break
+                            if attempt < 8:
+                                wait_time = 5 * attempt
+                                time.sleep(wait_time)
+
+                    if deleted:
+                        logger.info(f"Successfully deleted Floating IP '{fip_name}'")
+                    else:
+                        logger.warning(
+                            f"Floating IP '{fip_name}' may still be attached or in transition state"
+                        )
+                        errors += 1
+                time.sleep(5)
+            else:
+                logger.info("No Floating IPs found")
+        except Exception as e:
+            logger.error(f"Error processing Floating IPs: {e}")
+            errors += 1
+        return count, errors
+
+    def delete_load_balancers(self, prefix):
+        """
+        Delete Load Balancers matching the provided prefix.
+
+        Args:
+            prefix (str): The prefix string to match load balancer names.
+
+        Returns:
+            tuple: A tuple containing the count of matched load balancers and the number of errors occurred during
+            deletion. Errors are raised as CommandFailed exceptions.
+        """
+        logger.info("Discovering Load Balancers...")
+        errors = 0
+        count = 0
+        try:
+            cmd = "ibmcloud is load-balancers --output json"
+            proc = exec_cmd(cmd)
+            load_balancers = json.loads(proc.stdout)
+            lb_list = [
+                lb for lb in load_balancers if lb.get("name", "").startswith(prefix)
+            ]
+            count = len(lb_list)
+
+            if count > 0:
+                logger.info(f"Found {count} Load Balancer(s)")
+                for lb in lb_list:
+                    logger.info(
+                        f"Name: {lb.get('name')}, ID: {lb.get('id')}, \
+                        Hostname: {lb.get('hostname')}, Status: {lb.get('provisioning_status')}"
+                    )
+
+                logger.info("Deleting Load Balancers...")
+                lb_ids = []
+                for lb in lb_list:
+                    lb_name = lb.get("name")
+                    lb_id = lb.get("id")
+                    logger.info(f"Deleting Load Balancer '{lb_name}'...")
+                    cmd = f"ibmcloud is load-balancer-delete {lb_id} --force"
+                    try:
+                        self._execute_command(cmd)
+                        logger.info(f"Successfully deleted Load Balancer '{lb_name}'")
+                        lb_ids.append(lb_id)
+                    except CommandFailed:
+                        logger.error(f"Failed to delete Load Balancer '{lb_name}'")
+                        errors += 1
+
+                # Wait for Load Balancers to be fully deleted
+                if lb_ids:
+                    logger.info(
+                        "Waiting for Load Balancers to fully delete (this may take a while)..."
+                    )
+                    for lb_id in lb_ids:
+                        self._wait_for_resource_deletion("load-balancer", lb_id, 60, 10)
+            else:
+                logger.info("No Load Balancers found")
+        except Exception as e:
+            logger.error(f"Error processing Load Balancers: {e}")
+            errors += 1
+        return count, errors
+
+    def delete_security_groups(self, prefix):
+        """
+        Delete Security Groups matching the provided prefix.
+
+        Args:
+            prefix (str): The prefix string to match security group names.
+
+        Returns:
+            tuple: A tuple containing the count of matched security groups and the number of errors occurred during
+            deletion. Errors are raised as CommandFailed exceptions.
+        """
+        logger.info("Discovering Security Groups...")
+        errors = 0
+        count = 0
+        try:
+            cmd = "ibmcloud is security-groups --output json"
+            proc = exec_cmd(cmd)
+            security_groups = json.loads(proc.stdout)
+            sg_list = [
+                sg for sg in security_groups if sg.get("name", "").startswith(prefix)
+            ]
+            count = len(sg_list)
+
+            if count > 0:
+                logger.info(f"Found {count} Security Group(s)")
+                for sg in sg_list:
+                    logger.info(
+                        f"Name: {sg.get('name')}, ID: {sg.get('id')}, \
+                        VPC: {sg.get('vpc', {}).get('name', 'N/A')}"
+                    )
+
+                logger.info("Deleting Security Groups...")
+                # Get all security groups for reference checking
+                all_sgs = security_groups
+
+                for sg in sg_list:
+                    sg_name = sg.get("name")
+                    sg_id = sg.get("id")
+                    logger.info(f"Processing Security Group '{sg_name}'...")
+
+                    # Find and remove rules that reference this SG from other SGs
+                    for ref_sg in all_sgs:
+                        rules = ref_sg.get("rules", [])
+                        for rule in rules:
+                            remote = rule.get("remote", {})
+                            if remote.get("id") == sg_id:
+                                rule_id = rule.get("id")
+                                if rule_id:
+                                    try:
+                                        cmd = (
+                                            f"ibmcloud is security-group-rule-delete "
+                                            f"{ref_sg.get('id')} {rule_id} --force"
+                                        )
+                                        exec_cmd(cmd)
+                                    except CommandFailed:
+                                        pass
+                    time.sleep(2)
+
+                    # Now delete the security group
+                    cmd = f"ibmcloud is security-group-delete {sg_id} --force"
+                    try:
+                        self._execute_command(cmd)
+                        logger.info(f"Successfully deleted Security Group '{sg_name}'")
+                    except CommandFailed:
+                        logger.error(f"Failed to delete Security Group '{sg_name}'")
+                        errors += 1
+                time.sleep(5)
+            else:
+                logger.info("No Security Groups found")
+        except Exception as e:
+            logger.error(f"Error processing Security Groups: {e}")
+            errors += 1
+        return count, errors
+
+    def delete_cos_buckets(self, prefix):
+        """
+        Delete IBM Cloud Object Storage (COS) buckets whose names match the given prefix.
+
+        Args:
+            prefix (str): The prefix to match for deleting COS buckets.
+
+        Returns:
+            tuple: A tuple containing the count of matched COS buckets and the number of errors occurred during
+            deletion. Errors are raised as CommandFailed exceptions.
+        """
+        logger.info("Discovering Cloud Object Storage Buckets...")
+        errors = 0
+        count = 0
+        try:
+            cmd = "ibmcloud cos buckets --output json"
+            proc = exec_cmd(cmd)
+            buckets_data = json.loads(proc.stdout)
+            bucket_list = [
+                bucket.get("Name")
+                for bucket in buckets_data
+                if bucket.get("Name", "").startswith(prefix)
+            ]
+            count = len(bucket_list)
+
+            if count > 0:
+                logger.info(f"Found {count} COS Bucket(s)")
+                for bucket_name in bucket_list:
+                    logger.info(f"Name: {bucket_name}")
+
+                logger.info("Deleting COS Buckets...")
+                for bucket_name in bucket_list:
+                    logger.info(f"Emptying and deleting bucket '{bucket_name}'...")
+
+                    # Delete all objects in the bucket
+                    try:
+                        cmd = (
+                            f"ibmcloud cos objects --bucket {bucket_name} --output json"
+                        )
+                        proc = exec_cmd(cmd)
+                        objects_data = json.loads(proc.stdout)
+                        contents = objects_data.get("Contents", [])
+                        if contents:
+                            for obj in contents:
+                                obj_key = obj.get("Key")
+                                if obj_key:
+                                    try:
+                                        cmd = (
+                                            f"ibmcloud cos object-delete --bucket {bucket_name} "
+                                            f"--key '{obj_key}' --force"
+                                        )
+                                        exec_cmd(cmd)
+                                    except CommandFailed:
+                                        pass
+                            time.sleep(3)
+                    except CommandFailed:
+                        pass
+
+                    # Delete the bucket
+                    cmd = f"ibmcloud cos bucket-delete --bucket {bucket_name} --force"
+                    try:
+                        self._execute_command(cmd)
+                        logger.info(f"Successfully deleted COS Bucket '{bucket_name}'")
+                    except CommandFailed:
+                        logger.error(f"Failed to delete COS Bucket '{bucket_name}'")
+                        errors += 1
+            else:
+                logger.info("No COS Buckets found")
+        except Exception as e:
+            logger.error(f"Error processing COS Buckets: {e}")
+            errors += 1
+        return count, errors
+
+    def delete_cos_instances(self, prefix):
+        """
+        Delete COS Instances matching the provided prefix.
+
+        Args:
+            prefix (str): The prefix string to match instance names.
+
+        Returns:
+            tuple: A tuple containing the count of matched COS instances and the number of errors occurred during
+            deletion. Errors are raised as CommandFailed exceptions.
+        """
+        logger.info("Discovering Cloud Object Storage Instances...")
+        errors = 0
+        count = 0
+        try:
+            cmd = "ibmcloud resource service-instances --service-name cloud-object-storage --output json"
+            proc = exec_cmd(cmd)
+            cos_instances = json.loads(proc.stdout)
+            cos_list = [
+                cos_inst
+                for cos_inst in cos_instances
+                if cos_inst.get("name", "").startswith(prefix)
+            ]
+            count = len(cos_list)
+
+            if count > 0:
+                logger.info(f"Found {count} COS Instance(s)")
+                for cos_inst in cos_list:
+                    logger.info(
+                        f"Name: {cos_inst.get('name')}, ID: {cos_inst.get('id')}, \
+                        GUID: {cos_inst.get('guid')}"
+                    )
+
+                logger.info("Deleting COS Instances...")
+                for cos_inst in cos_list:
+                    cos_name = cos_inst.get("name")
+                    cos_guid = cos_inst.get("guid")
+                    logger.info(f"Deleting COS Instance '{cos_name}'...")
+                    cmd = f"ibmcloud resource service-instance-delete {cos_guid} --force --recursive"
+                    try:
+                        self._execute_command(cmd)
+                        logger.info(f"Successfully deleted COS Instance '{cos_name}'")
+                    except CommandFailed:
+                        logger.error(f"Failed to delete COS Instance '{cos_name}'")
+                        errors += 1
+                time.sleep(5)
+            else:
+                logger.info("No COS Instances found")
+        except Exception as e:
+            logger.error(f"Error processing COS Instances: {e}")
+            errors += 1
+        return count, errors
+
+    def delete_custom_images(self, prefix):
+        """
+        Delete Custom Images matching the provided prefix.
+
+        Args:
+            prefix (str): The prefix string to match image names.
+
+        Returns:
+            tuple: A tuple containing the count of matched custom images and the number of errors occurred during
+            deletion. Errors are raised as CommandFailed exceptions.
+        """
+        logger.info("Discovering Custom Images...")
+        errors = 0
+        count = 0
+        try:
+            cmd = "ibmcloud is images --output json"
+            proc = exec_cmd(cmd)
+            images = json.loads(proc.stdout)
+            image_list = [
+                img
+                for img in images
+                if img.get("name", "").startswith(prefix)
+                and img.get("visibility") == "private"
+            ]
+            count = len(image_list)
+
+            if count > 0:
+                logger.info(f"Found {count} Custom Image(s)")
+                for img in image_list:
+                    logger.info(
+                        f"Name: {img.get('name')}, ID: {img.get('id')}, \
+                        Status: {img.get('status')}"
+                    )
+
+                logger.info("Deleting Custom Images...")
+                for img in image_list:
+                    img_name = img.get("name")
+                    img_id = img.get("id")
+                    logger.info(f"Deleting Image '{img_name}'...")
+                    cmd = f"ibmcloud is image-delete {img_id} --force"
+                    try:
+                        self._execute_command(cmd)
+                        logger.info(f"Successfully deleted Image '{img_name}'")
+                    except CommandFailed:
+                        logger.error(f"Failed to delete Image '{img_name}'")
+                        errors += 1
+            else:
+                logger.info("No Custom Images found")
+        except Exception as e:
+            logger.error(f"Error processing Custom Images: {e}")
+            errors += 1
+        return count, errors
+
+    def destroy_cluster_from_existing_vpc(self):
+        """
+        Destroy the OCP cluster from existing VPC infrastructure on IBM Cloud.
+        This function will destroy the cluster and the following resources:
+        - Virtual Server Instances (VSIs)
+        - Floating IPs
+        - Load Balancers
+        - Security Groups
+        - Custom Images
+        - Volumes (Block Storage)
+        - Cloud Object Storage Buckets
+        - Cloud Object Storage Instances
+
+        raises LeftoversExistError if any errors occur during deletion.
+        """
+        prefix = config.ENV_DATA.get("cluster_name")
+        if not prefix:
+            logger.error("cluster_name not found in ENV_DATA")
+            return
+
+        # Delete each resource type (VSIs first as they may have dependencies)
+        try:
+            vsi_count, vsi_errors = self.delete_vsis(prefix)
+        except Exception as e:
+            logger.error(f"Error deleting Virtual Server Instances: {e}")
+
+        try:
+            fip_count, fip_errors = self.delete_floating_ips(prefix)
+        except Exception as e:
+            logger.error(f"Error deleting Floating IPs: {e}")
+
+        try:
+            lb_count, lb_errors = self.delete_load_balancers(prefix)
+        except Exception as e:
+            logger.error(f"Error deleting Load Balancers: {e}")
+
+        try:
+            sg_count, sg_errors = self.delete_security_groups(prefix)
+        except Exception as e:
+            logger.error(f"Error deleting Security Groups: {e}")
+
+        try:
+            bucket_count, bucket_errors = self.delete_cos_buckets(prefix)
+        except Exception as e:
+            logger.error(f"Error deleting COS Buckets: {e}")
+
+        try:
+            cos_count, cos_errors = self.delete_cos_instances(prefix)
+        except Exception as e:
+            logger.error(f"Error deleting COS Instances: {e}")
+
+        try:
+            image_count, image_errors = self.delete_custom_images(prefix)
+        except Exception as e:
+            logger.error(f"Error deleting Custom Images: {e}")
+
+        total_errors = (
+            vsi_errors
+            + fip_errors
+            + lb_errors
+            + sg_errors
+            + bucket_errors
+            + cos_errors
+            + image_errors
+        )
+        total_resources = (
+            vsi_count
+            + fip_count
+            + lb_count
+            + sg_count
+            + bucket_count
+            + cos_count
+            + image_count
+        )
+
+        if total_errors > 0:
+            raise LeftoversExistError(f"Total errors: {total_errors}")
+
+        logger.info(f"Successfully deleted {total_resources} resources")
