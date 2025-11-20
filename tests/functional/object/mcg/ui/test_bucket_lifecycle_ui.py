@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.ui.page_objects.bucket_lifecycle_ui import BucketLifecycleUI
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.utility.utils import log_step
+from ocs_ci.framework.logger_helper import log_step
 
 logger = logging.getLogger(__name__)
 
