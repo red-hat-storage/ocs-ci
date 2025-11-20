@@ -3,9 +3,10 @@ import time
 
 import pytest
 import logging
+import subprocess
 
 from datetime import datetime, timezone
-
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     stretchcluster_required,
@@ -20,17 +21,23 @@ from ocs_ci.helpers.stretchcluster_helper import (
     verify_data_corruption,
     verify_vm_workload,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 from ocs_ci.ocs.resources.pod import (
     get_not_running_pods,
     get_deployment_name,
     wait_for_pods_by_label_count,
     get_all_pods,
     get_pod_node,
+    restart_pods_having_label,
 )
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    CephHealthException,
+    NoRunningCephToolBoxException,
+    UnexpectedBehaviour,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +164,27 @@ class TestMonAndOSDFailures:
         * Verify the IO during the teardown
 
     """
+
+    def teardown(self):
+        """
+        If ceph health warnning is observed due to partitioning restart mon pods.
+        And validate ceph health.
+        """
+        network_partition_warning = "network partition detected"
+        try:
+            ceph_health_check(fix_ceph_health=True)
+        except (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ) as e:
+            logger.error(f"Ceph health check failed after failure injection. : {e}")
+            if network_partition_warning in str(e).lower():
+                logger.info("Network partition detected — restarting mon pods")
+                restart_pods_having_label(label=constants.MON_APP_LABEL)
+        logger.info("Checking for Ceph Health OK")
+        ceph_health_check()
 
     @polarion_id("OCS-5059")
     def test_single_mon_failures(self):
