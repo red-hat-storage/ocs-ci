@@ -6841,3 +6841,12 @@ def verify_socket_on_node(node_name, host_path, socket_name):
         node=node_name, cmd_list=[f"ls -l {host_path}/{socket_name}"]
     )
     return socket_name in debug_node_output
+
+
+def set_rook_log_level():
+    """
+    Set the rook log level
+    """
+    rook_log_level = config.DEPLOYMENT.get("rook_log_level")
+    if rook_log_level:
+        set_configmap_log_level_rook_ceph_operator(rook_log_level)
