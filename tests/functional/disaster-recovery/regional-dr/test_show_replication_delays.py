@@ -170,7 +170,8 @@ class TestShowReplicationDelays:
         logger.info(
             "Waiting for the first sync to happen after scaling up the deployment"
         )
-        sleep(scheduling_interval * 60)
+        wait_time = scheduling_interval * 2
+        sleep(wait_time * 60)
 
         check_dr_status(
             acm_obj, workload_names, rdr_workload, expected_status="healthy"
