@@ -37,7 +37,7 @@ repos:
     rev: 0.13.1+ibm.64.dss
     hooks:
       - id: detect-secrets
-        args: [--baseline, .secrets.baseline, --use-all-plugins]
+        args: [--baseline, .secrets.baseline, --use-all-plugins, --fail-on-unaudited]
   # Local wrapper to strip "generated_at" after detect-secrets runs
   - repo: local
     hooks:
