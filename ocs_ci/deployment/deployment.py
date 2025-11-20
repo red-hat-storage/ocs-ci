@@ -1653,6 +1653,16 @@ class Deployment(object):
                     }
                 cluster_data["spec"]["resources"] = resources
 
+        # Disable NFS when cluster resources are insufficient
+        from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
+
+        if not check_cluster_resources_for_nfs():
+            logger.info(
+                "Disabling NFS because cluster resources are insufficient "
+                "(based on actual node CPU/memory measurement)"
+            )
+            cluster_data["spec"]["nfs"] = {"enable": False}
+
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get("host_network"):
@@ -2088,6 +2098,16 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"]["storageClassName"] = (
                     storageclassnames["encryption"]
                 )
+
+        # Disable NFS when cluster resources are insufficient
+        from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
+
+        if not check_cluster_resources_for_nfs():
+            logger.info(
+                "Disabling NFS for external mode because cluster resources are insufficient "
+                "(based on actual node CPU/memory measurement)"
+            )
+            cluster_data["spec"]["nfs"] = {"enable": False}
 
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
