@@ -84,7 +84,7 @@ def _healthcheck_matches(actual, desired):
 @tier2
 @brown_squad
 @skipif_external_mode
-@pytest.mark.polarion_id("OCS-XXXX")
+@pytest.mark.polarion_id("OCS-7403")
 class TestMonHealthcheckPassthrough(ManageTest):
     """
     Verify StorageCluster.spec.managedResources.cephCluster.healthCheck.daemonHealth.mon
