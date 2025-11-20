@@ -11267,19 +11267,15 @@ def install_helm_fixture(request):
 
 
 @pytest.fixture(scope="class")
-def keda_class(request, install_helm_class, project_factory_class):
+def keda_class(request, install_helm_class):
     return keda_fixture(request)
 
 
-def keda_fixture(request, project_factory_class):
+def keda_fixture(request):
     """
     Install Keda, add a cleanup finalizer and return the KEDA object
     """
-    keda_namespace = "keda"
-    project_factory_class(namespace=keda_namespace)
-
     keda = KEDA(
-        keda_namespace=keda_namespace,
         workload_namespace=ocsci_config.ENV_DATA["cluster_namespace"],
     )
     request.addfinalizer(keda.cleanup)

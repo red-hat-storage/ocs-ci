@@ -7,4 +7,7 @@ spec:
   secretTargetRef:
     - parameter: bearerToken
       name: prom-bearer
-      key: token
+      key: bearerToken
+    - parameter: ca
+      name: prom-ca
+      key: ca.crt
