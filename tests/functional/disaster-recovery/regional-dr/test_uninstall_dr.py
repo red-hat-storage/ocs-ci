@@ -3,11 +3,12 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
-from ocs_ci.framework.testlib import tier2
+from ocs_ci.framework.testlib import tier2, skipif_ocs_version
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 @rdr
 @tier2
 @turquoise_squad
+@skipif_ocs_version("<4.19")
 class TestFailoverAndRelocate:
     """
     Test Failover and Relocate actions via CLI and UI
@@ -23,7 +25,6 @@ class TestFailoverAndRelocate:
 
     def test_failover_and_relocate(
         self,
-        pvc_interface,
         dr_workload,
         nodes_multicluster,
     ):
@@ -70,12 +71,12 @@ class TestFailoverAndRelocate:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
-        before_failover_last_group_sync_time = []
+        last_group_sync_time_after_ios = []
         for obj in drpc_objs:
-            before_failover_last_group_sync_time.append(
+            last_group_sync_time_after_ios.append(
                 dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
             )
-        logger.info("Verified lastGroupSyncTime before uninstall of RDR.")
+        logger.info("Verified lastGroupSyncTime before the uninstall of RDR.")
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             workloads[0].workload_namespace
@@ -95,18 +96,29 @@ class TestFailoverAndRelocate:
         logger.info("Disabling RDR on all the workloads...")
         dr_helpers.disable_dr_rdr()
 
-        # Get mirror peer assosiated with dr policy
+        # Get mirror peer associated with dr policy
         mirrorpeer_name = dr_helpers.get_mirrorpeer(dr_policy_name)
 
         # Perform partial DR Uninstall
         logger.info(
             f"Deleting the dr policy {dr_policy_name} "
-            f"and mirror peer {mirrorpeer_name} from ACM"
+            f"and mirror peer {mirrorpeer_name} from Hub Cluster"
         )
         dr_helpers.partial_rdr_uninstall(dr_policy_name, mirrorpeer_name)
 
         # Validate mirroring status in radospoolnamespace
-        # TODO: skipping this for now due to existing bug 2775
+        mirroring_disabled = dr_helpers.is_mirroring_disabled()
+
+        if not mirroring_disabled:
+            logger.error(
+                "Mirroring is not completely disabled from cephblockpoolradosnamespaces"
+                " after deleting the mirror peer"
+            )
+            raise ResourceWrongStatusException
+
+        logger.info(
+            "Mirroring has been succesfully disabled from radospoolnamespace !!"
+        )
 
         # Validate mirroring in tools pod
         logger.info("Validating the mirroring status in tools pod...")
@@ -115,7 +127,10 @@ class TestFailoverAndRelocate:
             "Mode: disabled",
             "rbd: mirroring not enabled on the pool",
         ]
-        dr_helpers.verify_mirroring_status_in_tools_pod(expected_mirroring_status)
+        mirroring_status_in_tools_pod = dr_helpers.verify_mirroring_status_in_tools_pod(
+            expected_mirroring_status
+        )
+        logger.info(f"Mirroring status in tools pod {mirroring_status_in_tools_pod}")
 
         # Check ceph health
         logger.info("Checking for Ceph Health OK")
@@ -155,3 +170,20 @@ class TestFailoverAndRelocate:
                 wl.workload_pod_count,
                 wl.workload_namespace,
             )
+
+        # Validate Mirroring status
+        dr_helpers.wait_for_mirroring_status_ok(
+            replaying_images=sum(
+                wl.workload_pvc_count
+                for wl in workloads
+                if wl.pvc_interface == constants.CEPHBLOCKPOOL
+            )
+        )
+
+        # Validate LastGroupSynctime post DR Reinstall
+        last_group_sync_time_post_dr_reinstall = []
+        for obj in drpc_objs:
+            last_group_sync_time_post_dr_reinstall.append(
+                dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
+            )
+        logger.info("Verified lastGroupSyncTime after RDR reinstall.")

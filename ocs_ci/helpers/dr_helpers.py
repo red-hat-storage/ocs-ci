@@ -2831,6 +2831,7 @@ def verify_mirroring_status_in_tools_pod(expected_mirroring_status):
         f"Mirroring status {mirroring_status} is not as expected as "
         f"{expected_mirroring_status}"
     )
+    return mirroring_status
 
 
 def verify_resource_rdr_resource_deletion(cluster_name):
@@ -2866,3 +2867,24 @@ def verify_resource_rdr_resource_deletion(cluster_name):
 
     if failed_cmds:
         raise Exception(f"The following commands failed: {failed_cmds}")
+
+
+def is_mirroring_disabled():
+    """
+    This function validates if mirroring is disabled on cephblockradospoolnamespace
+    after deleting the mirrorpeer
+    """
+
+    cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOLRADOSNS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=cephbpradosns,
+    )
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus")
+    mirroring_info = cbp_obj.get().get("status").get("mirroringInfo")
+    logger.info(
+        f"Mirroring status: {mirroring_status} Mirroring Info: {mirroring_info}"
+    )
+
+    return mirroring_status == mirroring_info
