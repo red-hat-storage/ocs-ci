@@ -214,7 +214,9 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.info("Destroying the IBM Cloud cluster")
             super(IBMCloudIPI, self).destroy_cluster(log_level)
             self.destroy_cluster_from_existing_vpc()
-            return
+            logger.info("IBM Cloud cluster destroyed successfully")
+            ibmcloud.delete_dns_records(self.cluster_name)
+            logger.info("DNS records deleted successfully")
         else:
             resource_group = self.get_resource_group()
             if resource_group:
@@ -249,11 +251,8 @@ class IBMCloudIPI(CloudDeploymentBase):
             except Exception as ex:
                 logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
                 raise
-            finally:
-                logger.info(
-                    "Force cleaning up Service IDs and Account Policies leftovers"
-                )
-                ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+        logger.info("Force cleaning up Service IDs and Account Policies leftovers")
+        ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
 
     def delete_bucket(self):
         """
@@ -1326,79 +1325,6 @@ class IBMCloudIPI(CloudDeploymentBase):
             errors += 1
         return count, errors
 
-    def delete_cos_buckets(self, prefix):
-        """
-        Delete IBM Cloud Object Storage (COS) buckets whose names match the given prefix.
-
-        Args:
-            prefix (str): The prefix to match for deleting COS buckets.
-
-        Returns:
-            tuple: A tuple containing the count of matched COS buckets and the number of errors occurred during
-            deletion. Errors are raised as CommandFailed exceptions.
-        """
-        logger.info("Discovering Cloud Object Storage Buckets...")
-        errors = 0
-        count = 0
-        try:
-            cmd = "ibmcloud cos buckets --output json"
-            proc = exec_cmd(cmd)
-            buckets_data = json.loads(proc.stdout)
-            bucket_list = [
-                bucket.get("Name")
-                for bucket in buckets_data
-                if bucket.get("Name", "").startswith(prefix)
-            ]
-            count = len(bucket_list)
-
-            if count > 0:
-                logger.info(f"Found {count} COS Bucket(s)")
-                for bucket_name in bucket_list:
-                    logger.info(f"Name: {bucket_name}")
-
-                logger.info("Deleting COS Buckets...")
-                for bucket_name in bucket_list:
-                    logger.info(f"Emptying and deleting bucket '{bucket_name}'...")
-
-                    # Delete all objects in the bucket
-                    try:
-                        cmd = (
-                            f"ibmcloud cos objects --bucket {bucket_name} --output json"
-                        )
-                        proc = exec_cmd(cmd)
-                        objects_data = json.loads(proc.stdout)
-                        contents = objects_data.get("Contents", [])
-                        if contents:
-                            for obj in contents:
-                                obj_key = obj.get("Key")
-                                if obj_key:
-                                    try:
-                                        cmd = (
-                                            f"ibmcloud cos object-delete --bucket {bucket_name} "
-                                            f"--key '{obj_key}' --force"
-                                        )
-                                        exec_cmd(cmd)
-                                    except CommandFailed:
-                                        pass
-                            time.sleep(3)
-                    except CommandFailed:
-                        pass
-
-                    # Delete the bucket
-                    cmd = f"ibmcloud cos bucket-delete --bucket {bucket_name} --force"
-                    try:
-                        self._execute_command(cmd)
-                        logger.info(f"Successfully deleted COS Bucket '{bucket_name}'")
-                    except CommandFailed:
-                        logger.error(f"Failed to delete COS Bucket '{bucket_name}'")
-                        errors += 1
-            else:
-                logger.info("No COS Buckets found")
-        except Exception as e:
-            logger.error(f"Error processing COS Buckets: {e}")
-            errors += 1
-        return count, errors
-
     def delete_cos_instances(self, prefix):
         """
         Delete COS Instances matching the provided prefix.
@@ -1515,7 +1441,6 @@ class IBMCloudIPI(CloudDeploymentBase):
         - Security Groups
         - Custom Images
         - Volumes (Block Storage)
-        - Cloud Object Storage Buckets
         - Cloud Object Storage Instances
 
         raises LeftoversExistError if any errors occur during deletion.
@@ -1547,11 +1472,6 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.error(f"Error deleting Security Groups: {e}")
 
         try:
-            bucket_count, bucket_errors = self.delete_cos_buckets(prefix)
-        except Exception as e:
-            logger.error(f"Error deleting COS Buckets: {e}")
-
-        try:
             cos_count, cos_errors = self.delete_cos_instances(prefix)
         except Exception as e:
             logger.error(f"Error deleting COS Instances: {e}")
@@ -1562,22 +1482,10 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.error(f"Error deleting Custom Images: {e}")
 
         total_errors = (
-            vsi_errors
-            + fip_errors
-            + lb_errors
-            + sg_errors
-            + bucket_errors
-            + cos_errors
-            + image_errors
+            vsi_errors + fip_errors + lb_errors + sg_errors + cos_errors + image_errors
         )
         total_resources = (
-            vsi_count
-            + fip_count
-            + lb_count
-            + sg_count
-            + bucket_count
-            + cos_count
-            + image_count
+            vsi_count + fip_count + lb_count + sg_count + cos_count + image_count
         )
 
         if total_errors > 0:
