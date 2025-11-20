@@ -20,8 +20,8 @@ class KEDA:
 
     def __init__(
         self,
-        keda_namespace="keda",
-        workload_namespace=config.ENV_DATA["cluster_namespace"],
+        keda_namespace,
+        workload_namespace,
     ):
         self.keda_namespace = keda_namespace
         self.workload_namespace = workload_namespace
@@ -150,7 +150,6 @@ class KEDA:
         # Uninstall KEDA via the Helm CLI
         try:
             exec_cmd(f"helm uninstall keda --namespace {self.keda_namespace}")
-            exec_cmd(f"oc delete namespace {self.keda_namespace}")
         except CommandFailed:
             raise CommandFailed("Failed to uninstall KEDA")
 
