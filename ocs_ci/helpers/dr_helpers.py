@@ -2599,6 +2599,7 @@ def verify_volsync():
         )
     config.switch_ctx(restore_index)
 
+
 def verify_cluster_data_protected_status(
     workload_type, namespace, workload_placement_name=None
 ):
@@ -2699,6 +2700,7 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
 
 def get_drpolicy(dr_cluster1, dr_cluster2):
     """
@@ -2864,4 +2866,3 @@ def verify_resource_rdr_resource_deletion(cluster_name):
 
     if failed_cmds:
         raise Exception(f"The following commands failed: {failed_cmds}")
-
