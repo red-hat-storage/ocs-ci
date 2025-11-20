@@ -1,3 +1,4 @@
+
 """
 AMQ Class to run amq specific tests
 """
@@ -65,12 +66,6 @@ class AMQ(object):
         self.kafka_topic = self.kafka_user = None
         self.kafka_connect = self.kafka_bridge = self.kafka_persistent = None
         self.kafkanodepools = []
-        # ToDo: Remove skip once the issue is fixed
-        if config.ENV_DATA.get("fips"):
-            pytest.skip(
-                "Skipped due to open bug in AMQ. "
-                "For more info: https://issues.redhat.com/browse/ENTMQST-3422"
-            )
         self.dir = tempfile.mkdtemp(prefix="amq_")
         self._clone_amq()
 
@@ -191,14 +186,15 @@ class AMQ(object):
         """
 
         _rc = True
+        get_pods_timeout = 300
+
+        # In FIPS mode the entity-operator pod takes longer to start up
+        if config.ENV_DATA.get("fips"):
+            get_pods_timeout = 900
 
         for pod in TimeoutSampler(
-            900, 10, get_pod_name_by_pattern, pod_pattern, namespace
+            get_pods_timeout, 10, get_pod_name_by_pattern, pod_pattern, namespace
         ):
-            if pod:
-                log.info(f"Found {len(pod)} pods matching pattern '{pod_pattern}' in {namespace}: {pod}")
-            else:
-                log.info(f"Waiting for pods matching '{pod_pattern}' in {namespace}...")
             try:
                 if pod is not None and len(pod) == expected_pods:
                     amq_pod = pod
@@ -1040,8 +1036,12 @@ class AMQ(object):
             # Reset namespace to default
             switch_to_default_rook_cluster_project()
             run_cmd(f"oc delete project {kafka_namespace}")
-            self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90) 
-
+            self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+            
+            # NEW: Cleanup Strimzi leftovers (CRDs, RBAC, Deployments, myproject namespace)
+            log.info("Running extended Strimzi/Kafka cleanup...")
+            self.cleanup_strimzi_resources()
+            
     def cleanup_strimzi_resources(self):
         """
         Clean up all leftover Strimzi/Kafka resources in the cluster:
@@ -1204,7 +1204,6 @@ class AMQ(object):
             )
 
         log.info("Completed Strimzi/Kafka cleanup.")
-    
 
     def check_amq_cluster_exists(self):
         """
