@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.ui.page_objects.bucket_lifecycle_ui import BucketLifecycleUI
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.utility.utils import log_step
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +36,12 @@ class TestBucketLifecycleUI:
         bucket_ui.nav_object_storage_page()
         bucket_ui.nav_buckets_page()
         _, bucket_name = bucket_ui.create_bucket_ui_with_details("s3")
-        logger.info(f"Created bucket via UI: {bucket_name}")
+        log_step(f"Created bucket via UI: {bucket_name}")
 
         lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
 
         self.created_buckets.append(bucket_name)
-        logger.info(
+        logger.debug(
             f"Stored bucket name for later use. Total buckets: {len(self.created_buckets)}"
         )
 
@@ -170,9 +171,7 @@ class TestBucketLifecycleUI:
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
         assert rule_name in rules, f"Rule {rule_name} not found in rules list"
-        logger.info(
-            f"Successfully created lifecycle rule '{rule_name}' with combination: {description}"
-        )
+        log_step(f"Verify rule '{rule_name}' created with combination: {description}")
 
         backend_policy = lifecycle_ui.get_lifecycle_policy_from_backend(
             bucket_name, mcg_obj
@@ -185,7 +184,7 @@ class TestBucketLifecycleUI:
 
         self._validate_backend_rule(our_rule, rules_dict)
 
-        logger.info(f"Backend validation successful for rule '{rule_name}'")
+        log_step(f"Validate rule '{rule_name}' in backend")
 
     @ui
     @tier2
@@ -256,9 +255,8 @@ class TestBucketLifecycleUI:
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
         assert rule_name in rules, f"Rule {rule_name} not found in rules list"
-        logger.info(
-            f"Successfully created targeted lifecycle rule '{rule_name}' with prefix '{target_prefix}'.\n"
-            f"Rule combination: {description}"
+        log_step(
+            f"Verify targeted rule '{rule_name}' created with prefix '{target_prefix}' and combination: {description}"
         )
 
         backend_policy = lifecycle_ui.get_lifecycle_policy_from_backend(
@@ -281,8 +279,8 @@ class TestBucketLifecycleUI:
 
         self._validate_backend_rule(our_rule, rules_dict)
 
-        logger.info(
-            f"Backend validation successful for targeted rule '{rule_name}' with prefix '{target_prefix}'"
+        log_step(
+            f"Validate targeted rule '{rule_name}' with prefix '{target_prefix}' in backend"
         )
 
     @ui
@@ -322,8 +320,8 @@ class TestBucketLifecycleUI:
         assert (
             initial_rule_name in rules
         ), f"Failed to create initial rule {initial_rule_name}"
-        logger.info(
-            f"Initial rule created successfully: {initial_rule_name} with {initial_days} days"
+        log_step(
+            f"Verify initial rule '{initial_rule_name}' created with {initial_days} days"
         )
 
         new_days = 60
@@ -352,8 +350,8 @@ class TestBucketLifecycleUI:
             our_rule["Expiration"]["Days"] == new_days
         ), f"Expected expiration days {new_days}, got {our_rule['Expiration']['Days']}"
 
-        logger.info(
-            f"Successfully edited lifecycle rule: {initial_rule_name} from {initial_days} to {new_days} days"
+        log_step(
+            f"Verify rule '{initial_rule_name}' edited from {initial_days} to {new_days} days"
         )
 
     @ui
@@ -379,24 +377,24 @@ class TestBucketLifecycleUI:
         lifecycle_ui = BucketLifecycleUI()
 
         if not self.created_buckets:
-            logger.warning("No buckets from previous tests, creating a new one")
+            log_step("No buckets from previous tests, creating a new one")
             lifecycle_ui, bucket_name = self._setup_bucket_and_navigate_to_lifecycle()
         else:
             # Validate list is not empty before accessing first element
             if len(self.created_buckets) == 0:
-                logger.warning("Created buckets list is empty, creating a new bucket")
+                log_step("Created buckets list is empty, creating a new bucket")
                 lifecycle_ui, bucket_name = (
                     self._setup_bucket_and_navigate_to_lifecycle()
                 )
             else:
                 bucket_name = self.created_buckets[0]
-                logger.info(f"Using existing bucket from previous tests: {bucket_name}")
+                log_step(f"Using existing bucket from previous tests: {bucket_name}")
                 lifecycle_ui.navigate_to_bucket_lifecycle(bucket_name)
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
 
         if not rules:
-            logger.info("No existing rules found, creating a rule to delete")
+            log_step("No existing rules found, creating a rule to delete")
             rule_to_delete = create_unique_resource_name("rule", "to-delete")
             lifecycle_ui.create_lifecycle_rule(
                 rule_name=rule_to_delete,
@@ -411,10 +409,10 @@ class TestBucketLifecycleUI:
             assert rule_to_delete in rules, f"Failed to create rule {rule_to_delete}"
         else:
             rule_to_delete = rules[0]
-            logger.info(f"Found existing rule to delete: {rule_to_delete}")
+            log_step(f"Found existing rule to delete: {rule_to_delete}")
 
         initial_rule_count = len(rules)
-        logger.info(f"Initial rule count: {initial_rule_count}")
+        logger.debug(f"Initial rule count: {initial_rule_count}")
 
         lifecycle_ui.delete_lifecycle_rule(rule_to_delete)
         time.sleep(5)  # Wait for backend processing and UI to update
@@ -436,4 +434,4 @@ class TestBucketLifecycleUI:
                 rule_to_delete not in backend_rule_ids
             ), f"Rule {rule_to_delete} still exists in backend after deletion"
 
-        logger.info(f"Successfully deleted lifecycle rule: {rule_to_delete}")
+        log_step(f"Verify rule '{rule_to_delete}' deleted successfully")

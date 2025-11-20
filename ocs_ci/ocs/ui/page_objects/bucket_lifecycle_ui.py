@@ -69,7 +69,7 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
     A class for bucket lifecycle policy UI operations
     """
 
-    def get_lifecycle_policy_from_backend(self, bucket_name, mcg_obj):
+    def get_lifecycle_policy_from_backend(self, bucket_name: str, mcg_obj) -> dict:
         """
         Get lifecycle policy from backend S3 API
 
@@ -78,7 +78,11 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             mcg_obj: MCG object with S3 client
 
         Returns:
-            dict: The lifecycle configuration from backend
+            dict: The lifecycle configuration from backend, or {"Rules": []} if no configuration exists,
+                  or None if an error occurs
+
+        Raises:
+            ClientError: If S3 API call fails (except for NoSuchLifecycleConfiguration)
         """
         try:
             response = mcg_obj.s3_client.get_bucket_lifecycle_configuration(
@@ -94,15 +98,24 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 )
                 return {"Rules": []}
             else:
-                logger.error(f"Failed to get lifecycle configuration: {e}")
-                return None
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                logger.error(
+                    f"Failed to get lifecycle configuration for bucket '{bucket_name}'. "
+                    f"S3 Error Code: {error_code}. Error: {e}. "
+                    f"Verify bucket exists and has proper permissions for lifecycle operations."
+                )
+                raise
 
-    def navigate_to_bucket_lifecycle(self, bucket_name):
+    def navigate_to_bucket_lifecycle(self, bucket_name: str) -> None:
         """
         Navigate to a specific bucket's lifecycle rules page
 
         Args:
             bucket_name (str): Name of the bucket
+
+        Raises:
+            NoSuchElementException: If bucket not found in search results or UI elements not found
+            TimeoutException: If page elements fail to load within timeout period
         """
         logger.info(f"Navigating to lifecycle rules for bucket: {bucket_name}")
 
@@ -196,12 +209,18 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         logger.info(f"Successfully created lifecycle rule: {rule_name}")
 
-    def delete_lifecycle_rule(self, rule_name):
+    def delete_lifecycle_rule(self, rule_name: str) -> None:
         """
         Delete a lifecycle rule
 
         Args:
             rule_name (str): Name of the rule to delete
+
+        Raises:
+            NoSuchElementException: If rule kebab menu or delete option not found
+            TimeoutException: If UI elements fail to load within timeout period
+            WebDriverException: If browser interaction fails
+            ImportError: If format_locator cannot be imported
         """
         logger.info(f"Deleting lifecycle rule: {rule_name}")
 
@@ -218,19 +237,31 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             logger.info(f"Successfully deleted lifecycle rule: {rule_name}")
 
         except (NoSuchElementException, TimeoutException, WebDriverException) as e:
-            logger.error(f"Failed to delete lifecycle rule {rule_name}: {e}")
+            logger.error(
+                f"Failed to delete lifecycle rule '{rule_name}'. "
+                f"Error: {e}. "
+                f"Verify rule exists in the UI and page elements are accessible. "
+                f"Check that kebab menu and delete option are visible."
+            )
             raise
         except ImportError as e:
             logger.error(f"Failed to import format_locator: {e}")
             raise
 
-    def edit_lifecycle_rule(self, rule_name, new_rules):
+    def edit_lifecycle_rule(self, rule_name: str, new_rules: dict) -> None:
         """
         Edit an existing lifecycle rule
 
         Args:
             rule_name (str): Name of the rule to edit
-            new_rules (dict): Dictionary of new rules to apply
+            new_rules (dict): Dictionary of new rules to apply, mapping rule types to their parameters
+
+        Raises:
+            NoSuchElementException: If rule kebab menu or edit option not found
+            TimeoutException: If UI elements fail to load within timeout period
+            WebDriverException: If browser interaction fails
+            ImportError: If format_locator cannot be imported
+            ValueError: If invalid rule parameters provided or unknown rule type
         """
         logger.info(f"Editing lifecycle rule: {rule_name}")
 
@@ -270,13 +301,23 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             logger.info(f"Successfully edited lifecycle rule: {rule_name}")
 
         except (NoSuchElementException, TimeoutException, WebDriverException) as e:
-            logger.error(f"Failed to edit lifecycle rule {rule_name}: {e}")
+            logger.error(
+                f"Failed to edit lifecycle rule '{rule_name}'. "
+                f"Error: {e}. "
+                f"Verify rule exists in the UI and edit dialog elements are accessible. "
+                f"Check that kebab menu, edit option, and rule input fields are visible."
+            )
             raise
         except ImportError as e:
             logger.error(f"Failed to import format_locator: {e}")
             raise
         except ValueError as e:
-            logger.error(f"Invalid rule parameters: {e}")
+            logger.error(
+                f"Invalid rule parameters provided for rule '{rule_name}'. "
+                f"Error: {e}. "
+                f"Provided rules: {new_rules}. "
+                f"Verify parameter format matches expected structure for each rule type."
+            )
             raise
 
     def get_lifecycle_rules_list(self):
