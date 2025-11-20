@@ -955,7 +955,7 @@ def check_dr_status(
         if not (expected_status == "FailingOver" or expected_status == "Relocating"):
             log.info("Verifying DR status on UI...")
             wait_for_text_result = TimeoutSampler(
-                timeout=320,
+                timeout=600,
                 sleep=10,
                 func=acm_obj.wait_until_expected_text_is_found,
                 locator=acm_loc["dr-status"],
@@ -969,6 +969,7 @@ def check_dr_status(
                 )
                 current_status = acm_obj.get_element_text(acm_loc["dr-status"])
                 log.info(f"Current status is {current_status}")
+                acm_obj.take_screenshot()
                 raise ResourceWrongStatusException
 
             log.info(
@@ -1051,6 +1052,7 @@ def check_dr_status(
                 f"current popover message is {current_pop_over_text} "
                 f"but the expected is {expected_status_popover_messages[expected_status]}"
             )
+            acm_obj.take_screenshot()
             raise UnexpectedBehaviour
 
         log.info("Popover message validation is successful")
