@@ -8,7 +8,7 @@ spec:
   storageDeviceSets:
   - name: ocs-deviceset
     count: 1
-    replica: 3
+    replica: 6
     resources: {}
     placement: {}
     dataPVCTemplate:
