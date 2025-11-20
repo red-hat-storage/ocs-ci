@@ -1,24 +1,21 @@
 import logging
 
-from ocs_ci.framework.testlib import (
-    acceptance,
-    post_ocs_upgrade,
-    rdr,
-    skipif_ocs_version,
-    tier1,
-    turquoise_squad,
-)
+import pytest
+
 from ocs_ci.helpers import dr_helpers
 
 logger = logging.getLogger(__name__)
 
 
-@rdr
-@tier1
-@acceptance
-@turquoise_squad
-@post_ocs_upgrade
-@skipif_ocs_version("<4.20")
+# @rdr
+# @tier1
+# @acceptance
+# @post_ocs_upgrade
+# @turquoise_squad
+# Test disabled until CG support is added in a future release. Related bug: DFBUGS-4556
+@pytest.mark.skip(
+    reason="Test disabled until CG support is added in a future release. Related bug: DFBUGS-4556"
+)
 class TestCGConfiguration:
     """
     Test for validating CG behavior for ODF version >= 4.20
