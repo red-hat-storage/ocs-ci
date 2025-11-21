@@ -581,11 +581,7 @@ def is_cg_enabled():
     if config.MULTICLUSTER["multicluster_mode"] != constants.RDR_MODE:
         return False
 
-    ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version >= version.VERSION_4_20:
-        return config.ENV_DATA.get("cg_enabled", True)
-    else:
-        return False
+    return config.ENV_DATA.get("cg_enabled", False)
 
 
 def get_resource_count(kind, namespace=None):
