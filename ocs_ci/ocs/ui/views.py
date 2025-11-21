@@ -1350,16 +1350,27 @@ acm_configuration_4_19 = {
     "name-input-btn": ("#name-input", By.CSS_SELECTOR),
     "vm-page-next-btn": ("button[type='submit']", By.CSS_SELECTOR),
     "dr-policy": ("[id*='select-toggle-id']", By.CSS_SELECTOR),
-    "select-policy": (
-        "(//span[contains(@class, 'c-select__menu-item-main')])[1]",
-        By.XPATH,
-    ),
+    "select-dr-policy": ("(//span[@class='pf-v5-c-select__menu-item-main'])[1]",),
     "selected-protection-type": ("//div[normalize-space()='{}']", By.XPATH),
     "assign": ("button[type='submit']", By.CSS_SELECTOR),
     "conf-msg": ("(//h4[@class='c-alert__title'])[1]", By.XPATH),
     "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
     "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
+    "dr-status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "popover_text": ("//div[@data-test-id='popover-header']", By.XPATH),
+    "kebab-action": (
+        "(//td[@class='pf-v5-c-table__td pf-v5-c-table__action']//button)[2]",
+        By.XPATH,
+    ),
+    "cluster_details_in_popover": (
+        "dl[class='pf-v5-c-description-list pf-m-compact'], "
+        "div[class='pf-v5-c-description-list__group'],"
+        " dd[class='pf-v5-c-description-list__description'], "
+        "div[class='pf-v5-c-description-list__text']",
+        By.CSS_SELECTOR,
+    ),
+    "dr_status_button": ("//button[@data-test-id='dr-status-button']", By.XPATH),
 }
 
 acm_configuration_4_20 = {
