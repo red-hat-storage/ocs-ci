@@ -12,6 +12,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
+
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
@@ -33,6 +34,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     def create_bucket_ui(self, method: str, return_name: bool = False):
         """
         Creates a bucket via UI using specified method.
+
+        Note: For new code, consider using create_bucket_ui_with_details() which always
+        returns a consistent type (tuple[ObjectStorage, str]).
 
         Args:
             method (str): Creation method, either 'obc' or 's3'.
@@ -123,6 +127,56 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         if return_name:
             return ObjectStorage(), name_generator
         return ObjectStorage()
+
+    def create_bucket_ui_with_details(self, method: str) -> tuple[ObjectStorage, str]:
+        """
+        Creates a bucket via UI using specified method and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Args:
+            method (str): Method to use for bucket creation ('obc' or 's3').
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            ValueError: If method is not 'obc' or 's3'.
+        """
+        self.do_click(self.bucket_tab["create_bucket_button"])
+        if method == "obc":
+            return self.create_bucket_via_obc_with_details()
+        elif method == "s3":
+            return self.create_bucket_via_s3_with_details()
+        else:
+            raise ValueError(f"Invalid method: {method}")
+
+    def create_bucket_via_obc_with_details(self) -> tuple[ObjectStorage, str]:
+        """
+        Creates bucket via OBC and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        # Call the existing method with return_name=True to get both values
+        return self.create_bucket_via_obc(return_name=True)
+
+    def create_bucket_via_s3_with_details(self) -> tuple[ObjectStorage, str]:
+        """
+        Creates bucket via S3 and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        # Call the existing method with return_name=True to get both values
+        return self.create_bucket_via_s3(return_name=True)
 
     def create_folder_in_bucket(
         self, bucket_name: str = None, folder_name: str = None
@@ -270,6 +324,22 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         logger.info(f"Successfully created {len(created_buckets)} buckets")
         return created_buckets
+
+    def navigate_to_bucket_by_name(self, bucket_name: str):
+        """
+        Navigate to a specific bucket by clicking on its name in the buckets list.
+
+        Args:
+            bucket_name (str): Name of the bucket to navigate to.
+
+        Raises:
+            NoSuchElementException: If bucket with given name is not found.
+        """
+        logger.info(f"Navigating to bucket: {bucket_name}")
+        # Use XPath to find the bucket link by name
+        bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
+        self.do_click(bucket_link_locator, By.XPATH)
+        logger.info(f"Successfully navigated to bucket: {bucket_name}")
 
     def has_pagination_controls(self) -> bool:
         """
