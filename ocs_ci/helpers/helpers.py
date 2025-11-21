@@ -4710,8 +4710,9 @@ def verify_log_exist_in_pods_logs(
             container=container,
             all_containers=all_containers_flag,
             since=since,
+            grep=expected_log,
+            return_empty_string=True,
         )
-        logger.info(f"logs osd:{pod_logs}")
         if expected_log in pod_logs:
             return True
     return False

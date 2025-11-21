@@ -1882,17 +1882,36 @@ def get_pod_logs(
     all_containers=False,
     since=None,
     tail=None,
+    grep=None,
+    regex=False,
+    case_senitive=False,
+    context=0,
+    return_empty_string=True,
+    first_match_only=True,
 ):
     """
     Get logs from a given pod
 
-    pod_name (str): Name of the pod
-    container (str): Name of the container
-    namespace (str): Namespace of the pod
-    previous (bool): True, if pod previous log required. False otherwise.
-    all_containers (bool): fetch logs from all containers of the resource
-    since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
-    tail (str): number of lines to tail
+    Args:
+        pod_name (str): Name of the pod
+        container (str): Name of the container
+        namespace (str): Namespace of the pod
+        previous (bool): True, if pod previous log required. False otherwise.
+        all_containers (bool): fetch logs from all containers of the resource
+        since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
+        tail (str): number of lines to tail
+        grep (str): filter the logs by the given string
+        regex (bool): True, if the grep is a regex. False otherwise.
+            Applicable only if grep is provided.
+        case_senitive (bool): True, if the grep is case sensitive. False otherwise.
+            Applicable only if grep is provided.
+        context (int): number of lines to show before and after the matching line
+            Applicable only if grep is provided.
+        return_empty_string (bool): True, if the function should return an empty string if no logs are found.
+            Applicable only if grep is provided. Default value is True.
+        first_match_only (bool): True, if the function should return the first match only. False otherwise.
+            Applicable only if grep is provided. Default value is True.
+
     Returns:
         str: Output from 'oc get logs <pod_name> command
 
@@ -1910,8 +1929,18 @@ def get_pod_logs(
         cmd += f" --since={since}"
     if tail:
         cmd += f" --tail={tail}"
-
-    return pod.exec_oc_cmd(cmd, out_yaml_format=False)
+    if grep:
+        regex_flag = "-E" if regex else ""
+        cmd += f" | grep {regex_flag} '{grep}'"
+        if not case_senitive:
+            cmd += " -i"
+        if context:
+            cmd += f" -C {context}"
+        if first_match_only:
+            cmd += " -m 1"
+        if return_empty_string:
+            cmd += " || echo ''"
+    return pod.exec_oc_cmd(cmd, out_yaml_format=False, shell=bool(grep))
 
 
 def get_pod_node(pod_obj):
