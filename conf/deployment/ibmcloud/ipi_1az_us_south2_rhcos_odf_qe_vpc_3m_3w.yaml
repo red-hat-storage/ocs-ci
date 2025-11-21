@@ -26,12 +26,3 @@ ENV_DATA:
   compute_subnets:
     - 'sn-20250917-02'
   security_group_name: 'odf-qe-sg'
-
-
-# The following values need to be set in a separate config and passed to ocs-ci in
-# order to deploy OCP/OCS cluster on IBM Cloud using IPI.
-#
-#AUTH:
-#  ibmcloud:
-#    account_id: ACCOUNT ID PLACEHOLDER
-#    api_key: IBM CLOUD API KEY PLACEHOLDER
