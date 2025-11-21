@@ -14,7 +14,6 @@ from ocs_ci.framework.testlib import (
     skipif_ibm_cloud,
     skipif_lso,
     skipif_ibm_power,
-    skipif_vsphere_ipi,
     skipif_tainted_nodes,
     tier4b,
     skipif_managed_service,
@@ -34,7 +33,6 @@ logger = logging.getLogger(__name__)
 @green_squad
 @tier4b
 @ignore_leftovers
-@skipif_vsphere_ipi
 @skipif_managed_service
 @skipif_hci_provider_or_client
 class TestRwoPVCFencingUnfencing(ManageTest):
