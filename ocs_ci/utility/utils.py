@@ -783,6 +783,8 @@ def download_file(url, filename, **kwargs):
 
     """
     log.debug(f"Download '{url}' to '{filename}'.")
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 600
     with open(filename, "wb") as f:
         r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
@@ -804,6 +806,8 @@ def get_url_content(url, **kwargs):
 
     """
     log.debug(f"Download '{url}' content.")
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 600
     r = requests.get(url, **kwargs)
     assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
     return r.content
@@ -1310,7 +1314,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
         force_download (bool): Force vault cli download even if already present
 
     """
-    res = requests.get(constants.VAULT_VERSION_INFO_URL)
+    res = requests.get(constants.VAULT_VERSION_INFO_URL, timeout=120)
     version = res.url.split("/")[-1].lstrip("v")
     bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
     system = platform.system()
@@ -1348,13 +1352,13 @@ def get_vault_cli(bind_dir=None, force_download=False):
 
 def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0] + "/"
-    r = requests.get(base_build_url)
+    r = requests.get(base_build_url, timeout=120)
     extracting_condition = b"Extracting" in r.content
     failed_build = b"FAILED.md" in r.content
     if extracting_condition:
         log.info("Build is extracting now, may take up to a minute.")
     if failed_build:
-        r = requests.get(base_build_url + "FAILED.md")
+        r = requests.get(base_build_url + "FAILED.md", timeout=120)
         log.info(
             f"Nightly build is not properly generated! Failed with reason: {r.content}"
         )
@@ -1517,6 +1521,14 @@ class TimeoutSampler(object):
         self.func_args = func_args
         self.func_kwargs = func_kwargs
 
+        # In case of underlying func has timeout or sleep parameter, user needs to pass it
+        # as func_timeout or func_sleep to avoid conflict.
+        if "func_timeout" in func_kwargs:
+            func_kwargs["timeout"] = func_kwargs["func_timeout"]
+            del func_kwargs["func_timeout"]
+        if "func_sleep" in func_kwargs:
+            func_kwargs["sleep"] = func_kwargs["func_sleep"]
+            del func_kwargs["func_sleep"]
         # Timestamps of the first and most recent samples
         self.start_time = None
         self.last_sample_time = None
@@ -1625,6 +1637,14 @@ class TimeoutIterator(TimeoutSampler):
             func_args = []
         if func_kwargs is None:
             func_kwargs = {}
+        # In case of underlying func has timeout or sleep parameter, we need to pass it to the super class
+        # so that it can be used in the super class without conflict.
+        if "timeout" in func_kwargs:
+            func_kwargs["func_timeout"] = func_kwargs["timeout"]
+            del func_kwargs["timeout"]
+        if "sleep" in func_kwargs:
+            func_kwargs["func_sleep"] = func_kwargs["sleep"]
+            del func_kwargs["sleep"]
         super().__init__(timeout, sleep, func, *func_args, **func_kwargs)
 
 
@@ -3184,6 +3204,7 @@ def query_quay_for_operator_tags(
             page=page,
         ),
         headers=headers,
+        timeout=120,
     )
     if not resp.ok:
         raise requests.RequestException(resp.json())
@@ -3690,7 +3711,9 @@ def get_available_ocp_versions(channel):
     """
     headers = {"Accept": "application/json"}
     req = requests.get(
-        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel), headers=headers
+        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel),
+        headers=headers,
+        timeout=120,
     )
     data = req.json()
     versions = [Version(node["version"]) for node in data["nodes"]]
@@ -5117,6 +5140,7 @@ def get_latest_acm_tag_unreleased(version):
     response = requests.get(
         "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/",
         params=params,
+        timeout=120,
     )
     responce_data = response.json()
     for data in responce_data["tags"]:
@@ -5258,7 +5282,7 @@ def create_unreleased_oadp_catalog():
         TagNotFoundException: if no image tag for oadp oprator found in brew
 
     """
-    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False)
+    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False, timeout=120)
     json_data = resp.json()["raw_messages"]
     image_tag = None
     ocp_version = version_module.get_semantic_ocp_version_from_config()
