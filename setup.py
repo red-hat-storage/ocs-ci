@@ -50,7 +50,7 @@ setup(
         "numpy==1.23.2",
         "pandas==1.5.2",
         "tabulate==0.9.0",
-        "python-ipmi==0.4.2",
+        "python-ipmi==0.5.7",
         "scipy==1.12.0",
         "PrettyTable==0.7.2",
         "azure-common==1.1.28",
