@@ -299,23 +299,44 @@ def setup_sa_permissions():
     if not sample.wait_for_func_status(result=True):
         raise Exception("Failed to add role to user")
 
-    applogs_per_cmd = (
-        f"oc adm policy add-cluster-role-to-user collect-application-logs"
-        f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+    sample = TimeoutSampler(
+        timeout=60,
+        sleep=10,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc adm policy add-cluster-role-to-user collect-application-logs"
+            f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+        ),
+        expected_output_lst='clusterrole.rbac.authorization.k8s.io/collect-application-logs added: "loki-reader" ',
     )
-    exec_cmd(applogs_per_cmd)
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to add role to user")
 
-    infralogs_per_cmd = (
-        f"oc adm policy add-cluster-role-to-user collect-infrastructure-logs"
-        f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+    sample = TimeoutSampler(
+        timeout=60,
+        sleep=10,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc adm policy add-cluster-role-to-user collect-infrastructure-logs"
+            f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+        ),
+        expected_output_lst='clusterrole.rbac.authorization.k8s.io/collect-infrastructure-logs added: "loki-reader" ',
     )
-    exec_cmd(infralogs_per_cmd)
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to add role to user")
 
-    audit_per_cmd = (
-        f"oc adm policy add-cluster-role-to-user collect-audit-logs"
-        f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+    sample = TimeoutSampler(
+        timeout=60,
+        sleep=10,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc adm policy add-cluster-role-to-user collect-audit-logs"
+            f" -z {sa_name} -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
+        ),
+        expected_output_lst='clusterrole.rbac.authorization.k8s.io/collect-audit-logs added: "loki-reader" ',
     )
-    exec_cmd(audit_per_cmd)
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to add role to user")
 
     exec_cmd(
         '/bin/bash -c "TOKEN=$(oc create token loki-reader -n openshift-logging)" '
