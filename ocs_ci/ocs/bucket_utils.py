@@ -1130,7 +1130,7 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.status.phase}'"
     )
-    res = exec_cmd(cmd=cmd, use_shell=True)
+    res = exec_cmd(cmd=cmd, shell=True)
     if res.returncode != 0:
         logger.error(f"Failed to fetch backingstore details\n{res.stderr}")
 
@@ -1141,7 +1141,7 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.spec.type}'"
     )
-    res = exec_cmd(cmd=cmd, use_shell=True)
+    res = exec_cmd(cmd=cmd, shell=True)
     if res.returncode != 0:
         logger.error(f"Failed to fetch backingstore type\n{res.stderr}")
     return res.stdout.decode()
