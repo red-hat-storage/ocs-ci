@@ -175,7 +175,7 @@ class FusionDataFoundationDeployment:
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
             clustersetup = StorageClusterSetup()
-            default_storage_class = storage_class.get_storageclass()
+            default_storage_class = storage_class.get_storageclass() or "localblock"
             create_lvs_resource(default_storage_class, default_storage_class)
             add_storage_label()
             clustersetup.setup_storage_cluster()

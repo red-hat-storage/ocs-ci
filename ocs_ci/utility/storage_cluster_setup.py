@@ -45,7 +45,7 @@ class StorageClusterSetup(object):
         self.arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
         self.platform = config.ENV_DATA["platform"]
         self.local_storage = config.DEPLOYMENT.get("local_storage")
-        self.storage_class = storage_class.get_storageclass()
+        self.storage_class = storage_class.get_storageclass() or "localblock"
         self.managed_ibmcloud = (
             config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA.get("deployment_type") == "managed"
