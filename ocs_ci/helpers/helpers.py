@@ -4898,8 +4898,9 @@ def verify_log_exist_in_pods_logs(
             container=container,
             all_containers=all_containers_flag,
             since=since,
+            grep=expected_log,
+            return_empty_string=True,
         )
-        logger.info(f"logs osd:{pod_logs}")
         if expected_log in pod_logs:
             return True
     return False
@@ -5053,7 +5054,7 @@ def odf_cli_set_log_level(service, log_level, subsystem):
     cmd = f"odf-cli set ceph log-level {service} {subsystem} {log_level}"
 
     logger.info(cmd)
-    return exec_cmd(cmd, use_shell=True)
+    return exec_cmd(cmd, shell=True)
 
 
 def get_ceph_log_level(service, subsystem):
