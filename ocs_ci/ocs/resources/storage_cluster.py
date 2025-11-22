@@ -3429,9 +3429,8 @@ def check_unnecessary_pods_present():
     present.
     """
     no_noobaa = config.COMPONENTS["disable_noobaa"]
-    no_ceph = (
-        config.DEPLOYMENT["external_mode"] or config.ENV_DATA["mcg_only_deployment"]
-    )
+    mcg_only = config.ENV_DATA["mcg_only_deployment"]
+    no_ceph = config.DEPLOYMENT["external_mode"]
     pod_names = [
         pod.name for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
     ]
@@ -3450,7 +3449,7 @@ def check_unnecessary_pods_present():
             raise InvalidPodPresent(
                 f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
             )
-    if no_ceph:
+    if mcg_only:
         for invalid_pod_name in constants.CEPH_PODS_NAMES:
             invalid_pods_found.extend(
                 [
@@ -3459,6 +3458,20 @@ def check_unnecessary_pods_present():
                     if pod_name.startswith(invalid_pod_name)
                 ]
             )
+        if invalid_pods_found:
+            raise InvalidPodPresent(
+                f"Pods {invalid_pods_found} should not be present because Ceph is not available"
+            )
+    if no_ceph:
+        for invalid_pod_name in constants.CEPH_PODS_NAMES:
+            if invalid_pod_name != constants.ROOK_CEPH_OPERATOR:
+                invalid_pods_found.extend(
+                    [
+                        pod_name
+                        for pod_name in pod_names
+                        if pod_name.startswith(invalid_pod_name)
+                    ]
+                )
         if invalid_pods_found:
             raise InvalidPodPresent(
                 f"Pods {invalid_pods_found} should not be present because Ceph is not available"
