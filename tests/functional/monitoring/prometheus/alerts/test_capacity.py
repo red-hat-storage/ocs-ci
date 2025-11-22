@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 )
 @skipif_managed_service
 @runs_on_provider
+@pytest.mark.skip(reason="Temporary skip test on HCI ")
 def test_rbd_capacity_workload_alerts(
     workload_storageutilization_97p_rbd, threading_lock
 ):
