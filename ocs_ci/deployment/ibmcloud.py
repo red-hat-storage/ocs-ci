@@ -7,6 +7,7 @@ on IBM Cloud Platform.
 import json
 import logging
 import os
+import time
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -402,6 +403,78 @@ class IBMCloudIPI(CloudDeploymentBase):
                 )
                 exec_cmd(cmd)
 
+        def _delete_vpc(resource_name_id_map):
+            """
+            Delete VPC
+
+            Args:
+                resource_name_id_map (dict): Dictionary which contains resource name as key and resource type as value
+                   e.g: {'vavuthuibmf1-vsdwj-vpc': 'is.vpc', 'ruse-mustang-unarmored-negate': 'is.security-group'}
+
+            """
+            logger.info(f"Deleting VPC. Existing resources: {resource_name_id_map}")
+            try:
+                for name, res_type in resource_name_id_map.items():
+                    if res_type == "is.subnet":
+                        cmd = f"ibmcloud is subnet {name} --show-attached --output json"
+                        result = exec_cmd(cmd)
+                        subnet_resources = json.loads(result.stdout)
+                        for lb in subnet_resources.get("load_balancers", []):
+                            lb_name = lb["name"]
+                            logger.info(
+                                f"Deleting Load balancer {lb_name} associated with subnet {name}"
+                            )
+                            delete_lb_cmd = (
+                                f"ibmcloud is load-balancer-delete {lb_name} -f"
+                            )
+                            exec_cmd(delete_lb_cmd)
+                            time.sleep(10)
+
+                        delete_subnet_cmd = f"ibmcloud is subnet-delete {name} -f"
+                        exec_cmd(delete_subnet_cmd)
+
+                for name, res_type in resource_name_id_map.items():
+                    if res_type == "is.public-gateway":
+                        logger.info(f"Deleting public gateway {name}")
+                        delete_public_gateway_cmd = (
+                            f"ibmcloud is public-gateway-delete {name} -f"
+                        )
+                        exec_cmd(delete_public_gateway_cmd)
+
+                for name, res_type in resource_name_id_map.items():
+                    if res_type == "is.floating-ip":
+                        logger.info(f"Deleting floating-ip {name}")
+                        delete_floating_ip_cmd = (
+                            f"ibmcloud is floating-ip-delete {name} -f"
+                        )
+                        exec_cmd(delete_floating_ip_cmd)
+
+                for name, res_type in resource_name_id_map.items():
+                    if res_type == "is.security-group":
+                        if config.ENV_DATA["cluster_name"] in res_type:
+                            logger.info(f"Deleting security-group {name}")
+                            delete_security_group_cmd = (
+                                f"ibmcloud is security-group-delete {name} -f"
+                            )
+                            exec_cmd(delete_security_group_cmd)
+
+                for name, res_type in resource_name_id_map.items():
+                    if res_type == "is.network-acl":
+                        if config.ENV_DATA["cluster_name"] in res_type:
+                            logger.info(f"Deleting network-acl {name}")
+                            delete_network_acl_cmd = (
+                                f"ibmcloud is network-acl-delete {name} -f"
+                            )
+                            exec_cmd(delete_network_acl_cmd)
+
+                for name, res_type in resource_name_id_map.items():
+                    if res_type == "is.vpc":
+                        logger.info(f"Deleting vpc {name}")
+                        delete_network_acl_cmd = f"ibmcloud is vpc-delete {name} -f"
+                        exec_cmd(delete_network_acl_cmd)
+            except CommandFailed as ex:
+                logger.error(f"Failed to delete resource: {ex}")
+
         def _delete_resources(resources, ignore_errors=False):
             """
             Deleting leftover resources.
@@ -429,9 +502,23 @@ class IBMCloudIPI(CloudDeploymentBase):
             if not leftovers:
                 logger.info("No leftovers found")
             else:
-                resource_names = set([r["name"] for r in leftovers])
-                logger.info(f"Deleting leftovers {resource_names}")
-                _delete_resources(resource_names, ignore_errors=True)
+                resource_name_id_map = {}
+                is_vpc_exists = False
+                for r in leftovers:
+                    resource_name_id_map[r["name"]] = r["resource_id"]
+                    if r["resource_id"] == "is.vpc":
+                        is_vpc_exists = True
+                if is_vpc_exists:
+                    _delete_vpc(resource_name_id_map)
+                    leftovers = _get_resources(resource_group)
+                    if leftovers:
+                        resource_names = set([r["name"] for r in leftovers])
+                        logger.info(f"Deleting leftovers {resource_names}")
+                        _delete_resources(resource_names, ignore_errors=True)
+                else:
+                    resource_names = set([r["name"] for r in leftovers])
+                    logger.info(f"Deleting leftovers {resource_names}")
+                    _delete_resources(resource_names, ignore_errors=True)
             reclamations = _get_reclamations(resource_group)
             if reclamations:
                 _delete_reclamations(reclamations)
