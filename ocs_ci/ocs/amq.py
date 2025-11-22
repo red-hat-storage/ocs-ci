@@ -1,3 +1,4 @@
+
 """
 AMQ Class to run amq specific tests
 """
@@ -1036,6 +1037,173 @@ class AMQ(object):
             switch_to_default_rook_cluster_project()
             run_cmd(f"oc delete project {kafka_namespace}")
             self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+            
+            # NEW: Cleanup Strimzi leftovers (CRDs, RBAC, Deployments, myproject namespace)
+            log.info("Running extended Strimzi/Kafka cleanup...")
+            self.cleanup_strimzi_resources()
+            
+    def cleanup_strimzi_resources(self):
+        """
+        Clean up all leftover Strimzi/Kafka resources in the cluster:
+        - CRDs
+        - ClusterRoles
+        - ClusterRoleBindings
+        - Namespaced RoleBindings
+        - Deployments (strimzi-cluster-operator)
+        - Namespace 'myproject' (force-delete if required)
+        """
+
+        log.info("Starting Strimzi/Kafka cleanup routine...")
+
+        #
+        # 1. Delete Strimzi/Kafka CRDs
+        #
+        try:
+            crd_list = run_cmd(
+                "oc get crd | grep -E 'kafka|strimzi' | awk '{print $1}' || true",
+                shell=True,
+                ignore_error=True,
+            ).splitlines()
+
+            for crd in crd_list:
+                log.info(f"Deleting CRD: {crd}")
+                run_cmd(f"oc delete crd {crd} --ignore-not-found=true", shell=True, ignore_error=True)
+
+            # ensure terminating CRDs are removed
+            for _ in range(12):  # ~2 minutes
+                remaining = run_cmd(
+                    "oc get crd | grep -E 'kafka|strimzi' | awk '{print $1}' || true",
+                    shell=True,
+                    ignore_error=True,
+                ).splitlines()
+                if not remaining:
+                    break
+
+                log.warning(f"CRDs still terminating: {remaining}")
+                for crd in remaining:
+                    run_cmd(
+                        f"oc patch crd {crd} -p '{{\"metadata\":{{\"finalizers\":[]}}}}' --type=merge'",
+                        shell=True,
+                        ignore_error=True,
+                    )
+                    run_cmd(
+                        f"oc delete crd {crd} --ignore-not-found=true --wait=true --timeout=60s",
+                        shell=True,
+                        ignore_error=True,
+                    )
+
+                time.sleep(10)
+
+        except Exception as e:
+            log.warning(f"Failed CRD cleanup: {e}")
+
+        #
+        # 2. ClusterRoles
+        #
+        try:
+            roles = run_cmd(
+                "oc get clusterrole | grep strimzi | awk '{print $1}'",
+                shell=True,
+                ignore_error=True,
+            ).splitlines()
+
+            for role in roles:
+                log.info(f"Deleting ClusterRole: {role}")
+                run_cmd(f"oc delete clusterrole {role} --ignore-not-found=true", ignore_error=True)
+        except Exception as e:
+            log.warning(f"Failed ClusterRole cleanup: {e}")
+
+        #
+        # 3. ClusterRoleBindings
+        #
+        try:
+            bindings = run_cmd(
+                "oc get clusterrolebinding | grep strimzi | awk '{print $1}'",
+                shell=True,
+                ignore_error=True,
+            ).splitlines()
+
+            for binding in bindings:
+                log.info(f"Deleting ClusterRoleBinding: {binding}")
+                run_cmd(f"oc delete clusterrolebinding {binding} --ignore-not-found=true", ignore_error=True)
+        except Exception as e:
+            log.warning(f"Failed ClusterRoleBinding cleanup: {e}")
+
+        #
+        # 4. Namespaced RoleBindings
+        #
+        try:
+            ns_list = run_cmd(
+                "oc get ns -o jsonpath='{.items[*].metadata.name}'",
+                shell=True,
+                ignore_error=True,
+            ).split()
+
+            for ns in ns_list:
+                ns_rbs = run_cmd(
+                    f"oc get rolebinding -n {ns} | grep strimzi | awk '{{print $1}}' || true",
+                    shell=True,
+                    ignore_error=True,
+                ).splitlines()
+
+                for rb in ns_rbs:
+                    log.info(f"Deleting namespaced RoleBinding: {rb} in {ns}")
+                    run_cmd(f"oc delete rolebinding {rb} -n {ns} --ignore-not-found=true", ignore_error=True)
+
+        except Exception as e:
+            log.warning(f"Failed RoleBinding cleanup: {e}")
+
+        #
+        # 5. Delete strimzi-cluster-operator deployments in any namespace
+        #
+        try:
+            ns_list = run_cmd(
+                "oc get ns -o jsonpath='{.items[*].metadata.name}'",
+                shell=True,
+                ignore_error=True,
+            ).split()
+
+            for ns in ns_list:
+                deployments = run_cmd(
+                    f"oc get deployment -n {ns} -o jsonpath='{{.items[*].metadata.name}}' | tr ' ' '\\n' | grep strimzi-cluster-operator || true",
+                    shell=True,
+                    ignore_error=True,
+                ).splitlines()
+
+                for dep in deployments:
+                    log.info(f"Deleting leftover deployment {dep} in namespace {ns}")
+                    run_cmd(
+                        f"oc delete deployment {dep} -n {ns} --ignore-not-found=true --force --grace-period=0",
+                        shell=True,
+                        ignore_error=True,
+                    )
+        except Exception as e:
+            log.warning(f"Failed Deployment cleanup: {e}")
+
+        #
+        # 6. Delete namespace 'myproject' (simple + forced delete)
+        #
+        try:
+            log.info("Deleting namespace 'myproject' ...")
+            run_cmd(
+                "oc delete ns myproject --ignore-not-found=true --wait=true --timeout=180s",
+                shell=True,
+                ignore_error=True,
+            )
+        except Exception:
+            log.warning("Namespace myproject did not delete normally. Forcing delete.")
+            run_cmd(
+                "oc patch ns myproject -p '{\"metadata\":{\"finalizers\":[]}}' --type=merge'",
+                shell=True,
+                ignore_error=True,
+            )
+            run_cmd(
+                "oc delete ns myproject --ignore-not-found=true --force --grace-period=0",
+                shell=True,
+                ignore_error=True,
+            )
+
+        log.info("Completed Strimzi/Kafka cleanup.")
 
     def check_amq_cluster_exists(self):
         """
