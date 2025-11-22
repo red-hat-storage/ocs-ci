@@ -234,6 +234,7 @@ from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
+from ocs_ci.ocs import md_blow
 
 log = logging.getLogger(__name__)
 
@@ -3531,6 +3532,21 @@ def bucket_factory_fixture(
     request.addfinalizer(bucket_cleanup)
 
     return _create_buckets
+
+
+@pytest.fixture()
+def md_blow_factory(request):
+    """
+    Returns md_blow object
+    """
+    blow_io = md_blow.MdBlow()
+    blow_io.increase_core_pod_cpu_memory()
+
+    def teardown():
+        blow_io.reduce_core_pod_cpu_memory()
+
+    request.addfinalizer(teardown)
+    return blow_io
 
 
 @pytest.fixture(scope="class")
