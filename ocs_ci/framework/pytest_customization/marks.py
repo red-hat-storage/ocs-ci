@@ -402,37 +402,6 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
 
-hci_client_required = pytest.mark.skipif(
-    not (
-        config.default_cluster_ctx.ENV_DATA["platform"].lower()
-        in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_CLIENT
-    ),
-    reason="Test runs ONLY on Fusion HCI Client cluster",
-)
-
-hci_provider_required = pytest.mark.skipif(
-    not (
-        config.default_cluster_ctx.ENV_DATA["platform"].lower()
-        in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_PROVIDER
-    ),
-    reason="Test runs ONLY on Fusion HCI Provider cluster",
-)
-hci_provider_and_client_required = pytest.mark.skipif(
-    not (
-        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.hci_provider_exist()
-        and config.hci_client_exist()
-    ),
-    reason="Test runs ONLY on Fusion HCI provider and client clusters",
-)
-
-data_replication_separation_required = pytest.mark.skipif(
-    config.DEPLOYMENT.get("enable_data_replication_separation") is False,
-    reason="Test runs only on deployments with enabled data replication separation",
-)
-
 
 # when run_on_all_clients marker is used, there needs to be added cluster_index
 # parameter to the test to prevent any issues with the test parametrization
@@ -485,6 +454,38 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
 run_on_all_clients = setup_multicluster_marker(pytest.mark.run_on_all_clients)
 run_on_all_clients_push_missing_configs = setup_multicluster_marker(
     pytest.mark.run_on_all_clients, True
+)
+
+
+hci_client_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_CLIENT
+    ),
+    reason="Test runs ONLY on Fusion HCI Client cluster",
+)
+
+hci_provider_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_PROVIDER
+    ),
+    reason="Test runs ONLY on Fusion HCI Provider cluster",
+)
+hci_provider_and_client_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.hci_provider_exist()
+        and config.hci_client_exist()
+    ),
+    reason="Test runs ONLY on Fusion HCI provider and client clusters",
+)
+
+data_replication_separation_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("enable_data_replication_separation") is False,
+    reason="Test runs only on deployments with enabled data replication separation",
 )
 
 kms_config_required = pytest.mark.skipif(
