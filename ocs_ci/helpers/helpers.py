@@ -3133,10 +3133,12 @@ def validate_pods_are_running_and_not_restarted(pod_name, pod_restart_count, nam
     )
     pod_state = pod_obj.get("status").get("phase")
     if pod_state == "Running" and restart_count == pod_restart_count:
-        logger.info("Pod is running state and restart count matches with previous one")
+        logger.info(
+            f"{pod_name} is running state and restart count matches with previous one"
+        )
         return True
     logger.error(
-        f"Pod is in {pod_state} state and restart count of pod {restart_count}"
+        f"{pod_name} is in {pod_state} state and restart count of pod {restart_count}"
     )
     logger.info(f"{pod_obj}")
     return False
