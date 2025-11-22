@@ -196,7 +196,6 @@ class TestCSIADDonDaemonset(ManageTest):
                 f"node {csi_pod_running_nodes_name} which is not a worker node"
             )
             csi_pod_running_nodes_name.append(csi_pod_running_node_name)
-            logger.info(f" {csi_addon_pods} : {pod_obj}, {dir(csi_addon_pods)}")
 
         pod_missed_node = set(worker_nodes_names) - set(csi_pod_running_nodes_name)
         assert (
@@ -230,7 +229,7 @@ class TestCSIADDonDaemonset(ManageTest):
 
         assert wait_for_pods_to_be_running(
             namespace=namespace, pod_names=csi_addon_pod_names_list
-        ), "CSI-addons pod didn't came up is running sattus "
+        ), "CSI-addons pod didn't came up is running status "
 
     @tier1
     @green_squad
