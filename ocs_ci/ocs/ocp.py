@@ -235,8 +235,7 @@ class OCP(object):
             config.switch_ctx(original_context)
 
         if out_yaml_format:
-            return yaml.safe_load(out)
-
+            return yaml.load(out, Loader=yaml.CSafeLoader)
         return out
 
     @retry(CommandFailed, tries=3, delay=30, backoff=1)
