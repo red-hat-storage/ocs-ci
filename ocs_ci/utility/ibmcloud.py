@@ -41,12 +41,14 @@ logger = logging.getLogger(name=__file__)
 ibm_config = config.AUTH.get("ibmcloud", {})
 
 
-def login(region=None):
+def login(region=None, resource_group=None):
     """
     Login to IBM Cloud cluster
 
     Args:
         region (str): region to log in, if not specified it will use one from config
+        resource_group (str): resource group to log in, if not specified it will use one from config
+            or nothing if not defined
     """
     api_key = ibm_config["api_key"]
     login_cmd = f"ibmcloud login --apikey {api_key}"
@@ -60,6 +62,14 @@ def login(region=None):
         region = config.ENV_DATA.get("region")
     if region:
         login_cmd += f" -r {region}"
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if not resource_group and ibm_cloud_managed:
+        resource_group = config.ENV_DATA.get("resource_group")
+    if resource_group:
+        login_cmd += f" -g {resource_group}"
     logger.info("Logging to IBM cloud")
     run_cmd(login_cmd, secrets=[api_key])
     logger.info("Successfully logged in to IBM cloud")
@@ -108,6 +118,12 @@ def get_region(cluster_path):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file) as f:
         metadata = json.load(f)
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        return metadata["region"]
     return metadata["ibmcloud"]["region"]
 
 
@@ -125,6 +141,12 @@ def get_resource_group_name(cluster_path):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file) as f:
         metadata = json.load(f)
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        return metadata["resourceGroupName"]
     return metadata["ibmcloud"]["resourceGroupName"]
 
 
@@ -242,7 +264,7 @@ def create_cluster(cluster_name):
     provider = config.ENV_DATA["provider"]
     worker_availability_zones = config.ENV_DATA.get("worker_availability_zones", [])
     worker_zones_number = len(worker_availability_zones)
-    zone = config.ENV_DATA["zone"]
+    zone = config.ENV_DATA["worker_availability_zone"]
     flavor = config.ENV_DATA["worker_instance_type"]
     worker_replicas = config.ENV_DATA["worker_replicas"]
     if worker_zones_number > 1:
@@ -261,7 +283,10 @@ def create_cluster(cluster_name):
         if semantic_ocp_version >= util_version.VERSION_4_15:
             cmd += " --disable-outbound-traffic-protection"
         vpc_id = config.ENV_DATA["vpc_id"]
-        subnet_id = config.ENV_DATA["subnet_id"]
+        subnet_id = config.ENV_DATA.get("subnet_id")
+        subnet_ids_per_zone = config.ENV_DATA.get("subnet_ids_per_zone", {}).get(zone)
+        if subnet_ids_per_zone:
+            subnet_id = subnet_ids_per_zone
         cmd += f" --vpc-id {vpc_id} --subnet-id  {subnet_id} --zone {zone}"
         cos_instance = config.ENV_DATA["cos_instance"]
         cmd += f" --cos-instance {cos_instance}"
@@ -416,10 +441,20 @@ class IBMCloud(object):
         self.restart_nodes(nodes)
 
         if wait:
+            timeout = 300
+            ibm_cloud_managed = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if ibm_cloud_managed:
+                timeout = 3000
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach ready state")
             wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_READY, timeout=180, sleep=5
+                node_names=node_names,
+                status=constants.NODE_READY,
+                timeout=timeout,
+                sleep=15,
             )
 
     def stop_nodes(self, nodes, wait=True):
@@ -443,10 +478,17 @@ class IBMCloud(object):
             run_cmd(cmd.format(node))
 
         if wait:
+            timeout = 300
+            ibm_cloud_managed = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if ibm_cloud_managed:
+                timeout = 900
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
             wait_for_nodes_status(
-                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                node_names, constants.NODE_NOT_READY, timeout=timeout, sleep=5
             )
 
     def restart_nodes(self, nodes, timeout=900, wait=True):
@@ -796,7 +838,7 @@ class IBMCloudIPI(object):
             force (bool): True for force instance stop, False otherwise
             timeout (int): Timeout for the command, defaults to 300 seconds.
         """
-        logger.info(f"Stopping instances {list(node.name for node in nodes )}")
+        logger.info(f"Stopping instances {list(node.name for node in nodes)}")
         self.stop_nodes(nodes=nodes, force=force)
         if wait:
             for node in nodes:
@@ -808,7 +850,7 @@ class IBMCloudIPI(object):
                     node_status=constants.STATUS_STOPPED,
                 )
                 sample.wait_for_func_status(result=True)
-        logger.info(f"Starting instances {list(node.name for node in nodes )}")
+        logger.info(f"Starting instances {list(node.name for node in nodes)}")
 
         self.start_nodes(nodes=nodes)
         if wait:

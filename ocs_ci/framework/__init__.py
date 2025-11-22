@@ -9,6 +9,7 @@ under section PYTEST_DONT_REWRITE
 
 # Use the new python 3.7 dataclass decorator, which provides an object similar
 # to a namedtuple, but allows type enforcement and defining methods.
+import functools
 import os
 import yaml
 import logging
@@ -494,6 +495,21 @@ class MultiClusterConfig:
         self.switch_ctx(
             self.get_cluster_type_indices_list(cluster_type)[num_of_cluster]
         )
+
+    def run_for_all_clusters(self, func):
+        """
+        A decorator to run the decorated function for all clusters
+        and switch context between them.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for cluster_index in range(self.nclusters):
+                self.switch_ctx(cluster_index)
+                logger.info(f"Running '{func.__name__}' for cluster {cluster_index}")
+                func(*args, **kwargs)
+
+        return wrapper
 
     class RunWithConfigContext(object):
         def __init__(self, config_index):
