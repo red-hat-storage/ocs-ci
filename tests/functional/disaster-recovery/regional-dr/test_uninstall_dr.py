@@ -17,16 +17,15 @@ logger = logging.getLogger(__name__)
 @tier2
 @turquoise_squad
 @skipif_ocs_version("<4.19")
-class TestFailoverAndRelocate:
+class UninstallDR:
     """
     Test Failover and Relocate actions via CLI and UI
 
     """
 
-    def test_failover_and_relocate(
+    def test_uninstall_dr(
         self,
         dr_workload,
-        nodes_multicluster,
     ):
         """
         Tests to verify application failover when the primary cluster is either UP or DOWN and relocate between managed
