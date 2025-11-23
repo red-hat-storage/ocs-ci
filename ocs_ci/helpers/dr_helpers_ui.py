@@ -788,50 +788,61 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         return False
 
 
-def assign_drpolicy_for_discovered_vms_via_ui(
+def check_or_assign_drpolicy_for_discovered_vms_via_ui(
     acm_obj,
-    vms: List[str],
+    vms: List[object],
+    managed_cluster_name,
+    assign_policy=True,
     standalone=True,
     protection_name=None,
     namespace=None,
-    vms_name=None,
-    managed_cluster_name=None,
 ):
     """
-    This function can be used to assign Data Policy via UI to Discovered VMs via Virtual machines page
-    of the ACM console.
+    This function can be used to check the VM status and assign Data Policy using UI to Discovered VMs
+    via Virtual machines page of the ACM console.
     Starting ODF 4.19 and ACM 2.14, Data Policy can be assigned as Standalone or Shared Protection type (if there is an
     existing DRPC for another VM workload, and you want to club it together)
 
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
-        vms (list): Specify the names of VMs for DR protection in the form of a list
+        vms (object): Contains object of VMs for DR protection in the form of a list
+        managed_cluster_name (str): Name of the managed cluster where VM workload is running
+        assign_policy (bool): Optional steps when only VM status has to be checked, DRPolicy won't be applied when False
         standalone (bool): True by default, will switch to Shared Protection type when False
         protection_name (str): Protection name used to DR protect the workload using which
                                 DRPC and Placement would be created
         namespace (str): None by default, namespace of the workload
-        vms_name (str): Name of the VM
-        managed_cluster_name (str): Name of the managed cluster where VM workload is running
+
+
      Returns:
          True if function executes successfully
 
     """
-    if not vms or any(not vm.strip() for vm in vms):
-        raise ValueError("Parameter 'vms' is required and must be a non-empty list")
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    for _ in vms:
-        assert navigate_using_fleet_virtulization(
-            acm_obj, managed_cluster_name=managed_cluster_name
+    log.info("Look for 'All Clusters'")
+    all_clusters = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["all-clusters"], expected_text="All clusters"
+    )
+    if all_clusters:
+        log.info("All Clusters option found")
+    else:
+        log.warning("'All Clusters' not found on the VMs page")
+        return False
+    for vm in vms:
+        log.info("Select the cluster where VM workload is running")
+        acm_obj.do_click(
+            format_locator(acm_loc["managed-cluster-name"], managed_cluster_name)
         )
+        log.info(f"Managed cluster {managed_cluster_name} found ")
         log.info("Select the namespace where VM workload is running")
         acm_obj.do_click(
-            format_locator(acm_loc["cnv-workload-namespace"]),
-            namespace,
+            format_locator(acm_loc["cnv-workload-namespace"], namespace),
             enable_screenshot=True,
         )
+        log.info(f"Namespace {namespace} found on cluster {managed_cluster_name}")
         log.info("Click on the VM")
         acm_obj.do_click(
-            format_locator(acm_loc["cnv-vm-name"]), vms_name, enable_screenshot=True
+            format_locator(acm_loc["cnv-vm-name"], vm.vm_name), enable_screenshot=True
         )
         log.info("Check the status of the VM")
         vm_current_status = acm_obj.get_element_text(acm_loc["vm-status"])
@@ -842,58 +853,64 @@ def assign_drpolicy_for_discovered_vms_via_ui(
             assert (
                 wait_for_status
             ), f"Expected VM status is 'Running', but got '{vm_current_status}'"
-        log.info("Click on the Actions button")
-        acm_obj.do_click(acm_loc["vm-actions"], enable_screenshot=True)
-        log.info("Click on Manage disaster recovery")
-        acm_obj.do_click(acm_loc["manage-dr"], enable_screenshot=True)
-        log.info("Click on Enroll virtual machine")
-        acm_obj.do_click(acm_loc["enroll-vm"], enable_screenshot=True)
-        if standalone:
-            log.info("Send Protection name")
-            acm_obj.do_click(acm_loc["name-input-btn"])
-            acm_obj.do_send_keys(acm_loc["name-input-btn"], text=protection_name)
         else:
-            log.info("Protecting VM with Shared Protection type")
-            acm_obj.do_click(acm_loc["select-shared"], enable_screenshot=True)
-            radio_buttons = acm_obj.get_elements(acm_loc["select-drpc"])
-            # Assert that exactly one element is found
-            assert (
-                len(radio_buttons) == 1
-            ), f"Expected 1 radio button but found {len(radio_buttons)}"
-            log.info("Expected 1 radio button found, select existing DRPC")
-            acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
-        log.info("Click next")
-        acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
-        if standalone:
-            log.info("Select policy")
-            acm_obj.do_click(acm_loc["dr-policy"], enable_screenshot=True)
-            acm_obj.do_click(acm_loc["select-policy"], enable_screenshot=True)
-        log.info("Click next")
-        acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
-        log.info("Verify selected protection type")
-        selected_protection_type = "Standalone" if standalone else "Shared"
-        protection_type = acm_obj.get_element_text(
-            format_locator(
-                acm_loc["selected-protection-type"], selected_protection_type
+            log.info(
+                f"VM status is running on the managed cluster {managed_cluster_name}"
             )
-        )
-        assert protection_type == (
-            "Standalone" if standalone else "Shared"
-        ), f"Expected {'Standalone' if standalone else 'Shared'}, but got '{protection_type}'"
-        log.info("Assign DRPolicy")
-        acm_obj.do_click(acm_loc["assign"], enable_screenshot=True)
-        time.sleep(2)
-        log.info("Policy confirmation")
-        conf_msg = acm_obj.get_element_text(acm_loc["conf-msg"])
-        log.info(f"Confirmation message is {conf_msg}")
-        expected_conf_msg = conf_msg.split("\n", 1)[1].strip()
-        assert expected_conf_msg == "New policy assigned to application"
-        log.info("Close page")
-        acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
-        return True
+        if assign_policy:
+            log.info("Click on the Actions button")
+            acm_obj.do_click(acm_loc["vm-actions"], enable_screenshot=True)
+            log.info("Click on Manage disaster recovery")
+            acm_obj.do_click(acm_loc["manage-dr"], enable_screenshot=True)
+            log.info("Click on Enroll virtual machine")
+            acm_obj.do_click(acm_loc["enroll-vm"], enable_screenshot=True)
+            if standalone:
+                log.info("Protecting VM with Standalone Protection type")
+                log.info("Send Protection name")
+                acm_obj.do_click(acm_loc["name-input-btn"])
+                acm_obj.do_send_keys(acm_loc["name-input-btn"], text=protection_name)
+            else:
+                log.info("Protecting VM with Shared Protection type")
+                acm_obj.do_click(acm_loc["select-shared"], enable_screenshot=True)
+                radio_buttons = acm_obj.get_elements(acm_loc["select-drpc"])
+                # Assert that exactly one element is found
+                assert (
+                    len(radio_buttons) == 1
+                ), f"Expected 1 radio button but found {len(radio_buttons)}"
+                log.info("Expected 1 radio button found, select existing DRPC")
+                acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
+            log.info("Click next")
+            acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
+            if standalone:
+                log.info("Select policy")
+                acm_obj.do_click(acm_loc["dr-policy"], enable_screenshot=True)
+                acm_obj.do_click(acm_loc["select-policy"], enable_screenshot=True)
+            log.info("Click next")
+            acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
+            log.info("Verify selected protection type")
+            selected_protection_type = "Standalone" if standalone else "Shared"
+            protection_type = acm_obj.get_element_text(
+                format_locator(
+                    acm_loc["selected-protection-type"], selected_protection_type
+                )
+            )
+            assert protection_type == (
+                "Standalone" if standalone else "Shared"
+            ), f"Expected {'Standalone' if standalone else 'Shared'}, but got '{protection_type}'"
+            log.info("Assign DRPolicy")
+            acm_obj.do_click(acm_loc["assign"], enable_screenshot=True)
+            time.sleep(2)
+            log.info("Policy confirmation")
+            conf_msg = acm_obj.get_element_text(acm_loc["conf-msg"])
+            log.info(f"Confirmation message is {conf_msg}")
+            expected_conf_msg = conf_msg.split("\n", 1)[1].strip()
+            assert expected_conf_msg == "New policy assigned to application"
+            log.info("Close page")
+            acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
+    return True
 
 
-def navigate_using_fleet_virtulization(acm_obj, managed_cluster_name):
+def navigate_using_fleet_virtulization(acm_obj):
     """
     Starting ACM 2.15, VMs page from the ACM console has been removed and is integrated
     with the Virtulization Operator which is required to be installed on the ACM hub cluster and
@@ -907,7 +924,6 @@ def navigate_using_fleet_virtulization(acm_obj, managed_cluster_name):
 
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
-        managed_cluster_name (str): Name of the managed cluster where VM is running
 
     Returns:
         True if VM is found on the selected managed cluster and function executes successfully, False otherwise
@@ -919,19 +935,7 @@ def navigate_using_fleet_virtulization(acm_obj, managed_cluster_name):
     acm_obj.page_has_loaded(retries=10, sleep_time=5)
     log.info("From side nav bar, navigate to VirtualMachines page")
     acm_obj.do_click(acm_loc["nav-bar-vms-page"])
-    log.info("Look for 'All Clusters'")
-    all_clusters = acm_obj.wait_until_expected_text_is_found(
-        acm_loc["all-clusters"], expected_text="All clusters"
+    log.info(
+        "Successfully navigate to the VirtualMachines page under Fleet Virtualization"
     )
-    if all_clusters:
-        log.info(
-            "All Clusters found, now select the cluster where VM workload is running"
-        )
-        acm_obj.do_click(
-            format_locator(acm_loc["managed-cluster-name"]), managed_cluster_name
-        )
-        log.info("Managed cluster found")
-    else:
-        log.warning("'All Clusters' not found on the VMs page")
-        return False
     return True

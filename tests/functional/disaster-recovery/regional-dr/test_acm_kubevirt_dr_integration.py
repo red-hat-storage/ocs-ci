@@ -18,8 +18,7 @@ from ocs_ci.helpers.dr_helpers import wait_for_all_resources_deletion
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
-    assign_drpolicy_for_discovered_vms_via_ui,
-    verify_drpolicy_ui,
+    check_or_assign_drpolicy_for_discovered_vms_via_ui,
     navigate_using_fleet_virtulization,
 )
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
@@ -88,47 +87,36 @@ class TestACMKubevirtDRIntergration:
             pvc_vm=1, dr_protect=False, shared_drpc_protection=False
         )
 
-        if protection_type == "shared":
+        if protection_type:
             # Second workload (uses same namespace as first)
             logger.info("Deploy 2nd CNV workload in the existing namespace")
             cnv_workloads = discovered_apps_dr_workload_cnv(
                 pvc_vm=1, dr_protect=False, shared_drpc_protection=True
             )
 
-        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
-
-        logger.info(f"CNV workloads instance is {cnv_workloads}")
-        primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            cnv_workloads[0].workload_namespace,
-            discovered_apps=True,
-            resource_name=resource_name,
-        )
-
-        acm_obj = AcmAddClusters()
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
         protection_name = cnv_workloads[0].workload_namespace
         logger.info(f"Protection name is {protection_name}")
-        acm_obj.navigate_clusters_page(vms=True)
-        assert navigate_using_fleet_virtulization(
-            acm_obj, managed_cluster_name=primary_cluster_name
+        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
+
+        logger.info(f"CNV workloads instance is {cnv_workloads}")
+
+        acm_obj = AcmAddClusters()
+        primary_cluster_name = cnv_workloads[0].preferred_primary_cluster
+        logger.info(
+            f"Primary managed cluster name is {cnv_workloads[0].preferred_primary_cluster}"
         )
-        assert assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[cnv_workloads[0].vm_name],
-            protection_name=protection_name,
-            namespace=cnv_workloads[0].workload_namespace,
-            vms_name=[cnv_workloads[0].vm_name],
-            managed_cluster_name=primary_cluster_name,
-        )
-        if protection_type == "shared":
-            assert assign_drpolicy_for_discovered_vms_via_ui(
+        assert navigate_using_fleet_virtulization(acm_obj)
+        for i, vm in enumerate(cnv_workloads):
+            standalone_flag = (not protection_type) or (i == 0)
+            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
                 acm_obj,
-                vms=[cnv_workloads[1].vm_name],
-                standalone=False,
-                namespace=cnv_workloads[0].workload_namespace,
-                vms_name=[cnv_workloads[0].vm_name],
+                vms=[vm],
                 managed_cluster_name=primary_cluster_name,
+                standalone=standalone_flag,
+                protection_name=protection_name,
+                namespace=cnv_workloads[0].workload_namespace,
             )
 
         logger.info(
@@ -141,29 +129,18 @@ class TestACMKubevirtDRIntergration:
             resource_name=resource_name,
         )
 
-        verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
+        logger.info(f"Primary cluster name before failover is {primary_cluster_name}")
 
-        primary_cluster_name_before_failover = (
-            dr_helpers.get_current_primary_cluster_name(
-                cnv_workloads[0].workload_namespace,
-                discovered_apps=True,
-                resource_name=resource_name,
-            )
-        )
-        logger.info(
-            f"Primary cluster name before failover is {primary_cluster_name_before_failover}"
-        )
-
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        config.switch_to_cluster_by_name(primary_cluster_name)
 
         workload_pvc_count = (
             cnv_workloads[0].workload_pvc_count * 2
-            if protection_type == "shared"
+            if protection_type
             else cnv_workloads[0].workload_pvc_count
         )
         workload_pod_count = (
             cnv_workloads[0].workload_pod_count * 2
-            if protection_type == "shared"
+            if protection_type
             else cnv_workloads[0].workload_pod_count
         )
         dr_helpers.wait_for_all_resources_creation(
@@ -179,14 +156,14 @@ class TestACMKubevirtDRIntergration:
             phase=constants.STATUS_RUNNING,
         )
 
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
-        # Download and extract the virtctl binary to bin_dir. Skips if already present.
-        CNVInstaller().download_and_extract_virtctl_binary()
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             resource_name=resource_name,
         )
+
+        # Download and extract the virtctl binary to bin_dir. Skips if already present.
+        CNVInstaller().download_and_extract_virtctl_binary()
 
         # Creating a file (file1) on VM and calculating its MD5sum
         for cnv_wl in cnv_workloads:
@@ -216,7 +193,7 @@ class TestACMKubevirtDRIntergration:
             active_primary_cluster_node_objs
         )
         logger.info(
-            f"All nodes of the primary managed cluster {primary_cluster_name_before_failover} are powered off, "
+            f"All nodes of the primary managed cluster {primary_cluster_name} are powered off, "
             "waiting for cluster to be unreachable.."
         )
         sleep(300)
@@ -227,7 +204,7 @@ class TestACMKubevirtDRIntergration:
             namespace=cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             workload_placement_name=resource_name,
-            old_primary=primary_cluster_name_before_failover,
+            old_primary=primary_cluster_name,
         )
 
         # Verify resources creation on secondary cluster (failoverCluster)
@@ -267,8 +244,8 @@ class TestACMKubevirtDRIntergration:
                 f"Checksum of files written after Failover: {vm_filepaths[1]} on VM {cnv_wl.workload_name}: {md5sum}"
             )
 
+        config.switch_to_cluster_by_name(primary_cluster_name)
         logger.info("Recover the down managed cluster")
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         nodes_multicluster[active_primary_index].start_nodes(
             active_primary_cluster_node_objs
         )
@@ -280,14 +257,13 @@ class TestACMKubevirtDRIntergration:
         for cnv_wl in cnv_workloads:
             dr_helpers.do_discovered_apps_cleanup(
                 drpc_name=resource_name,
-                old_primary=primary_cluster_name_before_failover,
+                old_primary=primary_cluster_name,
                 workload_namespace=cnv_workloads[0].workload_namespace,
                 workload_dir=cnv_wl.workload_dir,
                 vrg_name=resource_name,
                 skip_resource_deletion_verification=True,
             )
 
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         wait_for_all_resources_deletion(
             namespace=cnv_workloads[0].workload_namespace,
             discovered_apps=True,
@@ -299,15 +275,22 @@ class TestACMKubevirtDRIntergration:
         )
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
-        # Doing Relocate in below code
-        primary_cluster_name_after_failover = (
-            dr_helpers.get_current_primary_cluster_name(
-                cnv_workloads[0].workload_namespace,
-                discovered_apps=True,
-                resource_name=resource_name,
-            )
+        logger.info("On UI, check if VM is running after failover or not")
+        acm_obj.refresh_page()
+        acm_obj.page_has_loaded()
+
+        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+            acm_obj,
+            vms=cnv_workloads,
+            protection_name=protection_name,
+            namespace=cnv_workloads[0].workload_namespace,
+            managed_cluster_name=secondary_cluster_name,
+            assign_policy=False,
         )
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+
+        # Doing Relocate in below code
+        config.switch_to_cluster_by_name(primary_cluster_name)
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
@@ -315,20 +298,19 @@ class TestACMKubevirtDRIntergration:
         )
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        # sleep(wait_time * 60)
 
         logger.info("Relocating the workloads.....")
         dr_helpers.relocate(
-            preferred_cluster=secondary_cluster_name,
+            preferred_cluster=primary_cluster_name,
             namespace=cnv_workloads[0].workload_namespace,
             workload_placement_name=resource_name,
             discovered_apps=True,
-            old_primary=primary_cluster_name_after_failover,
+            old_primary=secondary_cluster_name,
             workload_instance=cnv_workloads[0],
             workload_instances_shared=cnv_workloads,
         )
         # Cleanup is handled as part of the Relocate function and checks are done below
-        config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
         wait_for_all_resources_deletion(
             namespace=cnv_workloads[0].workload_namespace,
             discovered_apps=True,
@@ -341,7 +323,7 @@ class TestACMKubevirtDRIntergration:
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         # Verify resources creation on primary managed cluster
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        config.switch_to_cluster_by_name(primary_cluster_name)
         dr_helpers.wait_for_all_resources_creation(
             workload_pvc_count,
             workload_pod_count,
@@ -354,6 +336,19 @@ class TestACMKubevirtDRIntergration:
             namespace=cnv_workloads[0].workload_namespace,
             phase=constants.STATUS_RUNNING,
         )
+
+        config.switch_acm_ctx()
+        logger.info("On UI, check if VM is running after relocate or not")
+        acm_obj.refresh_page()
+        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+            acm_obj,
+            vms=cnv_workloads,
+            protection_name=protection_name,
+            namespace=cnv_workloads[0].workload_namespace,
+            managed_cluster_name=primary_cluster_name,
+            assign_policy=False,
+        )
+        config.switch_to_cluster_by_name(primary_cluster_name)
 
         # Validating data integrity (file1) after relocating VMs back to primary managed cluster
         validate_data_integrity_vm(
@@ -373,3 +368,4 @@ class TestACMKubevirtDRIntergration:
                 username=cnv_wl.vm_username,
                 verify=True,
             )
+        logger.info(f"Test for {protection_name} protection type passed")
