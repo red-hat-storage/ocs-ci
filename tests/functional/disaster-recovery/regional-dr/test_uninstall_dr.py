@@ -97,7 +97,9 @@ class TestFailoverAndRelocate:
         dr_helpers.disable_dr_rdr()
 
         # Get mirror peer associated with dr policy
-        mirrorpeer_name = dr_helpers.get_mirrorpeer(dr_policy_name)
+        mirrorpeer_name = dr_helpers.get_mirrorpeer(
+            primary_cluster_name, secondary_cluster_name
+        )
 
         # Perform partial DR Uninstall
         logger.info(
@@ -107,34 +109,40 @@ class TestFailoverAndRelocate:
         dr_helpers.partial_rdr_uninstall(dr_policy_name, mirrorpeer_name)
 
         # Validate mirroring status in radospoolnamespace
-        mirroring_disabled = dr_helpers.is_mirroring_disabled()
+        for managed_cluster in [primary_cluster_name, secondary_cluster_name]:
+            config.switch_to_cluster_by_name(managed_cluster)
+            mirroring_disabled = dr_helpers.is_mirroring_disabled()
 
-        if not mirroring_disabled:
-            logger.error(
-                "Mirroring is not completely disabled from cephblockpoolradosnamespaces"
-                " after deleting the mirror peer"
+            if not mirroring_disabled:
+                logger.error(
+                    "Mirroring is not completely disabled from cephblockpoolradosnamespaces"
+                    " after deleting the mirror peer"
+                )
+                raise ResourceWrongStatusException
+
+            logger.info(
+                "Mirroring has been succesfully disabled from radospoolnamespace !!"
             )
-            raise ResourceWrongStatusException
 
-        logger.info(
-            "Mirroring has been succesfully disabled from radospoolnamespace !!"
-        )
+            # Validate mirroring in tools pod
+            logger.info("Validating the mirroring status in tools pod...")
 
-        # Validate mirroring in tools pod
-        logger.info("Validating the mirroring status in tools pod...")
+            expected_mirroring_status = [
+                "Mode: disabled",
+                "rbd: mirroring not enabled on the pool",
+            ]
+            mirroring_status_in_tools_pod = (
+                dr_helpers.verify_mirroring_status_in_tools_pod(
+                    expected_mirroring_status
+                )
+            )
+            logger.info(
+                f"Mirroring status in tools pod {mirroring_status_in_tools_pod}"
+            )
 
-        expected_mirroring_status = [
-            "Mode: disabled",
-            "rbd: mirroring not enabled on the pool",
-        ]
-        mirroring_status_in_tools_pod = dr_helpers.verify_mirroring_status_in_tools_pod(
-            expected_mirroring_status
-        )
-        logger.info(f"Mirroring status in tools pod {mirroring_status_in_tools_pod}")
-
-        # Check ceph health
-        logger.info("Checking for Ceph Health OK")
-        ceph_health_check()
+            # Check ceph health
+            logger.info("Checking for Ceph Health OK")
+            ceph_health_check()
 
         # Complete RDR Uninstall on ACM
         logger.info("Proceeding to complete RDR uninstallation...")

@@ -2714,18 +2714,21 @@ def get_drpolicy(dr_cluster1, dr_cluster2):
         str: name of dr policy
 
     """
+    config.switch_ctx()
     cmd = (
-        "oc get drpolicies -o json | "
-        f"jq -r --arg c1 {dr_cluster1} --arg c2 {dr_cluster2} '.items[] |"
-        f"select((.spec.drClusters | sort) == "
-        "([$c1, $c2] | sort)) .metadata.name'"
+        'bash -c "'
+        f"oc get drpolicies -o json | "
+        f"jq -r --arg c1 '{dr_cluster1}' --arg c2 '{dr_cluster2}' "
+        "'.items[] | select((.spec.drClusters | sort) == ([$c1, $c2] | sort)) "
+        ".metadata.name'"
+        '"'
     )
     dr_policy_name = run_cmd(cmd)
 
-    return dr_policy_name
+    return dr_policy_name.strip()
 
 
-def get_mirrorpeer(drpolicy):
+def get_mirrorpeer(primary_cluster_name, secondary_cluster_name):
     """
     Gets the mirror peer based on dr policy associated with the mirror peer
 
@@ -2736,16 +2739,7 @@ def get_mirrorpeer(drpolicy):
         str: name of mirror peer
 
     """
-    cmd = (
-        f"oc get mirrorpeers -A -o json | "
-        f"jq -r --arg dr_clusters {drpolicy} "
-        f"'.items[] | "
-        f'{{name: .metadata.name, clusters: (.spec.items | map(.clusterName) | sort | join(","))}} '
-        f"| select(.clusters == $dr_clusters) "
-        f"| .name'"
-    )
-
-    mirror_peer = run_cmd(cmd)
+    mirror_peer = f"mirrorpeer-{primary_cluster_name}-{secondary_cluster_name}"
 
     return mirror_peer
 
@@ -2759,6 +2753,7 @@ def partial_rdr_uninstall(drpolicy, mirrorpeer):
         mirrorpeer (str): mirror peer name
 
     """
+    config.switch_ctx()
     drpolicy_delete_cmd = f"oc delete drpolicy {drpolicy}"
     mirrorpeer_delete_cmd = f"oc delete mirrorpeer {mirrorpeer}"
 
