@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @tier2
 @turquoise_squad
 @skipif_ocs_version("<4.19")
-class UninstallDR:
+class TestUninstallDR:
     """
     Test Failover and Relocate actions via CLI and UI
 
