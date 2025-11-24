@@ -9,7 +9,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
+    tier2,
     green_squad,
     skipif_ocs_version,
     polarion_id,
@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 
 @skipif_ocs_version("<4.20")
-@tier1
+@tier2
 @green_squad
 class TestCSIAddonsLogsValidation(ManageTest):
     """
@@ -222,7 +222,7 @@ class TestCSIAddonsLogsValidation(ManageTest):
 
         return debug_info
 
-    @polarion_id("OCS-TBD")
+    @polarion_id("OCS-xxx")
     def test_csi_addons_daemonset_logs_validation(self):
         """
         Validate log format, content, and debugging information for CSI addons daemonset pods
@@ -347,7 +347,7 @@ class TestCSIAddonsLogsValidation(ManageTest):
 
         log.info("CSI addons daemonset logs validation completed successfully")
 
-    @polarion_id("OCS-TBD")
+    @polarion_id("OCS-xxx")
     def test_csi_addons_provisioner_pod_logs_validation(self):
         """
         Validate log format, content, and debugging information for CSI addons provisioner pods
