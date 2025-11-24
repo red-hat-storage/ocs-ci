@@ -18,4 +18,5 @@ ENV_DATA:
   submariner_source: "downstream"
   submariner_release_type: "unreleased"
   acm_hub_unreleased: true
+  subctl_version: "subctl-rhel9:v0.21"
   oadp_version: "1.5"
