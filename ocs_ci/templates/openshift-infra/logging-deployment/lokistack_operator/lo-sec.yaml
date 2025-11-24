@@ -5,6 +5,6 @@ metadata:
   namespace: openshift-logging
 stringData:
   access_key_id: "ACCESS_KEY_PLACEHOLDER"
-  access_key_secret: "SECRET_KEY_PLACEHOLDER"
+  access_key_secret: "ACCESS_KEY_SECRET_PLACEHOLDER" # pragma: allowlist secret
   bucketnames: "BUCKETNAME_PLACEHOLDER"
   endpoint: "ENDPOINT_PLACEHOLDER"

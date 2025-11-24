@@ -1083,7 +1083,7 @@ CSI_CEPHFS_ROX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "csi-cephfs-rox.yam
 # Openshift-logging lokistack operator deployment yamls
 LOKI_OPERATOR_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-sub.yaml")
 LOKI_OPERATOR_OBC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-obc.yaml")
-LOKI_OPERATOR_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-secret.yaml")
+LOKI_OPERATOR_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-sec.yaml")
 LOKISTACK_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-lokistack.yaml")
 CLF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "clf-cr.yaml")
 
