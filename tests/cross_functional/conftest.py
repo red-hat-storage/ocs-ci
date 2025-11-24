@@ -21,6 +21,7 @@ from ocs_ci.helpers.e2e_helpers import (
     validate_mcg_nsfs_feature,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
