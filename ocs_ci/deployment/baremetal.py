@@ -532,6 +532,7 @@ class BAREMETALUPI(Deployment):
             response = requests.get(
                 url=self.bm_config["bm_status_check"], headers=headers
             )
+            response.encoding = "utf-8-sig"
             return response.json()[0]["user"]
 
         def update_bm_status(self, bm_status):
