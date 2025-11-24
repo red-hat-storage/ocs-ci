@@ -291,7 +291,7 @@ higher priority).
     * `bm_httpd_server_user` - user name used to ssh to the helper node
     * `bm_tftp_base_dir` - TFTP root dir where are placed files for PXE boot (usually `/tftpboot/`)
     * `bm_dnsmasq_dir` - _dnsmasq_ configuration files place
-    * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
+    * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker)
     * `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
     * `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
     * `servers` - definition of the servers in the BM environment (map where key is the name of the server)
