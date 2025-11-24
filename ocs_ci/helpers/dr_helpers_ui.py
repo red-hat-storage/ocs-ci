@@ -912,6 +912,7 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
             log.info("Policy confirmation")
             conf_msg = acm_obj.get_element_text(acm_loc["conf-msg"])
             log.info(f"Confirmation message is {conf_msg}")
+            acm_obj.take_screenshot()
             expected_conf_msg = conf_msg.split("\n", 1)[1].strip()
             assert expected_conf_msg == "New policy assigned to application"
             log.info("Close page")
