@@ -88,7 +88,7 @@ class TestACMKubevirtDRIntergration:
         )
 
         if protection_type:
-            # Second workload (uses same namespace as first)
+            # Deploy second workload for Shared protection (uses same namespace as first)
             logger.info("Deploy 2nd CNV workload in the existing namespace")
             cnv_workloads = discovered_apps_dr_workload_cnv(
                 pvc_vm=1, dr_protect=False, shared_drpc_protection=True
@@ -276,9 +276,6 @@ class TestACMKubevirtDRIntergration:
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         logger.info("On UI, check if VM is running after failover or not")
-        acm_obj.refresh_page()
-        acm_obj.page_has_loaded()
-
         assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
             acm_obj,
             vms=cnv_workloads,
@@ -298,7 +295,7 @@ class TestACMKubevirtDRIntergration:
         )
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        # sleep(wait_time * 60)
+        sleep(wait_time * 60)
 
         logger.info("Relocating the workloads.....")
         dr_helpers.relocate(

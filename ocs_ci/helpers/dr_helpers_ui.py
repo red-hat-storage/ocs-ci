@@ -819,6 +819,15 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
 
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
+    if acm_obj.check_element_presence(
+        (
+            acm_loc["modal_dialog_close_button"][1],
+            acm_loc["modal_dialog_close_button"][0],
+        ),
+        timeout=10,
+    ):
+        log.info("Modal dialog box found, closing it..")
+        acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
     log.info("Look for 'All Clusters'")
     all_clusters = acm_obj.wait_until_expected_text_is_found(
         acm_loc["all-clusters"], expected_text="All clusters"
@@ -938,4 +947,13 @@ def navigate_using_fleet_virtulization(acm_obj):
     log.info(
         "Successfully navigate to the VirtualMachines page under Fleet Virtualization"
     )
+    if acm_obj.check_element_presence(
+        (
+            acm_loc["modal_dialog_close_button"][1],
+            acm_loc["modal_dialog_close_button"][0],
+        ),
+        timeout=10,
+    ):
+        log.info("Modal dialog box found, closing it..")
+        acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
     return True
