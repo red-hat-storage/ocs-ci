@@ -353,6 +353,7 @@ def setup_sa_permissions():
     exec_cmd(cmd)
 
 
+@retry(CommandFailed, tries=5, delay=60, backoff=2)
 def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     """
     Create a ClusterLogForwarder CR to collect logs from nodes and
