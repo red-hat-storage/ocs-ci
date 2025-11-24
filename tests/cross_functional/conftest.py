@@ -161,12 +161,13 @@ def noobaa_db_backup_and_recovery_locally(
         )
         secrets = [
             "noobaa-root-master-key-volume",
-            "noobaa-root-master-key-backend",
             "noobaa-admin",
             "noobaa-operator",
             "noobaa-server",
             "noobaa-endpoints",
         ]
+        if not is_kms_enabled():
+            secrets.append("noobaa-root-master-key-backend")
 
         secrets_yaml = [
             ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
@@ -486,9 +487,10 @@ def noobaa_db_recovery_from_local(request):
             logger.info("Cleaned up potential database clients to nbcore!")
 
         # Delete the existing cnpg cluster
-        OCP(kind=constants.CNPG_CLUSTER_KIND).delete(
-            resource_name=constants.NB_DB_CNPG_CLUSTER_NAME
-        )
+        OCP(
+            kind=constants.CNPG_CLUSTER_KIND,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).delete(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
 
         # Ensure the the cnpg cluster yaml uses the correct bootstrap object
         cnpg_cluster_yaml["bootstrap"] = {
