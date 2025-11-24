@@ -288,11 +288,6 @@ class TestACMKubevirtDRIntergration:
 
         # Doing Relocate in below code
         config.switch_to_cluster_by_name(primary_cluster_name)
-        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            cnv_workloads[0].workload_namespace,
-            discovered_apps=True,
-            resource_name=resource_name,
-        )
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
