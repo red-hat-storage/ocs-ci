@@ -14,6 +14,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
+from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 
 log = logging.getLogger(__name__)
@@ -460,7 +461,6 @@ def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
     """
     try:
         from ocs_ci.ocs.node import get_nodes
-        from ocs_ci.ocs.resources.ocs import OCS
 
         # Check worker nodes only (OCS/ODF runs on worker nodes)
         worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
@@ -476,7 +476,7 @@ def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
             memory_str = capacity.get("memory", "0")
 
             try:
-                real_memory = OCS.convert_device_size(memory_str, "BY")
+                real_memory = convert_device_size(memory_str, "BY")
             except Exception:
                 real_memory = 0
 
