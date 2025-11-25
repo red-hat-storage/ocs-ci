@@ -529,21 +529,24 @@ class MultiClusterConfig:
         return wrapper
 
         def get_cluster_kubeconfig_by_index(self, index):
-            """
-            Get the cluster kubeconfig by the cluster index
-            Args:
-                index (int): The cluster index
-            Returns:
-                str: The cluster kubeconfig path
-            Raises:
-                ClusterNotFoundException: In case it didn't find the cluster
-            """
-            if index < 0 or index >= self.nclusters:
-                raise ClusterNotFoundException(f"Cluster with index {index} not found")
-            return os.path.join(
-                self.clusters[index].ENV_DATA["cluster_path"],
-                self.clusters[index].RUN.get("kubeconfig_location", "auth/kubeconfig"),
-            )
+        """
+        Get the cluster kubeconfig by the cluster index
+
+        Args:
+            index (int): The cluster index
+
+        Returns:
+            str: The cluster kubeconfig path
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find the cluster
+        """
+        if index < 0 or index >= self.nclusters:
+            raise ClusterNotFoundException(f"Cluster with index {index} not found")
+        return os.path.join(
+            self.clusters[index].ENV_DATA["cluster_path"],
+            self.clusters[index].RUN.get("kubeconfig_location", "auth/kubeconfig"),
+        )
 
     class RunWithConfigContext(object):
         def __init__(self, config_index):
