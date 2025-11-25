@@ -10,7 +10,6 @@ from subprocess import TimeoutExpired
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
-from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.helpers.e2e_helpers import (
