@@ -1,3 +1,4 @@
+import datetime
 import logging
 import time
 
@@ -463,22 +464,29 @@ class TestS3BucketPolicy(MCGTest):
         obc = bucket_factory(amount=1, interface="OC")
         obc_obj = OBC(obc[0].name)
 
-        # Admin sets policy on obc bucket with obc account principal
-        bucket_policy_generated = gen_bucket_policy(
-            user_list=[obc_obj.obc_account],
-            actions_list=(
-                ["PutObject"]
-                if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
-                else ["GetObject", "DeleteObject"]
-            ),
-            effect=(
-                "Allow"
-                if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
-                else "Deny"
-            ),
-            resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
-        )
-        bucket_policy = json.dumps(bucket_policy_generated)
+        # Setting this new policy because by default the PUT action is not set
+        # and thus we are failing tests with access denied errors.
+        # An error occurred (AccessDenied) when calling the PutObject operation: Access Denied
+        bucket_policy = {
+            "Version": datetime.date.today().strftime("%Y-%m-%d"),
+            "Statement": [
+                {
+                    "Sid": "AllowPutObjectFirst",
+                    "Effect": "Allow",
+                    "Principal": {"AWS": [obc_obj.obc_account]},
+                    "Action": ["s3:PutObject"],
+                    "Resource": [f"arn:aws:s3:::{obc_obj.bucket_name}/*"],
+                },
+                {
+                    "Sid": "ThenBlockGetObjectAndDeleteObject",
+                    "Effect": "Deny",
+                    "Principal": {"AWS": [obc_obj.obc_account]},
+                    "Action": ["s3:GetObject", "s3:DeleteObject"],
+                    "Resource": [f"arn:aws:s3:::{obc_obj.bucket_name}/*"],
+                },
+            ],
+        }
+        bucket_policy = json.dumps(bucket_policy)
 
         logger.info(
             f"Creating bucket policy on bucket: {obc_obj.bucket_name} with principal: {obc_obj.obc_account}"
