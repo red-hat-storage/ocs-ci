@@ -23,13 +23,17 @@ class StorageClusterSetup(object):
     Performs the setup of the StorageCluster for Data Foundation deployments
     """
 
-    def __init__(self):
+    def __init__(self, deployment):
+        """
+        Args:
+            deployment (Deployment): The deployment object
+
+        """
+        self.deployment = deployment
         self.platform = config.ENV_DATA["platform"]
-        self.namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.ocs_version = version.get_semantic_ocs_version_from_config()
         self.ocp_version = version.get_semantic_ocp_version_from_config()
-        self.storage_class = storage_class.get_storageclass()
-        self.custom_storage_class_path = None
         self.arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
         self.local_storage = config.DEPLOYMENT.get("local_storage")
         self.managed_ibmcloud = (
@@ -41,9 +45,9 @@ class StorageClusterSetup(object):
 
     def setup_storage_cluster(self):
         # create custom storage class for StorageCluster CR if necessary
-        if self.custom_storage_class_path is not None:
-            self.storage_class = storage_class.create_custom_storageclass(
-                self.custom_storage_class_path
+        if self.deployment.custom_storage_class_path is not None:
+            self.deployment.storage_class = storage_class.create_custom_storageclass(
+                self.deployment.custom_storage_class_path
             )
 
         # Set rook log level
@@ -100,7 +104,7 @@ class StorageClusterSetup(object):
             cluster_data["spec"]["arbiter"]["enable"] = True
             cluster_data["spec"]["nodeTopologies"][
                 "arbiterLocation"
-            ] = self.get_arbiter_location()
+            ] = self.deployment.get_arbiter_location()
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
@@ -144,10 +148,10 @@ class StorageClusterSetup(object):
             ] = f"{device_size}Gi"
 
         # set storage class to OCS default on current platform
-        if self.storage_class:
+        if self.deployment.storage_class:
             deviceset_data["dataPVCTemplate"]["spec"][
                 "storageClassName"
-            ] = self.storage_class
+            ] = self.deployment.storage_class
 
         # StorageCluster tweaks for LSO
         if self.local_storage:
@@ -252,7 +256,7 @@ class StorageClusterSetup(object):
                 "spec": {
                     "accessModes": ["ReadWriteOnce"],
                     "resources": {"requests": {"storage": "20Gi"}},
-                    "storageClassName": self.storage_class,
+                    "storageClassName": self.deployment.storage_class,
                     "volumeMode": "Filesystem",
                 }
             }

@@ -1455,7 +1455,7 @@ class Deployment(object):
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
 
-        storage_cluster_setup = StorageClusterSetup()
+        storage_cluster_setup = StorageClusterSetup(deployment=self)
         storage_cluster_setup.setup_storage_cluster()
 
         if config.DEPLOYMENT["infra_nodes"]:
