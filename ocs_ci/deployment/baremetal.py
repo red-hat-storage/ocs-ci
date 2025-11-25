@@ -61,20 +61,22 @@ class BAREMETALUPI(Deployment):
             Pre-Requisites for Bare Metal UPI Deployment
             """
             super(BAREMETALUPI.OCPDeployment, self).deploy_prereq()
-            # check for BM status
-            logger.info("Checking BM Status")
-            status = self.check_bm_status_exist()
-            if status == constants.BM_STATUS_PRESENT:
-                pytest.fail(
-                    f"BM Cluster still present and locked by {self.get_locked_username()}"
-                )
+            # original bm_status service is deprecated in favor of Resource Locker managed outside of ocs-ci code
+            if self.bm_config.get("bm_status_check"):
+                # check for BM status
+                logger.info("Checking BM Status")
+                status = self.check_bm_status_exist()
+                if status == constants.BM_STATUS_PRESENT:
+                    pytest.fail(
+                        f"BM Cluster still present and locked by {self.get_locked_username()}"
+                    )
 
-            # update BM status
-            logger.info("Updating BM Status")
-            result = self.update_bm_status(constants.BM_STATUS_PRESENT)
-            assert (
-                result == constants.BM_STATUS_RESPONSE_UPDATED
-            ), "Failed to update request"
+                # update BM status
+                logger.info("Updating BM Status")
+                result = self.update_bm_status(constants.BM_STATUS_PRESENT)
+                assert (
+                    result == constants.BM_STATUS_RESPONSE_UPDATED
+                ), "Failed to update request"
             # create manifest
             self.create_manifest()
             # create chrony resource
@@ -501,11 +503,13 @@ class BAREMETALUPI(Deployment):
                 delete_from_base_domain=True,
             )
 
-            logger.info("Updating BM status")
-            result = self.update_bm_status(constants.BM_STATUS_ABSENT)
-            assert (
-                result == constants.BM_STATUS_RESPONSE_UPDATED
-            ), "Failed to update request"
+            # original bm_status service is deprecated in favor of Resource Locker managed outside of ocs-ci code
+            if self.bm_config.get("bm_status_check"):
+                logger.info("Updating BM status")
+                result = self.update_bm_status(constants.BM_STATUS_ABSENT)
+                assert (
+                    result == constants.BM_STATUS_RESPONSE_UPDATED
+                ), "Failed to update request"
 
         def check_bm_status_exist(self):
             """
