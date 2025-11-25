@@ -3,7 +3,13 @@ import re
 import pytest
 
 from ocs_ci.ocs.resources.pod import get_mon_pods
-from ocs_ci.framework.testlib import tier1, brown_squad, polarion_id, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    tier1,
+    brown_squad,
+    polarion_id,
+    skipif_ocs_version,
+    skipif_external_mode,
+)
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +32,7 @@ class TestGetCommands:
         self.validate_pg_status(output)
         self.validate_mgr_pods(output)
 
+    @skipif_external_mode
     @polarion_id("OCS-6238")
     def test_get_mon_endpoint(self):
         result = self.odf_cli_runner.run_get_mon_endpoint()
