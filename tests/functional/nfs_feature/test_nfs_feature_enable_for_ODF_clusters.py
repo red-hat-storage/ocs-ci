@@ -36,6 +36,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
+from ocs_ci.utility.nfs_utils import provisioner_selectors
 
 
 log = logging.getLogger(__name__)
@@ -76,15 +77,28 @@ class TestDefaultNfsDisabled(ManageTest):
         if cephnfs_resource is None:
             log.info("No cephnfs resources found. NFS should be disabled.")
             pod_objs = get_all_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+            nfs_pod_selectors = provisioner_selectors(nfs_plugins=True)
 
-            nfs_pod_patterns = ("openshift-storage.nfs",)
+            nfs_pods = []
 
-            nfs_pods = [p.name for p in pod_objs if p.name.startswith(nfs_pod_patterns)]
+            for p in pod_objs:
+                labels = p.get().get("metadata", {}).get("labels", {})
+
+                for selector in nfs_pod_selectors:
+                    key, value = selector.split("=", 1)
+
+                    if labels.get(key) == value:
+                        nfs_pods.append(p.name)
+                        break
 
             if nfs_pods:
-                pytest.fail(f"NFS pods found when NFS should be disabled: {nfs_pods}")
+                unique_nfs_pods = list(set(nfs_pods))
+                pytest.fail(
+                    f"NFS pods found when NFS should be disabled: {unique_nfs_pods}"
+                )
             else:
                 log.info("No NFS pods found. NFS is correctly disabled.")
+
         else:
             pytest.fail(
                 "cephnfs resources exist. NFS is unexpectedly enabled by default."
