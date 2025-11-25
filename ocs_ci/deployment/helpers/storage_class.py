@@ -5,6 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -58,10 +59,20 @@ def create_custom_storageclass(storage_class_path: str) -> str:
         str: Name of the storageclass
 
     """
+
     with open(storage_class_path, "r") as custom_sc_fo:
         custom_sc = yaml.load(custom_sc_fo, Loader=yaml.SafeLoader)
 
     storage_class_name = custom_sc["metadata"]["name"]
+
+    # Check if storage class already exists
+    sc_obj = OCP(kind=constants.STORAGECLASS)
+    if sc_obj.is_exist(resource_name=storage_class_name):
+        logger.info(
+            f"Storage class {storage_class_name} already exists, skipping creation"
+        )
+        return storage_class_name
+
     log_step(f"Creating custom storage class {storage_class_name}")
     run_cmd(f"oc create -f {storage_class_path}")
 
