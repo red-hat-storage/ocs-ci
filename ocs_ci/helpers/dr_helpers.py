@@ -2328,9 +2328,13 @@ def check_storage_cluster_peer_state():
         return False
 
 
-def create_service_exporter():
+def create_service_exporter(annotate=True):
     """
     Create Service exporter
+
+    Args:
+        annotate (bool): If True - annotate the service exporter
+
     """
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
@@ -2339,6 +2343,12 @@ def create_service_exporter():
         config.switch_ctx(index)
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+        if annotate:
+            run_cmd(
+                "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
+                f" ocs.openshift.io/api-server-exported-address={cluster.ENV_DATA['cluster_name']}"
+                ".ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
+            )
     config.switch_ctx(restore_index)
 
 

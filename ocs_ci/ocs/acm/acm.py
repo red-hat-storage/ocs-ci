@@ -20,6 +20,7 @@ from ocs_ci.ocs.acm.acm_constants import (
     ACM_PAGE_TITLE,
     ACM_2_7_MULTICLUSTER_URL,
     ACM_PAGE_TITLE_2_7_ABOVE,
+    ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED,
 )
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
@@ -244,28 +245,35 @@ class AcmAddClusters(AcmPageNavigator):
             log.info("Globalnet is disabled")
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it")
-        self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info(
-            "Increase the gateway count to 3 by clicking twice on the gateway count add button"
+        acm_version = ".".join(get_running_acm_version().split(".")[:2])
+        increase_gateway = False
+        if compare_versions(f"{acm_version}>=2.12"):
+            increase_gateway = True
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
         )
-        self.do_click(self.page_nav["gateway-count-btn"])
-        self.do_click(self.page_nav["gateway-count-btn"])
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.submariner_unreleased_downstream_info()
-        log.info("Click on Next button")
-        self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it [2]")
-        self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info(
-            "Increase the gateway count to 3 by clicking twice on the gateway count add button [2]"
-        )
-        self.do_click(self.page_nav["gateway-count-btn"])
-        self.do_click(self.page_nav["gateway-count-btn"])
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.submariner_unreleased_downstream_info()
-        log.info("Click on Next button [2]")
-        self.do_click(self.page_nav["next-btn"])
+        increase_gateway_number = 2
+        if ibm_cloud_managed:
+            increase_gateway_number = 1
+        for cluster_nr in range(1, 3):
+            if not ibm_cloud_managed:
+                log.info(
+                    f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
+                )
+                self.do_click(self.page_nav["nat-t-checkbox"])
+            if increase_gateway:
+                log.info(
+                    f"Increase the gateway count by {increase_gateway_number} clicking"
+                    f" gateway count add button for cluster [{cluster_nr}]"
+                )
+                for _ in range(increase_gateway_number):
+                    self.do_click(self.page_nav["gateway-count-btn"])
+            if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+                self.submariner_unreleased_downstream_info()
+            self.take_screenshot()
+            log.info("Click on Next button for cluster [{cluster_nr}]")
+            self.do_click(self.page_nav["next-btn"])
         if ocs_version >= version.VERSION_4_13 and globalnet:
             check_globalnet = self.get_element_text(self.page_nav["check-globalnet"])
             assert (
@@ -304,7 +312,13 @@ class AcmAddClusters(AcmPageNavigator):
         This is a mandatory pre-check for Regional DR.
 
         """
-
+        timeout = 600
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed:
+            timeout = 2100
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
             locator=self.page_nav["cluster-sets"],
@@ -328,34 +342,34 @@ class AcmAddClusters(AcmPageNavigator):
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Connection status 1 is unhealthy for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-2"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Connection status 2 is unhealthy for Submariner"
         log.info("Checking agent status of both the imported clusters")
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Agent status 1 is unhealthy for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Agent status 2 is unhealthy for Submariner"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
-            timeout=600,
+            timeout=timeout,
         ), "First gateway node label check did not pass for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
-            timeout=600,
+            timeout=timeout,
         ), "Second gateway node label check did not pass for Submariner"
         self.take_screenshot()
         log.info("Submariner is healthy, check passed")
@@ -577,10 +591,18 @@ def login_to_acm():
     else:
         log.warning("local-cluster dropdown not found, view is already on ACM console")
 
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
     if compare_versions(cmp_str):
-        page_title = ACM_PAGE_TITLE_2_7_ABOVE
+        if ibm_cloud_managed:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED
+        else:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
+    log.info(f"Validating page title to be: {page_title}")
     validate_page_title(title=page_title)
     log.info("Successfully logged into RHACM console")
     side_navigation_toggle_btn = wait_for_element_to_be_clickable(
@@ -732,7 +754,7 @@ def import_clusters_via_cli(clusters):
         time.sleep(60)
         ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
         ocp_obj.wait_for_resource(
-            timeout=1200,
+            timeout=2000,
             condition="True",
             column="AVAILABLE",
             resource_name=cluster[0],
