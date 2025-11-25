@@ -172,11 +172,12 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         Destroy OCP cluster
         """
-        logger.info("Updating BM status")
-        result = self.update_bm_status(constants.BM_STATUS_ABSENT)
-        assert (
-            result == constants.BM_STATUS_RESPONSE_UPDATED
-        ), "Failed to update request"
+        if self.bm_config.get("bm_status_check"):
+            logger.info("Updating BM status")
+            result = self.update_bm_status(constants.BM_STATUS_ABSENT)
+            assert (
+                result == constants.BM_STATUS_RESPONSE_UPDATED
+            ), "Failed to update request"
 
     def configure_dnsmasq_on_helper_vm(self):
         """
