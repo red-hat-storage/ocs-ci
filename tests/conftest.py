@@ -7290,6 +7290,7 @@ def dr_workload(request):
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
                 pvc_interface=pvc_interface,
+                workload_path=workload_details["workload_path"],
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -7310,6 +7311,7 @@ def dr_workload(request):
                 workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
                 appset_model=appset_model,
                 pvc_interface=pvc_interface,
+                workload_path=workload_details["workload_path"],
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -7548,14 +7550,17 @@ def discovered_apps_dr_workload(request):
         if bool(kubeobject):
             for index in range(kubeobject):
                 workload_details = workload_details_list[index]
+                workload_namespace = create_unique_resource_name("workload", "dist")[
+                    :20
+                ]
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_namespace=(
-                        workload_details["workload_namespace"] + "-multi-ns"
+                        workload_namespace + "-multi-ns"
                         if multi_ns
-                        else workload_details["workload_namespace"]
+                        else workload_namespace
                     ),
                     discovered_apps_pvc_selector_key=workload_details[
                         "dr_workload_app_pvc_selector_key"
@@ -7587,10 +7592,11 @@ def discovered_apps_dr_workload(request):
                 pvc_type = constants.RBD_INTERFACE
             elif pvc_interface == constants.CEPHFILESYSTEM:
                 pvc_type = constants.CEPHFS_INTERFACE
-            drpc_name = f"busybox-multi-ns-{pvc_type}-" + "-".join(
+            randam_hash = get_random_str(size=5)
+            drpc_name = f"bb-mlt-ns-{randam_hash}-{pvc_type}-" + "-".join(
                 map(str, range(1, kubeobject + 1))
             )
-            placement_name = drpc_name + "-placement-1"
+            placement_name = drpc_name + "-plmnt-1"
             for index in range(kubeobject):
                 instances[index].discovered_apps_placement_name = drpc_name
             instances[0].create_placement(placement_name=placement_name)
@@ -7611,12 +7617,14 @@ def discovered_apps_dr_workload(request):
         if bool(recipe):
             for index in range(recipe):
                 workload_details = ocsci_config.ENV_DATA[workload_key][index]
+                workload_namespace = create_unique_resource_name("workload", "dist")[
+                    :20
+                ]
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
-                    workload_namespace=workload_details["workload_namespace"]
-                    + "-recipe-ns",
+                    workload_namespace=workload_namespace + "-recipe-ns",
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
                     ]
@@ -7712,13 +7720,14 @@ def discovered_apps_dr_workload_cnv(request):
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
             workload = CnvWorkloadDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=workload_details["workload_namespace"],
+                workload_namespace=workload_namespace,
                 discovered_apps_pvc_selector_key=workload_details[
                     "dr_workload_app_pvc_selector_key"
                 ],
