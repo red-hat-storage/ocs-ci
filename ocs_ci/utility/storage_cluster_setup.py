@@ -417,20 +417,6 @@ class StorageClusterSetup(object):
             merge_dict(
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
             )
-        if (
-            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
-            and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
-        ):
-            api_server_exported_address_annotation = {
-                "ocs.openshift.io/api-server-exported-address": (
-                    f'{config.ENV_DATA["cluster_name"]}.'
-                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
-                )
-            }
-            merge_dict(
-                cluster_data,
-                {"metadata": {"annotations": api_server_exported_address_annotation}},
-            )
         if config.ENV_DATA.get("noobaa_external_pgsql"):
             log_step(
                 "Creating external pgsql DB for NooBaa and correct StorageCluster data"
