@@ -78,6 +78,17 @@ class AZUREIPI(AZUREBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(AZUREIPI, self).__init__()
+        # Set custom storage class path for Azure Performance Plus feature
+        if config.ENV_DATA.get("azure_performance_plus") or config.DEPLOYMENT.get(
+            "azure_performance_plus"
+        ):
+            self.custom_storage_class_path = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "azure_storageclass_perfplus.yaml"
+            )
+            logger.info(
+                "Azure Performance Plus enabled. Will use custom storage class: %s",
+                self.custom_storage_class_path,
+            )
 
     class OCPDeployment(IPIOCPDeployment):
         def deploy_prereq(self):
@@ -207,6 +218,17 @@ class AZUREAroManaged(AZUREBase):
         self.name = self.__class__.__name__
         self.azure_util = AzureAroUtil()
         super(AZUREAroManaged, self).__init__()
+        # Set custom storage class path for Azure Performance Plus feature
+        if config.ENV_DATA.get("azure_performance_plus") or config.DEPLOYMENT.get(
+            "azure_performance_plus"
+        ):
+            self.custom_storage_class_path = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "azure_storageclass_perfplus.yaml"
+            )
+            logger.info(
+                "Azure Performance Plus enabled. Will use custom storage class: %s",
+                self.custom_storage_class_path,
+            )
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
