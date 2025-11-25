@@ -618,54 +618,7 @@ def process_cluster_cli_params(config):
             )
             set_cli_param(config, f"cluster_path{suffix}", cluster_path)
 
-    if not cluster_path:
-        raise ClusterPathNotProvidedError()
-    cluster_path = os.path.expanduser(cluster_path)
-    if not os.path.exists(cluster_path):
-        os.makedirs(cluster_path)
-
-    # create kubeconfig if doesn't exist and OCP url and kubeadmin password is provided
-    kubeconfig_path = os.path.join(
-        cluster_path, ocsci_config.RUN["kubeconfig_location"]
-    )
-    if not os.path.isfile(kubeconfig_path) and not (
-        get_cli_param(config, "deploy", default=False)
-        or get_cli_param(config, "teardown", default=False)
-        or get_cli_param(config, "kubeconfig")
-    ):
-        if ocsci_config.RUN.get("kubeadmin_password") and ocsci_config.RUN.get(
-            "ocp_url"
-        ):
-            log.info(
-                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
-            )
-            # check and correct OCP URL (change it to API url if console url provided and add port if needed
-            ocp_api_url = ocsci_config.RUN.get("ocp_url").replace(
-                "console-openshift-console.apps", "api"
-            )
-            if ":6443" not in ocp_api_url:
-                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
-
-            cmd = (
-                f"oc login --username {ocsci_config.RUN['username']} "
-                f"--password {ocsci_config.RUN['kubeadmin_password']} "
-                f"{ocp_api_url} "
-                f"--kubeconfig {kubeconfig_path} "
-                "--insecure-skip-tls-verify=true"
-            )
-            result = exec_cmd(cmd, secrets=(ocsci_config.RUN["kubeadmin_password"],))
-            if result.returncode:
-                log.warning(f"executed command: {cmd}")
-                log.warning(f"returncode: {result.returncode}")
-                log.warning(f"stdout: {result.stdout}")
-                log.warning(f"stderr: {result.stderr}")
-            else:
-                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
-        else:
-            raise ConfigurationError(
-                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
-                "environment variables were not provided."
-            )
+    cluster_path = generate_kubeconfig_using_creds(cluster_path, config)
 
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
@@ -840,6 +793,75 @@ def process_cluster_cli_params(config):
     )
     ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
     ocsci_config.ENV_DATA["product_type"] = get_cli_param(config, "product_type")
+
+
+def generate_kubeconfig_using_creds(cluster_path, config):
+    """
+    Generate kubeconfig file from provided kubeadmin password and OCP URL
+
+    Args:
+        cluster_path (str): Path to cluster directory
+        config (pytest.config): Pytest config object
+
+    Raises:
+        ClusterPathNotProvidedError: If a cluster path is missing
+        ConfigurationError: If kubeconfig doesn't exist and RUN['kubeadmin_password'] and
+            RUN['ocp_url'] environment variables were not provided.
+
+    Returns:
+        str: Path to cluster directory
+
+    """
+
+    if not cluster_path:
+        raise ClusterPathNotProvidedError()
+    cluster_path = os.path.expanduser(cluster_path)
+    if not os.path.exists(cluster_path):
+        os.makedirs(cluster_path)
+
+    # create kubeconfig if doesn't exist and OCP url and kubeadmin password is provided
+    kubeconfig_path = os.path.join(
+        cluster_path, ocsci_config.RUN["kubeconfig_location"]
+    )
+    if not os.path.isfile(kubeconfig_path) and not (
+        get_cli_param(config, "deploy", default=False)
+        or get_cli_param(config, "teardown", default=False)
+        or get_cli_param(config, "kubeconfig")
+    ):
+        if ocsci_config.RUN.get("kubeadmin_password") and ocsci_config.RUN.get(
+            "ocp_url"
+        ):
+            log.info(
+                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
+            )
+            # check and correct OCP URL (change it to API url if console url provided and add port if needed
+            ocp_api_url = ocsci_config.RUN.get("ocp_url").replace(
+                "console-openshift-console.apps", "api"
+            )
+            if ":6443" not in ocp_api_url:
+                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
+
+            cmd = (
+                f"oc login --username {ocsci_config.RUN['username']} "
+                f"--password {ocsci_config.RUN['kubeadmin_password']} "
+                f"{ocp_api_url} "
+                f"--kubeconfig {kubeconfig_path} "
+                "--insecure-skip-tls-verify=true"
+            )
+            result = exec_cmd(cmd, secrets=[ocsci_config.RUN["kubeadmin_password"]])
+            if result.returncode:
+                log.warning(f"executed command: {cmd}")
+                log.warning(f"returncode: {result.returncode}")
+                log.warning(f"stdout: {result.stdout}")
+                log.warning(f"stderr: {result.stderr}")
+            else:
+                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+        else:
+            raise ConfigurationError(
+                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
+                "environment variables were not provided."
+            )
+    return cluster_path
 
 
 def pytest_collection_modifyitems(session, config, items):
