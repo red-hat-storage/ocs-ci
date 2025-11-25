@@ -7748,7 +7748,7 @@ def discovered_apps_dr_workload_cnv(request):
         return instances
 
     def teardown():
-        if request.node.name == "test_acm_kubevirt_using_shared_protection":
+        if "[shared]" in request.node.nodeid:
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
         else:
