@@ -3339,6 +3339,23 @@ DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
 DRPC_RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc_with_recipe.yaml")
 RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "recipe_with_checkhooks.yaml")
 PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
+PLACEMENT_SUBSCRIPTION_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "placement_subscription.yaml"
+)
+MANAGEDCLUSTER_SETBINDING_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "managedcluster_setbinding.yaml"
+)
+CHANNEL_PATH = os.path.join(TEMPLATE_DIR, "DR", "channel.yaml")
+SUBSCRIPTION_APP_PATH = os.path.join(TEMPLATE_DIR, "DR", "app.yaml")
+SUBSCRIPTION_WORKLOAD_TEMPLATE_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "subscription.yaml"
+)
+SUBSCRIPTION_NAMESPACE_TEMPLATE_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "namespace.yaml"
+)
+APPSET_WORKLOAD_TEMPLATE = os.path.join(
+    TEMPLATE_DIR, "DR", "appset_workload_template.yaml"
+)
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"
 )
