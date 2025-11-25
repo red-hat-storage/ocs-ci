@@ -252,7 +252,7 @@ OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 # AMQ
 AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
-RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
+RGW_KAFKA_NOTIFY = "https://github.com/sagihirshfeld/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
 
