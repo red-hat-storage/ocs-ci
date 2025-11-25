@@ -1343,7 +1343,7 @@ acm_configuration_4_19 = {
         "//button[@id='run-search-button']//*[name()='svg']",
         By.XPATH,
     ),
-    "vm-status": ("td[data-label='Status']", By.CSS_SELECTOR),
+    "vm-status": ("(//button[@type='button'][normalize-space()='Running'])", By.XPATH),
     "vm-kebab-menu": ("button[aria-label='Actions']", By.CSS_SELECTOR),
     "manage-dr": ("//span[contains(text(),'Manage disaster recovery')]", By.XPATH),
     "enroll-vm": ("button[aria-label='Empty Page']", By.CSS_SELECTOR),
@@ -1356,7 +1356,7 @@ acm_configuration_4_19 = {
     ),
     "selected-protection-type": ("//div[normalize-space()='{}']", By.XPATH),
     "assign": ("button[type='submit']", By.CSS_SELECTOR),
-    "conf-msg": ("(//h4[@class='c-alert__title'])[1]", By.XPATH),
+    "conf-msg": ('//h4[text()="New policy assigned to application"]', By.XPATH),
     "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
     "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
@@ -1376,6 +1376,17 @@ acm_configuration_4_20 = {
     ),
     "kebab-action": ("//button[@aria-label='Actions']", By.XPATH),
     "select-dr-policy": ('//*[text()="{}"]', By.XPATH),
+    "switch-perspective": (
+        "//button[@data-test-id='perspective-switcher-toggle']",
+        By.XPATH,
+    ),
+    "fleet-virtual": ("//h2[text()='Fleet Virtualization']", By.XPATH),
+    "nav-bar-vms-page": ("//a[@data-test-id='virtualmachines-nav-item']", By.XPATH),
+    "all-clusters": ("//button[text()='All clusters']", By.XPATH),
+    "managed-cluster-name": ("//button[text()='{}']", By.XPATH),
+    "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
+    "cnv-vm-name": ('//a[@data-test-id="{}"]', By.XPATH),
+    "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
 }
 
 add_capacity = {
