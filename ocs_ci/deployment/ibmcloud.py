@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     LeftoversExistError,
     VolumesExistError,
+    ResourceNotSupported,
 )
 from ocs_ci.ocs.resources.backingstore import get_backingstore
 from ocs_ci.ocs.resources.pvc import (
@@ -1025,7 +1026,9 @@ class IBMCloudIPI(CloudDeploymentBase):
                 elif resource_type == "floating-ip":
                     cmd = f"ibmcloud is floating-ip {resource_id} --output json"
                 else:
-                    return True
+                    raise ResourceNotSupported(
+                        f"Resource type {resource_type} is not supported"
+                    )
                 exec_cmd(cmd)
             except CommandFailed:
                 return True
@@ -1035,22 +1038,6 @@ class IBMCloudIPI(CloudDeploymentBase):
             f"Timeout waiting for {resource_type} {resource_id} to be deleted"
         )
         return False
-
-    @retry(CommandFailed, tries=3, delay=5, backoff=2)
-    def _execute_command(self, cmd):
-        """
-        Execute delete command with retry decorator.
-
-        Args:
-            cmd (str): The command to execute.
-        Raises:
-            CommandFailed: If the command fails to execute.
-        """
-        try:
-            exec_cmd(cmd)
-        except CommandFailed as e:
-            logger.error(f"Failed to execute command: {e}")
-            raise CommandFailed(f"Failed to execute command: {e}")
 
     def delete_vsis(self, prefix):
         """
@@ -1091,7 +1078,7 @@ class IBMCloudIPI(CloudDeploymentBase):
                     logger.info(f"Deleting VSI '{inst_name}'...")
                     cmd = f"ibmcloud is instance-delete {inst_id} --force"
                     try:
-                        self._execute_command(cmd)
+                        retry(CommandFailed, tries=3, delay=5, backoff=2)(exec_cmd)(cmd)
                         logger.info(f"Successfully deleted VSI '{inst_name}'")
                         vsi_ids.append(inst_id)
                     except CommandFailed:
@@ -1230,7 +1217,7 @@ class IBMCloudIPI(CloudDeploymentBase):
                     logger.info(f"Deleting Load Balancer '{lb_name}'...")
                     cmd = f"ibmcloud is load-balancer-delete {lb_id} --force"
                     try:
-                        self._execute_command(cmd)
+                        retry(CommandFailed, tries=3, delay=5, backoff=2)(exec_cmd)(cmd)
                         logger.info(f"Successfully deleted Load Balancer '{lb_name}'")
                         lb_ids.append(lb_id)
                     except CommandFailed:
@@ -1312,7 +1299,7 @@ class IBMCloudIPI(CloudDeploymentBase):
                     # Now delete the security group
                     cmd = f"ibmcloud is security-group-delete {sg_id} --force"
                     try:
-                        self._execute_command(cmd)
+                        retry(CommandFailed, tries=3, delay=5, backoff=2)(exec_cmd)(cmd)
                         logger.info(f"Successfully deleted Security Group '{sg_name}'")
                     except CommandFailed:
                         logger.error(f"Failed to delete Security Group '{sg_name}'")
@@ -1365,7 +1352,7 @@ class IBMCloudIPI(CloudDeploymentBase):
                     logger.info(f"Deleting COS Instance '{cos_name}'...")
                     cmd = f"ibmcloud resource service-instance-delete {cos_guid} --force --recursive"
                     try:
-                        self._execute_command(cmd)
+                        retry(CommandFailed, tries=3, delay=5, backoff=2)(exec_cmd)(cmd)
                         logger.info(f"Successfully deleted COS Instance '{cos_name}'")
                     except CommandFailed:
                         logger.error(f"Failed to delete COS Instance '{cos_name}'")
@@ -1419,7 +1406,7 @@ class IBMCloudIPI(CloudDeploymentBase):
                     logger.info(f"Deleting Image '{img_name}'...")
                     cmd = f"ibmcloud is image-delete {img_id} --force"
                     try:
-                        self._execute_command(cmd)
+                        retry(CommandFailed, tries=3, delay=5, backoff=2)(exec_cmd)(cmd)
                         logger.info(f"Successfully deleted Image '{img_name}'")
                     except CommandFailed:
                         logger.error(f"Failed to delete Image '{img_name}'")
