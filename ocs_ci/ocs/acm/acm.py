@@ -302,7 +302,16 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["submariner-custom-subscription"])
         log.info("Clear existing Source")
         self.do_clear(self.page_nav["submariner-custom-source"])
-        log.info("Send submariner-catalogsource as Source")
+        source = self.driver.find_element(
+            By.XPATH, "//input[@placeholder='Enter the catalog source']"
+        )
+        value_of_source = source.get_attribute("value")
+        if value_of_source == "":
+            log.info("Textbox for 'Source' is empty.")
+        else:
+            self.do_clear(self.page_nav["submariner-custom-source"])
+            log.info("Textbox for 'Source' wasn't empty, cleared it in 2nd attempt")
+        log.info("Send submariner-catalogsource as 'Source'")
         self.do_send_keys(
             self.page_nav["submariner-custom-source"], "submariner-catalogsource"
         )
