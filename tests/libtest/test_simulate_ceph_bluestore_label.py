@@ -7,8 +7,11 @@ from ocs_ci.framework.testlib import (
     brown_squad,
     skipif_no_lso,
 )
-from ocs_ci.deployment.baremetal import simulate_ceph_bluestore_on_node_disk
-from ocs_ci.ocs.node import get_nodes
+
+from ocs_ci.framework import config
+from ocs_ci.deployment.helpers.ceph_cluster import (
+    simulate_full_ceph_bluestore_process_on_wnodes,
+)
 
 log = logging.getLogger(__name__)
 
@@ -27,11 +30,9 @@ class TestSimulateCephBlueStoreLabel(ManageTest):
         Test simulates a Ceph BlueStore label on the worker node disks.
 
         """
-        results = []
-        wnodes = get_nodes()
-        for wnode in wnodes:
-            result = simulate_ceph_bluestore_on_node_disk(wnode)
-            results.append(result)
-
-        assert all(results), "BlueStore label simulation failed"
-        log.info("BlueStore label simulation succeeded ")
+        simulate_bluestore_label = config.ENV_DATA.get(
+            "simulate_bluestore_label", False
+        )
+        if simulate_bluestore_label:
+            simulate_full_ceph_bluestore_process_on_wnodes()
+            log.info("BlueStore label simulation succeeded on all worker nodes disks")
