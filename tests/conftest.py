@@ -176,7 +176,7 @@ from ocs_ci.utility.multicluster import (
     get_multicluster_upgrade_parametrizer,
     MultiClusterUpgradeParametrize,
 )
-
+from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_default_if_keyval_empty,
@@ -3782,8 +3782,7 @@ def install_logging(request):
     rosa_hcp_depl = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 
     def finalizer():
-        # uninstall_cluster_logging()
-        pass
+        uninstall_cluster_logging()
 
     request.addfinalizer(finalizer)
 

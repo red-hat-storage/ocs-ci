@@ -45,7 +45,7 @@ class Testopenshiftloggingonocs(E2ETest):
     """
 
     @pytest.fixture()
-    def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
+    def create_pvc_and_deployment_pod(self, request, pvc_factory, pod_factory):
         """"""
 
         def finalizer():
@@ -70,6 +70,7 @@ class Testopenshiftloggingonocs(E2ETest):
             sa_name=sa_name.name,
             deployment=True,
         )
+
         helpers.wait_for_resource_state(
             resource=pod_obj, state=constants.STATUS_RUNNING
         )
@@ -138,9 +139,7 @@ class Testopenshiftloggingonocs(E2ETest):
     @tier1
     @skipif_managed_service
     @skipif_ms_provider_and_consumer
-    def test_create_new_project_to_verify_logging(
-        self, create_pvc_and_deploymentconfig_pod
-    ):
+    def test_create_new_project_to_verify_logging(self, create_pvc_and_deployment_pod):
         """
         This function creates new project to verify logging in  lokistack
         1. Creates new project
@@ -149,7 +148,7 @@ class Testopenshiftloggingonocs(E2ETest):
         4. verify if apllication logs are present in lokistack
         """
 
-        pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
+        pod_obj, pvc_obj = create_pvc_and_deployment_pod
 
         # Running IO on the app_pod
         pod_obj.run_io(storage_type="fs", size=6000)
