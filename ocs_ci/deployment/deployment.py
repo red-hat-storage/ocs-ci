@@ -1379,6 +1379,19 @@ class Deployment(object):
                     timeout=2100,
                 )
 
+        add_new_disks_for_lso = True
+        # Simulate bluestore label on Baremetal or vSphere LSO worker nodes before deploying OCS
+        simulate_bluestore_label = config.ENV_DATA.get(
+            "simulate_bluestore_label", False
+        )
+        if simulate_bluestore_label:
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                simulate_full_ceph_bluestore_process_on_wnodes,
+            )
+
+            simulate_full_ceph_bluestore_process_on_wnodes()
+            add_new_disks_for_lso = False
+
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
         # hence perform_lso_standalone_deployment must be False if we want to deploy LSO with ODF operator and do not
@@ -1390,7 +1403,10 @@ class Deployment(object):
             )
             if not lso_deployed:
                 log_step("Deploy and setup Local Storage Operator")
-                setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+                setup_local_storage(
+                    storageclass=constants.DEFAULT_STORAGECLASS_LSO,
+                    add_new_disks=add_new_disks_for_lso,
+                )
 
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
