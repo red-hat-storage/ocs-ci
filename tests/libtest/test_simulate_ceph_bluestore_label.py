@@ -7,7 +7,9 @@ from ocs_ci.framework.testlib import (
     brown_squad,
     skipif_no_lso,
 )
-from ocs_ci.deployment.baremetal import simulate_ceph_bluestore_on_node_disk
+from ocs_ci.deployment.baremetal import (
+    simulate_ceph_bluestore_on_node_disk,
+)
 from ocs_ci.ocs.node import get_nodes
 
 log = logging.getLogger(__name__)
