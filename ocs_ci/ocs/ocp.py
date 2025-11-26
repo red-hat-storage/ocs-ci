@@ -792,6 +792,7 @@ class OCP(object):
             )
 
         selector = selector or self.selector
+        resource_name = resource_name or self.resource_name
         command = f"wait {self.kind} {resource_name} --for=jsonpath='{{.status.phase}}'={condition}"
 
         # if selector is used, all resources of kind self.kind with that selector must match the condition, e.g.
