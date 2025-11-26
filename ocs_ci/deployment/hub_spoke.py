@@ -1139,12 +1139,16 @@ class HostedClients(HyperShiftBase):
             if cluster_names_paths_dict
             else list(config.ENV_DATA.get("clusters", {}).keys())
         )
-        # filter out non-hosted clusters
+        # filter out non-hosted clusters if they exist in the provided config
         cluster_names = [
             name
             for name in cluster_names
-            if config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
-            == "hci_client"
+            if (
+                config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                is None
+                or config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                == "hci_client"
+            )
         ]
 
         for name in cluster_names:
@@ -1549,6 +1553,8 @@ class HypershiftHostedOCP(
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
+            # create Provisioning resource if not present
+
             provisioning_obj = OCS(
                 **OCP(kind=constants.PROVISIONING).get().get("items")[0]
             )
@@ -2495,7 +2501,7 @@ def hypershift_cluster_factory(
                     "installer_version"
                 ] = running_ocp_version
 
-            with ocsci_config.RunWithConfigContext(default_index):
+            with ocsci_config.RunWithProviderConfigContextIfAvailable():
                 cluster_path = create_cluster_dir(cluster_name)
                 def_client_config_dict["ENV_DATA"]["cluster_path"] = cluster_path
                 kubeconf_paths = (
