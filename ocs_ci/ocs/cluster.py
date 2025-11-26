@@ -1213,31 +1213,85 @@ def validate_claim_name_match_pvc(pvc_names, validated_pods=None):
         validated_pods.add(ceph_pod)
 
 
+def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
+    """
+    Helper to collect all OCS PVC names which are in Bound state.
+
+    Returns:
+        list(str): Names of all matching PVCs which are Bound.
+
+    Raises:
+        TimeoutExpiredError: If matching PVCs do not become Bound within the timeout.
+    """
+
+    lso_deployed = ocp.OCP(kind=constants.STORAGECLASS).is_exist(
+        resource_name=constants.DEFAULT_STORAGECLASS_LSO
+    )
+
+    # pvc name for the disks created with LSO and ODF is dynamic and depends on the
+    # storage cluster name, so we need to get it here
+    storage_device_set_name = ""
+    if lso_deployed:
+        storage_cluster_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=namespace,
+            resource_name=config.ENV_DATA["storage_cluster_name"],
+        )
+        storage_device_set_name = (
+            storage_cluster_obj.get()
+            .get("spec", {})
+            .get("storageDeviceSets", [])[0]
+            .get("name", "")
+        )
+
+    def _get_matching_bound_pvcs():
+        ocs_pvc_obj = get_all_pvc_objs(namespace=namespace)
+        matching_pvcs = [
+            pvc_obj
+            for pvc_obj in ocs_pvc_obj
+            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
+            or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)
+            or pvc_obj.name.startswith(storage_device_set_name)
+        ]
+        not_bound = [
+            pvc_obj.name
+            for pvc_obj in matching_pvcs
+            if pvc_obj.status != constants.STATUS_BOUND
+        ]
+        if not_bound:
+            logger.info(f"Waiting for PVCs to be Bound: {', '.join(sorted(not_bound))}")
+            return None
+        for pvc_obj in matching_pvcs:
+            logger.info(f"PVC {pvc_obj.name} is in Bound state")
+        return [pvc_obj.name for pvc_obj in matching_pvcs]
+
+    for pvc_names in TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=_get_matching_bound_pvcs
+    ):
+        if pvc_names:
+            return pvc_names
+    return None
+
+
 def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
     Also validate that those PVCs are attached to the OCS pods
 
     Raises:
-         AssertionError: If PVC is not mounted on one or more OCS pods
+         AssertionError: If PVC is not mounted on one or more OCS pods or some of the PVCs are not bound
 
     """
     # Get the PVCs for selected label (MON/OSD)
     ns = config.ENV_DATA["cluster_namespace"]
-    ocs_pvc_obj = get_all_pvc_objs(namespace=ns)
 
-    # Check all pvc's are in bound state
+    try:
+        pvc_names = _collect_bound_ocs_pvcs(namespace=ns)
+    except TimeoutExpiredError as exc:
+        raise AssertionError("Timed out waiting for OCS PVCs to become Bound") from exc
 
-    pvc_names = []
-    for pvc_obj in ocs_pvc_obj:
-        if pvc_obj.name.startswith(
-            constants.DEFAULT_DEVICESET_PVC_NAME
-        ) or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME):
-            assert (
-                pvc_obj.status == constants.STATUS_BOUND
-            ), f"PVC {pvc_obj.name} is not Bound"
-            logger.info(f"PVC {pvc_obj.name} is in Bound state")
-            pvc_names.append(pvc_obj.name)
+    if pvc_names is None:
+        pvc_names = []
 
     mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
     if not config.DEPLOYMENT.get("local_storage"):
