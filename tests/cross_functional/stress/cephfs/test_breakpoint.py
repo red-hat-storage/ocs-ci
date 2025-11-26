@@ -11,6 +11,8 @@ from ocs_ci.helpers.cephfs_stress_helpers import (
     stop_event,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import create_pod
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,9 @@ class TestCephfsStress(E2ETest):
     CephFS break point test - without failures
     """
 
-    def test_cephfs_breakpoint(self, threading_lock):
+    def test_cephfs_breakpoint(
+        self, threading_lock, project_factory, pvc_factory, teardown_factory
+    ):
         """
         The primary objective of this test is to find the system's breaking point which is the critical
         threshold at which ODF operations cease to complete successfully within the defined resource limits
@@ -50,9 +54,26 @@ class TestCephfsStress(E2ETest):
             daemon=True,
         )
         stress_checks_thread.start()
-
+        proj_name = "cephfs-stress-testing"
+        proj_obj = project_factory(project_name=proj_name)
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=proj_obj,
+            size=400,
+            access_mode=constants.ACCESS_MODE_RWX,
+            pvc_name="stress-cephfs-1",
+        )
+        standby_pod = create_pod(
+            interface_type=constants.CEPHFILESYSTEM,
+            pvc_name=pvc_obj.name,
+            namespace=proj_name,
+            pod_name="standby-stress-pod",
+        )
+        teardown_factory(standby_pod)
         try:
-            cephfs_stress_pod_obj = create_cephfs_stress_pod()
+            cephfs_stress_pod_obj = create_cephfs_stress_pod(
+                namespace=proj_name, pvc_name=pvc_obj.name
+            )
             logger.info(
                 f"The CephFS-stress pod {cephfs_stress_pod_obj.name} is created "
             )
@@ -72,8 +93,13 @@ class TestCephfsStress(E2ETest):
                     )
                     break
                 elif status == constants.STATUS_RUNNING:
-                    logger.debug(
-                        f"Pod is 'Running'. Waiting for {POD_INTERVAL_SECONDS}s..."
+                    logger.info(
+                        f"******* {cephfs_stress_pod_obj.name} is still in {status} state. "
+                        "Waiting for {POD_INTERVAL_SECONDS}s...*******"
+                    )
+                    logger.info(
+                        f"******* Check {cephfs_stress_pod_obj.name} logs to get more details on the ongoing "
+                        "file and directory opearations.....*******"
                     )
                     time.sleep(POD_INTERVAL_SECONDS)
                 else:
@@ -82,6 +108,7 @@ class TestCephfsStress(E2ETest):
                     )
 
         finally:
+            teardown_factory(cephfs_stress_pod_obj)
             logger.info("Signaling check thread to stop...")
             stop_event.set()
             stress_checks_thread.join()

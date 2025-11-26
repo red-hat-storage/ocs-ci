@@ -56,6 +56,8 @@ def create_cephfs_stress_project(project_name):
 
 
 def create_cephfs_stress_pod(
+    namespace,
+    pvc_name,
     base_dir=None,
     num_files=None,
     files_size=None,
@@ -97,9 +99,10 @@ def create_cephfs_stress_pod(
         "THREADS": threads,
     }
     cephfs_stress_pod_data = templating.load_yaml(CEPHFS_STRESS_YAML)
-    namespace = create_cephfs_stress_project(project_name="cephfs-stress-project")
     cephfs_stress_pod_data["metadata"]["namespace"] = namespace
-
+    cephfs_stress_pod_data["spec"]["volumes"][0]["persistentVolumeClaim"][
+        "claimName"
+    ] = pvc_name
     logger.info("Set environment variables in the pod template")
     set_env_vars(cephfs_stress_pod_data, env_vars)
     cephfs_stress_pod_obj = pod.Pod(**cephfs_stress_pod_data)
@@ -484,11 +487,15 @@ def continuous_checks_runner(interval_minutes, threading_lock=None):
     )
 
     while True:
-        if stop_event.wait(timeout=interval_seconds):
-            break
-
         logger.info(f"Running periodic checks loop (Interval: {interval_minutes} min)")
         run_cluster_checks(threading_lock=threading_lock)
         run_verification_checks()
+        logger.info(
+            f"Pausing for {interval_minutes} mins before the subsequent round of periodic cluster and"
+            "verification checks."
+        )
+
+        if stop_event.wait(timeout=interval_seconds):
+            break
 
     logger.info("Check Runner thread: Stop signal received, exiting")
