@@ -1233,6 +1233,15 @@ class HostedClients(HyperShiftBase):
                 "MCE resources are present, cannot proceed with OCP upgrade on KubeVirt clusters"
             )
 
+        # apply admin ack on hosting clusters to allow OCP upgrade for 4.19 version
+        # https://access.redhat.com/articles/7130599
+        # checked manually - there are no Removed Kubernetes APIs on the deployed IBM BM multi-client cluster
+        if config.ENV_DATA.get("ocp_version", "") == "4.19":
+            OCP().exec_oc_cmd(
+                f"patch cm admin-acks -n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+                f'--patch \'{{"data":{{"ack-4.19-admissionregistration-v1beta1-api-removals-in-4.20":"true"}}}}\' '
+            )
+
         cluster_names = list(config.ENV_DATA.get("clusters").keys())
         cluster_names = [
             name
@@ -1258,6 +1267,8 @@ class HostedClients(HyperShiftBase):
 
             logger.info(f"Upgrading OCP on hosted OCP cluster '{cluster_name}'")
             hypershift_cluster = HypershiftHostedOCP(cluster_name)
+
+            hypershift_cluster.apply_admin_acks_to_hosted_cluster()
             hypershift_cluster.patch_hosted_cluster_for_ocp_upgrade()
             hypershift_cluster.patch_nodepool_for_ocp_upgrade()
 
@@ -1731,6 +1742,16 @@ class HypershiftHostedOCP(
         if "nightly" in target_version:
             return f"{constants.REGISTRY_SVC}:{target_version}"
         return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
+
+    @if_version("<4.20")
+    def apply_admin_acks_to_hosted_cluster(self):
+        """
+        perform patch to hosted cluster necessary for 4.19 to 4.20 upgrade
+        """
+        self.exec_oc_cmd(
+            f"patch cm admin-acks -n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+            f'--patch \'{{"data":{{"ack-4.19-admissionregistration-v1beta1-api-removals-in-4.20":"true"}}}}\' '
+        )
 
     def patch_hosted_cluster_for_ocp_upgrade(self):
         """
