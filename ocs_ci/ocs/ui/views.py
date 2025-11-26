@@ -1099,17 +1099,18 @@ acm_configuration_4_12 = {
         "//span[contains(@class, 'c-menu__item-text') and text()='All Clusters']/..",
         By.XPATH,
     ),
-    # works for OCP 4.12 to 4.15
+    # works for OCP 4.12 to 4.20
     "local-cluster_dropdown": (
         "//h2[text()='local-cluster'] | "
         "//span[contains(@class, 'c-menu-toggle__text') "
-        "and text()='local-cluster']/..",
+        "and text()='local-cluster']/.. | "
+        "//h2[normalize-space()='Fleet Management']",
         By.XPATH,
     ),
-    # works for OCP 4.12 to 4.15
+    # works for OCP 4.12 to 4.20
     "local-cluster_dropdown_item": (
-        "//span[contains(@class, 'c-menu__item-text') "
-        "and text()='local-cluster']/..",
+        "//span[contains(@class, 'c-menu__item-text') and text()='local-cluster']/.. | "
+        "//h2[normalize-space()='Administrator']",
         By.XPATH,
     ),
     "cluster_status_check": ('//button[normalize-space()="{}"]', By.XPATH),

@@ -1027,6 +1027,18 @@ def login_ui(console_url=None, username=None, password=None):
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     )
 
+    def _skip_tour():
+        # Skip tour if it appears, if not found, continue without clicking
+        # we don't want to wait for Tour Guide more than 15 sec, because in most cases it will not be present
+        if any(
+            (driver.find_elements(*login_loc["skip_tour"][::-1]) or time.sleep(5))
+            for _ in range(3)
+        ):
+            skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
+            skip_tour_el.click()
+        else:
+            logger.info("Skip tour element not found. Continuing without clicking.")
+
     if hci_platform_conf:
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
@@ -1036,6 +1048,9 @@ def login_ui(console_url=None, username=None, password=None):
         if current_url != dashboard_url:
             # timeout is unusually high for different scenarios when default page is not loaded immediately
             logger.info("Navigate to 'Local Cluster' page")
+
+            _skip_tour()
+
             navigate_to_local_cluster(
                 acm_page=locators_for_current_ocp_version()["acm_page"], timeout=180
             )
@@ -1051,16 +1066,7 @@ def login_ui(console_url=None, username=None, password=None):
     if default_console is True:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
-    # Skip tour if it appears, if not found, continue without clicking
-    # we don't want to wait for Tour Guide more than 15 sec, because in most cases it will not be present
-    if any(
-        (driver.find_elements(*login_loc["skip_tour"][::-1]) or time.sleep(5))
-        for _ in range(3)
-    ):
-        skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
-        skip_tour_el.click()
-    else:
-        logger.info("Skip tour element not found. Continuing without clicking.")
+    _skip_tour()
 
     return driver
 
