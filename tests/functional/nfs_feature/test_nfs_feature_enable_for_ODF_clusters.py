@@ -33,7 +33,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_hci_client,
 )
-
+from ocs_ci.utility import version as version_module
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
@@ -208,12 +208,16 @@ class TestNfsEnable(ManageTest):
             )
 
             # Create a duplicate sc of nfs-sc and update the server details with hostname_add
-            _ = nfs_utils.create_nfs_sc(
-                sc_name_to_create=self.nfs_sc_copy,
-                sc_name_to_copy=self.nfs_sc,
-                server=self.hostname_add,
-            )
-            self.nfs_sc = self.nfs_sc_copy
+            if (
+                version_module.get_semantic_ocs_version_from_config()
+                < version_module.VERSION_4_21
+            ):
+                _ = nfs_utils.create_nfs_sc(
+                    sc_name_to_create=self.nfs_sc_copy,
+                    sc_name_to_copy=self.nfs_sc,
+                    server=self.hostname_add,
+                )
+                self.nfs_sc = self.nfs_sc_copy
             yield
             # Disable nfs feature
             nfs_utils.disable_nfs_service_from_provider(self.sc, nfs_ganesha_pod)
