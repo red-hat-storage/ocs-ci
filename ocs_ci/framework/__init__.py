@@ -528,7 +528,7 @@ class MultiClusterConfig:
 
         return wrapper
 
-        def get_cluster_kubeconfig_by_index(self, index):
+    def get_cluster_kubeconfig_by_index(self, index):
         """
         Get the cluster kubeconfig by the cluster index
 
