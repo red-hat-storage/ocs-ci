@@ -5,7 +5,11 @@ import shlex
 import subprocess
 
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.wait import WebDriverWait
@@ -68,6 +72,7 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Home"])
         self.do_click(locator=self.acm_page_nav["Overview_page"])
 
+    @retry(StaleElementReferenceException, tries=3, delay=10, backoff=1)
     def navigate_clusters_page(self, timeout=120):
         """
         Navigate to ACM Clusters Page
