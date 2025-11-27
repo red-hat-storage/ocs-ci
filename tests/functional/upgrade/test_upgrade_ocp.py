@@ -8,6 +8,7 @@ from semantic_version import Version
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CephHealthException
+from ocs_ci.ocs.node import get_nodes_in_statuses
 from ocs_ci.ocs.ocp import check_cluster_operator_versions
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
@@ -21,6 +22,7 @@ from ocs_ci.utility.utils import (
     expose_ocp_version,
     ceph_health_check,
     load_config_file,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
@@ -117,6 +119,7 @@ class TestUpgradeOCP(ManageTest):
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
         if (
             config.multicluster
+            and config.MULTICLUSTER.get("multicluster_mode")
             and config.MULTICLUSTER["multicluster_mode"] in ["metro-dr", "regional-dr"]
             and is_acm_cluster(config)
         ):
@@ -217,6 +220,21 @@ class TestUpgradeOCP(ManageTest):
 
                 logger.info(f"full upgrade path: {image_path}:{target_image}")
                 ocp.upgrade_ocp(image=target_image, image_path=image_path)
+
+                # On provider clusters, using HCP, automatic MCO drain & reboot fails due to fail evict
+                # kube-apiserver and virt-launcher pods
+                if provider_cluster and config.ENV_DATA["platform"] == "hci_baremetal":
+                    cordoned = get_nodes_in_statuses(
+                        [
+                            constants.NODE_READY_SCHEDULING_DISABLED,
+                            constants.NODE_NOT_READY_SCHEDULING_DISABLED,
+                        ]
+                    )
+                    logger.info(f"Cordoned nodes: {[node.name for node in cordoned]}")
+                    wait_for_machineconfigpool_status(
+                        node_type="worker", force_delete_pods=True, timeout=1800
+                    )
+
             else:
                 logger.info(f"upgrade rosa cluster to target version: '{target_image}'")
                 upgrade_rosa_cluster(config.ENV_DATA["cluster_name"], target_image)

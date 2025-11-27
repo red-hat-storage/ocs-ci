@@ -4771,6 +4771,20 @@ def get_client_version(client_binary_path):
         return stdout["releaseClientVersion"]
 
 
+def get_server_version():
+    """
+    Get version reported by `oc version`.
+
+    Returns:
+        str: version reported by `oc version`.
+
+    """
+    cmd = "oc version -o json"
+    resp = exec_cmd(cmd)
+    stdout = json.loads(resp.stdout.decode())
+    return stdout["openshiftVersion"]
+
+
 def clone_notify():
     """
     Repository contains the source code of notify tool,
