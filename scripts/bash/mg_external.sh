@@ -24,7 +24,7 @@ dbglog() {
     # Allow the input to be piped
     declare msg=${1:-$(</dev/stdin)}
 
-    echo -e "${msg}" | tee -a "${BASE_COLLECTION_PATH}"/ceph/gather-debug.log
+    echo -e "${msg}" | tee -a "${BASE_COLLECTION_PATH}/external-ceph-gather.log"
 }
 
 
