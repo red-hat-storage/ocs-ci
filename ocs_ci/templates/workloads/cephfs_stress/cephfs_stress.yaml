@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: smallfile-pod
+  name: cephfs-stress-pod
   namespace: default
 spec:
   containers:
-  - name: smallfileio
+  - name: cephfs-stress
     image: quay.io/ocsci/stress-smallfile:latest
     imagePullPolicy: Always
     command: ["python3", "/script/smallfile.py"]

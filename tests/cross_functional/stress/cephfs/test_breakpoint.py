@@ -61,13 +61,13 @@ class TestCephfsStress(E2ETest):
             project=proj_obj,
             size=400,
             access_mode=constants.ACCESS_MODE_RWX,
-            pvc_name="stress-cephfs-1",
+            pvc_name="cephfs-stress-pvc",
         )
         standby_pod = create_pod(
             interface_type=constants.CEPHFILESYSTEM,
             pvc_name=pvc_obj.name,
             namespace=proj_name,
-            pod_name="standby-stress-pod",
+            pod_name="standby-cephfs-stress-pod",
         )
         teardown_factory(standby_pod)
         try:
@@ -95,7 +95,7 @@ class TestCephfsStress(E2ETest):
                 elif status == constants.STATUS_RUNNING:
                     logger.info(
                         f"******* {cephfs_stress_pod_obj.name} is still in {status} state. "
-                        "Waiting for {POD_INTERVAL_SECONDS}s...*******"
+                        f"Waiting for {POD_INTERVAL_SECONDS}s...*******"
                     )
                     logger.info(
                         f"******* Check {cephfs_stress_pod_obj.name} logs to get more details on the ongoing "
