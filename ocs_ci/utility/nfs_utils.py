@@ -445,3 +445,32 @@ def disable_nfs_service_from_provider(nfs_sc_obj, nfs_ganesha_pod_name):
 
     # switch to consumer
     config.switch_to_consumer()
+
+
+def update_nfs_endpoint():
+    """
+    This method is to pass nfs external endpoint under storagecluster.spec.nfs
+
+    """
+    storage_cluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    nfs_spec_enable = '{"spec": {"nfs":{ExternalEndpoint}}}'
+    assert storage_cluster_obj.patch(
+        resource_name="ocs-storagecluster",
+        params=nfs_spec_enable,
+        format_type="merge",
+    ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
+
+
+def fetch_nfs_spec_details():
+    """
+    This method is to fetch nfs spec details
+
+    Returns:
+        dict: nfs spec details
+    """
+    storage_cluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    return storage_cluster_obj.get().get("spec").get("nfs")
