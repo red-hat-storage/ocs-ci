@@ -384,8 +384,8 @@ higher priority).
 * `vpc_name` - Name of existing VPC for IBM Cloud IPI deployment when using existing VPC.
 * `control_plane_subnets` - List of existing control plane subnet names for IBM Cloud IPI deployment when using existing VPC.
 * `compute_subnets` - List of existing compute subnet names for IBM Cloud IPI deployment when using existing VPC.
-*  `worker_instance_type` - Worker instance type in ibmcloud; example: 'bx2-16x64'
-*  `master_instance_type` - Worker instance type in ibmcloud; example: 'bx2-4x16'
+* `worker_instance_type` - Worker instance type in ibmcloud; example: 'bx2-16x64'
+* `master_instance_type` - Worker instance type in ibmcloud; example: 'bx2-4x16'
 * `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
