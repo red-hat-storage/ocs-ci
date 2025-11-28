@@ -6,9 +6,10 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     tier4c,
+    tier2,
     acceptance,
     polarion_id,
-    green_squad,
+    brown_squad,
     skipif_ocs_version,
 )
 from ocs_ci.ocs import (
@@ -21,19 +22,22 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.helpers.helpers import verify_socket_on_node
+from ocs_ci.helpers.helpers import (
+    verify_socket_on_node,
+    verify_socket_permission,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @skipif_ocs_version("<4.20")
+@brown_squad
 class TestCSIADDonDaemonset(ManageTest):
     """
     Test class for CSI addon daemonset verification
     """
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7386")
     def test_csi_addon_daemonset_exists(self):
         """
@@ -77,7 +81,6 @@ class TestCSIADDonDaemonset(ManageTest):
 
     @acceptance
     @tier1
-    @green_squad
     @polarion_id("OCS-7374")
     def test_csi_addon_pods_containers_ready(self):
         """
@@ -102,7 +105,6 @@ class TestCSIADDonDaemonset(ManageTest):
         logger.info("All containers in CSI-addon DaemonSet pods are ready")
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7373")
     def test_csi_addon_pods_uses_pod_network(self):
         """
@@ -126,7 +128,6 @@ class TestCSIADDonDaemonset(ManageTest):
         )
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7375")
     def test_csi_addon_daemonset_desired_vs_ready(self):
         """
@@ -161,7 +162,6 @@ class TestCSIADDonDaemonset(ManageTest):
         )
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7305")
     def test_csi_addon_pods_on_worker_nodes(self):
         """
@@ -204,7 +204,6 @@ class TestCSIADDonDaemonset(ManageTest):
         logger.info("CSI addon pods running on each worker node")
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7387")
     def test_csi_addon_pod_restart(self):
         """
@@ -232,7 +231,6 @@ class TestCSIADDonDaemonset(ManageTest):
         ), "CSI-addons pod didn't came up is running status "
 
     @tier1
-    @green_squad
     @polarion_id("OCS-7379")
     def test_csi_addons_socket_creation_per_pods_node(self):
         """
@@ -261,7 +259,6 @@ class TestCSIADDonDaemonset(ManageTest):
                 socket_name=constants.RBD_CSI_ADDONS_SOCKET_NAME,
             ), f"csi-addons Socket not found on node {csi_pod_running_node_name}"
 
-    @green_squad
     @tier4c
     @polarion_id("OCS-7376")
     def test_csi_addons_pod_crash_recovery(self):
@@ -309,3 +306,32 @@ class TestCSIADDonDaemonset(ManageTest):
         assert (
             restart_count_after > restart_count_before
         ), f"Restart count should increase, Pod restart count of pod- {pod_name} is {restart_count_after} "
+
+    @tier2
+    @polarion_id("OCS-7389")
+    def test_csi_addons_socket_permission(self):
+        """
+        csi-addons.sock are used for communication for csi-addons.
+        This test ensure the socket permission of csi-addons.sock socket
+        on hostpath for each pods node.
+        Steps:
+        1. Get all csi-addons pods
+        2. Get nodes of each csi-addons pod
+        3. Verify socket permission of each csi-addon.sock file on nodes
+        """
+        logger.info(
+            "Validating csi-addons.sock socket permission on nodes of each csi-addons pod"
+        )
+        namespace = config.ENV_DATA["cluster_namespace"]
+        # 1. Get all csi-addons pods
+        csi_addon_pods = get_pods_having_label(
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        # Verify socket creation on node of each csi-addons pod
+        for pod_obj in csi_addon_pods:
+            csi_pod_running_node_name = pod_obj.get("spec").get("nodeName")
+            assert verify_socket_permission(
+                node_name=csi_pod_running_node_name,
+                host_path=constants.RBD_CSI_ADDONS_PLUGIN_DIR,
+                socket_name=constants.RBD_CSI_ADDONS_SOCKET_NAME,
+            ), f"csi-addons.sock Socket not having expected permission on node {csi_pod_running_node_name}"
