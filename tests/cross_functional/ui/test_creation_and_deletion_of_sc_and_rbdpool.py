@@ -21,6 +21,7 @@ from ocs_ci.ocs.cluster import (
     validate_replica_data,
 )
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
+from ocs_ci.utility.utils import skip_test_for_debugging_failure
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 @skipif_ibm_cloud_managed
 @skipif_hci_provider_or_client
 @skipif_disconnected_cluster
+@skip_test_for_debugging_failure
 class TestRbDPool(ManageTest):
     """
     Create a new  Storage Class on a new rbd pool with
