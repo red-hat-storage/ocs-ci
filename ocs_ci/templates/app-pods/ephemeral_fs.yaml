@@ -6,7 +6,7 @@ metadata:
 spec:
   containers:
     - name: web-server
-      image: quay.io/ocsci/nginx:fio
+      image: quay.io/ocsci/nginx:nov18-3
       volumeMounts:
         - mountPath: "/scratch"
           name: scratch-volume
