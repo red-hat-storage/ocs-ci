@@ -2966,12 +2966,16 @@ def run_osd_removal_job(osd_ids=None):
     Run the ocs-osd-removal job
 
     Args:
-        osd_ids (list): The osd IDs.
+        osd_ids (list | None): The osd IDs.
 
     Returns:
-        ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
+        ocs_ci.ocs.resources.ocs.OCS | None: The ocs-osd-removal job object, or None if no OSDs provided
 
     """
+    if not osd_ids:
+        logger.warning("run_osd_removal_job called with empty osd_ids – nothing to do")
+        return None
+
     osd_ids_str = ",".join(map(str, osd_ids))
 
     cmd_params = "-p FORCE_OSD_REMOVAL=true"
