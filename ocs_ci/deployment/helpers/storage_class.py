@@ -40,6 +40,14 @@ def get_storageclass() -> str:
 
     if customized_deployment_storage_class:
         storage_class = customized_deployment_storage_class
+    elif (
+        platform == constants.VSPHERE_PLATFORM
+        and config.ENV_DATA.get("deployment_type") == "ai"
+    ):
+        # If the deployment type is AI, it's considered as baremetal deployment
+        # and we don't have thin-csi storage class available. This will avoid
+        # failures in patching default SC as non-default SC.
+        storage_class = None
     else:
         storage_class = DEFAULT_STORAGE_CLASS_MAP.get(platform)
 
