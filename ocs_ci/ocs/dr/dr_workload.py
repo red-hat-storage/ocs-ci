@@ -178,10 +178,12 @@ class BusyBox(DRWorkload):
             self._deploy_prereqs()
             self.workload_namespace = self._get_workload_namespace()
         else:
+            if self.pvc_interface == constants.CEPHBLOCKPOOL:
+                pvc_type = constants.RBD_INTERFACE
+            elif self.pvc_interface == constants.CEPHFILESYSTEM:
+                pvc_type = constants.CEPHFS_INTERFACE
             self.workload_namespace = (
-                create_unique_resource_name("workload", "sub")[:25]
-                + "-"
-                + self.pvc_interface
+                create_unique_resource_name("workload", "sub")[:25] + "-" + pvc_type
             )
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -726,10 +728,12 @@ class BusyBox_AppSet(DRWorkload):
             self._deploy_prereqs()
             self.workload_namespace = self._get_workload_namespace()
         else:
+            if self.pvc_interface == constants.CEPHBLOCKPOOL:
+                pvc_type = constants.RBD_INTERFACE
+            elif self.pvc_interface == constants.CEPHFILESYSTEM:
+                pvc_type = constants.CEPHFS_INTERFACE
             self.workload_namespace = (
-                create_unique_resource_name("workload", "appset")[:25]
-                + "-"
-                + self.pvc_interface
+                create_unique_resource_name("workload", "appset")[:25] + "-" + pvc_type
             )
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)

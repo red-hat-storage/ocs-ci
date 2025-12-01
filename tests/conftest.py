@@ -7546,14 +7546,17 @@ def discovered_apps_dr_workload(request):
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
-
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            pvc_type = constants.RBD_INTERFACE
+        elif pvc_interface == constants.CEPHFILESYSTEM:
+            pvc_type = constants.CEPHFS_INTERFACE
         if bool(kubeobject):
             for index in range(kubeobject):
                 workload_details = workload_details_list[index]
                 workload_namespace = (
                     create_unique_resource_name("workload", "dist")[:20]
                     + "-"
-                    + pvc_interface
+                    + pvc_type
                 )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
@@ -7622,7 +7625,7 @@ def discovered_apps_dr_workload(request):
                 workload_namespace = (
                     create_unique_resource_name("workload-rp", "dist")[:20]
                     + "-"
-                    + pvc_interface
+                    + pvc_type
                 )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
