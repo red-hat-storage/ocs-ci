@@ -7550,9 +7550,11 @@ def discovered_apps_dr_workload(request):
         if bool(kubeobject):
             for index in range(kubeobject):
                 workload_details = workload_details_list[index]
-                workload_namespace = create_unique_resource_name("workload", "dist")[
-                    :20
-                ]
+                workload_namespace = (
+                    create_unique_resource_name("workload", "dist")[:20]
+                    + "-"
+                    + pvc_interface
+                )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
@@ -7617,9 +7619,11 @@ def discovered_apps_dr_workload(request):
         if bool(recipe):
             for index in range(recipe):
                 workload_details = ocsci_config.ENV_DATA[workload_key][index]
-                workload_namespace = create_unique_resource_name("workload", "dist")[
-                    :20
-                ]
+                workload_namespace = (
+                    create_unique_resource_name("workload-rp", "dist")[:20]
+                    + "-"
+                    + pvc_interface
+                )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
