@@ -178,9 +178,11 @@ class BusyBox(DRWorkload):
             self._deploy_prereqs()
             self.workload_namespace = self._get_workload_namespace()
         else:
-            self.workload_namespace = create_unique_resource_name("workload", "sub")[
-                :25
-            ]
+            self.workload_namespace = (
+                create_unique_resource_name("workload", "sub")[:25]
+                + "-"
+                + self.pvc_interface
+            )
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
@@ -724,9 +726,11 @@ class BusyBox_AppSet(DRWorkload):
             self._deploy_prereqs()
             self.workload_namespace = self._get_workload_namespace()
         else:
-            self.workload_namespace = create_unique_resource_name("workload", "appset")[
-                :25
-            ]
+            self.workload_namespace = (
+                create_unique_resource_name("workload", "appset")[:25]
+                + "-"
+                + self.pvc_interface
+            )
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
