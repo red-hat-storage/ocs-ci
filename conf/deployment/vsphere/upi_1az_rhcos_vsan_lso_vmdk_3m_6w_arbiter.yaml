@@ -26,7 +26,7 @@ ENV_DATA:
     - 'data-1'
     - 'data-2'
   worker_num_cpus: '16'
-  master_num_cpus: '4'
+  master_num_cpus: '8'
   master_memory: '16384'
   compute_memory: '65536'
   extra_disks: 2
