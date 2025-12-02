@@ -12,7 +12,10 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
     skipif_external_mode,
 )
-from ocs_ci.helpers.helpers import verify_quota_resource_exist
+from ocs_ci.helpers.helpers import (
+    verify_quota_resource_exist,
+    create_unique_resource_name,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -20,8 +23,9 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True, scope="class")
 def setup_sc(storageclass_factory_class):
+    sc_name = create_unique_resource_name("test-blk", "sc")
     sc_blk_obj = storageclass_factory_class(
-        interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
+        interface=constants.CEPHBLOCKPOOL, sc_name=sc_name
     )
     yield {
         constants.CEPHBLOCKPOOL_SC: None,
