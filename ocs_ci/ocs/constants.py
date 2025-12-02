@@ -2227,6 +2227,8 @@ DISCON_CL_PROXY_ALLOWED_DOMAINS = (
     "mirrorlist.centos.org",
     "mirror.centos.org",
 )
+
+NO_PROXY_LOCALHOST = ["localhost", "127.0.0.1", "::1"]
 # mirrored redhat-operators index image for catalog source namespace and name
 MIRRORED_INDEX_IMAGE_NAMESPACE = "olm-mirror"
 MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
