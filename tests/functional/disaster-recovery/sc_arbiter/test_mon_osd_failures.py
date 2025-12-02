@@ -146,7 +146,7 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
 @tier2
 @turquoise_squad
 @stretchcluster_required
-@pytest.mark.usefixtures("setup_cnv_workload")
+# @pytest.mark.usefixtures("setup_cnv_workload")
 @pytest.mark.usefixtures("setup_logwriter_workloads")
 class TestMonAndOSDFailures:
     """
