@@ -64,6 +64,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.jira import JiraHelper
 from psutil._common import bytes2human
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
@@ -2591,13 +2592,21 @@ def ceph_health_resolve_mon_slow_ops(health_status):
         )
 
 
-def ceph_health_recover(health_status, namespace=None):
+def ceph_health_recover(
+    health_status,
+    namespace=None,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Function which tries to recover ceph health to be HEALTH OK
 
     Args:
         health_status (str): Ceph health status
         namespace (str): Namespace of OCS
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered
 
     Raises:
         CephHealthNotRecoveredException: When Ceph health was not recovered
@@ -2620,6 +2629,12 @@ def ceph_health_recover(health_status, namespace=None):
             "func_kwargs": {},
             "ceph_health_tries": 5,
             "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-2781",
+                    "pattern": r"mgr module prometheus crashed in",
+                },
+            ],
         },
         {
             "pattern": r"slow ops, oldest one blocked for \d+ sec, mon\.([a-z]) has slow ops",
@@ -2628,11 +2643,19 @@ def ceph_health_recover(health_status, namespace=None):
             "func_kwargs": {},
             "ceph_health_tries": 6,
             "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-2456",
+                    "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
+                    == "regional-dr",
+                },
+            ],
         },
         # TODO: Add more patterns and fix functions
     ]
     for fix_dict in ceph_health_fixes:
         pattern = fix_dict["pattern"]
+        jira_issues = fix_dict.get("known_issues", [])
         if re.search(pattern, health_status):
             log.info(
                 "Trying to fix Ceph Health because we found in Health status the matching pattern"
@@ -2648,6 +2671,53 @@ def ceph_health_recover(health_status, namespace=None):
                 ocp=False,
                 timeout=defaults.MUST_GATHER_TIMEOUT,
             )
+            jenkins_build_url = config.RUN.get("jenkins_build_url", "")
+            base_logs_url = config.RUN.get("logs_url", "")
+            mg_log_url = (
+                f"{base_logs_url}/failed_testcase_ocs_logs_{config.RUN['run_id']}/"
+            )
+            odf_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
+            odf_version = version_module.get_ocs_version_from_csv()
+            ocp_version = version_module.get_semantic_ocp_running_version()
+            issue_confirmed = False
+            issue_commented = False
+            jira_issue_id = None
+            for jira_issue in jira_issues:
+                jira_issue_id = jira_issue["issue"]
+                jira_issue_pattern = jira_issue.get("pattern")
+                jira_issue_function = jira_issue.get("func")
+                if jira_issue_pattern:
+                    if re.search(jira_issue["pattern"], health_status):
+                        issue_confirmed = True
+                if jira_issue_function:
+                    issue_confirmed = jira_issue_function()
+                if issue_confirmed:
+                    break
+            if issue_confirmed and update_jira:
+                msg_lines = [
+                    "*OCS-CI report*",
+                    f"ODF version: {odf_version}",
+                    f"OCP version: {ocp_version}",
+                ]
+                if odf_registry_image:
+                    msg_lines.append(f"ODF registry image: {odf_registry_image}")
+                if jenkins_build_url:
+                    msg_lines.append(f"Issue reproduced in job: {jenkins_build_url}")
+                if mg_log_url:
+                    msg_lines.append(f"MG logs collected here: {mg_log_url}")
+                msg = "\n".join(msg_lines)
+                try:
+                    jira_helper = JiraHelper()
+                    jira_issue = jira_helper.get_issue(jira_issue_id)
+                    jira_issue_summary = jira_issue["fields"]["summary"]
+                    log.error(
+                        f"Hitting jira issue: {jira_issue_id} - {jira_issue_summary}"
+                    )
+                    jira_helper.add_comment(jira_issue_id, msg)
+                    issue_commented = True
+                except Exception as ex:
+                    log.error(f"Failed to connect or comment to Jira: {ex}")
+
             fix_dict["func"](
                 *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
             )
@@ -2661,6 +2731,12 @@ def ceph_health_recover(health_status, namespace=None):
                 raise CephHealthNotRecoveredException(
                     f"Attempt to try to recover the Ceph Health failed! Exception: {ex}"
                 )
+            if update_jira and issue_commented and no_exception_if_jira_issue_updated:
+                log.info(
+                    f"Jira issue: {jira_issue_id} was updated and ceph health was recovered,"
+                    " no exception will be raised"
+                )
+                return
             raise CephHealthRecoveredException(
                 "Ceph health was not OK and got forcibly recovered to not block other tests"
                 f" after the issue: {pattern} !"
@@ -2669,7 +2745,14 @@ def ceph_health_recover(health_status, namespace=None):
             )
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False):
+def ceph_health_check(
+    namespace=None,
+    tries=20,
+    delay=30,
+    fix_ceph_health=False,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Args:
         namespace (str): Namespace of OCS
@@ -2678,7 +2761,9 @@ def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False)
         delay (int): Delay in seconds between retries
         fix_ceph_health (bool): If True, it will try to fix the health to be OK
             even if it will recover, we will get an exception CephHealthRecoveredException
-
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered. Applicable only if fix_ceph_health is True.
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
             delay of 30 seconds if default values are not changed via args.
@@ -2699,7 +2784,12 @@ def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False)
     )(ceph_health_check_base)(namespace, fix_ceph_health)
 
 
-def ceph_health_check_base(namespace=None, fix_ceph_health=False):
+def ceph_health_check_base(
+    namespace=None,
+    fix_ceph_health=False,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
@@ -2708,6 +2798,9 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
             (default: config.ENV_DATA['cluster_namespace'])
         fix_ceph_health (bool): If True, it will try to fix the health to be OK
             even if it will recover, we will get an exception CephHealthRecoveredException
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered. Applicable only if fix_ceph_health is True.
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
@@ -2719,14 +2812,20 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    health = run_ceph_health_cmd(namespace)
+    health = run_ceph_health_cmd(namespace, detail=True)
 
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
+        log.warning(f"Ceph cluster health is not HEALTH_OK: {health}")
         if fix_ceph_health:
-            ceph_health_recover(health, namespace)
+            ceph_health_recover(
+                health,
+                namespace,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
         raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
 
 
@@ -2750,12 +2849,13 @@ def create_ceph_health_cmd(namespace):
     return ceph_health_cmd
 
 
-def run_ceph_health_cmd(namespace):
+def run_ceph_health_cmd(namespace, detail=False):
     """
     Run the ceph health command
 
     Args:
         namespace: Namespace of OCS
+        detail: If True, it will run the ceph health command with detail option
 
     Raises:
         CommandFailed: In case the rook-ceph-tools pod failed to reach the Ready state.
@@ -2772,7 +2872,9 @@ def run_ceph_health_cmd(namespace):
         ct_pod = get_ceph_tools_pod(namespace=namespace)
     except (AssertionError, CephToolBoxNotFoundException) as ex:
         raise CommandFailed(ex)
-
+    ceph_cmd = "ceph health"
+    if detail:
+        ceph_cmd += "detail"
     return ct_pod.exec_ceph_cmd(
         ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
     )

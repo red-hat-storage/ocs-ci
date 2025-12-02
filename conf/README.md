@@ -411,6 +411,12 @@ auth file or pulled from s3.
   * `username` - username for database
   * `password` - password of database user
   * `port` - port where PgSQL server listen to
+* `jira` - Jira related section for reporting purpose, if not provided it will try to read values from /etc/jira.cfg
+  * `url` - URL of Jira instance
+  * `token` - auth token for Jira
+  * `visibility` - E.g. `{"type": "group", "value": "Red Hat Employee"}` which
+    is used as Default value if not provided to do not expose data to public
+
 
 #### MULTICLUSTER
 

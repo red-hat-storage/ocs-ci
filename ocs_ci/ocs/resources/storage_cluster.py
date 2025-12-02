@@ -25,7 +25,6 @@ from ocs_ci.helpers.managed_services import (
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
-    CephHealthRecoveredException,
     CommandFailed,
     InvalidPodPresent,
     ResourceNotFoundError,
@@ -767,24 +766,17 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
 
-    rdr_run = config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
-
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
     if not (fusion_aas_consumer or hci_cluster):
         # Temporarily disable health check for hci until we have enough healthy clusters
-        try:
-            assert utils.ceph_health_check(
-                namespace,
-                health_check_tries,
-                health_check_delay,
-                fix_ceph_health=True,
-            )
-        except CephHealthRecoveredException as ex:
-            if rdr_run and "slow ops" in str(ex):
-                # Related issue: https://github.com/red-hat-storage/ocs-ci/issues/11244
-                log.warning("For RDR run we ignore slow ops error as it was recovered!")
-            else:
-                raise
+        assert utils.ceph_health_check(
+            namespace,
+            health_check_tries,
+            health_check_delay,
+            fix_ceph_health=True,
+            update_jira=True,
+            no_exception_if_jira_issue_updated=True,
+        )
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
