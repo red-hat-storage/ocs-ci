@@ -1412,7 +1412,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             get_primary_cluster_config().ENV_DATA["cluster_name"]
         )
         if is_hosted_cluster(get_primary_cluster_config().ENV_DATA["cluster_type"]):
-            self.self.preferred_primary_cluster = (
+            self.preferred_primary_cluster = (
                 constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
                 + "-"
                 + self.preferred_primary_cluster
