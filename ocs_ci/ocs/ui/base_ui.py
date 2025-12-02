@@ -843,6 +843,7 @@ class SeleniumDriver(WebDriver):
                 config.DEPLOYMENT.get("proxy")
                 or config.DEPLOYMENT.get("disconnected")
                 or config.ENV_DATA.get("private_link")
+                or config.DEPLOYMENT.get("ipv6")
             ) and config.ENV_DATA.get("client_http_proxy"):
                 client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
                 # there is a big difference between configuring not authenticated
@@ -858,6 +859,9 @@ class SeleniumDriver(WebDriver):
                     )
                     chrome_options.add_argument(
                         f"--proxy-server={client_proxy.geturl()}"
+                    )
+                    chrome_options.add_argument(
+                        f"--proxy-bypass-list={','.join(constants.NO_PROXY_LOCALHOST)}"
                     )
                 elif not headless:
                     # authenticated proxy, not headless mode

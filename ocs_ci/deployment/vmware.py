@@ -909,7 +909,8 @@ class VSPHEREUPI(VSPHEREBASE):
                             [
                                 cluster_domain,
                                 config.DEPLOYMENT.get("disconnected_no_proxy", ""),
-                            ],
+                            ]
+                            + constants.NO_PROXY_LOCALHOST,
                         ),
                     }
                 if config.DEPLOYMENT.get("disconnected"):
@@ -923,7 +924,8 @@ class VSPHEREUPI(VSPHEREBASE):
                             [
                                 cluster_domain,
                                 config.DEPLOYMENT.get("disconnected_no_proxy", ""),
-                            ],
+                            ]
+                            + constants.NO_PROXY_LOCALHOST,
                         ),
                     }
                     install_config_obj.update(
