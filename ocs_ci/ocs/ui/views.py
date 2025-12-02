@@ -2857,6 +2857,60 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
+external_systems = {
+    "connect_external_system": (
+        "//button[@data-test='configure-external-systems']",
+        By.XPATH,
+    ),
+    "connect_flash": (
+        "connect-flash-system",
+        By.ID,
+    ),
+    "connect_scale": (
+        "setup-scale-storage",
+        By.ID,
+    ),
+    "next_button": (
+        "//button[contains(text(), 'Next')]",
+        By.XPATH,
+    ),
+    "scale_name": (
+        "name",
+        By.ID,
+    ),
+    "selected_nodes": (
+        "use-selected-nodes",
+        By.ID,
+    ),
+    "mandatory_endpoit": (
+        "mandatory-endpoint-host",
+        By.ID,
+    ),
+    "mandatory_port": (
+        "mandatory-endpoint-port",
+        By.ID,
+    ),
+    "scale_username": (
+        "userName",
+        By.ID,
+    ),
+    "scale_password": (
+        "password",
+        By.ID,
+    ),
+    "filesystem_name": (
+        "fileSystemName",
+        By.ID,
+    ),
+    "connect_scale_final": (
+        "button[data-test='connect-scale-system']",
+        By.CSS_SELECTOR,
+    ),
+    "alert_description": (
+        "[class*='-c-alert__description']",
+        By.CSS_SELECTOR,
+    ),
+}
 locators = {
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -2984,6 +3038,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
+        "external_systems": external_systems,
     },
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
