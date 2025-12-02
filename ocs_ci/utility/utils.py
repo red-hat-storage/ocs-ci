@@ -2639,18 +2639,26 @@ def ceph_health_resolve_crash():
 
 def ceph_health_resolve_mon_slow_ops(health_status):
     """
-    Fix ceph health issue with mon slow ops
+    Fix Ceph health issue with mon slow ops.
+    Supports both 'mon.e has slow ops' and 'daemons [mon.e,mon.f] have slow ops'
     """
-    log.warning("Trying to fix the issue with mon slow ops by restarting mon pod")
-    mon_pattern = r"mon\.([a-z]) has slow ops"
-    match = re.search(mon_pattern, health_status)
-    mon_id = None
-    if match:
-        mon_id = match.group(1)
-        log.warning(f"Problematic MON ID with slow ops: {mon_id} will be restarted")
-    if mon_id:
-        from ocs_ci.ocs import ocp
+    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
 
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning("No MON IDs found in health status. Cannot resolve slow ops.")
+        return
+
+    log.warning(f"Detected problematic MON IDs with slow ops: {mon_ids}")
+
+    from ocs_ci.ocs import ocp
+
+    # Restart each problematic MON
+    for mon_id in mon_ids:
+        log.warning(f"Restarting MON '{mon_id}' ...")
         ocp.OCP().exec_oc_cmd(
             f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
         )
@@ -2687,7 +2695,7 @@ def ceph_health_recover(health_status, namespace=None):
             "ceph_health_delay": 30,
         },
         {
-            "pattern": r"slow ops, oldest one blocked for \d+ sec, mon\.([a-z]) has slow ops",
+            "pattern": r"slow ops, oldest one blocked for \d+ sec, .*(?:has|have) slow ops",
             "func": ceph_health_resolve_mon_slow_ops,
             "func_args": [health_status],
             "func_kwargs": {},
