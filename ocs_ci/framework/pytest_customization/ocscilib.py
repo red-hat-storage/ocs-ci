@@ -592,7 +592,7 @@ def process_cluster_cli_params(config):
         # Problem:
         # In case of setting up multiple configuration files provided to run-ci, script expects path to have suffix + 1
         # When running run-ci with single configuration, suffix is empty, but pytest script sets config.multicluster
-        # in time when loading marks.py module, if platform is 'hci_baremetal'
+        # in time when loading marks.py module, if platform is 'ibm_baremetal'
         # When script dynamically adds configuration, makes ocsci_config.multicluster and adds suffix + 1 to config_path
         # This leads to ClusterPathNotProvidedError
         #
