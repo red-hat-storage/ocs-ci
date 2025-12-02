@@ -512,7 +512,8 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
             # Bring arbiter node down
-            arbiter_zone = constants.ARBITER_ZONE_LABEL
+            arbiter_zone = constants.ARBITER_ZONE_LABEL[0]
+            print(f"----Amrita--- arbiter_zone: {arbiter_zone}")
             nodes_to_shutdown = sc_obj.get_nodes_in_zone(arbiter_zone)
 
             assert (
