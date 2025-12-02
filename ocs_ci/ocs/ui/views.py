@@ -4,6 +4,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import get_ocp_version
 
+
 logger = logging.getLogger(__name__)
 
 osd_sizes = ("512", "2048", "4096")
@@ -2652,6 +2653,136 @@ bucket_tab = {
         ".toast-notifications-list-pf .alert-success",
         ".co-alert--success",
     ],
+    # Lifecycle policy locators
+    "management_tab": (
+        "//span[contains(@class, 'c-tabs__item-text') and text()='Management']/parent::*",
+        By.XPATH,
+    ),
+    "create_lifecycle_rule_button": (
+        "//button[text()='Create lifecycle rule']",
+        By.XPATH,
+    ),
+    "lifecycle_rules_list": (
+        "//table[@data-label='Lifecycle rules table']//tbody/tr",
+        By.XPATH,
+    ),
+    "rule_name_by_text": (
+        "//td[@data-label='Name' and text()='{}']",
+        By.XPATH,
+    ),
+    "rule_kebab_menu": (
+        "//tr[contains(., '{}')]//button[@data-ouia-component-type='PF5/MenuToggle']",
+        By.XPATH,
+    ),
+    "edit_rule_option": (
+        "//span[contains(@class, 'c-menu__item-text') and text()='Edit lifecycle rule']",
+        By.XPATH,
+    ),
+    "delete_rule_option": (
+        "//span[contains(@class, 'c-menu__item-text') and text()='Delete rule']",
+        By.XPATH,
+    ),
+    # Create lifecycle rule form locators
+    "rule_name_input": (
+        "//input[@placeholder='Enter a valid rule name']",
+        By.XPATH,
+    ),
+    "rule_scope_targeted": (
+        "//input[@id='scope-TARGETED']",
+        By.XPATH,
+    ),
+    "rule_scope_global": (
+        "//input[@id='scope-GLOBAL']",
+        By.XPATH,
+    ),
+    # Targeted rule locators
+    "prefix_input": (
+        "#prefix",
+        By.CSS_SELECTOR,
+    ),
+    "min_object_size_checkbox": (
+        "#min-object-size",
+        By.CSS_SELECTOR,
+    ),
+    "min_object_size_input": (
+        "//input[@id='min-object-size']/ancestor::div[contains(@class, 'c-form__group-body')]//input[@type='number']",
+        By.XPATH,
+    ),
+    "max_object_size_checkbox": (
+        "#max-object-size",
+        By.CSS_SELECTOR,
+    ),
+    "max_object_size_input": (
+        "//input[@id='max-object-size']/ancestor::div[contains(@class, 'c-form__group-body')]//input[@type='number']",
+        By.XPATH,
+    ),
+    "lifecycle_actions_section": (
+        "//div[contains(@class, 'c-form__section') and .//h3[text()='Lifecycle rule actions']]",
+        By.XPATH,
+    ),
+    "incomplete_multipart_checkbox": (
+        "//button[@id='INCOMPLETE_UPLOADS']",
+        By.XPATH,
+    ),
+    "incomplete_multipart_enable_checkbox": (
+        "//input[@id='incomplete-multiparts-delete']",
+        By.XPATH,
+    ),
+    "incomplete_multipart_days_input": (
+        "//input[@id='incomplete-multiparts-delete-days']",
+        By.XPATH,
+    ),
+    "lifecycle_create_button": (
+        "//button[text()='Create' and contains(@class, 'pf-m-primary') and @aria-disabled='false']",
+        By.XPATH,
+    ),
+    "lifecycle_save_button": (
+        "//button[text()='Save' and contains(@class, 'pf-m-primary')]",
+        By.XPATH,
+    ),
+    "lifecycle_cancel_button": (
+        "//button[text()='Cancel']",
+        By.XPATH,
+    ),
+    # Current objects (Expiration) section
+    "current_objects_accordion": (
+        "//button[@id='CURRENT_OBJECTS']",
+        By.XPATH,
+    ),
+    "expiration_delete_checkbox": (
+        "#current-object-delete",
+        By.CSS_SELECTOR,
+    ),
+    "expiration_days_input": (
+        "#current-object-delete-days",
+        By.CSS_SELECTOR,
+    ),
+    # Noncurrent objects section
+    "noncurrent_objects_accordion": (
+        "//button[@id='NONCURRENT_OBJECTS']",
+        By.XPATH,
+    ),
+    "noncurrent_delete_checkbox": (
+        "#noncurrent-object-delete",
+        By.CSS_SELECTOR,
+    ),
+    "noncurrent_days_input": (
+        "#noncurrent-object-delete-days",
+        By.CSS_SELECTOR,
+    ),
+    "noncurrent_versions_input": (
+        "//input[@aria-label='Input'][@type='number']",
+        By.XPATH,
+    ),
+    # Expired markers accordion button
+    "expired_markers_accordion": (
+        "button[id='EXPIRED_MARKERS']",
+        By.CSS_SELECTOR,
+    ),
+    "expired_markers_checkbox": (
+        "#expired-delete-marker",
+        By.CSS_SELECTOR,
+    ),
 }
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
