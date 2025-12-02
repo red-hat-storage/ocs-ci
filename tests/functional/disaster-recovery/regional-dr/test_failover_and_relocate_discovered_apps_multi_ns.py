@@ -167,6 +167,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             expected_count=wl.workload_pvc_count,
                         )
 
+        config.switch_to_cluster_by_name(secondary_cluster_name)
         wait_for_vrg_state(
             vrg_state="primary",
             vrg_namespace=constants.DR_OPS_NAMESAPCE,
@@ -265,7 +266,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             namespace=wl.workload_namespace,
                             expected_count=wl.workload_pvc_count,
                         )
-
+        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         wait_for_vrg_state(
             vrg_state="primary",
             vrg_namespace=constants.DR_OPS_NAMESAPCE,
