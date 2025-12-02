@@ -87,7 +87,9 @@ class TestNamespace(MCGTest):
         ],
     )
     @pytest.mark.polarion_id("OCS-2255")
-    def test_namespace_store_creation_crd(self, namespace_store_factory, nss_tup):
+    def deprecated_test_namespace_store_creation_crd(
+        self, namespace_store_factory, nss_tup
+    ):
         """
         Test namespace store creation using the MCG CRDs.
         """

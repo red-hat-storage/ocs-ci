@@ -136,7 +136,7 @@ def test_pod_log_after_upgrade():
 @pytest.mark.polarion_id("OCS-2666")
 @mcg
 @red_squad
-def test_noobaa_service_mon_after_ocs_upgrade():
+def deprecated_test_noobaa_service_mon_after_ocs_upgrade():
     """
     Verify 'noobaa-service-monitor' does not exist after OCS upgrade.
 

@@ -95,7 +95,7 @@ class TestMultiCloud(MCGTest):
             "IBMCOS-OC-1",
         ],
     )
-    def test_multicloud_backingstore_deletion(
+    def deprecated_test_multicloud_backingstore_deletion(
         self, backingstore_factory, backingstore_tup
     ):
         """

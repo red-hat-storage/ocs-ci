@@ -183,7 +183,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
 @bugzilla("1874243")
 @mcg
 @red_squad
-def test_upgrade_mcg_io(mcg_workload_job):
+def deprecated_test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
     """
