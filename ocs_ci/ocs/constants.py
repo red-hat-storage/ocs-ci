@@ -210,6 +210,7 @@ ROUTE = "Route"
 SERVICE = "Service"
 DAEMONSET = "DaemonSet"
 CEPHOBJECTSTORE = "cephobjectstore"
+CEPHOBJECTSTORE_NAME = "ocs-storagecluster-cephobjectstore"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
@@ -3689,5 +3690,5 @@ KEDA_TRIGGER_AUTHENTICATION_YAML = os.path.join(
     TEMPLATE_DIR, "keda", "trigger_authentication.yaml"
 )
 KEDA_SCALED_OBJECT_YAML = os.path.join(TEMPLATE_DIR, "keda", "scaled_object.yaml")
-THANOS_QUERIER_ADDRESS = "https://thanos-querier.openshift-monitoring.svc:9091"
+THANOS_QUERIER_ADDRESS = "https://thanos-querier.openshift-monitoring.svc:9092"
 CLUSTER_MONITORING_VIEW_ROLE = "cluster-monitoring-view"
