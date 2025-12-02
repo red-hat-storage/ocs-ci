@@ -108,7 +108,7 @@ class PlatformNodesFactory:
             "rosa_hcp": ROSAHCPNode,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
-            "hci_baremetal": IBMCloudBMNodes,
+            "ibm_baremetal": IBMCloudBMNodes,
             "kubevirt_vm": KubevirtVMNodes,
             "ibm_cloud_ipi": IBMCloudIPI,
         }

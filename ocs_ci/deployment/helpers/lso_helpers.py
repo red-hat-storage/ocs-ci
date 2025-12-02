@@ -186,7 +186,7 @@ def setup_local_storage(storageclass):
         # extra_disks is used in vSphere attach_disk() method
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
     expected_pvs = len(worker_names) * storage_class_device_count
-    if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
+    if platform in [constants.BAREMETAL_PLATFORM, constants.IBM_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
     else:
         verify_pvs_created(expected_pvs, storageclass)
@@ -196,9 +196,9 @@ def setup_local_storage(storageclass):
 def create_optional_operators_catalogsource_non_ga(force=False):
     """
     Creating optional operators CatalogSource and ImageContentSourcePolicy
-    for non-ga OCP. If platform is hci_baremetal then force delete static pods
+    for non-ga OCP. If platform is ibm_baremetal then force delete static pods
     to apply the changes and wait machines in machineconfig pool are ready.
-    If the platform is hci_baremetal we force-delete vm and hcp pods if wait for ready Machines is not successful.
+    If the platform is ibm_baremetal we force-delete vm and hcp pods if wait for ready Machines is not successful.
 
     Args:
         force (bool): enable/disable lso catalog setup
@@ -263,7 +263,7 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
         run_cmd(f"oc apply -f {optional_operators_yaml.name}")
-    if config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
+    if config.ENV_DATA.get("platform").lower() == constants.IBM_BAREMETAL:
         force_delete_pods = True
     else:
         force_delete_pods = False
