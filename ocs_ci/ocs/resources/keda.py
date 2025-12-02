@@ -160,7 +160,7 @@ class KEDA:
         logger.info("Checking if KEDA is configured to read Thanos metrics")
         return True
 
-    def create_thanos_metric_scaled_object(self, deployment, query, threshold):
+    def create_thanos_metric_scaled_object(self, target_ref_dict, query, threshold):
         """
         Create and register a KEDA ScaledObject driven by a Thanos metric.
 
@@ -168,8 +168,14 @@ class KEDA:
         to scale, what metric to watch, and the conditions that trigger scaling.
 
         Args:
-            deployment (str): Deployment name to scale.
-            namespace (str): Namespace of the deployment.
+            target_ref_obj (dict): A dictionary containing the target reference object.
+            Example:
+            {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": "deployment-name",
+                "namespace": "deployment-namespace"
+            }
             query (str): Thanos query used as the scaling signal.
             threshold (str): Metric threshold that triggers scaling.
 
@@ -186,7 +192,7 @@ class KEDA:
 
         # Specifics on what to scale and on what metric to scale
         scaled_obj = (
-            scaled_obj.set_scale_target_ref(deployment)
+            scaled_obj.set_scale_target_ref(target_ref_dict)
             .set_trigger_query(query)
             .set_trigger_threshold(threshold)
         )
@@ -307,7 +313,7 @@ class ScaledObject:
         return self._update(path, namespace)
 
     def set_scale_target_ref(self, ref):
-        path = ("spec", "scaleTargetRef", "name")
+        path = ("spec", "scaleTargetRef")
         return self._update(path, ref)
 
     def set_min_replica_count(self, n):
