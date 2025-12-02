@@ -2681,10 +2681,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "incomplete_multipart_days_input": (
-        "//input[@aria-label='inputNumberDaysUntilInitiation'] | "
-        "//input[@type='number'] | "
-        "//div[@id='INCOMPLETE_UPLOADS']//input[@type='number'] | "
-        "//input[contains(@id, 'days')]",
+        "//input[@id='incomplete-multiparts-delete-days']",
         By.XPATH,
     ),
     "lifecycle_create_button": (
