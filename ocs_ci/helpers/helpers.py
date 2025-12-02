@@ -4731,6 +4731,92 @@ def verify_quota_resource_exist(quota_name):
     ]
 
 
+def verify_substrings_in_string(output_string, expected_strings):
+    """
+    Verify all expected substrings are present in the output string
+
+    Args:
+        output_string (str): String to check
+        expected_strings (list): Expected substrings
+
+    Returns:
+        bool: True if all expected strings found, False otherwise
+
+    """
+    for expected_string in expected_strings:
+        if expected_string not in output_string:
+            logger.error(f"Expected string: {expected_string} not in {output_string}")
+            return False
+    return True
+
+
+def wait_for_quota_usage_update(
+    clusterresourcequota_obj,
+    quota_name,
+    quota_key,
+    expected_strings,
+    operation_description,
+    timeout=120,
+):
+    """
+    Wait for ClusterResourceQuota usage to update and verify expected strings
+
+    Args:
+        clusterresourcequota_obj (obj): ClusterResourceQuota OCP object
+        quota_name (str): Name of the quota resource
+        quota_key (str): Quota key to check (e.g., 'requests.storage')
+        expected_strings (list): Strings to verify (e.g., ['8Gi', '7Gi'])
+        operation_description (str): Operation description for logging
+        timeout (int): Timeout in seconds (default: 120)
+
+    Raises:
+        TimeoutExpiredError: If quota usage doesn't update within timeout
+
+    """
+    logger.info(f"Waiting for quota usage to reflect {operation_description}")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=clusterresourcequota_obj.get,
+        resource_name=quota_name,
+    )
+    for quota_resource in sample:
+        # Extract used and hard quota values from the resource
+        try:
+            used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+            hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+
+            # Get storage request values using the specified quota key
+            used_storage = used.get(quota_key, "0")
+            hard_storage = hard.get(quota_key, "0")
+
+            logger.info(
+                f"Quota usage for {quota_name}: "
+                f"used={used_storage}, hard={hard_storage}"
+            )
+
+            # Check if the expected values are present
+            quota_info = f"{used_storage} {hard_storage}"
+            if verify_substrings_in_string(
+                output_string=quota_info,
+                expected_strings=expected_strings,
+            ):
+                logger.info(
+                    f"Quota usage updated successfully after {operation_description}"
+                )
+                return
+        except (KeyError, AttributeError) as e:
+            logger.warning(f"Failed to parse quota resource: {e}")
+            continue
+    else:
+        err_str = (
+            f"Quota usage did not update to show {expected_strings} after {timeout} seconds "
+            f"for {operation_description}."
+        )
+        logger.error(err_str)
+        raise TimeoutExpiredError(err_str)
+
+
 def check_cluster_is_compact():
     existing_num_nodes = len(node.get_all_nodes())
     worker_n = node.get_worker_nodes()
