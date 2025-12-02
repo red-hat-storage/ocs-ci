@@ -133,5 +133,3 @@ if __name__ == "__main__":
 
     configure_target(worker_iqns)
     configure_initiators()
-
-    print("\n\n🎉 END-TO-END iSCSI Provisioning Completed Successfully!")
