@@ -3669,3 +3669,7 @@ RBD_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
 )
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+
+# Fill pool pod and PVC Yaml files
+FILL_POOL_POD_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pod.yaml")
+FILL_POOL_PVC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pvc.yaml")
