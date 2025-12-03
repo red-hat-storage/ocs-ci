@@ -223,7 +223,7 @@ class TestUpgradeOCP(ManageTest):
 
                 # On provider clusters, using HCP, automatic MCO drain & reboot fails due to fail evict
                 # kube-apiserver and virt-launcher pods
-                if provider_cluster and config.ENV_DATA["platform"] == "hci_baremetal":
+                if provider_cluster and config.ENV_DATA["platform"] == "ibm_baremetal":
                     cordoned = get_nodes_in_statuses(
                         [
                             constants.NODE_READY_SCHEDULING_DISABLED,
