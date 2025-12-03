@@ -1058,7 +1058,8 @@ class HostedClients(HyperShiftBase):
 
         heartbeat_stable = []
         for cluster_name in cluster_names:
-            heartbeat_stable.append(verify_last_heartbeat_timestamp(cluster_name))
+            if storage_installation_requested(cluster_name):
+                heartbeat_stable.append(verify_last_heartbeat_timestamp(cluster_name))
 
         assert (
             hosted_ocp_verification_passed
