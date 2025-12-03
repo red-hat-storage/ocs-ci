@@ -24,7 +24,15 @@ def retry(
         @wraps(f)
         def f_retry(*args, **kwargs):
             mtries, mdelay = tries, delay
+            attempts = 0
+            exception_summary = set()
             while mtries > 1:
+                attempts += 1
+                if attempts == 2:
+                    # Show log only for second attempt
+                    logger.debug(
+                        f"Executing {f.__name__}. Tries: {mtries}. Delay: {mdelay}. Backoff: {backoff}"
+                    )
                 try:
                     if func is not None:
                         func()
@@ -36,16 +44,16 @@ def retry(
                                 f"Text: {text_in_exception} found in exception: {e}"
                             )
                         else:
-                            logger.debug(
-                                f"Text: {text_in_exception} not found in exception: {e}"
-                            )
                             raise
-                    logger.warning("%s, Retrying in %d seconds..." % (str(e), mdelay))
+                    exception_summary.add(repr(e))
                     time.sleep(mdelay)
                     mtries -= 1
                     mdelay *= backoff
                     if func is not None:
                         func()
+            if exception_summary:
+                logger.debug(f"Retry exception summary: {exception_summary}")
+
             return f(*args, **kwargs)
 
         return f_retry
