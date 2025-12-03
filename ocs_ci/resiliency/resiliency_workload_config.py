@@ -322,24 +322,37 @@ class ResiliencyWorkloadConfig:
             if "VDBENCH" in workloads:
                 vdbench_config = self.get_vdbench_config()
                 if not vdbench_config:
-                    log.warning("VDBENCH enabled but no vdbench_config found")
-                    return True
+                    raise ValueError(
+                        "VDBENCH workload is enabled but 'vdbench_config' section is missing. "
+                        "Please provide vdbench_config in your resiliency_tests_config.yaml. "
+                        "See conf/ocsci/resiliency_tests_config.yaml for configuration examples."
+                    )
 
                 # Check block and filesystem configs
                 block_config = vdbench_config.get("block", {})
                 filesystem_config = vdbench_config.get("filesystem", {})
 
                 if not block_config and not filesystem_config:
-                    log.warning("No block or filesystem workload configuration found")
+                    raise ValueError(
+                        "VDBENCH workload is enabled but neither 'block' nor 'filesystem' "
+                        "configuration is provided in vdbench_config. "
+                        "At least one of these must be configured. "
+                        "See conf/ocsci/resiliency_tests_config.yaml for configuration examples."
+                    )
 
-                # Validate patterns
-                for workload_type in ["block", "filesystem"]:
-                    config_section = vdbench_config.get(workload_type, {})
+                # Validate patterns for each configured workload type
+                configs = {
+                    "block": block_config,
+                    "filesystem": filesystem_config,
+                }
+                for workload_type, config_section in configs.items():
                     if config_section:
                         patterns = config_section.get("patterns", [])
                         if not patterns:
-                            log.warning(
-                                f"No patterns configured for {workload_type} workloads"
+                            raise ValueError(
+                                f"VDBENCH {workload_type} configuration exists but no 'patterns' "
+                                f"are defined. Patterns are required to define I/O workload behavior. "
+                                f"See conf/ocsci/resiliency_tests_config.yaml for configuration examples."
                             )
 
             return True
