@@ -197,7 +197,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         # adding odf-qe security group to the instances
         if config.ENV_DATA.get("existing_vpc"):
             instance_names = self.get_instance_names_by_prefix(
-                f"{config.ENV_DATA['cluster_name']}"
+                f"{config.ENV_DATA['cluster_name']}-"
             )
             for instance_name in instance_names:
                 self.add_security_group_to_vsi(instance_name)
@@ -844,14 +844,6 @@ class IBMCloudIPI(CloudDeploymentBase):
         logger.info(f"Using existing control plane subnets: {control_plane_subnets}")
         logger.info(f"Using existing compute subnets: {compute_subnets}")
 
-        # Set the configuration for the installer
-        config.ENV_DATA["existing_vpc"] = True
-        config.ENV_DATA["resource_group_name"] = resource_group
-        config.ENV_DATA["network_resource_group_name"] = network_resource_group
-        config.ENV_DATA["vpc_name"] = vpc_name
-        config.ENV_DATA["control_plane_subnets"] = control_plane_subnets
-        config.ENV_DATA["compute_subnets"] = compute_subnets
-
     def get_instance_names_by_prefix(self, prefix):
         """
         Get all instance names for instances whose names start with the given prefix.
@@ -1432,7 +1424,7 @@ class IBMCloudIPI(CloudDeploymentBase):
 
         raises LeftoversExistError if any errors occur during deletion.
         """
-        prefix = config.ENV_DATA.get("cluster_name")
+        prefix = f"{config.ENV_DATA.get('cluster_name')}-"
         if not prefix:
             logger.error("cluster_name not found in ENV_DATA")
             return
