@@ -67,7 +67,7 @@ def nfs_enable(
         condition=constants.STATUS_RUNNING,
         selector="app=rook-ceph-nfs",
         dont_allow_other_resources=True,
-        timeout=60,
+        timeout=120,
     )
 
     provisioner_list = provisioner_selectors(nfs_plugins=True)
@@ -79,7 +79,7 @@ def nfs_enable(
             condition=constants.STATUS_RUNNING,
             selector=provisioner,
             dont_allow_other_resources=True,
-            timeout=60,
+            timeout=120,
         )
 
     # Fetch the nfs-ganesha pod name
