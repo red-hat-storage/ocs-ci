@@ -237,7 +237,7 @@ def schedule_nodes(node_names):
     wait_for_nodes_status(node_names)
 
 
-def drain_nodes(node_names, timeout=2400, disable_eviction=False):
+def drain_nodes(node_names, timeout=1800, disable_eviction=False):
     """
     Drain nodes
 
@@ -267,11 +267,12 @@ def drain_nodes(node_names, timeout=2400, disable_eviction=False):
                 timeout=timeout,
             )
         else:
-            ocp.exec_oc_cmd(
+            out = ocp.exec_oc_cmd(
                 f"adm drain {node_names_str} --force=true --ignore-daemonsets "
                 f"{drain_deletion_flag}",
                 timeout=timeout,
             )
+            print(f"---Amrita--- output: {out}")
     except TimeoutExpired:
         ct_pod = pod.get_ceph_tools_pod()
         ceph_status = ct_pod.exec_cmd_on_pod("ceph status", out_yaml_format=False)

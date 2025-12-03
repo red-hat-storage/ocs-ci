@@ -90,7 +90,9 @@ class TestNodeDrain:
 
         # drain nodes in the selected zone
         start_time = datetime.now(timezone.utc)
-        drain_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
+        drain_nodes(
+            node_names=[node_obj.name for node_obj in nodes_to_drain], timeout=3600
+        )
         time.sleep(300)
         schedule_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
         end_time = datetime.now(timezone.utc)
