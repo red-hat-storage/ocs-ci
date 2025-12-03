@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from ocs_ci.ocs import node
-
 import paramiko
 import sys
 import time
 import logging
+import subprocess
+import json
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +47,42 @@ def ssh_run(host, cmd):
         return None
 
 
+def get_worker_node_ips(kubeconfig_path="/User/auth_odf/auth/kubeconfig"):
+    """
+    collect worker node IPs from the cluster
+    """
+    # Command to get node details in JSON
+    cmd = [
+        "oc",
+        "--kubeconfig",
+        kubeconfig_path,
+        "get",
+        "nodes",
+        "-l",
+        "node-role.kubernetes.io/worker",
+        "-o",
+        "json",
+    ]
+
+    try:
+        result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        print("Error running oc command:", e.output.decode())
+        return []
+
+    data = json.loads(result)
+
+    worker_ips = []
+
+    # Parse each worker node
+    for node in data.get("items", []):
+        for addr in node["status"]["addresses"]:
+            if addr["type"] == "InternalIP":
+                worker_ips.append(addr["address"])
+
+    return worker_ips
+
+
 # --------------------------------------------------------
 # STEP 1: Collect worker node initiator IQNs
 # --------------------------------------------------------
@@ -57,21 +93,21 @@ def get_worker_iqns(worker_node_ips):
         check_iscsi_command = "which iscsiadm"
         iscsiadm_installed = ssh_run(node_ip, check_iscsi_command)
         if not iscsiadm_installed:
-            log.info(f"[{node}] iscsiadm not found. Installing...")
+            log.info(f"[{node_ip}] iscsiadm not found. Installing...")
             ssh_run(
-                node,
+                node_ip,
                 "sudo yum install -y iscsi-initiator-utils || sudo apt install -y open-iscsi",
             )
             start_iscsi_command = (
                 "sudo systemctl enable iscsid && sudo systemctl start iscsid"
             )
-            ssh_run(node, start_iscsi_command)
+            ssh_run(node_ip, start_iscsi_command)
 
         iqn = ssh_run(
-            node, "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
+            node_ip, "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
         )
         if iqn:
-            log.info(f"[{node}] Found IQN: {iqn}")
+            log.info(f"[{node_ip}] Found IQN: {iqn}")
             iqns.append(iqn)
     return iqns
 
@@ -112,10 +148,10 @@ def configure_initiators(worker_node_ips):
     for idx, node_ip in enumerate(worker_node_ips):
 
         # Discover target
-        ssh_run(node, f"iscsiadm -m discovery -t sendtargets -p {PORTAL_IP}")
+        ssh_run(node_ip, f"iscsiadm -m discovery -t sendtargets -p {PORTAL_IP}")
 
         # Login
-        ssh_run(node, f"iscsiadm -m node -T {TARGET_IQN} -p {PORTAL_IP} --login")
+        ssh_run(node_ip, f"iscsiadm -m node -T {TARGET_IQN} -p {PORTAL_IP} --login")
 
         time.sleep(5)
 
@@ -127,7 +163,7 @@ def configure_initiators(worker_node_ips):
 
 if __name__ == "__main__":
     # Get worker nodes
-    worker_node_ips = node.get_node_ips()
+    worker_node_ips = get_worker_node_ips()
     log.info(f"Current available worker nodes are {worker_node_ips}")
     worker_iqns = get_worker_iqns(worker_node_ips)
 
