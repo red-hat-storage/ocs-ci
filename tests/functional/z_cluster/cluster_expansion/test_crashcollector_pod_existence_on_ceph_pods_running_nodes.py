@@ -67,6 +67,11 @@ class TestAddNodeCrashCollector(ManageTest):
         failure_domain = get_failure_domin()
         logger.info(f"The failure domain is {failure_domain}")
 
+        if failure_domain == "host":
+            pytest.skip(
+                "Test requires zone or rack failure domain for topology validation"
+            )
+
         if failure_domain in ("zone", "rack"):
             old_node_rack_zone_dict = get_node_rack_or_zone_dict(failure_domain)
             logger.info(f"The old node rack/zone dict is {old_node_rack_zone_dict}")
