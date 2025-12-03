@@ -18,7 +18,7 @@ spec:
         registry:
           certConfigMap: user-ca-bundle
           secretRef: quayadmin
-          url: docker://r8-ru26-w-l.quay-service.fusion.tadn.ibm.com:8443/ocsci-image/nirsof/cirros:0.6.2-1
+          url: docker://r11-ru22-w-l.quay-service.fusion.tadn.ibm.com:8443/df_team/nirsof/cirros:0.6.2-1
       storage:
         accessModes:
         - ReadWriteMany
