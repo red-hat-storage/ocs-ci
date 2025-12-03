@@ -237,7 +237,7 @@ def schedule_nodes(node_names):
     wait_for_nodes_status(node_names)
 
 
-def drain_nodes(node_names, timeout=1800, disable_eviction=False):
+def drain_nodes(node_names, timeout=2400, disable_eviction=False):
     """
     Drain nodes
 
