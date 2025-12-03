@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
+from ocs_ci.ocs import node
+
 import paramiko
 import sys
 import time
+import logging
+
+log = logging.getLogger(__name__)
 
 # -----------------------------
 # USER CONFIGURATION
 # -----------------------------
-OCP_WORKERS = ["worker1.example.com", "worker2.example.com", "worker3.example.com"]
 TARGET_VM = "10.1.161.239"
 
 USERNAME = "root"
@@ -19,11 +23,8 @@ BACKSTORES = ["disk0", "disk1", "disk2"]  # Already created on target
 MOUNT_BASE = "/mnt/iscsi_lun"
 
 
-# -----------------------------
-
-
 def ssh_run(host, cmd):
-    print(f"\n[{host}] ➜ {cmd}")
+    log.info(f"\n[{host}] ➜ {cmd}")
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -34,29 +35,29 @@ def ssh_run(host, cmd):
         err = stderr.read().decode().strip()
 
         if out:
-            print(out)
+            log.info(out)
         if err:
-            print("ERROR:", err)
+            log.error("ERROR:", err)
 
         client.close()
         return out
 
     except Exception as e:
-        print(f"SSH ERROR on {host}: {e}")
+        log.error(f"SSH ERROR on {host}: {e}")
         return None
 
 
 # --------------------------------------------------------
 # STEP 1: Collect worker node initiator IQNs
 # --------------------------------------------------------
-def get_worker_iqns():
+def get_worker_iqns(worker_node_ips):
     iqns = []
-    print("\n=== Collecting Worker IQNs ===")
-    for node in OCP_WORKERS:
+    ("\n=== Collecting Worker IQNs ===")
+    for node_ip in worker_node_ips:
         check_iscsi_command = "which iscsiadm"
-        iscsiadm_installed = ssh_run(node, check_iscsi_command)
+        iscsiadm_installed = ssh_run(node_ip, check_iscsi_command)
         if not iscsiadm_installed:
-            print(f"[{node}] iscsiadm not found. Installing...")
+            log.info(f"[{node}] iscsiadm not found. Installing...")
             ssh_run(
                 node,
                 "sudo yum install -y iscsi-initiator-utils || sudo apt install -y open-iscsi",
@@ -70,7 +71,7 @@ def get_worker_iqns():
             node, "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
         )
         if iqn:
-            print(f"[{node}] Found IQN: {iqn}")
+            log.info(f"[{node}] Found IQN: {iqn}")
             iqns.append(iqn)
     return iqns
 
@@ -80,7 +81,7 @@ def get_worker_iqns():
 # --------------------------------------------------------
 def configure_target(worker_iqns):
 
-    print("\n=== Configuring iSCSI Target ===")
+    log.info("\n=== Configuring iSCSI Target ===")
 
     # ssh_run(TARGET_VM, f"targetcli /iscsi/{TARGET_IQN} create")
 
@@ -99,16 +100,16 @@ def configure_target(worker_iqns):
     ssh_run(TARGET_VM, "targetcli saveconfig")
     ssh_run(TARGET_VM, "systemctl enable --now target")
 
-    print("\n✔ Target configuration complete")
+    log.info("\n✔ Target configuration complete")
 
 
 # --------------------------------------------------------
 # STEP 3: Configure iSCSI Initiator on each Worker
 # --------------------------------------------------------
-def configure_initiators():
-    print("\n=== Configuring Worker Nodes as Initiators ===")
+def configure_initiators(worker_node_ips):
+    log.info("\n=== Configuring Worker Nodes as Initiators ===")
 
-    for idx, node in enumerate(OCP_WORKERS):
+    for idx, node_ip in enumerate(worker_node_ips):
 
         # Discover target
         ssh_run(node, f"iscsiadm -m discovery -t sendtargets -p {PORTAL_IP}")
@@ -125,11 +126,14 @@ def configure_initiators():
 
 
 if __name__ == "__main__":
-    worker_iqns = get_worker_iqns()
+    # Get worker nodes
+    worker_node_ips = node.get_node_ips()
+    log.info(f"Current available worker nodes are {worker_node_ips}")
+    worker_iqns = get_worker_iqns(worker_node_ips)
 
     if not worker_iqns:
-        print("No IQNs found! Exiting...")
+        log.info("No IQNs found! Exiting...")
         sys.exit(1)
 
     configure_target(worker_iqns)
-    configure_initiators()
+    configure_initiators(worker_node_ips)
