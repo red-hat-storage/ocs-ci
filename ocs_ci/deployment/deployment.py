@@ -1653,6 +1653,16 @@ class Deployment(object):
                     }
                 cluster_data["spec"]["resources"] = resources
 
+        # Disable NFS when cluster resources are insufficient
+        from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
+
+        if not check_cluster_resources_for_nfs():
+            logger.info(
+                "Disabling NFS because cluster resources are insufficient "
+                "(based on actual node CPU/memory measurement)"
+            )
+            cluster_data["spec"]["nfs"] = {"enable": False}
+
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get("host_network"):
@@ -1776,20 +1786,6 @@ class Deployment(object):
             }
             merge_dict(
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
-            )
-        if (
-            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
-            and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
-        ):
-            api_server_exported_address_annotation = {
-                "ocs.openshift.io/api-server-exported-address": (
-                    f'{config.ENV_DATA["cluster_name"]}.'
-                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
-                )
-            }
-            merge_dict(
-                cluster_data,
-                {"metadata": {"annotations": api_server_exported_address_annotation}},
             )
         if config.ENV_DATA.get("noobaa_external_pgsql"):
             log_step(
@@ -1942,6 +1938,11 @@ class Deployment(object):
         ocs_version = version.get_semantic_ocs_version_from_config()
         disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
         noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
+        dr_cmd_arg = ""
+        if config.MULTICLUSTER.get("multicluster_mode") == constants.RDR_MODE and (
+            ocs_version <= version.VERSION_4_17
+        ):
+            dr_cmd_arg = "--param prepareForDisasterRecovery=true"
         device_size = int(
             config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED)
         )
@@ -1954,7 +1955,7 @@ class Deployment(object):
         osd_size_arg = f"--param osdSize={device_size}Gi"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
-            f"{ocs_version}.0 {noobaa_cmd_arg} {osd_size_arg}"
+            f"{ocs_version}.0 {noobaa_cmd_arg} {osd_size_arg} {dr_cmd_arg}"
         )
         run_ibmcloud_cmd(cmd)
         time.sleep(120)
@@ -2088,6 +2089,16 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"]["storageClassName"] = (
                     storageclassnames["encryption"]
                 )
+
+        # Disable NFS when cluster resources are insufficient
+        from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
+
+        if not check_cluster_resources_for_nfs():
+            logger.info(
+                "Disabling NFS for external mode because cluster resources are insufficient "
+                "(based on actual node CPU/memory measurement)"
+            )
+            cluster_data["spec"]["nfs"] = {"enable": False}
 
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
@@ -3587,6 +3598,15 @@ class MultiClusterDROperatorsDeploy(object):
             dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
                 "cluster_name"
             ]
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed:
+            dr_policy_hub_data["metadata"][
+                "name"
+            ] = constants.RDR_DR_POLICY_IBM_CLOUD_MANAGED
+            dr_policy_hub_data["spec"]["schedulingInterval"] = "10m"
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
             dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY

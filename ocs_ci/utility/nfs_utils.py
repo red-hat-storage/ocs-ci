@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
 from ocs_ci.deployment.hosted_cluster import get_autodistributed_storage_classes
+from ocs_ci.utility.utils import convert_device_size
 
 log = logging.getLogger(__name__)
 
@@ -445,3 +446,58 @@ def disable_nfs_service_from_provider(nfs_sc_obj, nfs_ganesha_pod_name):
 
     # switch to consumer
     config.switch_to_consumer()
+    retain_nfs_sc.reload()
+    retain_nfs_sc.data["reclaimPolicy"] = constants.RECLAIM_POLICY_RETAIN
+    retain_nfs_sc.data["metadata"]["name"] = sc_name
+    retain_nfs_sc.data["metadata"]["ownerReferences"] = None
+    retain_nfs_sc._name = retain_nfs_sc.data["metadata"]["name"]
+    retain_nfs_sc.create()
+    return retain_nfs_sc
+
+
+def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
+    """
+    Check if cluster has sufficient resources for NFS deployment.
+
+    Args:
+        min_cpu (int): Minimum CPU cores per worker node (default: 12)
+        min_memory (int): Minimum memory in bytes per worker node (default: 32GB)
+
+    Returns:
+        bool: True if cluster meets NFS resource requirements, False otherwise
+    """
+    try:
+        from ocs_ci.ocs.node import get_nodes
+
+        # Check worker nodes only (OCS/ODF runs on worker nodes)
+        worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+        if not worker_nodes:
+            log.warning("No worker nodes found for NFS resource check")
+            return True
+
+        for node in worker_nodes:
+            node_data = node.get()
+            capacity = node_data.get("status", {}).get("capacity", {})
+
+            real_cpu = int(capacity.get("cpu", 0))
+            memory_str = capacity.get("memory", "0")
+
+            try:
+                real_memory = convert_device_size(memory_str, "BY")
+            except Exception:
+                real_memory = 0
+
+            if real_cpu < min_cpu or real_memory < min_memory:
+                log.info(
+                    f"Insufficient resources for NFS. Node has {real_cpu} CPUs "
+                    f"and {real_memory / 10**9:.1f}GB RAM (required: {min_cpu} CPUs, "
+                    f"{min_memory / 10**9}GB RAM)"
+                )
+                return False
+
+        log.info("Cluster has sufficient resources for NFS deployment")
+        return True
+
+    except Exception as e:
+        log.warning(f"Unable to check NFS resource requirements: {e}")
+        return True  # Don't block deployment on check failure

@@ -471,7 +471,7 @@ OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 AMQ_NAMESPACE = "myproject"
 KAFKA_ENDPOINT = f"my-cluster-kafka-bootstrap.{AMQ_NAMESPACE}.svc.cluster.local:9092"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
-RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
+RGW_KAFKA_NOTIFY = "https://github.com/sagihirshfeld/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
 KAFKA_PODS_LABEL = "strimzi.io/pool-name=kafka"
@@ -1347,6 +1347,7 @@ DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
 MDR_MODE = "metro-dr"
 MDR_DR_POLICY = "odr-policy-mdr"
+RDR_DR_POLICY_IBM_CLOUD_MANAGED = "odr-policy-10m"
 RESTIC_OR_NODE_AGENT_POD_COUNT = 3
 VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
@@ -1393,8 +1394,8 @@ RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
-RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool-2way"
-RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc-r2"
+RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
+RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
 
 # constants
 RBD_INTERFACE = "rbd"

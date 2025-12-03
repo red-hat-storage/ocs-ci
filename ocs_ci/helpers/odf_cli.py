@@ -226,6 +226,32 @@ class ODFCliRunner:
         """
         return self.run_set_recovery_profile(HIGH_RECOVERY_OPS)
 
+    def run_maintenance_start(self, deployment_name):
+        """
+        This starts the maintenance mode for the deployment.
+
+        Args:
+            deployment_name (str): Name of the deployment that you want
+            it to be in maintenance mode i.e, either Mon or OSD deployments
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+        """
+        return self.run_command(f" maintenance start {deployment_name}")
+
+    def run_maintenance_stop(self, deployment_name):
+        """
+        This stops the maintenance mode for the deployment.
+
+        Args:
+            deployment_name (str): Name of the maintenance mode deployment
+            that you want it to be stopped.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+        """
+        return self.run_command(f" maintenance stop {deployment_name}")
+
 
 def odf_cli_setup_helper():
     """

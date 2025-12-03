@@ -40,6 +40,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_resource_not_found_error_label,
     config_index,
 )
+from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
@@ -226,6 +227,8 @@ from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 log = logging.getLogger(__name__)
+
+odf_cli_runner = ODFCliRunner()
 
 
 class OCSLogFormatter(logging.Formatter):
@@ -7557,7 +7560,7 @@ def discovered_apps_dr_workload(request):
 
 
 @pytest.fixture()
-def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
+def discovered_apps_dr_workload_cnv(request):
     """
     Deploys CNV Discovered App based workload for DR setup
 
@@ -7589,8 +7592,6 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         if shared_drpc_protection:
             workload_key = "dr_cnv_discovered_apps_shared"
         if custom_sc:
-            log.info("Calling fixture to create Custom Pool/SC..")
-            cnv_custom_storage_class()
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
@@ -8118,7 +8119,11 @@ def ceph_objectstore_tool_fixture(request):
     def teardown():
         deployment_in_maintenance = cot_obj.deployment_in_maintenance
         for deployment_name in list(deployment_in_maintenance):
-            cot_obj.maintenance_stop(deployment_name=deployment_name)
+            try:
+                log.info(f"Cleaning up maintenance mode for {deployment_name}")
+                odf_cli_runner.run_maintenance_stop(deployment_name=deployment_name)
+            except Exception as e:
+                log.warning(f"Failed to stop maintenance for {deployment_name}: {e}")
 
     request.addfinalizer(teardown)
 
@@ -8142,7 +8147,11 @@ def ceph_monstore_tool_fixture(request):
     def teardown():
         deployment_in_maintenance = mot_obj.deployment_in_maintenance
         for deployment_name in list(deployment_in_maintenance):
-            mot_obj.maintenance_stop(deployment_name=deployment_name)
+            try:
+                log.info(f"Cleaning up maintenance mode for {deployment_name}")
+                odf_cli_runner.run_maintenance_stop(deployment_name=deployment_name)
+            except Exception as e:
+                log.warning(f"Failed to stop maintenance for {deployment_name}: {e}")
 
     request.addfinalizer(teardown)
 

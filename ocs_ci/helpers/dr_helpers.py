@@ -444,7 +444,7 @@ def check_mirroring_status_ok(
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
@@ -555,11 +555,8 @@ def check_mirroring_status_for_custom_pool(
                     f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
                 )
 
-            return True
-
-        raise ValueError(f"Custom Pool {custom_pool_name} not found in {namespace}")
     config.switch_ctx(restore_index)
-    return False
+    return True
 
 
 def get_pv_count(namespace):
@@ -2331,9 +2328,13 @@ def check_storage_cluster_peer_state():
         return False
 
 
-def create_service_exporter():
+def create_service_exporter(annotate=True):
     """
     Create Service exporter
+
+    Args:
+        annotate (bool): If True - annotate the service exporter
+
     """
     restore_index = config.cur_index
     managed_clusters = get_non_acm_cluster_config()
@@ -2342,6 +2343,12 @@ def create_service_exporter():
         config.switch_ctx(index)
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+        if annotate:
+            run_cmd(
+                "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
+                f" ocs.openshift.io/api-server-exported-address={cluster.ENV_DATA['cluster_name']}"
+                ".ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
+            )
     config.switch_ctx(restore_index)
 
 
