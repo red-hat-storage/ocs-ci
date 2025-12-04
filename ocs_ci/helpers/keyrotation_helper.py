@@ -293,11 +293,23 @@ class OSDKeyrotation(KeyRotation):
         # get the kms config for the OSD keyrotation
         if is_kms_enabled(dont_raise=True) and (
             config.ENV_DATA.get("KMS_PROVIDER")
-            in [constants.VAULT_KMS_PROVIDER, constants.HPCS_KMS_PROVIDER]
+            in [
+                constants.VAULT_KMS_PROVIDER,
+                constants.HPCS_KMS_PROVIDER,
+                constants.KMIP_KMS_PROVIDER,
+            ]
         ):
             self.kms = get_kms_details()
-            self.kms.gather_init_vault_conf()
-            self.kms.update_vault_env_vars()
+            # Vault and HPCS require vault-specific configuration
+            if config.ENV_DATA.get("KMS_PROVIDER") in [
+                constants.VAULT_KMS_PROVIDER,
+                constants.HPCS_KMS_PROVIDER,
+            ]:
+                self.kms.gather_init_vault_conf()
+                self.kms.update_vault_env_vars()
+            # KMIP requires different configuration
+            elif config.ENV_DATA.get("KMS_PROVIDER") == constants.KMIP_KMS_PROVIDER:
+                self.kms.update_kmip_env_vars()
 
     def _get_deviceset(self):
         """
@@ -446,7 +458,10 @@ class PVKeyrotation(KeyRotation):
     def __init__(self, sc_obj):
         self.sc_obj = sc_obj
         self.kms = get_kms_details()
+        self.kms_provider = config.ENV_DATA.get("KMS_PROVIDER", "vault").lower()
         self.all_pvc_key_data = None
+
+        log.info(f"Initialized PVKeyrotation with KMS provider: {self.kms_provider}")
 
     def annotate_storageclass_key_rotation(self, schedule="@weekly"):
         """
@@ -581,11 +596,16 @@ class PVKeyrotation(KeyRotation):
     def get_pvc_keys_data(self, pvc_objs):
         """
         Retrieves key data for PVCs.
+
+        Returns a dictionary with PVC names as keys and their encryption key details.
+        The key name in the dict is generic ('kms_key') to support different KMS providers.
         """
+        key_field_name = "kms_key"  # Generic name for KMS key/secret
+
         return {
             pvc.name: {
                 "device_handle": pvc.get_pv_volume_handle_name,
-                "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
+                key_field_name: self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
             }
             for pvc in pvc_objs
         }
@@ -593,17 +613,32 @@ class PVKeyrotation(KeyRotation):
     @retry(UnexpectedBehaviour, tries=10, delay=20)
     def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
         """
-        Waits for all PVC keys to be rotated in the Vault KMS.
+        Waits for all PVC keys to be rotated in the KMS.
+
+        Supports multiple KMS providers: Vault, HPCS, and KMIP.
+
+        Args:
+            pvc_objs (list): List of PVC objects to check for key rotation
+
+        Returns:
+            bool: True if all keys have been rotated successfully
+
+        Raises:
+            UnexpectedBehaviour: If keys have not rotated within the retry period
         """
         if not self.all_pvc_key_data:
             self.all_pvc_key_data = self.get_pvc_keys_data(pvc_objs)
-            raise UnexpectedBehaviour("Initializing PVC vault key data")
+            raise UnexpectedBehaviour(
+                f"Initializing PVC key data for {self.kms_provider}"
+            )
 
         new_pvc_keys = self.get_pvc_keys_data(pvc_objs)
         if self.all_pvc_key_data == new_pvc_keys:
-            raise UnexpectedBehaviour("PVC keys have not rotated yet.")
+            raise UnexpectedBehaviour(
+                f"PVC keys have not rotated yet on {self.kms_provider}."
+            )
 
-        log.info("PVC keys rotated successfully.")
+        log.info(f"PVC keys rotated successfully on {self.kms_provider}.")
         return True
 
     def change_pvc_keyrotation_cronjob_state(self, pvc_objs, disable=True):
