@@ -53,12 +53,13 @@ def verify_provider_mode_deployment():
         resource_count=1,
         timeout=300,
     )
-    pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.RGW_APP_LABEL,
-        resource_count=1,
-        timeout=300,
-    )
+    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.RGW_APP_LABEL,
+            resource_count=1,
+            timeout=300,
+        )
 
     # Check ocs-storagecluster is in 'Ready' status
     log.info("Verify storagecluster on Ready state")
