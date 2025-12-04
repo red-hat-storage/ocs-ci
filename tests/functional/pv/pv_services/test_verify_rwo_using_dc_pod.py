@@ -67,7 +67,7 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         self.namespace = pod1.namespace
 
         dc_obj = OCP(
-            kind=constants.DEPLOYMENTCONFIG,
+            kind=constants.DEPLOYMENT,
             namespace=self.namespace,
             resource_name=self.name,
         )

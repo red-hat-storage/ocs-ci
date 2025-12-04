@@ -309,7 +309,7 @@ def create_pod(
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
     if deployment:
-        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DEPLOY_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(f"test-{interface}", "pod")
@@ -318,6 +318,11 @@ def create_pod(
     if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        # Ensure selector field exists (defensive check for custom pod_dict_path)
+        if "selector" not in pod_data["spec"]:
+            pod_data["spec"]["selector"] = {}
+        if "matchLabels" not in pod_data["spec"]["selector"]:
+            pod_data["spec"]["selector"]["matchLabels"] = {}
         pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
@@ -461,9 +466,43 @@ def create_pod(
         logger.info(deployment_obj.name)
         deployment_name = deployment_obj.name
         label = f"name={deployment_name}"
+
+        # Determine how many pods to wait for based on PVC access mode and replica count
+        wait_resource_count = None
+        if pvc_name and replica_count > 1:
+            try:
+                # Get PVC object to check access mode
+                pvc_obj = pvc.PVC(name=pvc_name, namespace=namespace)
+                pvc_obj.reload()
+                pvc_access_mode = pvc_obj.get_pvc_access_mode
+
+                # For RWO volumes with multiple replicas, only one pod can be Running
+                # For RWX volumes, all replicas can be Running, so wait for all
+                if pvc_access_mode == constants.ACCESS_MODE_RWO:
+                    wait_resource_count = 1
+                    logger.info(
+                        f"PVC {pvc_name} has RWO access mode with {replica_count} replicas. "
+                        f"Waiting for 1 pod to be Running."
+                    )
+                # For RWX or other access modes, wait for all replicas (resource_count=None)
+                else:
+                    logger.info(
+                        f"PVC {pvc_name} has {pvc_access_mode} access mode with {replica_count} replicas. "
+                        f"Waiting for all pods to be Running."
+                    )
+            except Exception as ex:
+                # If we can't determine access mode, default to waiting for 1 pod
+                # to avoid timeout issues with RWO volumes
+                logger.warning(
+                    f"Could not determine PVC access mode for {pvc_name}: {ex}. "
+                    f"Defaulting to wait for 1 pod."
+                )
+                wait_resource_count = 1
+
         assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
+            resource_count=wait_resource_count,
             timeout=360,
             sleep=3,
         )
