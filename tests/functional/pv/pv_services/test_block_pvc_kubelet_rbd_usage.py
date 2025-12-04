@@ -73,7 +73,7 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
     pod_obj.exec_cmd_on_pod(command=dd_full_command, out_yaml_format=False)
 
     # Wait for metrics to be scraped
-    time.sleep(45)
+    time.sleep(180)
 
     # Query kubelet metrics for the PVC
 
@@ -107,9 +107,6 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
         f"Kubelet Metrics for {pvc_obj.name}: "
         f"Capacity={kube_capacity} B, Used={kube_used} B, Available={kube_available} B )"
     )
-
-    # default allowed difference in used,provisioned values between ceph rbd du and kubelet metric
-    tolerance_bytes = 10 * 1024 * 1024  # (10MB)
 
     # Get Ceph-side reporting using rbd du
 
@@ -171,28 +168,22 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
     )
 
     # Final Comparison
+    # Provisioned Capacity Check (Ceph Provisioned vs Kubelet Capacity )
 
-    # 1. Provisioned Capacity Check (Ceph Provisioned vs. PVC Requested Size)
-    diff_capacity = abs(kube_capacity - provisioned_bytes_ceph)
-    assert diff_capacity <= tolerance_bytes, (
-        f"Capacity mismatch: Ceph Provisioned ({provisioned_bytes_ceph}) differs from kubelet Size ({kube_capacity}) "
-        f"by {diff_capacity} B (Tolerance: {tolerance_bytes} B)."
-    )
+    assert (
+        kube_capacity == provisioned_bytes_ceph
+    ), f"Capacity mismatch: Ceph Provisioned ({provisioned_bytes_ceph} B ) differs from kubelet Size ({kube_capacity} B ) "
 
-    # 2. Used Bytes Comparison (Kubelet Used vs. Ceph RBD Used)
-    diff_used = abs(kube_used - used_bytes_ceph)
-    assert diff_used <= tolerance_bytes, (
-        f"Used Size mismatch: Kubelet Used ({kube_used}) differs from Ceph Used ({used_bytes_ceph}) "
-        f"by {diff_used} B (Tolerance: {tolerance_bytes} B)."
-    )
+    # Used Bytes Comparison (Kubelet Used vs. Ceph RBD Used)
+    assert (
+        kube_used == used_bytes_ceph
+    ), f"Used Size mismatch: Kubelet Used ({kube_used}) differs from Ceph Used ({used_bytes_ceph}) "
 
-    # 3. Available Bytes Comparison (Kubelet Available vs. Ceph RBD Available)
-    diff_available = abs(kube_available - available_bytes_ceph)
-    assert diff_available <= tolerance_bytes, (
-        f"Available Size mismatch: Kubelet Available ({kube_available}) differs from Ceph Available ({available_bytes_ceph}) "
-        f"by {diff_available} B (Tolerance: {tolerance_bytes} B)."
-    )
+    # Available Bytes Comparison (Kubelet Available vs. Ceph RBD Available)
+    assert (
+        kube_available == available_bytes_ceph
+    ), f"Available Size mismatch: Kubelet Available ({kube_available}) differs from Ceph Available ({available_bytes_ceph}) "
 
     logger.info(
-        "✓ Kubelet and Ceph metrics match within tolerance for Capacity, Used, and Available sizes."
+        "Kubelet and Ceph metrics match within tolerance for Capacity, Used, and Available sizes."
     )
