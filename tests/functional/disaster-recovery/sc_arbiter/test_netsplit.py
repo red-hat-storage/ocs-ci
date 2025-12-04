@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     stretchcluster_required,
 )
+
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     check_for_logwriter_workload_pods,
@@ -19,6 +20,7 @@ from ocs_ci.helpers.stretchcluster_helper import (
 )
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+
 from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs import constants
