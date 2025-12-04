@@ -522,10 +522,22 @@ def get_ocs_storage_consumer_configmap_obj(storageconsumer_name):
         OcsStorageConsumerConfigMap: OCS Storage Consumer ConfigMap instance
     """
     ocp_obj = OCP(
-        kind=constants.CONFIGMAP,
-        resource_name=f"storageconsumer-{storageconsumer_name}",
+        kind=constants.STORAGECONSUMER,
+        resource_name=storageconsumer_name,
         namespace=config.ENV_DATA["cluster_namespace"],
+    ).get()
+    cm_name = ocp_obj.get("status").get("resourceNameMappingConfigMap").get("name")
+
+    provider_cluster_index = config.get_provider_index()
+    provider_cluster_kubeconfig = config.get_cluster_kubeconfig_by_index(
+        provider_cluster_index
     )
-    ocs_obj = OcsStorageConsumerConfigMap(**ocp_obj.data)
-    ocs_obj.reload()
-    return ocs_obj
+
+    ocp_obj = OCP(
+        kind=constants.CONFIGMAP,
+        resource_name=cm_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        cluster_kubeconfig=provider_cluster_kubeconfig,
+    ).get()
+
+    return ocp_obj
