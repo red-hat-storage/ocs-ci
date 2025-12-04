@@ -6460,3 +6460,12 @@ def get_node_plugin_label(interface):
         elif interface == constants.CEPHBLOCKPOOL:
             label = constants.CSI_RBDPLUGIN_LABEL
     return label
+
+
+def set_rook_log_level():
+    """
+    Set the rook log level
+    """
+    rook_log_level = config.DEPLOYMENT.get("rook_log_level")
+    if rook_log_level:
+        set_configmap_log_level_rook_ceph_operator(rook_log_level)
