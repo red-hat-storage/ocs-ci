@@ -179,6 +179,12 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
         kube_used == used_bytes_ceph
     ), f"Used Size mismatch: Kubelet Used ({kube_used}) differs from Ceph Used ({used_bytes_ceph}) "
 
+    # Written Bytes Comparison (Kubelet Used vs. Written bytes)
+    written_bytes = write_size_mib * 1024 * 1024
+    assert (
+        kube_used == written_bytes
+    ), f"Written Size mismatch: Kubelet Used ({kube_used}) differs from Written size ({written_bytes}) "
+
     # Available Bytes Comparison (Kubelet Available vs. Ceph RBD Available)
     assert (
         kube_available == available_bytes_ceph
