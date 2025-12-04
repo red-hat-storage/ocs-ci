@@ -466,7 +466,12 @@ class Deployment(object):
                             )
                     config.reset_ctx()
                 if config.REPORTING["collect_logs_on_success_run"]:
-                    collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                    try:
+                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to collect OCS logs: {e}, but ignoring it as deployment is successful"
+                        )
             else:
                 logger.warning("OCS deployment will be skipped")
         except Exception as e:
@@ -474,16 +479,22 @@ class Deployment(object):
             if config.REPORTING["gather_on_deploy_failure"]:
                 # Let's do the collections separately to guard against one
                 # of them failing
-                collect_ocs_logs(
-                    "deployment",
-                    ocs=False,
-                    timeout=defaults.MUST_GATHER_TIMEOUT,
-                )
-                collect_ocs_logs(
-                    "deployment",
-                    ocp=False,
-                    timeout=defaults.MUST_GATHER_TIMEOUT,
-                )
+                try:
+                    collect_ocs_logs(
+                        "deployment",
+                        ocs=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCP logs: {e}")
+                try:
+                    collect_ocs_logs(
+                        "deployment",
+                        ocp=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCS logs: {e}")
             raise
 
     def do_deploy_mce(self):
