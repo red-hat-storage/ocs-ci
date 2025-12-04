@@ -93,104 +93,19 @@ def setup_local_storage(storageclass):
         logger.info("Creating LocalVolumeDiscovery CR")
         run_cmd(f"oc create -f {lvd_data_yaml.name}")
 
-        # Pull local volume set yaml data
-        logger.info("Pulling LocalVolumeSet CR data from yaml")
-        lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
-
-        # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
-        # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
-        # HDD disk
-        if config.ENV_DATA.get(
-            "local_storage_allow_rotational_disks"
-        ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
-            logger.info(
-                "Adding Rotational for deviceMechanicalProperties spec"
-                " to detect HDD disk"
-            )
-            lvs_data["spec"]["deviceInclusionSpec"][
-                "deviceMechanicalProperties"
-            ].append("Rotational")
-
-        # Update local volume set data with Worker node Names
-        logger.info(
-            "Updating LocalVolumeSet CR data with storage nodes Name: %s",
-            storage_node_names,
-        )
-        lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
-            "values"
-        ] = storage_node_names
-
-        # Set storage class
-        logger.info(
-            "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
-        )
-        lvs_data["spec"]["storageClassName"] = storageclass
-
-        # set volumeMode to Filesystem for MCG only deployment
-        if config.ENV_DATA["mcg_only_deployment"]:
-            lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
-
-        # configure deviceTypes only to disk if partitioned_disk_on_workers (the part is configured in second LVS)
+        # Create LocalVolumeSet
         if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
-            lvs_data["spec"]["deviceInclusionSpec"]["deviceTypes"] = ["disk"]
-
-        lvs_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="local_volume_set", delete=False
-        )
-        templating.dump_data_to_temp_yaml(lvs_data, lvs_data_yaml.name)
-        logger.info("Creating LocalVolumeSet CR")
-        run_cmd(f"oc create -f {lvs_data_yaml.name}")
-
-        # Create second LVS for partitions if partitioned_disk_on_workers
-        if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
-            # Pull local volume set yaml data
-            logger.info("Pulling LocalVolumeSet CR data from yaml for partitions")
-            lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
-
-            # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
-            # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
-            # HDD disk
-            if config.ENV_DATA.get(
-                "local_storage_allow_rotational_disks"
-            ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
-                logger.info(
-                    "Adding Rotational for deviceMechanicalProperties spec"
-                    " to detect HDD disk"
-                )
-                lvs_data["spec"]["deviceInclusionSpec"][
-                    "deviceMechanicalProperties"
-                ].append("Rotational")
-
-            # Update local volume set data with Worker node Names
-            logger.info(
-                "Updating LocalVolumeSet for partitions CR data with storage nodes Name: %s",
-                storage_node_names,
+            # in case of partitioned OS disk on workers, create two separated LocalVolumeSets - one for disks and second
+            # for partitions
+            # create LVS for disks
+            create_local_volume_set(storage_node_names, storageclass, ["disk"])
+            # create LVS for partitions
+            create_local_volume_set(
+                storage_node_names, storageclass + "-part", ["part"]
             )
-            lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0][
-                "matchExpressions"
-            ][0]["values"] = storage_node_names
+        else:
+            create_local_volume_set(storage_node_names, storageclass)
 
-            # Set storage class
-            logger.info(
-                "Updating LocalVolumeSet CR data with LSO storageclass-part: %s",
-                storageclass + "-part",
-            )
-            lvs_data["spec"]["storageClassName"] = storageclass + "-part"
-
-            # set volumeMode to Filesystem for MCG only deployment
-            if config.ENV_DATA["mcg_only_deployment"]:
-                lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
-
-            # configure deviceTypes only to disk if partitioned_disk_on_workers (the part is configured in second LVS)
-            if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
-                lvs_data["spec"]["deviceInclusionSpec"]["deviceTypes"] = ["part"]
-
-            lvs_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="local_volume_set_part", delete=False
-            )
-            templating.dump_data_to_temp_yaml(lvs_data, lvs_data_yaml.name)
-            logger.info("Creating LocalVolumeSet for partitions CR")
-            run_cmd(f"oc create -f {lvs_data_yaml.name}")
     else:
         # Retrieve NVME device path ID for each worker node
         device_paths = get_device_paths(worker_names)
@@ -255,6 +170,67 @@ def add_disks_lso():
 
     if platform == constants.RHV_PLATFORM:
         add_disk_for_rhv_platform()
+
+
+def create_local_volume_set(storage_node_names, storageclass, device_types=None):
+    """
+    Create LocalVolumeSet based on the provided configuration
+
+    Args:
+        storage_node_names (list): list of compute node names
+        storageclass (str): storageClassName value to be used in
+            LocalVolume CR based on LOCAL_VOLUME_YAML
+        device_types (list): list of required device types (if None, no change is done in the template)
+
+    """
+
+    # Pull local volume set yaml data
+    logger.info("Pulling LocalVolumeSet CR data from yaml")
+    lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
+
+    # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+    # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+    # HDD disk
+    if config.ENV_DATA.get(
+        "local_storage_allow_rotational_disks"
+    ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
+        logger.info(
+            "Adding Rotational for deviceMechanicalProperties spec"
+            " to detect HDD disk"
+        )
+        lvs_data["spec"]["deviceInclusionSpec"]["deviceMechanicalProperties"].append(
+            "Rotational"
+        )
+
+    # Update local volume set data with Worker node Names
+    logger.info(
+        "Updating LocalVolumeSet CR data with storage nodes Name: %s",
+        storage_node_names,
+    )
+    lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
+        "values"
+    ] = storage_node_names
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
+    )
+    lvs_data["spec"]["storageClassName"] = storageclass
+
+    # set volumeMode to Filesystem for MCG only deployment
+    if config.ENV_DATA["mcg_only_deployment"]:
+        lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
+
+    # configure deviceTypes only to disk if partitioned_disk_on_workers (the part is configured in second LVS)
+    if device_types:
+        lvs_data["spec"]["deviceInclusionSpec"]["deviceTypes"] = device_types
+
+    lvs_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="local_volume_set", delete=False
+    )
+    templating.dump_data_to_temp_yaml(lvs_data, lvs_data_yaml.name)
+    logger.info("Creating LocalVolumeSet CR")
+    run_cmd(f"oc create -f {lvs_data_yaml.name}")
 
 
 # TODO: remove this function
