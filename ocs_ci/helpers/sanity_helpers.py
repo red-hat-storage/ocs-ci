@@ -59,7 +59,9 @@ class Sanity:
             or is_hci_client_cluster()
         ):
             ceph_health_check(
-                namespace=config.ENV_DATA["cluster_namespace"], tries=tries
+                namespace=config.ENV_DATA["cluster_namespace"],
+                tries=tries,
+                fix_ceph_health=True,
             )
             if cluster_check:
                 self.ceph_cluster.cluster_health_check(timeout=120)
