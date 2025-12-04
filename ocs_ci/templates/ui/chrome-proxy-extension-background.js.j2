@@ -6,7 +6,7 @@ var config = {
             host: "{{proxy.hostname}}",
             port: parseInt({{proxy.port}})
         },
-        bypassList: ["localhost"]
+        bypassList: ["localhost", "127.0.0.1", "::1"]
         }
     };
 
