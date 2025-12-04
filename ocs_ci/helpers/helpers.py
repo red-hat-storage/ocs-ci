@@ -2419,9 +2419,31 @@ def setup_pod_directories(pod_obj, dir_names):
     """
     full_dirs_path = []
     test_name = get_current_test_name()
-    pod_obj.exec_cmd_on_pod(command=f"mkdir -p {test_name}")
+
+    # Check if the AWS CLI pod has persistent storage
+    has_persistent_storage = True
+    try:
+        pod_obj.exec_cmd_on_pod(
+            command=f"ls -l {constants.AWSCLI_PERSISTENT_DATA_PATH}"
+        )
+    except CommandFailed:
+        logger.warning(
+            (
+                "AWS CLI pod does not have persistent storage\n"
+                "Continuing to create sub-directories in ephemeral storage"
+            )
+        )
+        has_persistent_storage = False
+
+    if has_persistent_storage:
+        test_dir_path = f"{constants.AWSCLI_PERSISTENT_DATA_PATH}/{test_name}"
+    else:
+        test_dir_path = test_name
+
+    # Create the sub-directories in the test directory
+    pod_obj.exec_cmd_on_pod(command=f"mkdir -p {test_dir_path}")
     for cur_dir in dir_names:
-        current = f"{test_name}/{cur_dir}"
+        current = f"{test_dir_path}/{cur_dir}"
         pod_obj.exec_cmd_on_pod(command=f"mkdir -p {current}")
         full_dirs_path.append(current)
     return full_dirs_path

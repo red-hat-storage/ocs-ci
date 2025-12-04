@@ -27,13 +27,17 @@ from ocs_ci.utility.ssl_certs import (
 log = logging.getLogger(__name__)
 
 
-def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
+def create_awscli_pod(
+    scope_name=None, namespace=None, service_account=None, pvc_obj=None
+):
     """
     Create AWS cli pod and its resources.
 
     Args:
         scope_name (str): The name of the fixture's scope
         namespace (str): Namespace for aws cli pod
+        service_account (str): Service account for aws cli pod
+        pvc_obj (PVC): PVC object for aws cli pod
 
     Returns:
         object: awscli_pod_obj
@@ -84,6 +88,23 @@ def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
                 "name": ocs_ca_bundle_name,
                 "mountPath": "/cert/ocs-ca-bundle.crt",
                 "subPath": "ca-bundle.crt",
+            }
+        )
+
+    # Add persistent storage if a PVC object is provided
+    if pvc_obj:
+        awscli_sts_dict["spec"]["template"]["spec"]["volumes"].append(
+            {
+                "name": "persistent-data",
+                "persistentVolumeClaim": {"claimName": pvc_obj.name},
+            }
+        )
+        awscli_sts_dict["spec"]["template"]["spec"]["containers"][0][
+            "volumeMounts"
+        ].append(
+            {
+                "name": "persistent-data",
+                "mountPath": constants.AWSCLI_PERSISTENT_DATA_PATH,
             }
         )
 

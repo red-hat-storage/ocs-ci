@@ -3032,8 +3032,30 @@ def awscli_pod_fixture(request, scope_name):
     # Ignore potential letover on teardown
     ocp_obj.add_label(resource_name=project, label=constants.S3CLI_APP_LABEL)
 
+    pvc_obj = None
+    try:
+        # Note that this PVC is cleared with the project on teardown
+        pvc_obj = helpers.create_pvc(
+            sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
+            namespace=project,
+            size="10Gi",
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+    except Exception as e:
+        log.warning(
+            (
+                f"Failed to create PVC: {e}\n"
+                "Continuing to create AWS CLI pod without persistent storage"
+            )
+        )
+
     ocp.switch_to_default_rook_cluster_project()
-    return create_awscli_pod(scope_name, project)
+    return create_awscli_pod(
+        scope_name=scope_name,
+        namespace=project,
+        service_account=None,  # Required for backwards compatibility
+        pvc_obj=pvc_obj,
+    )
 
 
 @pytest.fixture(scope="session")
