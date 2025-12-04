@@ -1275,6 +1275,16 @@ class Deployment(object):
                 log_step("Deploy and setup Local Storage Operator")
                 setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
+        simulate_bluestore_label = config.ENV_DATA.get(
+            "simulate_bluestore_label", False
+        )
+        if simulate_bluestore_label:
+            from ocs_ci.deployment.baremetal import simulate_ceph_bluestore_on_node_disk
+
+            wnodes = get_nodes()
+            for wnode in wnodes:
+                simulate_ceph_bluestore_on_node_disk(wnode)
+
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
         olm_ns_op_group_data = list(templating.load_yaml(constants.OLM_YAML, True))
