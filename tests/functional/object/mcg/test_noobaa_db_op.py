@@ -8,6 +8,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     red_squad,
     mcg,
+    pre_upgrade,
+    post_upgrade,
 )
 from ocs_ci.ocs import platform_nodes
 from ocs_ci.ocs.node import get_node_objs
@@ -251,3 +253,59 @@ class TestNoobaaDbOps:
         t2.start()
         t1.join()
         t2.join()
+
+    @pre_upgrade
+    def test_db_with_large_data_before_upgrade(
+        self,
+        request,
+        bucket_factory_session,
+        md_blow_factory,
+        mcg_obj_session,
+        awscli_pod_session,
+    ):
+        """
+        Test noobaa upgrade after filling DB to 80%
+        Script is skipping metadata comparision operation due to multiple re-execution of post-upgrade MCG operation
+            1. On pre-upgraded version, Create OBC
+            2. Fill DB cluster upto 80% using MD blow script
+            3. Capture object count from the bucket for post upgrade verification purpose
+        """
+
+        bucketname = bucket_factory_session(1)[0].name
+        request.config.cache.set("bucket_name", bucketname)
+        md_blow_factory.upload_obj_using_md_blow(bucketname, threshold_pct=79)
+        obj_count_pre_upgrade = len(
+            list_objects_from_bucket(
+                pod_obj=awscli_pod_session,
+                s3_obj=mcg_obj_session,
+                target=bucketname,
+                recursive=True,
+            )
+        )
+        request.config.cache.set("object_count", obj_count_pre_upgrade)
+        logger.info(f"Number of objects present in bucket: {obj_count_pre_upgrade}")
+
+    @post_upgrade
+    def test_db_with_large_data_after_upgrade(
+        self, request, mcg_obj_session, awscli_pod_session
+    ):
+        """
+        Test noobaa upgrade after filling DB to 80%
+            1. Capture object count from the bucket
+            2. Compare object count with pre-upgrade object count
+        """
+
+        # Create an MCG bucket
+        bucketname = request.config.cache.get("bucket_name", None)
+        obj_count_pre_upgrade = request.config.cache.get("object_count", None)
+        obj_count_post_upgrade = len(
+            list_objects_from_bucket(
+                pod_obj=awscli_pod_session,
+                s3_obj=mcg_obj_session,
+                target=bucketname,
+                recursive=True,
+            )
+        )
+        assert (
+            obj_count_pre_upgrade == obj_count_post_upgrade
+        ), "Mismatch in object count after upgrade"
