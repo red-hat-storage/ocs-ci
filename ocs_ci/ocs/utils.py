@@ -1026,6 +1026,9 @@ def collect_ceph_external(path):
 
     """
     try:
+        # In case it fails in deployment sooner than we create the toolbox pod
+        # we need to make sure the toolbox pod is created
+        setup_ceph_toolbox()
         log.info(f"Collecting external ceph logs to: {path}")
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
