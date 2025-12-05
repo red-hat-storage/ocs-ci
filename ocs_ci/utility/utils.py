@@ -2655,9 +2655,41 @@ def ceph_health_resolve_mon_slow_ops(health_status):
 
     log.warning(f"Detected problematic MON IDs with slow ops: {mon_ids}")
 
+    restart_mon_pods(mon_ids)
+
+
+def ceph_health_resolve_network_partition(health_status):
+    """
+    Fix Ceph health issue with mon network partition.
+    """
+    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
+
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning(
+            "No MON IDs found in health status. Cannot resolve network partition detected issue."
+        )
+        return
+
+    log.warning(
+        f"Detected problematic MON IDs with network partition detected: {mon_ids}"
+    )
+
+    restart_mon_pods(mon_ids)
+
+
+def restart_mon_pods(mon_ids):
+    """
+    Restart the MON pods.
+
+    Args:
+        mon_ids (list): List of MON IDs
+    """
     from ocs_ci.ocs import ocp
 
-    # Restart each problematic MON
     for mon_id in mon_ids:
         log.warning(f"Restarting MON '{mon_id}' ...")
         ocp.OCP().exec_oc_cmd(
@@ -2721,6 +2753,20 @@ def ceph_health_recover(
                     "issue": "DFBUGS-2456",
                     "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
                     == "regional-dr",
+                },
+            ],
+        },
+        {
+            "pattern": r"HEALTH_WARN\s+\d+\s+network partition detected",
+            "func": ceph_health_resolve_network_partition,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-4521",
+                    "pattern": r"Netsplit detected between mon",
                 },
             ],
         },
