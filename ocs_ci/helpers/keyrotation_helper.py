@@ -581,30 +581,93 @@ class PVKeyrotation(KeyRotation):
     def get_pvc_keys_data(self, pvc_objs):
         """
         Retrieves key data for PVCs.
-        """
-        return {
-            pvc.name: {
-                "device_handle": pvc.get_pv_volume_handle_name,
-                "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
-            }
-            for pvc in pvc_objs
-        }
 
-    @retry(UnexpectedBehaviour, tries=10, delay=20)
+        Args:
+            pvc_objs (list): List of PVC objects
+
+        Returns:
+            dict: Dictionary mapping PVC names to their key data
+
+        Raises:
+            UnexpectedBehaviour: If any PVC's key cannot be retrieved from Vault
+        """
+        keys_data = {}
+        for pvc in pvc_objs:
+            try:
+                keys_data[pvc.name] = {
+                    "device_handle": pvc.get_pv_volume_handle_name,
+                    "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
+                }
+            except UnexpectedBehaviour as e:
+                log.error(
+                    f"Failed to get Vault key for PVC '{pvc.name}' "
+                    f"(device handle: {pvc.get_pv_volume_handle_name}): {e}"
+                )
+                raise UnexpectedBehaviour(
+                    f"Failed to retrieve Vault key for PVC '{pvc.name}'. "
+                    f"This may indicate that the PVC's encryption key was not properly stored in Vault, "
+                    f"or the key path is incorrect. Original error: {e}"
+                )
+        return keys_data
+
+    @retry(UnexpectedBehaviour, tries=20, delay=60, backoff=1)
     def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
         """
         Waits for all PVC keys to be rotated in the Vault KMS.
+        This method waits up to 20 minutes (20 tries * 60 seconds) for keys to rotate.
+        Key rotation jobs may take time to complete, especially if they need to retry.
+
+        Note: If PVC keys don't exist in Vault during initialization, this will retry
+        (as keys may be created with a delay), but will eventually fail with a clear
+        error message if keys are genuinely missing.
         """
         if not self.all_pvc_key_data:
             self.all_pvc_key_data = self.get_pvc_keys_data(pvc_objs)
+            log.info(
+                f"Initialized PVC vault key data for {len(pvc_objs)} PVC(s). "
+                f"Waiting for key rotation (will check every 60 seconds)..."
+            )
             raise UnexpectedBehaviour("Initializing PVC vault key data")
 
         new_pvc_keys = self.get_pvc_keys_data(pvc_objs)
-        if self.all_pvc_key_data == new_pvc_keys:
+
+        # Check if any keys have rotated
+        rotated_pvcs = []
+        for pvc_name in self.all_pvc_key_data:
+            if (
+                pvc_name in new_pvc_keys
+                and self.all_pvc_key_data[pvc_name]["vault_key"]
+                != new_pvc_keys[pvc_name]["vault_key"]
+            ):
+                rotated_pvcs.append(pvc_name)
+
+        if not rotated_pvcs:
+            # No keys have rotated yet
+            log.info(
+                f"PVC keys have not rotated yet. Waiting... "
+                f"(Checked {len(pvc_objs)} PVC(s), will retry in 60 seconds)"
+            )
             raise UnexpectedBehaviour("PVC keys have not rotated yet.")
 
-        log.info("PVC keys rotated successfully.")
-        return True
+        # Check if all keys have rotated
+        if len(rotated_pvcs) == len(pvc_objs):
+            log.info(f"All {len(pvc_objs)} PVC key(s) rotated successfully.")
+            return True
+        else:
+            # Only some keys have rotated - need to wait for the rest
+            not_rotated_pvcs = [
+                pvc_name
+                for pvc_name in self.all_pvc_key_data
+                if pvc_name not in rotated_pvcs
+            ]
+            log.info(
+                f"Only {len(rotated_pvcs)}/{len(pvc_objs)} PVC key(s) rotated. "
+                f"Rotated: {rotated_pvcs}. Still waiting for: {not_rotated_pvcs}"
+            )
+            raise UnexpectedBehaviour(
+                f"Only {len(rotated_pvcs)}/{len(pvc_objs)} PVC keys have rotated. "
+                f"Waiting for remaining keys to rotate."
+            )
 
     def change_pvc_keyrotation_cronjob_state(self, pvc_objs, disable=True):
         """
@@ -665,51 +728,220 @@ class PVKeyrotation(KeyRotation):
         log.info("Completed key rotation state changes for all specified PVCs.")
         return True
 
-    @retry(UnexpectedBehaviour, tries=10, delay=10)
+    def _find_cronjob_for_pvc_by_listing(self, pvc_obj):
+        """
+        Find key rotation cronjob for a PVC by listing all cronjobs and matching.
+        This is used when PVC doesn't have the cronjob annotation (e.g., when
+        annotation is only on StorageClass).
+
+        Args:
+            pvc_obj: PVC object
+
+        Returns:
+            OCP object of the cronjob if found, None otherwise
+        """
+        # List all encryption key rotation cronjobs in the PVC's namespace
+        cronjob_ocp = OCP(
+            kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+            namespace=pvc_obj.namespace,
+        )
+        try:
+            cronjobs = cronjob_ocp.get(all_namespaces=False)
+            cronjob_items = cronjobs.get("items", [])
+
+            log.debug(
+                f"Found {len(cronjob_items)} encryption key rotation cronjobs "
+                f"in namespace '{pvc_obj.namespace}'"
+            )
+
+            # Match cronjob to PVC by checking owner references, spec, or name
+            for cronjob in cronjob_items:
+                cronjob_name = cronjob.get("metadata", {}).get("name", "")
+
+                # Check if cronjob references this PVC via owner references
+                owner_refs = cronjob.get("metadata", {}).get("ownerReferences", [])
+                for owner_ref in owner_refs:
+                    if (
+                        owner_ref.get("kind") == "PersistentVolumeClaim"
+                        and owner_ref.get("name") == pvc_obj.name
+                    ):
+                        log.info(
+                            f"Found CronJob '{cronjob_name}' for PVC '{pvc_obj.name}' "
+                            f"via owner reference"
+                        )
+                        return OCP(
+                            kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+                            namespace=pvc_obj.namespace,
+                            resource_name=cronjob_name,
+                        )
+
+                # Check if PVC name is in cronjob name (common pattern)
+                if pvc_obj.name in cronjob_name:
+                    log.info(
+                        f"Found CronJob '{cronjob_name}' for PVC '{pvc_obj.name}' "
+                        f"via name matching"
+                    )
+                    return OCP(
+                        kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+                        namespace=pvc_obj.namespace,
+                        resource_name=cronjob_name,
+                    )
+
+                # Check spec for PVC reference (some cronjobs may reference PVC in spec)
+                spec = cronjob.get("spec", {})
+                if spec:
+                    # Check for PVC reference in spec.targetRef or similar fields
+                    target_ref = spec.get("targetRef", {})
+                    if (
+                        target_ref.get("kind") == "PersistentVolumeClaim"
+                        and target_ref.get("name") == pvc_obj.name
+                    ):
+                        log.info(
+                            f"Found CronJob '{cronjob_name}' for PVC '{pvc_obj.name}' "
+                            f"via spec.targetRef"
+                        )
+                        return OCP(
+                            kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+                            namespace=pvc_obj.namespace,
+                            resource_name=cronjob_name,
+                        )
+
+            log.debug(
+                f"No matching cronjob found for PVC '{pvc_obj.name}' "
+                f"among {len(cronjob_items)} cronjobs"
+            )
+
+        except Exception as e:
+            log.warning(f"Error listing cronjobs for PVC '{pvc_obj.name}': {e}")
+
+        return None
+
+    @retry(UnexpectedBehaviour, tries=20, delay=30, backoff=1)
     def wait_for_keyrotation_cronjobs_recreation(self, pvc_objs):
         """
-        Wait for key rotation cronjobs to be recreated for all PVCs after re-enabling.
+        Wait for key rotation cronjobs to be created/recreated for all PVCs.
+        When StorageClass has keyrotation annotation, PVCs automatically inherit it
+        and the reconciler creates cronjobs for them. This method checks for cronjobs
+        either via PVC annotation (if present) or by listing and matching cronjobs.
 
         Args:
             pvc_objs (list): List of PVC objects to check.
 
         Returns:
-            bool: True if all cronjobs are recreated and active.
+            bool: True if all cronjobs are created and active.
 
         Raises:
-            UnexpectedBehaviour: If cronjobs are not recreated within timeout.
+            UnexpectedBehaviour: If cronjobs are not created within timeout.
         """
+        log.info(f"Checking for key rotation cronjobs for {len(pvc_objs)} PVC(s)...")
         missing_cronjobs = []
+
+        # First, check if any cronjobs exist at all in the namespace
+        if pvc_objs:
+            namespace = pvc_objs[0].namespace
+            cronjob_ocp = OCP(
+                kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+                namespace=namespace,
+            )
+            try:
+                all_cronjobs = cronjob_ocp.get(all_namespaces=False)
+                total_cronjobs = len(all_cronjobs.get("items", []))
+                log.info(
+                    f"Found {total_cronjobs} total encryption key rotation cronjob(s) "
+                    f"in namespace '{namespace}'"
+                )
+            except Exception as e:
+                log.debug(f"Could not list cronjobs: {e}")
 
         for pvc_obj in pvc_objs:
             # Reload PVC to get latest annotations
             pvc_obj.reload()
 
+            cronjob = None
+            # First try to get cronjob via PVC annotation (if present)
             try:
                 cronjob = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
-                # Check if cronjob exists and is not suspended
-                if not cronjob.is_exist():
-                    missing_cronjobs.append(pvc_obj.name)
-                    continue
+                log.debug(f"Found cronjob for PVC '{pvc_obj.name}' via annotation")
+            except ValueError:
+                # PVC doesn't have cronjob annotation, try finding by listing
+                log.debug(
+                    f"PVC '{pvc_obj.name}' doesn't have cronjob annotation, "
+                    f"trying to find cronjob by listing"
+                )
+                cronjob = self._find_cronjob_for_pvc_by_listing(pvc_obj)
 
-                # Check if cronjob is not suspended
+            if not cronjob:
+                log.debug(f"Cronjob not found for PVC '{pvc_obj.name}' yet")
+                missing_cronjobs.append(pvc_obj.name)
+                continue
+
+            # Check if cronjob exists and is not suspended
+            if not cronjob.is_exist():
+                log.debug(f"Cronjob for PVC '{pvc_obj.name}' does not exist")
+                missing_cronjobs.append(pvc_obj.name)
+                continue
+
+            # Check if cronjob is not suspended
+            try:
                 cronjob_data = cronjob.get()
                 if cronjob_data.get("spec", {}).get("suspend", False):
+                    log.debug(f"Cronjob for PVC '{pvc_obj.name}' is suspended")
                     missing_cronjobs.append(f"{pvc_obj.name} (suspended)")
                     continue
-
-                log.info(f"Key rotation cronjob for PVC '{pvc_obj.name}' is active.")
-
-            except ValueError:
-                # Cronjob annotation not found or cronjob doesn't exist
+            except Exception as e:
+                log.warning(
+                    f"Error checking cronjob status for PVC '{pvc_obj.name}': {e}"
+                )
                 missing_cronjobs.append(pvc_obj.name)
+                continue
+
+            log.info(f"Key rotation cronjob for PVC '{pvc_obj.name}' is active.")
 
         if missing_cronjobs:
+            log.warning(
+                f"Key rotation cronjobs not ready for {len(missing_cronjobs)} PVC(s): "
+                f"{', '.join(missing_cronjobs)}"
+            )
             raise UnexpectedBehaviour(
                 f"Key rotation cronjobs not ready for PVCs: {', '.join(missing_cronjobs)}"
             )
 
         log.info("All key rotation cronjobs are recreated and active.")
+        return True
+
+    @retry(UnexpectedBehaviour, tries=20, delay=30, backoff=1)
+    def wait_for_keyrotation_cronjobs_deletion(self, pvc_objs):
+        """
+        Wait for key rotation cronjobs to be deleted/garbage collected for all PVCs.
+
+        Args:
+            pvc_objs (list): List of PVC objects to check.
+
+        Returns:
+            bool: True if all cronjobs are deleted.
+
+        Raises:
+            UnexpectedBehaviour: If cronjobs still exist within timeout.
+        """
+        log.info("Waiting for key rotation cronjobs to be garbage collected...")
+        missing_cronjobs = []
+
+        for pvc_obj in pvc_objs:
+            pvc_obj.reload()
+            try:
+                cronjob = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
+                if cronjob.is_exist():
+                    missing_cronjobs.append(pvc_obj.name)
+            except ValueError:
+                # Cronjob doesn't exist, which is what we want
+                log.info(f"CronJob for PVC '{pvc_obj.name}' has been GCed")
+
+        if missing_cronjobs:
+            raise UnexpectedBehaviour(
+                f"Key rotation cronjobs still exist for PVCs: {', '.join(missing_cronjobs)}"
+            )
+
+        log.info("All key rotation cronjobs have been garbage collected.")
         return True
 
 
