@@ -104,7 +104,7 @@ class StorageClusterSetup(object):
             cluster_data["spec"]["arbiter"]["enable"] = True
             cluster_data["spec"]["nodeTopologies"][
                 "arbiterLocation"
-            ] = self.get_arbiter_location()
+            ] = self.deployment.get_arbiter_location()
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
