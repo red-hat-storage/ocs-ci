@@ -5,9 +5,8 @@ import sys
 import logging
 import subprocess
 import json
-import argparse
+import os
 
-from rtslib_fb import Root, NetworkPortal, ACL
 
 log = logging.getLogger(__name__)
 
@@ -15,32 +14,17 @@ log = logging.getLogger(__name__)
 TARGET_VM = "10.1.161.239"
 
 USERNAME = "root"
-SSH_KEY = "/Users/avdhootsagare/.ssh/id_rsa"
+key_path = "~/.ssh/openshift-dev.pem"
+key_path = os.path.expanduser(key_path)
 
-TARGET_IQN = "iqn.2003-01.org.linux-iscsi.localhost.x8664:sn.d7a7c8437192 "
+TARGET_IQN = "iqn.2003-01.org.linux-iscsi.localhost.x8664:sn.d7a7c8437192"
 TARGET_IP = "10.1.161.239"
 
 BACKSTORES = ["disk0", "disk1", "disk2"]  # Already created on target
 MOUNT_BASE = "/mnt/iscsi_lun"
 
 
-def parse_args():
-    """
-    Parses command-line arguments using argparse.
-
-    Returns:
-    argparse.Namespace: An object containing the parsed arguments.
-    """
-    parser = argparse.ArgumentParser(description="iSCSI Automation Script")
-    parser.add_argument(
-        "--kubeconfig",
-        required=True,
-        help="Path to the kubeconfig file used to discover OCP worker nodes",
-    )
-    return parser.parse_args()
-
-
-def ssh_run(host, cmd):
+def ssh_run(host, cmd, username=USERNAME):
     """ "
     Executes a command on a remote host via SSH using Paramiko.
 
@@ -52,12 +36,21 @@ def ssh_run(host, cmd):
     (str): stdout objects from the command execution
     """
     log.info(f"\n[{host}] ➜ {cmd}")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(host, username=USERNAME, key_filename=SSH_KEY, timeout=10)
-        stdin, stdout, stderr = client.exec_command(cmd)
+        if username == "core":
+            private_key = paramiko.RSAKey.from_private_key_file(key_path)
+            client.connect(host, username=username, pkey=private_key, timeout=10)
+        else:
+            client.connect(
+                host,
+                username=username,
+                password=os.environ.get("TARGET_PASSWORD"),
+                timeout=10,
+            )
 
+        stdin, stdout, stderr = client.exec_command(cmd)
         out = stdout.read().decode().strip()
         err = stderr.read().decode().strip()
 
@@ -65,13 +58,47 @@ def ssh_run(host, cmd):
             log.info(out)
         if err:
             log.error("ERROR:", err)
-
-        client.close()
-        return out
+        return True, out, err
 
     except Exception as e:
         log.error(f"SSH ERROR on {host}: {e}")
         return None
+    finally:
+        client.close()
+
+
+def setup_target_environment(target_vm_ip, username=USERNAME):
+    """
+    Set up target environment on remote target VM via SSH.
+
+    Parameters:
+    target_vm_ip (str): IP address of the target VM
+    username (str): SSH username (default: root)
+    """
+    log.info(f"Setting up target environment on {target_vm_ip}...")
+
+    commands = [
+        # Create target directory
+        "mkdir -p /etc/target",
+        # Mount configfs
+        "mount -t configfs configfs /sys/kernel/config 2>/dev/null || true",
+        # Load kernel modules
+        "modprobe target_core_mod",
+        "modprobe iscsi_target_mod",
+        # Start and enable target service
+        "systemctl start target",
+        "systemctl enable target",
+        # Verify setup
+        "systemctl status target --no-pager",
+    ]
+
+    for cmd in commands:
+        log.info(f"Executing on target VM: {cmd}")
+        success, stdout, stderr = ssh_run(target_vm_ip, cmd, username)
+        if not success and "already" not in stderr.lower():
+            log.warning(f"Command warning: {stderr}")
+        if stdout:
+            log.debug(f"Output: {stdout.strip()}")
 
 
 def get_worker_node_ips(kubeconfig_path):
@@ -133,7 +160,7 @@ def get_worker_iqns(worker_node_ips):
     ("\n=== Collecting Worker IQNs ===")
     for node_ip in worker_node_ips:
         check_iscsi_command = "which iscsiadm"
-        iscsiadm_installed = ssh_run(node_ip, check_iscsi_command)
+        iscsiadm_installed = ssh_run(node_ip, check_iscsi_command, username="core")
         if not iscsiadm_installed:
             log.info(f"[{node_ip}] iscsiadm not found. Installing...")
             ssh_run(
@@ -145,8 +172,10 @@ def get_worker_iqns(worker_node_ips):
             )
             ssh_run(node_ip, start_iscsi_command)
 
-        iqn = ssh_run(
-            node_ip, "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
+        success, iqn, err = ssh_run(
+            node_ip,
+            "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2",
+            username="core",
         )
         if iqn:
             log.info(f"[{node_ip}] Found IQN: {iqn}")
@@ -157,7 +186,7 @@ def get_worker_iqns(worker_node_ips):
 # --------------------------------------------------------
 # STEP 2: Configure Target VM
 # --------------------------------------------------------
-def configure_target(target_iqn, target_ip, worker_iqns):
+def configure_target(target_iqn, target_ip, worker_iqns, username=USERNAME):
     """
     Configures the iSCSI target with given IQNs and IP.
     This function is a placeholder and requires implementation.
@@ -168,47 +197,57 @@ def configure_target(target_iqn, target_ip, worker_iqns):
     worker_iqns (list): List of IQNs of worker nodes.
     """
 
-    root = Root()
-    # Find existing target
-    target = None
-    for t in root.targets:
-        if t.wwn == target_iqn:
-            target = t
-            break
+    # Setup environment first
+    # setup_target_environment(target_ip)
 
-    if target is None:
-        raise Exception(f"Target IQN not found: {target_iqn}")
+    # Check if target exists
+    # Check if target exists
+    check_cmd = f"targetcli ls /iscsi/{target_iqn} 2>/dev/null"
+    success, stdout, stderr = ssh_run(target_ip, check_cmd, username)
+    if not success:
+        log.info(f"Creating iSCSI target {target_iqn} on {target_ip}...")
+        create_target_cmd = f"targetcli /iscsi create {target_iqn}"
+        ssh_run(target_ip, create_target_cmd, username)
+    else:
+        log.info(f"iSCSI target {target_iqn} already exists on {target_ip}.")
+        log.info("Adding workers...")
 
-    # Create TPG
-    tpg = target.tpgs[0]
+    # Add LUNs and ACLs for each worker IQN
+    for worker_iqn in worker_iqns:
+        # Add ACL
+        acl_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls create {worker_iqn}"
+        ssh_run(target_ip, acl_cmd, username)
+        log.info(f"AddedACL for worker IQN: {worker_iqn}")
 
-    log.info(f"Adding portal {target_ip}:3260 if missing...")
-    try:
-        NetworkPortal(tpg, target_ip, 3260)
-    except Exception as e:
-        if "already exists" in str(e):
-            log.exception("Portal already exists — OK")
+        # Get list of LUNs to map
+        lun_list_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls"
+        success, stdout, stderr = ssh_run(target_ip, lun_list_cmd, username)
 
-    # ACL creation
-    for iqn in worker_iqns:
-        log.info(f"Adding ACL entry for worker IQN: {iqn}")
-        try:
-            acl = ACL(tpg, iqn)
-        except Exception as e:
-            if "already exists" in str(e):
-                log.exception("ACL already exists — OK")
-            acl = [a for a in tpg.node_acls if a.node_wwn == iqn][0]
+        import re
 
-    # Map all LUNs under ACL
-    for lun in tpg.luns:
-        try:
-            acl.lun_map(lun.storage_object, lun.lun)
-            log.info(f"Mapped LUN{lun.lun} under ACL")
-        except Exception as e:
-            if "already mapped" in str(e):
-                log.exception(f"LUN{lun.lun} already mapped — OK")
+        lun_numbers = re.findall(r"lun(\d+)", stdout)
 
-    log.info("\n Target configuration complete")
+        for lun_num in lun_numbers:
+            log.info(f"Mapping LUN{lun_num} to {worker_iqn}...")
+
+            # Map LUN to ACL
+            map_cmd = (
+                f"targetcli /iscsi/{target_iqn}/tpg1/acls/{worker_iqn} "
+                f"create {lun_num} {lun_num} 2>&1 || "
+                f"echo 'LUN mapping may already exist'"
+            )
+            success, stdout, stderr = ssh_run(target_ip, map_cmd, username)
+            log.info(f"LUN{lun_num} mapping result: {stdout.strip()}")
+
+    # Save configuration
+    log.info("Saving target configuration...")
+    save_cmd = "targetcli saveconfig"
+    success, stdout, stderr = ssh_run(target_ip, save_cmd, username)
+
+    if success:
+        log.info("Configuration saved successfully")
+    else:
+        log.warning(f"Save warning: {stderr}")
 
 
 # --------------------------------------------------------
@@ -237,18 +276,15 @@ def configure_initiators(worker_ip):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    KUBECONFIG = args.kubeconfig
-
+    KUBECONFIG_PATH = "/Users/avdhootsagare/auth_odf/auth/kubeconfig"
     # Get worker nodes
-    worker_node_ips = get_worker_node_ips(KUBECONFIG)
+    worker_node_ips = get_worker_node_ips(KUBECONFIG_PATH)
     log.info(f"Current available worker nodes are {worker_node_ips}")
     worker_iqns = get_worker_iqns(worker_node_ips)
 
     if not worker_iqns:
         log.info("No IQNs found! Exiting...")
         sys.exit(1)
-
     configure_target(TARGET_IQN, TARGET_IP, worker_iqns)
     for worker_ip in worker_node_ips:
         configure_initiators(worker_ip)
