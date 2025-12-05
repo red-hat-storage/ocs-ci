@@ -1787,6 +1787,7 @@ class VSPHEREAI(VSPHEREBASE):
                 ingress_vip=self.ingress_vip,
                 ssh_public_key=self.get_ssh_key(),
                 pull_secret=self.get_pull_secret(),
+                platform="vsphere",
             )
 
             # create (register) cluster in Assisted Installer console
