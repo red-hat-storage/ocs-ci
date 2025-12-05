@@ -2578,15 +2578,54 @@ def ceph_health_resolve_mon_slow_ops(health_status):
     Fix ceph health issue with mon slow ops
     """
     log.warning("Trying to fix the issue with mon slow ops by restarting mon pod")
-    mon_pattern = r"mon\.([a-z]) has slow ops"
-    match = re.search(mon_pattern, health_status)
-    mon_id = None
-    if match:
-        mon_id = match.group(1)
-        log.warning(f"Problematic MON ID with slow ops: {mon_id} will be restarted")
-    if mon_id:
-        from ocs_ci.ocs import ocp
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
 
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning("No MON IDs found in health status. Cannot resolve slow ops.")
+        return
+
+    log.warning(f"Detected problematic MON IDs with slow ops: {mon_ids}")
+
+    restart_mon_pods(mon_ids)
+
+
+def ceph_health_resolve_network_partition(health_status):
+    """
+    Fix Ceph health issue with mon network partition.
+    """
+    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
+
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning(
+            "No MON IDs found in health status. Cannot resolve network partition detected issue."
+        )
+        return
+
+    log.warning(
+        f"Detected problematic MON IDs with network partition detected: {mon_ids}"
+    )
+
+    restart_mon_pods(mon_ids)
+
+
+def restart_mon_pods(mon_ids):
+    """
+    Restart the MON pods.
+
+    Args:
+        mon_ids (list): List of MON IDs
+    """
+    from ocs_ci.ocs import ocp
+
+    for mon_id in mon_ids:
+        log.warning(f"Restarting MON '{mon_id}' ...")
         ocp.OCP().exec_oc_cmd(
             f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
         )
@@ -2648,6 +2687,20 @@ def ceph_health_recover(
                     "issue": "DFBUGS-2456",
                     "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
                     == "regional-dr",
+                },
+            ],
+        },
+        {
+            "pattern": r"HEALTH_WARN\s+\d+\s+network partition detected",
+            "func": ceph_health_resolve_network_partition,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-4521",
+                    "pattern": r"Netsplit detected between mon",
                 },
             ],
         },
