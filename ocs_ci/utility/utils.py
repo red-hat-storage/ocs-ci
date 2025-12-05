@@ -2900,7 +2900,9 @@ def ceph_health_check(
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace, fix_ceph_health)
+    )(ceph_health_check_base)(
+        namespace, fix_ceph_health, update_jira, no_exception_if_jira_issue_updated
+    )
 
 
 def ceph_health_check_base(
@@ -2945,7 +2947,10 @@ def ceph_health_check_base(
                 update_jira=update_jira,
                 no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
             )
-        raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+        else:
+            raise CephHealthException(
+                f"Ceph cluster health is not OK. Health: {health}"
+            )
 
 
 def create_ceph_health_cmd(namespace):
