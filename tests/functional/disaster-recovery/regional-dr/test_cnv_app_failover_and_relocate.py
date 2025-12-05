@@ -88,8 +88,9 @@ class TestCnvApplicationRDR:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             wl_namespace, cnv_workloads[0].workload_type
         )
-        logger.info(f"Waiting for {scheduling_interval} minutes for sync to complete")
-        sleep(scheduling_interval * 60)
+        wait_time = 2 * scheduling_interval  # Time in minutes
+        logger.info(f"Waiting for {wait_time} minutes for sync to complete")
+        sleep(wait_time * 60)
 
         # Shutting down primary managed cluster nodes
         primary_cluster_nodes = get_node_objs()
@@ -180,8 +181,8 @@ class TestCnvApplicationRDR:
             )
         )
 
-        logger.info(f"Waiting for {scheduling_interval} minutes for sync to complete")
-        sleep(scheduling_interval * 60)
+        logger.info(f"Waiting for {wait_time} minutes for sync to complete")
+        sleep(wait_time * 60)
 
         # Relocate the applications back to primary managed cluster
         for cnv_wl in cnv_workloads:
