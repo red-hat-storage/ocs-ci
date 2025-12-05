@@ -308,6 +308,22 @@ class StorageClusterSetup(object):
             )["hostNetwork"] = False
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
+        if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+            pv_size_list = helpers.get_pv_size(
+                storageclass=constants.DEFAULT_STORAGECLASS_LSO + "-part"
+            )
+            pv_size_list.sort()
+            deviceset_data_part = deepcopy(deviceset_data)
+            deviceset_data_part["name"] = (
+                constants.DEFAULT_DEVICESET_LSO_PVC_NAME + "-part"
+            )
+            deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
+                self.deployment.storage_class + "-part"
+            )
+            deviceset_data_part["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = f"{pv_size_list[0]}"
+            cluster_data["spec"]["storageDeviceSets"].append(deviceset_data_part)
 
         if self.managed_ibmcloud:
             mon_pvc_template = {

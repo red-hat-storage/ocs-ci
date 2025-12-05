@@ -188,6 +188,9 @@ def create_local_volume_set(storage_node_names, storageclass, device_types=None)
     logger.info("Pulling LocalVolumeSet CR data from yaml")
     lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
 
+    # set LVS name
+    lvs_data["metadata"]["name"] = storageclass
+
     # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
     # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
     # HDD disk
