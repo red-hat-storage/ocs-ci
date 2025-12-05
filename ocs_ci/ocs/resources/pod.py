@@ -4208,10 +4208,10 @@ def get_pod_metrics(pod_name, namespace=None):
                     elif memory_str.endswith("Gi"):
                         memory_mib = int(float(memory_str.replace("Gi", "")) * 1024)
                     elif memory_str.endswith("Ki"):
-                        memory_mib = int(memory_str.replace("Ki", "")) / 1024
+                        memory_mib = int(int(memory_str.replace("Ki", "")) / 1024)
                     else:
                         # Assume bytes
-                        memory_mib = int(memory_str) / (1024 * 1024)
+                        memory_mib = int(int(memory_str) / (1024 * 1024))
 
                     return {
                         "memory_mib": memory_mib,
