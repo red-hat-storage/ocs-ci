@@ -86,8 +86,8 @@ class TestMemoryStressWithCSIAddon:
         pv_keyrotation_obj = PVKeyrotation(sc_obj)
         pv_keyrotation_obj.set_keyrotation_state_by_annotation(enable=True)
         log.info("Key rotation enabled via StorageClass annotation")
-        pv_keyrotation_obj.annotate_storageclass_key_rotation(schedule="* * * * *")
-        log.info("StorageClass annotated with * * * * * schedule for key rotation")
+        pv_keyrotation_obj.annotate_storageclass_key_rotation(schedule="*/1 * * * *")
+        log.info("StorageClass annotated with */1 * * * * schedule for key rotation")
 
         # Create encrypted PVCs (they will automatically inherit the StorageClass annotation)
         log.info("Creating encrypted PVCs...")

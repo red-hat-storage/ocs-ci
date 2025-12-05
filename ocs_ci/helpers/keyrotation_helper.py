@@ -581,14 +581,34 @@ class PVKeyrotation(KeyRotation):
     def get_pvc_keys_data(self, pvc_objs):
         """
         Retrieves key data for PVCs.
+
+        Args:
+            pvc_objs (list): List of PVC objects
+
+        Returns:
+            dict: Dictionary mapping PVC names to their key data
+
+        Raises:
+            UnexpectedBehaviour: If any PVC's key cannot be retrieved from Vault
         """
-        return {
-            pvc.name: {
-                "device_handle": pvc.get_pv_volume_handle_name,
-                "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
-            }
-            for pvc in pvc_objs
-        }
+        keys_data = {}
+        for pvc in pvc_objs:
+            try:
+                keys_data[pvc.name] = {
+                    "device_handle": pvc.get_pv_volume_handle_name,
+                    "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
+                }
+            except UnexpectedBehaviour as e:
+                log.error(
+                    f"Failed to get Vault key for PVC '{pvc.name}' "
+                    f"(device handle: {pvc.get_pv_volume_handle_name}): {e}"
+                )
+                raise UnexpectedBehaviour(
+                    f"Failed to retrieve Vault key for PVC '{pvc.name}'. "
+                    f"This may indicate that the PVC's encryption key was not properly stored in Vault, "
+                    f"or the key path is incorrect. Original error: {e}"
+                )
+        return keys_data
 
     @retry(UnexpectedBehaviour, tries=20, delay=60, backoff=1)
     def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
@@ -596,6 +616,10 @@ class PVKeyrotation(KeyRotation):
         Waits for all PVC keys to be rotated in the Vault KMS.
         This method waits up to 20 minutes (20 tries * 60 seconds) for keys to rotate.
         Key rotation jobs may take time to complete, especially if they need to retry.
+
+        Note: If PVC keys don't exist in Vault during initialization, this will retry
+        (as keys may be created with a delay), but will eventually fail with a clear
+        error message if keys are genuinely missing.
         """
         if not self.all_pvc_key_data:
             self.all_pvc_key_data = self.get_pvc_keys_data(pvc_objs)

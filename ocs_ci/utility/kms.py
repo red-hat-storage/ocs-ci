@@ -1335,6 +1335,9 @@ class Vault(KMS):
 
         Returns:
             secret (str): passphrase stored in the vault KMS for given device handle.
+
+        Raises:
+            UnexpectedBehaviour: If the secret key is not found in Vault or if Vault command fails.
         """
         if not self.csi_vault_backend_path:
             self.get_vault_backend_path(
@@ -1342,8 +1345,27 @@ class Vault(KMS):
             )
 
         cmd = f"vault kv get -format=json {self.csi_vault_backend_path}/{device_handle}"
-        out = subprocess.check_output(shlex.split(cmd))
-        json_out = json.loads(out)
+        try:
+            out = subprocess.check_output(
+                shlex.split(cmd), stderr=subprocess.STDOUT, text=True
+            )
+        except CalledProcessError as e:
+            error_msg = e.output.strip() if e.output else str(e)
+            logger.error(
+                f"Failed to get PV secret from Vault for device handle '{device_handle}': {error_msg}"
+            )
+            raise UnexpectedBehaviour(
+                f"PV secret not found in Vault for device handle '{device_handle}'. "
+                f"Vault error: {error_msg}"
+            )
+
+        try:
+            json_out = json.loads(out)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON output from Vault command: {e}")
+            raise UnexpectedBehaviour(
+                f"Invalid JSON response from Vault for device handle '{device_handle}': {e}"
+            )
 
         def find_passphrase(obj):
             """
@@ -1365,6 +1387,11 @@ class Vault(KMS):
             return None
 
         secret = find_passphrase(json_out)
+
+        if not secret:
+            raise UnexpectedBehaviour(
+                f"Passphrase not found in Vault response for device handle '{device_handle}'"
+            )
 
         return secret
 
