@@ -712,6 +712,41 @@ class PVKeyrotation(KeyRotation):
         log.info("All key rotation cronjobs are recreated and active.")
         return True
 
+    @retry(UnexpectedBehaviour, tries=20, delay=30)
+    def wait_for_keyrotation_cronjobs_deletion(self, pvc_objs):
+        """
+        Wait for key rotation cronjobs to be deleted/garbage collected for all PVCs.
+
+        Args:
+            pvc_objs (list): List of PVC objects to check.
+
+        Returns:
+            bool: True if all cronjobs are deleted.
+
+        Raises:
+            UnexpectedBehaviour: If cronjobs still exist within timeout.
+        """
+        log.info("Waiting for key rotation cronjobs to be garbage collected...")
+        missing_cronjobs = []
+
+        for pvc_obj in pvc_objs:
+            pvc_obj.reload()
+            try:
+                cronjob = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
+                if cronjob.is_exist():
+                    missing_cronjobs.append(pvc_obj.name)
+            except ValueError:
+                # Cronjob doesn't exist, which is what we want
+                log.info(f"CronJob for PVC '{pvc_obj.name}' has been GCed")
+
+        if missing_cronjobs:
+            raise UnexpectedBehaviour(
+                f"Key rotation cronjobs still exist for PVCs: {', '.join(missing_cronjobs)}"
+            )
+
+        log.info("All key rotation cronjobs have been garbage collected.")
+        return True
+
 
 def validate_key_rotation_schedules(schedule):
     """
