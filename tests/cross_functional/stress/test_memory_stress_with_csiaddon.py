@@ -5,14 +5,13 @@ This test validates memory and CPU usage of the PVC reconciler pod during
 encryption key rotation operations with a large number of encrypted PVCs.
 
 Test Scenarios:
-1. Create 100 encrypted PVCs with 100 deployments (1:1 mapping)
+1. Create encrypted PVCs with deployments (1:1 mapping)
 2. Monitor initial memory/CPU stats of reconciler pod
-3. Annotate StorageClass for EKR with schedule: @weekly
-4. Update SC annotation with schedule: * * * * *
-5. Watch memory go up and ensure key rotation succeeds
-6. Annotate SC with annotation enable: false
-7. Wait for resources to be GCed
-8. Monitor memory usage go down (should return to initial stats)
+3. Annotate StorageClass for EKR with schedule: * * * * *
+4. Watch memory go up and ensure key rotation succeeds
+5. Annotate SC with annotation enable: false
+6. Wait for resources to be GCed
+7. Monitor memory usage go down (should return to initial stats)
 """
 
 import logging
@@ -82,15 +81,16 @@ class TestMemoryStressWithCSIAddon:
         log.info("Vault CSI KMS token created")
 
         # Initialize PVKeyrotation helper and enable key rotation BEFORE creating PVCs
-        # This ensures PVCs get keyrotation cronjobs immediately upon creation
+        # When StorageClass has keyrotation annotation, PVCs automatically inherit it
+        # and the reconciler will create cronjobs for them
         pv_keyrotation_obj = PVKeyrotation(sc_obj)
         pv_keyrotation_obj.set_keyrotation_state_by_annotation(enable=True)
         log.info("Key rotation enabled via StorageClass annotation")
-        pv_keyrotation_obj.annotate_storageclass_key_rotation(schedule="@weekly")
-        log.info("StorageClass annotated with @weekly schedule for key rotation")
+        pv_keyrotation_obj.annotate_storageclass_key_rotation(schedule="* * * * *")
+        log.info("StorageClass annotated with * * * * * schedule for key rotation")
 
-        # Create 100 encrypted PVCs
-        log.info("Creating 100 encrypted PVCs...")
+        # Create encrypted PVCs (they will automatically inherit the StorageClass annotation)
+        log.info("Creating encrypted PVCs...")
         pvc_objs = multi_pvc_factory(
             size=1,
             num_of_pvc=100,
@@ -101,8 +101,8 @@ class TestMemoryStressWithCSIAddon:
         )
         log.info(f"Created {len(pvc_objs)} encrypted PVCs")
 
-        # Create 100 deployments (1:1 mapping with PVCs)
-        log.info("Creating 100 deployments (1:1 mapping with PVCs)...")
+        # Create deployments (1:1 mapping with PVCs)
+        log.info("Creating deployments (1:1 mapping with PVCs)...")
         pod_objs = []
         for i, pvc_obj in enumerate(pvc_objs):
             pod_obj = pod_factory(
@@ -117,7 +117,16 @@ class TestMemoryStressWithCSIAddon:
         log.info(f"Created {len(pod_objs)} deployments")
 
         # Wait for key rotation cronjobs to be created for all PVCs
+        # The reconciler automatically creates cronjobs for PVCs that inherit
+        # the StorageClass keyrotation annotation and adds the cronjob annotation
+        # to each PVC. This may take time for the reconciler to process all PVCs.
         log.info("Waiting for key rotation cronjobs to be created for all PVCs...")
+        log.info(
+            "PVCs automatically inherit StorageClass keyrotation annotation. "
+            "Reconciler will create cronjobs and add cronjob annotations to PVCs."
+        )
+        # Add initial delay to give reconciler time to start processing
+        time.sleep(30)
         pv_keyrotation_obj.wait_for_keyrotation_cronjobs_recreation(pvc_objs)
         log.info("Key rotation cronjobs created successfully for all PVCs")
 
@@ -167,16 +176,11 @@ class TestMemoryStressWithCSIAddon:
         )
 
         # Step 2: Verify StorageClass annotation (already set in setup)
-        log.info("=== Step 2: Verifying StorageClass EKR annotation (@weekly) ===")
-        log.info("StorageClass already annotated with @weekly schedule from setup")
+        log.info("=== Step 2: Verifying StorageClass EKR annotation (* * * * *) ===")
+        log.info("StorageClass already annotated with * * * * * schedule from setup")
 
-        # Step 3: Update SC annotation with schedule: * * * * *
-        log.info("=== Step 3: Updating SC annotation with schedule: * * * * * ===")
-        pv_keyrotation_obj.annotate_storageclass_key_rotation(schedule="* * * * *")
-        log.info("StorageClass annotation updated to * * * * * schedule")
-
-        # Step 4: Watch memory go up and ensure key rotation succeeds
-        log.info("=== Step 4: Monitoring memory increase and key rotation ===")
+        # Step 3: Watch memory go up and ensure key rotation succeeds
+        log.info("=== Step 3: Monitoring memory increase and key rotation ===")
         max_memory_during_kr = 0
         max_cpu_during_kr = 0
 
@@ -216,18 +220,18 @@ class TestMemoryStressWithCSIAddon:
             f"CPU: {max_cpu_during_kr}m"
         )
 
-        # Step 5: Annotate SC with annotation enable: false
-        log.info("=== Step 5: Disabling key rotation via SC annotation ===")
+        # Step 4: Annotate SC with annotation enable: false
+        log.info("=== Step 4: Disabling key rotation via SC annotation ===")
         pv_keyrotation_obj.set_keyrotation_state_by_annotation(enable=False)
         log.info("Key rotation disabled via StorageClass annotation")
 
-        # Step 6: Wait for resources to be GCed
-        log.info("=== Step 6: Waiting for resources to be garbage collected ===")
+        # Step 5: Wait for resources to be GCed
+        log.info("=== Step 5: Waiting for resources to be garbage collected ===")
         pv_keyrotation_obj.wait_for_keyrotation_cronjobs_deletion(pvc_objs)
         log.info("All key rotation cronjobs have been garbage collected")
 
-        # Step 7: Monitor memory usage go down (should return to initial stats)
-        log.info("=== Step 7: Monitoring memory decrease after GC ===")
+        # Step 6: Monitor memory usage go down (should return to initial stats)
+        log.info("=== Step 6: Monitoring memory decrease after GC ===")
         time.sleep(60)  # Wait for GC to complete and memory to stabilize
 
         final_metrics = get_pods_aggregated_metrics(reconciler_pods)
