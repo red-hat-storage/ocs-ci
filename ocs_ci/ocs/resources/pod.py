@@ -4186,37 +4186,37 @@ def get_pod_metrics(pod_name, namespace=None):
         # Example: pod-name 50m 125Mi
         lines = output.strip().split("\n")
         for line in lines:
-            if pod_name in line:
-                parts = line.split()
-                if len(parts) >= 3:
-                    cpu_str = parts[1]
-                    memory_str = parts[2]
+            parts = line.split()
+            # Check exact match on first column (pod name) to avoid substring matching issues
+            if len(parts) >= 3 and parts[0] == pod_name:
+                cpu_str = parts[1]
+                memory_str = parts[2]
 
-                    # Parse CPU (e.g., "50m" -> 50 millicores)
-                    cpu_millicores = 0
-                    if cpu_str.endswith("m"):
-                        cpu_millicores = int(cpu_str.replace("m", ""))
-                    elif "." in cpu_str:
-                        cpu_millicores = int(float(cpu_str) * 1000)
-                    else:
-                        cpu_millicores = int(cpu_str) * 1000
+                # Parse CPU (e.g., "50m" -> 50 millicores)
+                cpu_millicores = 0
+                if cpu_str.endswith("m"):
+                    cpu_millicores = int(cpu_str.replace("m", ""))
+                elif "." in cpu_str:
+                    cpu_millicores = int(float(cpu_str) * 1000)
+                else:
+                    cpu_millicores = int(cpu_str) * 1000
 
-                    # Parse memory (e.g., "125Mi" -> 125 MiB)
-                    memory_mib = 0
-                    if memory_str.endswith("Mi"):
-                        memory_mib = int(memory_str.replace("Mi", ""))
-                    elif memory_str.endswith("Gi"):
-                        memory_mib = int(float(memory_str.replace("Gi", "")) * 1024)
-                    elif memory_str.endswith("Ki"):
-                        memory_mib = int(int(memory_str.replace("Ki", "")) / 1024)
-                    else:
-                        # Assume bytes
-                        memory_mib = int(int(memory_str) / (1024 * 1024))
+                # Parse memory (e.g., "125Mi" -> 125 MiB)
+                memory_mib = 0
+                if memory_str.endswith("Mi"):
+                    memory_mib = int(memory_str.replace("Mi", ""))
+                elif memory_str.endswith("Gi"):
+                    memory_mib = int(float(memory_str.replace("Gi", "")) * 1024)
+                elif memory_str.endswith("Ki"):
+                    memory_mib = int(int(memory_str.replace("Ki", "")) / 1024)
+                else:
+                    # Assume bytes
+                    memory_mib = int(int(memory_str) / (1024 * 1024))
 
-                    return {
-                        "memory_mib": memory_mib,
-                        "cpu_millicores": cpu_millicores,
-                    }
+                return {
+                    "memory_mib": memory_mib,
+                    "cpu_millicores": cpu_millicores,
+                }
 
         logger.warning(f"Could not parse metrics for pod {pod_name}")
         return {"memory_mib": 0, "cpu_millicores": 0}
