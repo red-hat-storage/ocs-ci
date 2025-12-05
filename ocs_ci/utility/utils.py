@@ -2596,7 +2596,9 @@ def ceph_health_resolve_network_partition(health_status):
     """
     Fix Ceph health issue with mon network partition.
     """
-    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
+    log.warning(
+        "Trying to fix the issue with mon newtork parition by restarting MON pod(s)"
+    )
 
     # Extract ALL MON IDs appearing in the string
     # Matches mon.e → captures "e"
@@ -2691,7 +2693,7 @@ def ceph_health_recover(
             ],
         },
         {
-            "pattern": r"HEALTH_WARN\s+\d+\s+network partition detected",
+            "pattern": r"HEALTH_WARN \d+ network partitions? detected",
             "func": ceph_health_resolve_network_partition,
             "func_args": [health_status],
             "func_kwargs": {},
@@ -2730,7 +2732,10 @@ def ceph_health_recover(
                 f"{base_logs_url}/failed_testcase_ocs_logs_{config.RUN['run_id']}/"
             )
             odf_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
-            odf_version = version_module.get_ocs_version_from_csv()
+            try:
+                odf_version = version_module.get_running_odf_version()
+            except Exception:
+                odf_version = version_module.get_ocs_version_from_csv()
             ocp_version = version_module.get_semantic_ocp_running_version()
             issue_confirmed = False
             issue_commented = False
@@ -2834,7 +2839,9 @@ def ceph_health_check(
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace, fix_ceph_health)
+    )(ceph_health_check_base)(
+        namespace, fix_ceph_health, update_jira, no_exception_if_jira_issue_updated
+    )
 
 
 def ceph_health_check_base(
@@ -2879,7 +2886,11 @@ def ceph_health_check_base(
                 update_jira=update_jira,
                 no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
             )
-        raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+            return True
+        else:
+            raise CephHealthException(
+                f"Ceph cluster health is not OK. Health: {health}"
+            )
 
 
 def create_ceph_health_cmd(namespace):
@@ -2927,9 +2938,9 @@ def run_ceph_health_cmd(namespace, detail=False):
         raise CommandFailed(ex)
     ceph_cmd = "ceph health"
     if detail:
-        ceph_cmd += "detail"
+        ceph_cmd += " detail"
     return ct_pod.exec_ceph_cmd(
-        ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
+        ceph_cmd=ceph_cmd, format=None, out_yaml_format=False, timeout=120
     )
 
 
