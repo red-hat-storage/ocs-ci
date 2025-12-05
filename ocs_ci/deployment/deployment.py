@@ -466,7 +466,12 @@ class Deployment(object):
                             )
                     config.reset_ctx()
                 if config.REPORTING["collect_logs_on_success_run"]:
-                    collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                    try:
+                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to collect OCS logs: {e}, but ignoring it as deployment is successful"
+                        )
             else:
                 logger.warning("OCS deployment will be skipped")
         except Exception as e:
@@ -474,16 +479,22 @@ class Deployment(object):
             if config.REPORTING["gather_on_deploy_failure"]:
                 # Let's do the collections separately to guard against one
                 # of them failing
-                collect_ocs_logs(
-                    "deployment",
-                    ocs=False,
-                    timeout=defaults.MUST_GATHER_TIMEOUT,
-                )
-                collect_ocs_logs(
-                    "deployment",
-                    ocp=False,
-                    timeout=defaults.MUST_GATHER_TIMEOUT,
-                )
+                try:
+                    collect_ocs_logs(
+                        "deployment",
+                        ocs=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCP logs: {e}")
+                try:
+                    collect_ocs_logs(
+                        "deployment",
+                        ocp=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCS logs: {e}")
             raise
 
     def do_deploy_mce(self):
@@ -1448,7 +1459,7 @@ class Deployment(object):
                 selector=operator_selector,
                 subscription_plan_approval=subscription_plan_approval,
             )
-            package_manifest.wait_for_resource(timeout=300)
+            package_manifest.wait_for_resource(timeout=600)
             csv_name = package_manifest.get_current_csv(channel=channel)
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
             if managed_ibmcloud and not live_deployment:
@@ -1728,6 +1739,7 @@ class Deployment(object):
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        external_cluster.disable_certificate_check()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
@@ -3250,6 +3262,15 @@ class MultiClusterDROperatorsDeploy(object):
             dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
                 "cluster_name"
             ]
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed:
+            dr_policy_hub_data["metadata"][
+                "name"
+            ] = constants.RDR_DR_POLICY_IBM_CLOUD_MANAGED
+            dr_policy_hub_data["spec"]["schedulingInterval"] = "10m"
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
             dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY

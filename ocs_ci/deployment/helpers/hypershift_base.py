@@ -15,7 +15,10 @@ from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
@@ -29,6 +32,8 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.deployment.mce import MCEInstaller
+from packaging.version import parse as parse_version
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -372,6 +377,39 @@ def delete_hcp_podman_container():
         )
 
 
+def get_latest_supported_hypershift_version() -> str | None:
+    """
+    Get the latest supported Hypershift version from the hub cluster
+
+    Returns:
+        str: latest supported Hypershift version in 'major.minor' format, e.g. '4.18' or None in case of failure
+
+    """
+
+    hcp_version = None
+    try:
+        mce_installer = MCEInstaller()
+        if mce_installer.check_hypershift_namespace():
+            versions = mce_installer.get_supported_versions() or []
+            if versions:
+                latest = sorted(versions, key=parse_version)[-1]
+                v = parse_version(latest)
+                hcp_version = f"{v.major}.{v.minor}"
+                logger.info(
+                    f"Hypershift detected on hub. Using latest supported version {latest} "
+                    f"(branch release-{hcp_version})."
+                )
+            else:
+                logger.warning(
+                    "No supported versions returned from hub cluster. Falling back to config hcp_version."
+                )
+    except Exception as e:
+        logger.debug(
+            f"Could not determine Hypershift installation or supported versions due to: {e}"
+        )
+    return hcp_version
+
+
 class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
@@ -413,9 +451,14 @@ class HyperShiftBase:
 
         return os.path.isfile(self.hypershift_binary_path)
 
-    def install_hcp_and_hypershift_from_git(self):
+    def install_hcp_and_hypershift_from_git(self, install_latest=False):
         """
         Install hcp binary from git
+
+        Args:
+            install_latest (bool): If True, install the latest Hypershift version from git.
+            If False, use the configured hcp_version or latest supported version from hub.
+
         """
 
         if self.hcp_binary_exists() and self.hypershift_binary_exists():
@@ -424,7 +467,19 @@ class HyperShiftBase:
             )
             return
 
-        hcp_version = config.ENV_DATA["hcp_version"]
+        if install_latest:
+            # Decide which version to use for cloning Hypershift
+            # If Hypershift is already installed on the hub (namespace exists), pick the latest supported version
+            # from the supported-versions configmap. Otherwise, use the configured hcp_version.
+            hcp_version = get_latest_supported_hypershift_version()
+            if not hcp_version:
+                logger.error("Falling back to configured hcp_version.")
+                return self.install_hcp_and_hypershift_from_git(install_latest=False)
+        else:
+            hcp_version = config.ENV_DATA.get("hcp_version")
+            logger.info(
+                f"Using configured hcp_version: {hcp_version} (branch release-{hcp_version})."
+            )
 
         logger.info("Downloading hcp binary from git")
 
@@ -509,19 +564,23 @@ class HyperShiftBase:
                 f"hcp binary download failed to path:{self.hcp_binary_path}"
             )
 
-    def update_hcp_binary(self):
+    def update_hcp_binary(self, install_latest=False):
         """
         Update hcp binary
+
+        Args:
+            install_latest (bool): If True, install the latest Hypershift version from git.
+            If False, use the configured hcp_version.
         """
 
         if not config.ENV_DATA.get("hcp_version"):
             logger.error("hcp_version is not set in config.ENV_DATA")
             return
 
-        self.delete_hcp_and_hypershift()
-        self.install_hcp_and_hypershift_from_git()
+        self.delete_hcp_and_hypershift_bin()
+        self.install_hcp_and_hypershift_from_git(install_latest)
 
-    def delete_hcp_and_hypershift(self):
+    def delete_hcp_and_hypershift_bin(self):
         """
         Delete hcp binary
         """

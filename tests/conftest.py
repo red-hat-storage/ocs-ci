@@ -5674,6 +5674,7 @@ def use_client_proxy(request):
         )
         os.environ["http_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
         os.environ["https_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
+        os.environ["no_proxy"] = ",".join(constants.NO_PROXY_LOCALHOST)
 
 
 @pytest.fixture(scope="session", autouse=True)

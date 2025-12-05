@@ -318,6 +318,11 @@ def create_pod(
     if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        # Ensure selector field exists (defensive check for custom pod_dict_path)
+        if "selector" not in pod_data["spec"]:
+            pod_data["spec"]["selector"] = {}
+        if "matchLabels" not in pod_data["spec"]["selector"]:
+            pod_data["spec"]["selector"]["matchLabels"] = {}
         pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
@@ -461,9 +466,43 @@ def create_pod(
         logger.info(deployment_obj.name)
         deployment_name = deployment_obj.name
         label = f"name={deployment_name}"
+
+        # Determine how many pods to wait for based on PVC access mode and replica count
+        wait_resource_count = None
+        if pvc_name and replica_count > 1:
+            try:
+                # Get PVC object to check access mode
+                pvc_obj = pvc.PVC(name=pvc_name, namespace=namespace)
+                pvc_obj.reload()
+                pvc_access_mode = pvc_obj.get_pvc_access_mode
+
+                # For RWO volumes with multiple replicas, only one pod can be Running
+                # For RWX volumes, all replicas can be Running, so wait for all
+                if pvc_access_mode == constants.ACCESS_MODE_RWO:
+                    wait_resource_count = 1
+                    logger.info(
+                        f"PVC {pvc_name} has RWO access mode with {replica_count} replicas. "
+                        f"Waiting for 1 pod to be Running."
+                    )
+                # For RWX or other access modes, wait for all replicas (resource_count=None)
+                else:
+                    logger.info(
+                        f"PVC {pvc_name} has {pvc_access_mode} access mode with {replica_count} replicas. "
+                        f"Waiting for all pods to be Running."
+                    )
+            except Exception as ex:
+                # If we can't determine access mode, default to waiting for 1 pod
+                # to avoid timeout issues with RWO volumes
+                logger.warning(
+                    f"Could not determine PVC access mode for {pvc_name}: {ex}. "
+                    f"Defaulting to wait for 1 pod."
+                )
+                wait_resource_count = 1
+
         assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
+            resource_count=wait_resource_count,
             timeout=360,
             sleep=3,
         )
@@ -3133,10 +3172,12 @@ def validate_pods_are_running_and_not_restarted(pod_name, pod_restart_count, nam
     )
     pod_state = pod_obj.get("status").get("phase")
     if pod_state == "Running" and restart_count == pod_restart_count:
-        logger.info("Pod is running state and restart count matches with previous one")
+        logger.info(
+            f"{pod_name} is running state and restart count matches with previous one"
+        )
         return True
     logger.error(
-        f"Pod is in {pod_state} state and restart count of pod {restart_count}"
+        f"{pod_name} is in {pod_state} state and restart count of pod {restart_count}"
     )
     logger.info(f"{pod_obj}")
     return False
@@ -6851,3 +6892,58 @@ def set_rook_log_level():
     rook_log_level = config.DEPLOYMENT.get("rook_log_level")
     if rook_log_level:
         set_configmap_log_level_rook_ceph_operator(rook_log_level)
+
+
+def check_osds_down(osd_ids: list[str]) -> bool:
+    """
+    Check if specified OSDs are marked as 'down' in Ceph
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to check
+
+    Returns:
+        bool: True if all OSDs are down, False otherwise
+    """
+    log = logging.getLogger(__name__)
+    ceph_pod = pod.get_ceph_tools_pod()
+    osd_dump = ceph_pod.exec_ceph_cmd("ceph osd dump")
+
+    osds_status = {}
+    for osd in osd_dump["osds"]:
+        osd_id = str(osd["osd"])
+        if osd_id in osd_ids:
+            osds_status[osd_id] = {"up": osd["up"], "in": osd["in"]}
+
+    for osd_id, status in osds_status.items():
+        state = "up" if status["up"] == 1 else "down"
+        log.info(f"OSD {osd_id}: {state}")
+
+    all_down = all(status["up"] == 0 for status in osds_status.values())
+    return all_down
+
+
+def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) -> None:
+    """
+    Wait for OSDs to be marked as 'down' in Ceph using polling
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to wait for
+        timeout (int): Timeout in seconds (default: 300)
+        sleep (int): Sleep interval between checks (default: 10)
+
+    Raises:
+        TimeoutExpiredError: If OSDs don't go down within timeout
+    """
+    log = logging.getLogger(__name__)
+    log.info(f"Waiting for OSDs {osd_ids} to be marked as 'down' in Ceph")
+
+    sample = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_osds_down, osd_ids=osd_ids
+    )
+
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"OSDs {osd_ids} did not go down within {timeout} seconds"
+        )
+
+    log.info(f"All OSDs {osd_ids} are now marked as 'down'")

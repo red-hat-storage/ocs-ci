@@ -42,6 +42,7 @@ from ocs_ci.ocs.constants import (
     VAULT_KMS_PROVIDER,
     NFS_OUTCLUSTER_TEST_PLATFORMS,
     DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+    ORDER_OCP_ON_KUBEVIRT_UPGRADE,
     ORDER_MCE_UPGRADE,
 )
 from ocs_ci.utility import version
@@ -137,6 +138,7 @@ order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
 order_mce_upgrade = pytest.mark.order(ORDER_MCE_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
+order_ocp_on_kubevirt_upgrade = pytest.mark.order(ORDER_OCP_ON_KUBEVIRT_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
@@ -158,6 +160,9 @@ ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
 # provider operator upgrade
 provider_operator_upgrade = compose(
     order_ocs_upgrade, pytest.mark.provider_operator_upgrade
+)
+kubevirt_cluster_upgrade = compose(
+    order_ocp_on_kubevirt_upgrade, pytest.mark.kubevirt_cluster_upgrade
 )
 
 # pre_*_upgrade markers
@@ -417,9 +422,9 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
         Parametrized marker or original marker if setup fails
     """
     try:
-        if push_missing_configs:
+        if push_missing_configs and not config.multicluster:
             # run this only if cluster type is provider and it is part of test execution stage (not deployment or
-            # teardown)
+            # teardown) and when configuration is not initially a multicluster one
             # FIXME: the usage of `sys.argv` here is not correct, but we can't use something like
             # `config.RUN["cli_params"]["deploy"]`, because this setup_multicluster_marker(...) function is called on
             # the module level (see the lines below this function definition) which means that it is actually called
@@ -427,7 +432,11 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
             # the command line arguments are not processed)
             # the solution will be to move following logic to some fixture (similarly as we have session scope autouse
             # fixture `cluster`, which is responsible for deploying and teardown of the whole cluster (when particular
-            # parameters are passed)
+            # parameters are passed). This solution will still not update cluster indexes on parametrization level,
+            # meaning, run_on_all_clients will continue execute only on the clients available at the time of the
+            # parametrization, but at least, we will be able to run tests with updated MultiCluster Config during the
+            # session and test clusters switching between contexts within the body of the test
+            # when the hypershift_cluster_factory fixture will be used.
             test_stage = not ("--deploy" in sys.argv or "--teardown" in sys.argv)
             if (
                 config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()

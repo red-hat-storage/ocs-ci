@@ -23,7 +23,7 @@ setup(
         "reportportal-client==3.2.3",
         "requests==2.32.2",
         "paramiko==3.5.0",
-        "pyyaml==6.0",
+        "pyyaml==6.0.3",
         "jinja2==3.1.6",
         "openshift==0.13.2",
         "boto3==1.38.31",
@@ -103,6 +103,7 @@ setup(
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.22",
+        "atlassian-python-api==4.0.7",
         "certbot==3.0.0",
         "certbot-dns-route53==3.0.0",
         "openshift-python-wrapper==11.0.58",
@@ -111,6 +112,7 @@ setup(
         "marshmallow==3.26.1",
         "zope.event==6.0",
         "xattr==1.3.0",
+        "pyotp==2.9.0",
     ],
     entry_points={
         "console_scripts": [

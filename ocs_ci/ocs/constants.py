@@ -1409,6 +1409,7 @@ DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
 MDR_MODE = "metro-dr"
 MDR_DR_POLICY = "odr-policy-mdr"
+RDR_DR_POLICY_IBM_CLOUD_MANAGED = "odr-policy-10m"
 RESTIC_OR_NODE_AGENT_POD_COUNT = 3
 VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
@@ -1905,7 +1906,8 @@ ORDER_MCO_UPGRADE = 42
 ORDER_DR_HUB_UPGRADE = 44
 # ACM Operator
 ORDER_ACM_UPGRADE = 46
-ORDER_MCE_UPGRADE = 48
+ORDER_MCE_UPGRADE = 46
+ORDER_OCP_ON_KUBEVIRT_UPGRADE = 48
 ORDER_BEFORE_OCS_UPGRADE = 50
 ORDER_OCS_UPGRADE = 60
 ORDER_AFTER_OCS_UPGRADE = 70
@@ -2393,6 +2395,8 @@ DISCON_CL_PROXY_ALLOWED_DOMAINS = (
     "mirrorlist.centos.org",
     "mirror.centos.org",
 )
+
+NO_PROXY_LOCALHOST = ["localhost", "127.0.0.1", "::1"]
 # mirrored redhat-operators index image for catalog source namespace and name
 MIRRORED_INDEX_IMAGE_NAMESPACE = "olm-mirror"
 MIRRORED_INDEX_IMAGE_NAME = "redhat-operator-index"
