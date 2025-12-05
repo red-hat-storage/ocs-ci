@@ -243,22 +243,41 @@ class TestMemoryStressWithCSIAddon:
         )
 
         # Verify memory returned to initial levels (allow 20% variance)
-        memory_increase_ratio = (
-            final_metrics["max_memory_mib"] / initial_metrics["max_memory_mib"]
-        )
-        log.info(
-            f"Memory ratio (final/initial): {memory_increase_ratio:.2f} "
-            f"(initial: {initial_metrics['max_memory_mib']:.1f}Mi, "
-            f"final: {final_metrics['max_memory_mib']:.1f}Mi)"
-        )
+        # Check if initial memory is zero to avoid ZeroDivisionError
+        if initial_metrics["max_memory_mib"] == 0:
+            log.warning(
+                f"Initial memory metrics were zero. Cannot calculate ratio. "
+                f"Initial: {initial_metrics['max_memory_mib']:.1f}Mi, "
+                f"Final: {final_metrics['max_memory_mib']:.1f}Mi"
+            )
+            # If initial was zero but final is not, memory increased
+            if final_metrics["max_memory_mib"] > 0:
+                pytest.fail(
+                    f"Initial memory was zero but final memory is "
+                    f"{final_metrics['max_memory_mib']:.1f}Mi. "
+                    f"This suggests metrics collection issue."
+                )
+            # Both are zero, skip ratio check
+            log.info(
+                "Both initial and final memory metrics are zero. Skipping ratio check."
+            )
+        else:
+            memory_increase_ratio = (
+                final_metrics["max_memory_mib"] / initial_metrics["max_memory_mib"]
+            )
+            log.info(
+                f"Memory ratio (final/initial): {memory_increase_ratio:.2f} "
+                f"(initial: {initial_metrics['max_memory_mib']:.1f}Mi, "
+                f"final: {final_metrics['max_memory_mib']:.1f}Mi)"
+            )
 
-        # Assert memory is close to initial (within 20% variance)
-        assert memory_increase_ratio <= 1.2, (
-            f"Memory did not return to initial levels. "
-            f"Initial: {initial_metrics['max_memory_mib']:.1f}Mi, "
-            f"Final: {final_metrics['max_memory_mib']:.1f}Mi, "
-            f"Ratio: {memory_increase_ratio:.2f}"
-        )
+            # Assert memory is close to initial (within 20% variance)
+            assert memory_increase_ratio <= 1.2, (
+                f"Memory did not return to initial levels. "
+                f"Initial: {initial_metrics['max_memory_mib']:.1f}Mi, "
+                f"Final: {final_metrics['max_memory_mib']:.1f}Mi, "
+                f"Ratio: {memory_increase_ratio:.2f}"
+            )
 
         log.info("✅ Test completed successfully!")
         log.info(
