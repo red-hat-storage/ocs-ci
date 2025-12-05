@@ -2381,8 +2381,65 @@ def ceph_health_resolve_daemon_crash():
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
     ct_pod = get_ceph_tools_pod()
-    ceph_crash_info_display(ct_pod)
     archive_ceph_crashes(ct_pod)
+
+
+def ceph_health_resolve_mon_slow_ops(health_status):
+    """
+    Fix ceph health issue with mon slow ops
+    """
+    log.warning("Trying to fix the issue with mon slow ops by restarting mon pod")
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning("No MON IDs found in health status. Cannot resolve slow ops.")
+        return
+
+    log.warning(f"Detected problematic MON IDs with slow ops: {mon_ids}")
+
+    restart_mon_pods(mon_ids)
+
+
+def ceph_health_resolve_network_partition(health_status):
+    """
+    Fix Ceph health issue with mon network partition.
+    """
+    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
+
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning(
+            "No MON IDs found in health status. Cannot resolve network partition detected issue."
+        )
+        return
+
+    log.warning(
+        f"Detected problematic MON IDs with network partition detected: {mon_ids}"
+    )
+
+    restart_mon_pods(mon_ids)
+
+
+def restart_mon_pods(mon_ids):
+    """
+    Restart the MON pods.
+
+    Args:
+        mon_ids (list): List of MON IDs
+    """
+    from ocs_ci.ocs import ocp
+
+    for mon_id in mon_ids:
+        log.warning(f"Restarting MON '{mon_id}' ...")
+        ocp.OCP().exec_oc_cmd(
+            f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
+        )
 
 
 def ceph_health_recover(health_status, namespace=None):
@@ -2406,6 +2463,36 @@ def ceph_health_recover(health_status, namespace=None):
             "func_kwargs": {},
             "ceph_health_tries": 5,
             "ceph_health_delay": 30,
+        },
+        {
+            "pattern": r"modules have recently crashed",
+            "func": ceph_health_resolve_daemon_crash,
+            "func_args": [],
+            "func_kwargs": {},
+            "ceph_health_tries": 5,
+            "ceph_health_delay": 30,
+        },
+        {
+            "pattern": r"slow ops, oldest one blocked for \d+ sec, mon\.([a-z]) has slow ops",
+            "func": ceph_health_resolve_mon_slow_ops,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
+            "ceph_health_delay": 30,
+        },
+        {
+            "pattern": r"HEALTH_WARN\s+\d+\s+network partition detected",
+            "func": ceph_health_resolve_network_partition,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-4521",
+                    "pattern": r"Netsplit detected between mon",
+                },
+            ],
         },
         # TODO: Add more patterns and fix functions
     ]
