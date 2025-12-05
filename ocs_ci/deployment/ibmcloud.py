@@ -33,6 +33,7 @@ from ocs_ci.utility.utils import (
     get_random_str,
     exec_cmd,
     get_infra_id_from_openshift_install_state,
+    get_infra_id,
 )
 
 
@@ -213,10 +214,17 @@ class IBMCloudIPI(CloudDeploymentBase):
         self.export_api_key()
         if config.ENV_DATA.get("existing_vpc"):
             logger.info("Destroying the IBM Cloud cluster")
+            try:
+                prefix = get_infra_id(self.cluster_path)
+            except FileNotFoundError:
+                prefix = f"{self.cluster_name}-"
+            logger.info(
+                f"Prefix used for destroy resources from odf-qe-vpc VPC: {prefix}"
+            )
             super(IBMCloudIPI, self).destroy_cluster(log_level)
-            self.destroy_cluster_from_existing_vpc()
+            self.destroy_cluster_from_existing_vpc(prefix)
             logger.info("IBM Cloud cluster destroyed successfully")
-            ibmcloud.delete_dns_records(self.cluster_name)
+            ibmcloud.delete_dns_records(prefix)
             logger.info("DNS records deleted successfully")
         else:
             resource_group = self.get_resource_group()
@@ -1410,7 +1418,7 @@ class IBMCloudIPI(CloudDeploymentBase):
             errors += 1
         return count, errors
 
-    def destroy_cluster_from_existing_vpc(self):
+    def destroy_cluster_from_existing_vpc(self, prefix):
         """
         Destroy the OCP cluster from existing VPC infrastructure on IBM Cloud.
         This function will destroy the cluster and the following resources:
@@ -1420,11 +1428,12 @@ class IBMCloudIPI(CloudDeploymentBase):
         - Security Groups
         - Custom Images
         - Volumes (Block Storage)
-        - Cloud Object Storage Instances
+        - Cloud Object Storage
+
+        prefix: the prefix of the cluster (can be obtained from metadata infraID or cluster_name-)
 
         raises LeftoversExistError if any errors occur during deletion.
         """
-        prefix = f"{config.ENV_DATA.get('cluster_name')}-"
         if not prefix:
             logger.error("cluster_name not found in ENV_DATA")
             return
