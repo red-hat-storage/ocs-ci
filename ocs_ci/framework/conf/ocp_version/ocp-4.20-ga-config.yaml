@@ -13,8 +13,5 @@ ENV_DATA:
   acm_hub_channel: "release-2.15"
   acm_version: "2.15"
   mce_version: "2.10"
-  submariner_version: "0.21.0"
-  submariner_source: "downstream"
-  submariner_release_type: "unreleased"
-  acm_hub_unreleased: true
+  submariner_version: "0.22.0"
   oadp_version: "1.5"
