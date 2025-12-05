@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 # Increased from default 90s to 180s for PVC creation & bound to avoid the TimeoutExpiredError
-PVC_BIND_TIMEOUT = 180
+PVC_BIND_TIMEOUT = 240
 
 
 def test_block_pvc_kubelet_metrics_match_rbd_usage(
@@ -109,7 +109,6 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
     )
 
     # Get Ceph-side reporting using rbd du
-
     # Get the Ceph Toolbox Pod object
     ceph_toolbox_pod = pod_helpers.get_ceph_tools_pod()
     if not ceph_toolbox_pod:
@@ -124,19 +123,11 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
         .get("imageName")
     )
 
-    image_info = get_rbd_image_info(rbd_pool_name, rbd_image_name)
-
-    if not image_info:
-        raise AssertionError("Could not retrieve RBD image info from PVC/PV binding.")
-
-    pool_name = constants.DEFAULT_BLOCKPOOL
-    image_name = image_info.get("name")
-
-    if not image_name or not pool_name:
-        raise AssertionError("RBD image or pool name is missing from image info.")
+    if not rbd_image_name or not rbd_pool_name:
+        raise AssertionError("RBD image or pool name is missing")
 
     # Execute rbd du using the pod's exec_ceph_cmd method
-    rbd_cmd = f"rbd du -p {pool_name} {image_name}"
+    rbd_cmd = f"rbd du -p {rbd_pool_name} {rbd_image_name}"
     logger.info(f"Executing rbd du on Ceph toolbox pod: {rbd_cmd}")
 
     try:
@@ -163,7 +154,7 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
         raise AssertionError(f"Failed to execute or parse rbd du output: {e}")
 
     logger.info(
-        f"Ceph RBD Metrics for {image_name}: "
+        f"Ceph RBD Metrics for {rbd_image_name}: "
         f"Capacity={provisioned_bytes_ceph} B, Used={used_bytes_ceph} B, Available={available_bytes_ceph} B"
     )
 
