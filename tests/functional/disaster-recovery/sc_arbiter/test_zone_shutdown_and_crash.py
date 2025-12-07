@@ -1,10 +1,12 @@
 import pytest
 import logging
+import subprocess
 import time
 import random
 import concurrent.futures as futures
 from datetime import datetime, timezone, timedelta
 
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_from_ceph_stuck,
@@ -23,9 +25,12 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_debug_pods,
+    restart_pods_having_label,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    CephHealthException,
+    NoRunningCephToolBoxException,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
@@ -45,6 +50,27 @@ log = logging.getLogger(__name__)
 class TestZoneShutdownsAndCrashes:
 
     zones = constants.DATA_ZONE_LABELS
+
+    def teardown(self):
+        """
+        If ceph health warnning is observed due to partitioning restart mon pods.
+        And validate ceph health.
+        """
+        network_partition_warning = "network partition detected"
+        try:
+            ceph_health_check(fix_ceph_health=True)
+        except (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ) as e:
+            log.error(f"Ceph health check failed after failure injection. : {e}")
+            if network_partition_warning in str(e).lower():
+                log.info("Network partition detected — restarting mon pods")
+                restart_pods_having_label(label=constants.MON_APP_LABEL)
+        log.info("Checking for Ceph Health OK")
+        ceph_health_check()
 
     @pytest.mark.parametrize(
         argnames="iteration, immediate, delay",
@@ -583,7 +609,9 @@ class TestZoneShutdownsAndCrashes:
 
             # drain nodes in the selected zone
             start_time = datetime.now(timezone.utc)
-            drain_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
+            drain_nodes(
+                node_names=[node_obj.name for node_obj in nodes_to_drain], timeout=3600
+            )
             time.sleep(300)
             schedule_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
             end_time = datetime.now(timezone.utc)
