@@ -1,6 +1,8 @@
 apiVersion: agent-install.openshift.io/v1beta1
 kind: AgentServiceConfig
 metadata:
+  annotations:
+    unsupported.agent-install.openshift.io/assisted-service-allow-unrestricted-image-pulls: "true"
   finalizers:
   - agentserviceconfig.agent-install.openshift.io/ai-deprovision
   name: agent
@@ -10,16 +12,18 @@ spec:
     - ReadWriteOnce
     resources:
       requests:
-        storage: 10Gi
+        storage: 50Gi
   filesystemStorage:
     accessModes:
     - ReadWriteOnce
     resources:
       requests:
-        storage: 100Gi
+        storage: 200Gi
   imageStorage:
     accessModes:
     - ReadWriteOnce
     resources:
       requests:
-        storage: 50Gi
+        storage: 150Gi
+  mirrorRegistryRef:
+    name: mirror-registry-config
