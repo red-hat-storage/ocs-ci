@@ -22,7 +22,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
-from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -35,7 +34,6 @@ from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.mce import MCEInstaller
 from packaging.version import parse as parse_version
-from ocs_ci.helpers.helpers import create_project, create_resource
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -718,6 +716,7 @@ class HyperShiftBase:
 
         return name
 
+    @config.run_with_provider_context_if_available
     def create_agent_ocp_cluster(
         self,
         name: str = None,
@@ -750,10 +749,6 @@ class HyperShiftBase:
 
         """
 
-        if name in get_hosted_cluster_names():
-            logger.info(f"HyperShift hosted cluster {name} already exists")
-            return name
-
         self.save_mirrors_list_to_file()
         pull_secret_path = download_pull_secret()
 
@@ -768,9 +763,9 @@ class HyperShiftBase:
             index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
         if not name:
-            name = "hcp-" + datetime.utcnow().strftime("%f")
+            name = "hcp-" + datetime.now().strftime("%f")
 
-        logger.info("Creating hosted cluster based on agent")
+        logger.info("Creating agent hosted cluster")
 
         create_hcp_cluster_cmd = (
             f"{self.hypershift_binary_path} create cluster agent "
@@ -818,13 +813,10 @@ class HyperShiftBase:
         if disable_default_sources:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
-        infra_env = self.create_host_inventory(infra_env_name=name)
-
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)
 
-        self.boot_machines_for_agent()
-        agents_obj = OCP(kind="agents", namespace=infra_env.namespace)
+        agents_obj = OCP(kind="agents", namespace=name)
         nodepool_replicas = (
             config.ENV_DATA["clusters"]
             .get(name)
@@ -837,7 +829,6 @@ class HyperShiftBase:
             timeout=1800,
             sleep=30,
         )
-        self.create_dns_records(hcp_cluster_name=name)
         for agent_info in agents_obj.get()["items"]:
             agents_obj.patch(
                 resource_name=agent_info["metadata"]["name"],
@@ -846,100 +837,6 @@ class HyperShiftBase:
             )
 
         return name
-
-    def create_host_inventory(self, infra_env_name):
-        """
-        Create InfraEnv resource for host inventory
-
-        Args:
-            infra_env_name (str): Name of the host inventory, usually the name of the hcp cluster
-
-        Returns:
-            An OCS instance of kind InfraEnv
-        """
-        # Create InfraEnv
-        template_yaml = os.path.join(
-            constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
-        )
-        infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
-        ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
-        with open(ssh_pub_file_path, "r") as ssh_key:
-            ssh_pub_key = ssh_key.read().strip()
-        # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
-        #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
-
-        infra_env_namespace = infra_env_name
-
-        # Create project
-        create_project(project_name=infra_env_namespace)
-
-        for data in infra_env_data:
-            if data["kind"] == constants.INFRA_ENV:
-                data["spec"]["sshAuthorizedKey"] = ssh_pub_key
-                data["metadata"]["name"] = infra_env_name
-                # Create new secret in the namespace using the existing secret
-                secret_obj = OCP(
-                    kind=constants.SECRET,
-                    resource_name="pull-secret",
-                    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
-                )
-                secret_info = secret_obj.get()
-                secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
-                secret_data["data"][".dockerconfigjson"] = secret_info["data"][
-                    ".dockerconfigjson"
-                ]
-                secret_data["metadata"]["namespace"] = infra_env_namespace
-                secret_data["metadata"]["name"] = "pull-secret"
-                secret_manifest = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="pull_secret", delete=False
-                )
-                templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
-                # Create secret like this to avoid printing in logs
-                exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
-            data["metadata"]["namespace"] = infra_env_namespace
-            resource_obj = create_resource(**data)
-            if data["kind"] == constants.INFRA_ENV:
-                infra_env = resource_obj
-        logger.info(f"Created InfraEnv {infra_env_name}.")
-        return infra_env
-
-    def boot_machines_for_agent(self, infra_env_namespace):
-        """
-        Boot the bare metal machines
-
-        Args:
-            infra_env_namespace: Namespace where the InfraEnv for the hosted cluster is present
-        """
-        pass
-        # infraenv = OCP(kind=constants.INFRA_ENV, namespace=infra_env_namespace).get()[0]
-        # ipxescript = infraenv.get("status").get("bootArtifacts").get("ipxeScript")
-        # initrd = infraenv.get("status").get("bootArtifacts").get("initrd")
-        # kernel = infraenv.get("status").get("bootArtifacts").get("kernel")
-        # rootfs = infraenv.get("status").get("bootArtifacts").get("rootfs")
-        # iso_download_url = infraenv.get("status").get("isoDownloadURL")
-
-        # Get iso download url or ipxe script from InfraEnv CR
-        # baremetal_ai = BAREMETALAI()
-        # ocp_deployment = baremetal_ai.OCPDeployment()
-        # ocp_deployment.deploy_prereq()
-        # ocp_deployment.deploy("INFO")
-
-    def create_dns_records(self, hcp_cluster_name):
-        """
-        Create DNS records for the hcp cluster
-
-        Args:
-            hcp_cluster_name (str): Name of the hcp cluster
-        """
-        pass
-
-        """
-        Create 2 records. One with *.apps.hcp_cluster_name.domain and the other with api.hcp_cluster_name.domain as the
-        Record name fields. Value is IPs of the bare metal nodes of the hosted cluster.
-        """
-        # baremetal_ai = BAREMETALAI()
-        # ocp_deployment = baremetal_ai.OCPDeployment()
-        # ocp_deployment.create_dns_records()
 
     def verify_hosted_ocp_cluster_from_provider(self, name):
         """
