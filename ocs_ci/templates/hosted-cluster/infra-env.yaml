@@ -2,12 +2,13 @@
 apiVersion: agent-install.openshift.io/v1beta1
 kind: InfraEnv
 metadata:
-  name: bm-agents
-  namespace: bm-agents
+  name: agents-infra-env
+  namespace: {}
   labels:
     agentclusterinstalls.extensions.hive.openshift.io/location: localagents
     networkType: dhcp
 spec:
+  cpuArchitecture: x86_64
   agentLabels:
     'agentclusterinstalls.extensions.hive.openshift.io/location': localagents
   pullSecretRef:
@@ -15,8 +16,10 @@ spec:
   sshAuthorizedKey: ssh-public-key-value
   nmStateConfigLabelSelector:
       matchLabels:
-        infraenvs.agent-install.openshift.io: bm-agents
-  cpuArchitecture: x86_64
+        infraenvs.agent-install.openshift.io: agents-infra-env
+  mirrorRegistryRef:
+    name: mirror-registry-config
+    namespace: multicluster-engine
 status:
   agentLabelSelector:
     matchLabels:
@@ -26,7 +29,7 @@ kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: capi-provider-role
-  namespace: bm-agents
+  namespace: {}
 rules:
   - verbs:
       - '*'

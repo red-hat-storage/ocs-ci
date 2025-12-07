@@ -31,6 +31,8 @@ import unicodedata
 
 import hcl2
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 import yaml
 import git
 from bs4 import BeautifulSoup
@@ -926,6 +928,44 @@ def download_file(url, filename, **kwargs):
         r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
         f.write(r.content)
+
+
+def download_with_retries(url, boot_image_path, max_retries=3):
+    """Download file with retries and proper error handling"""
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=max_retries,
+        backoff_factor=2,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    try:
+        with session.get(url, stream=True, timeout=(10, 30), verify=False) as response:
+            response.raise_for_status()
+            total_size = int(response.headers.get("content-length", 0))
+
+            with open(boot_image_path, "wb") as f:
+                downloaded = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size:
+                            log.debug(
+                                f"Downloaded {downloaded}/{total_size} bytes ({100 * downloaded // total_size}%)"
+                            )
+
+            log.info(f"Successfully downloaded ISO to {boot_image_path}")
+            return boot_image_path
+    except requests.exceptions.RequestException as e:
+        log.error(f"Failed to download ISO: {e}")
+        if os.path.exists(boot_image_path):
+            os.remove(boot_image_path)
+        return None
 
 
 def get_url_content(url, **kwargs):

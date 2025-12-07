@@ -1736,6 +1736,7 @@ AZURE_PLATFORM = "azure"
 AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
+VSPHERE_AGENT_PLATFORM = "vsphere_agent"
 BAREMETAL_PLATFORM = "baremetal"
 IBM_POWER_PLATFORM = "powervs"
 IBM_CLOUD_BAREMETAL_PLATFORM = "ibm_cloud_baremetal"
@@ -3154,6 +3155,9 @@ MCE_CATSRC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_catsrc.yaml")
 MCE_CATSRC_NAME = "mce-catalogsource"
 MCE_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_subscription.yaml"
+)
+MIRROR_REGISTRY_CONFIG_CM_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_MCE, "mirror_registry_config_cm.yaml"
 )
 MCE_SUBSCRIPTION_NAME = "multicluster-engine"
 MCE_OPERATOR = "multicluster-engine"

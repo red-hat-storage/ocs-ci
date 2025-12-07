@@ -373,7 +373,7 @@ higher priority).
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
       * `storage_quota` - storage quota for the hosted cluster
       * `provider_cluster_name` - Name of the provider cluster if storageclient is required/present in the hosted cluster. This is optional and useful when there are more than one provider cluster in the config, provider mode RDR for example
-      * `hosted_cluster_platform` - HCP cluster platform. Example: kubevirt, agent. kubevirt is default.
+      * `hosted_cluster_platform` - Platform of the hosted cluster, e.g. kubevirt, agent. kubevirt is default.
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
