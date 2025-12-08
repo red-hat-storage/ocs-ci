@@ -176,9 +176,14 @@ class TestMonAndOSDFailures:
         logger.info("Muting the mon netsplit warning")
         assert run_cmd_verify_cli_output(
             cmd="ceph health mute MON_NETSPLIT",
-            expected_output_lst={"HEALTH_OK", "(muted: MON_NETSPLIT)"},
             cephtool_cmd=True,
         ), "mon_netplit warnings are not muted successfully"
+
+        assert run_cmd_verify_cli_output(
+            cmd="ceph health",
+            expected_output_lst={"HEALTH_OK", "(muted: MON_NETSPLIT)"},
+            cephtool_cmd=True,
+        ), "ceph health not okay and mon_netsplit warnings are not muted"
 
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self):
