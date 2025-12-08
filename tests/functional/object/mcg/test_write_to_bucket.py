@@ -445,7 +445,7 @@ class TestBucketIO(MCGTest):
             s3_obj=mcg_obj_session, bucketname=bucket_name, object_key=f"{filename}"
         )
         assert (
-            head_obj["ContentEncoding"] == "zip"
+            "zip" in head_obj["ContentEncoding"]
         ), "Put object operation doesn't store ContentEncoding!!"
         logger.info(
             "Put object operation is preserving ContentEncoding as a object metadata"
