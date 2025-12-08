@@ -185,7 +185,7 @@ class TestMonAndOSDFailures:
             cephtool_cmd=True,
         ), "ceph health not okay and mon_netsplit warnings are not muted"
 
-    @pytest.fixture(scope="function", autouse=True)
+    @pytest.fixture(autouse=True)
     def teardown(self):
         """
         If ceph health warnning is observed due to partitioning restart mon pods.
