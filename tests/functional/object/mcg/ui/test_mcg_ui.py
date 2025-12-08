@@ -518,6 +518,12 @@ class TestBucketCreate:
         setup_ui_class_factory()
         bucket_ui = BucketsTab()
         bucket_ui.nav_object_storage_page()
+
+        # Create test buckets via UI to ensure comparison is meaningful
+        bucket_ui.create_bucket_ui("s3")
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.create_bucket_ui("obc")
+
         bucket_ui.nav_buckets_page()
 
         # Get CLI bucket list for comparison
