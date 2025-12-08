@@ -195,7 +195,7 @@ class ExternalCluster(object):
             self.user,
             self.password,
             self.ssh_key,
-            jump_host_connection=self.rhcs_conn if self.jump_host else None,
+            ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
         return script_path
 
@@ -216,7 +216,7 @@ class ExternalCluster(object):
             self.user,
             self.password,
             self.ssh_key,
-            jump_host_connection=self.rhcs_conn if self.jump_host else self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else self.ssh_key,
         )
         return remote_rgw_cert_ca_path
 
@@ -352,7 +352,7 @@ class ExternalCluster(object):
             self.user,
             self.password,
             self.ssh_key,
-            jump_host_connection=self.rhcs_conn if self.jump_host else None,
+            ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
         return script_path
 

@@ -3212,7 +3212,7 @@ def upload_file(
     user=None,
     password=None,
     key_file=None,
-    jump_host_connection=None,
+    ssh_connection=None,
 ):
     """
     Upload a file to remote server
@@ -3222,13 +3222,16 @@ def upload_file(
         localpath (str): Local file to upload
         remotepath (str): Target path on the remote server. filename should be included
         user (str): User to use for the remote connection
+        password (str): Password to use for the remote connection
+        key_file (str): Key file to use for the remote connection
+        ssh_connection (SSHClient): SSH connection to use for the remote connection
 
     """
     if not user:
         user = "root"
     try:
-        if jump_host_connection:
-            sftp = jump_host_connection.client.open_sftp()
+        if ssh_connection:
+            sftp = ssh_connection.client.open_sftp()
             log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
             sftp.put(localpath, remotepath)
             sftp.close()
