@@ -209,6 +209,8 @@ class FusionDataFoundationDeployment:
             logger.info("Storage configuration for Fusion 2.11 or greater")
             clustersetup = StorageClusterSetup()
             create_lvs_resource(self.storage_class, self.storage_class)
+            if config.ENV_DATA.get("mark_masters_schedulable", False):
+                node.mark_masters_schedulable()
             add_storage_label()
             clustersetup.setup_storage_cluster()
             storagecluster_health_check()

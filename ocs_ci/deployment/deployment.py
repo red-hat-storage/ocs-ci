@@ -87,6 +87,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.node import (
     get_worker_nodes,
+    mark_masters_schedulable,
     verify_all_nodes_created,
     label_nodes,
     get_all_nodes,
@@ -1891,15 +1892,7 @@ class Deployment(object):
 
             # Mark master nodes schedulable if mark_masters_schedulable: True
             if config.ENV_DATA.get("mark_masters_schedulable", True):
-                path = "/spec/mastersSchedulable"
-                params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-                scheduler_obj = ocp.OCP(
-                    kind=constants.SCHEDULERS_CONFIG,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-                assert scheduler_obj.patch(
-                    params=params, format_type="json"
-                ), "Failed to run patch command to update control nodes as scheduleable"
+                mark_masters_schedulable()
                 # Allow ODF to be deployed on all nodes
                 logger.info("labeling all nodes as storage nodes")
                 nodes = get_all_nodes()
