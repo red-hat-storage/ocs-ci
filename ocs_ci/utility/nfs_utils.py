@@ -494,6 +494,8 @@ def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
     except Exception as e:
         log.warning(f"Unable to check NFS resource requirements: {e}")
         return True  # Don't block deployment on check failure
+
+
 def update_nfs_endpoint():
     """
     This method is to pass nfs external endpoint under storagecluster.spec.nfs
