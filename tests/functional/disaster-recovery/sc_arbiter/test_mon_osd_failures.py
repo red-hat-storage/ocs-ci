@@ -166,6 +166,7 @@ class TestMonAndOSDFailures:
 
     """
 
+    @pytest.fixture(autouse=True)
     def teardown(self):
         """
         If ceph health warnning is observed due to partitioning restart mon pods.

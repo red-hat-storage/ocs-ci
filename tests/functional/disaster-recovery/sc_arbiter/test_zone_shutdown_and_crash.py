@@ -51,6 +51,7 @@ class TestZoneShutdownsAndCrashes:
 
     zones = constants.DATA_ZONE_LABELS
 
+    @pytest.fixture(autouse=True)
     def teardown(self):
         """
         If ceph health warnning is observed due to partitioning restart mon pods.
