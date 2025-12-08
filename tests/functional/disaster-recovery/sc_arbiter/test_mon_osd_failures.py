@@ -39,6 +39,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
 logger = logging.getLogger(__name__)
 
@@ -166,12 +167,26 @@ class TestMonAndOSDFailures:
 
     """
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(scope="class", autouse=True)
+    def setup(self):
+        """
+        Asper discussion, muting network partitioning warning
+        ceph health mute MON_NETSPLIT
+        """
+        logger.info("Muting the mon netsplit warning")
+        assert run_cmd_verify_cli_output(
+            cmd="ceph health mute MON_NETSPLIT",
+            expected_output_lst={"HEALTH_OK", "(muted: MON_NETSPLIT)"},
+            cephtool_cmd=True,
+        ), "mon_netplit warnings are not muted successfully"
+
+    @pytest.fixture(scope="function", autouse=True)
     def teardown(self):
         """
         If ceph health warnning is observed due to partitioning restart mon pods.
         And validate ceph health.
         """
+        logger.info("-----test teardown-----")
         network_partition_warning = "network partition detected"
         try:
             ceph_health_check(fix_ceph_health=True)
