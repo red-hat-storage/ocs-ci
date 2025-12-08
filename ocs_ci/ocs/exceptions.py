@@ -790,3 +790,9 @@ class PolicyEditorError(RuntimeError):
     """Exception raised when policy editor manipulation fails."""
 
     pass
+
+
+class ResourceNotSupported(Exception):
+    """Exception raised when resource is not supported."""
+
+    pass

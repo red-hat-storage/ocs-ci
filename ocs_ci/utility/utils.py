@@ -3334,7 +3334,15 @@ def check_if_executable_in_path(exec_name):
     return which(exec_name) is not None
 
 
-def upload_file(server, localpath, remotepath, user=None, password=None, key_file=None):
+def upload_file(
+    server,
+    localpath,
+    remotepath,
+    user=None,
+    password=None,
+    key_file=None,
+    ssh_connection=None,
+):
     """
     Upload a file to remote server
 
@@ -3343,23 +3351,33 @@ def upload_file(server, localpath, remotepath, user=None, password=None, key_fil
         localpath (str): Local file to upload
         remotepath (str): Target path on the remote server. filename should be included
         user (str): User to use for the remote connection
+        password (str): Password to use for the remote connection
+        key_file (str): Key file to use for the remote connection
+        ssh_connection (SSHClient): SSH connection to use for the remote connection
 
     """
     if not user:
         user = "root"
     try:
-        ssh = SSHClient()
-        ssh.set_missing_host_key_policy(AutoAddPolicy())
-        if password:
-            ssh.connect(hostname=server, username=user, password=password)
+        if ssh_connection:
+            sftp = ssh_connection.client.open_sftp()
+            log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+            sftp.put(localpath, remotepath)
+            sftp.close()
+            return
         else:
-            log.info(key_file)
-            ssh.connect(hostname=server, username=user, key_filename=key_file)
-        sftp = ssh.open_sftp()
-        log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
-        sftp.put(localpath, remotepath)
-        sftp.close()
-        ssh.close()
+            ssh = SSHClient()
+            ssh.set_missing_host_key_policy(AutoAddPolicy())
+            if password:
+                ssh.connect(hostname=server, username=user, password=password)
+            else:
+                log.info(key_file)
+                ssh.connect(hostname=server, username=user, key_filename=key_file)
+            sftp = ssh.open_sftp()
+            log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+            sftp.put(localpath, remotepath)
+            sftp.close()
+            ssh.close()
     except AuthenticationException as authException:
         log.error(f"Authentication failed: {authException}")
         raise authException
