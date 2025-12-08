@@ -135,7 +135,7 @@ class StorageClusterSetup(object):
             and self.ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
-            and not (self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS)
+            and self.platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
