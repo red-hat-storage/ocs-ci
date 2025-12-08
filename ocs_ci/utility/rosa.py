@@ -804,6 +804,8 @@ def get_rosa_cluster_service_id(cluster):
     return cluster_service_info
 
 
+# with 1.2.53 rosa list service or delete service command return 404, we catch this exception and later deprecate
+@catch_exceptions(CommandFailed)
 def destroy_appliance_mode_cluster(cluster):
     """
     Delete rosa cluster if appliance mode
