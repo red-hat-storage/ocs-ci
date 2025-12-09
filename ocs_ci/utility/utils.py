@@ -2788,7 +2788,7 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
     health = run_ceph_health_cmd(namespace)
 
     # New check for network partition warnings
-    if "HEALTH_WARN" in health and "network partitions" in health:
+    if "HEALTH_WARN" in health and "network partition" in health:
         log.warning("Ceph cluster health WARNING: Network partitions detected.")
         mute_mon_netsplit_ceph_warning()
         health = run_ceph_health_cmd(namespace)
