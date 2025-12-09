@@ -66,7 +66,6 @@ from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 from psutil._common import bytes2human
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output, get_provisioner_label
 
 log = logging.getLogger(__name__)
 
@@ -2256,7 +2255,7 @@ def get_csi_versions():
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
 
-    # from ocs_ci.helpers.helpers import get_provisioner_label
+    from ocs_ci.helpers.helpers import get_provisioner_label
 
     for provisioner in [
         get_provisioner_label(constants.CEPHFILESYSTEM),
@@ -2811,6 +2810,8 @@ def mute_mon_netsplit_ceph_warning():
     Asper discussion, muting network partitioning warning
     ceph health mute MON_NETSPLIT
     """
+    from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+
     log.info("Muting the mon netsplit warning")
     assert run_cmd_verify_cli_output(
         cmd="ceph health mute MON_NETSPLIT",
