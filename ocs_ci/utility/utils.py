@@ -931,7 +931,17 @@ def download_file(url, filename, **kwargs):
 
 
 def download_with_retries(url, boot_image_path, max_retries=3):
-    """Download file with retries and proper error handling"""
+    """
+    Download file with retries and proper error handling
+
+    Args:
+        url (str): URL of the file to download
+        boot_image_path (str): Path where to save the downloaded file
+        max_retries (int): Maximum number of retries for downloading the file
+
+    Returns:
+        str: Path to the downloaded file if successful, None otherwise
+    """
     session = requests.Session()
     retry_strategy = Retry(
         total=max_retries,
