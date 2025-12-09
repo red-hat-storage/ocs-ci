@@ -152,6 +152,25 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
     request.addfinalizer(finalizer)
 
 
+@pytest.fixture(autouse=True)
+def mute_mon_netsplit_ceph_warning():
+    """
+    Asper discussion, muting network partitioning warning
+    ceph health mute MON_NETSPLIT
+    """
+    logger.info("Muting the mon netsplit warning")
+    assert run_cmd_verify_cli_output(
+        cmd="ceph health mute MON_NETSPLIT",
+        cephtool_cmd=True,
+    ), "mon_netplit warnings are not muted successfully"
+
+    assert run_cmd_verify_cli_output(
+        cmd="ceph health",
+        expected_output_lst={"HEALTH_OK", "(muted: MON_NETSPLIT)"},
+        cephtool_cmd=True,
+    ), "ceph health not okay and mon_netsplit warnings are not muted"
+
+
 @tier2
 @turquoise_squad
 @stretchcluster_required
@@ -166,24 +185,6 @@ class TestMonAndOSDFailures:
         * Verify the IO during the teardown
 
     """
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """
-        Asper discussion, muting network partitioning warning
-        ceph health mute MON_NETSPLIT
-        """
-        logger.info("Muting the mon netsplit warning")
-        assert run_cmd_verify_cli_output(
-            cmd="ceph health mute MON_NETSPLIT",
-            cephtool_cmd=True,
-        ), "mon_netplit warnings are not muted successfully"
-
-        assert run_cmd_verify_cli_output(
-            cmd="ceph health",
-            expected_output_lst={"HEALTH_OK", "(muted: MON_NETSPLIT)"},
-            cephtool_cmd=True,
-        ), "ceph health not okay and mon_netsplit warnings are not muted"
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -212,6 +213,7 @@ class TestMonAndOSDFailures:
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.usefixtures("mute_mon_netsplit_ceph_warning")
     @polarion_id("OCS-5059")
     def test_single_mon_failures(self):
         """
@@ -247,6 +249,7 @@ class TestMonAndOSDFailures:
             label=constants.MON_APP_LABEL, expected_count=5, timeout=300
         )
 
+    @pytest.mark.usefixtures("mute_mon_netsplit_ceph_warning")
     @polarion_id("OCS-5060")
     def test_both_mon_failure(self):
         """
@@ -287,6 +290,7 @@ class TestMonAndOSDFailures:
             label=constants.MON_APP_LABEL, expected_count=5, timeout=300
         )
 
+    @pytest.mark.usefixtures("mute_mon_netsplit_ceph_warning")
     @polarion_id("OCS-5061")
     def test_single_osd_failure(self):
         """

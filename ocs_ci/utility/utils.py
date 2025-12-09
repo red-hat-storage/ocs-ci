@@ -2786,7 +2786,7 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     health = run_ceph_health_cmd(namespace)
 
-    if health.strip() == "HEALTH_OK":
+    if health.split()[0] == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
