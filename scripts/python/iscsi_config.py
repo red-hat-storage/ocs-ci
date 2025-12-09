@@ -11,8 +11,6 @@ import os
 log = logging.getLogger(__name__)
 
 
-TARGET_VM = "10.1.161.239"
-
 USERNAME = "root"
 key_path = "~/.ssh/openshift-dev.pem"
 key_path = os.path.expanduser(key_path)
@@ -166,11 +164,12 @@ def get_worker_iqns(worker_node_ips):
             ssh_run(
                 node_ip,
                 "sudo yum install -y iscsi-initiator-utils || sudo apt install -y open-iscsi",
+                username="core",
             )
-            start_iscsi_command = (
-                "sudo systemctl enable iscsid && sudo systemctl start iscsid"
-            )
-            ssh_run(node_ip, start_iscsi_command)
+        start_iscsi_command = (
+            "sudo systemctl enable iscsid && sudo systemctl start iscsid"
+        )
+        ssh_run(node_ip, start_iscsi_command, username="core")
 
         success, iqn, err = ssh_run(
             node_ip,
@@ -200,7 +199,6 @@ def configure_target(target_iqn, target_ip, worker_iqns, username=USERNAME):
     # Setup environment first
     # setup_target_environment(target_ip)
 
-    # Check if target exists
     # Check if target exists
     check_cmd = f"targetcli ls /iscsi/{target_iqn} 2>/dev/null"
     success, stdout, stderr = ssh_run(target_ip, check_cmd, username)
@@ -265,13 +263,12 @@ def configure_initiators(worker_ip):
 
     log.info("\n=== Configuring Worker Nodes as Initiators ===")
     cmds = [
-        "sudo yum install -y iscsi-initiator-utils || sudo apt install -y open-iscsi",
         f"sudo iscsiadm -m discovery -t sendtargets -p {TARGET_IP}:3260",
         f"sudo iscsiadm -m node -T {TARGET_IQN} -p {TARGET_IP}:3260 --login",
         "sudo systemctl enable --now iscsid || sudo systemctl enable --now open-iscsi",
     ]
     for cmd in cmds:
-        ssh_run(worker_ip, cmd)
+        ssh_run(worker_ip, cmd, username="core")
     log.info(f"Worker {worker_ip} successfully logged in to target.")
 
 
@@ -281,7 +278,6 @@ if __name__ == "__main__":
     worker_node_ips = get_worker_node_ips(KUBECONFIG_PATH)
     log.info(f"Current available worker nodes are {worker_node_ips}")
     worker_iqns = get_worker_iqns(worker_node_ips)
-
     if not worker_iqns:
         log.info("No IQNs found! Exiting...")
         sys.exit(1)
