@@ -89,6 +89,14 @@ def file_setup(request):
     return zip_filename
 
 
+@pytest.fixture(scope="class", autouse=True)
+def reduce_dedup_wait_time(add_env_vars_to_noobaa_endpoint_class):
+    """
+    Reduce the dedup time to 0 sec
+    """
+    add_env_vars_to_noobaa_endpoint_class([(constants.MIN_CHUNK_AGE_FOR_DEDUP, 0)])
+
+
 @mcg
 @red_squad
 @runs_on_provider
