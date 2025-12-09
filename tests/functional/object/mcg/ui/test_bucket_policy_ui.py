@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     polarion_id,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @black_squad
 @red_squad
+@mcg
 @post_upgrade
 class TestBucketPolicyUI:
     """
