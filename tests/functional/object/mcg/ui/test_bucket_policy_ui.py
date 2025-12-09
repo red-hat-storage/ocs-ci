@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     post_upgrade,
     polarion_id,
+    red_squad,
     ui,
 )
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @ui
 @black_squad
+@red_squad
 @post_upgrade
 class TestBucketPolicyUI:
     """
@@ -222,9 +224,8 @@ class TestBucketPolicyUI:
         1. Create a new bucket
         2. Create a new bucket policy with 'Allow All Access'
         3. Test the correct behaviour of 'Block public access' tab
+        4. Delete the created bucket
 
-        Raises:
-            pytest.skip: If no buckets are available for testing
         """
 
         setup_ui_class_factory()
