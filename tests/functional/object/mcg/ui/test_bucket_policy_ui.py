@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 import time
@@ -14,6 +15,7 @@ from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
     PolicyConfig,
     PolicyType,
+    BlockPublicAccessType,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,3 +214,65 @@ class TestBucketPolicyUI:
         bucket_permissions_ui.apply_bucket_policy()
 
         logger.info(f"Successfully completed step-by-step test for {policy_name}")
+
+    def test_bucket_public_access_with_policy(self, setup_ui_class_factory):
+        """
+        Tests the correct work of 'Block public access' tab
+        The workflow is as following:
+        1. Create a new bucket
+        2. Create a new bucket policy with 'Allow All Access'
+        3. Test the correct behaviour of 'Block public access' tab
+
+        Raises:
+            pytest.skip: If no buckets are available for testing
+        """
+
+        setup_ui_class_factory()
+        logger.info("Starting test ")
+
+        bucket_ui = BucketsTab()
+        bucket_ui.navigate_buckets_page()
+
+        # Create the bucket
+        _, target_bucket_name = bucket_ui.create_bucket_ui("s3", return_name=True)
+        logger.info(f"Created bucket name: {target_bucket_name}")
+        bucket_ui.navigate_buckets_page()
+        bucket_ui.page_has_loaded(sleep_time=2)
+
+        bucket_permissions_ui = bucket_ui.navigate_to_bucket_permissions(
+            bucket_name=target_bucket_name
+        )
+
+        bucket_permissions_ui.activate_policy_editor()
+
+        # Create, modify and set bucket policy
+        config = PolicyConfig(target_bucket_name)
+        policy_json = bucket_permissions_ui._build_bucket_policy(
+            PolicyType.ALLOW_PUBLIC_READ, config
+        )
+        policy_dict = json.loads(policy_json)
+        policy_dict["Statement"][0]["Action"][0] = "s3:*"
+
+        policy_json = json.dumps(policy_dict)
+        logger.info(f"Set policy json: {policy_json}")
+        bucket_permissions_ui.set_policy_json_in_editor(policy_json)
+
+        bucket_permissions_ui.apply_bucket_policy()
+
+        # Test the Block public access tab
+        bucket_permissions_ui.navigate_to_block_public_access_tab()
+        bucket_permissions_ui.verify_block_public_access(
+            BlockPublicAccessType.BLOCK_ALL
+        )
+        bucket_permissions_ui.verify_block_public_access(
+            BlockPublicAccessType.BLOCK_NEW_POLICIES
+        )
+        bucket_permissions_ui.verify_block_public_access(
+            BlockPublicAccessType.BLOCK_CROSS_ACCOUNT
+        )
+
+        bucket_ui.delete_bucket_ui(
+            delete_via="three_dots", expect_fail=False, resource_name=target_bucket_name
+        )
+
+        logger.info("Successfully completed test")

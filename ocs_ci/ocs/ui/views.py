@@ -2661,6 +2661,46 @@ bucket_tab = {
         ".toast-notifications-list-pf .alert-success",
         ".co-alert--success",
     ],
+    "block_public_access_tab": (
+        "//button[contains(., 'Block public access')]",
+        By.XPATH,
+    ),
+    "manage_public_access_settings_button": (
+        "//button[normalize-space()='Manage public access settings']",
+        By.XPATH,
+    ),
+    "block_all_public_access_checkbox": (
+        "//label[.//p[contains(., 'Block all public access')]]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "block_all_public_access_msg": (
+        "//label[.//p[contains(., 'Block all public access')]]//span[contains(@class,'pf-v5-c-label__text')]",
+        By.XPATH,
+    ),
+    "block_new_public_policies_checkbox": (
+        "//label[.//p[contains(., 'granted through new public bucket policies')]]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "block_new_public_policies_msg": (
+        "//label[.//p[contains(., 'new public bucket policies')]]//span[contains(@class,'pf-v5-c-label__text')]",
+        By.XPATH,
+    ),
+    "block_cross_account_checkbox": (
+        "//label[.//p[contains(., 'cross-account access')]]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "block_cross_account_msg": (
+        "//label[.//p[contains(., 'cross-account access')]]//span[contains(@class,'pf-v5-c-label__text')]",
+        By.XPATH,
+    ),
+    "save_public_access_settings_button": (
+        "//button[normalize-space()='Save changes']",
+        By.XPATH,
+    ),
+    "proceed_to_disable_public_access_button": (
+        "//button[normalize-space()='Proceed to disable']",
+        By.XPATH,
+    ),
     # Lifecycle policy locators
     "management_tab": (
         "//span[contains(@class, 'c-tabs__item-text') and text()='Management']/parent::*",
