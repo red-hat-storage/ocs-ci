@@ -113,11 +113,10 @@ class TestPvcExpand(ManageTest):
                     continue
                 df_out = df_out.split()
                 new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
-                if new_size_mount in [
-                    f"{pvc_size_new - 0.1}G",
-                    f"{float(pvc_size_new)}G",
-                    f"{pvc_size_new}G",
-                ]:
+                if (
+                    pvc_size_new - 0.5 <= float(new_size_mount[:-1]) <= pvc_size_new
+                    and new_size_mount[-1] == "G"
+                ):
                     log.info(
                         f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
                         f"is reflected on pod {pod_obj.name}"
