@@ -8356,8 +8356,23 @@ def ceph_monstore_tool_fixture(request):
     return mot_obj
 
 
-@pytest.fixture()
+@pytest.fixture(scope="class")
+def change_the_noobaa_log_level_class(request):
+    """
+    Class-scoped fixture for changing the noobaa log level
+    """
+    return change_the_noobaa_log_level_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def change_the_noobaa_log_level(request):
+    """
+    Function-scoped fixture for changing the noobaa log level
+    """
+    return change_the_noobaa_log_level_fixture(request)
+
+
+def change_the_noobaa_log_level_fixture(request):
     """
     This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
     """
