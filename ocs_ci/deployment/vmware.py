@@ -2022,19 +2022,22 @@ class VSPHEREAgentAI(VSPHEREBASE):
     To use this class we need to switch to client context first
     """
 
-    def __init__(self):
+    def __init__(self, agent_workflow):
         self.cluster_name = config.ENV_DATA["cluster_name"]
+        self.agent_workflow = agent_workflow
         super(VSPHEREAgentAI, self).__init__()
 
     class OCPDeployment(BaseOCPDeployment):
 
-        parent: Optional["VSPHEREAgentAI"] = None
+        # self.ocp_deployment.outer is a dependency injection,
+        # necessary to refer an outer instance methods from the inner OCPDeployment
+        # here this class attribute is a placeholder for the outer VSPHEREAgentAI instance
+        outer: Optional["VSPHEREAgentAI"] = None
 
         def __init__(self):
             super(VSPHEREAgentAI.OCPDeployment, self).__init__()
 
             # create terraform_data directory
-            self.ai_cluster = None
             self.terraform_data_dir = os.path.join(
                 self.cluster_path, constants.TERRAFORM_DATA_DIR
             )
@@ -2104,90 +2107,46 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 log_cli_level (str): not used for Assisted Installer deployment
 
             """
-            log_step("Deploying OCP cluster on vSphere platform via Assisted Installer")
-            # initialize AssistedInstallerCluster object
-            self.ai_cluster = assisted_installer.AssistedInstallerCluster(
-                name=self.cluster_name,
-                cluster_path=self.cluster_path,
-                openshift_version=str(version.get_semantic_ocp_version_from_config()),
-                base_dns_domain=config.ENV_DATA["base_domain"],
-                api_vip=self.api_vip,
-                ingress_vip=self.ingress_vip,
-                ssh_public_key=self.get_ssh_key(),
-                pull_secret=self.get_pull_secret(),
+            logger.info(
+                "Deploying OCP cluster on vSphere platform with Assistant Installer "
+                "service running on MCE cluster"
             )
-
-            log_step("create (register) cluster in Assisted Installer console")
-            self.ai_cluster.create_cluster()
 
             log_step("download discovery iso from the pre-created InfraEnv")
-            self.download_discovery_iso()
+            if not self.download_discovery_iso():
+                raise RuntimeError("Failed to download discovery ISO image")
 
-            # create infrastructure in vSphere and configure DNS records for API and Ingress (via Terraform)
-            log_step(
-                "Creating infrastructure in vSphere and DNS records for Assisted Installer deployment "
-                "(via Terraform)"
-            )
+            log_step("Creating infrastructure in vSphere and DNS records via Terraform")
             previous_dir = os.getcwd()
             os.chdir(self.terraform_data_dir)
             self.terraform.initialize()
+
+            if not os.path.isfile(self.discovery_iso_image):
+                raise FileNotFoundError(
+                    f"Discovery ISO image not found at {self.discovery_iso_image}"
+                )
+
             self.terraform.apply(self.terraform_vars_file)
             os.chdir(previous_dir)
 
-            log_step("wait and verify discovered nodes")
-            # wait for discovering all nodes
-            expected_node_num = (
-                config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"]
-            )
-            self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
-
-            log_step("perform validations on discovered nodes")
-            # verify validations info
-            self.ai_cluster.verify_validations_info_for_discovered_nodes()
-
-            # load terraform.tfstate file
-            with open(self.terraform.state_file_path, "r") as tf_file:
-                tfstate = json.load(tf_file)
-            # prepare MAC addresses to node name mapping
-            mac_name_mapping = {
-                res["instances"][0]["attributes"]["network_interface"][0][
-                    "mac_address"
-                ]: res["instances"][0]["attributes"]["name"]
-                for res in tfstate["resources"]
-                if res["type"] == "vsphere_virtual_machine"
-            }
-            # prepare MAC addresses to node role mapping
-            mac_role_mapping = {
-                res["instances"][0]["attributes"]["network_interface"][0][
-                    "mac_address"
-                ]: (
-                    "master" if "module.control_plane_vm" in res["module"] else "worker"
+            if not hasattr(self, "outer"):
+                raise RuntimeError(
+                    "OCPDeployment.outer has not been assigned by VSPHEREAgentAI"
                 )
-                for res in tfstate["resources"]
-                if res["type"] == "vsphere_virtual_machine"
-            }
-            # update discovered hosts (configure hostname and role)
-            self.ai_cluster.update_hosts_config(
-                mac_name_mapping=mac_name_mapping, mac_role_mapping=mac_role_mapping
+            self.outer.agent_workflow.wait_agents_available(
+                config.ENV_DATA["worker_replicas"]
             )
-
-            log_step("Installing the OCP cluster with Assisted Installer")
-            # install the OCP cluster
-            self.ai_cluster.install_cluster()
-            hosts_ip_list = self.ai_cluster.get_ip_list_by_cluster_id()
+            self.outer.agent_workflow.approve_agents()
 
             log_step(
                 "Modifying DNS records for API and Ingress, pointing to host (machines) IPs"
             )
-            modify_dns_records(hosts_ip_list, hosts_ip_list)
+
+            agent_ip_list = self.outer.agent_workflow.get_agents_external_ip_list()
+            modify_dns_records(agent_ip_list, agent_ip_list)
 
             log_step("removing reserved API and Ingress IPs")
-            if not hasattr(self, "parent"):
-                raise RuntimeError(
-                    "OCPDeployment.parent has not been assigned by VSPHEREAgentAI"
-                )
-            else:
-                self.parent.release_reserved_ips()
+            release_reserved_ips(self.cluster_name)
 
         def generate_terraform_vars(self):
             """
@@ -2253,6 +2212,8 @@ class VSPHEREAgentAI(VSPHEREBASE):
             Assumption is that this method is called from the client context, and th InfraEnv is created on the
             management cluster (Provider context)
 
+            Returns:
+                str: Path to downloaded ISO image or None if download failed
             """
 
             with config.RunWithProviderConfigContextIfAvailable():
@@ -2281,7 +2242,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 )
 
                 try:
-                    download_with_retries(iso_url, self.discovery_iso_image)
+                    return download_with_retries(iso_url, self.discovery_iso_image)
                 except Exception as e:
                     self.discovery_iso_image = None
                     logger.error(f"Failed to download ISO image: {e}")
@@ -2318,23 +2279,6 @@ class VSPHEREAgentAI(VSPHEREBASE):
             log_level (str): this parameter is not used here
 
         """
-        try:
-            ai_cluster = assisted_installer.AssistedInstallerCluster(
-                name=self.cluster_name,
-                cluster_path=self.cluster_path,
-                existing_cluster=True,
-            )
-            ai_cluster.delete_cluster()
-            ai_cluster.delete_infrastructure_environment()
-        except (
-            exceptions.OpenShiftAPIResponseException,
-            exceptions.ClusterNotFoundException,
-        ) as err:
-            logger.warning(
-                f"Failed to delete cluster in Assisted Installer Console: {err}\n"
-                "(ignoring the failure and continuing the destroy process to remove other resources)"
-            )
-
         # Download terraform binary based on terraform version
         # in terraform.log
         terraform_version = Terraform.get_terraform_version()
@@ -2375,7 +2319,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
 
         # release IPs
         try:
-            self.release_reserved_ips()
+            release_reserved_ips(self.cluster_name)
         except Exception as err:
             logger.warning(
                 f"Failed to release reserved IPs: {err}\n"
@@ -2385,16 +2329,6 @@ class VSPHEREAgentAI(VSPHEREBASE):
 
         # post destroy checks
         self.post_destroy_checks()
-
-    def release_reserved_ips(self):
-        logger.info("Releasing reserved API and Ingress IPs")
-        ipam = IPAM(appiapp="address")
-        ipam.release_ips(
-            [
-                f"api.{self.cluster_name}",
-                f"ingress.{self.cluster_name}",
-            ]
-        )
 
 
 class VSPHEREUPIFlexy(VSPHEREBASE):
@@ -3157,3 +3091,17 @@ def enable_hardware_virtualization():
 
     # write data t json file
     dump_data_to_json(terraform_json_content, constants.VM_MAIN_JSON)
+
+
+def release_reserved_ips(name: str):
+    """
+    Release reserved API and Ingress IPs
+    """
+    logger.info("Releasing reserved API and Ingress IPs")
+    ipam = IPAM(appiapp="address")
+    ipam.release_ips(
+        [
+            f"api.{name}",
+            f"ingress.{name}",
+        ]
+    )
