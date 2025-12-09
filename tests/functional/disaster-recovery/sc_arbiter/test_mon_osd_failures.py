@@ -167,7 +167,7 @@ class TestMonAndOSDFailures:
 
     """
 
-    @pytest.fixture(scope="class", autouse=True)
+    @pytest.fixture(autouse=True)
     def setup(self):
         """
         Asper discussion, muting network partitioning warning
@@ -186,27 +186,31 @@ class TestMonAndOSDFailures:
         ), "ceph health not okay and mon_netsplit warnings are not muted"
 
     @pytest.fixture(autouse=True)
-    def teardown(self):
+    def teardown(self, request):
         """
         If ceph health warnning is observed due to partitioning restart mon pods.
         And validate ceph health.
         """
-        logger.info("-----test teardown-----")
-        network_partition_warning = "network partition detected"
-        try:
-            ceph_health_check(fix_ceph_health=True)
-        except (
-            CephHealthException,
-            CommandFailed,
-            subprocess.TimeoutExpired,
-            NoRunningCephToolBoxException,
-        ) as e:
-            logger.error(f"Ceph health check failed after failure injection. : {e}")
-            if network_partition_warning in str(e).lower():
-                logger.info("Network partition detected — restarting mon pods")
-                restart_pods_having_label(label=constants.MON_APP_LABEL)
-        logger.info("Checking for Ceph Health OK")
-        ceph_health_check()
+
+        def finalizer():
+            logger.info("-----test teardown-----")
+            network_partition_warning = "network partition detected"
+            try:
+                ceph_health_check(fix_ceph_health=True)
+            except (
+                CephHealthException,
+                CommandFailed,
+                subprocess.TimeoutExpired,
+                NoRunningCephToolBoxException,
+            ) as e:
+                logger.error(f"Ceph health check failed after failure injection. : {e}")
+                if network_partition_warning in str(e).lower():
+                    logger.info("Network partition detected — restarting mon pods")
+                    restart_pods_having_label(label=constants.MON_APP_LABEL)
+            logger.info("Checking for Ceph Health OK")
+            ceph_health_check()
+
+        request.addfinalizer(finalizer)
 
     @polarion_id("OCS-5059")
     def test_single_mon_failures(self):
