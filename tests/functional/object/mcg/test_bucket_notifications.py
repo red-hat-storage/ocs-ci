@@ -145,9 +145,7 @@ class TestBucketNotifications(MCGTest):
                 func=notif_manager.get_events,
                 topic=topic,
             ):
-                keys_in_notifs = set(
-                    event["s3"]["object"]["key"] for event in events[1:]
-                )
+                keys_in_notifs = set(event["s3"]["object"]["key"] for event in events)
                 delta = obj_keys_set.difference(keys_in_notifs)
                 if not delta:
                     logger.info("All expected events were received by Kafka")
