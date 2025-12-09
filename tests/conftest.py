@@ -9116,15 +9116,18 @@ def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
         # Label the default noobaa PV with a custom label
         # to allow ignoring false leftover errors
         nonlocal default_pvc_labeled
-        if not is_custom_pvc_in_use and not default_pvc_labeled:
-            default_pvc = get_pvc_objs(
+        if not default_pvc_labeled and not use_custom_logs_pvc:
+            get_pvc_results = get_pvc_objs(
                 pvc_names=[constants.DEFAULT_MCG_BUCKET_LOGS_PVC]
-            )[0]
-            default_pvc.add_label(constants.CUSTOM_MCG_LABEL)
-            pv_ocp_obj.add_label(
-                resource_name=default_pvc.backed_pv, label=constants.CUSTOM_MCG_LABEL
             )
-            default_pvc_labeled = True
+            if get_pvc_results:
+                default_pvc = get_pvc_results[0]
+                default_pvc.add_label(constants.CUSTOM_MCG_LABEL)
+                pv_ocp_obj.add_label(
+                    resource_name=default_pvc.backed_pv,
+                    label=constants.CUSTOM_MCG_LABEL,
+                )
+                default_pvc_labeled = True
 
     def cleanup():
         logs_manager.disable_bucket_logging_on_cr()
