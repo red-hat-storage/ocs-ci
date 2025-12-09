@@ -32,10 +32,7 @@ class DeploymentFactory(object):
                     "aws_upi_flexy": AWSUPIFlexy,
                 }
             )
-        elif self.deployment_platform in [
-            constants.VSPHERE_PLATFORM,
-            constants.VSPHERE_AGENT_PLATFORM,
-        ]:
+        elif self.deployment_platform == constants.VSPHERE_PLATFORM:
             from .vmware import (
                 VSPHEREUPI,
                 VSPHEREIPI,
@@ -52,7 +49,7 @@ class DeploymentFactory(object):
                     "vsphere_ai": VSPHEREAI,
                     # this deployment type is not independent and rely on hub cluster existence and InfraEnv resource
                     # therefore this is just a placeholder here to stick with the factory pattern
-                    "vsphere_agent_ai": VSPHEREAgentAI,
+                    "vsphere_ai_agent": VSPHEREAgentAI,
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:
