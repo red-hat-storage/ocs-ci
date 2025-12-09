@@ -317,9 +317,15 @@ class StorageClusterSetup(object):
             deviceset_data_part["name"] = (
                 constants.DEFAULT_DEVICESET_LSO_PVC_NAME + "-part"
             )
-            deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
-                self.deployment.storage_class + "-part"
-            )
+            if self.deployment.storage_class:
+                deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
+                    self.deployment.storage_class + "-part"
+                )
+            elif deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"]:
+                deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
+                    deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"]
+                    + "-part"
+                )
             deviceset_data_part["dataPVCTemplate"]["spec"]["resources"]["requests"][
                 "storage"
             ] = f"{pv_size_list[0]}"
