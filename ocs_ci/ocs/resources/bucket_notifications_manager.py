@@ -332,7 +332,7 @@ class BucketNotificationsManager:
         )
         if wait:
             logger.info("Waiting for put-bucket-notification to propagate")
-            sleep(60)
+            sleep(90)
 
     def get_bucket_notification_configuration(self, awscli_pod, mcg_obj, bucket):
         """
