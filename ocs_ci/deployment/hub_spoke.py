@@ -2160,98 +2160,18 @@ class HypershiftHostedOCP(
         from ocs_ci.deployment.vmware import VSPHEREAgentAI
 
         with config.RunWithConfigContext(config.get_cluster_index_by_name(self.name)):
-            # assumption: within this context, config.DEPLOYMENT has parameters for the current cluster
-            deployer = VSPHEREAgentAI()
-            deployer.deploy_cluster(log_cli_level="INFO")
-            return True
+            # assumption: within this multicluster context, config.DEPLOYMENT has parameters for the current cluster
+            deployer = VSPHEREAgentAI(agent_workflow=AgentWorkflow(self.name))
 
-    def approve_agents(self):
-        """
-        Approve agents for the hosted cluster
-        Example: oc patch $a -n agents-ns --type=merge -p '{"spec":{"approved":true}}'
-
-        Returns:
-            bool: True if agents are approved successfully, False otherwise
-        """
-        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
-        infraenv_list = infraenv_obj.get().get("items", [])
-
-        if not infraenv_list:
-            return False
-
-        agent_obj = OCP(kind=constants.HOSTED_CLUSTER_AGENT, namespace=self.name)
-        agents_list = agent_obj.get().get("items", [])
-
-        if not agents_list:
-            logger.warning(f"No agents found in namespace {self.name}")
-            return False
-
-        logger.info(f"Found {len(agents_list)} agents in namespace {self.name}")
-
-        patch_data = json.dumps({"spec": {"approved": True}})
-        for agent in agents_list:
-            agent_name = agent["metadata"]["name"]
             try:
-                logger.info(f"Approving agent: {agent_name}")
-                agent_obj.patch(
-                    resource_name=agent_name, params=patch_data, format_type="merge"
-                )
-            except Exception as e:
-                logger.error(f"Failed to approve agent {agent_name}: {e}")
+                deployer.deploy_cluster(log_cli_level="INFO")
+            except RuntimeError as e:
+                logger.error(f"Error during booting machines for Agent cluster: {e}")
                 return False
-
-        # Wait for agents to be approved
-        logger.info("Waiting for agents to be approved...")
-        try:
-            for agent_approved in TimeoutSampler(
-                timeout=600,
-                sleep=10,
-                func=_check_agents_approved,
-                namespace=self.name,
-            ):
-                if agent_approved:
-                    logger.info("All agents are approved successfully")
-                    return True
-        except TimeoutExpiredError:
-            logger.error("Timeout waiting for agents to be approved")
-            return False
-
-    def wait_agents_available(self, expected_count, timeout=600):
-        """
-        Wait for a specific number of agents to be available in the namespace
-
-        Args:
-            expected_count (int): Expected number of agents to wait for
-            timeout (int): Timeout in seconds to wait for agents (default: 600 seconds / 10 minutes)
-
-        Returns:
-            bool: True if the expected number of agents are available within timeout, False otherwise
-        """
-        logger.info(
-            f"Waiting for {expected_count} agents to be available in namespace {self.name}. "
-            f"Timeout: {timeout} seconds"
-        )
-
-        try:
-            for agents_available in TimeoutSampler(
-                timeout=timeout,
-                sleep=10,
-                func=_check_agents_available,
-                namespace=self.name,
-                expected_count=expected_count,
-            ):
-                if agents_available:
-                    logger.info(
-                        f"Expected number of agents ({expected_count}) are available "
-                        f"in namespace {self.name}"
-                    )
-                    return True
-        except TimeoutExpiredError:
-            logger.error(
-                f"Timeout waiting for {expected_count} agents to be available "
-                f"in namespace {self.name} after {timeout} seconds"
-            )
-            return False
+            except FileNotFoundError as e:
+                logger.error(f"Required file not found during deployment: {e}")
+                return False
+            return True
 
 
 class SpokeODF(SpokeOCP, ABC):
@@ -3213,3 +3133,164 @@ def hypershift_cluster_factory(
                 f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
             )
             ocsci_config.insert_cluster_config(ocsci_config.nclusters, cluster_config)
+
+
+class AgentWorkflow:
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def approve_agents(self):
+        """
+        Approve agents for the hosted cluster
+        Example: oc patch $a -n agents-ns --type=merge -p '{"spec":{"approved":true}}'
+
+        Returns:
+            bool: True if agents are approved successfully, False otherwise
+        """
+        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
+        infraenv_list = infraenv_obj.get().get("items", [])
+
+        if not infraenv_list:
+            return False
+
+        agent_obj = OCP(kind=constants.HOSTED_CLUSTER_AGENT, namespace=self.name)
+        agents_list = agent_obj.get().get("items", [])
+
+        if not agents_list:
+            logger.warning(f"No agents found in namespace {self.name}")
+            return False
+
+        logger.info(f"Found {len(agents_list)} agents in namespace {self.name}")
+
+        patch_data = json.dumps({"spec": {"approved": True}})
+        for agent in agents_list:
+            agent_name = agent["metadata"]["name"]
+            try:
+                logger.info(f"Approving agent: {agent_name}")
+                agent_obj.patch(
+                    resource_name=agent_name, params=patch_data, format_type="merge"
+                )
+            except Exception as e:
+                logger.error(f"Failed to approve agent {agent_name}: {e}")
+                return False
+
+        # Wait for agents to be approved
+        logger.info("Waiting for agents to be approved...")
+        try:
+            for agent_approved in TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=_check_agents_approved,
+                namespace=self.name,
+            ):
+                if agent_approved:
+                    logger.info("All agents are approved successfully")
+                    return True
+        except TimeoutExpiredError:
+            logger.error("Timeout waiting for agents to be approved")
+            return False
+
+    def wait_agents_available(self, expected_count, timeout=600):
+        """
+        Wait for a specific number of agents to be available in the namespace
+
+        Args:
+            expected_count (int): Expected number of agents to wait for
+            timeout (int): Timeout in seconds to wait for agents (default: 600 seconds / 10 minutes)
+
+        Returns:
+            bool: True if the expected number of agents are available within timeout, False otherwise
+        """
+        logger.info(
+            f"Waiting for {expected_count} agents to be available in namespace {self.name}. "
+            f"Timeout: {timeout} seconds"
+        )
+
+        try:
+            for agents_available in TimeoutSampler(
+                timeout=timeout,
+                sleep=10,
+                func=_check_agents_available,
+                namespace=self.name,
+                expected_count=expected_count,
+            ):
+                if agents_available:
+                    logger.info(
+                        f"Expected number of agents ({expected_count}) are available "
+                        f"in namespace {self.name}"
+                    )
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"Timeout waiting for {expected_count} agents to be available "
+                f"in namespace {self.name} after {timeout} seconds"
+            )
+            return False
+
+    def get_agents_external_ip_list(self):
+        """
+        Get the external IP address of the agent machines
+        Any network masks (CIDR, e.g. "/24") are stripped from the addresses.
+
+        Returns:
+            list: List of IPv4 addresses (possibly empty)
+        """
+        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
+        infraenv_list = infraenv_obj.get().get("items", [])
+
+        if not infraenv_list:
+            logger.warning(f"No InfraEnv found in namespace {self.name}")
+            return []
+
+        agent_obj = OCP(kind=constants.HOSTED_CLUSTER_AGENT, namespace=self.name)
+        agents_list = agent_obj.get().get("items", [])
+
+        if not agents_list:
+            logger.warning(f"No agents found in namespace {self.name}")
+            return []
+
+        ips = set()
+
+        # Collect IPv4 addresses from all agents' interfaces. Be flexible with key names
+        for agent in agents_list:
+            interfaces = (
+                agent.get("status", {}).get("inventory", {}).get("interfaces", [])
+            )
+            if not interfaces:
+                # Some agents may not have inventory/interfaces populated yet
+                continue
+
+            for iface in interfaces:
+                # Common key names used in different infra versions
+                for key in (
+                    "ipv4_addresses",
+                    "ipV4Addresses",
+                    "ipV4Address",
+                    "ipv4Address",
+                ):
+                    addrs = iface.get(key)
+                    if not addrs:
+                        continue
+
+                    # Ensure we iterate lists, but also accept single string
+                    if isinstance(addrs, str):
+                        addrs = [addrs]
+
+                    for addr in addrs:
+                        # addr may include CIDR mask (e.g., "192.168.1.10/24") - strip it
+                        if not isinstance(addr, str):
+                            continue
+                        ip = addr.split("/")[0].strip()
+                        if ip:
+                            ips.add(ip)
+
+        result = sorted(ips)
+        if result:
+            logger.info(f"External IP addresses of the agent machines: {result}")
+        else:
+            logger.warning(
+                f"No external IPv4 addresses discovered for agents in namespace {self.name}"
+            )
+
+        return result
