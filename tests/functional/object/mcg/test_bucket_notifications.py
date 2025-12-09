@@ -51,11 +51,11 @@ class TestBucketNotifications(MCGTest):
 
     # TODO: Remove when https://github.com/red-hat-storage/ocs-ci/issues/13893 is closed
     @pytest.fixture(scope="class", autouse=True)
-    def increase_noobaa_logging_level(self, change_the_noobaa_log_level):
+    def increase_noobaa_logging_level(self, change_the_noobaa_log_level_class):
         """
         A fixture to set the noobaa log level to all.
         """
-        change_the_noobaa_log_level(level="all")
+        change_the_noobaa_log_level_class(level="all")
 
     @pytest.fixture(autouse=True, scope="class")
     def notif_manager(self, request, pvc_factory_class):
