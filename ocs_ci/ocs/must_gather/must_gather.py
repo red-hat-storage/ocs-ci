@@ -66,10 +66,20 @@ class MustGather(object):
         """
         Search File Path
 
+        In post-upgrade scenarios, uses config.UPGRADE["upgrade_ocs_version"]
+        to ensure correct version-specific file expectations.
         """
-        ocs_version = float(
-            f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        )
+        upgrade_version = config.UPGRADE.get("upgrade_ocs_version")
+        if upgrade_version:
+            ocs_version = float(upgrade_version)
+            logger.debug(
+                f"Using upgrade version for must-gather validation: {ocs_version}"
+            )
+        else:
+            ocs_version = float(
+                f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
+            )
+            logger.debug(f"Using CSV version for must-gather validation: {ocs_version}")
         if (
             self.type_log == "OTHERS"
             and config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS
