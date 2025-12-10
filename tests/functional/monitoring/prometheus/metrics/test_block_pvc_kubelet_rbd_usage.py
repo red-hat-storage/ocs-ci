@@ -64,7 +64,7 @@ def test_block_pvc_kubelet_metrics_match_rbd_usage(
     dev_path = "/dev/rbdblock"
 
     # Write sample data using dd
-    dd_cmd_str = f"dd if=/dev/urandom of={dev_path} bs=1M count={write_size_mib} oflag=direct status=progress"
+    dd_cmd_str = f"dd if=/dev/urandom of={dev_path} bs=1M count={write_size_mib} oflag=direct"
     logger.info(
         f"Writing {write_size_mib} MiB to device {dev_path} inside pod {pod_obj.name}"
     )
