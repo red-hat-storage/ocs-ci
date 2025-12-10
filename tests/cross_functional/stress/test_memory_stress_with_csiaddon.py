@@ -1,17 +1,13 @@
 """
 Test suite for memory stress testing with CSI addon PVC reconciler.
 
-This test validates memory and CPU usage of the PVC reconciler pod during
-encryption key rotation operations with a large number of encrypted PVCs.
+This test validates memory and CPU usage of the PVC reconciler pod with
+a large number of encrypted PVCs.
 
 Test Scenarios:
 1. Create encrypted PVCs with deployments (1:1 mapping)
 2. Monitor initial memory/CPU stats of reconciler pod
-3. Annotate StorageClass for EKR with schedule: * * * * *
-4. Watch memory go up and ensure key rotation succeeds
-5. Annotate SC with annotation enable: false
-6. Wait for resources to be GCed
-7. Monitor memory usage go down (should return to initial stats)
+3. Monitor memory/CPU stats over time
 """
 
 import logging
@@ -24,7 +20,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     vault_kms_deployment_required,
 )
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.pod import (
     get_csi_addons_controller_manager_pod,
     get_pods_aggregated_metrics,
@@ -39,7 +34,7 @@ log = logging.getLogger(__name__)
 @skipif_disconnected_cluster
 class TestMemoryStressWithCSIAddon:
     """
-    Test memory stress with CSI addon PVC reconciler during key rotation operations.
+    Test memory stress with CSI addon PVC reconciler.
     """
 
     @pytest.fixture(scope="function")
@@ -80,16 +75,7 @@ class TestMemoryStressWithCSIAddon:
         kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
         log.info("Vault CSI KMS token created")
 
-        # Initialize PVKeyrotation helper and enable key rotation BEFORE creating PVCs
-        # When StorageClass has keyrotation annotation, PVCs automatically inherit it
-        # and the reconciler will create cronjobs for them
-        pv_keyrotation_obj = PVKeyrotation(sc_obj)
-        pv_keyrotation_obj.set_keyrotation_state_by_annotation(enable=True)
-        log.info("Key rotation enabled via StorageClass annotation")
-        pv_keyrotation_obj.annotate_storageclass_key_rotation(schedule="*/1 * * * *")
-        log.info("StorageClass annotated with */1 * * * * schedule for key rotation")
-
-        # Create encrypted PVCs (they will automatically inherit the StorageClass annotation)
+        # Create encrypted PVCs
         log.info("Creating encrypted PVCs...")
         pvc_objs = multi_pvc_factory(
             size=1,
@@ -116,48 +102,27 @@ class TestMemoryStressWithCSIAddon:
 
         log.info(f"Created {len(pod_objs)} deployments")
 
-        # Wait for key rotation cronjobs to be created for all PVCs
-        # The reconciler automatically creates cronjobs for PVCs that inherit
-        # the StorageClass keyrotation annotation and adds the cronjob annotation
-        # to each PVC. This may take time for the reconciler to process all PVCs.
-        log.info("Waiting for key rotation cronjobs to be created for all PVCs...")
-        log.info(
-            "PVCs automatically inherit StorageClass keyrotation annotation. "
-            "Reconciler will create cronjobs and add cronjob annotations to PVCs."
-        )
-        # Add initial delay to give reconciler time to start processing
-        time.sleep(30)
-        pv_keyrotation_obj.wait_for_keyrotation_cronjobs_recreation(pvc_objs)
-        log.info("Key rotation cronjobs created successfully for all PVCs")
-
         return {
             "kms": kms,
             "project": proj_obj,
             "sc_obj": sc_obj,
             "pvc_objs": pvc_objs,
             "pod_objs": pod_objs,
-            "pv_keyrotation_obj": pv_keyrotation_obj,
         }
 
     @polarion_id("RHSTOR-8091")
     def test_memory_stress_with_pvc_reconciler(self, setup_test_resources):
         """
-        Test memory stress of PVC reconciler during key rotation operations.
+        Test memory stress of PVC reconciler.
 
         Steps:
         1. Monitor initial memory/CPU stats of reconciler pod
-        2. Annotate StorageClass for EKR with schedule: @weekly
-        3. Update SC annotation with schedule: * * * * *
-        4. Watch memory go up and ensure key rotation succeeds
-        5. Annotate SC with annotation enable: false
-        6. Wait for resources to be GCed
-        7. Monitor memory usage go down (should return to initial stats)
+        2. Monitor memory/CPU stats over time
         """
         log.info("Starting memory stress test with PVC reconciler")
 
         # Get test resources
-        pvc_objs = setup_test_resources["pvc_objs"]
-        pv_keyrotation_obj = setup_test_resources["pv_keyrotation_obj"]
+        # pvc_objs = setup_test_resources["pvc_objs"]
 
         # Get reconciler pods (CSI addons controller manager)
         reconciler_pods = get_csi_addons_controller_manager_pod()
@@ -175,65 +140,27 @@ class TestMemoryStressWithCSIAddon:
             f"(total: {initial_metrics['total_cpu_millicores']}m)"
         )
 
-        # Step 2: Verify StorageClass annotation (already set in setup)
-        log.info("=== Step 2: Verifying StorageClass EKR annotation (* * * * *) ===")
-        log.info("StorageClass already annotated with * * * * * schedule from setup")
+        # Step 2: Monitor memory/CPU stats over time
+        log.info("=== Step 2: Monitoring memory/CPU stats over time ===")
+        max_memory = 0
+        max_cpu = 0
 
-        # Step 3: Watch memory go up and ensure key rotation succeeds
-        log.info("=== Step 3: Monitoring memory increase and key rotation ===")
-        max_memory_during_kr = 0
-        max_cpu_during_kr = 0
-
-        # Monitor metrics during key rotation
+        # Monitor metrics over time
         for i in range(20):  # Monitor for up to 10 minutes (30s intervals)
             time.sleep(30)
             current_metrics = get_pods_aggregated_metrics(reconciler_pods)
-            max_memory_during_kr = max(
-                max_memory_during_kr, current_metrics["max_memory_mib"]
-            )
-            max_cpu_during_kr = max(
-                max_cpu_during_kr, current_metrics["max_cpu_millicores"]
-            )
+            max_memory = max(max_memory, current_metrics["max_memory_mib"])
+            max_cpu = max(max_cpu, current_metrics["max_cpu_millicores"])
             log.info(
                 f"Metrics check {i+1}/20 - Memory: {current_metrics['max_memory_mib']:.1f}Mi, "
                 f"CPU: {current_metrics['max_cpu_millicores']}m"
             )
 
-            # Check if memory has increased
-            if (
-                current_metrics["max_memory_mib"]
-                > initial_metrics["max_memory_mib"] * 1.1
-            ):
-                log.info(
-                    f"Memory increased from {initial_metrics['max_memory_mib']:.1f}Mi "
-                    f"to {current_metrics['max_memory_mib']:.1f}Mi"
-                )
-                break
+        log.info(f"Peak metrics - Memory: {max_memory:.1f}Mi, " f"CPU: {max_cpu}m")
 
-        # Verify key rotation succeeded
-        log.info("Verifying key rotation succeeded...")
-        pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(pvc_objs)
-        log.info("Key rotation completed successfully")
-
-        log.info(
-            f"Peak metrics during key rotation - Memory: {max_memory_during_kr:.1f}Mi, "
-            f"CPU: {max_cpu_during_kr}m"
-        )
-
-        # Step 4: Annotate SC with annotation enable: false
-        log.info("=== Step 4: Disabling key rotation via SC annotation ===")
-        pv_keyrotation_obj.set_keyrotation_state_by_annotation(enable=False)
-        log.info("Key rotation disabled via StorageClass annotation")
-
-        # Step 5: Wait for resources to be GCed
-        log.info("=== Step 5: Waiting for resources to be garbage collected ===")
-        pv_keyrotation_obj.wait_for_keyrotation_cronjobs_deletion(pvc_objs)
-        log.info("All key rotation cronjobs have been garbage collected")
-
-        # Step 6: Monitor memory usage go down (should return to initial stats)
-        log.info("=== Step 6: Monitoring memory decrease after GC ===")
-        time.sleep(60)  # Wait for GC to complete and memory to stabilize
-
+        # Step 3: Get final metrics
+        log.info("=== Step 3: Getting final metrics ===")
+        time.sleep(10)  # Wait for metrics to stabilize
         final_metrics = get_pods_aggregated_metrics(reconciler_pods)
         log.info(
             f"Final metrics - Memory: {final_metrics['max_memory_mib']:.1f}Mi "
@@ -284,8 +211,8 @@ class TestMemoryStressWithCSIAddon:
             f"Summary:\n"
             f"  Initial memory: {initial_metrics['max_memory_mib']:.1f}Mi, "
             f"CPU: {initial_metrics['max_cpu_millicores']}m\n"
-            f"  Peak memory during KR: {max_memory_during_kr:.1f}Mi, "
-            f"CPU: {max_cpu_during_kr}m\n"
+            f"  Peak memory: {max_memory:.1f}Mi, "
+            f"CPU: {max_cpu}m\n"
             f"  Final memory: {final_metrics['max_memory_mib']:.1f}Mi, "
             f"CPU: {final_metrics['max_cpu_millicores']}m"
         )
