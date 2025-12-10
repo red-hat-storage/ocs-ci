@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.warp import WarpWorkloadRunner
 
@@ -27,6 +28,31 @@ class TestKedaHA:
     """
     Test RGW's integration with the KEDA autoscaler
     """
+
+    @pytest.fixture(autouse=True, scope="class")
+    def enable_rgw_hpa(self, request):
+        """
+        Annotate the OCS StorageCluster to enable RGW HPA and remove the annotation after the test
+        """
+        storagecluster_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+        )
+
+        def finalizer():
+            # The trailing dash tells OCP to remove the annotation
+            storagecluster_obj.annotate(
+                annotation=f"{constants.ENABLE_RGW_HPA_ANNOTATION_KEY}-",
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+            )
+
+        request.addfinalizer(finalizer)
+
+        storagecluster_obj.annotate(
+            annotation=f'{constants.ENABLE_RGW_HPA_ANNOTATION_KEY}="true"',
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+        )
 
     @pytest.fixture(scope="class")
     def warp_workload_runner(self, request):
@@ -61,9 +87,9 @@ class TestKedaHA:
             bucket_name=bucketname,
             request=request,
             workload_type="mixed",
-            duration="1m",
-            timeout=300,
+            duration="10m",
+            timeout=1800,
         )
 
-        sleep(100)
+        sleep(600)
         warp_workload_runner.stop()
