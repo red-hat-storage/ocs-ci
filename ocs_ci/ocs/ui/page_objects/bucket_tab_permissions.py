@@ -740,6 +740,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 self.bucket_tab[checkbox]
             ), "The checkbox was not checked"
 
+            self.page_has_loaded()
             text = self.get_element_text(self.bucket_tab[msg])
             assert (
                 text == text_checked
@@ -771,10 +772,8 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 text == text_unchecked
             ), f"The text is not correct, expected {text_unchecked}, got {text}"
             return
-        except (NoSuchElementException, TimeoutException):
-            pass
-
-        raise NoSuchElementException(
-            "Could not find an element on public access page "
-            "Check if bucket block public access page is properly loaded."
-        )
+        except (NoSuchElementException, TimeoutException) as e:
+            raise NoSuchElementException(
+                f"Could not find element for {block_public_access.value}. "
+                f"Original error: {e}"
+            ) from e
