@@ -329,6 +329,9 @@ class StorageClusterSetup(object):
             deviceset_data_part["dataPVCTemplate"]["spec"]["resources"]["requests"][
                 "storage"
             ] = f"{pv_size_list[0]}"
+            deviceset_data_part["primaryAffinity"] = config.DEPLOYMENT.get(
+                "partitioned_disk_primary_affinity", "0.0"
+            )
             cluster_data["spec"]["storageDeviceSets"].append(deviceset_data_part)
 
         if self.managed_ibmcloud:
