@@ -166,7 +166,7 @@ def create_cephfs_stress_job(
         parallelism (str, optional): Specifies how many pod replicas running in parallel should execute a job.
 
     Returns:
-        pod_obj: The created Pod object after it's in a running state
+        cephfs_stress_job_obj: The created Job object after it's in a running state
 
     Raises:
         AssertionError: If the pod creation fails
