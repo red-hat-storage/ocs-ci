@@ -1499,6 +1499,14 @@ class Deployment(object):
                             replace_to=csv_change_to,
                         )
 
+        # Create custom storage class early for Azure Performance Plus feature
+        # This needs to be done before StorageSystem/StorageCluster creation
+        if self.custom_storage_class_path is not None:
+            log_step("Creating custom storage class for deployment")
+            self.storage_class = storage_class.create_custom_storageclass(
+                self.custom_storage_class_path
+            )
+
         if is_storage_system_needed():
             logger.info("Creating StorageSystem")
             # change namespace of storage system if needed
