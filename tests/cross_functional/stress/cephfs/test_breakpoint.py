@@ -5,7 +5,7 @@ import time
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cephfs_stress_helpers import (
-    create_cephfs_stress_pod,
+    create_cephfs_stress_job,
     continuous_checks_runner,
     verification_failures,
     stop_event,
@@ -71,7 +71,7 @@ class TestCephfsStress(E2ETest):
         )
         teardown_factory(standby_pod)
         try:
-            cephfs_stress_pod_obj = create_cephfs_stress_pod(
+            cephfs_stress_pod_obj = create_cephfs_stress_job(
                 namespace=proj_name, pvc_name=pvc_obj.name
             )
             logger.info(
