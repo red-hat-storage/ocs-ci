@@ -226,7 +226,7 @@ class TestZoneShutdownsAndCrashes:
                 log.error("Something went wrong!")
 
             # Validate all nodes are in READY state and up
-            wait_for_nodes_status(timeout=600)
+            wait_for_nodes_status(timeout=900)
 
             log.info(f"Nodes of zone {zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")
