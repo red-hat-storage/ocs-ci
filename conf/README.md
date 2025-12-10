@@ -185,6 +185,7 @@ version.
 * `enable_nested_virtualization` - Enable nested virtualization for vSphere platform primarily. Used for kubevirt on HCP Clusters. It sets options kvm_intel nested=1 options kvm_amd nested=1 in MachineConfig
 * `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
 * `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
+* `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
 
 #### REPORTING
 
