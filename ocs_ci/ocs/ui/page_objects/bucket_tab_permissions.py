@@ -735,16 +735,15 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 self.bucket_tab["save_public_access_settings_button"],
                 timeout=QUICK_WAIT,
             )
-
-            assert self.get_checkbox_status(
-                self.bucket_tab[checkbox]
-            ), "The checkbox was not checked"
+            if not self.get_checkbox_status(self.bucket_tab[checkbox]):
+                raise ValueError("The checkbox was not checked")
 
             self.page_has_loaded()
             text = self.get_element_text(self.bucket_tab[msg])
-            assert (
-                text == text_checked
-            ), f"The text is not correct, expected {text_checked}, got {text}"
+            if text != text_checked:
+                raise ValueError(
+                    f"The text is not correct, expected {text_checked}, got {text}"
+                )
 
             # uncheck the checkbox
             self.do_click(
@@ -763,14 +762,15 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             )
             self.do_click(self.bucket_tab["proceed_to_disable_public_access_button"])
 
-            assert not self.get_checkbox_status(
-                self.bucket_tab[checkbox]
-            ), "The checkbox was not unchecked"
+            if self.get_checkbox_status(self.bucket_tab[checkbox]):
+                raise ValueError("The checkbox was not unchecked")
 
             text = self.get_element_text(self.bucket_tab[msg])
-            assert (
-                text == text_unchecked
-            ), f"The text is not correct, expected {text_unchecked}, got {text}"
+            if text != text_unchecked:
+                raise ValueError(
+                    f"The text is not correct, expected {text_unchecked}, got {text}"
+                )
+
             return
         except (NoSuchElementException, TimeoutException) as e:
             raise NoSuchElementException(
