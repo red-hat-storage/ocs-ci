@@ -2666,7 +2666,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "block_all_public_access_msg": (
-        "//label[.//p[contains(., 'Block all public access')]]//span[contains(@class,'pf-v5-c-label__text')]",
+        "//label[.//p[contains(., 'Block all public access')]]//span[contains(@class,'c-label__text')]",
         By.XPATH,
     ),
     "block_new_public_policies_checkbox": (
@@ -2674,7 +2674,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "block_new_public_policies_msg": (
-        "//label[.//p[contains(., 'new public bucket policies')]]//span[contains(@class,'pf-v5-c-label__text')]",
+        "//label[.//p[contains(., 'new public bucket policies')]]//span[contains(@class,'c-label__text')]",
         By.XPATH,
     ),
     "block_cross_account_checkbox": (
@@ -2682,7 +2682,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "block_cross_account_msg": (
-        "//label[.//p[contains(., 'cross-account access')]]//span[contains(@class,'pf-v5-c-label__text')]",
+        "//label[.//p[contains(., 'cross-account access')]]//span[contains(@class,'c-label__text')]",
         By.XPATH,
     ),
     "save_public_access_settings_button": (
