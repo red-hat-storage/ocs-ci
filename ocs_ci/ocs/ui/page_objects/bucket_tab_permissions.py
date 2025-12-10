@@ -765,6 +765,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             if self.get_checkbox_status(self.bucket_tab[checkbox]):
                 raise ValueError("The checkbox was not unchecked")
 
+            self.page_has_loaded()
             text = self.get_element_text(self.bucket_tab[msg])
             if text != text_unchecked:
                 raise ValueError(
