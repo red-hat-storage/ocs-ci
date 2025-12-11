@@ -9695,8 +9695,8 @@ def setup_cnv(request):
             installed = True
             cnv_obj.deploy_cnv()
         if cnv_obj.post_install_verification():
-            # Enable software emulation
-            cnv_obj.enable_software_emulation()
+            # Download and extract the virtctl binary to bin_dir
+            cnv_obj.download_and_extract_virtctl_binary()
 
     finally:
 

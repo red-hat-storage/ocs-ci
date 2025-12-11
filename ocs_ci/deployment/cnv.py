@@ -671,10 +671,10 @@ class CNVInstaller(object):
         self.deploy_hyper_converged()
         # Post CNV installation checks
         self.post_install_verification()
-        # Download and extract the virtctl binary to bin_dir
-        self.download_and_extract_virtctl_binary()
         # Enable software emulation
         self.enable_software_emulation()
+        # Download and extract the virtctl binary to bin_dir
+        self.download_and_extract_virtctl_binary()
 
     def disable_multicluster_engine(self):
         """
