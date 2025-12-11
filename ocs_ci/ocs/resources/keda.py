@@ -1,4 +1,6 @@
+import json
 import logging
+import shlex
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -7,6 +9,7 @@ from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
 )
+from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.ocp import OCP
@@ -38,6 +41,9 @@ class KEDA:
         self.keda_namespace = keda_namespace
         self.sa_name = None
         self.secret_name = None
+        self.token = None
+        self.ca_data = None
+        self.ca_secret_name = None
         self.ta_name = None
         self.scaled_objects = []
 
@@ -99,9 +105,12 @@ class KEDA:
             == 0
         )
 
-    def allow_keda_to_read_thanos_metrics(self):
+    def setup_access_to_thanos_metrics(self):
         """
-        Allow KEDA to read Thanos metrics
+        Setup access to Thanos metrics for KEDA
+
+        This creates a service account, a secret with a token, and a secret with the CA bundle.
+        It then creates a TriggerAuthentication that points KEDA to the token + CA bundle.
         """
         logger.info("Configuring KEDA to read Thanos metrics")
         ocp_obj = OCP(namespace=self.workload_namespace)
@@ -115,21 +124,21 @@ class KEDA:
 
         # Mint a token for the service account and store it in a secret
         self.secret_name = create_unique_resource_name("keda-prom-token", "secret")
-        token = ocp_obj.exec_oc_cmd(f"create token {self.sa_name}")
+        self.token = ocp_obj.exec_oc_cmd(f"create token {self.sa_name}")
         ocp_obj.exec_oc_cmd(
-            f"create secret generic {self.secret_name} --from-literal=bearerToken={token}"
+            f"create secret generic {self.secret_name} --from-literal=bearerToken={self.token}"
         )
 
         # Extract the cluster CA bundle so KEDA can verify Thanos TLS
         # TODO: This currently leaves a leftover we need to cleanup at teardown
-        ca_data = OCP(namespace="openshift-monitoring").exec_oc_cmd(
+        self.ca_data = OCP(namespace="openshift-monitoring").exec_oc_cmd(
             "get configmap serving-certs-ca-bundle -o jsonpath='{.data.service-ca\\.crt}'",
             out_yaml_format=False,
         )
         self.ca_secret_name = create_unique_resource_name("keda-prom-ca", "secret")
         ocp_obj.exec_oc_cmd(
             f"create secret generic {self.ca_secret_name} "
-            f"--from-literal=ca.crt='{ca_data}'"
+            f"--from-literal=ca.crt='{self.ca_data}'"
         )
 
         # Create a TriggerAuthentication that points KEDA to the token + CA bundle
@@ -152,50 +161,84 @@ class KEDA:
 
         logger.info("KEDA configured to read Thanos metrics")
 
-    # TODO
-    def check_keda_thanos_metrics_read(self):
+    def can_read_thanos_metrics(self):
         """
-        Check if KEDA is configured to read Thanos metrics
-        """
-        logger.info("Checking if KEDA is configured to read Thanos metrics")
-        return True
-
-    def create_thanos_metric_scaled_object(self, target_ref_dict, query, threshold):
-        """
-        Create and register a KEDA ScaledObject driven by a Thanos metric.
-
-        A ScaledObject defines how KEDA should scale a workload: which target
-        to scale, what metric to watch, and the conditions that trigger scaling.
-
-        Args:
-            target_ref_obj (dict): A dictionary containing the target reference object.
-            Example:
-            {
-                "apiVersion": "apps/v1",
-                "kind": "Deployment",
-                "name": "deployment-name",
-                "namespace": "deployment-namespace"
-            }
-            query (str): Thanos query used as the scaling signal.
-            threshold (str): Metric threshold that triggers scaling.
+        Check if the token and CA that KEDA is configured to use are valid
+        by querying the Thanos Querier internal address from one of the Prometheus pods.
 
         Returns:
-            ScaledObject: The configured ScaledObject instance.
+            bool: True if KEDA is configured to read Thanos metrics, False otherwise.
         """
-        # Common configuration to watch Thanos metrics
-        scaled_obj = (
-            ScaledObject()
-            .set_trigger_address(constants.THANOS_QUERIER_ADDRESS)
-            .set_trigger_authentication_ref(self.ta_name)
-            .set_scaled_obj_namespace(self.workload_namespace)
+        logger.info(
+            "Checking if KEDA's token and CA can be used to read Thanos metrics"
         )
 
-        # Specifics on what to scale and on what metric to scale
-        scaled_obj = (
-            scaled_obj.set_scale_target_ref(target_ref_dict)
-            .set_trigger_query(query)
-            .set_trigger_threshold(threshold)
+        if not self.token or not self.ca_secret_name:
+            logger.warning("KEDA is not configured to read Thanos metrics")
+            return False
+
+        # Get one of the Prometheus pods
+        prom_pod_obj = get_pods_having_label(
+            constants.PROMETHEUS_POD_LABEL, constants.OPENSHIFT_MONITORING_NAMESPACE
+        )[0]
+        prom_pod = Pod(**prom_pod_obj)
+
+        # Build the headers and URL for the query
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+        }
+        header_args = " ".join(
+            f"-H {shlex.quote(f'{k}: {v}')}" for k, v in headers.items()
         )
+        url = f"{constants.THANOS_QUERIER_INTERNAL_ADDRESS}/api/v1/query?query=time()"
+
+        # Feed the CA data to the curl command as a bash variable
+        # shlex is needed to properly quote the CA data and the URL
+        bash_script = (
+            "CERT=$(cat << 'EOF'\n"
+            f"{self.ca_data.strip()}\n"
+            "EOF\n"
+            ")\n"
+            f"curl -s -k {header_args} --cacert <(printf '%s\\n' \"$CERT\") {shlex.quote(url)}\n"
+        )
+        # Wrap it for bash -lc (so <(...) works)
+        cmd = f"bash -lc {shlex.quote(bash_script)}"
+
+        raw_response = prom_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        response = json.loads(raw_response)
+        if response.get("status") == "success":
+            logger.info("KEDA's token and CA can be used to read Thanos metrics")
+            return True
+        else:
+            logger.warning(
+                (
+                    "KEDA's token and CA cannot be used to read Thanos metrics"
+                    f"Got response: {response}"
+                )
+            )
+            return False
+
+    def create_scaled_object(self, config_dict):
+        """
+        Create and register a KEDA ScaledObject.
+
+        Args:
+            config_dict (dict): Configuration dictionary for the ScaledObject.
+                See ScaledObject.__init__ for valid keys.
+
+        Returns:
+            ScaledObject: The created ScaledObject instance.
+        """
+        # Add defaults that are specific to this KEDA instance
+        config_dict = config_dict.copy()
+        config_dict.setdefault("namespace", self.workload_namespace)
+        config_dict.setdefault(
+            "trigger_address", constants.THANOS_QUERIER_INTERNAL_ADDRESS
+        )
+        config_dict.setdefault("authenticationRef", self.ta_name)
+
+        scaled_obj = ScaledObject(config_dict)
         self.scaled_objects.append(scaled_obj.create())
         return scaled_obj
 
@@ -263,87 +306,167 @@ class KEDA:
 
 class ScaledObject:
     """
-    A class for managing scaled objects for KEDA.
+    A class for managing KEDA ScaledObject custom resources.
 
-    Uses the builder pattern to simplify its creation.
+    Accepts a flat dictionary of configurable values that map to the ScaledObject CR structure.
     """
 
-    def __init__(self):
+    # Mapping from flat dict keys to nested paths in the YAML
+    # Supports both camelCase and snake_case keys
+    _CONFIG_MAPPING = {
+        "namespace": ("metadata", "namespace"),
+        "scaleTargetRef": ("spec", "scaleTargetRef"),
+        "scale_target_ref": ("spec", "scaleTargetRef"),
+        "minReplicaCount": ("spec", "minReplicaCount"),
+        "min_replica_count": ("spec", "minReplicaCount"),
+        "maxReplicaCount": ("spec", "maxReplicaCount"),
+        "max_replica_count": ("spec", "maxReplicaCount"),
+        "pollingInterval": ("spec", "pollingInterval"),
+        "polling_interval": ("spec", "pollingInterval"),
+        "cooldownPeriod": ("spec", "cooldownPeriod"),
+        "cooldown_period": ("spec", "cooldownPeriod"),
+        "trigger_address": ("spec", "triggers", 0, "metadata", "serverAddress"),
+        "serverAddress": ("spec", "triggers", 0, "metadata", "serverAddress"),
+        "query": ("spec", "triggers", 0, "metadata", "query"),
+        "threshold": ("spec", "triggers", 0, "metadata", "threshold"),
+        "authenticationRef": ("spec", "triggers", 0, "authenticationRef", "name"),
+        "authentication_ref": ("spec", "triggers", 0, "authenticationRef", "name"),
+        "trigger_authentication_ref": (
+            "spec",
+            "triggers",
+            0,
+            "authenticationRef",
+            "name",
+        ),
+    }
+
+    def __init__(self, config_dict=None):
+        """
+        Initialize a ScaledObject from a flat configuration dictionary.
+
+        Args:
+            config_dict (dict, optional): Flat dictionary with configurable values.
+                Only specify the values you want to override from the template.
+                Valid keys:
+                - namespace: Namespace for the ScaledObject
+                - scaleTargetRef: Target reference to scale (dict)
+                - minReplicaCount: Minimum replica count (int)
+                - maxReplicaCount: Maximum replica count (int)
+                - pollingInterval: Polling interval in seconds (int)
+                - cooldownPeriod: Cooldown period in seconds (int)
+                - trigger_address or serverAddress: Thanos querier address (str)
+                - query: Prometheus query string (str)
+                - threshold: Metric threshold (str)
+                - authenticationRef or trigger_authentication_ref: Auth ref name (str)
+
+                Example:
+                {
+                    'namespace': 'openshift-storage',
+                    'scaleTargetRef': {'name': 'my-deployment'},
+                    'cooldownPeriod': 60,
+                    'query': 'sum(rate(ceph_rgw_req[2m]))'
+                }
+        """
+        config_dict = config_dict or {}
+
+        # Load the template as a base
+        self.data = templating.load_yaml(constants.KEDA_SCALED_OBJECT_YAML)
+
+        # Generate a unique name if not provided
         self.scaled_object_name = create_unique_resource_name(
             "keda-scaled-object", "scaledobject"
         )
-        self.data = templating.load_yaml(constants.KEDA_SCALED_OBJECT_YAML)
         self.data["metadata"]["name"] = self.scaled_object_name
+
+        # Apply config dict values to the template
+        self._apply_config(config_dict)
+
         self.ocs_obj = None
+
+    def _apply_config(self, config_dict):
+        """
+        Apply flat config dict values to the nested YAML structure.
+
+        Args:
+            config_dict (dict): Flat dictionary of configurable values
+        """
+        for key, value in config_dict.items():
+            if key not in self._CONFIG_MAPPING:
+                raise ValueError(
+                    f"Unknown config key: '{key}'. "
+                    f"Valid keys: {list(self._CONFIG_MAPPING.keys())}"
+                )
+
+            path = self._CONFIG_MAPPING[key]
+            self._set_nested_value(self.data, path, value)
+
+    def _set_nested_value(self, data, path, value):
+        """
+        Set a nested value in the data structure.
+
+        Args:
+            data (dict): The data structure to update
+            path (tuple): Tuple of keys representing the path
+            value: The value to set
+        """
+        # Traverse to the parent container (all keys except the last)
+        container = data
+        for key in path[:-1]:
+            container = self._ensure_and_get(container, key)
+
+        # Ensure the final container is ready, then set the value
+        final_key = path[-1]
+        self._ensure_and_get(container, final_key)
+        container[final_key] = value
+
+    def _ensure_and_get(self, container, key):
+        """
+        Ensure the container has the key/index and return the nested value.
+
+        Args:
+            container: The container (dict or list) to access
+            key: The key/index to access
+
+        Returns:
+            The nested container at the key
+        """
+        if isinstance(key, int):
+            if not isinstance(container, list):
+                raise ValueError(f"Expected list, got {type(container)}")
+            # Extend list if needed
+            while len(container) <= key:
+                container.append({})
+            return container[key]
+        else:
+            if not isinstance(container, dict):
+                raise ValueError(f"Expected dict, got {type(container)}")
+            # Create dict entry if missing
+            if key not in container:
+                container[key] = {}
+            return container[key]
 
     @property
     def is_created(self):
+        """Check if the ScaledObject has been created in the cluster."""
         return self.ocs_obj is not None
 
     def create(self):
+        """
+        Create the ScaledObject CR in the cluster.
+
+        Returns:
+            OCS: The created OCS object
+        """
         self.ocs_obj = create_resource(**self.data)
         return self.ocs_obj
 
-    def _update(self, path, value):
+    def delete(self, wait=True):
         """
-        Updates the data and applies it to the OCS object if it is already created
+        Delete the ScaledObject CR from the cluster.
 
         Args:
-            path (tuple): The path to the value to update
-            value (any): The value to update the path to
-
-        Returns:
-            self: This allows for convenient chaining of methods
+            wait (bool): Whether to wait for deletion to complete
         """
-        try:
-            d = self.data
-            for p in path[:-1]:
-                d = d[p]
-            d[path[-1]] = value
-        except KeyError:
-            raise KeyError(f"Path {path} not found in data")
-
-        if self.is_created:
-            self.ocs_obj.apply(**self.data)
-
-        return self
-
-    def set_scaled_obj_namespace(self, namespace):
-        path = ("metadata", "namespace")
-        return self._update(path, namespace)
-
-    def set_scale_target_ref(self, ref):
-        path = ("spec", "scaleTargetRef")
-        return self._update(path, ref)
-
-    def set_min_replica_count(self, n):
-        path = ("spec", "minReplicaCount")
-        return self._update(path, n)
-
-    def set_max_replica_count(self, n):
-        path = ("spec", "maxReplicaCount")
-        return self._update(path, n)
-
-    def set_polling_interval(self, n):
-        path = ("spec", "pollingInterval")
-        return self._update(path, n)
-
-    def set_cooldown_period(self, n):
-        path = ("spec", "cooldownPeriod")
-        return self._update(path, n)
-
-    def set_trigger_address(self, addr):
-        path = ("spec", "triggers", 0, "metadata", "serverAddress")
-        return self._update(path, addr)
-
-    def set_trigger_query(self, q):
-        path = ("spec", "triggers", 0, "metadata", "query")
-        return self._update(path, q)
-
-    def set_trigger_threshold(self, t):
-        path = ("spec", "triggers", 0, "metadata", "threshold")
-        return self._update(path, t)
-
-    def set_trigger_authentication_ref(self, ref):
-        path = ("spec", "triggers", 0, "authenticationRef", "name")
-        return self._update(path, ref)
+        if not self.ocs_obj:
+            raise ValueError("ScaledObject has not been created yet")
+        self.ocs_obj.delete(wait=wait)

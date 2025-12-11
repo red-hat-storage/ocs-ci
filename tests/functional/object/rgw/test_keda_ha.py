@@ -9,9 +9,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.warp import WarpWorkloadRunner
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -65,18 +68,31 @@ class TestKedaHA:
     ):
         """
         Test RGW's integration with Keda autoscaler
-        """
-        keda = keda_class
-        logger.info(f"KEDA: {keda}")
-        assert keda.is_installed(), "KEDA is not installed"
 
-        scaled_object = keda.create_thanos_metric_scaled_object(
-            target_ref_dict=RGW_TARGET_REF_DICT,
-            query="sum(rate(ceph_rgw_req[2m]))",
-            threshold="0.02",
+        1. Create a ScaledObject to autoscale the RGW deployment with a low
+        threshold.
+        2. Start a warp workload on an RGW bucket to run in the background
+        3. Wait for the RGW pods to upscale to the target max replicas
+        4. Stop the warp workload
+        5. Wait for the RGW pods to downscale to the min replica count
+        """
+        TARGET_MAX_REPLICAS = 5
+        TARGET_MIN_REPLICAS = 1
+        THRESHOLD = "7.00"
+
+        # 1. Create a ScaledObject to autoscale the RGW deployment
+        scaled_object = keda_class.create_scaled_object(
+            {
+                "scaleTargetRef": RGW_TARGET_REF_DICT,
+                "query": "sum(rate(ceph_rgw_req[1m]))",
+                "threshold": THRESHOLD,
+                "minReplicaCount": TARGET_MIN_REPLICAS,
+                "maxReplicaCount": TARGET_MAX_REPLICAS,
+            }
         )
         logger.info(f"ScaledObject: {scaled_object}")
 
+        # 2. Start a warp workload on an RGW bucket to run in the background
         bucket = rgw_bucket_factory(1, "RGW-OC")[0]
         bucketname = bucket.name
         obc_obj = OBC(bucketname)
@@ -87,9 +103,52 @@ class TestKedaHA:
             bucket_name=bucketname,
             request=request,
             workload_type="mixed",
-            duration="10m",
-            timeout=1800,
+            duration="30s",
+            concurrent=10,
+            obj_size="1MiB",
         )
 
-        sleep(600)
-        warp_workload_runner.stop()
+        # 3. Wait for the RGW pods to upscale
+        try:
+            for rgw_pods_sampled in TimeoutSampler(
+                timeout=300,
+                sleep=30,
+                func=get_pods_having_label,
+                label=constants.RGW_APP_LABEL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ):
+                pod_names = "\n".join(
+                    [pod["metadata"]["name"] for pod in rgw_pods_sampled]
+                )
+                logger.info(f"RGW pods running:\n{pod_names}")
+                if len(rgw_pods_sampled) == TARGET_MAX_REPLICAS:
+                    logger.info("RGW pods upscaled to target max replicas as expected.")
+                    break
+        except TimeoutExpiredError:
+            logger.error("RGW did not upscale as expected.")
+            raise
+        finally:
+            # 4. Stop the warp workload
+            warp_workload_runner.stop()
+
+        # 5. Wait for the RGW pods to downscale to the min replica count
+        try:
+            for rgw_pods_sampled in TimeoutSampler(
+                timeout=300,
+                sleep=30,
+                func=get_pods_having_label,
+                label=constants.RGW_APP_LABEL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ):
+                pod_names = "\n".join(
+                    [pod["metadata"]["name"] for pod in rgw_pods_sampled]
+                )
+                logger.info(f"RGW pods running:\n{pod_names}")
+                if len(rgw_pods_sampled) == TARGET_MIN_REPLICAS:
+                    logger.info(
+                        "RGW pods downscaled to target min replicas as expected."
+                    )
+                    break
+        except TimeoutExpiredError:
+            logger.error("RGW did not downscale as expected.")
+            raise
