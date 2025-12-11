@@ -1972,7 +1972,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         self.catsrc_image = f"{self.odf_registry}:{self.odf_version}"
         self.namespace_client = config.ENV_DATA.get(
-            "client_namespace", "openshift-storage-client"
+            "client_namespace", "openshift-storage"
         )
         # default cluster name picked from the storage client yaml
         storage_client_data = templating.load_yaml(
@@ -2255,7 +2255,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            resource_name="openshift-storage-client-operator-group",
+            resource_name="openshift-storage-operator-group",
             should_exist=True,
         )
 
