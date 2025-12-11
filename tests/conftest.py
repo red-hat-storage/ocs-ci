@@ -182,7 +182,6 @@ from ocs_ci.utility.multicluster import (
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
-    exec_cmd,
     get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
