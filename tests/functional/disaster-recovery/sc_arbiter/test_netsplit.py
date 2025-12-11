@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 
 # from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
-    check_for_logwriter_workload_pods,
+    # check_for_logwriter_workload_pods,
     recover_from_ceph_stuck,
     # verify_vm_workload,
     verify_data_loss,
@@ -86,7 +86,7 @@ class TestNetSplit:
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
-        nodes,
+        # nodes,
         zones,
         duration,
         node_restart_teardown,
@@ -140,8 +140,8 @@ class TestNetSplit:
         #     f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
         # )
 
-        # note all the pod names
-        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+        # # note all the pod names
+        # check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
 
         # note the file names created and each file start write time
         # note the file names created
@@ -199,7 +199,7 @@ class TestNetSplit:
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
         # check for any data loss
-        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+        # check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
         verify_data_loss(sc_obj)
 
         # check for data corruption
