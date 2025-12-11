@@ -735,10 +735,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 self.bucket_tab["save_public_access_settings_button"],
                 timeout=QUICK_WAIT,
             )
+
+            self.page_has_loaded()
             if not self.get_checkbox_status(self.bucket_tab[checkbox]):
                 raise ValueError("The checkbox was not checked")
 
-            self.page_has_loaded()
             text = self.get_element_text(self.bucket_tab[msg])
             if text != text_checked:
                 raise ValueError(
@@ -762,10 +763,10 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             )
             self.do_click(self.bucket_tab["proceed_to_disable_public_access_button"])
 
+            self.page_has_loaded()
             if self.get_checkbox_status(self.bucket_tab[checkbox]):
                 raise ValueError("The checkbox was not unchecked")
 
-            self.page_has_loaded()
             text = self.get_element_text(self.bucket_tab[msg])
             if text != text_unchecked:
                 raise ValueError(
