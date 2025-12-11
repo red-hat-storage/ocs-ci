@@ -206,6 +206,7 @@ ROUTE = "Route"
 SERVICE = "Service"
 DAEMONSET = "DaemonSet"
 CEPHOBJECTSTORE = "cephobjectstore"
+CEPHOBJECTSTORE_NAME = "ocs-storagecluster-cephobjectstore"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
@@ -305,6 +306,7 @@ STORAGE_AUTO_SCALER = "StorageAutoScaler"
 INTERNAL_STORAGE_CONSUMER_NAME = "internal"
 CEPH_DRIVER_CSI = "drivers.csi.ceph.io"
 ADDONDEPLOYMENTCONFIG = "AddOnDeploymentConfig"
+TRIGGER_AUTHENTICATION = "TriggerAuthentication"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -3658,3 +3660,13 @@ RBD_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
 )
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+
+# KEDA and RGW HA
+KEDACORE_REPO_URL = "https://kedacore.github.io/charts"
+KEDA_TRIGGER_AUTHENTICATION_YAML = os.path.join(
+    TEMPLATE_DIR, "keda", "trigger_authentication.yaml"
+)
+KEDA_SCALED_OBJECT_YAML = os.path.join(TEMPLATE_DIR, "keda", "scaled_object.yaml")
+THANOS_QUERIER_INTERNAL_ADDRESS = "https://thanos-querier.openshift-monitoring.svc:9091"
+CLUSTER_MONITORING_VIEW_ROLE = "cluster-monitoring-view"
+ENABLE_RGW_HPA_ANNOTATION_KEY = "ocs.openshift.io/enable-rgw-autoscale"
