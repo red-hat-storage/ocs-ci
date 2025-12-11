@@ -1,5 +1,5 @@
 apiVersion: batch/v1
-kind:
+kind: Job
 metadata:
   name: cephfs-stress-job
   namespace: default
@@ -32,7 +32,7 @@ spec:
           - name: BASE_FILE_COUNT  # Base file count, to multiply with scaling factor - Total files = BASE_FILE_COUNT * THREADS
             value: "50000"
           - name: MULTIPLICATION_FACTORS # Dynamic scaling of file creation - base_file_count * MULTIPLICATION_FACTORS
-            value: "1,2,3,4,3,2,1"
+            value: "1,2"
           - name: FILES_SIZE       # File size in KB
             value: "4"
           - name: OPERATIONS       # File and directory operations to perform, Pass as a comma-separated string

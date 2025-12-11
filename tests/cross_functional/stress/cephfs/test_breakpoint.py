@@ -46,7 +46,7 @@ class TestCephfsStress(E2ETest):
 
         """
         CHECKS_RUNNER_INTERVAL_MINUTES = 30
-        POD_INTERVAL_SECONDS = 300
+        JOB_POD_INTERVAL_SECONDS = 300
         stress_checks_thread = threading.Thread(
             target=continuous_checks_runner,
             args=(CHECKS_RUNNER_INTERVAL_MINUTES, threading_lock),
@@ -71,13 +71,12 @@ class TestCephfsStress(E2ETest):
         )
         teardown_factory(standby_pod)
         try:
-            cephfs_stress_pod_obj = create_cephfs_stress_job(
+            cephfs_stress_job_obj = create_cephfs_stress_job(
                 namespace=proj_name, pvc_name=pvc_obj.name
             )
             logger.info(
-                f"The CephFS-stress pod {cephfs_stress_pod_obj.name} is created "
+                f"The CephFS-stress Job {cephfs_stress_job_obj.name} has been submitted"
             )
-
             while True:
                 # Check for failure signal from the check-thread
                 if verification_failures:
@@ -85,30 +84,30 @@ class TestCephfsStress(E2ETest):
                         f"Test failed due to validation failure: {verification_failures[0]}"
                     )
 
-                status = cephfs_stress_pod_obj.status()
+                status = cephfs_stress_job_obj.status()
 
                 if status == constants.STATUS_COMPLETED:
                     logger.info(
-                        f"Pod '{cephfs_stress_pod_obj.name}' reached 'Completed' state"
+                        f"Job '{cephfs_stress_job_obj.name}' reached 'Completed' state"
                     )
                     break
                 elif status == constants.STATUS_RUNNING:
                     logger.info(
-                        f"******* {cephfs_stress_pod_obj.name} is still in {status} state. "
-                        f"Waiting for {POD_INTERVAL_SECONDS}s...*******"
+                        f"******* {cephfs_stress_job_obj.name} is still in {status} state. "
+                        f"Waiting for {JOB_POD_INTERVAL_SECONDS}s...*******"
                     )
                     logger.info(
-                        f"******* Check {cephfs_stress_pod_obj.name} logs to get more details on the ongoing "
-                        "file and directory opearations.....*******"
+                        f"******* Check {cephfs_stress_job_obj.name} job logs to get more details on the ongoing "
+                        "file and directory operations.....*******"
                     )
-                    time.sleep(POD_INTERVAL_SECONDS)
+                    time.sleep(JOB_POD_INTERVAL_SECONDS)
                 else:
                     raise Exception(
-                        f"Pod '{cephfs_stress_pod_obj.name}' entered unexpected state '{status}' state"
+                        f"Job '{cephfs_stress_job_obj.name}' entered unexpected state '{status}' state"
                     )
 
         finally:
-            teardown_factory(cephfs_stress_pod_obj)
+            teardown_factory(cephfs_stress_job_obj)
             logger.info("Signaling check thread to stop...")
             stop_event.set()
             stress_checks_thread.join()

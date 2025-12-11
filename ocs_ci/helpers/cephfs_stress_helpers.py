@@ -11,7 +11,8 @@ from ocs_ci.ocs.constants import (
     STATUS_RUNNING,
 )
 from ocs_ci.utility import templating
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import (
     validate_pod_oomkilled,
@@ -105,7 +106,7 @@ def create_cephfs_stress_pod(
         "claimName"
     ] = pvc_name
     logger.info("Set environment variables in the pod template")
-    set_env_vars(cephfs_stress_pod_data, env_vars)
+    set_env_vars(cephfs_stress_pod_data, env_vars, pod_type=constants.POD)
     cephfs_stress_pod_obj = pod.Pod(**cephfs_stress_pod_data)
     logger.info("Creating Cephfs stress pod")
     created_resource = cephfs_stress_pod_obj.create()
@@ -119,16 +120,24 @@ def create_cephfs_stress_pod(
     return cephfs_stress_pod_obj
 
 
-def set_env_vars(pod_data, env_vars):
+def set_env_vars(pod_data, env_vars, type):
     """
     Updates the pod's environment variables in the container spec based on the provided mapping
 
     Args:
         pod_data (dict): The pod specification loaded from YAML.
         env_vars (dict): Dictionary mapping env variable names to their desired values.
+        type (str): pod type, either a regular pod or a job pod
 
     """
-    container_env = pod_data["spec"]["containers"][0].get("env", [])
+    if type == constants.POD:
+        container_env = pod_data["spec"]["containers"][0].get("env", [])
+    elif type == constants.JOB:
+        container_env = pod_data["spec"]["template"]["spec"]["containers"][0].get(
+            "env", []
+        )
+    else:
+        raise ValueError(f"Unsupported pod_type: '{type}'. Expected POD or JOB.")
     for env in container_env:
         name = env.get("name")
         if name in env_vars:
@@ -149,7 +158,7 @@ def create_cephfs_stress_job(
     parallelism=None,
 ):
     """
-    Creates a CephFS stress pods job. This job launches concurrent pods based on the configured
+    Creates a CephFS stress Job. This job launches concurrent pods based on the configured
     parallelism count, where each pod executes generate numerous small files and directories.
     Configured with specific parameters, the workload stresses CephFS by gradually increasing
     the load in incremental stages.
@@ -166,7 +175,7 @@ def create_cephfs_stress_job(
         parallelism (str, optional): Specifies how many pod replicas running in parallel should execute a job.
 
     Returns:
-        cephfs_stress_job_obj: The created Job object after it's in a running state
+        cephfs_stress_job_obj(OCS): The created Job object after it's in a running state
 
     Raises:
         AssertionError: If the pod creation fails
@@ -182,18 +191,25 @@ def create_cephfs_stress_job(
     }
     cephfs_stress_job_data = templating.load_yaml(CEPHFS_STRESS_JOB_YAML)
     cephfs_stress_job_data["metadata"]["namespace"] = namespace
-    cephfs_stress_job_data["spec"]["parallelism"] = parallelism
-    cephfs_stress_job_data["spec"]["volumes"][0]["persistentVolumeClaim"][
-        "claimName"
-    ] = pvc_name
+    cephfs_stress_job_data["spec"]["template"]["spec"]["volumes"][0][
+        "persistentVolumeClaim"
+    ]["claimName"] = pvc_name
+    if parallelism:
+        cephfs_stress_job_data["spec"]["parallelism"] = parallelism
     logger.info("Set environment variables in the pod template")
-    set_env_vars(cephfs_stress_job_data, env_vars)
-    cephfs_stress_job_obj = pod.Pod(**cephfs_stress_job_data)
-    logger.info("Creating Cephfs stress pod")
-    created_resource = cephfs_stress_job_obj.create()
-    assert created_resource, f"Failed to create Job {cephfs_stress_job_obj.name}"
+    set_env_vars(cephfs_stress_job_data, env_vars, pod_type=constants.JOB)
+    job_name = cephfs_stress_job_data["metadata"]["name"]
+    job_ocs_obj = OCS(**cephfs_stress_job_data)
+    created_resource = job_ocs_obj.create()
+    assert created_resource, f"Failed to create Job {job_ocs_obj.name}"
 
-    logger.info("Waiting for Cephfs stress pod to start")
+    logger.info(f"Waiting for Job {job_ocs_obj.name} to start")
+    job_ocp_obj = ocp.OCP(
+        kind=constants.JOB, namespace=namespace, resource_name=job_name
+    )
+    job_ocp_dict = job_ocp_obj.get(resource_name=job_ocp_obj.resource_name)
+    cephfs_stress_job_obj = OCS(**job_ocp_dict)
+
     helpers.wait_for_resource_state(
         cephfs_stress_job_obj, state=STATUS_RUNNING, timeout=300
     )
