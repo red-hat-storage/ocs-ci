@@ -116,7 +116,6 @@ class PlatformNodesFactory:
     def get_nodes_platform(self):
         cluster_name = config.ENV_DATA.get("cluster_name")
         platform = config.ENV_DATA["platform"]
-        print(f"-------Amrita-------platform: {platform} cluster name: {cluster_name}")
         if platform == constants.VSPHERE_PLATFORM:
             deployment_type = config.ENV_DATA["deployment_type"]
             if cluster.is_lso_cluster():
@@ -137,10 +136,6 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ipi":
                 platform += "_ipi"
-
-        if config.ENV_DATA["platform"] == constants.HCI_BAREMETAL:
-            if config.ENV_DATA["deployment_type"] == "upi":
-                platform += "_upi"
         return self.cls_map[platform]()
 
 
