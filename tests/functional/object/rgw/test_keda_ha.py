@@ -7,6 +7,8 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     tier1,
+    rgw,
+    red_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -26,6 +28,8 @@ RGW_SCALE_TARGET_REF = {
 }
 
 
+@rgw
+@red_squad
 @skipif_disconnected_cluster
 class TestKedaHA:
     """
