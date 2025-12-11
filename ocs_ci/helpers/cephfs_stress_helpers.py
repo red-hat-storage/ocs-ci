@@ -106,7 +106,7 @@ def create_cephfs_stress_pod(
         "claimName"
     ] = pvc_name
     logger.info("Set environment variables in the pod template")
-    set_env_vars(cephfs_stress_pod_data, env_vars, pod_type=constants.POD)
+    set_env_vars(cephfs_stress_pod_data, env_vars, type=constants.POD)
     cephfs_stress_pod_obj = pod.Pod(**cephfs_stress_pod_data)
     logger.info("Creating Cephfs stress pod")
     created_resource = cephfs_stress_pod_obj.create()
@@ -197,7 +197,7 @@ def create_cephfs_stress_job(
     if parallelism:
         cephfs_stress_job_data["spec"]["parallelism"] = parallelism
     logger.info("Set environment variables in the pod template")
-    set_env_vars(cephfs_stress_job_data, env_vars, pod_type=constants.JOB)
+    set_env_vars(cephfs_stress_job_data, env_vars, type=constants.JOB)
     job_name = cephfs_stress_job_data["metadata"]["name"]
     job_ocs_obj = OCS(**cephfs_stress_job_data)
     created_resource = job_ocs_obj.create()
