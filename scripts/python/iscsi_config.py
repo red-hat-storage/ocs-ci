@@ -23,7 +23,7 @@ MOUNT_BASE = "/mnt/iscsi_lun"
 
 
 def ssh_run(host, cmd, username=USERNAME):
-    """ "
+    """
     Executes a command on a remote host via SSH using Paramiko.
 
     Parameters:
