@@ -219,27 +219,26 @@ class KEDA:
             )
             return False
 
-    def create_scaled_object(self, config_dict):
+    def create_thanos_metric_scaled_object(self, config_dict):
         """
-        Create and register a KEDA ScaledObject.
+        Create and register a KEDA ScaledObject driven by a Thanos metric.
+        A ScaledObject defines how KEDA should scale a workload: which target
+        to scale, what metric to watch, and the conditions that trigger scaling.
 
         Args:
-            config_dict (dict): Configuration dictionary for the ScaledObject.
-                See ScaledObject.__init__ for valid keys.
-
+            config_dict (dict): A dictionary containing the configuration for the ScaledObject.
+            See ScaledObject.KEYS_TO_YAML_PATH for valid keys.
         Returns:
-            ScaledObject: The created ScaledObject instance.
+            ScaledObject: The configured ScaledObject instance.
         """
-        # Add defaults that are specific to this KEDA instance
-        config_dict = config_dict.copy()
         config_dict.setdefault("namespace", self.workload_namespace)
         config_dict.setdefault(
-            "trigger_address", constants.THANOS_QUERIER_INTERNAL_ADDRESS
+            "serverAddress", constants.THANOS_QUERIER_INTERNAL_ADDRESS
         )
         config_dict.setdefault("authenticationRef", self.ta_name)
 
         scaled_obj = ScaledObject(config_dict)
-        self.scaled_objects.append(scaled_obj.create())
+        self.scaled_objects.append(scaled_obj.ocp_obj)
         return scaled_obj
 
     # TODO clean this mess
@@ -306,167 +305,99 @@ class KEDA:
 
 class ScaledObject:
     """
-    A class for managing KEDA ScaledObject custom resources.
-
-    Accepts a flat dictionary of configurable values that map to the ScaledObject CR structure.
+    A class for managing scaled objects for KEDA.
     """
 
-    # Mapping from flat dict keys to nested paths in the YAML
-    # Supports both camelCase and snake_case keys
-    _CONFIG_MAPPING = {
+    KEYS_TO_YAML_PATH = {
+        "name": ("metadata", "name"),
         "namespace": ("metadata", "namespace"),
         "scaleTargetRef": ("spec", "scaleTargetRef"),
-        "scale_target_ref": ("spec", "scaleTargetRef"),
         "minReplicaCount": ("spec", "minReplicaCount"),
-        "min_replica_count": ("spec", "minReplicaCount"),
         "maxReplicaCount": ("spec", "maxReplicaCount"),
-        "max_replica_count": ("spec", "maxReplicaCount"),
         "pollingInterval": ("spec", "pollingInterval"),
-        "polling_interval": ("spec", "pollingInterval"),
         "cooldownPeriod": ("spec", "cooldownPeriod"),
-        "cooldown_period": ("spec", "cooldownPeriod"),
-        "trigger_address": ("spec", "triggers", 0, "metadata", "serverAddress"),
         "serverAddress": ("spec", "triggers", 0, "metadata", "serverAddress"),
         "query": ("spec", "triggers", 0, "metadata", "query"),
         "threshold": ("spec", "triggers", 0, "metadata", "threshold"),
         "authenticationRef": ("spec", "triggers", 0, "authenticationRef", "name"),
-        "authentication_ref": ("spec", "triggers", 0, "authenticationRef", "name"),
-        "trigger_authentication_ref": (
-            "spec",
-            "triggers",
-            0,
-            "authenticationRef",
-            "name",
-        ),
     }
 
-    def __init__(self, config_dict=None):
+    def __init__(self, config_dict):
         """
-        Initialize a ScaledObject from a flat configuration dictionary.
-
         Args:
-            config_dict (dict, optional): Flat dictionary with configurable values.
-                Only specify the values you want to override from the template.
-                Valid keys:
-                - namespace: Namespace for the ScaledObject
-                - scaleTargetRef: Target reference to scale (dict)
-                - minReplicaCount: Minimum replica count (int)
-                - maxReplicaCount: Maximum replica count (int)
-                - pollingInterval: Polling interval in seconds (int)
-                - cooldownPeriod: Cooldown period in seconds (int)
-                - trigger_address or serverAddress: Thanos querier address (str)
-                - query: Prometheus query string (str)
-                - threshold: Metric threshold (str)
-                - authenticationRef or trigger_authentication_ref: Auth ref name (str)
-
-                Example:
-                {
-                    'namespace': 'openshift-storage',
-                    'scaleTargetRef': {'name': 'my-deployment'},
-                    'cooldownPeriod': 60,
-                    'query': 'sum(rate(ceph_rgw_req[2m]))'
-                }
+            config_dict (dict): A dictionary containing the configuration for the ScaledObject.
         """
-        config_dict = config_dict or {}
+        self._validate_config_dict(config_dict)
 
-        # Load the template as a base
+        self.ocp_obj = None
+
         self.data = templating.load_yaml(constants.KEDA_SCALED_OBJECT_YAML)
+        self.name = create_unique_resource_name("keda-scaled-object", "scaledobject")
+        self.data["metadata"]["name"] = self.name
 
-        # Generate a unique name if not provided
-        self.scaled_object_name = create_unique_resource_name(
-            "keda-scaled-object", "scaledobject"
-        )
-        self.data["metadata"]["name"] = self.scaled_object_name
+        for key, path in self.KEYS_TO_YAML_PATH.items():
+            if key in config_dict:
+                self._update_yaml_path(path, config_dict[key], apply=False)
 
-        # Apply config dict values to the template
-        self._apply_config(config_dict)
-
-        self.ocs_obj = None
-
-    def _apply_config(self, config_dict):
-        """
-        Apply flat config dict values to the nested YAML structure.
-
-        Args:
-            config_dict (dict): Flat dictionary of configurable values
-        """
-        for key, value in config_dict.items():
-            if key not in self._CONFIG_MAPPING:
-                raise ValueError(
-                    f"Unknown config key: '{key}'. "
-                    f"Valid keys: {list(self._CONFIG_MAPPING.keys())}"
-                )
-
-            path = self._CONFIG_MAPPING[key]
-            self._set_nested_value(self.data, path, value)
-
-    def _set_nested_value(self, data, path, value):
-        """
-        Set a nested value in the data structure.
-
-        Args:
-            data (dict): The data structure to update
-            path (tuple): Tuple of keys representing the path
-            value: The value to set
-        """
-        # Traverse to the parent container (all keys except the last)
-        container = data
-        for key in path[:-1]:
-            container = self._ensure_and_get(container, key)
-
-        # Ensure the final container is ready, then set the value
-        final_key = path[-1]
-        self._ensure_and_get(container, final_key)
-        container[final_key] = value
-
-    def _ensure_and_get(self, container, key):
-        """
-        Ensure the container has the key/index and return the nested value.
-
-        Args:
-            container: The container (dict or list) to access
-            key: The key/index to access
-
-        Returns:
-            The nested container at the key
-        """
-        if isinstance(key, int):
-            if not isinstance(container, list):
-                raise ValueError(f"Expected list, got {type(container)}")
-            # Extend list if needed
-            while len(container) <= key:
-                container.append({})
-            return container[key]
-        else:
-            if not isinstance(container, dict):
-                raise ValueError(f"Expected dict, got {type(container)}")
-            # Create dict entry if missing
-            if key not in container:
-                container[key] = {}
-            return container[key]
+        self.ocp_obj = create_resource(**self.data)
 
     @property
     def is_created(self):
-        """Check if the ScaledObject has been created in the cluster."""
-        return self.ocs_obj is not None
+        return self.ocp_obj is not None
 
-    def create(self):
+    def _validate_config_dict(self, config_dict):
         """
-        Create the ScaledObject CR in the cluster.
-
-        Returns:
-            OCS: The created OCS object
-        """
-        self.ocs_obj = create_resource(**self.data)
-        return self.ocs_obj
-
-    def delete(self, wait=True):
-        """
-        Delete the ScaledObject CR from the cluster.
+        Validates the config_dict
 
         Args:
-            wait (bool): Whether to wait for deletion to complete
+            config_dict (dict): A dictionary containing the configuration for the ScaledObject.
+            See ScaledObject.KEYS_TO_YAML_PATH for valid keys.
+        Raises:
+            ValueError: If the config_dict is invalid.
         """
-        if not self.ocs_obj:
-            raise ValueError("ScaledObject has not been created yet")
-        self.ocs_obj.delete(wait=wait)
+        for key in config_dict:
+            if key not in self.KEYS_TO_YAML_PATH:
+                raise ValueError(f"Invalid key: {key}")
+
+    def _update_yaml_path(self, path, value, apply=True):
+        """
+        Updates the data and applies it to the OCS object if it is already created
+
+        Args:
+            path (tuple): The path to the value to update
+            value (any): The value to update the path to
+            apply (bool): Whether to apply the changes to the OCS object if it is already created
+
+        Returns:
+            self: This allows for convenient chaining of methods
+        Raises:
+            KeyError: If the path is not found in the data.
+        """
+        try:
+            d = self.data
+            for p in path[:-1]:
+                d = d[p]
+            d[path[-1]] = value
+        except KeyError:
+            raise KeyError(f"Path {path} not found in data")
+
+        if self.is_created and apply:
+            self.ocp_obj.apply(**self.data)
+
+        return self
+
+    def update_from_dict(self, config_dict):
+        """
+        Updates the ScaledObject from a dictionary
+
+        Args:
+            config_dict (dict): A dictionary containing the configuration for the ScaledObject.
+            See ScaledObject.KEYS_TO_YAML_PATH for valid keys.
+        Raises:
+            ValueError: If the config_dict is invalid.
+        """
+        self._validate_config_dict(config_dict)
+        for key, value in config_dict.items():
+            self._update_yaml_path(self.KEYS_TO_YAML_PATH[key], value, apply=False)
+
+        self.ocp_obj.apply(**self.data)

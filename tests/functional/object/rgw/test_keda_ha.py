@@ -1,5 +1,5 @@
 import logging
-from time import sleep
+import pandas as pd
 
 import pytest
 
@@ -18,7 +18,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
-RGW_TARGET_REF_DICT = {
+RGW_SCALE_TARGET_REF = {
     "apiVersion": "ceph.rook.io/v1",
     "kind": constants.CEPHOBJECTSTORE,
     "name": constants.CEPHOBJECTSTORE_NAME,
@@ -81,9 +81,9 @@ class TestKedaHA:
         THRESHOLD = "7.00"
 
         # 1. Create a ScaledObject to autoscale the RGW deployment
-        scaled_object = keda_class.create_scaled_object(
+        scaled_object = keda_class.create_thanos_metric_scaled_object(
             {
-                "scaleTargetRef": RGW_TARGET_REF_DICT,
+                "scaleTargetRef": RGW_SCALE_TARGET_REF,
                 "query": "sum(rate(ceph_rgw_req[1m]))",
                 "threshold": THRESHOLD,
                 "minReplicaCount": TARGET_MIN_REPLICAS,
@@ -130,6 +130,26 @@ class TestKedaHA:
         finally:
             # 4. Stop the warp workload
             warp_workload_runner.stop()
+
+            # Optional: Log findings from the last warp run
+            try:
+                last_report = warp_workload_runner.warp.get_last_report()
+                num_of_errors = (
+                    pd.to_numeric(last_report["errors"], errors="coerce")
+                    .fillna(0)
+                    .astype(int)
+                    .sum()
+                )
+                average_throughput = (
+                    pd.to_numeric(last_report["mb_per_sec"], errors="coerce")
+                    .fillna(0)
+                    .astype(float)
+                    .mean()
+                )
+                logger.info(f"Number of errors: {num_of_errors}")
+                logger.info(f"Average throughput: {average_throughput:.2f} MB/s")
+            except Exception as e:
+                logger.warning(f"Failed to get last report: {e}")
 
         # 5. Wait for the RGW pods to downscale to the min replica count
         try:

@@ -1,19 +1,22 @@
+import concurrent.futures as futures
+from io import StringIO
 import logging
 import os
+from tempfile import mkdtemp
 import threading
 import time
 
-import concurrent.futures as futures
+import pandas as pd
+
+from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.utility import templating
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
-from ocs_ci.ocs import constants
-from ocs_ci.framework import config
-from ocs_ci.ocs.resources import pod
-from tempfile import mkdtemp
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -239,6 +242,23 @@ class Warp(object):
         if self.pvc_obj:
             self.pvc_obj.delete()
 
+    def get_last_report(self):
+        """
+        Get the last report from the warp workload runner
+
+        Returns:
+            pd.DataFrame: The last report from the warp workload runner
+        """
+        try:
+            output_csv = self.pod_obj.exec_cmd_on_pod(
+                command=f"cat {self.output_file}", out_yaml_format=False, silent=True
+            )
+            df = pd.read_csv(StringIO(output_csv), sep="\t")
+            return df
+        except CommandFailed as e:
+            log.warning(f"Failed to get last report: {e}")
+            return None
+
 
 class WarpWorkloadRunner:
     """
@@ -268,8 +288,10 @@ class WarpWorkloadRunner:
         bucket_name,
         request,
         workload_type="put",
+        concurrent=10,
+        obj_size="1MiB",
         duration="30s",
-        timeout=60,
+        timeout=300,
     ):
         """
         Start a continuous warp workload in a background thread
@@ -279,6 +301,9 @@ class WarpWorkloadRunner:
             secret_key (str): S3 secret key
             bucket_name (str): Name of the bucket to use
             request (pytest.FixtureRequest): The pytest request object
+            workload_type (str): Type of workload to run (put, get, stat, mixed, etc.)
+            concurrent (int): number of concurrent
+            obj_size (int): size of object
             duration (str): Duration for each warp iteration (default: "30s")
             timeout (int): Timeout for each warp iteration (default: 60 seconds)
         """
@@ -301,8 +326,8 @@ class WarpWorkloadRunner:
                         access_key=access_key,
                         secret_key=secret_key,
                         duration=duration,
-                        concurrent=10,
-                        obj_size="1MiB",
+                        concurrent=concurrent,
+                        obj_size=obj_size,
                         timeout=timeout,
                         tls=True,
                         insecure=True,
