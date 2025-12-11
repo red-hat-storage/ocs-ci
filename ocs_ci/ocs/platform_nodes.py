@@ -2386,11 +2386,34 @@ class AZURENodes(NodesBase):
         self.azure.stop_vm_instances(node_names, force=force)
 
         if wait:
-            # When the node is not reachable then the node reaches status NotReady.
-            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
-            wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
-            )
+            try:
+                # When the node is not reachable then the node reaches status NotReady.
+                logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
+                wait_for_nodes_status(
+                    node_names=node_names,
+                    status=constants.NODE_NOT_READY,
+                    timeout=timeout,
+                )
+            except CommandFailed as err:
+                # Consider the situation where the cluster is not accessible after nodes are down,
+                # example: when all the nodes are off
+                if "Unable to connect to the server" in str(err):
+                    logger.info(
+                        f"Unable to connect to the server to check the nodes status NotReady. "
+                        f"Trying alternate method to verify nodes {node_names} are stopped"
+                    )
+                    vms_not_stopped = [
+                        vm_name
+                        for vm_name in node_names
+                        if self.azure.get_vm_power_status(vm_name)
+                        != constants.VM_STOPPED
+                    ]
+
+                    assert not (
+                        vms_not_stopped
+                    ), f"Nodes corresponding to the machines {vms_not_stopped} are not stopped."
+                else:
+                    raise
 
     def start_nodes(self, nodes, timeout=540, wait=True):
         """
