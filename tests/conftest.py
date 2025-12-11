@@ -9694,6 +9694,9 @@ def setup_cnv(request):
         if not cnv_obj.post_install_verification():
             installed = True
             cnv_obj.deploy_cnv()
+        if cnv_obj.post_install_verification():
+            # Enable software emulation
+            cnv_obj.enable_software_emulation()
 
     finally:
 
