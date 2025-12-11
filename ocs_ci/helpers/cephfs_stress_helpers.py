@@ -127,7 +127,7 @@ def set_env_vars(pod_data, env_vars, type):
     Args:
         pod_data (dict): The pod specification loaded from YAML.
         env_vars (dict): Dictionary mapping env variable names to their desired values.
-        type (str): pod type, either a regular pod or a job pod
+        type (str): pod type, either a regular pod or a job
 
     """
     if type == constants.POD:
@@ -178,7 +178,7 @@ def create_cephfs_stress_job(
         cephfs_stress_job_obj(OCS): The created Job object after it's in a running state
 
     Raises:
-        AssertionError: If the pod creation fails
+        AssertionError: If the Job creation fails
 
     """
     env_vars = {
