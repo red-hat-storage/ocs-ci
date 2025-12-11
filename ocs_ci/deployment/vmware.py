@@ -36,7 +36,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
-from ocs_ci.framework import config
+from ocs_ci.framework import config, Config
 from ocs_ci.ocs import constants, defaults, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -49,6 +49,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
@@ -75,6 +76,7 @@ from ocs_ci.utility.utils import (
     read_file_as_str,
     replace_content_in_file,
     run_cmd,
+    exec_cmd,
     upload_file,
     wait_for_co,
     get_infra_id,
@@ -2018,9 +2020,9 @@ class VSPHEREAgentAI(VSPHEREBASE):
     To use this class we need to switch to client context first
     """
 
-    def __init__(self, agent_workflow):
+    def __init__(self):
         self.cluster_name = config.ENV_DATA["cluster_name"]
-        self.agent_workflow = agent_workflow
+        # self.agent_workflow = agent_workflow
         super(VSPHEREAgentAI, self).__init__()
 
     class OCPDeployment(BaseOCPDeployment):
@@ -2033,6 +2035,59 @@ class VSPHEREAgentAI(VSPHEREBASE):
         def __init__(self):
             super(VSPHEREAgentAI.OCPDeployment, self).__init__()
 
+            if not (
+                config.DEPLOYMENT.get("hub_cluster_path")
+                and config.DEPLOYMENT.get("hub_cluster_name")
+            ):
+                raise exceptions.ConfigurationError(
+                    "HCP Agent deployment requires reference to the HUB cluster "
+                    "in DEPLOYMENT section: hub_cluster_path, hub_cluster_name"
+                )
+
+            # prepare config object for the HUB Cluster
+            cluster_config = Config()
+            # TODO: update platform, deployment_type somehow, if needed
+            cluster_path = os.path.expanduser(config.DEPLOYMENT.get("hub_cluster_path"))
+            def_client_config_dict = {
+                "DEPLOYMENT": {},
+                "ENV_DATA": {
+                    "cluster_name": config.DEPLOYMENT.get("hub_cluster_name"),
+                    "cluster_path": cluster_path,
+                    "platform": None,
+                    "deployment_type": None,
+                    "cluster_type": "provider",
+                },
+                "RUN": {
+                    "kubeconfig": os.path.join(
+                        cluster_path, cluster_config.RUN["kubeconfig_location"]
+                    )
+                },
+            }
+            keys = [
+                "run_id",
+                "log_dir",
+                "bin_dir",
+                "jenkins_build_url",
+                "logs_url",
+            ]
+            for key in keys:
+                def_client_config_dict["RUN"][key] = config.RUN.get(key, "")
+            cluster_config.update(def_client_config_dict)
+            logger.info(
+                "Inserting HUB cluster config to Multicluster Config "
+                f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
+            )
+            self.hub_cluster_config_context = config.nclusters
+            config.insert_cluster_config(
+                self.hub_cluster_config_context, cluster_config
+            )
+
+            with config.RunWithConfigContext(self.hub_cluster_config_context):
+                # check connection to the Hub cluster
+                exec_cmd("oc version")
+
+            # define local path for downloading discovery iso
+            self.discovery_iso_image = f"/tmp/{self.cluster_name}-discovery.iso"
             # create terraform_data directory
             self.terraform_data_dir = os.path.join(
                 self.cluster_path, constants.TERRAFORM_DATA_DIR
@@ -2049,20 +2104,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
             #
             self.terraform_work_dir = os.path.join(os.getcwd(), "terraform/ai/vsphere/")
             self.terraform = Terraform(self.terraform_work_dir)
-
-            self.discovery_iso_image = None
-            cluster_path = (
-                config.ENV_DATA.get("clusters", {})
-                .get(self.cluster_name, {})
-                .get("cluster_path")
-            )
-            base_path = cluster_path or config.ENV_DATA["cluster_path"]
-            if not base_path:
-                logger.error(f"Cluster path not found for cluster {self.cluster_name}")
-            else:
-                self.discovery_iso_image = os.path.join(
-                    base_path, f"{self.cluster_name}-discovery.iso"
-                )
+            assert Exception("TEST-TEST-TEST-TEST-TEST")
 
         def deploy_prereq(self):
             """
@@ -2129,10 +2171,10 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 raise RuntimeError(
                     "OCPDeployment.outer has not been assigned by VSPHEREAgentAI"
                 )
-            self.outer.agent_workflow.wait_agents_available(
-                config.ENV_DATA["worker_replicas"]
-            )
-            self.outer.agent_workflow.approve_agents()
+            # self.outer.agent_workflow.wait_agents_available(
+            #     config.ENV_DATA["worker_replicas"]
+            # )
+            # self.outer.agent_workflow.approve_agents()
 
             log_step(
                 "Modifying DNS records for API and Ingress, pointing to host (machines) IPs"
