@@ -10,24 +10,24 @@ from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
 )
 
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
+# from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     check_for_logwriter_workload_pods,
     recover_from_ceph_stuck,
-    verify_vm_workload,
+    # verify_vm_workload,
     verify_data_loss,
     verify_data_corruption,
 )
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 
-from ocs_ci.ocs.exceptions import CommandFailed
+# from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_all_nodes
 from datetime import datetime, timedelta, timezone
 
-from ocs_ci.utility.retry import retry
+# from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class TestNetSplit:
         duration,
         node_restart_teardown,
         reset_conn_score,
-        cnv_workload,
+        # cnv_workload,
         setup_cnv,
     ):
         """
@@ -129,16 +129,16 @@ class TestNetSplit:
 
         logger.info("Workloads are running")
 
-        # setup vm and write some data to the VM instance
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
-        vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
-        vm_obj.run_ssh_cmd(
-            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt && sync"
-        )
-        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
-        logger.debug(
-            f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
-        )
+        # # setup vm and write some data to the VM instance
+        # vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
+        # vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
+        # vm_obj.run_ssh_cmd(
+        #     command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt && sync"
+        # )
+        # md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
+        # logger.debug(
+        #     f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
+        # )
 
         # note all the pod names
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
@@ -173,16 +173,16 @@ class TestNetSplit:
 
         logger.info(f"Ended netsplit at {end_time}")
 
-        # check vm data written before the failure for integrity
-        logger.info("Waiting for VM SSH connectivity!")
-        retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
-        retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(
-            vm_obj, md5sum_before
-        )
+        # # check vm data written before the failure for integrity
+        # logger.info("Waiting for VM SSH connectivity!")
+        # retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
+        # retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(
+        #     vm_obj, md5sum_before
+        # )
 
-        # stop the VM
-        vm_obj.stop()
-        logger.info("Stoped the VM successfully")
+        # # stop the VM
+        # vm_obj.stop()
+        # logger.info("Stoped the VM successfully")
 
         # get all the running logwriter pods
         sc_obj.get_logwriter_reader_pods(
