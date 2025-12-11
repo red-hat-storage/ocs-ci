@@ -217,7 +217,7 @@ class AZURE:
         """
         if not self._compute_client:
             self._compute_client = ComputeManagementClient(
-                credentials=self.credentials, subscription_id=self._subscription_id
+                credential=self.credentials, subscription_id=self._subscription_id
             )
         return self._compute_client
 
