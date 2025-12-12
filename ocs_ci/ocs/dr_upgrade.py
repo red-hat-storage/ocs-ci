@@ -193,6 +193,12 @@ class DRUpgrade(OCSUpgrade):
                     resource_name=p.get()["metadata"]["name"],
                     kind="Pod",
                 )
+                pod_obj.wait_for_resource(
+                    condition="Running",
+                    resource_name=pod_obj.resource_name,
+                    timeout=300,
+                    sleep=10,
+                )
                 if self.upgrade_phase == "pre_upgrade":
                     self.pre_upgrade_data["age"] = pod_obj.get_resource(
                         resource_name=p.get()["metadata"]["name"], column="AGE"
