@@ -609,7 +609,6 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
-    use_shell=False,
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
@@ -632,7 +631,6 @@ def exec_cmd(
         threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
-        use_shell (bool): If True will pass the cmd without splitting
         cluster_config (MultiClusterConfig): In case of multicluster environment this object
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
