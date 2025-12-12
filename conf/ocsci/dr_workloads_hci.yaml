@@ -1,0 +1,4 @@
+ENV_DATA:
+  dr_workload_repo_url: "https://github.ibm.com/ProjectAbell/odf-qe-ocs-workloads.git"
+  dr_workload_repo_branch: "master"
+  dr_workload_repo_login: True

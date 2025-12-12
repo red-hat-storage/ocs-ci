@@ -46,11 +46,16 @@ class DRWorkload(object):
     """
 
     def __init__(
-        self, workload_name=None, workload_repo_url=None, workload_repo_branch=None
+        self,
+        workload_name=None,
+        workload_repo_url=None,
+        workload_repo_branch=None,
+        workload_repo_url_login=None,
     ):
         self.workload_name = workload_name
         self.workload_repo_url = workload_repo_url
         self.workload_repo_branch = workload_repo_branch
+        self.workload_repo_login = workload_repo_url_login
 
     def deploy_workload(self):
         raise NotImplementedError("Method not implemented")
@@ -72,7 +77,14 @@ class BusyBox(DRWorkload):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.AUTH["github_ibm_odf_qe_ocs_workloads"][
+                "gh_token"
+            ]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
 
         self.workload_type = kwargs.get("workload_type", constants.SUBSCRIPTION)
         self.workload_namespace = kwargs.get("workload_namespace", None)
@@ -411,6 +423,7 @@ class BusyBox(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def _get_workload_namespace(self):
@@ -551,7 +564,14 @@ class BusyBox_AppSet(DRWorkload):
     def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.AUTH["github_ibm_odf_qe_ocs_workloads"][
+                "gh_token"
+            ]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
 
         self.workload_type = kwargs.get("workload_type", constants.APPLICATION_SET)
         self.workload_namespace = kwargs.get("workload_namespace", None)
@@ -647,10 +667,12 @@ class BusyBox_AppSet(DRWorkload):
 
         """
         # Clone workload repo
+
         clone_repo(
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def add_annotation_to_placement(self):
@@ -811,7 +833,14 @@ class CnvWorkload(DRWorkload):
         """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.AUTH["github_ibm_odf_qe_ocs_workloads"][
+                "gh_token"
+            ]
+        super().__init__(
+            "cnv", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
 
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
@@ -1002,6 +1031,7 @@ class CnvWorkload(DRWorkload):
                 url=self.workload_repo_url,
                 location=self.target_clone_dir,
                 branch=self.workload_repo_branch,
+                clone_token=self.workload_repo_login,
             )
 
     def add_annotation_to_placement(self):
@@ -1193,7 +1223,14 @@ class BusyboxDiscoveredApps(DRWorkload):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.AUTH["github_ibm_odf_qe_ocs_workloads"][
+                "gh_token"
+            ]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_type = kwargs.get("workload_type", constants.DISCOVERED_APPS)
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
@@ -1293,6 +1330,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def verify_workload_deployment(self, vrg_name=None):
@@ -1617,7 +1655,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.AUTH["github_ibm_odf_qe_ocs_workloads"][
+                "gh_token"
+            ]
+        super().__init__(
+            "cnv", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
         self.vm_secret_name = kwargs.get("vm_secret")
@@ -1705,6 +1750,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def create_namespace(self):
