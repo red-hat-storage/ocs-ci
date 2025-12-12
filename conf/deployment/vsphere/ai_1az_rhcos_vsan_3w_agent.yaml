@@ -1,0 +1,14 @@
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: "vsphere"
+  deployment_type: "ai_agent"
+  hosted_cluster_platform: "agent"
+  worker_replicas: 3
+  master_replicas: 0
+  worker_num_cpus: "16"
+  compute_memory: "65536"
+
+REPORTING:
+  polarion:
+    deployment_id: "PLACEHOLDER"
