@@ -275,15 +275,6 @@ class AZURE:
         )
         vm_statuses = vm.instance_view.statuses
         vm_power_state = len(vm_statuses) >= 2 and vm_statuses[1].code.split("/")[1]
-        logger.info(
-            f"VM name : {vm_name} VM code status: {[vm_status.code for vm_status in vm_statuses]}"
-        )
-        logger.info(
-            f"VM name : {vm_name} VM display status: {[vm_status.display_status for vm_status in vm_statuses]}"
-        )
-        logger.info(
-            f"VM name : {vm_name}. Identified vm_power_state is {vm_power_state}"
-        )
         return vm_power_state
 
     def get_node_by_attached_volume(self, volume):
