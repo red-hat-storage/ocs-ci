@@ -86,9 +86,9 @@ class TestCephfsStress(E2ETest):
 
                 status = cephfs_stress_job_obj.status()
 
-                if status == constants.STATUS_COMPLETED:
+                if status == "Complete":
                     logger.info(
-                        f"Job '{cephfs_stress_job_obj.name}' reached 'Completed' state"
+                        f"Job '{cephfs_stress_job_obj.name}' reached 'Complete' state"
                     )
                     break
                 elif status == constants.STATUS_RUNNING:
