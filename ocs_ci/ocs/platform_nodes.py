@@ -2391,7 +2391,7 @@ class AZURENodes(NodesBase):
                 try:
                     for vm_state in TimeoutSampler(
                         timeout=timeout,
-                        sleep=1,
+                        sleep=3,
                         func=self.azure.get_vm_power_status,
                         vm_name=vm_name,
                     ):
