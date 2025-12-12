@@ -1971,3 +1971,19 @@ class VSPHERE(object):
             f"VM {vm.name} did not reach the desired status {desired_status} within the timeout period."
         )
         return False
+
+    def get_uuid_for_vm(self, ip, dc, vm_search=True):
+        """
+        Gets the ID(UID) for the VM
+
+        Args:
+            ip (str): IP address
+            dc (str): Datacenter name
+            vm_search (bool): Search for VMs if True, Hosts if False
+
+        Returns:
+            str: UUID of VM
+
+        """
+        vm = self.get_vm_by_ip(ip, dc, vm_search)
+        return vm.config.uuid
