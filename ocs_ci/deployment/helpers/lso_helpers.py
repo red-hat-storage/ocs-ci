@@ -22,6 +22,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.operators import LocalStorageOperator
 from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -53,16 +54,7 @@ def setup_local_storage(storageclass):
 
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
-    ocp_ga_version = get_ocp_ga_version(ocp_version)
-    if not ocp_ga_version:
-        create_optional_operators_catalogsource_non_ga()
-    try:
-        get_lso_channel()
-    except CommandFailed as ex:
-        if "not found" in str(ex):
-            create_optional_operators_catalogsource_non_ga(force=True)
-        else:
-            raise
+    lso_operator = LocalStorageOperator(create_catalog=True)
 
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(
@@ -70,7 +62,7 @@ def setup_local_storage(storageclass):
     )
 
     # ensure namespace is correct
-    lso_namespace = config.ENV_DATA["local_storage_namespace"]
+    lso_namespace = lso_operator.namespace
     for data in lso_data:
         if data["kind"] == "Namespace":
             data["metadata"]["name"] = lso_namespace
@@ -82,10 +74,9 @@ def setup_local_storage(storageclass):
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data["kind"] == "Subscription":
-            data["spec"]["channel"] = get_lso_channel()
-        if not ocp_ga_version:
-            if data["kind"] == "Subscription":
-                data["spec"]["source"] = "optional-operators"
+            data["spec"]["channel"] = lso_operator.get_channel()
+        if data["kind"] == "Subscription":
+            data["spec"]["source"] = lso_operator.catalog_name
 
     # Create temp yaml file and create local storage operator
     logger.info(
@@ -94,15 +85,11 @@ def setup_local_storage(storageclass):
     lso_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="local_storage_operator", delete=False
     )
-    image_source_policy = ocp.OCP(
-        kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
-    )
-    if not image_source_policy.is_exist(resource_name=lso_data_yaml.name):
-        templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
-        with open(lso_data_yaml.name, "r") as f:
-            logger.info(f.read())
-        logger.info("Creating local-storage-operator")
-        run_cmd(f"oc create -f {lso_data_yaml.name}")
+    templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
+    with open(lso_data_yaml.name, "r") as f:
+        logger.info(f.read())
+    logger.info("Creating local-storage-operator")
+    run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
     assert local_storage_operator.wait_for_resource(
@@ -246,6 +233,7 @@ def setup_local_storage(storageclass):
         verify_pvs_created(expected_pvs, storageclass)
 
 
+# TODO: remove this function
 def create_optional_operators_catalogsource_non_ga(force=False):
     """
     Creating optional operators CatalogSource and ImageContentSourcePolicy
@@ -618,6 +606,8 @@ def lso_upgrade():
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
         if not catalog_source_created(catalogsource_name=constants.OPTIONAL_OPERATORS):
+            # TODO: We need to update this upgrade function and probably move to new
+            # operators.py module and start using it here as well.
             create_optional_operators_catalogsource_non_ga()
         else:
             logger.info(f"Catalog Source {constants.OPTIONAL_OPERATORS} already exists")

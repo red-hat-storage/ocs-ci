@@ -27,6 +27,7 @@ from ocs_ci.utility.utils import (
 logger = logging.getLogger(__name__)
 
 
+# TODO: remove this function and use the one in version.py
 def get_ocp_ga_version(channel):
     """
     Retrieve the latest GA version for
