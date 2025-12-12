@@ -2278,6 +2278,7 @@ def get_csi_versions():
     return csi_versions
 
 
+# TODO: remove this function and use the one in version.py
 def get_ocp_version(seperator=None):
     """
     *The deprecated form of 'get current ocp version'*
