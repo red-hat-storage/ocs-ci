@@ -1242,7 +1242,7 @@ NMSTATE_INSTANCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "nmstate_instance.yaml"
 )
 NMSTATE_NAMESPACE = "openshift-nmstate"
-NMSTATE_CSV_NAME = "kubernetes-nmstate-operator"
+NMSTATE_OPERATOR = NMSTATE_CSV_NAME = "kubernetes-nmstate-operator"
 
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")
