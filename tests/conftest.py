@@ -83,6 +83,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotDeleted,
     MissingDecoratorError,
     UnsupportedWorkloadError,
+    NoRunningCephToolBoxException,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -211,6 +212,7 @@ from ocs_ci.helpers.helpers import (
     get_schedule_precedance_value_from_csi_addons_configmap,
     set_schedule_precedence,
     get_reclaimspacecronjob_for_pvc,
+    wait_for_ct_pod_recovery,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -2003,6 +2005,52 @@ def upgrade_marks_name():
     return upgrade_marks_name
 
 
+def ceph_health_check_with_toolbox_recovery(
+    namespace: str,
+    tries: int = 20,
+    delay: int = 30,
+    fix_ceph_health: bool = True,
+) -> bool:
+    """
+    Perform ceph health check with automatic toolbox pod recovery.
+
+    If the ceph toolbox pod is not running (e.g., after node disruption tests),
+    this function will wait for the toolbox pod to recover before retrying.
+
+    Args:
+        namespace (str): Kubernetes namespace for ceph cluster.
+        tries (int): Number of retries for health check.
+        delay (int): Delay between retries in seconds.
+        fix_ceph_health (bool): Whether to attempt fixing ceph health issues.
+
+    Returns:
+        bool: True if ceph health check passes.
+
+    Raises:
+        NoRunningCephToolBoxException: If toolbox pod doesn't recover.
+        CephHealthException: If ceph health check fails after retries.
+    """
+    try:
+        return ceph_health_check(
+            namespace=namespace,
+            tries=tries,
+            delay=delay,
+            fix_ceph_health=fix_ceph_health,
+        )
+    except NoRunningCephToolBoxException:
+        log.warning(
+            "Ceph toolbox pod not running. " "Waiting for recovery before retry..."
+        )
+        if wait_for_ct_pod_recovery():
+            return ceph_health_check(
+                namespace=namespace,
+                tries=tries,
+                delay=delay,
+                fix_ceph_health=fix_ceph_health,
+            )
+        raise
+
+
 @pytest.fixture(scope="function", autouse=True)
 def health_checker(request, tier_marks_name, upgrade_marks_name):
     skipped = False
@@ -2054,7 +2102,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
                     # "flip-flopping ceph health OK and warn because of:
                     # HEALTH_WARN Reduced data availability: 2 pgs peering
-                    ceph_health_check(
+                    ceph_health_check_with_toolbox_recovery(
                         namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                         fix_ceph_health=True,
                         update_jira=True,
@@ -2082,7 +2130,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+                ceph_health_check_with_toolbox_recovery(
+                    namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                )
 
                 if (
                     not multi_storagecluster_external_health_passed
@@ -2113,7 +2163,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             log.info("Checking for Ceph Health OK ")
             external_multi_storagecluster_status = False
             try:
-                status = ceph_health_check(
+                status = ceph_health_check_with_toolbox_recovery(
                     namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                     tries=10,
                     delay=15,
