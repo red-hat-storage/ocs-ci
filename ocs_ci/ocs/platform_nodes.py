@@ -2411,7 +2411,7 @@ class AZURENodes(NodesBase):
 
                     assert not (
                         vms_not_stopped
-                    ), f"Nodes corresponding to the machines {vms_not_stopped} are not stopped."
+                    ), f"Nodes {vms_not_stopped} are not identified as stopped. But they are actually stopped"
                     return
                 else:
                     raise
