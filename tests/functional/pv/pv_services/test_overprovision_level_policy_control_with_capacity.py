@@ -1,5 +1,6 @@
 import logging
 import pytest
+import fauxfactory
 
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.ocp import OCP, set_overprovision_policy, clear_overprovision_spec
@@ -20,8 +21,9 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True, scope="class")
 def setup_sc(storageclass_factory_class):
+    sc_name = f"sc-test-blk-{fauxfactory.gen_alpha(8).lower()}"
     sc_blk_obj = storageclass_factory_class(
-        interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
+        interface=constants.CEPHBLOCKPOOL, sc_name=sc_name
     )
     yield {
         constants.CEPHBLOCKPOOL_SC: None,
