@@ -39,6 +39,9 @@ class FusionDataFoundationDeployment:
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
+        self.fdf_skip_storage_setup = config.DEPLOYMENT.get(
+            "fdf_skip_storage_setup", False
+        )
         storage_class.set_custom_storage_class_path()
 
     @property
@@ -71,7 +74,8 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-        self.setup_storage()
+        if not self.fdf_skip_storage_setup:
+            self.setup_storage()
 
     def ensure_lso_installed(self):
         """
