@@ -97,6 +97,59 @@ def cnv_custom_storage_class(request, storageclass_factory):
     return factory
 
 
+@pytest.fixture()
+def cephfs_custom_storage_class(request, storageclass_factory):
+    """
+    Uses storage class factory fixture to create a custom CephFS storage class and a custom
+    cephfs pool with replica-2 to be used by discovered applications
+
+    Raises Exception if the custom SC creation fails on any of the managed clusters
+    """
+
+    def factory(replica, compression):
+        """
+        Args:
+            replica (int):  Replica count used in Pool creation
+            compression (str): Type of compression to be used in the Pool, defaults to None
+
+        """
+
+        cephfs_pool_name = constants.RDR_CUSTOM_CEPHFS_POOL
+        cephfs_sc_name = constants.RDR_CUSTOM_CEPHFS_STORAGECLASS
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            # Create or verify existing SC in all clusters
+            existing_sc_list = get_all_storageclass()
+            if cephfs_sc_name in existing_sc_list:
+                log.info(f"Storage class {cephfs_sc_name} already exists")
+            else:
+                try:
+                    sc_obj = storageclass_factory(
+                        sc_name=cephfs_sc_name,
+                        replica=replica,
+                        compression=compression,
+                        pool_name=cephfs_pool_name,
+                    )
+                    if sc_obj is None or sc_obj.name != cephfs_sc_name:
+                        log.error(
+                            f"Failed to create SC '{cephfs_sc_name}' or name mismatch: "
+                            f"Created '{sc_obj.name if sc_obj else 'None'}'"
+                        )
+                    else:
+                        log.info(
+                            f"Successfully created custom CephFS SC: {cephfs_sc_name}"
+                        )
+                        time.sleep(60)
+
+                except Exception as e:
+                    log.error(f"Error creating SC '{cephfs_sc_name}': {e}")
+                    raise
+        config.reset_ctx()
+
+    return factory
+
+
 @pytest.fixture
 def scale_deployments(request):
     """
