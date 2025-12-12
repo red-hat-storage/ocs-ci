@@ -5,9 +5,14 @@ from prettytable import PrettyTable
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.constants import CEPHFS_STRESS_YAML, STATUS_RUNNING
+from ocs_ci.ocs.constants import (
+    CEPHFS_STRESS_POD_YAML,
+    CEPHFS_STRESS_JOB_YAML,
+    STATUS_RUNNING,
+)
 from ocs_ci.utility import templating
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import (
     validate_pod_oomkilled,
@@ -59,7 +64,6 @@ def create_cephfs_stress_pod(
     namespace,
     pvc_name,
     base_dir=None,
-    num_files=None,
     files_size=None,
     operations=None,
     base_file_count=None,
@@ -73,7 +77,6 @@ def create_cephfs_stress_pod(
 
     Args:
         base_dir (str, optional): Directory used by smallfile to perform file and directory operations
-        num_files (str, optional): Total number of files to create
         files_size (str, optional): Size of each file in KB
         operations (str, optional): File operations to perform (e.g., append, stat, chmod, ls-l, etc),
         Pass as a comma-separated string
@@ -91,20 +94,19 @@ def create_cephfs_stress_pod(
     """
     env_vars = {
         "BASE_DIR": base_dir,
-        "NUM_FILES": num_files,
         "FILES_SIZE": files_size,
         "OPERATIONS": operations,
         "BASE_FILE_COUNT": base_file_count,
         "MULTIPLICATION_FACTOR": multiplication_factor,
         "THREADS": threads,
     }
-    cephfs_stress_pod_data = templating.load_yaml(CEPHFS_STRESS_YAML)
+    cephfs_stress_pod_data = templating.load_yaml(CEPHFS_STRESS_POD_YAML)
     cephfs_stress_pod_data["metadata"]["namespace"] = namespace
     cephfs_stress_pod_data["spec"]["volumes"][0]["persistentVolumeClaim"][
         "claimName"
     ] = pvc_name
     logger.info("Set environment variables in the pod template")
-    set_env_vars(cephfs_stress_pod_data, env_vars)
+    set_env_vars(cephfs_stress_pod_data, env_vars, type=constants.POD)
     cephfs_stress_pod_obj = pod.Pod(**cephfs_stress_pod_data)
     logger.info("Creating Cephfs stress pod")
     created_resource = cephfs_stress_pod_obj.create()
@@ -118,22 +120,101 @@ def create_cephfs_stress_pod(
     return cephfs_stress_pod_obj
 
 
-def set_env_vars(pod_data, env_vars):
+def set_env_vars(pod_data, env_vars, type):
     """
     Updates the pod's environment variables in the container spec based on the provided mapping
 
     Args:
         pod_data (dict): The pod specification loaded from YAML.
         env_vars (dict): Dictionary mapping env variable names to their desired values.
+        type (str): pod type, either a regular pod or a job
 
     """
-    container_env = pod_data["spec"]["containers"][0].get("env", [])
+    if type == constants.POD:
+        container_env = pod_data["spec"]["containers"][0].get("env", [])
+    elif type == constants.JOB:
+        container_env = pod_data["spec"]["template"]["spec"]["containers"][0].get(
+            "env", []
+        )
+    else:
+        raise ValueError(f"Unsupported pod_type: '{type}'. Expected POD or JOB.")
     for env in container_env:
         name = env.get("name")
         if name in env_vars:
             value = env_vars[name]
             if value is not None:
                 env["value"] = str(value)
+
+
+def create_cephfs_stress_job(
+    namespace,
+    pvc_name,
+    base_dir=None,
+    files_size=None,
+    operations=None,
+    base_file_count=None,
+    multiplication_factor=None,
+    threads=None,
+    parallelism=None,
+):
+    """
+    Creates a CephFS stress Job. This job launches concurrent pods based on the configured
+    parallelism count, where each pod executes generate numerous small files and directories.
+    Configured with specific parameters, the workload stresses CephFS by gradually increasing
+    the load in incremental stages.
+
+    Args:
+        base_dir (str, optional): Directory used by smallfile to perform file and directory operations
+        files_size (str, optional): Size of each file in KB
+        operations (str, optional): File operations to perform (e.g., append, stat, chmod, ls-l, etc),
+        Pass as a comma-separated string
+        base_file_count (str, optional): Base file count, to multiply with scaling factor
+        multiplication_factor (str, optional): Dynamic scaling of file creation
+          - base_file_count * MULTIPLICATION_FACTORS
+        threads (str, optional): Number of threads to use for the operation.
+        parallelism (str, optional): Specifies how many pod replicas running in parallel should execute a job.
+
+    Returns:
+        cephfs_stress_job_obj(OCS): The created Job object after it's in a running state
+
+    Raises:
+        AssertionError: If the Job creation fails
+
+    """
+    env_vars = {
+        "BASE_DIR": base_dir,
+        "FILES_SIZE": files_size,
+        "OPERATIONS": operations,
+        "BASE_FILE_COUNT": base_file_count,
+        "MULTIPLICATION_FACTOR": multiplication_factor,
+        "THREADS": threads,
+    }
+    cephfs_stress_job_data = templating.load_yaml(CEPHFS_STRESS_JOB_YAML)
+    cephfs_stress_job_data["metadata"]["namespace"] = namespace
+    cephfs_stress_job_data["spec"]["template"]["spec"]["volumes"][0][
+        "persistentVolumeClaim"
+    ]["claimName"] = pvc_name
+    if parallelism:
+        cephfs_stress_job_data["spec"]["parallelism"] = parallelism
+    logger.info("Set environment variables in the pod template")
+    set_env_vars(cephfs_stress_job_data, env_vars, type=constants.JOB)
+    job_name = cephfs_stress_job_data["metadata"]["name"]
+    job_ocs_obj = OCS(**cephfs_stress_job_data)
+    created_resource = job_ocs_obj.create()
+    assert created_resource, f"Failed to create Job {job_ocs_obj.name}"
+
+    logger.info(f"Waiting for Job {job_ocs_obj.name} to start")
+    job_ocp_obj = ocp.OCP(
+        kind=constants.JOB, namespace=namespace, resource_name=job_name
+    )
+    job_ocp_dict = job_ocp_obj.get(resource_name=job_ocp_obj.resource_name)
+    cephfs_stress_job_obj = OCS(**job_ocp_dict)
+
+    helpers.wait_for_resource_state(
+        cephfs_stress_job_obj, state=STATUS_RUNNING, timeout=300
+    )
+
+    return cephfs_stress_job_obj
 
 
 def check_prometheus_alerts(threading_lock=None):
