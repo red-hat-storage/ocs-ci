@@ -12,6 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     ClusterNotFoundException,
     HostValidationFailed,
+    OpenShiftAPIResponseException,
     SameNameClusterAlreadyExistsException,
 )
 from ocs_ci.utility import assisted_installer as ai
@@ -83,11 +84,21 @@ class AssistedInstallerCluster(object):
                 raise ClusterNotFoundException(
                     f"Cluster '{name}' not found in Assisted Installer Console"
                 )
-            self.id = [
-                cl["id"]
-                for cl in clusters
-                if cl["name"] == name and cl["kind"] == "Cluster"
-            ][0]
+            try:
+                self.id = [
+                    cl["id"]
+                    for cl in clusters
+                    if cl["name"] == name and cl["kind"] == "Cluster"
+                ][0]
+            except IndexError:
+                # there might be missing "kind: Cluster" with the name, but still present AddHostsCluster
+                # so we want to delete that as well
+                self.id = [
+                    cl["id"]
+                    for cl in clusters
+                    if cl["name"] == name and cl["kind"] == "AddHostsCluster"
+                ][0]
+
             # load configuration of existing cluster
             self.load_existing_cluster_configuration()
             logger.info(
@@ -141,27 +152,34 @@ class AssistedInstallerCluster(object):
         except (KeyError, IndexError):
             self.api_vip = ""
             self.ingress_vip = ""
-        self.ssh_public_key = cl_config["ssh_public_key"]
+        self.ssh_public_key = cl_config.get("ssh_public_key")
         # self.pull_secret = cl_config["pull_secret"]
-        self.cpu_architecture = cl_config["cpu_architecture"]
-        self.high_availability_mode = cl_config["high_availability_mode"]
+        self.cpu_architecture = cl_config.get("cpu_architecture")
+        self.high_availability_mode = cl_config.get("high_availability_mode")
         self.image_type = infra_config["type"]
         self.openshift_cluster_id = cl_config.get("openshift_cluster_id")
         # load records with: 'kind': 'AddHostsCluster'
-        self.add_hosts_clusters = [
-            cl["id"]
-            for cl in self.api.get_clusters()
-            if self.openshift_cluster_id
-            and cl.get("openshift_cluster_id") == self.openshift_cluster_id
-            and cl["kind"] == "AddHostsCluster"
-        ]
+        try:
+            self.add_hosts_clusters = [
+                cl["id"]
+                for cl in self.api.get_clusters()
+                if self.openshift_cluster_id
+                and cl.get("openshift_cluster_id") == self.openshift_cluster_id
+                and cl["kind"] == "AddHostsCluster"
+            ]
+        except OpenShiftAPIResponseException:
+            self.add_hosts_clusters = []
         logger.debug(f"AddHostsClusters: {', '.join(self.add_hosts_clusters)}")
-        self.add_hosts_infra_envs = [
-            infra["id"]
-            for cl_id in self.add_hosts_clusters
-            for infra in self.api.get_infra_envs()
-            if infra["cluster_id"] == cl_id
-        ]
+
+        try:
+            self.add_hosts_infra_envs = [
+                infra["id"]
+                for cl_id in self.add_hosts_clusters
+                for infra in self.api.get_infra_envs()
+                if infra["cluster_id"] == cl_id
+            ]
+        except OpenShiftAPIResponseException:
+            self.add_hosts_infra_envs = []
         logger.debug(
             f"AddHosts Infrastructure Environments: {', '.join(self.add_hosts_infra_envs)}"
         )
