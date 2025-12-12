@@ -4564,6 +4564,8 @@ def node_restart_teardown(request, nodes_multicluster, nodes):
 
     def finalizer():
         for index in range(ocsci_config.nclusters):
+            if index == 2:
+                continue
             ocsci_config.switch_ctx(index)
             # Start the powered off nodes
             try:
