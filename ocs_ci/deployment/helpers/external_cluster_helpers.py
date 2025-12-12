@@ -167,6 +167,10 @@ class ExternalCluster(object):
             if "cluster-name" not in params:
                 params += f" --k8s-cluster-name {cluster_name}"
 
+        if config.EXTERNAL_MODE.get("run_as_user"):
+            ceph_user = config.EXTERNAL_MODE["run_as_user"]
+            params = f"{params} --run-as-user {ceph_user}"
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
