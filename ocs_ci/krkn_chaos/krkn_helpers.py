@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import pytest
 from ocs_ci.ocs.constants import (
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
@@ -17,6 +18,31 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
     # Container chaos specific labels
     NOOBAA_APP_LABEL,
+    # Platform constants
+    AWS_PLATFORM,
+    ROSA_PLATFORM,
+    ROSA_HCP_PLATFORM,
+    AZURE_PLATFORM,
+    AZURE_WITH_LOGS_PLATFORM,
+    GCP_PLATFORM,
+    IBMCLOUD_PLATFORM,
+    IBM_PLATFORM,
+    IBM_POWER_PLATFORM,
+    IBM_CLOUD_BAREMETAL_PLATFORM,
+    VSPHERE_PLATFORM,
+    HCI_VSPHERE,
+    BAREMETAL_PLATFORM,
+    BAREMETALPSI_PLATFORM,
+    HCI_BAREMETAL,
+    RHV_PLATFORM,
+    # Krkn cloud type constants
+    KRKN_CLOUD_AWS,
+    KRKN_CLOUD_AZURE,
+    KRKN_CLOUD_GCP,
+    KRKN_CLOUD_IBM,
+    KRKN_CLOUD_VMWARE,
+    KRKN_CLOUD_BAREMETAL,
+    KRKN_CLOUD_OPENSTACK,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
@@ -25,10 +51,101 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     NetworkOutageScenarios,
     HogScenarios,
     PodScenarios,
+    NodeScenarios,
 )
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
+
+# ============================================================================
+# PLATFORM DETECTION HELPER CLASS
+# ============================================================================
+
+
+# Platform to Krkn cloud type mapping
+PLATFORM_TO_KRKN_CLOUD_TYPE = {
+    # AWS platforms
+    AWS_PLATFORM: KRKN_CLOUD_AWS,
+    ROSA_PLATFORM: KRKN_CLOUD_AWS,
+    ROSA_HCP_PLATFORM: KRKN_CLOUD_AWS,
+    # Azure platforms
+    AZURE_PLATFORM: KRKN_CLOUD_AZURE,
+    AZURE_WITH_LOGS_PLATFORM: KRKN_CLOUD_AZURE,
+    # GCP platform
+    GCP_PLATFORM: KRKN_CLOUD_GCP,
+    # IBM platforms
+    IBMCLOUD_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_POWER_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_CLOUD_BAREMETAL_PLATFORM: KRKN_CLOUD_IBM,
+    # VMware/vSphere platforms
+    VSPHERE_PLATFORM: KRKN_CLOUD_VMWARE,
+    HCI_VSPHERE: KRKN_CLOUD_VMWARE,
+    # BareMetal platforms
+    BAREMETAL_PLATFORM: KRKN_CLOUD_BAREMETAL,
+    BAREMETALPSI_PLATFORM: KRKN_CLOUD_BAREMETAL,
+    HCI_BAREMETAL: KRKN_CLOUD_BAREMETAL,
+    # OpenStack/RHV platforms
+    RHV_PLATFORM: KRKN_CLOUD_OPENSTACK,
+}
+
+
+def get_krkn_cloud_type():
+    """
+    Get the Krkn cloud type based on the current platform.
+
+    Returns:
+        str: Krkn cloud type (aws, azure, gcp, ibm, vmware, bm, openstack)
+
+    Raises:
+        pytest.skip: If platform is not supported for node chaos testing
+    """
+    platform = config.ENV_DATA.get("platform", "").lower()
+
+    if not platform:
+        pytest.skip("Platform not configured in ENV_DATA")
+
+    cloud_type = PLATFORM_TO_KRKN_CLOUD_TYPE.get(platform)
+
+    if not cloud_type:
+        pytest.skip(
+            f"Platform '{platform}' is not supported for Krkn node chaos testing. "
+            f"Supported platforms: {list(PLATFORM_TO_KRKN_CLOUD_TYPE.keys())}"
+        )
+
+    return cloud_type
+
+
+def get_node_scenario_generator():
+    """
+    Get the appropriate NodeScenarios generator method based on the platform.
+
+    Returns:
+        tuple: (generator_method, cloud_type, platform)
+    """
+    platform = config.ENV_DATA.get("platform", "").lower()
+    cloud_type = get_krkn_cloud_type()
+
+    # Map cloud types to their specific generator methods
+    generator_map = {
+        KRKN_CLOUD_AWS: NodeScenarios.aws_node_scenarios,
+        KRKN_CLOUD_AZURE: NodeScenarios.azure_node_scenarios,
+        KRKN_CLOUD_GCP: NodeScenarios.gcp_node_scenarios,
+        KRKN_CLOUD_IBM: NodeScenarios.ibmcloud_node_scenarios,
+        KRKN_CLOUD_VMWARE: NodeScenarios.vmware_node_scenarios,
+        KRKN_CLOUD_BAREMETAL: NodeScenarios.baremetal_node_scenarios,
+        KRKN_CLOUD_OPENSTACK: NodeScenarios.openstack_node_scenarios,
+    }
+
+    generator = generator_map.get(cloud_type)
+    if not generator:
+        pytest.skip(
+            f"No node scenario generator available for cloud type '{cloud_type}'"
+        )
+
+    return generator, cloud_type, platform
+
 
 # ============================================================================
 # BASE SCENARIO HELPER CLASS
