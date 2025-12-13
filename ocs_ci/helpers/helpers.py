@@ -54,6 +54,7 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.vsphere import VSPHERE
+from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -5502,11 +5503,10 @@ def upgrade_multus_holder_design():
         return
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
-        from ocs_ci.deployment.nmstate import NMStateInstaller
-
-        logger.info("Install NMState operator and create an instance")
-        nmstate_obj = NMStateInstaller()
-        nmstate_obj.running_nmstate()
+        nmstate_operator = NMStateOperator(
+            create_catalog=True,
+        )
+        nmstate_operator.deploy()
         configure_node_network_configuration_policy_on_all_worker_nodes()
     reset_all_osd_pods()
     enable_csi_disable_holder_pods()

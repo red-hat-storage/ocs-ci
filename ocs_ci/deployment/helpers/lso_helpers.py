@@ -55,48 +55,7 @@ def setup_local_storage(storageclass):
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
     lso_operator = LocalStorageOperator(create_catalog=True)
-
-    logger.info("Retrieving local-storage-operator data from yaml")
-    lso_data = list(
-        templating.load_yaml(constants.LOCAL_STORAGE_OPERATOR, multi_document=True)
-    )
-
-    # ensure namespace is correct
-    lso_namespace = lso_operator.namespace
-    for data in lso_data:
-        if data["kind"] == "Namespace":
-            data["metadata"]["name"] = lso_namespace
-        else:
-            data["metadata"]["namespace"] = lso_namespace
-        if data["kind"] == "OperatorGroup":
-            data["spec"]["targetNamespaces"] = [lso_namespace]
-
-    # Update local-storage-operator subscription data with channel
-    for data in lso_data:
-        if data["kind"] == "Subscription":
-            data["spec"]["channel"] = lso_operator.get_channel()
-        if data["kind"] == "Subscription":
-            data["spec"]["source"] = lso_operator.catalog_name
-
-    # Create temp yaml file and create local storage operator
-    logger.info(
-        "Creating temp yaml file with local-storage-operator data:\n %s", lso_data
-    )
-    lso_data_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="local_storage_operator", delete=False
-    )
-    templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
-    with open(lso_data_yaml.name, "r") as f:
-        logger.info(f.read())
-    logger.info("Creating local-storage-operator")
-    run_cmd(f"oc create -f {lso_data_yaml.name}")
-
-    local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
-    assert local_storage_operator.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
-        timeout=600,
-    ), "Local storage operator did not reach running phase"
+    lso_operator.deploy()
 
     # Add disks for vSphere/RHV platform
     platform = config.ENV_DATA.get("platform").lower()
@@ -113,7 +72,7 @@ def setup_local_storage(storageclass):
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
         lvd_data = templating.load_yaml(constants.LOCAL_VOLUME_DISCOVERY_YAML)
         # Set local-volume-discovery namespace
-        lvd_data["metadata"]["namespace"] = lso_namespace
+        lvd_data["metadata"]["namespace"] = lso_operator.namespace
 
         storage_node_names = get_compute_node_names(no_replace=True)
 
@@ -190,7 +149,7 @@ def setup_local_storage(storageclass):
         lv_data = templating.load_yaml(constants.LOCAL_VOLUME_YAML)
 
         # Set local-volume namespace
-        lv_data["metadata"]["namespace"] = lso_namespace
+        lv_data["metadata"]["namespace"] = lso_operator.namespace
 
         # Set storage class
         logger.info(
