@@ -127,6 +127,27 @@ def get_region(cluster_path):
     return metadata["ibmcloud"]["region"]
 
 
+def get_ibmcloud_cluster_region():
+    """
+    Get IBM Cloud region from the cluster's infrastructure object.
+
+    This function queries the live cluster to retrieve the IBM Cloud region
+    from the infrastructure status, which may differ from the metadata.json file.
+
+    Returns:
+        str: IBM Cloud region where the cluster is deployed
+
+    Raises:
+        CommandFailed: If the oc command fails
+    """
+    ocp_obj = OCP()
+    region = ocp_obj.exec_oc_cmd(
+        "get infrastructure cluster -o jsonpath='{.status.platformStatus.ibmcloud.location}'"
+    )
+    logger.info(f"IBM Cloud cluster region: {region}")
+    return region.strip()
+
+
 def get_resource_group_name(cluster_path):
     """
     Get resource group from metadata.json in given cluster_path

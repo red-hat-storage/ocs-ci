@@ -3649,7 +3649,7 @@ MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
 
 # chaos Tests constants
 KRKN_REPO_URL = "https://github.com/redhat-chaos/krkn.git"
-KRKN_VERSION = "v4.0.11"
+KRKN_VERSION = "v4.0.16"
 KRKN_DIR = os.path.join(DATA_DIR, "krkn")
 KRKN_CHAOS_DIR = os.path.join(TOP_DIR, "ocs_ci", "krkn_chaos")
 KRKN_SCENARIO_TEMPLATE_DIR = os.path.join(KRKN_CHAOS_DIR, "template")
@@ -3663,6 +3663,25 @@ KRKN_CHAOS_SCENARIO_DIR = os.path.join(DATA_DIR, "krkn_scenarios")
 KRKN_OUTPUT_DIR = os.path.join(DATA_DIR, "krkn_output")
 KRKN_RUN_CMD = os.path.join(KRKN_DIR, "run_kraken.py")
 KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
+
+# Krkn supported cloud types for node scenarios
+KRKN_CLOUD_AWS = "aws"
+KRKN_CLOUD_AZURE = "azure"
+KRKN_CLOUD_IBM = "ibm"
+KRKN_CLOUD_BAREMETAL = "bm"
+KRKN_CLOUD_VMWARE = "vmware"
+
+# Krkn node scenario actions
+KRKN_NODE_START = "node_start_scenario"
+KRKN_NODE_STOP = "node_stop_scenario"
+KRKN_NODE_STOP_START = "node_stop_start_scenario"
+KRKN_NODE_TERMINATION = "node_termination_scenario"
+KRKN_NODE_REBOOT = "node_reboot_scenario"
+KRKN_NODE_DISK_DETACH_ATTACH = "node_disk_detach_attach_scenario"
+KRKN_STOP_KUBELET = "stop_kubelet_scenario"
+KRKN_STOP_START_KUBELET = "stop_start_kubelet_scenario"
+KRKN_RESTART_KUBELET = "restart_kubelet_scenario"
+KRKN_NODE_CRASH = "node_crash_scenario"
 
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
 RBD_CSI_ADDONS_PLUGIN_DIR = (

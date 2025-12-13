@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=../plugin.schema.json
+# Node Scenarios - Simulates node failures on various cloud platforms
+# Supported cloud_types: aws, azure, openstack, ibm, alibaba, bm (baremetal), vmware
+# Supported actions: node_stop_start_scenario, node_reboot_scenario, node_termination_scenario,
+#                    node_disk_detach_attach_scenario, stop_kubelet_scenario, restart_kubelet_scenario
+node_scenarios:
+{%- for scenario in scenarios %}
+  - actions:
+{%- for action in scenario.actions %}
+    - {{ action }}
+{%- endfor %}
+{%- if scenario.node_name is defined and scenario.node_name %}
+    node_name: {{ scenario.node_name }}
+{%- else %}
+    node_name:
+{%- endif %}
+    label_selector: {{ scenario.label_selector | default('node-role.kubernetes.io/worker') }}
+    instance_count: {{ scenario.instance_count | default(1) }}
+{%- if scenario.runs is defined %}
+    runs: {{ scenario.runs }}
+{%- endif %}
+    timeout: {{ scenario.timeout | default(360) }}
+{%- if scenario.duration is defined %}
+    duration: {{ scenario.duration }}
+{%- endif %}
+{%- if scenario.parallel is defined %}
+    parallel: {{ scenario.parallel | lower }}
+{%- endif %}
+    cloud_type: {{ scenario.cloud_type | default('aws') }}
+{%- if scenario.kube_check is defined %}
+    kube_check: {{ scenario.kube_check | lower }}
+{%- endif %}
+{%- if scenario.poll_interval is defined %}
+    poll_interval: {{ scenario.poll_interval }}
+{%- endif %}
+{%- if scenario.disable_ssl_verification is defined %}
+    disable_ssl_verification: {{ scenario.disable_ssl_verification | lower }}  # Set to true for CI environments with certificate issues
+{%- endif %}
+{%- if scenario.skip_openshift_checks is defined %}
+    skip_openshift_checks: {{ scenario.skip_openshift_checks | lower }}
+{%- endif %}
+{%- if scenario.verify_nodes_ready is defined %}
+    verify_nodes_ready: {{ scenario.verify_nodes_ready | lower }}
+{%- endif %}
+{# BareMetal specific options #}
+{%- if scenario.bmc_user is defined %}
+    bmc_user: {{ scenario.bmc_user }}
+{%- endif %}
+{%- if scenario.bmc_password is defined %}
+    bmc_password: {{ scenario.bmc_password }}
+{%- endif %}
+{%- if scenario.bmc_info is defined %}
+    bmc_info:
+{%- for node_name, node_info in scenario.bmc_info.items() %}
+      {{ node_name }}:
+{%- if node_info.bmc_addr is defined %}
+        bmc_addr: {{ node_info.bmc_addr }}
+{%- endif %}
+{%- if node_info.bmc_user is defined %}
+        bmc_user: {{ node_info.bmc_user }}
+{%- endif %}
+{%- if node_info.bmc_password is defined %}
+        bmc_password: {{ node_info.bmc_password }}
+{%- endif %}
+{%- if node_info.disks is defined %}
+        disks: {{ node_info.disks }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- if scenario.service is defined %}
+    service: {{ scenario.service }}
+{%- endif %}
+{%- if scenario.ssh_private_key is defined %}
+    ssh_private_key: {{ scenario.ssh_private_key }}
+{%- endif %}
+{%- if scenario.ssh_user is defined %}
+    ssh_user: {{ scenario.ssh_user }}
+{%- endif %}
+{%- endfor %}
