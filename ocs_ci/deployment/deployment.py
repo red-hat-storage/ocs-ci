@@ -155,6 +155,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
+from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -1306,11 +1307,10 @@ class Deployment(object):
                 config.ENV_DATA.get("multus_create_public_net")
                 and ocs_version >= version.VERSION_4_16
             ):
-                from ocs_ci.deployment.nmstate import NMStateInstaller
-
-                logger.info("Install NMState operator and create an instance")
-                nmstate_obj = NMStateInstaller()
-                nmstate_obj.running_nmstate()
+                nmstate_operator = NMStateOperator(
+                    create_catalog=True,
+                )
+                nmstate_operator.deploy()
                 from ocs_ci.helpers.helpers import (
                     configure_node_network_configuration_policy_on_all_worker_nodes,
                 )

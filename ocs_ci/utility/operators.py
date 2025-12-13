@@ -8,9 +8,16 @@ from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.ocs.exceptions import ResourceNotFoundError, CommandFailed
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.exceptions import (
+    ResourceNotFoundError,
+    CommandFailed,
+    TimeoutExpiredError,
+)
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.version import (
     get_semantic_ocp_version_from_config,
     get_ocp_ga_version,
@@ -105,17 +112,11 @@ class Operator:
         return f"{self.name}-unreleased-catalog"
 
     def set_unreleased_catalog(self):
-        if not self.unreleased_catalog_name:
-            raise ValueError(
-                "Child class must define attribute `unreleased_catalog_name`"
-            )
         self.catalog_name = self.unreleased_catalog_name
 
     def get_idms_data(self):
         if not self.unreleased_images:
-            raise ValueError(
-                "Child class must define attribute `unreleased_images_source_mirrors`"
-            )
+            raise ValueError("Child class must define attribute `unreleased_images`")
         unreleased_catalog_idms_data = templating.load_yaml(
             os.path.join(
                 OPERATORS_TEMPLATES_DIR, "unreleased-operator-catalog-idms.yaml"
@@ -175,10 +176,6 @@ class Operator:
         """
         Create the unreleased catalog for the operator
         """
-        if not self.unreleased_catalog_name:
-            raise ValueError(
-                "Child class must define attribute `unreleased_catalog_name`"
-            )
         if not self.unreleased_catalog_image:
             raise ValueError(
                 "Child class must define attribute `unreleased_catalog_image`"
@@ -206,7 +203,7 @@ class Operator:
 
     def is_available(self):
         """
-        Get the version of the operator
+        Check if the operator is available
 
         Returns:
             bool: True if the operator is available, False otherwise
@@ -233,7 +230,7 @@ class Operator:
         """
         ocp_version = get_ocp_version()
         selector = self.catalog_selector
-        # Retrieve available channels for LSO
+        # Retrieve available channels
         package_manifest = PackageManifest(resource_name=self.name, selector=selector)
         channels = package_manifest.get_channels()
 
@@ -243,7 +240,7 @@ class Operator:
             if ocp_version == channel["name"]:
                 return ocp_version
             else:
-                if channel["name"] != "stable":
+                if channel["name"] != constants.STABLE:
                     versions.append(LooseVersion(channel["name"]))
                 else:
                     logger.debug(f"channel with name {channel['name']} found")
@@ -261,11 +258,112 @@ class Operator:
             # Use latest channel
             if stable_channel_found:
                 if stable_channel_version > get_semantic_version(sorted_versions[-1]):
-                    return "stable"
+                    return constants.STABLE
                 else:
                     return sorted_versions[-1]
         else:
             return channels[-1]["name"]
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for child classes to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        pass
+
+    def create_operatorgroup(self):
+        """
+        Create an OperatorGroup for the operator
+        """
+        operatorgroup_data = templating.load_yaml(
+            os.path.join(OPERATORS_TEMPLATES_DIR, "operatorgroup.yaml")
+        )
+        operatorgroup_data["metadata"]["name"] = self.name
+        operatorgroup_data["metadata"]["namespace"] = self.namespace
+        operatorgroup_data["spec"]["targetNamespaces"] = [self.namespace]
+        self._customize_operatorgroup(operatorgroup_data)
+        operatorgroup_data_yaml = NamedTemporaryFile(
+            mode="w+", prefix=f"{self.name}-operatorgroup", delete=False
+        )
+        with open(operatorgroup_data_yaml.name, "w") as fd:
+            fd.write(yaml.dump(operatorgroup_data))
+        run_cmd(f"oc apply -f {operatorgroup_data_yaml.name}")
+
+    def create_namespace(self):
+        """
+        Create a namespace for the operator
+        """
+        namespace_data = templating.load_yaml(
+            os.path.join(OPERATORS_TEMPLATES_DIR, "namespace.yaml")
+        )
+        namespace_data["metadata"]["name"] = self.namespace
+        self._customize_namespace(namespace_data)
+        namespace_data_yaml = NamedTemporaryFile(
+            mode="w+", prefix=f"{self.name}-namespace", delete=False
+        )
+        with open(namespace_data_yaml.name, "w") as fd:
+            fd.write(yaml.dump(namespace_data))
+        run_cmd(f"oc apply -f {namespace_data_yaml.name}")
+
+    def _customize_namespace(self, namespace_data: dict):
+        """
+        Hook for child classes to customize Namespace YAML
+
+        Args:
+            namespace_data (dict): the Namespace YAML data
+        """
+        pass
+
+    def create_subscription(self):
+        """
+        Create a subscription for the operator
+        """
+        subscription_data = templating.load_yaml(
+            os.path.join(OPERATORS_TEMPLATES_DIR, "subscription.yaml")
+        )
+        subscription_data["metadata"]["name"] = self.name
+        subscription_data["metadata"]["namespace"] = self.namespace
+        subscription_data["spec"]["channel"] = self.get_channel()
+        subscription_data["spec"]["name"] = self.name
+        subscription_data["spec"]["source"] = self.catalog_name
+        self._customize_subscription(subscription_data)
+        subscription_data_yaml = NamedTemporaryFile(
+            mode="w+", prefix=f"{self.name}-subscription", delete=False
+        )
+        with open(subscription_data_yaml.name, "w") as fd:
+            fd.write(yaml.dump(subscription_data))
+        run_cmd(f"oc apply -f {subscription_data_yaml.name}")
+
+    def _customize_subscription(self, subscription_data: dict):
+        """
+        Hook for child classes to customize Subscription YAML
+
+        Args:
+            subscription_data (dict): the Subscription YAML data
+        """
+        pass
+
+    def deploy(self):
+
+        self.create_namespace()
+        self.create_operatorgroup()
+        self.create_subscription()
+        self._customize_post_deployment_steps()
+        self._deployment_verification()
+
+    def _customize_post_deployment_steps(self):
+        """
+        Hook for child classes to customize post deployment steps
+        """
+        pass
+
+    def _deployment_verification(self):
+        """
+        Hook for child classes to verify the deployment
+        """
+        pass
 
 
 class NMStateOperator(Operator):
@@ -288,6 +386,121 @@ class NMStateOperator(Operator):
         ]
         super().__init__(create_catalog)
 
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for NMStateOperator to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["metadata"]["annotations"] = {
+            "olm.providedAPIs": "NMState.v1.nmstate.io",
+        }
+
+    def _customize_namespace(self, namespace_data: dict):
+        """
+        Hook for NMStateOperator to customize Namespace YAML
+
+        Args:
+            namespace_data (dict): the Namespace YAML data
+        """
+        namespace_data["metadata"]["labels"] = {
+            "kubernetes.io/metadata.name": self.namespace,
+            "name": self.namespace,
+        }
+        namespace_data["spec"]["finalizers"] = [
+            "kubernetes",
+        ]
+
+    def _customize_subscription(self, subscription_data: dict):
+        """
+        Hook for NMStateOperator to customize Subscription YAML
+
+        Args:
+            subscription_data (dict): the Subscription YAML data
+        """
+        subscription_data["metadata"]["labels"] = {
+            "operators.coreos.com/kubernetes-nmstate-operator.openshift-nmstate": "",
+        }
+
+    def verify_nmstate_csv_status(self):
+        """
+        Verify the CSV status for the nmstate Operator deployment equals Succeeded
+
+        """
+        for csv in TimeoutSampler(
+            timeout=900,
+            sleep=15,
+            func=get_csvs_start_with_prefix,
+            csv_prefix=self.name,
+            namespace=self.namespace,
+        ):
+            if csv:
+                break
+        csv_name = csv[0]["metadata"]["name"]
+        csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
+
+    def create_nmstate_instance(self):
+        """
+        Create an instance of the nmstate Operator
+
+        """
+        logger.info("Creating NMState Instance")
+        subscription_yaml_file = templating.load_yaml(constants.NMSTATE_INSTANCE_YAML)
+        subscription_yaml = OCS(**subscription_yaml_file)
+        subscription_yaml.create()
+        logger.info("NMState Instance created successfully")
+
+    def verify_nmstate_pods_running(self):
+        """
+        Verify the pods for NMState Operator are running
+
+        """
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=self.count_nmstate_pods_running,
+            count=10,
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise TimeoutExpiredError(
+                "Not all nmstate pods in Running state after 300 seconds"
+            )
+
+    def count_nmstate_pods_running(self, count):
+        """
+        Count the pods for NMState Operator are running
+
+        Returns:
+            bool:
+
+        """
+        count_running_nmstate_pods = 0
+        ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
+        pod_items = ocp_pod.get().get("items")
+        # Check if nmstate pods are in running state
+        for nmstate_pod in pod_items:
+            nmstate_pod_name = nmstate_pod.get("metadata").get("name")
+            status = ocp_pod.get_resource_status(nmstate_pod_name)
+            if status == constants.STATUS_RUNNING:
+                logger.info(f"NMState pod {nmstate_pod_name} in running state")
+                count_running_nmstate_pods += 1
+        return count_running_nmstate_pods >= count
+
+    def _customize_post_deployment_steps(self):
+        """
+        Customize post deployment steps for NMStateOperator
+        """
+        self.verify_nmstate_csv_status()
+        self.create_nmstate_instance()
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the nmstate operator
+        """
+        self.verify_nmstate_pods_running()
+
 
 class LocalStorageOperator(Operator):
     def __init__(self, create_catalog: bool = False):
@@ -308,3 +521,28 @@ class LocalStorageOperator(Operator):
         ]
         self.namespace = constants.LOCAL_STORAGE_NAMESPACE
         super().__init__(create_catalog)
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for LSO to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["metadata"]["annotations"] = {
+            "olm.providedAPIs": "LocalVolume.v1.local.storage.openshift.io",
+        }
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the local storage operator
+        """
+        local_storage_operator = OCP(kind=constants.POD, namespace=self.namespace)
+        assert local_storage_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
+            timeout=600,
+        ), "Local storage operator did not reach running phase"
+
+
+# TODO: Add MetalLB operator
