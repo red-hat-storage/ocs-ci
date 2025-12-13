@@ -101,7 +101,7 @@ class TestKrknNodeScenarios:
             log.info(f"Generated {cloud_type} node scenario file: {scenario_file}")
 
             # Add scenario to Krkn config
-            krkn_config.add_scenario_file("node_scenarios", scenario_file)
+            krkn_config.add_scenario("node_scenarios", scenario_file)
 
             # Configure and write Krkn configuration
             krkn_config.set_tunings(wait_duration=60, iterations=1)
@@ -250,7 +250,7 @@ class TestKrknNodeScenarios:
             log.info(f"Generated node scenario file: {scenario_file}")
 
             # Add scenario to Krkn config
-            krkn_config.add_scenario_file("node_scenarios", scenario_file)
+            krkn_config.add_scenario("node_scenarios", scenario_file)
 
             # Configure and write Krkn configuration
             krkn_config.set_tunings(wait_duration=60, iterations=1)
