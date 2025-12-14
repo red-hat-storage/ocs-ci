@@ -1,6 +1,7 @@
 import json
 import logging
 import shlex
+from time import sleep
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -37,15 +38,15 @@ class KEDA:
         workload_namespace,
         keda_namespace="keda",
     ):
+        self.cleanup_label = (
+            f"{create_unique_resource_name('keda-cleanup', 'label')}=true"
+        )
         self.workload_namespace = workload_namespace
         self.keda_namespace = keda_namespace
-        self.sa_name = None
-        self.secret_name = None
         self.token = None
         self.ca_data = None
         self.ca_secret_name = None
         self.ta_name = None
-        self.scaled_objects = []
 
     def install(self):
         """
@@ -70,16 +71,38 @@ class KEDA:
 
         # Install KEDA via the Helm CLI
         try:
+            # Add the KEDA repository to helm
             exec_cmd(f"helm repo add kedacore {KEDACORE_REPO_URL}")
             exec_cmd("helm repo update")
-            exec_cmd(
-                f"helm install keda kedacore/keda --namespace {self.keda_namespace} --create-namespace"
-                " --wait --timeout 5m"  # Waits for all of Keda's pods to be in running state
-            )
+
         except CommandFailed as e:
-            raise CommandFailed(
-                f"Failed to install KEDA in namespace {self.keda_namespace}: {e}"
-            )
+            raise CommandFailed(f"Failed to add KEDA repository to Helm: {e}")
+
+        # Install KEDA
+        install_cmd = (
+            f"helm install keda kedacore/keda --namespace {self.keda_namespace} --create-namespace"
+            " --wait --timeout 5m"  # Waits for all of Keda's pods to be in running state
+        )
+        try:
+            exec_cmd(install_cmd)
+        except CommandFailed as e:
+            e_msg = str(e).lower()
+            if e_msg.contains("customresourcedefinitions") and e_msg.contains(
+                "not found"
+            ):
+                logger.warning("Some KEDA CRDs are not yet established")
+
+                # Wait a bit for the CRDs
+                sleep(10)
+                OCP().exec_oc_cmd(
+                    (
+                        "oc wait --for=condition=Established"
+                        "crds -l app.kubernetes.io/part-of=keda-operator"
+                    )
+                )
+
+                # Retry once more
+                exec_cmd(install_cmd)
 
         # Verify that KEDA is installed
         if not self.is_installed():
@@ -110,8 +133,15 @@ class KEDA:
         Setup access to Thanos metrics for KEDA
 
         This creates a service account, a secret with a token, and a secret with the CA bundle.
-        It then creates a TriggerAuthentication that points KEDA to the token + CA bundle.
+        It then creates a TriggerAuthentication that points KEDA to the token + CA bundle:
+
+        1. Create a service account for KEDA and grant it read access
+        2. Mint a token for the service account and store it in a secret
+        3. Extract the cluster CA bundle so KEDA can verify Thanos TLS
+        4. Create a secret with the CA bundle
+        5. Create a TriggerAuthentication that points KEDA to the token + CA bundle
         """
+        resources_to_cleanup = []
         logger.info("Configuring KEDA to read Thanos metrics")
         ocp_obj = OCP(namespace=self.workload_namespace)
 
@@ -121,13 +151,19 @@ class KEDA:
         ocp_obj.exec_oc_cmd(
             f"adm policy add-cluster-role-to-user {constants.CLUSTER_MONITORING_VIEW_ROLE} -z {self.sa_name}",
         )
+        resources_to_cleanup.append(f"{constants.SERVICE_ACCOUNT}/{self.sa_name}")
 
         # Mint a token for the service account and store it in a secret
-        self.secret_name = create_unique_resource_name("keda-prom-token", "secret")
+        self.token_secret_name = create_unique_resource_name(
+            "keda-prom-token", "secret"
+        )
         self.token = ocp_obj.exec_oc_cmd(f"create token {self.sa_name}")
         ocp_obj.exec_oc_cmd(
-            f"create secret generic {self.secret_name} --from-literal=bearerToken={self.token}"
+            f"create secret generic {self.token_secret_name} --from-literal=bearerToken={self.token}",
+            silent=True,
         )
+        logger.info(f"Created token secret {self.token_secret_name}")
+        resources_to_cleanup.append(f"{constants.SECRET}/{self.token_secret_name}")
 
         # Extract the cluster CA bundle so KEDA can verify Thanos TLS
         # TODO: This currently leaves a leftover we need to cleanup at teardown
@@ -138,8 +174,11 @@ class KEDA:
         self.ca_secret_name = create_unique_resource_name("keda-prom-ca", "secret")
         ocp_obj.exec_oc_cmd(
             f"create secret generic {self.ca_secret_name} "
-            f"--from-literal=ca.crt='{self.ca_data}'"
+            f"--from-literal=ca.crt='{self.ca_data}'",
+            silent=True,
         )
+        logger.info(f"Created CA secret {self.ca_secret_name}")
+        resources_to_cleanup.append(f"{constants.SECRET}/{self.ca_secret_name}")
 
         # Create a TriggerAuthentication that points KEDA to the token + CA bundle
         trigger_auth_data = templating.load_yaml(
@@ -152,19 +191,27 @@ class KEDA:
         trigger_auth_data["metadata"]["namespace"] = self.workload_namespace
 
         # Set bearer token reference
-        trigger_auth_data["spec"]["secretTargetRef"][0]["name"] = self.secret_name
+        trigger_auth_data["spec"]["secretTargetRef"][0]["name"] = self.token_secret_name
 
         # Add TLS CA reference
         trigger_auth_data["spec"]["secretTargetRef"][1]["name"] = self.ca_secret_name
 
         create_resource(**trigger_auth_data)
+        resources_to_cleanup.append(
+            f"{constants.TRIGGER_AUTHENTICATION}/{self.ta_name}"
+        )
+
+        # Label these resources for easy cleanup
+        label_cmd = f"label {' '.join(resources_to_cleanup)} {self.cleanup_label}"
+        ocp_obj.exec_oc_cmd(label_cmd)
 
         logger.info("KEDA configured to read Thanos metrics")
 
     def can_read_thanos_metrics(self):
         """
         Check if the token and CA that KEDA is configured to use are valid
-        by querying the Thanos Querier internal address from one of the Prometheus pods.
+        by using them to query the Thanos Querier internal address from one
+        of the Prometheus pods and checking the response.
 
         Returns:
             bool: True if KEDA is configured to read Thanos metrics, False otherwise.
@@ -205,7 +252,7 @@ class KEDA:
         # Wrap it for bash -lc (so <(...) works)
         cmd = f"bash -lc {shlex.quote(bash_script)}"
 
-        raw_response = prom_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        raw_response = prom_pod.exec_cmd_on_pod(cmd, out_yaml_format=False, silent=True)
         response = json.loads(raw_response)
         if response.get("status") == "success":
             logger.info("KEDA's token and CA can be used to read Thanos metrics")
@@ -231,6 +278,8 @@ class KEDA:
         Returns:
             ScaledObject: The configured ScaledObject instance.
         """
+        logger.info(f"Creating ScaledObject according to config: {config_dict}")
+
         config_dict.setdefault("namespace", self.workload_namespace)
         config_dict.setdefault(
             "serverAddress", constants.THANOS_QUERIER_INTERNAL_ADDRESS
@@ -238,47 +287,59 @@ class KEDA:
         config_dict.setdefault("authenticationRef", self.ta_name)
 
         scaled_obj = ScaledObject(config_dict)
-        self.scaled_objects.append(scaled_obj.ocp_obj)
+
+        # Label the scaled object for easy cleanup
+        ocp_obj = OCP(namespace=self.workload_namespace)
+        ocp_obj.exec_oc_cmd(
+            f"label {constants.SCALED_OBJECT}/{scaled_obj.name} {self.cleanup_label}"
+        )
+
+        logger.info(f"ScaledObject created: {scaled_obj.name}")
         return scaled_obj
 
-    # TODO clean this mess
     def cleanup(self):
         """
         Cleanup KEDA
         """
-        for resource_name, kind, namespace in [
-            (self.ta_name, constants.TRIGGER_AUTHENTICATION, self.workload_namespace),
-            (self.secret_name, constants.SECRET, self.workload_namespace),
-            (self.sa_name, constants.SERVICE_ACCOUNT, self.workload_namespace),
-        ]:
-            try:
-                ocp_obj = OCP(namespace=namespace, kind=kind)
-                ocp_obj.delete(resource_name=resource_name, wait=True)
-            except CommandFailed:
-                logger.warning(f"Failed to delete {resource_name} of kind {kind}")
+        # Delete any resources that were created by this class
+        ocp_obj = OCP(namespace=self.workload_namespace)
+        resource_types_to_clean = [
+            "all",
+            constants.SERVICE_ACCOUNT,
+            constants.SECRET,
+            constants.TRIGGER_AUTHENTICATION,
+            constants.SCALED_OBJECT,
+        ]
 
         try:
-            for scaled_object in self.scaled_objects:
-                scaled_object.delete()
-        except CommandFailed as e:
-            logger.warning(f"Failed to delete scaled objects: {e}")
-        try:
-            ocp.switch_to_default_rook_cluster_project()
-            self.uninstall()
-
-            OCP().exec_oc_cmd("delete apiservice v1beta1.external.metrics.k8s.io")
-            OCP().exec_oc_cmd(f"delete namespace {self.keda_namespace}")
-
+            ocp_obj.exec_oc_cmd(
+                f"delete {','.join(resource_types_to_clean)} -l {self.cleanup_label}"
+            )
         except CommandFailed:
-            logger.warning(f"Failed to delete project {self.keda_namespace}")
+            logger.warning(
+                f"Failed to delete some resources labeled with {self.cleanup_label}"
+            )
 
+        # Uninstall KEDA via Helm
+        ocp.switch_to_default_rook_cluster_project()
+        self.uninstall()
+
+        # Delete the namespace
+        try:
+            OCP().exec_oc_cmd(f"delete namespace {self.keda_namespace}", timeout=120)
+
+        except CommandFailed as e:
+            logger.warning(f"Failed to delete project {self.keda_namespace}: {e}")
             try:
                 # Sometimes this resources hangs the namespace deletion
-                OCP().exec_oc_cmd("delete apiservice v1beta1.external.metrics.k8s.io")
+                OCP().exec_oc_cmd(
+                    "delete apiservice v1beta1.external.metrics.k8s.io", timeout=120
+                )
             except CommandFailed:
                 logger.warning(
                     "Failed to delete apiservice v1beta1.external.metrics.k8s.io"
                 )
+        OCP(kind=constants.NAMESPACE).wait_for_delete(self.keda_namespace, timeout=60)
 
     def uninstall(self):
         """

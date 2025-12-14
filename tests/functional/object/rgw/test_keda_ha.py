@@ -67,9 +67,7 @@ class TestKedaHA:
         return WarpWorkloadRunner(request, host)
 
     @tier1
-    def test_rgw_keda_ha(
-        self, request, keda_class, rgw_bucket_factory, warp_workload_runner
-    ):
+    def test_rgw_keda_ha(self, keda_class, rgw_bucket_factory, warp_workload_runner):
         """
         Test RGW's integration with Keda autoscaler
 
@@ -105,7 +103,6 @@ class TestKedaHA:
             access_key=obc_obj.access_key_id,
             secret_key=obc_obj.access_key,
             bucket_name=bucketname,
-            request=request,
             workload_type="mixed",
             duration="30s",
             concurrent=10,
@@ -138,20 +135,21 @@ class TestKedaHA:
             # Optional: Log findings from the last warp run
             try:
                 last_report = warp_workload_runner.warp.get_last_report()
-                num_of_errors = (
-                    pd.to_numeric(last_report["errors"], errors="coerce")
-                    .fillna(0)
-                    .astype(int)
-                    .sum()
-                )
-                average_throughput = (
-                    pd.to_numeric(last_report["mb_per_sec"], errors="coerce")
-                    .fillna(0)
-                    .astype(float)
-                    .mean()
-                )
-                logger.info(f"Number of errors: {num_of_errors}")
-                logger.info(f"Average throughput: {average_throughput:.2f} MB/s")
+                if last_report is not None:
+                    num_of_errors = (
+                        pd.to_numeric(last_report["errors"], errors="coerce")
+                        .fillna(0)
+                        .astype(int)
+                        .sum()
+                    )
+                    average_throughput = (
+                        pd.to_numeric(last_report["mb_per_sec"], errors="coerce")
+                        .fillna(0)
+                        .astype(float)
+                        .mean()
+                    )
+                    logger.info(f"Number of errors: {num_of_errors}")
+                    logger.info(f"Average throughput: {average_throughput:.2f} MB/s")
             except Exception as e:
                 logger.warning(f"Failed to get last report: {e}")
 
