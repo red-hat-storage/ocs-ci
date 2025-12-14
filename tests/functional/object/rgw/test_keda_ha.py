@@ -1,14 +1,15 @@
 import logging
-import pandas as pd
 
+import pandas as pd
 import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id,
+    red_squad,
+    rgw,
     skipif_disconnected_cluster,
     tier1,
-    rgw,
-    red_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -67,6 +68,7 @@ class TestKedaHA:
         return WarpWorkloadRunner(request, host)
 
     @tier1
+    @polarion_id("OCS-7408")
     def test_rgw_keda_ha(self, keda_class, rgw_bucket_factory, warp_workload_runner):
         """
         Test RGW's integration with Keda autoscaler
