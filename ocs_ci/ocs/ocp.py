@@ -409,7 +409,7 @@ class OCP(object):
         command = "create "
         if yaml_file:
             command += f"-f {yaml_file}"
-            if config.RUN["resource_checker"]:
+            if config.RUN.get("resource_checker"):
                 yaml_dct = load_yaml(yaml_file)
                 kind = yaml_dct["kind"]
                 if kind == "PersistentVolume":
@@ -448,7 +448,7 @@ class OCP(object):
         elif resource_name:
             # e.g "oc namespace my-project"
             command += f"{self.kind} {resource_name}"
-            if config.RUN["resource_checker"]:
+            if config.RUN.get("resource_checker"):
                 config.RUN["RESOURCE_DICT_TEST"][self.kind] = resource_name
         if out_yaml_format:
             command += " -o yaml"
@@ -685,7 +685,7 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        if config.RUN["custom_kubeconfig_location"]:
+        if config.RUN.get("custom_kubeconfig_location"):
             cmd = f'oc --kubeconfig {config.RUN["custom_kubeconfig_location"]} new-project {project_name}'
         else:
             cmd = f"oc new-project {project_name}"

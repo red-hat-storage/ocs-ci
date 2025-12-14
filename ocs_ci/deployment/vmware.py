@@ -11,7 +11,6 @@ import gzip
 from shutil import rmtree, copyfile
 from subprocess import TimeoutExpired
 import time
-from typing import Optional
 
 import requests
 import base64
@@ -2016,24 +2015,26 @@ class VSPHEREAI(VSPHEREBASE):
 
 class VSPHEREAgentAI(VSPHEREBASE):
     """
-    A class to handle vSphere Assisted Installer specific deployment for HCP Agent clusters
+    A class to handle vSphere specific deployment for HCP Agent clusters via Assisted Installer running on HCP cluster
     To use this class we need to switch to client context first
     """
 
     def __init__(self):
         self.cluster_name = config.ENV_DATA["cluster_name"]
-        # self.agent_workflow = agent_workflow
         super(VSPHEREAgentAI, self).__init__()
 
     class OCPDeployment(BaseOCPDeployment):
 
-        # self.ocp_deployment.outer is a dependency injection,
-        # necessary to refer an outer instance methods from the inner OCPDeployment
-        # here this class attribute is a placeholder for the outer VSPHEREAgentAI instance
-        outer: Optional["VSPHEREAgentAI"] = None
-
         def __init__(self):
+
             super(VSPHEREAgentAI.OCPDeployment, self).__init__()
+
+            self.api_vip = None
+            self.ingress_vip = None
+
+            from .hub_spoke import AgentWorkflow
+
+            self.agent_workflow = AgentWorkflow(self.cluster_name)
 
             if not (
                 config.DEPLOYMENT.get("hub_cluster_path")
@@ -2101,10 +2102,8 @@ class VSPHEREAgentAI(VSPHEREBASE):
             config.ENV_DATA["terraform_installer"] = terraform_installer
 
             # Initialize Terraform. It will be used later for infrastructure creation
-            #
             self.terraform_work_dir = os.path.join(os.getcwd(), "terraform/ai/vsphere/")
             self.terraform = Terraform(self.terraform_work_dir)
-            assert Exception("TEST-TEST-TEST-TEST-TEST")
 
         def deploy_prereq(self):
             """
@@ -2123,6 +2122,10 @@ class VSPHEREAgentAI(VSPHEREBASE):
                     {"clusterName": self.cluster_name, "infraID": self.cluster_name},
                     metadata_file,
                 )
+
+            log_step("Create host inventory and wait for min image creation")
+            self.agent_workflow.create_host_inventory()
+            self.agent_workflow.wait_for_image_created_in_infraenv()
 
             self.assign_api_ingress_ips()
 
@@ -2167,20 +2170,14 @@ class VSPHEREAgentAI(VSPHEREBASE):
             self.terraform.apply(self.terraform_vars_file)
             os.chdir(previous_dir)
 
-            if not hasattr(self, "outer"):
-                raise RuntimeError(
-                    "OCPDeployment.outer has not been assigned by VSPHEREAgentAI"
-                )
-            # self.outer.agent_workflow.wait_agents_available(
-            #     config.ENV_DATA["worker_replicas"]
-            # )
-            # self.outer.agent_workflow.approve_agents()
-
+            self.agent_workflow.wait_agents_available(
+                config.ENV_DATA["worker_replicas"]
+            )
+            self.agent_workflow.approve_agents()
             log_step(
                 "Modifying DNS records for API and Ingress, pointing to host (machines) IPs"
             )
-
-            agent_ip_list = self.outer.agent_workflow.get_agents_external_ip_list()
+            agent_ip_list = self.agent_workflow.get_agents_external_ip_list()
             modify_dns_records(agent_ip_list, agent_ip_list)
 
             log_step("removing reserved API and Ingress IPs")
@@ -2194,6 +2191,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 self.terraform_data_dir,
                 "terraform.tfvars.json",
             )
+            # control plane specs removed by purpose. HCP spoke clusters can not have own control plane nodes
             tfvars = {
                 "cluster_id": self.cluster_name,
                 "vsphere_server": config.ENV_DATA["vsphere_server"],
@@ -2207,20 +2205,11 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 "api_ip": self.api_vip,
                 "ingress_ip": self.ingress_vip,
                 "iso_image": self.discovery_iso_image,
-                "control_plane_count": config.ENV_DATA["master_replicas"],
                 "compute_count": config.ENV_DATA["worker_replicas"],
-                "control_plane_memory": config.ENV_DATA["master_memory"],
                 "compute_memory": config.ENV_DATA["compute_memory"],
-                "control_plane_num_cpus": config.ENV_DATA["master_num_cpus"],
                 "compute_num_cpus": config.ENV_DATA["worker_num_cpus"],
                 "system_disk_size": constants.VM_ROOT_DISK_SIZE,
-                "control_plane_data_disks_count": config.ENV_DATA.get(
-                    "control_plane_extra_disks", 0
-                ),
-                "control_plane_data_disks_size": config.ENV_DATA.get(
-                    "device_size", defaults.DEVICE_SIZE
-                ),
-                "compute_data_disks_count": config.ENV_DATA["extra_disks"],
+                "compute_data_disks_count": config.ENV_DATA.get("extra_disks", 1),
                 "compute_data_disks_size": config.ENV_DATA.get(
                     "device_size", defaults.DEVICE_SIZE
                 ),
@@ -2244,6 +2233,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 f"Assigned (reserved) API ({self.api_vip}) and Ingress ({self.ingress_vip}) IPs"
             )
 
+        @config.run_with_provider_context_if_available
         def download_discovery_iso(self):
             """
             Download the ISO image from the InfraEnv to cluster_path of the client cluster
@@ -2253,38 +2243,34 @@ class VSPHEREAgentAI(VSPHEREBASE):
             Returns:
                 str: Path to downloaded ISO image or None if download failed
             """
+            from ocs_ci.ocs.ocp import OCP as OCPobj
 
-            with config.RunWithProviderConfigContextIfAvailable():
-                from ocs_ci.ocs.ocp import OCP as OCPobj
+            infraenv_obj = OCPobj(kind=constants.INFRA_ENV, namespace=self.cluster_name)
+            infraenv_list = infraenv_obj.get().get("items", [])
 
-                infraenv_obj = OCPobj(
-                    kind=constants.INFRA_ENV, namespace=self.cluster_name
+            if not infraenv_list:
+                logger.error(f"No InfraEnv found in namespace {self.cluster_name}")
+                return None
+
+            infraenv = infraenv_list[0]
+            iso_url = infraenv.get("status", {}).get("isoDownloadURL")
+
+            if not iso_url:
+                logger.error(
+                    f"No ISO download URL found in InfraEnv {self.cluster_name}"
                 )
-                infraenv_list = infraenv_obj.get().get("items", [])
+                return None
 
-                if not infraenv_list:
-                    logger.error(f"No InfraEnv found in namespace {self.cluster_name}")
-                    return None
+            logger.info(
+                f"Downloading ISO image from {iso_url} to {self.discovery_iso_image}"
+            )
 
-                infraenv = infraenv_list[0]
-                iso_url = infraenv.get("status", {}).get("isoDownloadURL")
-
-                if not iso_url:
-                    logger.error(
-                        f"No ISO download URL found in InfraEnv {self.cluster_name}"
-                    )
-                    return None
-
-                logger.info(
-                    f"Downloading ISO image from {iso_url} to {self.discovery_iso_image}"
-                )
-
-                try:
-                    return download_with_retries(iso_url, self.discovery_iso_image)
-                except Exception as e:
-                    self.discovery_iso_image = None
-                    logger.error(f"Failed to download ISO image: {e}")
-                    return None
+            try:
+                return download_with_retries(iso_url, self.discovery_iso_image)
+            except Exception as e:
+                self.discovery_iso_image = None
+                logger.error(f"Failed to download ISO image: {e}")
+                return None
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
