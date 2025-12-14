@@ -1557,6 +1557,7 @@ class HypershiftHostedOCP(
         CNVInstaller.__init__(self)
         MCEInstaller.__init__(self)
         HyperConverged.__init__(self)
+        self.agent_workflow = AgentWorkflow(name)
         # min image to boot worker machines for HCP Agent deployments
         self.boot_image_path = None
 
@@ -1625,8 +1626,8 @@ class HypershiftHostedOCP(
                 return self.name
 
             log_step("Create host inventory and wait for min image creation")
-            self.create_host_inventory()
-            self.wait_for_image_created_in_infraenv()
+            self.agent_workflow.create_host_inventory()
+            self.agent_workflow.wait_for_image_created_in_infraenv()
 
             log_step("Boot machines for Agent hosted cluster with min image")
             if not self.boot_machines_for_agent():
@@ -1644,11 +1645,11 @@ class HypershiftHostedOCP(
                     "Cannot proceed with Agent hosted cluster deployment."
                 )
                 return ""
-            if not self.wait_agents_available(worker_number):
+            if not self.agent_workflow.wait_agents_available(worker_number):
                 return ""
 
             log_step("Approve agents for Agent hosted cluster")
-            self.approve_agents()
+            self.agent_workflow.approve_agents()
 
             return self.create_agent_ocp_cluster(
                 name=self.name,
@@ -2027,128 +2028,6 @@ class HypershiftHostedOCP(
             # thus exception is broad
             logger.error(f"Failed to apply IDMS mirrors to HostedClusters: {e}")
 
-    @config.run_with_provider_context_if_available
-    def create_host_inventory(self):
-        """
-        Create InfraEnv resource for host inventory. For every new Agent cluster there must be specific InfraEnv
-        resource, which makes HostedClient attached to InfraEnv by design.
-
-        Returns:
-            An OCS instance of kind InfraEnv
-        """
-        # Create InfraEnv
-        template_yaml = os.path.join(
-            constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
-        )
-        infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
-        ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
-        with open(ssh_pub_file_path, "r") as ssh_key:
-            ssh_pub_key = ssh_key.read().strip()
-        # TODO: Add custom OS image details. Reference
-        # https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.10
-        # /html-single/clusters/index#create-host-inventory-cli-steps
-
-        infra_env_namespace = self.name
-
-        # Create project
-        create_project(project_name=infra_env_namespace)
-
-        for data in infra_env_data:
-            if data["kind"] == constants.INFRA_ENV:
-                data["spec"]["sshAuthorizedKey"] = ssh_pub_key
-                data["metadata"]["name"] = self.name
-                # Create new secret in the namespace using the existing secret
-                secret_obj = OCP(
-                    kind=constants.SECRET,
-                    resource_name="pull-secret",
-                    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
-                )
-                secret_info = secret_obj.get()
-                secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
-                secret_data["data"][".dockerconfigjson"] = secret_info["data"][
-                    ".dockerconfigjson"
-                ]
-                secret_data["metadata"]["namespace"] = infra_env_namespace
-                secret_data["metadata"]["name"] = "pull-secret"
-                secret_manifest = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="pull_secret", delete=False
-                )
-                templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
-                # Create secret like this to avoid printing in logs
-                exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
-            data["metadata"]["namespace"] = infra_env_namespace
-            resource_obj = create_resource(**data)
-            if data["kind"] == constants.INFRA_ENV:
-                infra_env = resource_obj
-        logger.info(f"Created InfraEnv {self.name}.")
-        return infra_env
-
-    def image_created_in_infraenv(self):
-        """
-        Check if the image is created in the InfraEnv
-
-        Returns:
-            bool: True if the image is created, False otherwise
-        """
-
-        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
-        infraenv_list = infraenv_obj.get().get("items", [])
-
-        if not infraenv_list:
-            logger.warning(f"No InfraEnv found in namespace {self.name}")
-            return False
-
-        # we assume only one infraenv is created withing clients namsepace
-        infraenv = infraenv_list[0]
-        conditions = infraenv.get("status", {}).get("conditions", [])
-
-        for condition in conditions:
-            if condition.get("type") == "ImageCreated":
-                status = condition.get("status", "")
-                if status.lower() == "true":
-                    logger.info(f"Image creation completed in InfraEnv {self.name}")
-                    return True
-                else:
-                    logger.info(
-                        f"ImageCreated condition status is {status} in InfraEnv {self.name}"
-                    )
-                    return False
-
-        logger.warning(f"ImageCreated condition not found in InfraEnv {self.name}")
-        return False
-
-    @config.run_with_provider_context_if_available
-    def wait_for_image_created_in_infraenv(self, timeout=300):
-        """
-        Wait for the image to be created in the InfraEnv using TimeoutSampler
-
-        Args:
-            timeout (int): Timeout in seconds, default 5 minutes (300 seconds)
-
-        Returns:
-            bool: True if image is created within timeout, False otherwise
-        """
-        logger.info(
-            f"Waiting for image to be created in InfraEnv namespace '{self.name}'. "
-            f"Timeout: {timeout} seconds"
-        )
-
-        for sample in TimeoutSampler(
-            timeout=timeout,
-            sleep=30,
-            func=self.image_created_in_infraenv,
-            infra_env_namespace=self.name,
-        ):
-            if sample:
-                logger.info(f"Image successfully created in InfraEnv '{self.name}'")
-                return True
-
-        logger.error(
-            f"Timeout waiting for image creation in InfraEnv '{self.name}' "
-            f"after {timeout} seconds"
-        )
-        return False
-
     def boot_machines_for_agent(self):
         """
         Boot the bare metal machines and acks on successful boot
@@ -2161,8 +2040,7 @@ class HypershiftHostedOCP(
 
         with config.RunWithConfigContext(config.get_cluster_index_by_name(self.name)):
             # assumption: within this multicluster context, config.DEPLOYMENT has parameters for the current cluster
-            deployer = VSPHEREAgentAI(agent_workflow=AgentWorkflow(self.name))
-
+            deployer = VSPHEREAgentAI()
             try:
                 deployer.deploy_cluster(log_cli_level="INFO")
             except RuntimeError as e:
@@ -3294,3 +3172,123 @@ class AgentWorkflow:
             )
 
         return result
+
+    @config.run_with_provider_context_if_available
+    def create_host_inventory(self):
+        """
+        Create InfraEnv resource for host inventory. For every new Agent cluster there must be specific InfraEnv
+        resource, which makes HostedClient attached to InfraEnv by design.
+
+        Returns:
+            An OCS instance of kind InfraEnv
+        """
+        # Create InfraEnv
+        template_yaml = os.path.join(
+            constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
+        )
+        infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
+        ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
+        with open(ssh_pub_file_path, "r") as ssh_key:
+            ssh_pub_key = ssh_key.read().strip()
+        # TODO: Add custom OS image details. Reference
+        # https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.10
+        # /html-single/clusters/index#create-host-inventory-cli-steps
+
+        infra_env_namespace = self.name
+
+        # Create project
+        create_project(project_name=infra_env_namespace)
+
+        infra_env = None
+        for data in infra_env_data:
+            if data["kind"] == constants.INFRA_ENV:
+                data["spec"]["sshAuthorizedKey"] = ssh_pub_key
+                data["metadata"]["name"] = self.name
+                # Create new secret in the namespace using the existing secret
+                secret_obj = OCP(
+                    kind=constants.SECRET,
+                    resource_name="pull-secret",
+                    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+                )
+                secret_info = secret_obj.get()
+                secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
+                secret_data["data"][".dockerconfigjson"] = secret_info["data"][
+                    ".dockerconfigjson"
+                ]
+                secret_data["metadata"]["namespace"] = infra_env_namespace
+                secret_data["metadata"]["name"] = "pull-secret"
+                secret_manifest = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="pull_secret", delete=False
+                )
+                templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
+                # Create secret like this to avoid printing in logs
+                exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
+            data["metadata"]["namespace"] = infra_env_namespace
+            resource_obj = create_resource(**data)
+            if data["kind"] == constants.INFRA_ENV:
+                infra_env = resource_obj
+        logger.info(f"Created InfraEnv {self.name}.")
+        return infra_env
+
+    @config.run_with_provider_context_if_available
+    def wait_for_image_created_in_infraenv(self, timeout=300):
+        """
+        Wait for the image to be created in the InfraEnv using TimeoutSampler
+
+        Args:
+            timeout (int): Timeout in seconds, default 5 minutes (300 seconds)
+
+        Returns:
+            bool: True if image is created within timeout, False otherwise
+        """
+        logger.info(
+            f"Waiting for image to be created in InfraEnv namespace '{self.name}'. "
+            f"Timeout: {timeout} seconds"
+        )
+
+        for sample in TimeoutSampler(
+            timeout=timeout, sleep=30, func=self.image_created_in_infraenv
+        ):
+            if sample:
+                logger.info(f"Image successfully created in InfraEnv '{self.name}'")
+                return True
+
+        logger.error(
+            f"Timeout waiting for image creation in InfraEnv '{self.name}' "
+            f"after {timeout} seconds"
+        )
+        return False
+
+    def image_created_in_infraenv(self):
+        """
+        Check if the image is created in the InfraEnv
+
+        Returns:
+            bool: True if the image is created, False otherwise
+        """
+
+        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
+        infraenv_list = infraenv_obj.get().get("items", [])
+
+        if not infraenv_list:
+            logger.warning(f"No InfraEnv found in namespace {self.name}")
+            return False
+
+        # we assume only one infraenv is created withing clients namsepace
+        infraenv = infraenv_list[0]
+        conditions = infraenv.get("status", {}).get("conditions", [])
+
+        for condition in conditions:
+            if condition.get("type") == "ImageCreated":
+                status = condition.get("status", "")
+                if status.lower() == "true":
+                    logger.info(f"Image creation completed in InfraEnv {self.name}")
+                    return True
+                else:
+                    logger.info(
+                        f"ImageCreated condition status is {status} in InfraEnv {self.name}"
+                    )
+                    return False
+
+        logger.warning(f"ImageCreated condition not found in InfraEnv {self.name}")
+        return False
