@@ -26,6 +26,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
@@ -442,26 +443,30 @@ class Deployment(object):
                             )
                             storage_cluster.reload_data()
                             storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
-                            ptch = (
-                                f'\'{{"spec": {{"network": {{"multiClusterService": '
-                                f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
-                            )
-                            ptch_cmd = (
-                                f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                                f"-n openshift-storage  --type merge --patch {ptch}"
-                            )
-                            run_cmd(ptch_cmd)
-                            ocs_registry_image = config.DEPLOYMENT.get(
-                                "ocs_registry_image", None
-                            )
-                            storage_cluster.reload_data()
-                            assert (
-                                storage_cluster.data.get("spec")
-                                .get("network")
-                                .get("multiClusterService")
-                                .get("enabled")
-                            ), "Failed to update StorageCluster globalnet"
-                            validate_serviceexport()
+                            if (
+                                get_provider_service_type() != "NodePort"
+                                and cluster.ENV_DATA.get("cluster_type", "").lower()
+                                == constants.HCI_CLIENT
+                            ):
+                                ptch = (
+                                    f'\'{{"spec": {{"network": {{"multiClusterService": '
+                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+                                    f'"enabled": true}}}}}}}}\''
+                                )
+                                ptch_cmd = (
+                                    f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+                                    f"-n openshift-storage  --type merge --patch {ptch}"
+                                )
+                                run_cmd(ptch_cmd)
+
+                                storage_cluster.reload_data()
+                                assert (
+                                    storage_cluster.data.get("spec")
+                                    .get("network")
+                                    .get("multiClusterService")
+                                    .get("enabled")
+                                ), "Failed to update StorageCluster globalnet"
+                                validate_serviceexport()
                             ocs_install_verification(
                                 timeout=2000, ocs_registry_image=ocs_registry_image
                             )
@@ -3771,6 +3776,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         odf_running_version = version.get_semantic_ocs_version_from_config()
         if odf_running_version >= version.VERSION_4_19:
             # create service exporter
+
             create_service_exporter()
 
         # RBD specific dr deployment
