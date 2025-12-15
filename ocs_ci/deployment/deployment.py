@@ -2443,7 +2443,6 @@ class Deployment(object):
         addon_deployment_config = OCP(
             kind=constants.ADDONDEPLOYMENTCONFIG,
             namespace=constants.MCE_NAMESPACE,
-            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
         )
         klusterlet_config = OCP(
             kind=constants.KLUSTERLET_CONFIG,
@@ -2451,9 +2450,13 @@ class Deployment(object):
         )
         addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
 
-        addon_deployment_config.add_label(label=backup_label)
-        addon_deployment_config.ocp.add_label(
-            resource_name="hypershift-addon-deploy-config", label=backup_label
+        addon_deployment_config.add_label(
+            label=backup_label,
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
+        )
+        addon_deployment_config.add_label(
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
+            label=backup_label,
         )
 
         for management_addon in [
@@ -2463,7 +2466,10 @@ class Deployment(object):
             "application-manager",
         ]:
             addon_obj.add_label(resource_name=management_addon, label=backup_label)
-        klusterlet_config.add_label(label=backup_label)
+        klusterlet_config.add_label(
+            label=backup_label,
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+        )
 
     def deploy_acm_hub_unreleased(self):
         """
