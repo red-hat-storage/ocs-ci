@@ -301,6 +301,8 @@ higher priority).
             * `private_gw` - GW for the private interface
             * `root_disk_id` - ID of the root disk
             * `root_disk_sn` - Serial number of the root disk
+            * `fix_uefi_boot_order_first_option` - string identifying the PXE boot option which should be set to first place, if defined
+                (this is a workaround for UEFI boot order getting changed on some servers during the OCP deployment)
 
 #### UPGRADE
 

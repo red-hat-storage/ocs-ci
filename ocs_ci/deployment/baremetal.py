@@ -25,6 +25,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound, TimeoutExpi
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import ibmcloud_bm
+from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
@@ -1094,6 +1095,17 @@ class BAREMETALAI(BAREMETALBASE):
             # install the OCP cluster
             self.ai_cluster.install_cluster()
 
+            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
+            for machine in master_nodes + worker_nodes:
+                if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
+                    update_uefi_boot_order(
+                        first_option_string=self.srv_details[machine].get(
+                            "fix_uefi_boot_order_first_option"
+                        ),
+                        ocp_node=machine,
+                        ignore_error=True,
+                    )
+
         def create_dns_records(self):
             """
             Configure DNS records for api and ingress
@@ -1166,6 +1178,21 @@ class BAREMETALAI(BAREMETALBASE):
                 machine (str): Machine Name
 
             """
+            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
+            if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
+                update_uefi_boot_order(
+                    first_option_string=self.srv_details[machine].get(
+                        "fix_uefi_boot_order_first_option"
+                    ),
+                    host={
+                        "host": self.srv_details[machine]["public_ip"],
+                        "user": "core",
+                        "private_key": os.path.expanduser(
+                            config.DEPLOYMENT["ssh_key_private"]
+                        ),
+                    },
+                    ignore_error=True,
+                )
             if self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ipmitool":
                 secrets = [
                     self.srv_details[machine]["mgmt_username"],
