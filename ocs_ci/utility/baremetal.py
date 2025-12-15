@@ -1,4 +1,5 @@
 import logging
+import os
 
 import pyipmi
 import pyipmi.interfaces
@@ -9,6 +10,7 @@ from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes, get_master_nodes
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
+from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 
 logger = logging.getLogger(__name__)
@@ -244,3 +246,110 @@ class BAREMETAL(object):
                 )
                 node_ipmi_ctx.append(ipmi_ctx)
         return node_ipmi_ctx
+
+
+def update_uefi_boot_order(
+    first_option_string=None, ocp_node=None, host=None, ignore_error=False
+):
+    """
+    Update UEFI boot order (using efibootmgr) to set option containing first_option_string to first place.
+    Depending on the ocp_node and host parameters, it tries to access the node via oc debug command (if ocp_node
+    parameter is provided) or via ssh (as core user) if host (hostname or IP) is provided.
+    Parameter ocp_node have precedence before host parameter, which means that if both parameters are provided, it
+    will try to use only the oc debug access.
+
+    Args:
+        first_option_string (str): String identifying the boot option which should be set to first place
+        ocp_node (str): OCP Node name used to access the server via oc debug command
+        host (dict): configuration of the server to make ssh connection or None
+            the dict could contain following keys: host, user and private_key or password
+        ignore_error (bool): If True, do not raise an exception if the command fails for some reason.
+
+    Raises:
+        UnexpectedBehaviour: If parsing of output from efibootmgr command fails
+
+    """
+
+    def run_command(cmd):
+        if ocp_node:
+            ocp_obj = OCP()
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=ocp_node, cmd_list=[cmd], namespace=constants.DEFAULT_NAMESPACE
+            )
+            logger.info(f"Command '{cmd}' output: {out}")
+            return out
+        elif host:
+            private_key = (
+                os.path.expanduser(host.get("private_key"))
+                if host.get("private_key")
+                else None
+            )
+            ssh = Connection(
+                host=host["host"],
+                user=host.get("user", "core"),
+                password=host.get("password"),
+                private_key=private_key,
+                stdout=True,
+            )
+            _, out, _ = ssh.exec_cmd(cmd)
+            return out
+
+    if not ocp_node and not host:
+        raise ValueError(
+            "update_uefi_boot_order: one of 'ocp_node' and 'host' parameters have to be provided"
+        )
+
+    try:
+        efi_cfg_str = run_command("efibootmgr")
+    except Exception as ex:
+        logger.info(f"Failed to run command 'efibootmgr': {ex}")
+        if ignore_error:
+            return
+        else:
+            raise ex
+    boot_order = None
+    selected_option = None
+    for line in efi_cfg_str.splitlines():
+        if line.startswith("BootOrder:"):
+            boot_order = line.split(":")[1].strip()
+        if line.startswith("Boot") and first_option_string in line:
+            selected_option = line.split()[0].rstrip("*").removeprefix("Boot")
+
+    if not boot_order:
+        msg = f"Unable to parse output from efibootmgr - BootOrder: line not found:\n{efi_cfg_str}"
+        logger.error(msg)
+        if ignore_error:
+            return
+        else:
+            raise UnexpectedBehaviour(msg)
+    if not selected_option:
+        msg = (
+            "Unable to parse output from efibootmgr - "
+            f"Boot line with first_option_string ('{first_option_string}') not found:\n{efi_cfg_str}"
+        )
+        logger.error(msg)
+        if ignore_error:
+            return
+        else:
+            raise UnexpectedBehaviour(msg)
+
+    boot_order_list = boot_order.split(",")
+    if boot_order_list[0] == selected_option:
+        logger.debug(
+            f"No change in UEFI boot order needed, '{selected_option}' is already on first place: "
+            f"{boot_order}"
+        )
+        return
+
+    boot_order_list.remove(selected_option)
+    boot_order_list.insert(0, selected_option)
+
+    cmd = f"sudo efibootmgr --bootorder {','.join(boot_order_list)}"
+    try:
+        efi_cfg_str = run_command(cmd)
+    except Exception as ex:
+        logger.info(f"Failed to run command '{cmd}': {ex}")
+        if ignore_error:
+            return
+        else:
+            raise ex

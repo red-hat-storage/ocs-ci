@@ -318,6 +318,8 @@ higher priority).
             * `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
             * `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
             * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
+            * `fix_uefi_boot_order_first_option` - string identifying the PXE boot option which should be set to first place, if defined
+                (this is a workaround for UEFI boot order getting changed on some servers during the OCP deployment)
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
 * `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
