@@ -833,6 +833,7 @@ class BAREMETALAI(BAREMETALBASE):
     class OCPDeployment(BMBaseOCPDeployment):
         def __init__(self):
             super(BAREMETALAI.OCPDeployment, self).__init__()
+            self.handled_pending_user_actions = {}
 
         def deploy_prereq(self):
             """
@@ -1099,7 +1100,9 @@ class BAREMETALAI(BAREMETALBASE):
             )
 
             # install the OCP cluster
-            self.ai_cluster.install_cluster()
+            self.ai_cluster.install_cluster(
+                pending_user_action_handler=self.pending_user_action_handler
+            )
 
             # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
             for machine in master_nodes + worker_nodes:
@@ -1111,6 +1114,63 @@ class BAREMETALAI(BAREMETALBASE):
                         ocp_node=machine,
                         ignore_error=True,
                     )
+
+        def pending_user_action_handler(self, host):
+            """
+            Method for handling pending user action during deployment (this usually means that the server didn't boot
+            properly from the disk.)
+
+            Args:
+                host (dict): details about host with pending user action (from Assisted Installer api)
+
+            """
+            machine = host["requested_hostname"]
+            # do not run the handler for particular machine more often than once in 20 minutes
+            # to make sure the server have time to reboot and connect to the cluster
+            if (
+                time.time() - self.handled_pending_user_actions.get(machine, 0)
+                < 20 * 60
+            ):
+                logger.info(
+                    f"Skipping handling pending user action for {machine}. "
+                    "It was already handled less than 20 minutes ago."
+                )
+                return
+
+            if self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ipmitool":
+                secrets = [
+                    self.srv_details[machine]["mgmt_username"],
+                    self.srv_details[machine]["mgmt_password"],
+                ]
+                # reboot machine
+                cmd = (
+                    f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                    f"-P {self.srv_details[machine]['mgmt_password']} "
+                    f"-H {self.srv_details[machine]['mgmt_console']} chassis power cycle || "
+                    f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                    f"-P {self.srv_details[machine]['mgmt_password']} "
+                    f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
+                )
+                rc, stdout, stderr = self.helper_node_handler.exec_cmd(
+                    cmd=cmd, secrets=secrets
+                )
+                assert (
+                    rc == 0
+                ), f"Command execution failed - rc: {rc}, stdout: '{stdout}', stderr: '{stderr}'"
+
+            elif (
+                self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ibmcloud"
+            ):
+                ibmcloud = ibmcloud_bm.IBMCloudBM()
+                m = ibmcloud.get_machines_by_names([machine])
+                ibmcloud.stop_machines(m)
+                time.sleep(5)
+                ibmcloud.start_machines(m)
+                # run the power-on command second time to make sure the host is powered on
+                time.sleep(5)
+                ibmcloud.start_machines(m)
+
+            self.handled_pending_user_actions[machine] = time.time()
 
         def create_dns_records(self):
             """

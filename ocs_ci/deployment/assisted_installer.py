@@ -173,6 +173,7 @@ class AssistedInstallerCluster(object):
 
         Args:
             original_pull_secret (str or dict): content of pull secret
+
         """
         if isinstance(original_pull_secret, dict):
             # prepare copy of the original pull-secret (to not modify it)
@@ -290,6 +291,7 @@ class AssistedInstallerCluster(object):
 
         Args:
             expected_nodes (int): number of expected nodes
+
         """
 
         # wait for discovered nodes in cluster definition
@@ -323,6 +325,7 @@ class AssistedInstallerCluster(object):
         """
         Return:
             list: list of discovered hosts in the Infrastructure Environment
+
         """
         return self.api.get_infra_env_hosts(infra_env_id=self.infra_id)
 
@@ -330,7 +333,6 @@ class AssistedInstallerCluster(object):
     def verify_validations_info_for_discovered_nodes(self):
         """
         Check and verify validations info for the discovered nodes.
-
         """
         failed_validations = []
         for host in self.api.get_cluster_hosts(self.id):
@@ -356,6 +358,7 @@ class AssistedInstallerCluster(object):
 
         Return:
             list of lists: host id to mac mapping ([[host1_id, mac1], [host1_id, mac2], [host2_id, mac3],...])
+
         """
         hosts = self.api.get_infra_env_hosts(self.infra_id)
         mapping = []
@@ -372,6 +375,7 @@ class AssistedInstallerCluster(object):
         Args:
             mac_name_mapping (dict): host mac address to host name mapping
             mac_role_mapping (dict): host mac address to host role mapping
+
         """
         host_id_mac_mapping = self.get_host_id_mac_mapping()
         for host_id, mac in host_id_mac_mapping:
@@ -387,15 +391,20 @@ class AssistedInstallerCluster(object):
                 # them is used to the name and role mapping
                 pass
 
-    def install_cluster(self):
+    def install_cluster(self, pending_user_action_handler=None):
         """
         Trigger cluster installation
+
+        Args:
+            pending_user_action_handler (function): function handling pending user action for particular host (host
+                details as dict provided as first parameter)
+
         """
         self.api.install_cluster(self.id)
         logger.info("Started cluster installation")
         # wait for cluster installation success
         for sample in TimeoutSampler(
-            timeout=7200, sleep=300, func=self.api.get_cluster, cluster_id=self.id
+            timeout=10800, sleep=300, func=self.api.get_cluster, cluster_id=self.id
         ):
             status_per_hosts = [
                 h.get("progress", {}).get("installation_percentage", 0)
@@ -418,6 +427,19 @@ class AssistedInstallerCluster(object):
                     )
                 except KeyError:
                     pass
+
+            if sample["status"] == "installing-pending-user-action":
+                for host in sample["hosts"]:
+                    try:
+                        if host["status"] == "installing-pending-user-action":
+                            msg = f"{host['requested_hostname']}: {host['status']} ({host['status_info']})"
+                            if pending_user_action_handler:
+                                logger.info(msg)
+                                pending_user_action_handler(host)
+                            else:
+                                logger.error(msg)
+                    except KeyError:
+                        pass
 
             if sample["status"] == "installed":
                 logger.info(
