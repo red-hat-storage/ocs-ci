@@ -2744,6 +2744,7 @@ def wait_for_pods_to_be_running(
     timeout=200,
     sleep=10,
     cluster_kubeconfig="",
+    skip_for_status=None,
 ):
     """
     Wait for all the pods in a specific namespace to be running.
@@ -2759,6 +2760,9 @@ def wait_for_pods_to_be_running(
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
         cluster_kubeconfig (str): The kubeconfig file to use for the oc command
+        skip_for_status (list): List of pod status that should be skipped. If the status of a pod is in the given list,
+            the check for 'Running' status of that particular pod will be skipped.
+            eg: ["Pending", "Completed"]
 
     Returns:
          bool: True, if all pods in Running state. False, otherwise
@@ -2774,6 +2778,7 @@ def wait_for_pods_to_be_running(
             pod_names=pod_names,
             raise_pod_not_found_error=raise_pod_not_found_error,
             cluster_kubeconfig=cluster_kubeconfig,
+            skip_for_status=skip_for_status,
         ):
             # Check if all the pods in running state
             if pods_running:
