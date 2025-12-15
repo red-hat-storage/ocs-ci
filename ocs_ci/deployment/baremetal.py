@@ -1115,6 +1115,15 @@ class BAREMETALAI(BAREMETALBASE):
                         ignore_error=True,
                     )
 
+            self.test_cluster()
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing Disk cleanup")
+                workers = get_nodes(node_type="worker")
+                for worker in workers:
+                    clean_disk(worker)
+
         def pending_user_action_handler(self, host):
             """
             Method for handling pending user action during deployment (this usually means that the server didn't boot
