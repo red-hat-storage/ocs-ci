@@ -13,10 +13,7 @@ ENV_DATA:
   acm_hub_channel: "release-2.15"
   acm_version: "2.15"
   mce_version: "2.10"
-  submariner_version: "0.21.0"
+  submariner_version: "0.22.0"
   # Below values needs to be changed when acm and submariner are GAed
-  submariner_source: "downstream"
-  submariner_release_type: "unreleased"
-  acm_hub_unreleased: true
   subctl_version: "subctl-rhel9:v0.21"
   oadp_version: "1.5"
