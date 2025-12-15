@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
@@ -26,7 +27,12 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.node import gracefully_reboot_nodes, get_node_objs
+from ocs_ci.ocs.node import (
+    gracefully_reboot_nodes,
+    get_node_objs,
+    get_node_internal_ip,
+    get_worker_nodes,
+)
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
@@ -2568,18 +2574,37 @@ def create_service_exporter(annotate=True):
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         if (
-            config.ENV_DATA["platform"].lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            get_provider_service_type() != "NodePort"
+            and cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
         ):
             logger.info("Skipping ServiceExport creation for multiclient cluster")
             continue
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+
         if annotate:
+            if (
+                config.ENV_DATA.get("odf_provider_mode_deployment")
+                and cluster.ENV_DATA.get("cluster_type").lower()
+                == constants.HCI_PROVIDER
+            ):
+                cluster_address = get_node_internal_ip(
+                    get_node_objs(get_worker_nodes()[0])[0]
+                )
+                cluster_address_port = "31659"
+                cluster_service_export_provider_server = ""
+
+            else:
+                cluster_address = config.ENV_DATA["cluster_name"]
+                cluster_address_port = "50051"
+                cluster_service_export_provider_server = (
+                    ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                )
+
             run_cmd(
                 "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
-                f" ocs.openshift.io/api-server-exported-address={cluster.ENV_DATA['cluster_name']}"
-                ".ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
+                f" ocs.openshift.io/api-server-exported-address={cluster_address}"
+                f"{cluster_service_export_provider_server}:{cluster_address_port}"
             )
     config.switch_ctx(restore_index)
 
