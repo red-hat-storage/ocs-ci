@@ -2396,7 +2396,7 @@ class AZURENodes(NodesBase):
                         vm_name=vm_name,
                     ):
                         if vm_state == constants.VM_STOPPED:
-                            continue
+                            break
                 except TimeoutExpiredError:
                     nodes_not_stopped.append(vm_name)
             if nodes_not_stopped:
