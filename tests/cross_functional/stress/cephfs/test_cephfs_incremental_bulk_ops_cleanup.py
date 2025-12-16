@@ -95,7 +95,7 @@ class TestCephfsStressCleanUp(E2ETest):
             cephfs_stress_job_obj = create_cephfs_stress_job(
                 namespace=proj_name,
                 pvc_name=pvc_obj.name,
-                multiplication_factor=m_factor,
+                multiplication_factors=m_factor,
                 parallelism=parallelism,
                 completions=completions,
             )
@@ -152,7 +152,6 @@ class TestCephfsStressCleanUp(E2ETest):
             logger.info("Stress cleanup is successful")
 
         finally:
-            teardown_factory(cephfs_stress_job_obj)
             logger.info("Signaling check thread to stop...")
             stop_event.set()
             stress_checks_thread.join()
