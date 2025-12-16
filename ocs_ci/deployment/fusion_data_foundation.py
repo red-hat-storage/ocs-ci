@@ -174,6 +174,7 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Verifying FDF installation")
         fusion_service_instance_health_check()
+        wait_for_storageclusters_crd()
         self.get_installed_version()
         logger.info("FDF successfully installed")
 
@@ -362,6 +363,31 @@ def storagecluster_health_check():
     logger.info("StorageCluster is healthy and in Ready state.")
 
 
+def wait_for_storageclusters_crd():
+    """
+    Wait for the storageclusters CRD to exist.
+    """
+    logger.info("Waiting for the StorageClusters CRD to exist")
+
+    @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)
+    def _wait_for_storageclusters_crd():
+        storageclusters_crd = CustomResourceDefinition(
+            resource_name="storageclusters.ocs.openshift.io",
+        )
+        status = storageclusters_crd.data.get("status", {})
+        conditions = status.get("conditions")
+        established_status_exists = False
+
+        for condition in conditions:
+            if condition.get("type") == "Established":
+                established_status_exists = True
+                assert condition.get("status") == "True"
+
+        assert established_status_exists
+
+    _wait_for_storageclusters_crd()
+
+
 class FusionServiceInstance(OCP):
     def __init__(self, resource_name="", *args, **kwargs):
         super(FusionServiceInstance, self).__init__(
@@ -373,4 +399,14 @@ class OdfCluster(OCP):
     def __init__(self, resource_name="", *args, **kwargs):
         super(OdfCluster, self).__init__(
             resource_name=resource_name, kind="OdfCluster", *args, **kwargs
+        )
+
+
+class CustomResourceDefinition(OCP):
+    def __init__(self, resource_name="", *args, **kwargs):
+        super(CustomResourceDefinition, self).__init__(
+            resource_name=resource_name,
+            kind="CustomResourceDefinition",
+            *args,
+            **kwargs,
         )
