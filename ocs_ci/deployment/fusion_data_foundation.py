@@ -23,6 +23,8 @@ from ocs_ci.utility.utils import run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
+from ocs_ci.utility.operators import LocalStorageOperator
+
 import time
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
@@ -60,9 +62,8 @@ class FusionDataFoundationDeployment:
 
     def ensure_lso_installed(self):
         """
-        Install LSO operator if its not being installed
+        In the case of LSO is not available - bring catalog for unreleased version and install it
         """
-        from ocs_ci.utility.operators import LocalStorageOperator
 
         lso_operator = LocalStorageOperator()
         if not lso_operator.is_available():
