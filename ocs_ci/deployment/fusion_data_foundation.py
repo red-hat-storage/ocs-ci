@@ -49,7 +49,7 @@ class FusionDataFoundationDeployment:
         """
         Installs IBM Fusion Data Foundation.
         """
-        logger.info("Ensuring Local Storage Operator (LSO) is installed")
+
         self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
@@ -66,6 +66,7 @@ class FusionDataFoundationDeployment:
         In the case of LSO is not available - bring catalog for unreleased version and install it
         """
 
+        logger.info("Ensuring Local Storage Operator (LSO) is installed")
         lso_operator = LocalStorageOperator()
         if not lso_operator.is_available():
             lso_operator.create_catalog()
