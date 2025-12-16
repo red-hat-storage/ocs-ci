@@ -46,8 +46,8 @@ class FusionDataFoundationDeployment:
         """
         Installs IBM Fusion Data Foundation.
         """
-        logger.info("Checking if LSO is installed if not will install")
-        self.install_lso()
+        logger.info("Ensuring Local Storage Operator (LSO) is installed")
+        self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
@@ -58,7 +58,7 @@ class FusionDataFoundationDeployment:
         self.verify_fdf_installation()
         self.setup_storage()
 
-    def install_lso(self):
+    def ensure_lso_installed(self):
         """
         Install LSO operator if its not being installed
         """
