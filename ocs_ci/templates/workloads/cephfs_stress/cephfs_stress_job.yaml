@@ -30,7 +30,7 @@ spec:
           - name: BASE_DIR         # directory used by smallfile to perform file and directory operations (e.g., append, stat, chmod, ls-l, etc.)
             value: "/mnt"
           - name: BASE_FILE_COUNT  # Base file count, to multiply with scaling factor - Total files = BASE_FILE_COUNT * THREADS
-            value: "50000"
+            value: "5000"
           - name: MULTIPLICATION_FACTORS # Dynamic scaling of file creation - base_file_count * MULTIPLICATION_FACTORS
             value: "1,2"
           - name: FILES_SIZE       # File size in KB
