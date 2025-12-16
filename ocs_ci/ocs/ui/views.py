@@ -251,9 +251,9 @@ deployment_4_11 = {
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
     "managed-csi_sc": ("managed-csi-link", By.ID),
     "standard_sc": ("standard-link", By.ID),
-    "512": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
-    "2048": ('button[data-test-dropdown-menu="2 TiB"]', By.CSS_SELECTOR),
-    "4096": ('button[data-test-dropdown-menu="4 TiB"]', By.CSS_SELECTOR),
+    "512": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "2048": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.CSS_SELECTOR),
+    "4096": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.CSS_SELECTOR),
 }
 
 deployment_4_12 = {
@@ -334,6 +334,7 @@ deployment_4_21 = {
         "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
         By.XPATH,
     ),
+    "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
 }
 
 generic_locators = {
