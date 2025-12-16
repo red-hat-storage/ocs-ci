@@ -46,6 +46,8 @@ class FusionDataFoundationDeployment:
         """
         Installs IBM Fusion Data Foundation.
         """
+        logger.info("Checking if LSO is installed if not will install")
+        self.install_lso()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
@@ -55,6 +57,17 @@ class FusionDataFoundationDeployment:
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.setup_storage()
+
+    def install_lso(self):
+        """
+        Install LSO operator if its not being installed
+        """
+        from ocs_ci.utility.operators import LocalStorageOperator
+
+        lso_operator = LocalStorageOperator()
+        if not lso_operator.is_available():
+            lso_operator.create_catalog()
+            lso_operator.deploy()
 
     def create_image_tag_mirror_set(self):
         """
