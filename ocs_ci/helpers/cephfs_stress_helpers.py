@@ -69,7 +69,7 @@ def create_cephfs_stress_pod(
     files_size=None,
     operations=None,
     base_file_count=None,
-    multiplication_factor=None,
+    multiplication_factors=None,
     threads=None,
 ):
     """
@@ -83,7 +83,7 @@ def create_cephfs_stress_pod(
         operations (str, optional): File operations to perform (e.g., append, stat, chmod, ls-l, etc),
         Pass as a comma-separated string
         base_file_count (str, optional): Base file count, to multiply with scaling factor
-        multiplication_factor (str, optional): Dynamic scaling of file creation
+        multiplication_factors (str, optional): Dynamic scaling of file creation
           - base_file_count * MULTIPLICATION_FACTORS
         threads (str, optional): Number of threads to use for the operation.
 
@@ -99,7 +99,7 @@ def create_cephfs_stress_pod(
         "FILES_SIZE": files_size,
         "OPERATIONS": operations,
         "BASE_FILE_COUNT": base_file_count,
-        "MULTIPLICATION_FACTOR": multiplication_factor,
+        "MULTIPLICATION_FACTORS": multiplication_factors,
         "THREADS": threads,
     }
     cephfs_stress_pod_data = templating.load_yaml(CEPHFS_STRESS_POD_YAML)
@@ -155,7 +155,7 @@ def create_cephfs_stress_job(
     files_size=None,
     operations=None,
     base_file_count=None,
-    multiplication_factor=None,
+    multiplication_factors=None,
     threads=None,
     parallelism=None,
     completions=None,
@@ -172,7 +172,7 @@ def create_cephfs_stress_job(
         operations (str, optional): File operations to perform (e.g., append, stat, chmod, ls-l, etc),
         Pass as a comma-separated string
         base_file_count (str, optional): Base file count, to multiply with scaling factor
-        multiplication_factor (str, optional): Dynamic scaling of file creation
+        multiplication_factors (str, optional): Dynamic scaling of file creation
           - base_file_count * MULTIPLICATION_FACTORS
         threads (str, optional): Number of threads to use for the operation.
         parallelism (str, optional): Specifies how many pod replicas running in parallel should execute a job.
@@ -191,7 +191,7 @@ def create_cephfs_stress_job(
         "FILES_SIZE": files_size,
         "OPERATIONS": operations,
         "BASE_FILE_COUNT": base_file_count,
-        "MULTIPLICATION_FACTOR": multiplication_factor,
+        "MULTIPLICATION_FACTOR": multiplication_factors,
         "THREADS": threads,
     }
     cephfs_stress_job_data = templating.load_yaml(CEPHFS_STRESS_JOB_YAML)

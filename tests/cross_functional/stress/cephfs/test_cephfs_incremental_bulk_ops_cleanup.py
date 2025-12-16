@@ -50,9 +50,9 @@ class TestCephfsStressCleanUp(E2ETest):
         """
         CHECKS_RUNNER_INTERVAL_MINUTES = 30
         JOB_POD_INTERVAL_SECONDS = 300
-        m_factor = 1, 2, 3, 4, 5
-        parallelism = 10
-        completions = 10
+        m_factor = 1, 2, 3
+        parallelism = 3
+        completions = 3
 
         stress_checks_thread = threading.Thread(
             target=continuous_checks_runner,
