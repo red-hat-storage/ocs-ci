@@ -35,6 +35,8 @@ from ocs_ci.ocs.node import (
     get_node_resource_utilization_from_adm_top,
     get_node_resource_utilization_from_oc_describe,
 )
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ def create_cephfs_stress_pod(
     files_size=None,
     operations=None,
     base_file_count=None,
-    multiplication_factor=None,
+    multiplication_factors=None,
     threads=None,
 ):
     """
@@ -81,7 +83,7 @@ def create_cephfs_stress_pod(
         operations (str, optional): File operations to perform (e.g., append, stat, chmod, ls-l, etc),
         Pass as a comma-separated string
         base_file_count (str, optional): Base file count, to multiply with scaling factor
-        multiplication_factor (str, optional): Dynamic scaling of file creation
+        multiplication_factors (str, optional): Dynamic scaling of file creation
           - base_file_count * MULTIPLICATION_FACTORS
         threads (str, optional): Number of threads to use for the operation.
 
@@ -97,7 +99,7 @@ def create_cephfs_stress_pod(
         "FILES_SIZE": files_size,
         "OPERATIONS": operations,
         "BASE_FILE_COUNT": base_file_count,
-        "MULTIPLICATION_FACTOR": multiplication_factor,
+        "MULTIPLICATION_FACTORS": multiplication_factors,
         "THREADS": threads,
     }
     cephfs_stress_pod_data = templating.load_yaml(CEPHFS_STRESS_POD_YAML)
@@ -153,9 +155,10 @@ def create_cephfs_stress_job(
     files_size=None,
     operations=None,
     base_file_count=None,
-    multiplication_factor=None,
+    multiplication_factors=None,
     threads=None,
     parallelism=None,
+    completions=None,
 ):
     """
     Creates a CephFS stress Job. This job launches concurrent pods based on the configured
@@ -169,10 +172,12 @@ def create_cephfs_stress_job(
         operations (str, optional): File operations to perform (e.g., append, stat, chmod, ls-l, etc),
         Pass as a comma-separated string
         base_file_count (str, optional): Base file count, to multiply with scaling factor
-        multiplication_factor (str, optional): Dynamic scaling of file creation
+        multiplication_factors (str, optional): Dynamic scaling of file creation
           - base_file_count * MULTIPLICATION_FACTORS
         threads (str, optional): Number of threads to use for the operation.
         parallelism (str, optional): Specifies how many pod replicas running in parallel should execute a job.
+        completions (str, optional): Specifies how many times the Pod must finish successfully before the entire
+        Job is marked as "Complete.
 
     Returns:
         cephfs_stress_job_obj(OCS): The created Job object after it's in a running state
@@ -186,7 +191,7 @@ def create_cephfs_stress_job(
         "FILES_SIZE": files_size,
         "OPERATIONS": operations,
         "BASE_FILE_COUNT": base_file_count,
-        "MULTIPLICATION_FACTOR": multiplication_factor,
+        "MULTIPLICATION_FACTOR": multiplication_factors,
         "THREADS": threads,
     }
     cephfs_stress_job_data = templating.load_yaml(CEPHFS_STRESS_JOB_YAML)
@@ -196,6 +201,8 @@ def create_cephfs_stress_job(
     ]["claimName"] = pvc_name
     if parallelism:
         cephfs_stress_job_data["spec"]["parallelism"] = parallelism
+    if completions:
+        cephfs_stress_job_data["spec"]["completions"] = completions
     logger.info("Set environment variables in the pod template")
     set_env_vars(cephfs_stress_job_data, env_vars, type=constants.JOB)
     job_name = cephfs_stress_job_data["metadata"]["name"]
@@ -217,6 +224,7 @@ def create_cephfs_stress_job(
     return cephfs_stress_job_obj
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def check_prometheus_alerts(threading_lock=None):
     """
     Fetches alerts from the PrometheusAPI and logs alerts in a tabulated format
@@ -249,6 +257,7 @@ def check_prometheus_alerts(threading_lock=None):
     )
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def check_mds_pods_resource_utilization():
     """
     Get's the current resource utilization of MDS pods by fetching raw output from 'adm top' command
@@ -263,6 +272,7 @@ def check_mds_pods_resource_utilization():
     )
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def get_mon_db_usage():
     """
     Retrieves the MON DB pod usage
@@ -283,6 +293,7 @@ def get_mon_db_usage():
     )
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def get_nodes_resource_utilization():
     """
     Gets the node's cpu and memory utilization in percentage using 'adm top' and 'oc describe'
@@ -303,6 +314,7 @@ def get_nodes_resource_utilization():
     get_node_resource_utilization_from_oc_describe(node_type="worker", print_table=True)
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def get_pods_resource_utilization():
     """
     Get's the pod's memory utilization using adm top command in a raw output
@@ -320,6 +332,7 @@ def get_pods_resource_utilization():
     )
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def get_osd_disk_utilization():
     """
     Get's the disk utilization for individual OSDs and the total used capacity in the cluster
@@ -392,6 +405,7 @@ def check_ceph_health():
     logger.info("\n Ceph cluster is healthy" "\n")
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def verify_openshift_storage_ns_pods_in_running_state():
     """
     Verifies that all pods in the openshift-storage namespace are in a 'Running' state.
@@ -411,6 +425,7 @@ def verify_openshift_storage_ns_pods_in_running_state():
     logger.info("All the Pods in the openshift-storage namespace are in Running state")
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def get_filtered_pods():
     """
     Get's a list of all pods running in the openshift-storage namespace, ignoring few set of pods
@@ -436,6 +451,7 @@ def get_filtered_pods():
     return filtered_list_objs
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
 def verify_openshift_storage_ns_pods_health():
     """
     Validates that all the Pods in the openshift-storage namespace are healthy
@@ -580,3 +596,55 @@ def continuous_checks_runner(interval_minutes, threading_lock=None):
             break
 
     logger.info("Check Runner thread: Stop signal received, exiting")
+
+
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
+def get_mount_subdirs(pod_obj):
+    """
+    Retrieves a list of subdirectories located at the root of the PVC mount of the given pod.
+
+    Args:
+        pod_obj (obj): pod object
+
+    Returns:
+        list: A list of directory names found at the mount path
+
+    """
+    mount_path = (
+        pod_obj.get()
+        .get("spec")
+        .get("containers")[0]
+        .get("volumeMounts")[0]
+        .get("mountPath")
+    )
+    out = pod_obj.exec_sh_cmd_on_pod(command=f"ls {mount_path}")
+    subdirs = out.split()
+    return subdirs
+
+
+def run_stress_cleanup(pod_obj, top_dir, timeout=3600, parallelism_count=25):
+    """
+    Executes a parallelized deletion of a directory structure.
+    This function utilizes 'find' combined with 'xargs -P' to spawn
+    multiple deletion processes simultaneously.
+
+    Args:
+        pod_obj (obj): The app pod obj to execute commands
+        top_dir (str): The relative directory name to delete (e.g: 'cephfs-stress-job-xx')
+        timeout (int, optional): Max time in seconds to wait for cleanup. Defaults to 3600
+        parallelism_count (int, optional): Number of concurrent 'rm' processes to spawn
+                                           inside the pod. Defaults to 25
+
+    """
+    mount_path = (
+        pod_obj.get()
+        .get("spec")
+        .get("containers")[0]
+        .get("volumeMounts")[0]
+        .get("mountPath")
+    )
+    full_path = f"{mount_path}/{top_dir}"
+    cmd = f'find {full_path} -name "thrd_*" -type d -prune -print0 | xargs -0 -n 1 -P {parallelism_count} rm -rf'
+    logger.info(f"Deleting all files in {full_path} (Timeout: {timeout}s)")
+    pod_obj.exec_sh_cmd_on_pod(command=cmd, timeout=timeout)
+    logger.info(f"Finished deleting all files on {full_path}")
