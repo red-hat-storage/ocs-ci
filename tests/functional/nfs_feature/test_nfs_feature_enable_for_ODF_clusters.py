@@ -4,6 +4,7 @@ import time
 import os
 import socket
 
+from subprocess import CompletedProcess
 from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -36,7 +37,6 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
@@ -1479,6 +1479,7 @@ class TestNfsEnable(ManageTest):
         self,
         pod_factory,
         pvc_factory,
+        odf_cli_setup,
     ):
         """
         This test is to validate NFS export using a PVC mounted on an app pod (in-cluster) and subvolume
@@ -1500,9 +1501,9 @@ class TestNfsEnable(ManageTest):
         self.retain_nfs_sc = nfs_utils.create_nfs_sc(
             sc_name_to_create=self.retain_nfs_sc_name, retain_reclaim_policy=True
         )
-        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+        if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
             helpers.retrieve_cli_binary(cli_type="odf")
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = odf_cli_setup.run_command("subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         log.info(f"{inital_subvolume_list=}")
 
@@ -1516,7 +1517,7 @@ class TestNfsEnable(ManageTest):
         )
 
         # checking subvolumes post pvc creation
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = odf_cli_setup.run_command("subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
         new = set(later_subvolume_list)
@@ -1576,13 +1577,15 @@ class TestNfsEnable(ManageTest):
         pv_obj.delete(wait=True)
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = odf_cli_setup.run_command("subvolume ls --stale")
 
         # Deleteing stale subvolume
-        run_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+        odf_cli_setup.run_command(
+            f"subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
+        )
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = odf_cli_setup.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
 
@@ -1592,6 +1595,8 @@ class TestNfsEnable(ManageTest):
         self.sc_obj.wait_for_delete(resource_name=self.retain_nfs_sc_name)
 
     def parse_subvolume_ls_output(self, output):
+        if isinstance(output, CompletedProcess):
+            output = output.stdout.decode("utf-8")
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
