@@ -1,5 +1,4 @@
 import logging
-import threading
 import time
 
 from concurrent.futures import ThreadPoolExecutor
@@ -7,15 +6,12 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cephfs_stress_helpers import (
-    create_cephfs_stress_job,
-    continuous_checks_runner,
-    verification_failures,
-    stop_event,
     run_stress_cleanup,
     get_mount_subdirs,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_pod
+from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 
 
 logger = logging.getLogger(__name__)
@@ -27,9 +23,7 @@ class TestCephfsStressCleanUp(E2ETest):
     Test Cephfs incremental bulk operations cleanup
     """
 
-    def test_cephfs_stress_cleanup(
-        self, threading_lock, project_factory, pvc_factory, teardown_factory
-    ):
+    def test_cephfs_stress_cleanup(self, project_factory, teardown_factory):
         """
         Stress the cluster by performing bulk Cephfs data operations - Data creation, deletion and File operations
         in incremental stages and perform a stress clean up at the end by executing a parallelized deletion.
@@ -50,33 +44,15 @@ class TestCephfsStressCleanUp(E2ETest):
         """
         CHECKS_RUNNER_INTERVAL_MINUTES = 30
         JOB_POD_INTERVAL_SECONDS = 300
-        m_factor = 1, 2, 3
+        m_factor = "1,2"
         parallelism = 3
         completions = 3
 
-        stress_checks_thread = threading.Thread(
-            target=continuous_checks_runner,
-            args=(CHECKS_RUNNER_INTERVAL_MINUTES, threading_lock),
-            name="StressCheckRunnerThread",
-            daemon=True,
-        )
-        stress_checks_thread.start()
         proj_name = "cephfs-stress-testing"
-        proj_obj = project_factory(project_name=proj_name)
-        pvc_obj = pvc_factory(
-            interface=constants.CEPHFILESYSTEM,
-            project=proj_obj,
-            size=400,
-            access_mode=constants.ACCESS_MODE_RWX,
-            pvc_name="cephfs-stress-pvc",
-        )
-        standby_pod = create_pod(
-            interface_type=constants.CEPHFILESYSTEM,
-            pvc_name=pvc_obj.name,
-            namespace=proj_name,
-            pod_name="standby-cephfs-stress-pod",
-        )
-        teardown_factory(standby_pod)
+        project_factory(project_name=proj_name)
+        stress_mgr = CephFSStressTestManager(namespace=proj_name)
+
+        pvc_obj, _ = stress_mgr.setup_stress_test_environment(pvc_size="500Gi")
 
         pods_list = []
         pod_count = int(parallelism)
@@ -92,21 +68,25 @@ class TestCephfsStressCleanUp(E2ETest):
 
         teardown_factory(pods_list)
         try:
-            cephfs_stress_job_obj = create_cephfs_stress_job(
-                namespace=proj_name,
+            stress_mgr.start_background_checks(
+                interval_minutes=CHECKS_RUNNER_INTERVAL_MINUTES
+            )
+
+            cephfs_stress_job_obj = stress_mgr.create_cephfs_stress_job(
                 pvc_name=pvc_obj.name,
                 multiplication_factors=m_factor,
                 parallelism=parallelism,
                 completions=completions,
+                base_file_count=100,
             )
             logger.info(
                 f"The CephFS-stress Job {cephfs_stress_job_obj.name} has been submitted"
             )
+
             while True:
-                # Check for failure signal from the check-thread
-                if verification_failures:
+                if stress_mgr.verification_failures:
                     raise Exception(
-                        f"Test failed due to validation failure: {verification_failures[0]}"
+                        f"Test failed due to validation failure: {stress_mgr.verification_failures[0]}"
                     )
 
                 status = cephfs_stress_job_obj.status()
@@ -130,6 +110,7 @@ class TestCephfsStressCleanUp(E2ETest):
                     raise Exception(
                         f"Job '{cephfs_stress_job_obj.name}' entered unexpected state '{status}' state"
                     )
+
             logger.info("Starting stress cleanup....")
             subdirs = get_mount_subdirs(pods_list[0])
 
@@ -152,7 +133,4 @@ class TestCephfsStressCleanUp(E2ETest):
             logger.info("Stress cleanup is successful")
 
         finally:
-            logger.info("Signaling check thread to stop...")
-            stop_event.set()
-            stress_checks_thread.join()
-            logger.info("StressCheckRunnerThread has stopped")
+            stress_mgr.teardown()
