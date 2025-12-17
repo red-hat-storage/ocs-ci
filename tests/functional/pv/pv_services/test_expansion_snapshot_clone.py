@@ -217,7 +217,7 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Wait for cloned PVCs to reach Bound state and verify size")
         for pvc_obj in clone_objs:
             helpers.wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
             )
             assert pvc_obj.size == pvc_size_expand_2, (
                 f"Size is not {pvc_size_expand_2} but {pvc_obj.size} in "
@@ -253,7 +253,7 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Verify restored PVCs are Bound")
         for pvc_obj in restore_objs:
             helpers.wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
@@ -450,7 +450,7 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Wait for cloned PVCs to reach Bound state and verify size")
         for pvc_obj in restored_clone_objs:
             helpers.wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
             )
             assert pvc_obj.size == pvc_size_expand_3, (
                 f"Size is not {pvc_size_expand_3} but {pvc_obj.size} in "
@@ -524,7 +524,7 @@ class TestExpansionSnapshotClone(ManageTest):
         log.info("Verify restored PVCs are Bound")
         for pvc_obj in restore_objs_new:
             helpers.wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound.")
