@@ -1344,7 +1344,7 @@ class TestNfsEnable(ManageTest):
             # Delete deployment if it exists
             try:
                 exec_cmd(
-                    f"oc delete deployment deployment "
+                    f"oc delete deployment "
                     f"{self.nfs_app_deployment} "
                     f"-n {self.namespace} "
                     f"--ignore-not-found=true"
