@@ -9,6 +9,7 @@ from ocs_ci.ocs.constants import (
     RBD_INTERFACE,
 )
 from ocs_ci.framework import config
+from ocs_ci.utility.utils import TimeoutSampler, TimeoutExpiredError
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     brown_squad,
@@ -65,8 +66,29 @@ class TestEphemeralPod:
 
         # Make sure pvc deleted aswell
         log.info("Starting PVC delete validation")
-        pvcs = get_all_pvcs(
-            namespace=config.ENV_DATA["cluster_namespace"], selector="test=ephemeral"
-        )
-        log.info(f"PVCS AT END: {pvcs}")
-        assert not pvcs.get("items"), f"PVC {pvc_prefix_name} not deleted"
+        try:
+            for pvcs in TimeoutSampler(
+                timeout=60,
+                sleep=2,
+                func=get_all_pvcs,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                selector="test=ephemeral",
+            ):
+                if not pvcs.get("items"):
+                    log.info("Ephemeral PVCs deleted successfully")
+                    break
+                pvc_names = [p["metadata"]["name"] for p in pvcs["items"]]
+                log.debug(
+                    f"Waiting for {len(pvc_names)} PVCs to be deleted: {pvc_names}"
+                )
+        except TimeoutExpiredError:
+            pvcs = get_all_pvcs(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                selector="test=ephemeral",
+            )
+            remaining = [p["metadata"]["name"] for p in pvcs.get("items", [])]
+            raise AssertionError(
+                f"PVC {pvc_prefix_name} not deleted after 60s. "
+                f"Remaining PVCs: {remaining}. "
+                f"This may indicate stuck finalizers or CSI driver issues."
+            )
