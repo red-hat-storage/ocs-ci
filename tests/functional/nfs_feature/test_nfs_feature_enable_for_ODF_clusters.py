@@ -4,6 +4,7 @@ import time
 import os
 import socket
 
+from subprocess import CompletedProcess
 from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -1480,6 +1481,7 @@ class TestNfsEnable(ManageTest):
         self,
         pod_factory,
         pvc_factory,
+        odf_cli_setup,
     ):
         """
         This test is to validate NFS export using a PVC mounted on an app pod (in-cluster) and subvolume
@@ -1501,7 +1503,7 @@ class TestNfsEnable(ManageTest):
         self.retain_nfs_sc = nfs_utils.create_nfs_sc(
             sc_name_to_create=self.retain_nfs_sc_name, retain_reclaim_policy=True
         )
-        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+        if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
             helpers.retrieve_cli_binary(cli_type="odf")
         output = exec_cmd(cmd="odf-cli subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
@@ -1593,6 +1595,8 @@ class TestNfsEnable(ManageTest):
         self.sc_obj.wait_for_delete(resource_name=self.retain_nfs_sc_name)
 
     def parse_subvolume_ls_output(self, output):
+        if isinstance(output, CompletedProcess):
+            output = output.stdout.decode("utf-8")
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
