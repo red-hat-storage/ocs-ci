@@ -521,8 +521,9 @@ class KrKnRunner:
                         f"Setting IBMC_URL environment variable to: {api_endpoint}"
                     )
                 else:
+                    env["IBMC_URL"] = "https://cloud.ibm.com"
                     log.info(
-                        "No api_endpoint configured, IBMC_URL not set (will use default IBM Cloud endpoint)"
+                        "No api_endpoint configured, using default IBMC_URL: https://cloud.ibm.com"
                     )
         except Exception as e:
             log.warning(f"Failed to set IBM Cloud credentials: {str(e)}")
