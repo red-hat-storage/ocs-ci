@@ -26,6 +26,7 @@ from ocs_ci.framework.testlib import (
     acceptance,
     cloud_platform_required,
     skipif_lean_deployment,
+    ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -146,6 +147,7 @@ class TestAddCapacity(ManageTest):
         add_capacity_test(ui_flag=False)
 
     @tier1
+    @ui
     @black_squad
     def test_add_capacity_ui(self, reduce_and_resume_cluster_load):
         """
