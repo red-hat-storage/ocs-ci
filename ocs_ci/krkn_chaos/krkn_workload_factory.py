@@ -127,6 +127,51 @@ class WorkloadOps:
             log.error(f"Failed to start background cluster operations: {e}")
             self.background_cluster_ops = None
 
+    def validate_workload_operations(self):
+        """
+        Validate workload health without performing cleanup.
+
+        This method validates that workloads are still running correctly
+        after chaos testing, without stopping or cleaning them up.
+        Useful for intermediate validation during test execution.
+
+        Raises:
+            UnexpectedBehaviour: If workload validation fails
+            CommandFailed: If command execution fails during validation
+        """
+        log.info(f"Validating {len(self.workloads)} workloads...")
+
+        validation_errors = []
+        for i, workload in enumerate(self.workloads, 1):
+            try:
+                # Determine workload type for this specific workload
+                workload_type = self._get_workload_type_for_workload(workload)
+
+                if workload_type == KrknWorkloadConfig.VDBENCH:
+                    self._validate_vdbench_workload(workload)
+                elif workload_type == KrknWorkloadConfig.CNV_WORKLOAD:
+                    self._validate_cnv_workload(workload)
+                elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
+                    self._validate_rgw_workload(workload)
+                else:
+                    log.warning(f"Unknown workload type: {workload_type}")
+
+            except Exception as e:
+                error_msg = f"Issue validating workload {i}: {e}"
+                log.warning(error_msg)
+                validation_errors.append(error_msg)
+
+        if validation_errors:
+            error_summary = "\n".join(validation_errors)
+            log.error(f"Workload validation errors:\n{error_summary}")
+            from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+
+            raise UnexpectedBehaviour(
+                f"Workload validation failed for {len(validation_errors)} workload(s):\n{error_summary}"
+            )
+
+        log.info(f"✓ All {len(self.workloads)} workloads validated successfully")
+
     def validate_and_cleanup(self):
         """
         Validate workload health and perform cleanup.
@@ -501,6 +546,7 @@ class KrknWorkloadFactory:
             width = fs_config.get("width", 5)
             files = fs_config.get("files", 10)
             file_size = fs_config.get("file_size", "1m")
+            openflags = fs_config.get("openflags", "o_direct")
 
             # Get original patterns from config
             original_patterns = fs_config.get("patterns", [])
@@ -541,6 +587,7 @@ class KrknWorkloadFactory:
                         "width": width,
                         "files": files,
                         "file_size": file_size,
+                        "openflags": openflags,
                         "group_all_fwds_in_one_rd": True,
                         "patterns": all_patterns,
                     },

@@ -1,16 +1,16 @@
-# Krkn chaos testing configuration
+# Resiliency testing configuration
 
 ENV_DATA:
-  krkn_config:
-    # Workload types: VDBENCH, CNV_WORKLOAD, RGW_WORKLOAD, FIO
+  resiliency_config:
+    # Workload types: VDBENCH, CNV_WORKLOAD, FIO, RGW_WORKLOAD
     workloads:
       - VDBENCH
       - RGW_WORKLOAD
 
-    # Run workloads during chaos testing
+    # Run workloads during resiliency testing
     run_workload: true
 
-    # Enable data verification after chaos
+    # Enable data verification after failure injection
     enable_verification: true
 
     # VDBENCH Configuration
@@ -27,12 +27,12 @@ ENV_DATA:
 
       # Common workload parameters
       threads: 16
-      elapsed: 600
+      elapsed: 1200
       interval: 60
 
       # Block workloads (RBD)
       block:
-        size: "15g"
+        size: "20g"
 
         patterns:
           - name: "random_write"
@@ -64,27 +64,33 @@ ENV_DATA:
         group_all_fwds_in_one_rd: true
 
         patterns:
-          - name: "sequential_write"
+          - name: "random_write"
+            fileio: "random"
             rdpct: 0      # Write-only
-            seekpct: 0    # Sequential I/O
+            xfersize: "4k"
+            skew: 0
+
+          - name: "sequential_write"
+            fileio: "sequential"
+            rdpct: 0      # Write-only
             xfersize: "1m"
             skew: 0
 
           - name: "random_mixed"
+            fileio: "random"
             rdpct: 70     # 70% reads, 30% writes
-            seekpct: 100  # Random I/O
             xfersize: "256k"
             skew: 0
 
           - name: "small_file_ops"
+            fileio: "random"
             rdpct: 50     # 50% reads, 50% writes
-            seekpct: 100  # Random I/O
             xfersize: "4k"
             skew: 0
 
     # RGW Workload configuration (S3 workload on RADOS Gateway)
     rgw_config:
-      num_buckets: 5
+      num_buckets: 3
       iteration_count: 10
       upload_multiplier: 1
       metadata_ops_enabled: false
@@ -98,7 +104,7 @@ ENV_DATA:
 
     # Background Cluster Operations Configuration
     background_cluster_operations:
-      # Enable background ODF validation operations during chaos
+      # Enable background ODF validation operations during resiliency testing
       enabled: true
 
       # Operation interval in seconds (time between operations)
@@ -118,3 +124,10 @@ ENV_DATA:
         - reclaim_space          # CSI-Addons ReclaimSpace on RBD volumes
         - longevity_operations   # Comprehensive snapshot/restore/expand testing
         # - volume_replication   # CSI-Addons VolumeReplication (requires DR)
+
+    # Workload scaling configuration for resiliency tests
+    scaling_config:
+      enabled: true
+      min_replicas: 1
+      max_replicas: 5
+      delay: 30  # Delay in seconds before starting scaling operations

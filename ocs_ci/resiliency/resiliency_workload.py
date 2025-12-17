@@ -279,7 +279,9 @@ class VdbenchWorkload(Workload):
         image (str): Container image to use.
     """
 
-    def __init__(self, pvc, vdbench_config_file, namespace=None, image=None):
+    def __init__(
+        self, pvc, vdbench_config_file, namespace=None, image=None, workload_runs=1
+    ):
         super().__init__(namespace=namespace or pvc.namespace, image=image)
         self.pvc = pvc
         self.vdbench_config_file = vdbench_config_file
@@ -294,6 +296,7 @@ class VdbenchWorkload(Workload):
         log.info(
             f"Initialized Vdbench workload for resiliency testing: {self.workload_impl.deployment_name}"
         )
+        log.info(f"Workload will run {workload_runs} times")
 
     def start_workload(self):
         """Start the Vdbench workload."""
