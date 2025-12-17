@@ -1683,18 +1683,60 @@ class KrknResultAnalyzer(BaseScenarioHelper):
             # Variable names and code references
             r".*\w+_error\w*.*",  # Variable names like "last_error", "error_code"
             r".*error_\w+.*",  # Variable names like "error_message", "error_handler"
+            # Network cleanup errors (non-critical - interface may disappear during chaos)
+            r".*Cannot find device.*",  # Network interface disappeared during cleanup
+            r".*RTNETLINK answers: No such device.*",  # Network device not found
+            r".*tc qdisc del.*Cannot find device.*",  # Traffic control cleanup on missing interface
+            r".*Deleting.*virtual interfaces.*",  # Virtual interface cleanup (may fail gracefully)
         ]
 
         filtered_errors = []
+        cleanup_errors = []
+
+        # Network cleanup error patterns (tracked separately for informational purposes)
+        cleanup_error_patterns = [
+            r".*Cannot find device.*",
+            r".*RTNETLINK answers: No such device.*",
+            r".*tc qdisc del.*Cannot find device.*",
+            r".*Deleting.*virtual interfaces.*",
+        ]
+
         for error in detected_errors:
             is_false_positive = False
-            for fp_pattern in false_positive_patterns:
-                if re.search(fp_pattern, error["context"], re.IGNORECASE):
-                    is_false_positive = True
+            is_cleanup_error = False
+
+            # Check if this is a cleanup-related error
+            for cleanup_pattern in cleanup_error_patterns:
+                if re.search(cleanup_pattern, error["context"], re.IGNORECASE):
+                    is_cleanup_error = True
+                    cleanup_errors.append(error)
                     break
 
-            if not is_false_positive:
+            # Check if this is a false positive
+            if not is_cleanup_error:
+                for fp_pattern in false_positive_patterns:
+                    if re.search(fp_pattern, error["context"], re.IGNORECASE):
+                        is_false_positive = True
+                        break
+
+            if not is_false_positive and not is_cleanup_error:
                 filtered_errors.append(error)
+
+        # Log cleanup errors as warnings (non-critical)
+        if cleanup_errors:
+            self.log.warning(
+                f"Detected {len(cleanup_errors)} cleanup error(s) for {component_name} {test_type} (non-critical)"
+            )
+            self.log.warning(
+                "These errors occur during cleanup phase when network interfaces "
+                "may have already been removed by pod restarts/deletions during chaos."
+            )
+            for i, error in enumerate(cleanup_errors[:3], 1):  # Show first 3
+                self.log.debug(f"   Cleanup error {i}: {error['match']}")
+            if len(cleanup_errors) > 3:
+                self.log.debug(
+                    f"   ... and {len(cleanup_errors) - 3} more cleanup errors"
+                )
 
         # Log and assert if errors are found
         if filtered_errors:
@@ -1721,7 +1763,13 @@ class KrknResultAnalyzer(BaseScenarioHelper):
 
             raise AssertionError(error_summary)
         else:
-            success_msg = f"✅ No error messages detected in Krkn output for {component_name} {test_type}"
+            if cleanup_errors:
+                success_msg = (
+                    f"No critical errors detected in Krkn output for {component_name} {test_type} "
+                    f"({len(cleanup_errors)} non-critical cleanup errors filtered)"
+                )
+            else:
+                success_msg = f"No error messages detected in Krkn output for {component_name} {test_type}"
             self.log.info(success_msg)
 
     def validate_krkn_execution_with_error_check(
