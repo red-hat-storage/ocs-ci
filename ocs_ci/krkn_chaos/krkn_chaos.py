@@ -11,6 +11,7 @@ from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.krkn_chaos.krkn_port_manager import KrknPortManager
 from ocs_ci.framework import config
+from ocs_ci.utility.ibmcloud import get_ibmcloud_cluster_region
 
 log = logging.getLogger(__name__)
 
@@ -521,9 +522,12 @@ class KrKnRunner:
                         f"Setting IBMC_URL environment variable to: {api_endpoint}"
                     )
                 else:
-                    env["IBMC_URL"] = "https://cloud.ibm.com"
+                    ibmc_url = (
+                        f"https://{get_ibmcloud_cluster_region()}.iaas.cloud.ibm.com/v1"
+                    )
+                    env["IBMC_URL"] = ibmc_url
                     log.info(
-                        "No api_endpoint configured, using default IBMC_URL: https://cloud.ibm.com"
+                        f"No api_endpoint configured, using region-based IBMC_URL: {ibmc_url}"
                     )
         except Exception as e:
             log.warning(f"Failed to set IBM Cloud credentials: {str(e)}")
