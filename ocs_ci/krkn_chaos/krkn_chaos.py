@@ -10,6 +10,7 @@ import yaml
 from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.krkn_chaos.krkn_port_manager import KrknPortManager
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -491,6 +492,28 @@ class KrKnRunner:
             log.warning(
                 "Could not extract kubeconfig_path from krkn config, krkn may fail"
             )
+
+        # Export IBM Cloud API key if platform is IBM Cloud
+        # This is required for node scenarios on IBM Cloud
+        try:
+            platform = config.ENV_DATA.get("platform", "").lower()
+            if "ibm" in platform or "ibmcloud" in platform:
+                ibmcloud_auth = config.AUTH.get("ibmcloud", {})
+                api_key = ibmcloud_auth.get("api_key")
+                if api_key:
+                    env["IBMC_APIKEY"] = api_key
+                    env["IC_API_KEY"] = (
+                        api_key  # Also set IC_API_KEY for backward compatibility
+                    )
+                    log.info(
+                        "Setting IBMC_APIKEY and IC_API_KEY environment variables for IBM Cloud"
+                    )
+                else:
+                    log.warning(
+                        "IBM Cloud platform detected but api_key not found in AUTH config"
+                    )
+        except Exception as e:
+            log.warning(f"Failed to set IBM Cloud API key: {str(e)}")
 
         krkn_cmd = [
             "python3",
