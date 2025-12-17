@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.9")
 @skipif_ibm_cloud_managed
 @skipif_hci_provider_or_client
+@pytest.mark.skip(reason="Skipping because of issue #13794")
 class TestRbDPool(ManageTest):
     """
     Create a new  Storage Class on a new rbd pool with
