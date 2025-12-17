@@ -36,7 +36,6 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
@@ -1344,7 +1343,7 @@ class TestNfsEnable(ManageTest):
         finally:
             # Delete deployment if it exists
             try:
-                run_cmd(
+                exec_cmd(
                     f"oc delete deployment deployment "
                     f"{self.nfs_app_deployment} "
                     f"-n {self.namespace} "
@@ -1352,7 +1351,7 @@ class TestNfsEnable(ManageTest):
                 )
                 log.info(f"Deleted deployment: {self.nfs_app_deployment}")
             except CommandFailed:
-                log.debug("Deployment already deleted or doesn't exist")
+                log.info("Deployment already deleted or doesn't exist")
 
             pv_obj = nfs_pvc_obj.backed_pv_obj
             log.info(f"pv object-----{pv_obj}")
@@ -1504,7 +1503,7 @@ class TestNfsEnable(ManageTest):
         )
         if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
             helpers.retrieve_cli_binary(cli_type="odf")
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = exec_cmd(cmd="odf-cli subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         log.info(f"{inital_subvolume_list=}")
 
@@ -1518,7 +1517,7 @@ class TestNfsEnable(ManageTest):
         )
 
         # checking subvolumes post pvc creation
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = exec_cmd(cmd="odf-cli subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
         new = set(later_subvolume_list)
@@ -1578,13 +1577,13 @@ class TestNfsEnable(ManageTest):
         pv_obj.delete(wait=True)
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = exec_cmd(cmd="odf-cli subvolume ls --stale")
 
         # Deleteing stale subvolume
-        run_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+        exec_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = exec_cmd(cmd="odf-cli subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
 
