@@ -8,7 +8,6 @@ appropriate node scenarios based on actual krkn scenario configurations:
 Supported Platforms and their scenarios:
     - AWS: node_stop_start_scenario, node_reboot_scenario, node_disk_detach_attach_scenario
     - Azure: node_reboot_scenario, node_stop_start_scenario
-    - GCP: node_reboot_scenario, node_stop_start_scenario
     - IBM Cloud: node_stop_start_scenario, node_reboot_scenario (with disable_ssl_verification)
     - VMware/vSphere: node_reboot_scenario, node_stop_start_scenario
     - BareMetal: node_stop_start_scenario (with BMC/IPMI support)
@@ -60,25 +59,18 @@ class TestKrknNodeScenarios:
         1. Detects the cloud platform from ENV_DATA['platform']
         2. Uses the platform-specific node scenario generator
         3. Applies all default scenarios for that platform
-        4. Validates cluster recovery
+        4. Iterates through instance counts of 1, 2, and 3
+        5. Validates cluster recovery
 
         Platform-specific scenarios:
         - AWS: stop/start (parallel, kube_check), reboot, disk_detach_attach
         - Azure: reboot (parallel, kube_check), stop/start
-        - GCP: reboot (parallel, kube_check), stop/start
         - IBM Cloud: stop/start, reboot (with disable_ssl_verification)
         - VMware: reboot, stop/start (sequential)
         - BareMetal: stop/start (with BMC/IPMI, kube_check)
         """
         generator, cloud_type, platform = get_node_scenario_generator()
         scenario_dir = krkn_scenario_directory
-
-        log_test_start(
-            f"Platform Node Scenarios ({cloud_type})",
-            f"{platform} platform",
-            platform=platform,
-            cloud_type=cloud_type,
-        )
 
         # Initialize helpers
         validator = ValidationHelper()
@@ -91,64 +83,125 @@ class TestKrknNodeScenarios:
         log.info(f"Setting up workloads for {cloud_type} node scenarios")
         workload_ops.setup_workloads()
 
+        # Iterate through instance counts of 1, 2, and 3
+        instance_counts = [1, 2, 3]
+        all_results = []
+
         try:
-            # Create Krkn configuration
-            krkn_config = KrknConfigGenerator()
+            for instance_count in instance_counts:
+                log_test_start(
+                    f"Platform Node Scenarios ({cloud_type}) - Instance Count: {instance_count}",
+                    f"{platform} platform",
+                    platform=platform,
+                    cloud_type=cloud_type,
+                    instance_count=instance_count,
+                )
 
-            # Generate platform-specific node scenarios using the generator
-            scenario_file = generator(scenario_dir=scenario_dir)
+                try:
+                    # Create Krkn configuration
+                    krkn_config = KrknConfigGenerator()
 
-            log.info(f"Generated {cloud_type} node scenario file: {scenario_file}")
+                    # Generate platform-specific node scenarios using the generator
+                    scenario_file = generator(
+                        scenario_dir=scenario_dir, instance_count=instance_count
+                    )
 
-            # Add scenario to Krkn config
-            krkn_config.add_scenario("node_scenarios", scenario_file)
+                    log.info(
+                        f"Generated {cloud_type} node scenario file with "
+                        f"instance_count={instance_count}: {scenario_file}"
+                    )
 
-            # Configure and write Krkn configuration
-            krkn_config.set_tunings(wait_duration=60, iterations=1)
-            krkn_config.write_to_file(location=scenario_dir)
+                    # Add scenario to Krkn config
+                    krkn_config.add_scenario("node_scenarios", scenario_file)
 
-            # Execute Krkn
-            log.info(f"Executing {cloud_type} node scenarios on {platform}")
-            krkn_runner = KrKnRunner(krkn_config.global_config)
-            krkn_runner.run_async()
-            krkn_runner.wait_for_completion(check_interval=60)
-            chaos_output = krkn_runner.get_chaos_data()
+                    # Configure and write Krkn configuration
+                    krkn_config.set_tunings(wait_duration=60, iterations=1)
+                    krkn_config.write_to_file(location=scenario_dir)
 
-            log.info(f"{cloud_type} node scenarios execution completed")
+                    # Execute Krkn
+                    log.info(
+                        f"Executing {cloud_type} node scenarios on {platform} with instance_count={instance_count}"
+                    )
+                    krkn_runner = KrKnRunner(krkn_config.global_config)
+                    krkn_runner.run_async()
+                    krkn_runner.wait_for_completion(check_interval=60)
+                    chaos_output = krkn_runner.get_chaos_data()
 
-        except CommandFailed as e:
-            validator.handle_krkn_command_failure(
-                e, platform, f"{cloud_type} node scenarios"
+                    log.info(
+                        f"{cloud_type} node scenarios execution completed for instance_count={instance_count}"
+                    )
+
+                    # Analyze results for this iteration
+                    total_executed, successful_executed, failing_executed = (
+                        analyzer.analyze_chaos_results(
+                            chaos_output, platform, detail_level="detailed"
+                        )
+                    )
+
+                    # Store results for this iteration
+                    all_results.append(
+                        {
+                            "instance_count": instance_count,
+                            "total_executed": total_executed,
+                            "successful_executed": successful_executed,
+                            "failing_executed": failing_executed,
+                        }
+                    )
+
+                    # Validate execution for this iteration
+                    validator.validate_chaos_execution(
+                        total_executed,
+                        successful_executed,
+                        platform,
+                        f"{cloud_type} node scenarios (instance_count={instance_count})",
+                    )
+
+                    # Check Ceph health after each iteration
+                    no_crashes, crash_details = health_helper.check_ceph_crashes(
+                        "cluster",
+                        f"{cloud_type} node scenarios (instance_count={instance_count})",
+                    )
+                    assert no_crashes, crash_details
+
+                    log.info(
+                        f"{cloud_type} node scenarios completed successfully for instance_count={instance_count}"
+                    )
+
+                except CommandFailed as e:
+                    validator.handle_krkn_command_failure(
+                        e,
+                        platform,
+                        f"{cloud_type} node scenarios (instance_count={instance_count})",
+                    )
+                    raise
+                except Exception as e:
+                    log.error(
+                        f"{cloud_type} node scenarios failed on {platform} for instance_count={instance_count}: {e}"
+                    )
+                    raise
+
+            # Summary log for all iterations
+            log.info(f"\n{'='*80}")
+            log.info(
+                f"SUMMARY: {cloud_type} node scenarios completed for all instance counts"
             )
-            raise
-        except Exception as e:
-            log.error(f"{cloud_type} node scenarios failed on {platform}: {e}")
-            raise
+            log.info(f"{'='*80}")
+            for result in all_results:
+                log.info(
+                    f"Instance Count {result['instance_count']}: "
+                    f"Total={result['total_executed']}, "
+                    f"Successful={result['successful_executed']}, "
+                    f"Failed={result['failing_executed']}"
+                )
+            log.info(f"{'='*80}")
+
+            log.info(
+                f"{cloud_type} node scenarios completed successfully on {platform} for all instance counts"
+            )
+
         finally:
+            # Cleanup workloads after all iterations (always executes)
             workload_ops.validate_and_cleanup()
-
-        # Analyze results
-        total_executed, successful_executed, failing_executed = (
-            analyzer.analyze_chaos_results(
-                chaos_output, platform, detail_level="detailed"
-            )
-        )
-
-        # Validate execution
-        validator.validate_chaos_execution(
-            total_executed,
-            successful_executed,
-            platform,
-            f"{cloud_type} node scenarios",
-        )
-
-        # Check Ceph health
-        no_crashes, crash_details = health_helper.check_ceph_crashes(
-            "cluster", f"{cloud_type} node scenarios"
-        )
-        assert no_crashes, crash_details
-
-        log.info(f"{cloud_type} node scenarios completed successfully on {platform}")
 
     @pytest.mark.parametrize(
         "action",
@@ -222,7 +275,6 @@ class TestKrknNodeScenarios:
             if cloud_type in [
                 constants.KRKN_CLOUD_AWS,
                 constants.KRKN_CLOUD_AZURE,
-                constants.KRKN_CLOUD_GCP,
             ]:
                 scenario_params["parallel"] = True
                 scenario_params["kube_check"] = True

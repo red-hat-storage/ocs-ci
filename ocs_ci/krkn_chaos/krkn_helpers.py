@@ -24,7 +24,6 @@ from ocs_ci.ocs.constants import (
     ROSA_HCP_PLATFORM,
     AZURE_PLATFORM,
     AZURE_WITH_LOGS_PLATFORM,
-    GCP_PLATFORM,
     IBMCLOUD_PLATFORM,
     IBM_PLATFORM,
     IBM_POWER_PLATFORM,
@@ -38,7 +37,6 @@ from ocs_ci.ocs.constants import (
     # Krkn cloud type constants
     KRKN_CLOUD_AWS,
     KRKN_CLOUD_AZURE,
-    KRKN_CLOUD_GCP,
     KRKN_CLOUD_IBM,
     KRKN_CLOUD_VMWARE,
     KRKN_CLOUD_BAREMETAL,
@@ -72,8 +70,6 @@ PLATFORM_TO_KRKN_CLOUD_TYPE = {
     # Azure platforms
     AZURE_PLATFORM: KRKN_CLOUD_AZURE,
     AZURE_WITH_LOGS_PLATFORM: KRKN_CLOUD_AZURE,
-    # GCP platform
-    GCP_PLATFORM: KRKN_CLOUD_GCP,
     # IBM platforms
     IBMCLOUD_PLATFORM: KRKN_CLOUD_IBM,
     IBM_PLATFORM: KRKN_CLOUD_IBM,
@@ -96,7 +92,7 @@ def get_krkn_cloud_type():
     Get the Krkn cloud type based on the current platform.
 
     Returns:
-        str: Krkn cloud type (aws, azure, gcp, ibm, vmware, bm, openstack)
+        str: Krkn cloud type (aws, azure, ibm, vmware, bm, openstack)
 
     Raises:
         pytest.skip: If platform is not supported for node chaos testing
@@ -131,7 +127,6 @@ def get_node_scenario_generator():
     generator_map = {
         KRKN_CLOUD_AWS: NodeScenarios.aws_node_scenarios,
         KRKN_CLOUD_AZURE: NodeScenarios.azure_node_scenarios,
-        KRKN_CLOUD_GCP: NodeScenarios.gcp_node_scenarios,
         KRKN_CLOUD_IBM: NodeScenarios.ibmcloud_node_scenarios,
         KRKN_CLOUD_VMWARE: NodeScenarios.vmware_node_scenarios,
         KRKN_CLOUD_BAREMETAL: NodeScenarios.baremetal_node_scenarios,

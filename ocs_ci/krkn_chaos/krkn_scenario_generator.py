@@ -909,7 +909,6 @@ class NodeScenarios:
     Supported cloud types:
         - aws: Amazon Web Services
         - azure: Microsoft Azure
-        - gcp: Google Cloud Platform
         - openstack: OpenStack
         - ibm: IBM Cloud
         - alibaba: Alibaba Cloud
@@ -932,7 +931,6 @@ class NodeScenarios:
     # Cloud type constants
     CLOUD_AWS = "aws"
     CLOUD_AZURE = "azure"
-    CLOUD_GCP = "gcp"
     CLOUD_OPENSTACK = "openstack"
     CLOUD_IBM = "ibm"
     CLOUD_ALIBABA = "alibaba"
@@ -998,7 +996,7 @@ class NodeScenarios:
 
         Args:
             scenario_dir (str): Directory to write the YAML file.
-            cloud_type (str): Cloud provider type (aws, azure, gcp, openstack, ibm,
+            cloud_type (str): Cloud provider type (aws, azure, openstack, ibm,
                 alibaba, bm, vmware).
             scenarios (list, optional): List of scenario dicts for multiple scenarios.
                 Each dict can have all the parameters below.
@@ -1216,63 +1214,6 @@ class NodeScenarios:
             "openshift/node_scenarios.yml.j2",
             config,
             "node_scenarios_azure.yaml",
-        )
-
-    @staticmethod
-    def gcp_node_scenarios(
-        scenario_dir,
-        scenarios=None,
-        label_selector="node-role.kubernetes.io/worker",
-        instance_count=1,
-        timeout=360,
-        duration=120,
-        parallel=True,
-        kube_check=True,
-    ):
-        """Generates GCP node scenarios YAML.
-
-        Based on krkn gcp_node_scenarios.yml configuration.
-
-        Args:
-            scenario_dir (str): Directory to write the YAML file.
-            scenarios (list, optional): List of scenario dicts.
-            label_selector (str): Label selector (default: "node-role.kubernetes.io/worker").
-            instance_count (int): Number of nodes to target (default: 1).
-            timeout (int): Timeout in seconds (default: 360).
-            duration (int): Duration for stop_start scenarios (default: 120).
-            parallel (bool): Run actions in parallel (default: True).
-            kube_check (bool): Run kubernetes api checks (default: True).
-
-        Returns:
-            str: Path to the generated YAML file.
-        """
-        if scenarios is None:
-            scenarios = [
-                {
-                    "actions": [NodeScenarios.ACTION_NODE_REBOOT],
-                    "cloud_type": NodeScenarios.CLOUD_GCP,
-                    "label_selector": label_selector,
-                    "instance_count": instance_count,
-                    "timeout": 120,
-                    "parallel": parallel,
-                    "kube_check": kube_check,
-                },
-                {
-                    "actions": [NodeScenarios.ACTION_NODE_STOP_START],
-                    "cloud_type": NodeScenarios.CLOUD_GCP,
-                    "label_selector": label_selector,
-                    "instance_count": instance_count,
-                    "timeout": timeout,
-                    "duration": duration,
-                },
-            ]
-
-        config = {"scenarios": scenarios}
-        return NodeScenarios._create_node_scenario(
-            scenario_dir,
-            "openshift/node_scenarios.yml.j2",
-            config,
-            "node_scenarios_gcp.yaml",
         )
 
     @staticmethod

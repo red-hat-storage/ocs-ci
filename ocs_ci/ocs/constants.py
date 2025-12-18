@@ -3667,7 +3667,6 @@ KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
 # Krkn supported cloud types for node scenarios
 KRKN_CLOUD_AWS = "aws"
 KRKN_CLOUD_AZURE = "azure"
-KRKN_CLOUD_GCP = "gcp"
 KRKN_CLOUD_OPENSTACK = "openstack"
 KRKN_CLOUD_IBM = "ibm"
 KRKN_CLOUD_ALIBABA = "alibaba"
