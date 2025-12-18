@@ -161,7 +161,7 @@ ENV_DATA:
   storage_device_sets_name: "storageDeviceSets"
   sno: false
   cluster_namespace: "openshift-storage"
-  client_namespace: "openshift-storage-client"
+  client_namespace: "openshift-storage"
   service_namespace: "openshift-storage"
   local_storage_namespace: "openshift-local-storage"
   monitoring_enabled: true
