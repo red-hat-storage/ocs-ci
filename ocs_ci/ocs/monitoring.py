@@ -4,10 +4,11 @@ import json
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
-from ocs_ci.ocs.resources.pod import get_pod_obj
+from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
 from ocs_ci.helpers import helpers
 import ocs_ci.utility.prometheus
 from ocs_ci.ocs.exceptions import (
@@ -417,3 +418,50 @@ def get_ceph_capacity_metrics(threading_lock):
     # convert dict to json and print it with pretty format
     logger.info(json.dumps(ceph_capacity, indent=4))
     return ceph_capacity
+
+
+def validate_no_prometheus_rule_failures(threading_lock=threading_lock):
+    """
+    Check that there is no PrometheusRuleFailures alert in OCP Prometheus or
+    many-to-many matching errors in Prometheus logs (more in DFBUGS-2571).
+
+    Args:
+        threading_lock (threading.RLock): A lock to prevent multiple threads calling 'oc' command at the same time
+
+    Returns:
+        bool: True if no error is found
+
+    """
+    # any check with state False will fail the test
+    test_results = {}
+
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(threading_lock=threading_lock)
+    alerts_response = prometheus.get(
+        "alerts", payload={"silenced": False, "inhibited": False}
+    )
+    test_results["alert-msg-ok-check"] = alerts_response.ok is True
+    alerts = alerts_response.json()["data"]["alerts"]
+    logger.info(f"Prometheus Alerts: {alerts}")
+    test_results[f"{constants.ALERT_PROMETHEUSRULEFAILURES}-present-check"] = (
+        constants.ALERT_PROMETHEUSRULEFAILURES
+        not in [alert["labels"]["alertname"] for alert in alerts]
+    )
+    prometheus_pods = get_pod_name_by_pattern(
+        defaults.PROMETHEUS_ROUTE, constants.MONITORING_NAMESPACE
+    )
+    for pod_name in prometheus_pods:
+        logger.info(f"Checking logs of pod {pod_name}")
+        pod_logs = get_pod_logs(
+            pod_name=pod_name,
+            namespace=constants.MONITORING_NAMESPACE,
+        ).splitlines()
+        pod_logs.reverse()
+        for log_line in pod_logs:
+            if "many-to-many matching not allowed" in log_line.lower():
+                test_results[f"many-to-many-error-present-{pod_name}-check"] = False
+                break
+        else:
+            test_results[f"many-to-many-error-present-{pod_name}-check"] = True
+
+    logger.info(f"prometheus rule failures check: {test_results}")
+    return all(test_results.values())
