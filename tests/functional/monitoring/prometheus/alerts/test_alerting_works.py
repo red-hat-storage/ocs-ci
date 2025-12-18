@@ -8,7 +8,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     provider_mode,
     runs_on_provider,
 )
-from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
 import ocs_ci.utility.prometheus
 from ocs_ci.utility.utils import TimeoutSampler

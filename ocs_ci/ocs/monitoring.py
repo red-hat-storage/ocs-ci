@@ -420,7 +420,7 @@ def get_ceph_capacity_metrics(threading_lock):
     return ceph_capacity
 
 
-def validate_no_prometheus_rule_failures(threading_lock=threading_lock):
+def validate_no_prometheus_rule_failures(threading_lock=None):
     """
     Check that there is no PrometheusRuleFailures alert in OCP Prometheus or
     many-to-many matching errors in Prometheus logs (more in DFBUGS-2571).
