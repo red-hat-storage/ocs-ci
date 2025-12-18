@@ -10,6 +10,7 @@ import tempfile
 import yaml
 
 from ocs_ci.deployment.helpers import storage_class
+from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
@@ -212,6 +213,8 @@ class FusionDataFoundationDeployment:
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
+            if self.lso_enabled:
+                add_disks_lso()
             clustersetup = StorageClusterSetup()
             create_lvs_resource(self.storage_class, self.storage_class)
             if config.ENV_DATA.get("mark_masters_schedulable", False):
