@@ -104,7 +104,7 @@ def get_custom_storage_class_path() -> str:
         )
 
     logger.info(
-        f"For platform: {platform} we will use custom storage class: {custom_sc_path}"
+        f"For platform: {platform} we will use custom storage class path: {custom_sc_path}"
     )
     return custom_sc_path
 

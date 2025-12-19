@@ -238,6 +238,8 @@ from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
+DEPLOYERS = {}
+
 log = logging.getLogger(__name__)
 
 odf_cli_runner = ODFCliRunner()
@@ -2165,9 +2167,10 @@ def cluster(
             with config.RunWithConfigContext(index):
                 # Let get initiated deployer for each cluster here to be sure all necesary
                 # values are propagated to all clusters configs
-                dep_factory.DeploymentFactory()
-        factory = dep_factory.DeploymentFactory()
-        deployer = factory.get_deployment()
+                DEPLOYERS[config.ENV_DATA["cluster_name"]] = (
+                    dep_factory.DeploymentFactory().get_deployment()
+                )
+        deployer = DEPLOYERS[config.ENV_DATA["cluster_name"]]
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:

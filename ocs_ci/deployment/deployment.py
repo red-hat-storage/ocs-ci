@@ -209,9 +209,13 @@ class Deployment(object):
     def __init__(self):
         self.sts_role_arn = None
         storage_class.set_custom_storage_class_path()
+        logger.info(
+            f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
+        )
 
     # Because of for different platform multicluster run, as by wrong design we define only one deployer
     # We need use config to hold the storage class for each cluster.
+    # See issue: https://issues.redhat.com/browse/OCSQE-4214 for more details
     @property
     def storage_class(self):
         if not config.ENV_DATA.get("storage_class"):
