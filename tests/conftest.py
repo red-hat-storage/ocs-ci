@@ -2161,6 +2161,11 @@ def cluster(
     teardown = ocsci_config.RUN["cli_params"]["teardown"]
     deploy = ocsci_config.RUN["cli_params"]["deploy"]
     if teardown or deploy:
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                # Let get initiated deployer for each cluster here to be sure all necesary
+                # values are propagated to all clusters configs
+                dep_factory.DeploymentFactory()
         factory = dep_factory.DeploymentFactory()
         deployer = factory.get_deployment()
 

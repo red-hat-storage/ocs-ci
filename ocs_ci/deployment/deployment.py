@@ -207,13 +207,42 @@ class Deployment(object):
     """
 
     def __init__(self):
-        self.platform = config.ENV_DATA["platform"]
-        self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
-        self.cluster_path = config.ENV_DATA["cluster_path"]
-        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.sts_role_arn = None
-        self.storage_class = storage_class.get_storageclass()
-        self.custom_storage_class_path = None
+        storage_class.set_custom_storage_class_path()
+
+    # Because of for different platform multicluster run, as by wrong design we define only one deployer
+    # We need use config to hold the storage class for each cluster.
+    @property
+    def storage_class(self):
+        if not config.ENV_DATA.get("storage_class"):
+            sc = storage_class.get_storageclass()
+            self.storage_class = sc
+            return sc
+        return config.ENV_DATA["storage_class"]
+
+    @storage_class.setter
+    def storage_class(self, value):
+        config.ENV_DATA["storage_class"] = value
+
+    @property
+    def platform(self):
+        return config.ENV_DATA["platform"]
+
+    @property
+    def ocp_deployment_type(self):
+        return config.ENV_DATA["deployment_type"]
+
+    @property
+    def cluster_path(self):
+        return config.ENV_DATA["cluster_path"]
+
+    @property
+    def namespace(self):
+        return config.ENV_DATA["cluster_namespace"]
+
+    @property
+    def custom_storage_class_path(self):
+        return config.ENV_DATA["custom_storage_class_path"]
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -785,7 +814,7 @@ class Deployment(object):
             else:
                 x_addr_list = None
             if config.DEPLOYMENT.get("arbiter_deployment"):
-                arbiter_zone = self.get_arbiter_location()
+                arbiter_zone = get_arbiter_location()
                 logger.debug("detected arbiter zone: %s", arbiter_zone)
             else:
                 arbiter_zone = None
@@ -1172,40 +1201,6 @@ class Deployment(object):
                     return
                 logger.debug(f"Still waiting for the CSV: {csv_name}")
 
-    def get_arbiter_location(self):
-        """
-        Get arbiter mon location for storage cluster
-        """
-        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
-            "arbiter_autodetect"
-        ):
-            return config.DEPLOYMENT.get("arbiter_zone")
-
-        # below logic will autodetect arbiter_zone
-        nodes = ocp.OCP(kind="node").get().get("items", [])
-
-        worker_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.WORKER_LABEL in node["metadata"]["labels"]
-            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
-        }
-
-        master_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.MASTER_LABEL in node["metadata"]["labels"]
-        }
-
-        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
-
-        if len(arbiter_locations) < 1:
-            raise UnavailableResourceException(
-                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
-            )
-
-        return arbiter_locations[0]
-
     def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
@@ -1539,7 +1534,7 @@ class Deployment(object):
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
 
-        storage_cluster_setup = StorageClusterSetup(deployment=self)
+        storage_cluster_setup = StorageClusterSetup()
         storage_cluster_setup.setup_storage_cluster()
 
         if config.DEPLOYMENT["infra_nodes"]:
@@ -4049,3 +4044,38 @@ MULTICLUSTER_DR_MAP = {
     "regional-dr": RDRMultiClusterDROperatorsDeploy,
     "metro-dr": MDRMultiClusterDROperatorsDeploy,
 }
+
+
+def get_arbiter_location():
+    """
+    Get arbiter mon location for storage cluster
+    """
+    if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+        "arbiter_autodetect"
+    ):
+        return config.DEPLOYMENT.get("arbiter_zone")
+
+    # below logic will autodetect arbiter_zone
+    nodes = ocp.OCP(kind="node").get().get("items", [])
+
+    worker_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.WORKER_LABEL in node["metadata"]["labels"]
+        and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+    }
+
+    master_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.MASTER_LABEL in node["metadata"]["labels"]
+    }
+
+    arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+    if len(arbiter_locations) < 1:
+        raise UnavailableResourceException(
+            "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+        )
+
+    return arbiter_locations[0]
