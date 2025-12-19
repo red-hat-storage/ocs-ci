@@ -40,6 +40,7 @@ def workload_ops(
     vdbench_block_config,
     vdbench_filesystem_config,
     awscli_pod,
+    storageclass_factory,
 ):
     """
     Workload ops fixture for resiliency testing.
@@ -118,6 +119,7 @@ def workload_ops(
         vdbench_block_config,
         vdbench_filesystem_config,
         awscli_pod=awscli_pod,
+        storageclass_factory=storageclass_factory,
         scaling_helper=scaling_helper,
     )
 
