@@ -5,12 +5,10 @@ on Google Cloud Platform (aka GCP).
 """
 
 import logging
-import os
 
 from libcloud.compute.types import NodeState
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
-from ocs_ci.ocs.constants import TEMPLATE_DEPLOYMENT_DIR
 from ocs_ci.utility.gcp import GoogleCloudUtil
 
 
@@ -78,9 +76,3 @@ class GCPIPI(GCPBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(GCPIPI, self).__init__()
-        # storage class for StorageCluster CRD on Google Cloud platform
-        # uses a custom storageclass, which is created prior creating
-        # StorageCluster CR during OCS installation
-        self.custom_storage_class_path = os.path.join(
-            TEMPLATE_DEPLOYMENT_DIR, "storageclass.gcp.yaml"
-        )
