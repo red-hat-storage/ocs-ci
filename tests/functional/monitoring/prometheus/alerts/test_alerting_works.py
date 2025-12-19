@@ -48,7 +48,7 @@ def test_prometheus_rule_failures(threading_lock):
         timeout=120,
         sleep=30,
         func=validate_no_prometheus_rule_failures,
-        func_args=threading_lock,
+        func_kwargs={"threading_lock": threading_lock},
     ):
         if no_prometheus_rule_failures:
             break
