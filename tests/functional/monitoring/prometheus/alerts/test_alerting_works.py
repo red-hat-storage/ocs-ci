@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.ocp import OCP
 import ocs_ci.utility.prometheus
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutIterator
 from ocs_ci.ocs.monitoring import validate_no_prometheus_rule_failures
 
 log = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def test_prometheus_rule_failures(threading_lock):
     If such error message found PrometheusRuleFailures alert must fire as well.
     """
     no_prometheus_rule_failures = False
-    for no_prometheus_rule_failures in TimeoutSampler(
+    for no_prometheus_rule_failures in TimeoutIterator(
         timeout=120,
         sleep=30,
         func=validate_no_prometheus_rule_failures,
