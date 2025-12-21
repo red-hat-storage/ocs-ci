@@ -1,3 +1,4 @@
+import tempfile
 from datetime import datetime
 from functools import reduce
 import base64
@@ -45,7 +46,6 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CephHealthRecoveredException,
     CephHealthNotRecoveredException,
-    ClientDownloadError,
     CommandFailed,
     ConfigurationError,
     ResourceNotFoundError,
@@ -64,6 +64,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.jira import JiraHelper
 from psutil._common import bytes2human
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
@@ -610,7 +611,6 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
-    use_shell=False,
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
@@ -633,7 +633,6 @@ def exec_cmd(
         threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
-        use_shell (bool): If True will pass the cmd without splitting
         cluster_config (MultiClusterConfig): In case of multicluster environment this object
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
@@ -783,6 +782,8 @@ def download_file(url, filename, **kwargs):
 
     """
     log.debug(f"Download '{url}' to '{filename}'.")
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 600
     with open(filename, "wb") as f:
         r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
@@ -804,6 +805,8 @@ def get_url_content(url, **kwargs):
 
     """
     log.debug(f"Download '{url}' content.")
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 600
     r = requests.get(url, **kwargs)
     assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
     return r.content
@@ -1066,9 +1069,7 @@ def extract_ocp_binary_from_image(binary, image, bin_dir):
             shutil.move(temp_binary, binary_path)
 
 
-def get_openshift_client(
-    version=None, bin_dir=None, force_download=False, skip_comparison=False
-):
+def get_openshift_client(version=None, bin_dir=None, force_download=False):
     """
     Download the OpenShift client binary, if not already present.
     Update env. PATH and get path of the oc binary.
@@ -1078,8 +1079,6 @@ def get_openshift_client(
             (default: config.RUN['client_version'])
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
         force_download (bool): Force client download even if already present
-        skip_comparison (bool): Skip the comparison between the existing OCP client
-            version and the configured one.
 
     Returns:
         str: Path to the client binary
@@ -1088,10 +1087,22 @@ def get_openshift_client(
     version = version or config.RUN["client_version"]
     bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     bin_dir = os.path.abspath(bin_dir_rel_path)
+    prepare_bin_dir(bin_dir)
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
-    download_client = True
+    client_exist = os.path.isfile(client_binary_path)
+    use_system_available_oc_client = config.RUN.get(
+        "use_system_available_oc_client", False
+    )
+    if use_system_available_oc_client and not client_exist:
+        if use_system_available_client_and_kubectl(
+            client_binary_path, kubectl_binary_path
+        ):
+            download_client = False
+    else:
+        download_client = True
     client_version = None
+    skip_comparison = config.RUN.get("skip_oc_client_version_comparison", False)
     try:
         version = expose_ocp_version(version)
     except Exception:
@@ -1100,7 +1111,6 @@ def get_openshift_client(
         download_client = False
         force_download = False
 
-    client_exist = os.path.isfile(client_binary_path)
     custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
     skip_if_client_downloaded_from_installer = config.RUN.get(
         "custom_client_downloaded_from_installer"
@@ -1133,15 +1143,16 @@ def get_openshift_client(
         client_binary_backup = f"{client_binary_path}.bak"
         kubectl_binary_backup = f"{kubectl_binary_path}.bak"
 
+        backup_created = False
         try:
             os.rename(client_binary_path, client_binary_backup)
             os.rename(kubectl_binary_path, kubectl_binary_backup)
+            backup_created = True
         except FileNotFoundError:
             pass
 
         # Download the client
         log.info(f"Downloading openshift client ({version}).")
-        prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
@@ -1172,15 +1183,15 @@ def get_openshift_client(
             except FileNotFoundError:
                 pass
         else:
-            try:
+            if backup_created:
                 os.rename(client_binary_backup, client_binary_path)
                 os.rename(kubectl_binary_backup, kubectl_binary_path)
                 log.info("Restored backup binaries to their original location.")
-            except FileNotFoundError:
-                raise ClientDownloadError(
-                    "No backups exist and new binary was unable to be verified."
-                )
-
+            else:
+                if not use_system_available_client_and_kubectl(
+                    client_binary_path, kubectl_binary_path
+                ):
+                    raise FileNotFoundError("No system oc client exist to copy from!")
         if not os.path.exists("kubectl"):
             log.info("Creating kubectl link to oc binary.")
             os.link("oc", "kubectl")
@@ -1190,6 +1201,28 @@ def get_openshift_client(
 
     log.info(f"OpenShift Client version: {client_version}")
     return client_binary_path
+
+
+def use_system_available_client_and_kubectl(client_binary_path, kubectl_binary_path):
+    """
+    Use system available client and kubectl binaries.
+
+    Args:
+        client_binary_path (str): Path to the client binary
+        kubectl_binary_path (str): Path to the kubectl binary
+
+    Returns:
+        bool: True if system available client and kubectl binaries are available and used
+    """
+    system_available_client = shutil.which("oc")
+    system_available_kubectl = shutil.which("kubectl")
+    if system_available_client and system_available_kubectl:
+        shutil.copy2(system_available_client, client_binary_path)
+        shutil.copy2(system_available_kubectl, kubectl_binary_path)
+        log.info("Restored system available client and kubectl.")
+        return True
+    else:
+        return False
 
 
 def is_ocp_version_gaed(version):
@@ -1280,7 +1313,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
         force_download (bool): Force vault cli download even if already present
 
     """
-    res = requests.get(constants.VAULT_VERSION_INFO_URL)
+    res = requests.get(constants.VAULT_VERSION_INFO_URL, timeout=120)
     version = res.url.split("/")[-1].lstrip("v")
     bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
     system = platform.system()
@@ -1318,13 +1351,13 @@ def get_vault_cli(bind_dir=None, force_download=False):
 
 def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0] + "/"
-    r = requests.get(base_build_url)
+    r = requests.get(base_build_url, timeout=120)
     extracting_condition = b"Extracting" in r.content
     failed_build = b"FAILED.md" in r.content
     if extracting_condition:
         log.info("Build is extracting now, may take up to a minute.")
     if failed_build:
-        r = requests.get(base_build_url + "FAILED.md")
+        r = requests.get(base_build_url + "FAILED.md", timeout=120)
         log.info(
             f"Nightly build is not properly generated! Failed with reason: {r.content}"
         )
@@ -1487,6 +1520,14 @@ class TimeoutSampler(object):
         self.func_args = func_args
         self.func_kwargs = func_kwargs
 
+        # In case of underlying func has timeout or sleep parameter, user needs to pass it
+        # as func_timeout or func_sleep to avoid conflict.
+        if "func_timeout" in func_kwargs:
+            func_kwargs["timeout"] = func_kwargs["func_timeout"]
+            del func_kwargs["func_timeout"]
+        if "func_sleep" in func_kwargs:
+            func_kwargs["sleep"] = func_kwargs["func_sleep"]
+            del func_kwargs["func_sleep"]
         # Timestamps of the first and most recent samples
         self.start_time = None
         self.last_sample_time = None
@@ -1595,6 +1636,14 @@ class TimeoutIterator(TimeoutSampler):
             func_args = []
         if func_kwargs is None:
             func_kwargs = {}
+        # In case of underlying func has timeout or sleep parameter, we need to pass it to the super class
+        # so that it can be used in the super class without conflict.
+        if "timeout" in func_kwargs:
+            func_kwargs["func_timeout"] = func_kwargs["timeout"]
+            del func_kwargs["timeout"]
+        if "sleep" in func_kwargs:
+            func_kwargs["func_sleep"] = func_kwargs["sleep"]
+            del func_kwargs["sleep"]
         super().__init__(timeout, sleep, func, *func_args, **func_kwargs)
 
 
@@ -2006,9 +2055,14 @@ def email_reports(session):
     aborted_message = ""
     if config.RUN.get("aborted"):
         aborted_message = "[JOB ABORTED] "
+
+    cluster_names = ",".join(
+        [cl_conf.ENV_DATA["cluster_name"] for cl_conf in config.clusters]
+    )
+
     msg["Subject"] = (
         f"{aborted_message}"
-        f"ocs-ci results for {get_testrun_name()} "
+        f"ocs-ci results for {cluster_names} {get_testrun_name()} "
         f"({build_str}"
         f"RUN ID: {config.RUN['run_id']}) "
         # f"Passed: {percentage_passed:.0f}%"
@@ -2224,6 +2278,7 @@ def get_csi_versions():
     return csi_versions
 
 
+# TODO: remove this function and use the one in version.py
 def get_ocp_version(seperator=None):
     """
     *The deprecated form of 'get current ocp version'*
@@ -2462,7 +2517,18 @@ def get_testrun_name():
     )
     ocp_version_string = f"OCP{ocp_version}" if ocp_version else ""
     ocs_version = config.ENV_DATA.get("ocs_version")
-    ocs_version_string = f"OCS{ocs_version}" if ocs_version else ""
+    fusion_version = config.ENV_DATA.get("fusion_version")
+    fdf_version = config.ENV_DATA.get("fdf_version")
+    if fdf_version:
+        product_version = f"FDF{fdf_version}"
+        us_ds = ""
+    elif fusion_version:
+        product_version = f"Fusion{fusion_version}"
+        us_ds = ""
+    elif ocs_version:
+        product_version = f"OCS{ocs_version}"
+    else:
+        product_version = ""
     worker_os = "RHEL" if config.ENV_DATA.get("rhel_workers") else "RHCOS"
     build_user = None
     baremetal_config = None
@@ -2502,9 +2568,15 @@ def get_testrun_name():
             f"{config.ENV_DATA.get('worker_replicas')}W "
             f"{markers} {post_upgrade}".rstrip()
         )
-    testrun_name = (
-        f"{ocs_version_string} {us_ds} {ocp_version_string} " f"{testrun_name}"
-    )
+    version_prefix = ""
+    if product_version:
+        version_prefix += f"{product_version} "
+    if us_ds:
+        version_prefix += f"{us_ds} "
+    if ocp_version:
+        version_prefix += f"{ocp_version_string} "
+    version_prefix = version_prefix.rstrip()
+    testrun_name = f"{version_prefix} {testrun_name}"
     if build_user:
         testrun_name = f"{build_user} {testrun_name}"
     # replace invalid character(s) by '-'
@@ -2569,30 +2641,80 @@ def ceph_health_resolve_crash():
 
 def ceph_health_resolve_mon_slow_ops(health_status):
     """
-    Fix ceph health issue with mon slow ops
+    Fix Ceph health issue with mon slow ops.
+    Supports both 'mon.e has slow ops' and 'daemons [mon.e,mon.f] have slow ops'
     """
-    log.warning("Trying to fix the issue with mon slow ops by restarting mon pod")
-    mon_pattern = r"mon\.([a-z]) has slow ops"
-    match = re.search(mon_pattern, health_status)
-    mon_id = None
-    if match:
-        mon_id = match.group(1)
-        log.warning(f"Problematic MON ID with slow ops: {mon_id} will be restarted")
-    if mon_id:
-        from ocs_ci.ocs import ocp
+    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
 
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning("No MON IDs found in health status. Cannot resolve slow ops.")
+        return
+
+    log.warning(f"Detected problematic MON IDs with slow ops: {mon_ids}")
+
+    restart_mon_pods(mon_ids)
+
+
+def ceph_health_resolve_network_partition(health_status):
+    """
+    Fix Ceph health issue with mon network partition.
+    """
+    log.warning(
+        "Trying to fix the issue with mon newtork parition by restarting MON pod(s)"
+    )
+
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning(
+            "No MON IDs found in health status. Cannot resolve network partition detected issue."
+        )
+        return
+
+    log.warning(
+        f"Detected problematic MON IDs with network partition detected: {mon_ids}"
+    )
+
+    restart_mon_pods(mon_ids)
+
+
+def restart_mon_pods(mon_ids):
+    """
+    Restart the MON pods.
+
+    Args:
+        mon_ids (list): List of MON IDs
+    """
+    from ocs_ci.ocs import ocp
+
+    for mon_id in mon_ids:
+        log.warning(f"Restarting MON '{mon_id}' ...")
         ocp.OCP().exec_oc_cmd(
             f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
         )
 
 
-def ceph_health_recover(health_status, namespace=None):
+def ceph_health_recover(
+    health_status,
+    namespace=None,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Function which tries to recover ceph health to be HEALTH OK
 
     Args:
         health_status (str): Ceph health status
         namespace (str): Namespace of OCS
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered
 
     Raises:
         CephHealthNotRecoveredException: When Ceph health was not recovered
@@ -2615,19 +2737,47 @@ def ceph_health_recover(health_status, namespace=None):
             "func_kwargs": {},
             "ceph_health_tries": 5,
             "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-2781",
+                    "pattern": r"mgr module prometheus crashed in",
+                },
+            ],
         },
         {
-            "pattern": r"slow ops, oldest one blocked for \d+ sec, mon\.([a-z]) has slow ops",
+            "pattern": r"slow ops, oldest one blocked for \d+ sec, .*(?:has|have) slow ops",
             "func": ceph_health_resolve_mon_slow_ops,
             "func_args": [health_status],
             "func_kwargs": {},
             "ceph_health_tries": 6,
             "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-2456",
+                    "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
+                    == "regional-dr",
+                },
+            ],
+        },
+        {
+            "pattern": r"HEALTH_WARN \d+ network partitions? detected",
+            "func": ceph_health_resolve_network_partition,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-4521",
+                    "pattern": r"Netsplit detected between mon",
+                },
+            ],
         },
         # TODO: Add more patterns and fix functions
     ]
     for fix_dict in ceph_health_fixes:
         pattern = fix_dict["pattern"]
+        jira_issues = fix_dict.get("known_issues", [])
         if re.search(pattern, health_status):
             log.info(
                 "Trying to fix Ceph Health because we found in Health status the matching pattern"
@@ -2643,6 +2793,56 @@ def ceph_health_recover(health_status, namespace=None):
                 ocp=False,
                 timeout=defaults.MUST_GATHER_TIMEOUT,
             )
+            jenkins_build_url = config.RUN.get("jenkins_build_url", "")
+            base_logs_url = config.RUN.get("logs_url", "")
+            mg_log_url = (
+                f"{base_logs_url}/failed_testcase_ocs_logs_{config.RUN['run_id']}/"
+            )
+            odf_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
+            try:
+                odf_version = version_module.get_running_odf_version()
+            except Exception:
+                odf_version = version_module.get_ocs_version_from_csv()
+            ocp_version = version_module.get_semantic_ocp_running_version()
+            issue_confirmed = False
+            issue_commented = False
+            jira_issue_id = None
+            for jira_issue in jira_issues:
+                jira_issue_id = jira_issue["issue"]
+                jira_issue_pattern = jira_issue.get("pattern")
+                jira_issue_function = jira_issue.get("func")
+                if jira_issue_pattern:
+                    if re.search(jira_issue["pattern"], health_status):
+                        issue_confirmed = True
+                if jira_issue_function:
+                    issue_confirmed = jira_issue_function()
+                if issue_confirmed:
+                    break
+            if issue_confirmed and update_jira:
+                msg_lines = [
+                    "*OCS-CI report*",
+                    f"ODF version: {odf_version}",
+                    f"OCP version: {ocp_version}",
+                ]
+                if odf_registry_image:
+                    msg_lines.append(f"ODF registry image: {odf_registry_image}")
+                if jenkins_build_url:
+                    msg_lines.append(f"Issue reproduced in job: {jenkins_build_url}")
+                if mg_log_url:
+                    msg_lines.append(f"MG logs collected here: {mg_log_url}")
+                msg = "\n".join(msg_lines)
+                try:
+                    jira_helper = JiraHelper()
+                    jira_issue = jira_helper.get_issue(jira_issue_id)
+                    jira_issue_summary = jira_issue["fields"]["summary"]
+                    log.error(
+                        f"Hitting jira issue: {jira_issue_id} - {jira_issue_summary}"
+                    )
+                    jira_helper.add_comment(jira_issue_id, msg)
+                    issue_commented = True
+                except Exception as ex:
+                    log.error(f"Failed to connect or comment to Jira: {ex}")
+
             fix_dict["func"](
                 *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
             )
@@ -2656,6 +2856,12 @@ def ceph_health_recover(health_status, namespace=None):
                 raise CephHealthNotRecoveredException(
                     f"Attempt to try to recover the Ceph Health failed! Exception: {ex}"
                 )
+            if update_jira and issue_commented and no_exception_if_jira_issue_updated:
+                log.info(
+                    f"Jira issue: {jira_issue_id} was updated and ceph health was recovered,"
+                    " no exception will be raised"
+                )
+                return
             raise CephHealthRecoveredException(
                 "Ceph health was not OK and got forcibly recovered to not block other tests"
                 f" after the issue: {pattern} !"
@@ -2664,7 +2870,14 @@ def ceph_health_recover(health_status, namespace=None):
             )
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False):
+def ceph_health_check(
+    namespace=None,
+    tries=20,
+    delay=30,
+    fix_ceph_health=False,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Args:
         namespace (str): Namespace of OCS
@@ -2673,7 +2886,9 @@ def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False)
         delay (int): Delay in seconds between retries
         fix_ceph_health (bool): If True, it will try to fix the health to be OK
             even if it will recover, we will get an exception CephHealthRecoveredException
-
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered. Applicable only if fix_ceph_health is True.
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
             delay of 30 seconds if default values are not changed via args.
@@ -2691,10 +2906,17 @@ def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False)
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace, fix_ceph_health)
+    )(ceph_health_check_base)(
+        namespace, fix_ceph_health, update_jira, no_exception_if_jira_issue_updated
+    )
 
 
-def ceph_health_check_base(namespace=None, fix_ceph_health=False):
+def ceph_health_check_base(
+    namespace=None,
+    fix_ceph_health=False,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
@@ -2703,6 +2925,9 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
             (default: config.ENV_DATA['cluster_namespace'])
         fix_ceph_health (bool): If True, it will try to fix the health to be OK
             even if it will recover, we will get an exception CephHealthRecoveredException
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered. Applicable only if fix_ceph_health is True.
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
@@ -2714,15 +2939,25 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    health = run_ceph_health_cmd(namespace)
+    health = run_ceph_health_cmd(namespace, detail=True)
 
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
+        log.warning(f"Ceph cluster health is not HEALTH_OK: {health}")
         if fix_ceph_health:
-            ceph_health_recover(health, namespace)
-        raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+            ceph_health_recover(
+                health,
+                namespace,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
+            return True
+        else:
+            raise CephHealthException(
+                f"Ceph cluster health is not OK. Health: {health}"
+            )
 
 
 def create_ceph_health_cmd(namespace):
@@ -2745,12 +2980,13 @@ def create_ceph_health_cmd(namespace):
     return ceph_health_cmd
 
 
-def run_ceph_health_cmd(namespace):
+def run_ceph_health_cmd(namespace, detail=False):
     """
     Run the ceph health command
 
     Args:
         namespace: Namespace of OCS
+        detail: If True, it will run the ceph health command with detail option
 
     Raises:
         CommandFailed: In case the rook-ceph-tools pod failed to reach the Ready state.
@@ -2767,9 +3003,11 @@ def run_ceph_health_cmd(namespace):
         ct_pod = get_ceph_tools_pod(namespace=namespace)
     except (AssertionError, CephToolBoxNotFoundException) as ex:
         raise CommandFailed(ex)
-
+    ceph_cmd = "ceph health"
+    if detail:
+        ceph_cmd += " detail"
     return ct_pod.exec_ceph_cmd(
-        ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
+        ceph_cmd=ceph_cmd, format=None, out_yaml_format=False, timeout=120
     )
 
 
@@ -3132,6 +3370,7 @@ def query_quay_for_operator_tags(
             page=page,
         ),
         headers=headers,
+        timeout=120,
     )
     if not resp.ok:
         raise requests.RequestException(resp.json())
@@ -3153,7 +3392,15 @@ def check_if_executable_in_path(exec_name):
     return which(exec_name) is not None
 
 
-def upload_file(server, localpath, remotepath, user=None, password=None, key_file=None):
+def upload_file(
+    server,
+    localpath,
+    remotepath,
+    user=None,
+    password=None,
+    key_file=None,
+    ssh_connection=None,
+):
     """
     Upload a file to remote server
 
@@ -3162,23 +3409,33 @@ def upload_file(server, localpath, remotepath, user=None, password=None, key_fil
         localpath (str): Local file to upload
         remotepath (str): Target path on the remote server. filename should be included
         user (str): User to use for the remote connection
+        password (str): Password to use for the remote connection
+        key_file (str): Key file to use for the remote connection
+        ssh_connection (SSHClient): SSH connection to use for the remote connection
 
     """
     if not user:
         user = "root"
     try:
-        ssh = SSHClient()
-        ssh.set_missing_host_key_policy(AutoAddPolicy())
-        if password:
-            ssh.connect(hostname=server, username=user, password=password)
+        if ssh_connection:
+            sftp = ssh_connection.client.open_sftp()
+            log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+            sftp.put(localpath, remotepath)
+            sftp.close()
+            return
         else:
-            log.info(key_file)
-            ssh.connect(hostname=server, username=user, key_filename=key_file)
-        sftp = ssh.open_sftp()
-        log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
-        sftp.put(localpath, remotepath)
-        sftp.close()
-        ssh.close()
+            ssh = SSHClient()
+            ssh.set_missing_host_key_policy(AutoAddPolicy())
+            if password:
+                ssh.connect(hostname=server, username=user, password=password)
+            else:
+                log.info(key_file)
+                ssh.connect(hostname=server, username=user, key_filename=key_file)
+            sftp = ssh.open_sftp()
+            log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+            sftp.put(localpath, remotepath)
+            sftp.close()
+            ssh.close()
     except AuthenticationException as authException:
         log.error(f"Authentication failed: {authException}")
         raise authException
@@ -3638,7 +3895,9 @@ def get_available_ocp_versions(channel):
     """
     headers = {"Accept": "application/json"}
     req = requests.get(
-        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel), headers=headers
+        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel),
+        headers=headers,
+        timeout=120,
     )
     data = req.json()
     versions = [Version(node["version"]) for node in data["nodes"]]
@@ -4059,7 +4318,10 @@ def mirror_image(image, cluster_config=None):
     """
     if not cluster_config:
         cluster_config = config
-    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry")
+    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry", "").rstrip("/")
+    mirror_registry_path = cluster_config.DEPLOYMENT.get(
+        "mirror_registry_path", ""
+    ).strip("/")
     if not mirror_registry:
         raise ConfigurationError(
             'DEPLOYMENT["mirror_registry"] parameter not configured!\n'
@@ -4080,7 +4342,12 @@ def mirror_image(image, cluster_config=None):
         else:
             orig_image_full = image_inspect[0]["RepoDigests"][0]
         # prepare mirrored image url
-        mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
+        # normalize and join properly
+        mirror_base = mirror_registry
+        if mirror_registry_path:
+            mirror_base = f"{mirror_registry}/{mirror_registry_path}"
+
+        mirrored_image = mirror_base + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
@@ -4396,7 +4663,11 @@ def get_system_architecture():
 
 
 def wait_for_machineconfigpool_status(
-    node_type, timeout=1900, skip_tls_verify=False, force_delete_pods=False
+    node_type,
+    timeout=1900,
+    skip_tls_verify=False,
+    force_delete_pods=False,
+    cluster_kubeconfig="",
 ):
     """
     Check for Machineconfigpool status
@@ -4408,6 +4679,8 @@ def wait_for_machineconfigpool_status(
         timeout (int): Time in seconds to wait
         skip_tls_verify (bool): True if allow skipping TLS verification
         force_delete_pods (bool): if True delete pods stuck at terminating forcefully
+        cluster_kubeconfig (str): Path to kubeconfig file.
+            Important! Does not work with option force_delete_pods=True
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -4427,6 +4700,7 @@ def wait_for_machineconfigpool_status(
             kind=constants.MACHINECONFIGPOOL,
             resource_name=role,
             skip_tls_verify=skip_tls_verify,
+            cluster_kubeconfig=cluster_kubeconfig,
         )
         machine_count = ocp_obj.get()["status"]["machineCount"]
         assert ocp_obj.wait_for_resource(
@@ -4683,6 +4957,20 @@ def get_client_version(client_binary_path):
         return stdout["releaseClientVersion"]
 
 
+def get_server_version():
+    """
+    Get version reported by `oc version`.
+
+    Returns:
+        str: version reported by `oc version`.
+
+    """
+    cmd = "oc version -o json"
+    resp = exec_cmd(cmd)
+    stdout = json.loads(resp.stdout.decode())
+    return stdout["openshiftVersion"]
+
+
 def clone_notify():
     """
     Repository contains the source code of notify tool,
@@ -4744,13 +5032,21 @@ def enable_huge_pages():
     # Wait for Master nodes ready state when Compact mode 3M 0W config
     from ocs_ci.ocs.node import get_nodes
 
+    num_nodes = (
+        config.ENV_DATA["worker_replicas"]
+        + config.ENV_DATA["master_replicas"]
+        + config.ENV_DATA.get("infra_replicas", 0)
+    )
+    timeout = 1200
     if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
         wait_for_machineconfigpool_status(
-            node_type=constants.MASTER_MACHINE, timeout=1200
+            node_type=constants.MASTER_MACHINE, timeout=timeout
         )
     else:
+        if num_nodes >= 6:
+            timeout = 2400
         wait_for_machineconfigpool_status(
-            node_type=constants.WORKER_MACHINE, timeout=1200
+            node_type=constants.WORKER_MACHINE, timeout=timeout
         )
 
 
@@ -5042,6 +5338,7 @@ def get_latest_acm_tag_unreleased(version):
     response = requests.get(
         "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/",
         params=params,
+        timeout=120,
     )
     responce_data = response.json()
     for data in responce_data["tags"]:
@@ -5183,7 +5480,7 @@ def create_unreleased_oadp_catalog():
         TagNotFoundException: if no image tag for oadp oprator found in brew
 
     """
-    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False)
+    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False, timeout=120)
     json_data = resp.json()["raw_messages"]
     image_tag = None
     ocp_version = version_module.get_semantic_ocp_version_from_config()
@@ -5289,6 +5586,7 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
+@config.run_with_provider_context_if_available
 def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get the NooBaa DB pod that has been assigned the
@@ -5318,6 +5616,7 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     return nb_db_pod
 
 
+@config.run_with_provider_context_if_available
 def exec_nb_db_query(query):
     """
     Send a psql query to the Noobaa DB
@@ -5917,3 +6216,85 @@ def get_noobaa_cli_config():
         return constants.ODF_CLI_LOCAL_PATH, "noobaa"
     else:
         return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, ""
+
+
+def get_acm_mce_build_tag(quay_path, version):
+    """
+    Get Downstream tag from ACM/MCE latest tags
+
+    Args:
+        quay_path (str): quay image path for acm/mce builds
+        version (str): Version of acm/mce
+
+    Return:
+        str: ACM/MCE associated tag
+    """
+    pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
+    cmd = (
+        "skopeo inspect --no-tags --format '{{ index .Labels \"konflux.additional-tags\" }}' "
+        f"docker://{quay_path}:latest-{version} --authfile {pull_secret} --override-os "
+        "linux --override-arch amd64 --override-os linux"
+    )
+    downstream_tag_search = "DOWNSTREAM"
+    catalog_data = run_cmd(cmd)
+    catalog_data_list = catalog_data.split(",")
+    downstream_tag = [
+        val.strip() for val in catalog_data_list if downstream_tag_search in val
+    ]
+
+    return downstream_tag[0]
+
+
+def parse_k8s_timestamp(ts: str) -> datetime:
+    """
+    Parse RFC3339 timestamp like '2024-10-30T12:34:56Z' to a datetime.
+
+    Args:
+        ts (str): Timestamp string in RFC3339 format.
+
+    Returns:
+        datetime: Parsed datetime object, or datetime.min if parsing fails.
+
+    """
+    # K8s typically uses Zulu time; fallback to min if missing
+    try:
+        return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, TypeError):
+        return datetime.min
+
+
+def apply_oadp_workaround(namespace):
+    """
+    Apply the hostpath WA for IBMCloud's
+    https://access.redhat.com/articles/5456281#known-issues-with-cloud-providers-and-hyperscalers-18
+
+    Args:
+        namespace (str): Namespace where oadp is running
+    """
+
+    from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+    from ocs_ci.utility import templating
+
+    oadp_hostpath_map = {
+        "FS_PV_HOSTPATH": "/var/lib/kubelet/pods",
+        "PLUGINS_HOSTPATH": "/var/lib/kubelet/plugins",
+    }
+    csv_list = get_csvs_start_with_prefix("oadp-operator", namespace=namespace)
+    try:
+        oadp_csv_name = csv_list[0]["metadata"]["name"]
+        oadp_csv = CSV(resource_name=oadp_csv_name, namespace=namespace)
+        oadp_csv_dict = oadp_csv.get()
+        path_item = oadp_csv_dict["spec"]["install"]["spec"]["deployments"][0]["spec"][
+            "template"
+        ]["spec"]["containers"][0]["env"]
+
+        for wa_name in path_item:
+            if wa_name["name"] in oadp_hostpath_map:
+                wa_name["value"] = oadp_hostpath_map[wa_name["name"]]
+        oadp_wa_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="oadp_wa", delete=False
+        )
+        templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name)
+        run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
+    except IndexError:
+        log.error(f"OADP not found in given Namespace {namespace}")

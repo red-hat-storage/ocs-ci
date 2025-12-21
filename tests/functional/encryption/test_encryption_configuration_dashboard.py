@@ -2,13 +2,13 @@ import pytest
 import logging
 
 log = logging.getLogger(__name__)
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.framework.pytest_customization.marks import green_squad, tier1
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 
 @green_squad
@@ -81,13 +81,8 @@ class TestEncryptionConfigurationDashboard:
         """
 
         # Navigate to the block and file page
-        block_and_file_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_block_and_file()
-        )
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
 
         # Retrieve encryption summary from the dashboard
         encryption_summary = block_and_file_page.get_block_file_encryption_summary()
@@ -142,13 +137,7 @@ class TestEncryptionConfigurationDashboard:
             3. verify encryption data with the nooba and storagecluster spec.
         """
         # Navigate to the Object Storage page
-        object_details_page = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_details_object()
-        )
+        object_details_page = PageNavigator().navigate_object_tab()
 
         encryption_summary = object_details_page.get_object_encryption_summary()
         log.info(f"Encryption Summary from page : {encryption_summary}")

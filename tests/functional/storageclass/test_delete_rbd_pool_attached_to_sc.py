@@ -233,13 +233,7 @@ class TestDeleteRbdPool(ManageTest):
             storageclass_factory_class,
             volume_binding_mode,
         )
-        blocking_pool_tab = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_ceph_blockpool()
-        )
+        blocking_pool_tab = PageNavigator().navigate_storage_pools_page()
         assert not blocking_pool_tab.delete_block_pool(
             cbp_name, cannot_be_deleted=True
         ), "blocking pool attached by storage class was deleted, no Warning message was shown"

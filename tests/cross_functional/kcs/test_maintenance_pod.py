@@ -2,6 +2,8 @@ import logging
 import time
 import random
 
+import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
@@ -30,6 +32,10 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.12")
 class TestMaintenancePod(E2ETest):
+    @pytest.fixture(autouse=True)
+    def setup(self, odf_cli_setup):
+        self.odf_cli_runner = odf_cli_setup
+
     def test_maintenance_pod_for_osd(self, ceph_objectstore_factory):
         """
         Test Maintenance Pod for OSD
@@ -40,7 +46,10 @@ class TestMaintenancePod(E2ETest):
 
         # enable the maintenance mode for osd
         Cot_obj = ceph_objectstore_factory
-        Cot_obj.maintenance_start(deployment_name=original_deployment)
+        logger.info(f"Starting maintenance for deployment: {original_deployment}")
+        self.odf_cli_runner.run_maintenance_start(deployment_name=original_deployment)
+        Cot_obj.deployment_in_maintenance[original_deployment] = True
+        logger.info(f"{original_deployment} is successfully in mainetenance mode now!")
 
         # make sure original deployment is scaled down
         # make sure the new maintenance pod is brought up and running successfully
@@ -83,7 +92,7 @@ class TestMaintenancePod(E2ETest):
         logger.info("Operator successfully skipped reconciling osd deployment!")
 
         # stop the maintenance
-        Cot_obj.maintenance_stop(original_deployment)
+        self.odf_cli_runner.run_maintenance_stop(original_deployment)
 
         # make sure the original deployment is scaled up and maintenance pod is removed
         maintenance_deployment = get_deployments_having_label(
@@ -112,7 +121,10 @@ class TestMaintenancePod(E2ETest):
 
         # enable the maintenance mode for osd
         Mot_obj = ceph_monstore_factory
-        Mot_obj.maintenance_start(deployment_name=original_deployment)
+        logger.info(f"Starting maintenance for deployment: {original_deployment}")
+        self.odf_cli_runner.run_maintenance_start(deployment_name=original_deployment)
+        Mot_obj.deployment_in_maintenance[original_deployment] = True
+        logger.info(f"{original_deployment} is successfully in maintenance mode now!")
 
         # make sure original deployment is scaled down
         # make sure the new maintenance pod is brought up and running successfully
@@ -158,7 +170,7 @@ class TestMaintenancePod(E2ETest):
         )
 
         # stop the maintenance
-        Mot_obj.maintenance_stop(original_deployment)
+        self.odf_cli_runner.run_maintenance_stop(original_deployment)
 
         # make sure the original deployment is scaled up and maintenance pod is removed
         maintenance_deployment = get_deployments_having_label(

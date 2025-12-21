@@ -13,6 +13,7 @@ import os
 import requests
 import yaml
 
+from pyVmomi import vmodl
 from ocs_ci import framework
 from ocs_ci.deployment.vmware import delete_dns_records
 from ocs_ci.framework import config
@@ -85,9 +86,18 @@ def delete_ipi_nodes(vsphere, cluster_name):
 
     vms_ipi = []
     for vm in vms_dc:
-        if cluster_name in vm.name and "generated-zone" not in vm.name:
-            vms_ipi.append(vm)
-            logger.info(vm.name)
+        try:
+            if cluster_name in vm.name and "generated-zone" not in vm.name:
+                vms_ipi.append(vm)
+                logger.info(vm.name)
+        except vmodl.fault.ManagedObjectNotFound as e:
+            if "has already been deleted or has not been completely created" in str(e):
+                logger.warning(
+                    f"Deletion of VM failed because it was already deleted, Exception: {e}"
+                )
+                continue
+            else:
+                raise
     try:
         if vms_ipi:
             vsphere.destroy_vms(vms_ipi, remove_disks=True)
@@ -186,7 +196,7 @@ class IPAM(object):
         logger.info(f"Removing IP for node {node} from IPAM server")
         endpoint = os.path.join("http://", self.ipam, "api/removeHost.php?")
         payload = {"apiapp": self.apiapp, "apitoken": self.token, "host": node}
-        res = requests.post(endpoint, data=payload)
+        res = requests.post(endpoint, data=payload, timeout=120)
         if res.status_code == "200":
             logger.info(f"Successfully deleted {node} IP from IPAM server")
 

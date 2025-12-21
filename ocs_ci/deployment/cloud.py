@@ -4,17 +4,20 @@ This module contains common code and a base class for any cloud platform
 deployment.
 """
 
+import json
 import logging
 import os
 import subprocess
 
+from ocs_ci.ocs import ocp
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.deployment import get_cluster_prefix
-from ocs_ci.utility.utils import get_cluster_name, run_cmd
+from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd, set_target_region
+from ocs_ci.utility.utils import get_cluster_name, get_infra_id, run_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -117,5 +120,67 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     gather_bootstrap()
                 except Exception as ex:
                     logger.error(ex)
-            raise e
+            # W/A for bug: https://issues.redhat.com/browse/OCPBUGS-63723
+            # Issue to track W/A: https://github.com/red-hat-storage/ocs-ci/issues/13519
+            if (
+                "failed retrieving cos instance for destroy bootstrap: COS Resource Not Found"
+                in str(e)
+            ):
+                logger.warning(
+                    "COS instance not found for destroy bootstrap, related to bug: "
+                    "https://issues.redhat.com/browse/OCPBUGS-63723, continuing..."
+                )
+                logger.warning("Deleting bootstrap leftovers")
+                set_target_region()
+                infra_id = get_infra_id(config.ENV_DATA["cluster_name"])
+                try:
+                    run_ibmcloud_cmd(f"ibmcloud is instance {infra_id}-bootstrap")
+                    run_ibmcloud_cmd(
+                        f"ibmcloud is instance-delete --force {infra_id}-bootstrap"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to delete bootstrap VSI leftovers: {e}")
+                try:
+                    cos_instances = json.loads(
+                        run_ibmcloud_cmd(
+                            f"ibmcloud resource service-instance  --output json {infra_id}-cos"
+                        )
+                    )
+                    for cos_instance in cos_instances:
+                        buckets = json.loads(
+                            run_ibmcloud_cmd(
+                                f"ibmcloud cos buckets --output json --ibm-service-instance-id {cos_instance['guid']}"
+                            )
+                        )["Buckets"]
+                        if len(buckets) == 1 and "bootstrap" in buckets[0]["Name"]:
+                            run_ibmcloud_cmd(
+                                f"ibmcloud resource service-instance-delete -f {cos_instance['guid']}"
+                            )
+                except Exception as e:
+                    logger.error(f"Failed to delete bootstrap COS leftovers: {e}")
+                cluster_operators = ocp.get_all_cluster_operators()
+                for ocp_operator in cluster_operators:
+                    logger.info(f"Checking cluster status of {ocp_operator}")
+                    for sampler in TimeoutSampler(
+                        timeout=1600,
+                        sleep=60,
+                        func=ocp.verify_cluster_operator_status,
+                        cluster_operator=ocp_operator,
+                    ):
+                        if sampler:
+                            break
+                        else:
+                            logger.info(f"{ocp_operator} status is not valid")
+                logger.info("Checking clusterversion status")
+                cluster_version_timeout = 1800
+                for sampler in TimeoutSampler(
+                    timeout=cluster_version_timeout,
+                    sleep=15,
+                    func=ocp.validate_cluster_version_status,
+                ):
+                    if sampler:
+                        logger.info("Installation Completed Successfully!")
+                        break
+            else:
+                raise e
         self.test_cluster()

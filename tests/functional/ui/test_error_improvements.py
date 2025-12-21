@@ -43,7 +43,9 @@ class TestErrorMessageImprovements(ManageTest):
             Only lowercase letters, numbers, non-consecutive periods, or hyphens
             A unique name for the BackingStore within the project
         """
-        backing_store_tab = PageNavigator().nav_object_storage().nav_backing_store_tab()
+        backing_store_tab = (
+            PageNavigator().nav_object_storage_page().nav_backing_store_tab()
+        )
         backing_store_tab.proceed_resource_creation()
         backing_store_tab.check_error_messages()
 
@@ -59,7 +61,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
         object_bucket_claim_create_tab = (
-            PageNavigator().nav_object_storage().nav_object_buckets_claims_tab()
+            PageNavigator().nav_object_storage_page().nav_object_buckets_claims_tab()
         )
         object_bucket_claim_create_tab.proceed_resource_creation()
         object_bucket_claim_create_tab.check_error_messages()
@@ -77,7 +79,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
         bucket_class_create_tab = (
-            PageNavigator().nav_object_storage().nav_bucket_class_tab()
+            PageNavigator().nav_object_storage_page().nav_bucket_class_tab()
         )
         bucket_class_create_tab.proceed_resource_creation()
         bucket_class_create_tab.check_error_messages()
@@ -108,7 +110,7 @@ class TestErrorMessageImprovements(ManageTest):
             namespace_store_factory(*nss_tup)
 
         namespace_store_tab = (
-            PageNavigator().nav_object_storage().nav_namespace_store_tab()
+            PageNavigator().nav_object_storage_page().nav_namespace_store_tab()
         )
         namespace_store_tab.proceed_resource_creation()
         namespace_store_tab.check_error_messages()
@@ -128,13 +130,7 @@ class TestErrorMessageImprovements(ManageTest):
 
         block_pool_obj = cephblockpool_factory_ui_class()
 
-        blocking_pool_tab = (
-            PageNavigator()
-            .nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-            .nav_ceph_blockpool()
-        )
+        blocking_pool_tab = PageNavigator().navigate_storage_pools_page()
 
         blocking_pool_tab.check_edit_labels(block_pool_obj.name)
 
@@ -146,8 +142,10 @@ class TestErrorMessageImprovements(ManageTest):
     @flaky(max_runs=2)
     @external_mode_required
     @skipif_hci_provider_or_client
-    def test_storage_class_creation_rules(self, setup_ui_class):
+    def deprecated_storage_class_creation_rules(self, setup_ui_class):
         """
+        ! StorageSystem removed from management-console starting from ODF 4.20
+
         Test to verify error rules for the name when creating a new storage class.
         external_mode_required deco added. Starting from ODF 4.16 this form is available for External mode only,
         where still no clusters StorageSystem was created. Rules are:
@@ -157,7 +155,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
         storage_systems_tab = (
-            PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
+            PageNavigator().nav_storage_cluster_default_page().nav_storage_systems_tab()
         )
         storage_systems_tab.proceed_resource_creation()
         storage_systems_tab.fill_backing_storage_form(

@@ -41,12 +41,14 @@ logger = logging.getLogger(name=__file__)
 ibm_config = config.AUTH.get("ibmcloud", {})
 
 
-def login(region=None):
+def login(region=None, resource_group=None):
     """
     Login to IBM Cloud cluster
 
     Args:
         region (str): region to log in, if not specified it will use one from config
+        resource_group (str): resource group to log in, if not specified it will use one from config
+            or nothing if not defined
     """
     api_key = ibm_config["api_key"]
     login_cmd = f"ibmcloud login --apikey {api_key}"
@@ -60,6 +62,14 @@ def login(region=None):
         region = config.ENV_DATA.get("region")
     if region:
         login_cmd += f" -r {region}"
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if not resource_group and ibm_cloud_managed:
+        resource_group = config.ENV_DATA.get("resource_group")
+    if resource_group:
+        login_cmd += f" -g {resource_group}"
     logger.info("Logging to IBM cloud")
     run_cmd(login_cmd, secrets=[api_key])
     logger.info("Successfully logged in to IBM cloud")
@@ -108,6 +118,12 @@ def get_region(cluster_path):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file) as f:
         metadata = json.load(f)
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        return metadata["region"]
     return metadata["ibmcloud"]["region"]
 
 
@@ -125,6 +141,12 @@ def get_resource_group_name(cluster_path):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file) as f:
         metadata = json.load(f)
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        return metadata["resourceGroupName"]
     return metadata["ibmcloud"]["resourceGroupName"]
 
 
@@ -162,14 +184,27 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
     if not last_login or timeout_from_last_login > 570:
         login()
     try:
+        if config.multicluster:
+            set_target_region()
         return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     except CommandFailed as ex:
         if "Please login" in str(ex):
             login()
+            if config.multicluster:
+                set_target_region()
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
         else:
             if not ignore_error:
                 raise
+
+
+def set_target_region():
+    """
+    Set the target region for the IBM Cloud CLI.
+    """
+    region = get_region(config.ENV_DATA["cluster_path"])
+    cmd = f"ibmcloud target -r {region}"
+    run_cmd(cmd)
 
 
 def get_cluster_details(cluster):
@@ -229,7 +264,7 @@ def create_cluster(cluster_name):
     provider = config.ENV_DATA["provider"]
     worker_availability_zones = config.ENV_DATA.get("worker_availability_zones", [])
     worker_zones_number = len(worker_availability_zones)
-    zone = config.ENV_DATA["zone"]
+    zone = config.ENV_DATA["worker_availability_zone"]
     flavor = config.ENV_DATA["worker_instance_type"]
     worker_replicas = config.ENV_DATA["worker_replicas"]
     if worker_zones_number > 1:
@@ -248,7 +283,10 @@ def create_cluster(cluster_name):
         if semantic_ocp_version >= util_version.VERSION_4_15:
             cmd += " --disable-outbound-traffic-protection"
         vpc_id = config.ENV_DATA["vpc_id"]
-        subnet_id = config.ENV_DATA["subnet_id"]
+        subnet_id = config.ENV_DATA.get("subnet_id")
+        subnet_ids_per_zone = config.ENV_DATA.get("subnet_ids_per_zone", {}).get(zone)
+        if subnet_ids_per_zone:
+            subnet_id = subnet_ids_per_zone
         cmd += f" --vpc-id {vpc_id} --subnet-id  {subnet_id} --zone {zone}"
         cos_instance = config.ENV_DATA["cos_instance"]
         cmd += f" --cos-instance {cos_instance}"
@@ -403,10 +441,20 @@ class IBMCloud(object):
         self.restart_nodes(nodes)
 
         if wait:
+            timeout = 300
+            ibm_cloud_managed = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if ibm_cloud_managed:
+                timeout = 3000
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach ready state")
             wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_READY, timeout=180, sleep=5
+                node_names=node_names,
+                status=constants.NODE_READY,
+                timeout=timeout,
+                sleep=15,
             )
 
     def stop_nodes(self, nodes, wait=True):
@@ -430,10 +478,17 @@ class IBMCloud(object):
             run_cmd(cmd.format(node))
 
         if wait:
+            timeout = 300
+            ibm_cloud_managed = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if ibm_cloud_managed:
+                timeout = 900
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
             wait_for_nodes_status(
-                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                node_names, constants.NODE_NOT_READY, timeout=timeout, sleep=5
             )
 
     def restart_nodes(self, nodes, timeout=900, wait=True):
@@ -783,7 +838,7 @@ class IBMCloudIPI(object):
             force (bool): True for force instance stop, False otherwise
             timeout (int): Timeout for the command, defaults to 300 seconds.
         """
-        logger.info(f"Stopping instances {list(node.name for node in nodes )}")
+        logger.info(f"Stopping instances {list(node.name for node in nodes)}")
         self.stop_nodes(nodes=nodes, force=force)
         if wait:
             for node in nodes:
@@ -795,7 +850,7 @@ class IBMCloudIPI(object):
                     node_status=constants.STATUS_STOPPED,
                 )
                 sample.wait_for_func_status(result=True)
-        logger.info(f"Starting instances {list(node.name for node in nodes )}")
+        logger.info(f"Starting instances {list(node.name for node in nodes)}")
 
         self.start_nodes(nodes=nodes)
         if wait:
@@ -838,27 +893,16 @@ class IBMCloudIPI(object):
         """
         Make sure all nodes are up by the end of the test on IBM Cloud.
         """
-        resource_name = None
+        resource_group_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
         stop_node_list = []
-        cmd = "ibmcloud is ins --all-resource-groups --output json"
-        out = run_ibmcloud_cmd(cmd)
-        all_resource_grp = json.loads(out)
-        cluster_name = config.ENV_DATA["cluster_name"]
-        for resource_name in all_resource_grp:
-            if cluster_name in resource_name["resource_group"]["name"]:
-                resource_name = resource_name["resource_group"]["name"]
-                break
-        assert resource_name, "Resource Not found"
-        cmd = f"ibmcloud is ins --resource-group-name {resource_name} --output json"
+        cmd = (
+            f"ibmcloud is ins --resource-group-name {resource_group_name} --output json"
+        )
         out = run_ibmcloud_cmd(cmd)
         all_instance_output = json.loads(out)
-        for instance_name in all_instance_output:
-            if instance_name["status"] == constants.STATUS_STOPPED:
-                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
-                node_obj_ocs = OCS(**node_obj)
-                stop_node_list.append(node_obj_ocs)
-            if instance_name["status"] == constants.STATUS_STOPPED:
-                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
+        for instance in all_instance_output:
+            if instance["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance["name"]).get()
                 node_obj_ocs = OCS(**node_obj)
                 stop_node_list.append(node_obj_ocs)
         logger.info("Force stopping node which are in stopping state")
@@ -1106,7 +1150,9 @@ def delete_account_policy(policy_id, token=None):
         token = get_api_token()
     url = f"https://iam.cloud.ibm.com/v1/policies/{policy_id}"
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.delete(url.format("YOUR_POLICY_ID_HERE"), headers=headers)
+    response = requests.delete(
+        url.format("YOUR_POLICY_ID_HERE"), headers=headers, timeout=120
+    )
     if response.status_code == 204:  # 204 means success (No Content)
         logger.info(f"Policy id: {policy_id} deleted successfully.")
     else:
@@ -1164,16 +1210,140 @@ def create_vpc(cluster_name, resource_group):
     )
 
 
-def get_used_subnets():
+def get_used_subnets(vpc_id=""):
     """
     Get currently used subnets in IBM Cloud
+
+    Args:
+        vpc_id (str): VPC ID to filter subnets. Empty string means all VPCs.
 
     Returns:
         list: subnets
 
     """
-    subnets_data = json.loads(run_ibmcloud_cmd("ibmcloud is subnets --output json"))
+    subnets_data = json.loads(
+        run_ibmcloud_cmd(f"ibmcloud is subnets --vpc '{vpc_id}' --output json")
+    )
     return [subnet["ipv4_cidr_block"] for subnet in subnets_data]
+
+
+def get_security_groups(vpc_id="", resource_group_id="", resource_group_name=""):
+    """
+    Get security groups in IBM Cloud
+
+    Args:
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups.
+
+    Returns:
+        list: security groups
+
+    """
+    cmd = "ibmcloud is security-groups --output json"
+    if vpc_id:
+        cmd += f" --vpc '{vpc_id}'"
+    if resource_group_id:
+        cmd += f" --resource-group-id '{resource_group_id}'"
+    if resource_group_name:
+        cmd += f" --resource-group-name '{resource_group_name}'"
+    sg_data = json.loads(run_ibmcloud_cmd(cmd))
+    return sg_data
+
+
+def get_security_group_id(
+    sg_name, vpc_id="", resource_group_id="", resource_group_name=""
+):
+    """
+    Get security group ID by name
+
+    Args:
+        sg_name (str): security group name
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups
+
+    Returns:
+        str: security group ID or empty string if not found
+
+    """
+    sgs = get_security_groups(vpc_id, resource_group_id, resource_group_name)
+    for sg in sgs:
+        if sg["name"] == sg_name:
+            return sg["id"]
+    return ""
+
+
+def add_security_group_rule(
+    security_group, direction, protocol, port_min, port_max, **kwargs
+):
+    """
+    Add security group rule
+
+    Args:
+        security_group (str): security group ID or Name
+        direction (str): inbound or outbound
+        protocol (str): protocol, e.g. tcp, udp, icmp, all
+        port_min (int): minimum port number
+        port_max (int): maximum port number
+        **kwargs: other arguments to be passed to command, e.g.
+            --vpc ID or name of the VPC. It is required to specify only the unique resource by name inside this VPC.
+
+    """
+    cmd = (
+        f"ibmcloud is security-group-rule-add {security_group} {direction} {protocol} "
+        f"--port-min {port_min} --port-max {port_max}"
+    )
+    for key, value in kwargs.items():
+        cmd += f" {key} '{value}'"
+    run_ibmcloud_cmd(cmd)
+
+
+def get_security_group_name_by_pattern(
+    sg_name_pattern, vpc_id="", resource_group_id="", resource_group_name=""
+):
+    """
+    Get security group name by pattern
+
+    Args:
+        sg_name_pattern (str): security group name pattern (regular expression)
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs
+        resource_group_id (str): Resource group ID to filter security groups
+        resource_group_name (str): Resource group name to filter security groups
+
+    Returns:
+        str: security group name or empty string if not found
+
+    """
+    sgs = get_security_groups(vpc_id, resource_group_id, resource_group_name)
+    for sg in sgs:
+        if re.search(sg_name_pattern, sg["name"]):
+            return sg["name"]
+    return ""
+
+
+def open_ports_on_ibmcloud_hub_cluster():
+    """
+    Add the inbound rules for these cluster security configs `-cluster-wide` and `-openshift-net` to open the
+    following ports: 3300, 6789, 9283, 6800-7300 and 31659
+    """
+    rg_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+    sg_names = [
+        get_security_group_name_by_pattern(
+            r"cluster-wide$", resource_group_name=rg_name
+        ),
+        get_security_group_name_by_pattern(
+            r"openshift-net$", resource_group_name=rg_name
+        ),
+    ]
+
+    for sg_name in sg_names:
+        add_security_group_rule(sg_name, "inbound", "tcp", 3300, 3300)
+        add_security_group_rule(sg_name, "inbound", "tcp", 6789, 6789)
+        add_security_group_rule(sg_name, "inbound", "tcp", 9283, 9283)
+        add_security_group_rule(sg_name, "inbound", "tcp", 6800, 7300)
+        add_security_group_rule(sg_name, "inbound", "tcp", 31659, 31659)
+    logger.info("Inbound rules added successfully")
 
 
 def create_address_prefix(prefix_name, vpc, zone, cidr):

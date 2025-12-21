@@ -3,7 +3,7 @@ import yaml
 import json
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import version, templating
+from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
@@ -61,32 +61,22 @@ def create_configmap_cluster_monitoring_pod(sc_name=None, telemeter_server_url=N
     config_data = yaml.dump(config_data)
     config_map["data"]["config.yaml"] = config_data
     ocp = OCP("v1", "ConfigMap", defaults.OCS_MONITORING_NAMESPACE)
-    azure_platform = config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
-    ibm_cloud_platform = (
-        config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
-    )
-    version_4_16_onwards = (
-        version.get_semantic_ocs_version_from_config() >= version.VERSION_4_16
-    )
     config_map_exists = False
-    if (
-        (ibm_cloud_platform and version_4_16_onwards) or azure_platform
-    ) and config.ENV_DATA["deployment_type"] == "managed":
-        try:
-            assert ocp.get(resource_name="cluster-monitoring-config")
-            logger.info(
-                "For Azure ARO or IBM Cloud ROKS cluster the cluster-monitoring-config"
-                " exists and we need only apply the data!"
-            )
-            config_map_exists = True
-            config_map_obj = OCS(**config_map)
-            config_map_obj.apply(**config_map)
-        except CommandFailed:
-            pass
+    try:
+        ocp.get(resource_name="cluster-monitoring-config")
+        logger.info(
+            "In case the cluster-monitoring-config already exists, we need only apply the data!"
+        )
+        config_map_exists = True
+        config_map_obj = OCS(**config_map)
+        config_map_obj.apply(**config_map)
+        logger.info("Successfully updated configmap cluster-monitoring-config")
+    except CommandFailed:
+        pass
     if not config_map_exists:
         assert helpers.create_resource(**config_map)
+        logger.info("Successfully created configmap cluster-monitoring-config")
     assert ocp.get(resource_name="cluster-monitoring-config")
-    logger.info("Successfully created configmap cluster-monitoring-config")
 
 
 @retry((AssertionError, CommandFailed), tries=30, delay=10, backoff=1)

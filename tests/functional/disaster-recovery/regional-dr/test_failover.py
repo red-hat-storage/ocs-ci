@@ -10,15 +10,9 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
     wait_for_replication_destinations_creation,
     wait_for_replication_destinations_deletion,
-)
-from ocs_ci.helpers.dr_helpers_ui import (
-    dr_submariner_validation_from_ui,
-    check_cluster_status_on_acm_console,
-    failover_relocate_ui,
-    verify_failover_relocate_status_ui,
+    is_cg_cephfs_enabled,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
@@ -32,7 +26,7 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 class TestFailover:
     """
-    Test Failover action via CLI and UI
+    Test Failover action via CLI
 
     """
 
@@ -40,70 +34,36 @@ class TestFailover:
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHBLOCKPOOL,
-            False,  # via_ui = False
-            id="primary_up-rbd-cli",
             marks=pytest.mark.polarion_id("OCS-4429"),
+            id="primary_up-rbd-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
-            False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4426"),
             id="primary_down-rbd-cli",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
-            False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4726"),
             id="primary_up-cephfs-cli",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
-            False,  # via_ui = False
             marks=pytest.mark.polarion_id("OCS-4729"),
             id="primary_down-cephfs-cli",
-        ),
-        pytest.param(
-            False,  # primary_cluster_down = False
-            constants.CEPHBLOCKPOOL,
-            True,  # via_ui = True
-            id="primary_up-rbd-ui",
-            marks=pytest.mark.polarion_id("OCS-4741"),
-        ),
-        pytest.param(
-            True,  # primary_cluster_down = True
-            constants.CEPHBLOCKPOOL,
-            True,  # via_ui = True
-            marks=pytest.mark.polarion_id("OCS-4742"),
-            id="primary_down-rbd-ui",
-        ),
-        pytest.param(
-            False,  # primary_cluster_down = False
-            constants.CEPHFILESYSTEM,
-            True,  # via_ui = True
-            marks=pytest.mark.polarion_id("OCS-6848"),
-            id="primary_up-cephfs-ui",
-        ),
-        pytest.param(
-            True,  # primary_cluster_down = True
-            constants.CEPHFILESYSTEM,
-            True,  # via_ui = True
-            marks=pytest.mark.polarion_id("OCS-6847"),
-            id="primary_down-cephfs-ui",
         ),
     ]
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
+        argnames=["primary_cluster_down", "pvc_interface"], argvalues=params
     )
     def test_failover(
         self,
         primary_cluster_down,
         pvc_interface,
-        via_ui,
-        setup_acm_ui,
         dr_workload,
         nodes_multicluster,
         node_restart_teardown,
@@ -111,11 +71,7 @@ class TestFailover:
         """
         Tests to verify application failover between managed clusters when the primary cluster is either UP or DOWN.
 
-        This test will run twice both via CLI and UI
-
         """
-        if via_ui:
-            acm_obj = AcmAddClusters()
 
         workloads = dr_workload(
             num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
@@ -135,6 +91,18 @@ class TestFailover:
             # Verify the creation of ReplicationDestination resources on secondary cluster
             config.switch_to_cluster_by_name(secondary_cluster_name)
             for wl in workloads:
+                # Verifying the existence of replication group destination and volume snapshots
+                if is_cg_cephfs_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
@@ -146,50 +114,24 @@ class TestFailover:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
-        if via_ui:
-            logger.info("Start the process of Failover from ACM UI")
-            config.switch_acm_ctx()
-            dr_submariner_validation_from_ui(acm_obj)
-
         # Stop primary cluster nodes
         if primary_cluster_down:
             config.switch_to_cluster_by_name(primary_cluster_name)
             logger.info(f"Stopping nodes of primary cluster: {primary_cluster_name}")
             nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
 
-            # Verify if cluster is marked unknown on ACM console
-            if via_ui:
-                config.switch_acm_ctx()
-                check_cluster_status_on_acm_console(
-                    acm_obj,
-                    down_cluster_name=primary_cluster_name,
-                    expected_text="Unknown",
-                )
-        elif via_ui:
-            check_cluster_status_on_acm_console(acm_obj)
-
         for wl in workloads:
-            if via_ui:
-                # Failover via ACM UI
-                failover_relocate_ui(
-                    acm_obj,
-                    scheduling_interval=scheduling_interval,
-                    workload_to_move=f"{wl.workload_name}-1",
-                    policy_name=wl.dr_policy_name,
-                    failover_or_preferred_cluster=secondary_cluster_name,
-                )
-            else:
-                # Failover action via CLI
-                dr_helpers.failover(
-                    secondary_cluster_name,
-                    wl.workload_namespace,
-                    wl.workload_type,
-                    (
-                        wl.appset_placement_name
-                        if wl.workload_type == constants.APPLICATION_SET
-                        else None
-                    ),
-                )
+            # Failover action via CLI
+            dr_helpers.failover(
+                secondary_cluster_name,
+                wl.workload_namespace,
+                wl.workload_type,
+                (
+                    wl.appset_placement_name
+                    if wl.workload_type == constants.APPLICATION_SET
+                    else None
+                ),
+            )
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -198,6 +140,7 @@ class TestFailover:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         # Verify resources deletion from primary cluster
@@ -227,20 +170,41 @@ class TestFailover:
 
         if pvc_interface == constants.CEPHFILESYSTEM:
             for wl in workloads:
-                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                # Verify the deletion of Replication Group Destination resources
+                # on the old secondary cluster
                 config.switch_to_cluster_by_name(secondary_cluster_name)
+                cg_enabled = is_cg_cephfs_enabled()
+
                 wait_for_replication_destinations_deletion(wl.workload_namespace)
-                # Verify the creation of ReplicationDestination resources on primary cluster
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=False,
+                    )
+
+                # Verify the creation of Replication Group Destination resources
+                # on the current secondary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
-                wait_for_replication_destinations_creation(
+
+                dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+
+                    # Verify the creation of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
-
-        if via_ui:
-            config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(acm_obj)

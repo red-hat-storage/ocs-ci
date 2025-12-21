@@ -198,14 +198,16 @@ class TestStorageAutoscalerBase(ManageTest):
             f"(fast_fill_up={fast_fill_up})"
         )
 
-        numjobs = None
-        iodepth = None
+        numjobs = 1
+        iodepth = 16
+        max_servers = 20
 
         if fast_fill_up:
             numjobs = 4
-            iodepth = 64
+            iodepth = 32
+            max_servers = 40
             # Reduce the target to compensate for likely overshoot
-            target_percentage = int(target_percentage - target_percentage / 4)
+            target_percentage = int(target_percentage - target_percentage / 5)
             logger.info(
                 f"Target percentage adjusted to {target_percentage}% due to fast_fill_up mode"
             )
@@ -216,6 +218,7 @@ class TestStorageAutoscalerBase(ManageTest):
             is_completed=is_completed,
             numjobs=numjobs,
             iodepth=iodepth,
+            max_servers=max_servers,
         )
 
     def cleanup_cluster(self):

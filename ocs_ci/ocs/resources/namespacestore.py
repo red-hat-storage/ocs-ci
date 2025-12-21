@@ -156,7 +156,7 @@ class NamespaceStore:
             == constants.STATUS_READY
         )
 
-    def verify_health(self, timeout=240, interval=5):
+    def verify_health(self, timeout=360, interval=5):
         """
         Health verification function that tries to verify
         a namespacestores's health until a given time limit is reached
@@ -399,7 +399,12 @@ def template_pvc(
 
 
 def namespace_store_factory(
-    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session, pvc_factory_session
+    request,
+    cld_mgr,
+    mcg_obj_session,
+    cloud_uls_factory_session,
+    pvc_factory_session,
+    cluster_context=config.RunWithProviderConfigContextIfAvailable,
 ):
     """
     Create a NamespaceStore factory.
@@ -412,6 +417,8 @@ def namespace_store_factory(
         mcg_obj (MCG): MCG object containing data and utils
             related to MCG
         cloud_uls_factory: Factory for creation of underlying storage
+        cluster_context (object): context object in which the namespacestore will be created.
+            Default is provider context.
 
     Returns:
         func: Factory method - allows the user to create namespace stores
@@ -439,42 +446,51 @@ def namespace_store_factory(
             list: A list of the NamespaceStore objects created by the factory in the current scope
 
         """
-        current_call_created_nss = []
-        for platform, nss_lst in nss_dict.items():
-            for nss_tup in nss_lst:
-                for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
-                    if platform.lower() == "nsfs":
-                        uls_name = nss_tup[0] or create_unique_resource_name(
-                            constants.PVC.lower(), platform
+        with cluster_context():
+            current_call_created_nss = []
+            for platform, nss_lst in nss_dict.items():
+                for nss_tup in nss_lst:
+                    for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
+                        if platform.lower() == "nsfs":
+                            uls_name = nss_tup[0] or create_unique_resource_name(
+                                constants.PVC.lower(), platform
+                            )
+                            pvc_factory_session(
+                                custom_data=template_pvc(uls_name, size=nss_tup[1])
+                            )
+                        else:
+                            uls_name = list(
+                                cloud_uls_factory_session(
+                                    {platform: [(1, nss_tup[1])]}
+                                )[platform]
+                            )[0]
+                        nss_name = create_unique_resource_name(
+                            constants.MCG_NSS, platform
                         )
-                        pvc_factory_session(
-                            custom_data=template_pvc(uls_name, size=nss_tup[1])
+                        # Create the actual namespace resource
+                        cmdMap[method.lower()](
+                            nss_name,
+                            platform,
+                            mcg_obj_session,
+                            uls_name,
+                            cld_mgr,
+                            nss_tup,
                         )
-                    else:
-                        uls_name = list(
-                            cloud_uls_factory_session({platform: [(1, nss_tup[1])]})[
-                                platform
-                            ]
-                        )[0]
-                    nss_name = create_unique_resource_name(constants.MCG_NSS, platform)
-                    # Create the actual namespace resource
-                    cmdMap[method.lower()](
-                        nss_name, platform, mcg_obj_session, uls_name, cld_mgr, nss_tup
-                    )
-                    nss_obj = NamespaceStore(
-                        name=nss_name,
-                        method=method.lower(),
-                        mcg_obj=mcg_obj_session,
-                        uls_name=uls_name,
-                    )
-                    created_nss.append(nss_obj)
-                    current_call_created_nss.append(nss_obj)
-                    nss_obj.verify_health()
+                        nss_obj = NamespaceStore(
+                            name=nss_name,
+                            method=method.lower(),
+                            mcg_obj=mcg_obj_session,
+                            uls_name=uls_name,
+                        )
+                        created_nss.append(nss_obj)
+                        current_call_created_nss.append(nss_obj)
+                        nss_obj.verify_health()
         return current_call_created_nss
 
     def nss_cleanup():
-        for nss in created_nss:
-            nss.delete()
+        with cluster_context():
+            for nss in created_nss:
+                nss.delete()
 
     request.addfinalizer(nss_cleanup)
 

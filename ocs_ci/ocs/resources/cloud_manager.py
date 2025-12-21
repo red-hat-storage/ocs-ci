@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 
 import boto3
+from botocore.client import Config
 import google.api_core.exceptions as GoogleExceptions
 from azure.core.exceptions import ResourceNotFoundError, AzureError
 from azure.storage.blob import BlobServiceClient
@@ -41,7 +42,8 @@ class CloudManager(ABC):
 
     """
 
-    def __init__(self, obc_obj=None):
+    @config.run_with_provider_context_if_available
+    def __init__(self):
         """
         Constructor for the CloudManager class
 
@@ -52,12 +54,12 @@ class CloudManager(ABC):
         """
         cloud_map = {
             "AWS_STS": AwsSTSClient,
-            "AWS": S3Client,
+            "AWS": AwsClient,
             "GCP": GoogleClient,
             "AZURE": AzureClient,
             "AZURE_WITH_LOGS": AzureWithLogsClient,
-            "IBMCOS": S3Client,
-            "RGW": S3Client,
+            "IBMCOS": IbmCosClient,
+            "RGW": RgwClient,
         }
         try:
             logger.info(
@@ -92,40 +94,27 @@ class CloudManager(ABC):
                     if not any(
                         value is None for value in cred_dict[cloud_name].values()
                     ):
-                        setattr(
-                            self,
-                            f"{cloud_name.lower()}_client",
-                            cloud_map[cloud_name](auth_dict=cred_dict[cloud_name]),
-                        )
+                        try:
+                            setattr(
+                                self,
+                                f"{cloud_name.lower()}_client",
+                                cloud_map[cloud_name](auth_dict=cred_dict[cloud_name]),
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to instantiate {cloud_name} client: {e}"
+                            )
+                            setattr(self, f"{cloud_name.lower()}_client", None)
 
         try:
-            rgw_conn = RGW()
-            if obc_obj:
-                endpoint, access_key, secret_key = (
-                    obc_obj.s3_external_endpoint,
-                    obc_obj.access_key_id,
-                    obc_obj.access_key,
-                )
-            else:
-                endpoint, access_key, secret_key = rgw_conn.get_credentials()
-            cred_dict["RGW"] = {
-                "SECRET_PREFIX": "RGW",
-                "DATA_PREFIX": "AWS",
-                "ENDPOINT": endpoint,
-                "S3_INTERNAL_ENDPOINT": rgw_conn.s3_internal_endpoint,
-                "RGW_ACCESS_KEY_ID": access_key,
-                "RGW_SECRET_ACCESS_KEY": secret_key,
-            }
-            setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"]))
+            setattr(self, "rgw_client", cloud_map["RGW"]())
         except CommandFailed:
             setattr(self, "rgw_client", None)
 
         # set the client for STS enabled cluster
         try:
-            role_arn = get_role_arn_from_sub()
-            cred_dict["AWS"]["ROLE_ARN"] = role_arn
             setattr(
-                self, "aws_sts_client", cloud_map["AWS_STS"](auth_dict=cred_dict["AWS"])
+                self, "aws_sts_client", cloud_map["AWS_STS"](full_auth_dict=cred_dict)
             )
         except ClusterNotInSTSModeException:
             setattr(self, "aws_sts_client", None)
@@ -221,6 +210,7 @@ class S3Client(CloudClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self,
         auth_dict,
@@ -241,6 +231,8 @@ class S3Client(CloudClient):
         self.access_key = key_id
         self.secret_key = access_key
 
+        self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
+
         self.client = boto3.resource(
             "s3",
             verify=verify,
@@ -249,14 +241,6 @@ class S3Client(CloudClient):
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
-        self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
-
-        self.nss_creds = {
-            "access_key_id": self.access_key,
-            "access_key": self.secret_key,
-            "endpoint": endpoint,
-            "region": self.region,
-        }
 
     def internal_create_uls(self, name, region=None):
         """
@@ -271,7 +255,7 @@ class S3Client(CloudClient):
            the default region for AWS
 
         """
-        if region is None:
+        if region is None or region == "us-east-1":
             self.client.create_bucket(Bucket=name)
         else:
             self.client.create_bucket(
@@ -335,6 +319,67 @@ class S3Client(CloudClient):
             logger.info(f"{uls_name} does not exist")
             return False
 
+    def create_s3_secret(self, secret_prefix, data_prefix):
+        """
+        Create a Kubernetes secret to allow NooBaa to create AWS-based backingstores
+
+        """
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        secret_name_prefix = secret_prefix.lower()
+        secret_name_prefix = secret_name_prefix.replace("_", "-")
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            f"cldmgr-{secret_name_prefix}", "secret"
+        )
+        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_secret_data["data"][f"{data_prefix}_ACCESS_KEY_ID"] = (
+            base64.urlsafe_b64encode(self.access_key.encode("UTF-8")).decode("ascii")
+        )
+        bs_secret_data["data"][f"{data_prefix}_SECRET_ACCESS_KEY"] = (
+            base64.urlsafe_b64encode(self.secret_key.encode("UTF-8")).decode("ascii")
+        )
+
+        return create_resource(**bs_secret_data)
+
+
+class AwsClient(S3Client):
+    """
+    Implementation of a S3 Client using the S3 API for AWS buckets
+
+    """
+
+    @config.run_with_provider_context_if_available
+    def __init__(
+        self,
+        auth_dict,
+        verify=True,
+        endpoint="https://s3.amazonaws.com",
+        *args,
+        **kwargs,
+    ):
+        super().__init__(auth_dict, verify, endpoint, *args, **kwargs)
+        self.region = (
+            "us-east-1"  # the only region that allows cross-region bucket operations
+        )
+        self.endpoint = None  # lets AWS pick the endpoint dynamically
+
+        self.client = boto3.resource(
+            "s3",
+            verify=verify,
+            endpoint_url=self.endpoint,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+            region_name=self.region,
+            config=Config(
+                s3={"addressing_style": "virtual"}
+            ),  # supports cross-region bucket operation
+        )
+        self.nss_creds = {
+            "access_key_id": self.access_key,
+            "access_key": self.secret_key,
+            "endpoint": endpoint,
+            "region": self.region,
+        }
+
     def toggle_aws_bucket_readwrite(self, aws_bucket_name, block=True):
         """
         Toggles a bucket's IO using a bucket policy
@@ -367,26 +412,39 @@ class S3Client(CloudClient):
         else:
             self.client.meta.client.delete_bucket_policy(Bucket=aws_bucket_name)
 
-    def create_s3_secret(self, secret_prefix, data_prefix):
-        """
-        Create a Kubernetes secret to allow NooBaa to create AWS-based backingstores
 
-        """
-        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        secret_name_prefix = secret_prefix.lower()
-        secret_name_prefix = secret_name_prefix.replace("_", "-")
-        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
-            f"cldmgr-{secret_name_prefix}", "secret"
-        )
-        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-        bs_secret_data["data"][f"{data_prefix}_ACCESS_KEY_ID"] = (
-            base64.urlsafe_b64encode(self.access_key.encode("UTF-8")).decode("ascii")
-        )
-        bs_secret_data["data"][f"{data_prefix}_SECRET_ACCESS_KEY"] = (
-            base64.urlsafe_b64encode(self.secret_key.encode("UTF-8")).decode("ascii")
-        )
+class RgwClient(S3Client):
+    """
+    Implementation of a S3 Client using the S3 API for RGW buckets
+    """
 
-        return create_resource(**bs_secret_data)
+    @config.run_with_provider_context_if_available
+    def __init__(
+        self,
+        auth_dict=None,
+        verify=True,
+        *args,
+        **kwargs,
+    ):
+        rgw_conn = RGW()
+        endpoint, access_key, secret_key = rgw_conn.get_credentials()
+        rgw_creds_dict = {
+            "SECRET_PREFIX": "RGW",
+            "DATA_PREFIX": "AWS",
+            "ENDPOINT": endpoint,
+            "S3_INTERNAL_ENDPOINT": rgw_conn.s3_internal_endpoint,
+            "RGW_ACCESS_KEY_ID": access_key,
+            "RGW_SECRET_ACCESS_KEY": secret_key,
+        }
+        super().__init__(rgw_creds_dict, verify, endpoint, *args, **kwargs)
+
+
+class IbmCosClient(S3Client):
+    """
+    Implementation of a S3 Client using the S3 API for IBM COS buckets
+    """
+
+    pass
 
 
 class GoogleClient(CloudClient):
@@ -395,6 +453,7 @@ class GoogleClient(CloudClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(self, auth_dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cred_dict_string = base64.b64decode(
@@ -505,6 +564,7 @@ class AzureClient(CloudClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self, account_name=None, credential=None, auth_dict=None, *args, **kwargs
     ):
@@ -610,6 +670,7 @@ class AzureWithLogsClient(AzureClient):
 
     """
 
+    @config.run_with_provider_context_if_available
     def __init__(
         self, account_name=None, credential=None, auth_dict=None, *args, **kwargs
     ):
@@ -668,15 +729,30 @@ class AzureWithLogsClient(AzureClient):
 
 
 class AwsSTSClient(S3Client):
+
+    @config.run_with_provider_context_if_available
     def __init__(
         self,
-        auth_dict,
+        full_auth_dict,
         verify=True,
         endpoint="https://s3.amazonaws.com",
         *args,
         **kwargs,
     ):
+        role_arn = get_role_arn_from_sub()
+        aws_auth_dict = full_auth_dict.get("AWS")
+        if not aws_auth_dict:
+            logger.error(
+                "Cluster is supposed to be in STS mode, but no AWS credentials found"
+            )
+            raise ClusterNotInSTSModeException
+        aws_auth_dict["ROLE_ARN"] = role_arn
+        self.role_arn = role_arn
+
         super().__init__(
-            auth_dict=auth_dict, verify=verify, endpoint=endpoint, *args, **kwargs
+            auth_dict=aws_auth_dict,
+            verify=verify,
+            endpoint=endpoint,
+            *args,
+            **kwargs,
         )
-        self.role_arn = auth_dict["ROLE_ARN"]

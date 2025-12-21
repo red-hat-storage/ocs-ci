@@ -20,11 +20,16 @@ Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci`
 
 By default this will deploy the latest supported GA version of Fusion.
 
-For pre-release versions of Fusion, you can use the same command with an additional config for the version you wish to install.
+To specify the version to deploy, use the `--fusion-version` argument:
 
-To install previous GA versions, use the appropriate GA config file present in [fusion_version](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/fusion_version)
 ```
-deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf ocs_ci/framework/conf/fusion_version/fusion-2.8.yaml
+deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --fusion-version 2.8-ga
+```
+
+To specify a particular image tag, use the `--fusion-image-tag` argument:
+
+```
+deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --fusion-version 2.8-ga --fusion-image-tag 2.8.2-26546923
 ```
 
 To specify the location of the generated junit report, use the `--report` argument:
@@ -44,10 +49,16 @@ Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci`
 
 By default this will deploy the latest supported GA version of FDF.
 
-For pre-release versions of FDF, you can use the same command with an additional config for the version you wish to install.
+To specify the version to deploy, use the `--fdf-version` argument:
 
 ```
-deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf CLUSTER_CONF --conf ocs_ci/framework/conf/fdf_version/fdf-4.18.yaml
+deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf CLUSTER_CONF --fdf-version 4.18
+```
+
+To specify a particular image tag, use the `--fdf-image-tag` argument:
+
+```
+deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf CLUSTER_CONF --fdf-version 4.18 --fdf-image-tag v4.18.8-2
 ```
 
 Note for pre-release deployments: you will need to add a section to your `pull-secret` which contains your credentials to the registry where pre-release images are stored. Please reach out to the ecosystem team for more information.

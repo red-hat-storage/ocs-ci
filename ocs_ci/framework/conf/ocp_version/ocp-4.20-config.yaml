@@ -9,13 +9,11 @@ DEPLOYMENT:
   # https://docs.openshift.com/container-platform/4.7/post_installation_configuration/machine-configuration-tasks.html#machine-config-overview-post-install-machine-configuration-tasks
   ignition_version: "3.2.0"
 ENV_DATA:
-  vm_template: "rhcos-9.6.20250523-0-vmware.x86_64"
-  acm_hub_channel: "release-2.14"
-  acm_version: "2.14"
-  mce_version: "2.9"
-  submariner_version: "0.21.0"
+  vm_template: "rhcos-9.6.20250826-1-vmware.x86_64"
+  acm_hub_channel: "release-2.15"
+  acm_version: "2.15"
+  mce_version: "2.10"
+  submariner_version: "0.22.0"
   # Below values needs to be changed when acm and submariner are GAed
-  submariner_source: "downstream"
-  submariner_release_type: "unreleased"
-  acm_hub_unreleased: true
+  subctl_version: "subctl-rhel9:v0.21"
   oadp_version: "1.5"

@@ -5,6 +5,8 @@ This module contains functionality required for mce installation.
 import logging
 import tempfile
 import json
+import re
+from packaging.version import parse as parse_version
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
@@ -18,6 +20,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     wait_custom_resource_defenition_available,
     TimeoutSampler,
+    get_acm_mce_build_tag,
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.deployment import Deployment
@@ -26,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnavailableResourceException,
     MultiClusterEngineNotDeployedException,
+    TimeoutExpiredError,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,6 +53,13 @@ class MCEInstaller(object):
             kind=constants.CATSRC, namespace=constants.MARKETPLACE_NAMESPACE
         )
         self.subs = ocp.OCP(kind=constants.PROVIDER_SUBSCRIPTION)
+        self.version_before_upgrade = None
+        # In case if we are using registry image
+        self.version_change = None
+        self.zstream_upgrade = None
+        self.mce_registry_image = config.UPGRADE.get("upgrade_mce_registry_image", "")
+        self.upgrade_version = config.UPGRADE.get("upgrade_mce_version", "")
+        self.timeout_wait_csvs_minutes = 10
 
     def _create_mce_catalog_source(self):
         """
@@ -293,7 +304,7 @@ class MCEInstaller(object):
         self.wait_mce_resources()
 
         # avoid circular dependency with hosted cluster
-        from ocs_ci.deployment.hosted_cluster import (
+        from ocs_ci.deployment.hub_spoke import (
             apply_hosted_cluster_mirrors_max_items_wa,
             apply_hosted_control_plane_mirrors_max_items_wa,
         )
@@ -336,6 +347,7 @@ class MCEInstaller(object):
 
         Raises:
             TimeoutExpiredError: If the deployment is not in the 'Available' state within the timeout
+
         """
         if not self.mce_exists():
             raise UnavailableResourceException("MCE resource is not created")
@@ -356,3 +368,357 @@ class MCEInstaller(object):
                 **depl_ocp_obj.get(retry=60, wait=10, dont_raise=True)
             )
             deployment_obj.wait_for_available_replicas(timeout=600)
+
+    def upgrade_mce(self):
+        """
+        Upgrade mce to the latest build of desired target version.
+        Important ! Latest unreleased versions are not always available in the registry, and not always stable.
+        Important ! scopeo cli tool must be installed and pull-secret must be in a location expected in a config
+        Important ! MCE operator upgrade will be aborted if ACM operator is installed; use ACMUpgrade().run_upgrade()
+        Important ! MCE operator upgrade will be aborted if MCE operator is not deployed
+        New mce-dev-catalog catalogSource will be created and propagated, even if mce was initially installed with
+        a different catalogSource
+
+
+        Returns:
+            str: upgrade pass type: "version change upgrade" or "z-stream upgrade" or "" (if no upgrade performed)
+
+        Raises:
+            MultiClusterEngineNotDeployedException: If MCE is not deployed
+
+        """
+        from ocs_ci.deployment.deployment import Deployment
+
+        upgrade_pass = None
+
+        if Deployment().acm_operator_installed():
+            logger.warning(
+                "ACM operator is installed, aborting MCE upgrade, use ACMUpgrade().run_upgrade()"
+            )
+            return upgrade_pass
+
+        if not self.mce_installed():
+            logger.warning("MCE operator is not deployed before upgrade, abort upgrade")
+            return upgrade_pass
+
+        # another upgrade logic automated in following block
+        # When OCP upgrades, load_ocp_version_config_file func is called and mce version getting updated in env_data
+        if not self.upgrade_version:
+            self.upgrade_version = config.ENV_DATA["mce_version"]
+
+        if parse_version(config.ENV_DATA["mce_version"]) <= parse_version(
+            self.get_running_mce_version()
+        ):
+            logger.info(
+                "MCE is already at the desired upgrade version or higher, no upgrade needed."
+            )
+            return upgrade_pass
+
+        parsed_versions = self.get_parsed_versions()
+
+        self.version_change = parsed_versions[1] > parsed_versions[0]
+        if not self.version_change:
+            self.zstream_upgrade = True
+        # either this would be GA to Unreleased upgrade of same version OR
+        # GA to unreleased upgrade to higher version
+        if self.version_change:
+            self.set_catalogsource_image()
+            self.patch_channel()
+            upgrade_pass = "version change upgrade"
+        else:
+            # Z stream upgrade
+            self.set_catalogsource_image()
+            upgrade_pass = "z-stream upgrade"
+
+        # Post upgrade verification when engine is installed
+        if self.mce_exists():
+            self.wait_mce_resources()
+            logger.info("mce engine is running after upgrade")
+        else:
+            logger.warning("mce engine does not exist after upgrade")
+
+        logger.info(
+            f"Upgrade passed: {upgrade_pass}. Waiting for csv to be Succeeded and mce version match"
+        )
+        return (
+            self.wait_mce_csv_succeeded()
+            and self.verify_mce_version_major_minor_matches()
+        )
+
+    def get_running_mce_version(self):
+        """
+        Get the currently running MCE version.
+
+        Returns:
+            str: The current MCE version or an empty string if not found.
+
+        """
+        if not self.mce_exists():
+            logger.warning("MCE is not deployed, cannot get version")
+            return ""
+        cmd = (
+            f"oc get mce -n {self.mce_namespace} {constants.MULTICLUSTER_ENGINE} "
+            "-o jsonpath='{.status.currentVersion}'"
+        )
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode == 0:
+            return cmd_res.stdout.decode("utf-8").strip()
+        return ""
+
+    def get_parsed_versions(self):
+        """
+        Get parsed versions for current running mce and upgrade target version.
+
+        Returns:
+            tuple: Parsed versions of current running MCE and upgrade target version.
+
+        """
+        self.version_before_upgrade = self.get_running_mce_version()
+        parsed_version_before_upgrade = parse_version(self.version_before_upgrade)
+        parsed_upgrade_version = parse_version(self.upgrade_version)
+
+        return parsed_version_before_upgrade, parsed_upgrade_version
+
+    def _get_desired_mce_catalog_image(self):
+        """
+        Compute the desired CatalogSource image for MCE, mirroring logic used in create_mce_catsrc().
+
+        Returns:
+            str: Full image reference for CatalogSource spec.image
+
+        """
+        if not config.ENV_DATA.get("mce_unreleased_image"):
+            mce_image_tag = get_acm_mce_build_tag(
+                constants.MCE_CATSRC_IMAGE, config.ENV_DATA.get("mce_version")
+            )
+        else:
+            mce_image_tag = config.ENV_DATA.get("mce_unreleased_image")
+        return f"{constants.MCE_CATSRC_IMAGE}:{mce_image_tag}"
+
+    def set_catalogsource_image(self):
+        """
+        Set catalogsource image for mce upgrade. Works with catsrc already created or creates a new one.
+
+        """
+        logger.info("Upgrading mce using catalogsource image change")
+
+        try:
+            create_mce_catsrc()
+        except CommandFailed as cf:
+            logger.warning(f"Failed to create catalogsource: {cf}")
+            if (
+                "the object has been modified" in str(cf).lower()
+                or "already exists" in str(cf).lower()
+            ):
+                logger.info(
+                    "CatalogSource already exists or was modified, proceeding with patching"
+                )
+            else:
+                raise
+        self.patch_mce_catsrc_with_image_tag()
+
+    def patch_mce_catsrc_with_image_tag(self):
+
+        if not (desired_image := self.mce_registry_image):
+            desired_image = self._get_desired_mce_catalog_image()
+        logger.info(
+            f"Patching CatalogSource '{constants.MCE_DEV_CATALOG_SOURCE_NAME}' with image: {desired_image}"
+        )
+        patch_json = json.dumps({"spec": {"image": desired_image}})
+        patch_cmd = (
+            f"oc -n {constants.MARKETPLACE_NAMESPACE} patch {constants.CATSRC} "
+            f"{constants.MCE_DEV_CATALOG_SOURCE_NAME} --type=merge -p '{patch_json}'"
+        )
+        exec_cmd(patch_cmd)
+
+        mce_operator_catsrc = CatalogSource(
+            resource_name=constants.MCE_DEV_CATALOG_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        mce_operator_catsrc.wait_for_state("READY")
+
+    def patch_channel(self):
+        """
+        Method to patch mce subscription channel during upgrade where we do Y to Y upgrade
+
+        """
+        patch = f'\'{{"spec": {{"channel": "stable-{self.upgrade_version}"}}}}\''
+        patch_cmd = (
+            f"oc -n {self.mce_namespace} patch {constants.SUBSCRIPTION_WITH_ACM} "
+            f"{constants.MCE_SUBSCRIPTION_NAME} -p {patch} --type merge"
+        )
+        exec_cmd(patch_cmd)
+
+    def patch_subscription_with_mce_catsrc(self):
+        """
+        Patch subscription to use mce catalogsource
+
+        """
+        patch = (
+            f'\'{{"spec":{{"source": "{constants.MCE_DEV_CATALOG_SOURCE_NAME}"}}}}\''
+        )
+        patch_cmd = (
+            f"oc -n {self.mce_namespace} patch {constants.SUBSCRIPTION_WITH_ACM} "
+            f"{constants.MCE_SUBSCRIPTION_NAME} -p {patch} --type merge"
+        )
+        exec_cmd(patch_cmd)
+
+    def wait_csv_upgraded(self):
+        """
+        Wait for mce operator csv upgraded
+
+        Raises:
+            TimeoutExpiredError: If the CSV is not in the 'Succeeded' state within the timeout
+
+        """
+        csv_ocp_obj = OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            namespace=self.mce_namespace,
+        )
+        csv_name = csv_ocp_obj.get(resource_name="")["items"][0]["metadata"]["name"]
+        csv_obj = ocp.OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            namespace=self.mce_namespace,
+            resource_name=csv_name,
+        )
+        csv_obj.wait_for_phase("Succeeded", timeout=900)
+
+    def get_mce_csv_name(self):
+        """
+        Get MCE CSV name
+
+        Returns:
+            str: MCE CSV name
+
+        """
+        csv_ocp_obj = OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            namespace=self.mce_namespace,
+        )
+        csv_items = csv_ocp_obj.get(resource_name="").get("items", [])
+        return next(
+            (
+                item.get("metadata", {}).get("name", "")
+                for item in csv_items
+                if item.get("metadata", {})
+                .get("name", "")
+                .startswith(constants.MCE_OPERATOR)
+            ),
+            "",
+        )
+
+    def csv_succeeded(self):
+        """
+        Check if MCE CSV is in succeeded phase
+
+        Returns:
+            bool: True if MCE CSV is in succeeded phase, False otherwise
+        """
+        csv_name = self.get_mce_csv_name()
+        if not csv_name:
+            logger.error("MCE CSV not found")
+            return False
+        csv_obj = ocp.OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            namespace=self.mce_namespace,
+            resource_name=csv_name,
+        )
+        csv_phase = (
+            csv_obj.get(resource_name=csv_name).get("status", {}).get("phase", "")
+        )
+        return csv_phase == "Succeeded"
+
+    def wait_mce_csv_succeeded(self, timeout=None, sleep=10):
+        """
+        Wait until the MCE CSV reaches the 'Succeeded' phase.
+
+        Args:
+            timeout (int): Timeout in seconds. If None, defaults to self.timeout_wait_csvs_minutes * 60.
+            sleep (int): Sleep interval between checks in seconds.
+
+        Returns:
+            bool: True if CSV reached 'Succeeded' within timeout.
+
+        Raises:
+            TimeoutExpiredError: If the CSV does not reach 'Succeeded' within the timeout.
+
+        """
+        effective_timeout = timeout or (self.timeout_wait_csvs_minutes * 60)
+        logger.info(
+            f"Waiting up to {effective_timeout}s for MCE CSV to reach 'Succeeded' state"
+        )
+        sampler = TimeoutSampler(
+            timeout=effective_timeout,
+            sleep=sleep,
+            func=self.csv_succeeded,
+        )
+        try:
+            sampler.wait_for_func_value(True)
+            logger.info("MCE CSV reached 'Succeeded' phase")
+            return True
+        except TimeoutExpiredError:
+            logger.error(
+                "Timeout expired waiting for MCE CSV to reach 'Succeeded' phase"
+            )
+            return False
+
+    def verify_mce_version_major_minor_matches(self):
+        """
+        Verify that the major and minor version of MCE csv matches the desired upgrade version.
+
+        Returns:
+            bool: True if major and minor versions match, False otherwise.
+
+        """
+        # Determine desired version string
+        desired_version_str = (
+            self.upgrade_version or str(config.ENV_DATA.get("mce_version", "")).strip()
+        )
+        if not desired_version_str:
+            logger.error(
+                "Desired MCE upgrade version is not set (upgrade_version/ENV_DATA['mce_version'])."
+            )
+            return False
+
+        def extract_major_minor(v: str):
+            m = re.search(r"(\d+)\.(\d+)", str(v))
+            if not m:
+                return None, None
+            return int(m.group(1)), int(m.group(2))
+
+        desired_mm = extract_major_minor(desired_version_str)
+        if None in desired_mm:
+            logger.error(
+                f"Unable to parse major.minor from desired version '{desired_version_str}'"
+            )
+            return False
+
+        # Get current CSV and its version
+        csv_name = self.get_mce_csv_name()
+        if not csv_name:
+            logger.error("MCE CSV not found")
+            return False
+
+        csv_api = ocp.OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            namespace=self.mce_namespace,
+            resource_name=csv_name,
+        )
+        csv_data = csv_api.get(resource_name=csv_name)
+        csv_version_str = csv_data.get("spec", {}).get("version") or csv_data.get(
+            "metadata", {}
+        ).get("name", "")
+
+        running_mm = extract_major_minor(csv_version_str)
+        if None in running_mm:
+            logger.error(
+                f"Unable to parse major.minor from CSV version '{csv_version_str}'"
+            )
+            return False
+
+        matches = running_mm == desired_mm
+        logger.info(
+            f"MCE CSV version major.minor is {running_mm[0]}.{running_mm[1]}, "
+            f"desired is {desired_mm[0]}.{desired_mm[1]}: match={matches}"
+        )
+        return matches

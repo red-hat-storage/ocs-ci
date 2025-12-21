@@ -5,13 +5,20 @@ import shutil
 import tempfile
 import time
 from datetime import datetime
+import json
 
-from ocs_ci.deployment.helpers.idms_parser import parse_IDMS_json_to_mirrors_file
+from ocs_ci.deployment.helpers.idms_parser import (
+    parse_IDMS_json_to_mirrors_file,
+    extract_image_content_sources,
+)
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
@@ -25,6 +32,8 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.deployment.mce import MCEInstaller
+from packaging.version import parse as parse_version
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -368,6 +377,39 @@ def delete_hcp_podman_container():
         )
 
 
+def get_latest_supported_hypershift_version() -> str | None:
+    """
+    Get the latest supported Hypershift version from the hub cluster
+
+    Returns:
+        str: latest supported Hypershift version in 'major.minor' format, e.g. '4.18' or None in case of failure
+
+    """
+
+    hcp_version = None
+    try:
+        mce_installer = MCEInstaller()
+        if mce_installer.check_hypershift_namespace():
+            versions = mce_installer.get_supported_versions() or []
+            if versions:
+                latest = sorted(versions, key=parse_version)[-1]
+                v = parse_version(latest)
+                hcp_version = f"{v.major}.{v.minor}"
+                logger.info(
+                    f"Hypershift detected on hub. Using latest supported version {latest} "
+                    f"(branch release-{hcp_version})."
+                )
+            else:
+                logger.warning(
+                    "No supported versions returned from hub cluster. Falling back to config hcp_version."
+                )
+    except Exception as e:
+        logger.debug(
+            f"Could not determine Hypershift installation or supported versions due to: {e}"
+        )
+    return hcp_version
+
+
 class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
@@ -409,9 +451,14 @@ class HyperShiftBase:
 
         return os.path.isfile(self.hypershift_binary_path)
 
-    def install_hcp_and_hypershift_from_git(self):
+    def install_hcp_and_hypershift_from_git(self, install_latest=False):
         """
         Install hcp binary from git
+
+        Args:
+            install_latest (bool): If True, install the latest Hypershift version from git.
+            If False, use the configured hcp_version or latest supported version from hub.
+
         """
 
         if self.hcp_binary_exists() and self.hypershift_binary_exists():
@@ -420,7 +467,19 @@ class HyperShiftBase:
             )
             return
 
-        hcp_version = config.ENV_DATA["hcp_version"]
+        if install_latest:
+            # Decide which version to use for cloning Hypershift
+            # If Hypershift is already installed on the hub (namespace exists), pick the latest supported version
+            # from the supported-versions configmap. Otherwise, use the configured hcp_version.
+            hcp_version = get_latest_supported_hypershift_version()
+            if not hcp_version:
+                logger.error("Falling back to configured hcp_version.")
+                return self.install_hcp_and_hypershift_from_git(install_latest=False)
+        else:
+            hcp_version = config.ENV_DATA.get("hcp_version")
+            logger.info(
+                f"Using configured hcp_version: {hcp_version} (branch release-{hcp_version})."
+            )
 
         logger.info("Downloading hcp binary from git")
 
@@ -505,19 +564,23 @@ class HyperShiftBase:
                 f"hcp binary download failed to path:{self.hcp_binary_path}"
             )
 
-    def update_hcp_binary(self):
+    def update_hcp_binary(self, install_latest=False):
         """
         Update hcp binary
+
+        Args:
+            install_latest (bool): If True, install the latest Hypershift version from git.
+            If False, use the configured hcp_version.
         """
 
         if not config.ENV_DATA.get("hcp_version"):
             logger.error("hcp_version is not set in config.ENV_DATA")
             return
 
-        self.delete_hcp_and_hypershift()
-        self.install_hcp_and_hypershift_from_git()
+        self.delete_hcp_and_hypershift_bin()
+        self.install_hcp_and_hypershift_from_git(install_latest)
 
-    def delete_hcp_and_hypershift(self):
+    def delete_hcp_and_hypershift_bin(self):
         """
         Delete hcp binary
         """
@@ -842,6 +905,83 @@ class HyperShiftBase:
                 mode="w+", prefix="idms_mirrors-", delete=False
             ).name
         self.save_mirrors_list_to_file()
+
+    def apply_idms_to_hosted_cluster(self, name, idms_json_dict=None, replace=False):
+        """
+        Apply ImageDigestMirrorSet data to an existing HostedCluster as imageContentSources.
+        This patches spec.imageContentSources of the HostedCluster resource in the management (hub) cluster.
+
+        Args:
+            name (str): HostedCluster name (namespace is clusters-<name> but resource lives in clusters namespace)
+            idms_json_dict (dict|None): If provided, use this pre-fetched dict
+                (output of 'oc get imagedigestmirrorsets -o json').
+                If None, it will be fetched automatically.
+            replace (bool): If True, replace any existing spec.imageContentSources with the new list.
+                            If False, merge (append new unique entries after existing ones).
+
+        Returns:
+            bool: True if patch applied (or nothing to do), False on failure.
+
+        Notes:
+            - Empty or missing IDMS items will result in a no-op (returns True).
+            - Deduplication retains first occurrence (existing entries preserved if replace=False).
+        """
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                if idms_json_dict is None:
+                    logger.info(
+                        "Fetching ImageDigestMirrorSets JSON for HostedCluster patch"
+                    )
+                    idms_json_dict = self.ocp.exec_oc_cmd(
+                        "get imagedigestmirrorsets -o json"
+                    )
+                ics_new = extract_image_content_sources(idms_json_dict)
+                if not ics_new:
+                    logger.info(
+                        "No imageContentSources extracted from IDMS; skipping patch"
+                    )
+                    return True
+                ocp_hc = OCP(
+                    kind=constants.HOSTED_CLUSTERS,
+                    namespace=constants.CLUSTERS_NAMESPACE,
+                )
+                hosted = ocp_hc.get(name)
+                existing = hosted.get("spec", {}).get("imageContentSources") or []
+                if replace:
+                    combined = ics_new
+                else:
+                    seen = set(
+                        (
+                            e.get("source"),
+                            tuple(e.get("mirrors", [])),
+                        )
+                        for e in existing
+                    )
+                    combined = list(existing)
+                    for entry in ics_new:
+                        key = (entry.get("source"), tuple(entry.get("mirrors", [])))
+                        if key not in seen:
+                            seen.add(key)
+                            combined.append(entry)
+                if combined == existing:
+                    logger.info(
+                        "HostedCluster already has desired imageContentSources; no patch needed"
+                    )
+                    return True
+                patch_body = json.dumps({"spec": {"imageContentSources": combined}})
+                logger.info(
+                    f"Patching HostedCluster '{name}' with {len(combined)} imageContentSources "
+                    f"entries (replace={replace})"
+                )
+                ocp_hc.exec_oc_cmd(
+                    f"patch hostedclusters {name} --type=merge -p '{patch_body}'"
+                )
+                return True
+        except Exception as e:
+            # this is non-critical operation, it should not fail deployment or upgrade on multiple clusters,
+            # thus exception is broad
+            logger.error(f"Failed to apply IDMS mirrors to HostedCluster '{name}': {e}")
+            return False
 
     def destroy_kubevirt_cluster(self, name):
         """

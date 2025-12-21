@@ -132,7 +132,7 @@ def get_default_vdbench_configs():
                 {"id": 1, "sd_id": 1, "rdpct": 50, "seekpct": 100, "xfersize": "8k"}
             ],
             "run_definitions": [
-                {"id": 1, "wd_id": 1, "elapsed": 120, "interval": 5, "iorate": "max"}
+                {"id": 1, "wd_id": 1, "elapsed": 3600, "interval": 5, "iorate": "max"}
             ],
         },
         "stress": {
@@ -159,7 +159,6 @@ def get_default_vdbench_configs():
                     "width": 4,
                     "files": 10,
                     "size": "1g",
-                    "format": "yes",
                 }
             ],
             "workload_definitions": [
@@ -175,7 +174,7 @@ def get_default_vdbench_configs():
                 {
                     "id": 1,
                     "wd_id": 1,
-                    "elapsed": 120,
+                    "elapsed": 3600,
                     "interval": 5,
                     "iorate": "max",
                 }
@@ -628,7 +627,21 @@ def create_vdbench_block_scenario(
             - workload: The created Vdbench workload object.
     """
     log.info("Creating Vdbench block device scenario")
-    config = vdbench_block_config()
+    config = vdbench_block_config(
+        threads=4,
+        size="10g",
+        elapsed=300,
+        interval=60,
+        patterns=[
+            {
+                "name": "mixed_workload",
+                "rdpct": 50,  # 50% reads, 50% writes
+                "seekpct": 100,  # random I/O
+                "xfersize": "64k",  # 64k block size
+                "skew": 0,
+            }
+        ],
+    )
 
     log.info(
         f"Creating Block-mode PVC with size={pvc_size}, storage_class={storage_class}, access_mode=RWO"

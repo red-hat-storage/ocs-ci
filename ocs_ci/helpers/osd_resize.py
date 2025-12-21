@@ -467,13 +467,9 @@ def check_storage_size_is_reflected_in_ui():
     UI 'ocs-storagecluster-storagesystem' page.
 
     """
-    block_and_file = (
-        PageNavigator()
-        .nav_odf_default_page()
-        .nav_storage_systems_tab()
-        .nav_storagecluster_storagesystem_details()
-        .nav_block_and_file()
-    )
+    block_and_file = PageNavigator().nav_storage_cluster_default_page()
+    block_and_file.validate_block_and_file_tab_active()
+
     used, available = block_and_file.get_raw_capacity_card_values()
     block_and_file.take_screenshot("raw_capacity_card_values")
     # Get the used, available and total size in bytes

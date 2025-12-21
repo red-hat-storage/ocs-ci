@@ -20,6 +20,7 @@ import base64
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.exceptions import (
     VaultDeploymentError,
     VaultOperationError,
@@ -1582,6 +1583,7 @@ class HPCS(KMS):
             headers={"content-type": "application/x-www-form-urlencoded"},
             data=payload,
             verify=True,
+            timeout=120,
         )
         assert r.ok, f"Couldn't get access token! StatusCode: {r.status_code}."
         return "Bearer " + r.json()["access_token"]
@@ -1602,6 +1604,7 @@ class HPCS(KMS):
                 "authorization": access_token,
             },
             verify=True,
+            timeout=120,
         )
         assert r.ok, f"Couldn't list HPCS keys! StatusCode: {r.status_code}."
         return r.json()["resources"]
@@ -1932,6 +1935,8 @@ class KMIP(KMS):
 
         # Check for OSD keys
         osd_key_ids = self.get_osd_key_ids()
+        # Wait for NooBaa to be ready before loading keys
+        MCG.wait_for_ready_status(timeout=600)
         # Loading key list after gathering OSD pods to avoid mismatch.
         key_id_list = self.get_key_list_ciphertrust()
         if all(id in key_id_list for id in osd_key_ids):

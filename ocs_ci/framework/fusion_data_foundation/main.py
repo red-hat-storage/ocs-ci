@@ -35,4 +35,5 @@ def main(argv=None):
         fdf.deploy()
 
     # FDF deployment
-    fdf_deployment()
+    exit_code = fdf_deployment()
+    sys.exit(exit_code)

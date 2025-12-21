@@ -18,7 +18,11 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.ocs.constants import MDR_ROLES, RDR_ROLES, ACM_RANK, MANAGED_CLUSTER_RANK
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, wait_for_machineconfigpool_status
+from ocs_ci.utility.utils import (
+    run_cmd,
+    wait_for_machineconfigpool_status,
+    get_acm_mce_build_tag,
+)
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +39,8 @@ class MultiClusterUpgradeParametrize(object):
         "ocp_upgrade",
         "post_ocp_upgrade",
         "mco_upgrade",
+        "mce_upgrade",
+        "kubevirt_cluster_upgrade",
         "dr_hub_upgrade",
         "dr_cluster_operator_upgrade",
         "acm_upgrade",
@@ -262,13 +268,40 @@ def get_multicluster_upgrade_parametrizer():
 
 
 def create_mce_catsrc():
+    """
+    Create MCE CatalogSource in the marketplace namespace
+    1. Create ImageDigestMirrorSet for ACM Deployment if not present
+    2. Create Konflux Catalogsource for MCE
+    3. Wait for Catalogsource to be in READY state
+
+    """
+    # if idms were not created during acm deployment, create it now
+    log.info("Creating ImageDigestMirrorSet for ACM Deployment if not present")
+    try:
+        # attempt to apply the IDMS from the template. `oc apply` is idempotent so
+        # if the resource already exists it will be updated/unchanged instead of erroring.
+        run_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")
+        wait_for_machineconfigpool_status(node_type="all")
+        log.info("ACM Brew ImageDigestMirrorSet applied (or already present)")
+    except Exception as ex:
+        # If application failed for any reason, log and continue to create catalogsource
+        log.warning(f"Failed to apply ACM Brew ImageDigestMirrorSet: {ex}")
+
     log.info("Creating Konflux Catalogsource for MCE ")
     mce_konflux_catsrc_yaml_data = templating.load_yaml(
         constants.MCE_CATALOGSOURCE_YAML
     )
+    if not config.ENV_DATA.get("mce_unreleased_image"):
+        mce_image_tag = get_acm_mce_build_tag(
+            constants.MCE_CATSRC_IMAGE, config.ENV_DATA.get("mce_version")
+        )
+    else:
+        mce_image_tag = config.ENV_DATA.get("mce_unreleased_image")
+
     mce_konflux_catsrc_yaml_data["spec"][
         "image"
-    ] = f"{constants.MCE_CATSRC_IMAGE}:latest-{config.ENV_DATA.get('mce_version')}"
+    ] = f"{constants.MCE_CATSRC_IMAGE}:{mce_image_tag}"
+
     mce_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="mce_konflux_catsrc_yaml_data_manifest", delete=False
     )
@@ -281,6 +314,3 @@ def create_mce_catsrc():
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
     mce_operator_catsrc.wait_for_state("READY")
-    log.info("Creating ImageDigestMirrorSet for ACM Deployment")
-    run_cmd(f"oc create -f {constants.ACM_BREW_IDMS_YAML}")
-    wait_for_machineconfigpool_status(node_type="all")

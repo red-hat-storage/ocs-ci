@@ -63,7 +63,7 @@ class PVKeyrotationTestBase:
 
         # Key rotation annotations
         keyrotation_annotations = {
-            "keyrotation.csiaddons.openshift.io/schedule": "* * * * *"
+            constants.KEYROTATION_SCHEDULE_ANNOTATION: "* * * * *"
         }
 
         # Create an encryption-enabled storage class
@@ -144,7 +144,16 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
         self.pv_keyrotation_obj.set_keyrotation_state_by_annotation(True)
         log.info("Key rotation re-enabled globally via storage class annotation.")
 
-        # Verify key rotation cronjobs are recreated
+        # Wait for key rotation cronjobs to be recreated and active
+        assert self.pv_keyrotation_obj.wait_for_keyrotation_cronjobs_recreation(
+            self.pvc_objs
+        ), "Failed to recreate key rotation cronjobs after re-enabling."
+        log.info("Key rotation cronjobs successfully recreated and active.")
+
+        # Reset baseline to capture keys after re-enabling, before waiting for rotation
+        self.pv_keyrotation_obj.reset_keyrotation_baseline()
+
+        # Verify key rotation cronjobs are recreated and keys are rotated
         assert self.pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(
             self.pvc_objs
         ), "Failed to re-enable PV key rotation."
@@ -183,6 +192,9 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
             self.pvc_objs, disable=False
         )
         log.info("Key rotation re-enabled for specific PVCs.")
+
+        # Reset baseline to capture keys after re-enabling, before waiting for rotation
+        self.pv_keyrotation_obj.reset_keyrotation_baseline()
 
         # Verify key rotation cronjobs are recreated
         assert self.pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(

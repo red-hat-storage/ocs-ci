@@ -1,23 +1,20 @@
 import pytest
 import logging
 
-from ocs_ci.ocs.resources.pod import get_pods_having_label
-from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.constants import CSI_RBDPLUGIN_LABEL_419
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     green_squad,
 )
-from ocs_ci.framework.pytest_customization.marks import polarion_id, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import polarion_id
+from ocs_ci.ocs.resources.pod import get_csi_addons_pod
 
-log = logging
+log = logging.getLogger(__name__)
 
 
 @tier1
 @green_squad
 @polarion_id("OCS-6807")
-@skipif_ocs_version("<4.19")
 class TestCSIAddonPodSecurity:
     """This class contains tests to Validate if CSI Addon pod enforces security
     by allowing HTTPS and rejecting HTTP connections.
@@ -28,7 +25,7 @@ class TestCSIAddonPodSecurity:
         Validate that the CSI Addon pods are compliant with the Pod Security Standards.
 
         Test Steps:
-        1. Fetch a pod with label 'app=openshift-storage.rbd.csi.ceph.com-nodeplugin' (CSI RBD Nodeplugin).
+        1. Find a CSI addon pod that contains the 'csi-addons' container using ODF 4.20 labels.
         2. Retrieve container information for the container named 'csi-addons'.
         3. Assert that the 'csi-addons' container exists in the pod.
         4. Extract the port used by the 'csi-addons' container.
@@ -45,11 +42,15 @@ class TestCSIAddonPodSecurity:
 
         log.info("Validating CSI Addon pod security standards")
 
-        pod_obj = Pod(**get_pods_having_label(CSI_RBDPLUGIN_LABEL_419)[0])
+        # Find a pod with the 'csi-addons' container (handles both old and new pod structures)
+        pod_obj = get_csi_addons_pod()
+        log.info(f"Using CSI addon pod: {pod_obj.name}")
 
         csi_addon_container = pod_obj.get_container_data("csi-addons")
 
-        assert csi_addon_container, "No CSI Addon container found in the pod"
+        assert (
+            csi_addon_container
+        ), f"No CSI Addon container found in pod {pod_obj.name}"
 
         port_used_by_csi_addon = csi_addon_container[0]["ports"][0]["containerPort"]
 

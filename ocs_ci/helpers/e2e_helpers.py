@@ -23,6 +23,11 @@ from ocs_ci.ocs.cluster import (
     get_osd_utilization,
     get_ceph_df_detail,
 )
+from ocs_ci.ocs import cluster
+from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs import constants
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -419,3 +424,45 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             logger.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
             return True
     return False
+
+
+def run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=3):
+    """
+    This function facilitates
+    1. Create PVC with Cephfs, access mode RWX
+    2. Create dc pod with Fedora image
+    3. Copy helper_scripts/meta_data_io.py to Fedora dc pod
+    4. Run meta_data_io.py on fedora pod
+
+    Args:
+        no_of_io_pods : by default 3 IO pods will be created. We can modify this by passing required value as argument.
+        dc_pod_factory: a fixture which will take care of dc pod creation and termination.
+
+    """
+    access_mode = constants.ACCESS_MODE_RWX
+    file = constants.METAIO
+    interface = constants.CEPHFILESYSTEM
+    active_mds_node = cluster.get_active_mds_info()["node_name"]
+    sr_mds_node = cluster.get_mds_standby_replay_info()["node_name"]
+    worker_nodes = get_worker_nodes()
+    target_node = [
+        node for node in worker_nodes if node != active_mds_node and node != sr_mds_node
+    ]
+
+    for dc_pod in range(no_of_io_pods):
+        logger.info("Create fedora dc pod")
+        pod_obj = dc_pod_factory(
+            size="30",
+            access_mode=access_mode,
+            interface=interface,
+            node_name=random.choice(target_node),
+        )
+        logger.info("Copy meta_data_io.py to fedora pod ")
+        cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/"
+        helpers.run_cmd(cmd=cmd)
+        logger.info(f"meta_data_io.py copied successfully to pod {pod_obj.name}.")
+        logger.info(f"Running meta_data_io.py on pod {pod_obj.name}.")
+        metaio_executor = ThreadPoolExecutor(max_workers=1)
+        metaio_executor.submit(
+            pod_obj.exec_sh_cmd_on_pod, command="python3 meta_data_io.py"
+        )

@@ -300,6 +300,10 @@ class ExternalClusterRBDNamespaceCreationFailed(Exception):
     pass
 
 
+class ExternalClusterDisableCertificateCheckFailed(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -773,4 +777,34 @@ class FloatingIPAssignException(Exception):
 
 
 class SubctlDownloadFailed(Exception):
+    pass
+
+
+class PolicyApplicationError(Exception):
+    """Exception raised when bucket policy application fails."""
+
+    pass
+
+
+class PolicyEditorError(RuntimeError):
+    """Exception raised when policy editor manipulation fails."""
+
+    pass
+
+
+class ResourceNotSupported(Exception):
+    """Exception raised when resource is not supported."""
+
+    pass
+
+
+class PodsNotRunningError(Exception):
+    """Raised when pods in a namespace are not in the Running state"""
+
+    pass
+
+
+class PodStabilityError(Exception):
+    """Raised when pods show signs of instability (Restarts or OOMKills)"""
+
     pass

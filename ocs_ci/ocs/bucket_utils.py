@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.helpers.helpers import create_resource, remove_port_from_url
 from ocs_ci.utility import version
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
 
@@ -1130,7 +1131,7 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.status.phase}'"
     )
-    res = exec_cmd(cmd=cmd, use_shell=True)
+    res = exec_cmd(cmd=cmd, shell=True)
     if res.returncode != 0:
         logger.error(f"Failed to fetch backingstore details\n{res.stderr}")
 
@@ -1141,7 +1142,7 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.spec.type}'"
     )
-    res = exec_cmd(cmd=cmd, use_shell=True)
+    res = exec_cmd(cmd=cmd, shell=True)
     if res.returncode != 0:
         logger.error(f"Failed to fetch backingstore type\n{res.stderr}")
     return res.stdout.decode()
@@ -1814,7 +1815,7 @@ def compare_directory(
     return all(comparisons)
 
 
-def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
+def s3_copy_object(s3_obj, bucketname, source, object_key, **kwargs):
     """
     Boto3 client based copy object
 
@@ -1823,17 +1824,15 @@ def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
         bucketname (str): Name of the bucket
         source (str): Source object key. eg: '<bucket>/<key>
         object_key (str): Unique object Identifier for copied object
-        metadata (dict): Metadata to be updated with the object
+        **kwargs: Additional arguments to pass to boto3's copy_object method
+                  (e.g., Metadata, MetadataDirective, ACL, ServerSideEncryption, etc.)
 
     Returns:
         dict : Copy object response
 
     """
-    # default to None; metadata={} in the signature would be shared across calls
-    metadata = {} if metadata is None else metadata
-
     return s3_obj.s3_client.copy_object(
-        Bucket=bucketname, CopySource=source, Key=object_key, Metadata=metadata
+        Bucket=bucketname, CopySource=source, Key=object_key, **kwargs
     )
 
 
@@ -2141,6 +2140,7 @@ def write_random_test_objects_to_bucket(
     return obj_lst
 
 
+@config.run_with_provider_context_if_available
 def patch_replication_policy_to_bucket(
     bucket_name, rule_id, destination_bucket_name, prefix=""
 ):
@@ -2183,6 +2183,7 @@ def patch_replication_policy_to_bucket(
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+@config.run_with_provider_context_if_available
 def update_replication_policy(bucket_name, replication_policy_dict):
     """
     Updates the replication policy of a bucket
@@ -2210,6 +2211,7 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+@config.run_with_provider_context_if_available
 def get_replication_policy(bucket_name):
     """
     Get the replication policy on a bucket
@@ -2228,6 +2230,7 @@ def get_replication_policy(bucket_name):
     ).get()["spec"]["additionalConfig"]["replicationPolicy"]
 
 
+@config.run_with_provider_context_if_available
 def patch_replication_policy_to_bucketclass(
     bucketclass_name, rule_id, destination_bucket_name
 ):
@@ -2629,7 +2632,7 @@ def delete_all_noobaa_buckets(mcg_obj, request):
         logger.info(f"Deleting {bucket} and its objects")
         s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
         delete_all_objects_in_batches(
-            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket
+            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket.name
         )
         s3_bucket.delete()
 
@@ -3533,3 +3536,33 @@ def verify_soft_deletion(mcg_obj, awscli_pod, bucket_name, object_key):
         if delete_markers.get("IsLatest"):
             return True
     return False
+
+
+def get_noobaa_bucket_replication_metrics_in_prometheus(
+    metric_name, bucket_name, threading_lock
+):
+    """
+    Query Prometheus for a specific metric and verify its value.
+
+    Args:
+        metric_name (str): The name of the Prometheus metric to query
+        bucket_name (str): The bucket name to filter the metric by
+        threading_lock: Threading lock for PrometheusAPI
+
+    Returns:
+        int: The actual metric value retrieved from Prometheus
+    """
+    query = f"{metric_name} {{bucket_name='{bucket_name}'}}"
+    api = PrometheusAPI(threading_lock=threading_lock)
+    resp = api.get("query", payload={"query": query})
+
+    if resp.ok:
+        logger.debug(query)
+        metrics_output = json.loads(resp.text)
+        got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
+        logger.info(f"Metrics {metric_name} : {got_metrics_value}")
+        return got_metrics_value
+    else:
+        raise Exception(
+            f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+        )

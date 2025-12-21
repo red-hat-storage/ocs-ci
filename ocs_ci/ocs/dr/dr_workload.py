@@ -6,6 +6,7 @@ This module will have all DR related workload classes
 import logging
 import os
 import tempfile
+import time
 import yaml
 
 from subprocess import TimeoutExpired
@@ -492,7 +493,8 @@ class BusyBox(DRWorkload):
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             if self.is_placement:
                 clusterset_name = (
-                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                    config.ENV_DATA.get("cluster_set")
+                    or get_cluster_set_name(switch_ctx)[0]
                 )
                 managed_clusterset_binding_yaml_data = templating.load_yaml(
                     self.managed_clusterset_binding_file
@@ -981,6 +983,9 @@ class CnvWorkload(DRWorkload):
         if self.workload_type == constants.SUBSCRIPTION:
             run_cmd(f"oc create -f {self.channel_yaml_file}")
         run_cmd(f"oc create -f {self.cnv_workload_yaml_file}")
+        self.check_pod_pvc_status(skip_replication_resources=True)
+        # Wait for temporary resources to be cleaned up before DRPC creation
+        time.sleep(10)
         self.add_annotation_to_placement()
         run_cmd(f"oc create -f {drcp_data_yaml.name}")
         self.verify_workload_deployment()
@@ -1046,11 +1051,22 @@ class CnvWorkload(DRWorkload):
         Verify cnv workload deployment
 
         """
+        self.check_pod_pvc_status(skip_replication_resources=False)
+
+    def check_pod_pvc_status(self, skip_replication_resources=False):
+        """
+        Check for Pod and PVC status
+
+        Args:
+            skip_replication_resources (bool): Skip Volumereplication check
+
+        """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count,
             self.workload_pod_count,
             self.workload_namespace,
+            skip_replication_resources=skip_replication_resources,
         )
         dr_helpers.wait_for_cnv_workload(
             vm_name=self.vm_name,
@@ -1541,7 +1557,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             )
             log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
-                cmd=f"oc delete recipe {self.discovered_apps_recipe_name_value} -n {self.workload_namespace}",
+                cmd=f"oc delete recipe --all -n {self.workload_namespace}",
                 ignore_error=True,
             )
             log.info(f"Deleting secret from {cluster.ENV_DATA['cluster_name']}")
@@ -1557,7 +1573,8 @@ class BusyboxDiscoveredApps(DRWorkload):
                 vrg_name=self.discovered_apps_placement_name,
                 skip_vrg_check=skip_vrg_check,
             )
-            run_cmd(f"oc delete project {self.workload_namespace}")
+            ocp_obj = ocp.OCP()
+            ocp_obj.delete_project(project_name=self.workload_namespace)
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
@@ -1662,18 +1679,13 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self._deploy_prereqs()
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            if not shared_drpc_protection:
-                self.create_namespace()
-            else:
-                # Shared=False means namespace exists, so skip creation
-                log.info(
-                    f"Namespace in use: {self.workload_namespace} for Shared Protection type"
-                )
         self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
+        # Wait for temporary resources to be cleaned up before DRPC creation
+        time.sleep(10)
         config.switch_acm_ctx()
         if dr_protect:
             self.create_placement()
@@ -1721,6 +1733,11 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 except CommandFailed as ex:
                     if "(AlreadyExists)" in str(ex):
                         log.warning("The namespace already exists!")
+            else:
+                # Shared=False means namespace exists, so skip creation
+                log.info(
+                    f"Namespace in use: {self.workload_namespace} for Shared Protection type"
+                )
 
             # Create or recreate the secret for ssh access
             try:
@@ -1831,18 +1848,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         Verify cnv workload deployment
 
         """
-        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
-        dr_helpers.wait_for_all_resources_creation(
-            self.workload_pvc_count,
-            self.workload_pod_count,
-            self.workload_namespace,
-            discovered_apps=True,
-        )
-        dr_helpers.wait_for_cnv_workload(
-            vm_name=self.vm_name,
-            namespace=self.workload_namespace,
-            phase=constants.STATUS_RUNNING,
-        )
+        self.check_pod_pvc_status(skip_replication_resources=False)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -1858,6 +1864,12 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             self.workload_pod_count,
             self.workload_namespace,
             skip_replication_resources=skip_replication_resources,
+            discovered_apps=True,
+        )
+        dr_helpers.wait_for_cnv_workload(
+            vm_name=self.vm_name,
+            namespace=self.workload_namespace,
+            phase=constants.STATUS_RUNNING,
         )
 
     def delete_workload(
@@ -1907,5 +1919,6 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                     discovered_apps=True,
                     workload_cleanup=True,
                 )
-                run_cmd(f"oc delete project {self.workload_namespace}")
+                ocp_obj = ocp.OCP()
+                ocp_obj.delete_project(project_name=self.workload_namespace)
                 log.info(f"Project {self.workload_namespace} deleted successfully")

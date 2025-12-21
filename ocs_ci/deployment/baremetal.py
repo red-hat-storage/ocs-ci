@@ -7,6 +7,8 @@ import tempfile
 import time
 from datetime import datetime
 from time import sleep
+from pathlib import Path
+import base64
 
 import yaml
 import requests
@@ -17,7 +19,6 @@ from .flexy import FlexyBaremetalPSI
 from ocs_ci.utility import psiutils, aws, version
 
 from ocs_ci.deployment.deployment import Deployment
-from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -29,6 +30,9 @@ from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
+from ocs_ci.utility.deployment import (
+    add_mc_partitioned_disk_on_workers_to_ocp_deployment,
+)
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -42,6 +46,7 @@ from ocs_ci.utility.utils import (
     add_chrony_to_ocp_deployment,
     replace_content_in_file,
 )
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +117,10 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             str: response status
         """
         headers = {"content-type": "application/json"}
-        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        response = requests.get(
+            url=self.bm_config["bm_status_check"], headers=headers, timeout=60
+        )
+        response.encoding = "utf-8-sig"
         return response.json()[0]["status"]
 
     def get_locked_username(self):
@@ -123,7 +131,10 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             str: username
         """
         headers = {"content-type": "application/json"}
-        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        response = requests.get(
+            url=self.bm_config["bm_status_check"], headers=headers, timeout=60
+        )
+        response.encoding = "utf-8-sig"
         return response.json()[0]["user"]
 
     def update_bm_status(self, bm_status):
@@ -155,17 +166,19 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             json=payload,
             headers=headers,
         )
+        response.encoding = "utf-8-sig"
         return response.json()["message"]
 
     def destroy(self, log_level=""):
         """
         Destroy OCP cluster
         """
-        logger.info("Updating BM status")
-        result = self.update_bm_status(constants.BM_STATUS_ABSENT)
-        assert (
-            result == constants.BM_STATUS_RESPONSE_UPDATED
-        ), "Failed to update request"
+        if self.bm_config.get("bm_status_check"):
+            logger.info("Updating BM status")
+            result = self.update_bm_status(constants.BM_STATUS_ABSENT)
+            assert (
+                result == constants.BM_STATUS_RESPONSE_UPDATED
+            ), "Failed to update request"
 
     def configure_dnsmasq_on_helper_vm(self):
         """
@@ -322,6 +335,11 @@ class BAREMETALUPI(BAREMETALBASE):
             self.create_manifest()
             # create chrony resource
             add_chrony_to_ocp_deployment()
+            if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+                root_disk_common_path = self.bm_config["root_disk_common_path"]
+                add_mc_partitioned_disk_on_workers_to_ocp_deployment(
+                    root_disk_common_path
+                )
             # create ignitions
             self.create_ignitions()
             self.kubeconfig = os.path.join(
@@ -656,17 +674,25 @@ class BAREMETALUPI(BAREMETALBASE):
             approve_pending_csr()
 
             self.test_cluster()
-            logger.info("Performing Disk cleanup")
-            ocp_obj = ocp.OCP()
-            policy = constants.PSA_BASELINE
-            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
-                policy = constants.PSA_PRIVILEGED
-            ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS, policy=policy)
-            time.sleep(10)
-            workers = get_nodes(node_type="worker")
-            for worker in workers:
-                clean_disk(worker)
-            ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing Disk cleanup")
+                ocp_obj = ocp.OCP()
+                policy = constants.PSA_BASELINE
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    >= version.VERSION_4_12
+                ):
+                    policy = constants.PSA_PRIVILEGED
+                ocp_obj.new_project(
+                    project_name=constants.BM_DEBUG_NODE_NS, policy=policy
+                )
+                time.sleep(10)
+                workers = get_nodes(node_type="worker")
+                for worker in workers:
+                    clean_disks(worker)
+                ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         def create_config(self):
             """
@@ -1112,6 +1138,15 @@ class BAREMETALAI(BAREMETALBASE):
                         ignore_error=True,
                     )
 
+            self.test_cluster()
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing Disk cleanup")
+                workers = get_nodes(node_type="worker")
+                for worker in workers:
+                    clean_disks(worker)
+
         def pending_user_action_handler(self, host):
             """
             Method for handling pending user action during deployment (this usually means that the server didn't boot
@@ -1408,9 +1443,9 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
+def clean_disks(worker, namespace=constants.DEFAULT_NAMESPACE):
     """
-    Perform disk cleanup
+    Perform disks cleanup
 
     Args:
         worker (object): worker node object
@@ -1434,46 +1469,299 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
             logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
             pass
         else:
-            logger.info(f"Cleaning up {lsblk_device['name']}")
-            out = ocp_obj.exec_oc_debug_cmd(
-                node=worker.name,
-                cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
-                namespace=namespace,
+            clean_disk(
+                worker.name,
+                f"/dev/{lsblk_device['name']}",
+                int(lsblk_device["size"]),
+                ocp_obj=ocp_obj,
             )
 
-            logger.info(out)
-            out = ocp_obj.exec_oc_debug_cmd(
-                node=worker.name,
-                cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
-                namespace=namespace,
-            )
-            logger.info(out)
+    if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+        root_disk_common_path = config.ENV_DATA["baremetal"]["root_disk_common_path"]
+        partition = f"{root_disk_common_path}-part5"
+        clean_disk(worker.name, partition, run_sgdisk=False, ocp_obj=ocp_obj)
 
-            # Write different portion because bluestore replicates its metadata at multiple places on the device
-            # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
 
-            # Get the size of disk in bytes
-            disk_size_bytes = int(lsblk_device["size"])
+def clean_disk(
+    node_name,
+    device,
+    size=None,
+    run_sgdisk=True,
+    ocp_obj=None,
+    namespace=constants.DEFAULT_NAMESPACE,
+):
+    """
+    Perform disks cleanup
 
-            # Start offset as 1GiB
-            dd_seek_bytes = 1073741824
-            dd_seek_offsets = []
+    Args:
+        node_name (str): name of the (worker) node where to run the disk cleanup
+        device (str): path to the device to be cleaned up
+        size (int): size of the device, if not provided, it will be obtained via `lsblk -n --output SIZE -b {device}`
+            command
+        run_sgdisk (bool): run `sgdisk --zap-all {device}` command (default: True)
+        ocp_obj (obj): OCP object, if not provided, new one is initialized
+        namespace (str): namespace where the oc_debug command will be executed
 
-            # Get byte values in 1Gb / 10Gb / 100Gb etc. Applicable when 'bs' in dd command is 1
-            while dd_seek_bytes < disk_size_bytes:
-                dd_seek_offsets.append(dd_seek_bytes)
-                dd_seek_bytes = dd_seek_bytes * 10
+    """
+    if not ocp_obj:
+        ocp_obj = ocp.OCP()
+    logger.info(f"Cleaning up {device}")
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=node_name,
+        cmd_list=[f"wipefs -a -f {device}"],
+        namespace=namespace,
+    )
 
-            for dd_seek in dd_seek_offsets:
-                dd_cmd = [
-                    f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\" bs=1 count=204800 seek={dd_seek}"
-                ]
-                out = ocp_obj.exec_oc_debug_cmd(
-                    node=worker.name,
-                    cmd_list=dd_cmd,
-                    namespace=namespace,
-                )
-                logger.info(out)
+    logger.info(out)
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=node_name,
+        cmd_list=[f"sgdisk --zap-all {device}"],
+        namespace=namespace,
+    )
+    logger.info(out)
+
+    # Write different portion because bluestore replicates its metadata at multiple places on the device
+    # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
+
+    # Get the size of disk in bytes
+    if not size:
+        size = ocp_obj.exec_oc_debug_cmd(
+            node=node_name,
+            cmd_list=[f"lsblk -n  --output SIZE -b {device}"],
+            namespace=namespace,
+        )
+    disk_size_bytes = int(size)
+
+    # Start offset as 1GiB
+    dd_seek_bytes = 1073741824
+    dd_seek_offsets = []
+
+    # Get byte values in 1Gb / 10Gb / 100Gb etc. Applicable when 'bs' in dd command is 1
+    while dd_seek_bytes < disk_size_bytes:
+        dd_seek_offsets.append(dd_seek_bytes)
+        dd_seek_bytes = dd_seek_bytes * 10
+
+    for dd_seek in dd_seek_offsets:
+        dd_cmd = [f"dd if=/dev/zero of='{device}' bs=1 count=204800 seek={dd_seek}"]
+        out = ocp_obj.exec_oc_debug_cmd(
+            node=node_name,
+            cmd_list=dd_cmd,
+            namespace=namespace,
+        )
+        logger.info(out)
+
+
+def detect_simulation_disk_on_node(wnode, namespace="default", timeout=300):
+    """
+    Detects the last available /dev/sd* disk on a given worker node.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the command execution.
+
+    Returns:
+        str or None: The detected disk path (e.g., "/dev/sdb") or None if not found.
+
+    """
+    logger.info(
+        f"Attempting to auto-detect a suitable /dev/sd* disk on worker node: {wnode.name}."
+    )
+    cmd = ['lsblk -dn -o NAME | grep -E "^sd[a-z]$" | sed "s#^#/dev/#" | tail -1']
+    ocp_obj = ocp.OCP()
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    logger.info(f"Disk detection command output: {out}")
+    disk_name = out.strip()
+
+    if not disk_name:
+        logger.warning(
+            f"No suitable disk found for BlueStore simulation on worker node: {wnode.name}."
+        )
+        return None
+
+    logger.info(f"Detected disk for simulation: {disk_name}")
+    return disk_name
+
+
+def upload_script_to_node(
+    wnode,
+    script_src_path: str,
+    script_dest_path: str,
+    namespace: str = "default",
+    timeout: int = 300,
+):
+    """
+    Upload a shell script to a node using base64 encoding via `oc debug`.
+
+    The script is read locally, base64-encoded, and decoded on the node
+    using `echo | base64 -d`.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
+        script_src_path (str): Local path to the script.
+        script_dest_path (str): Destination path on the node.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the oc debug command (in seconds).
+
+    Returns:
+        str: Output of the command execution.
+
+    Raises:
+        FileNotFoundError: If the local script file does not exist.
+
+    """
+    ocp_obj = ocp.OCP()
+
+    if not os.path.exists(script_src_path):
+        raise FileNotFoundError(f"Script not found at {script_src_path}")
+
+    # Read and encode the script
+    with open(script_src_path, "rb") as f:
+        script_content = f.read()
+    script_b64 = base64.b64encode(script_content).decode("utf-8").replace("\n", "")
+
+    logger.info(
+        f"Uploading script from '{script_src_path}' to node '{wnode.name}' at '{script_dest_path}'"
+    )
+
+    # Build the shell command
+    upload_cmd = [
+        (
+            f"set -euo pipefail; "
+            f'echo "{script_b64}" | base64 -d > {script_dest_path} && '
+            f"chmod 755 {script_dest_path} && "
+            f'echo "Script written to {script_dest_path}" && ls -l {script_dest_path}'
+        )
+    ]
+
+    # Execute the command on the node
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=upload_cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
+def run_script_on_node(
+    wnode,
+    script_path: str,
+    args: str = "",
+    namespace: str = "default",
+    timeout: int = 600,
+):
+    """
+    Execute a shell script directly on a node (inside chroot /host)
+    using oc debug.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
+        script_path (str): Full path to the script on the node.
+        args (str): Optional arguments to pass to the script.
+        namespace (str): Namespace for the debug pod.
+        timeout (int): Timeout for the command execution (in seconds).
+
+    Returns:
+        str: Output of the script execution.
+    """
+    ocp_obj = ocp.OCP()
+
+    logger.info(
+        f"Running the script {script_path} with the args '{args}' "
+        f"on the worker node {wnode.name}"
+    )
+    # Build the command — single element, no single quotes inside
+    cmd = [f"set -euo pipefail; " f"bash {script_path} {args} "]
+
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=wnode.name,
+        cmd_list=cmd,
+        namespace=namespace,
+        use_root=True,
+        timeout=timeout,
+    )
+
+    return out
+
+
+def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="default"):
+    """
+    Simulates a Ceph BlueStore label on a specified disk of a given worker node.
+
+
+    This function uploads a local shell script to the node using base64 encoding,
+    verifies its integrity via SHA256 checksum, and executes it to simulate a
+    BlueStore label on the specified disk. If no disk is specified, the function
+    attempts to auto-detect a suitable disk. The output is parsed to determine
+    whether the simulation was successful.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object where the simulation
+            should be performed.
+        disk_name (str, optional): The disk device name to simulate the label on.
+            If not provided, the function auto-detects the last /dev/sd* disk on the node.
+        namespace (str): Namespace for the debug pod.
+
+    Returns:
+        bool: True if the simulation succeeded (BlueStore label detected), False otherwise.
+
+    """
+    if not disk_name:
+        disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+
+    if not disk_name:
+        logger.error("Disk detection failed. Aborting BlueStore simulation.")
+        return False
+
+    script_name = "simulate_bluestore_label.sh"
+    current_dir = Path(__file__).parent.parent.parent
+    script_src_path = os.path.join(current_dir, "scripts", "bash", script_name)
+    script_dest_path = f"/tmp/{script_name}"
+
+    # Step 3: Download the script directly on the node
+    logger.info(
+        f"Uploading BlueStore simulation script to the worker node {wnode.name}"
+    )
+    upload_script_to_node(
+        wnode=wnode,
+        script_src_path=script_src_path,
+        script_dest_path=script_dest_path,
+        namespace=namespace,
+        timeout=300,
+    )
+
+    # Step 5: Run the script on the node
+    logger.info(f"Running BlueStore simulation script on disk: {disk_name}")
+    out = run_script_on_node(
+        wnode=wnode,
+        script_path=script_dest_path,
+        args=disk_name,
+        namespace=namespace,
+        timeout=300,
+    )
+
+    logger.info("Script output:\n" + out)
+    result = "Verification PASSED" in out or ">>> BlueStore UUID:" in out
+    if result:
+        logger.info(
+            f"BlueStore label simulation succeeded on the worker node {wnode.name}"
+        )
+    else:
+        logger.warning(
+            f"BlueStore label simulation failed.on the worker node {wnode.name}"
+        )
+    return result
 
 
 class BaremetalPSIUPI(Deployment):

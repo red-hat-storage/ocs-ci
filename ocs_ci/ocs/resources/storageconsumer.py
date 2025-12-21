@@ -6,12 +6,14 @@ import concurrent
 import json
 import logging
 import tempfile
+from datetime import datetime, timezone, timedelta
 from concurrent.futures.thread import ThreadPoolExecutor
 
 from ocs_ci.framework import config, config_safe_thread_pool_task
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.managedservice import get_consumer_names
 from ocs_ci.ocs.rados_utils import fetch_rados_namespaces, fetch_pool_names
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1131,7 +1133,7 @@ def check_storage_classes_on_clients(ready_consumer_names: list[str]):
     log.info(
         "Verify Storage Classes are distributed and available in inventory of a hosted cluster"
     )
-    from ocs_ci.deployment.hosted_cluster import get_autodistributed_storage_classes
+    from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 
     with config.RunWithProviderConfigContextIfAvailable():
 
@@ -1206,3 +1208,96 @@ def check_storage_classes_on_clients(ready_consumer_names: list[str]):
 
         log.info(f"Results of storage classes verification across consumers: {results}")
         return all(results)
+
+
+def get_cluster_name_from_storage_consumer(storage_consumer):
+    """
+    Get the storage consumer name used pre-convergence for a given consumer. Status.client.clusterName
+
+    Args:
+        storage_consumer (str): Name value from the storage consumer cr
+
+    Returns:
+        str: storage consumer cluster name from Status.client.clusterName (prefix of full cluster console url)
+
+    """
+    if storage_consumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
+        return storage_consumer
+    else:
+        sc = StorageConsumer(
+            storage_consumer,
+            config.ENV_DATA["cluster_namespace"],
+            config.get_provider_index(),
+        )
+        client_info = sc.get_client_status()
+        consumer_url = client_info.get("clusterName", "")
+
+        return consumer_url.split(".")[0] if consumer_url else ""
+
+
+def verify_last_heartbeat_timestamp(cluster_name):
+    """
+    Verify that the last heartbeat timestamp of the storage consumer for `cluster_name`
+    is recent (not older than 4 minutes). Uses `get_storage_consumer_name` to map
+    consumer resources to the given cluster name.
+
+    Args:
+        cluster_name (str): Name of the cluster to verify the storage consumer heartbeat.
+
+    """
+    try:
+        consumer_names = get_consumer_names()
+        target_consumer = None
+        for consumer in consumer_names:
+            try:
+                mapped_name = get_cluster_name_from_storage_consumer(consumer)
+            except CommandFailed as cf:
+                log.error(f"Failed to get storage consumer name for `{consumer}`: {cf}")
+                mapped_name = ""
+            if mapped_name == cluster_name or consumer == cluster_name:
+                target_consumer = consumer
+                break
+
+        if not target_consumer:
+            log.error(f"StorageConsumer for cluster `{cluster_name}` not found")
+            return False
+
+        # storageconsumer CRs live on provider cluster context
+        storage_consumer = StorageConsumer(
+            target_consumer,
+            config.ENV_DATA["cluster_namespace"],
+            config.get_provider_index(),
+        )
+
+        last_hb = storage_consumer.get_last_heartbeat()
+        if not last_hb:
+            log.error(f"No lastHeartbeat found for StorageConsumer `{target_consumer}`")
+            return False
+
+        try:
+            last_dt = datetime.strptime(last_hb, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+
+            try:
+                last_dt = datetime.fromisoformat(last_hb.replace("Z", "+00:00"))
+            except Exception as e:
+                log.error(f"Failed to parse lastHeartbeat `{last_hb}`: {e}")
+                return False
+
+        now = datetime.now(timezone.utc)
+        if now - last_dt <= timedelta(minutes=4):
+            log.info(
+                f"Last heartbeat for StorageConsumer `{target_consumer}` is recent: `{last_hb}`"
+            )
+            return True
+
+        log.error(
+            f"Last heartbeat for StorageConsumer `{target_consumer}` is stale: `{last_hb}` (age={(now - last_dt)})"
+        )
+        return False
+
+    except Exception as exc:
+        log.error(f"Error verifying last heartbeat for `{cluster_name}`: {exc}")
+        return False

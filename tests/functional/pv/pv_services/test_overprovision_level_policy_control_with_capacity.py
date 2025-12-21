@@ -12,7 +12,8 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
     skipif_external_mode,
 )
-from ocs_ci.utility import version
+from ocs_ci.helpers.helpers import verify_quota_resource_exist
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -69,11 +70,7 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         sc_type = constants.CEPHBLOCKPOOL
         policy_labels = {"storagequota": "storagequota"}
         quota_capacity = "100Gi"
-
-        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
-            overprovision_resourse_name = f"ocs-{constants.CEPHBLOCKPOOL_SC}"
-        else:
-            overprovision_resourse_name = constants.CEPHBLOCKPOOL_SC
+        overprovision_resource_name = f"{constants.CEPHBLOCKPOOL_SC}-{quota_name}"
 
         clear_overprovision_spec(ignore_errors=True)
         set_overprovision_policy(quota_capacity, quota_name, sc_name, policy_labels)
@@ -102,9 +99,23 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
             log.error(f"Failed to create PVC {str(e)}")
             assert False
 
+        # Wait for clusterresourcequota to be created before describing it
+        log.info(
+            f"Waiting for clusterresourcequota '{overprovision_resource_name}' to be created"
+        )
+        for sample in TimeoutSampler(
+            timeout=120,
+            sleep=5,
+            func=verify_quota_resource_exist,
+            quota_name=overprovision_resource_name,
+        ):
+            if sample:
+                log.info(f"ClusterResourceQuota '{overprovision_resource_name}' found")
+                break
+
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
         output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=overprovision_resourse_name
+            resource_name=overprovision_resource_name
         )
 
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")

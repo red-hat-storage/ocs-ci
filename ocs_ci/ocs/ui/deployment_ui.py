@@ -5,6 +5,7 @@ from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STO
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
+from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -14,6 +15,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
 )
+from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,18 @@ class DeploymentUI(PageNavigator):
         Install OCS/ODF Opeartor
         """
         self.navigate_operatorhub_page()
-        self.do_send_keys(self.dep_loc["search_operators"], text=self.operator_name)
+        if self.ocp_version_semantic >= version.VERSION_4_20 and (
+            self.driver.find_elements(*self.dep_loc["filter_operator_namespace"][::-1])
+        ):
+            self.do_send_keys(
+                self.dep_loc["filter_operator_namespace"], text="openshift-operators"
+            )
+            self.do_click(
+                self.dep_loc["openshift_operators_namespace"], enable_screenshot=True
+            )
+        self.do_send_keys(
+            self.dep_loc["search_operators"], text=self.operator_name, timeout=60
+        )
         logger.info(f"Choose {self.operator_name} Version")
         if self.operator_name is OCS_OPERATOR:
             self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
@@ -124,8 +137,17 @@ class DeploymentUI(PageNavigator):
         """
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_19:
-            self.nav_odf_default_page()
+        if ocs_version >= version.VERSION_4_20:
+            logger.info("Navigate to Storage Cluster page")
+
+            self.nav_storage_cluster_default_page()
+            logger.info("Click Configure ODF")
+            self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
+            self.do_click(
+                locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
+            )
+        elif ocs_version >= version.VERSION_4_19:
+            self.nav_storage_cluster_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
             self.do_click(
                 locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
@@ -318,18 +340,24 @@ class DeploymentUI(PageNavigator):
             )
         else:
             self.do_click(locator=self.dep_loc["internal_mode"], enable_screenshot=True)
-
-        logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
-        self.do_click(
-            locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
-        )
-        self.do_click(
-            locator=self.dep_loc[self.storage_class],
-            enable_screenshot=True,
-            copy_dom=True,
-        )
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_20:
+            logger.info("Storage class is chosen automatically")
+        else:
+            logger.info("Configure Storage Class (thin-csi on vmware, gp2 on aws)")
+            self.do_click(
+                locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
+            )
+            self.do_click(
+                locator=self.dep_loc[self.storage_class],
+                enable_screenshot=True,
+                copy_dom=True,
+            )
 
         if self.operator_name == ODF_OPERATOR:
+            self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+
+        if ocs_version >= version.VERSION_4_21:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
         self.configure_osd_size()
@@ -540,8 +568,8 @@ class DeploymentUI(PageNavigator):
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
-            default_projects_is_checked = self.driver.find_element_by_id(
-                "no-label-switch-on"
+            default_projects_is_checked = self.driver.find_element(
+                By.ID, "no-label-switch-on"
             ).is_selected()
             if not default_projects_is_checked:
                 logger.info("Show default projects")
@@ -562,6 +590,9 @@ class DeploymentUI(PageNavigator):
             if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
                 add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
-        self.install_ocs_operator()
+        if not csv.get_csvs_start_with_prefix(
+            defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
+        ):
+            self.install_ocs_operator()
         if not config.UPGRADE.get("ui_upgrade"):
             self.install_storage_cluster()

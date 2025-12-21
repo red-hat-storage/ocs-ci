@@ -28,7 +28,12 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
 )
-from ocs_ci.ocs.resources.pod import pod_resource_utilization_raw_output_from_adm_top
+from ocs_ci.ocs.resources.pod import (
+    pod_resource_utilization_raw_output_from_adm_top,
+    get_noobaa_pods,
+    get_pod_node,
+    get_noobaa_core_pod,
+)
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 
@@ -48,7 +53,7 @@ def get_mcg_obj(bucket):
         return MCG()
 
 
-@retry(CommandFailed, tries=3, delay=60, backoff=1)
+@retry(CommandFailed, tries=5, delay=10, backoff=1)
 def sync_object_directory_with_retry(
     pod_obj,
     src,
@@ -235,7 +240,7 @@ def run_noobaa_metadata_intense_ops(
                     bucket_name,
                     source=f"{bucket_name}/{obj}",
                     object_key=object_key,
-                    metadata=metadata,
+                    Metadata=metadata,
                 )
                 logger.info(
                     f"METADATA OP: Updated metadata for object {object_key} in bucket {bucket_name}"
@@ -494,7 +499,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
         "\n"
     )
 
-    @retry(NoobaaHealthException, tries=10, delay=60)
+    @retry(NoobaaHealthException, tries=20, delay=10)
     def check_noobaa_health():
 
         while True:
@@ -513,9 +518,9 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
 
             time.sleep(300)
 
-    @retry(CephHealthException, tries=10, delay=60)
+    @retry((CommandFailed, CephHealthException), tries=20, delay=10)
     def check_ceph_health():
-
+        ceph_cluster = CephCluster()
         while True:
 
             if ceph_cluster.get_ceph_health() == constants.CEPH_HEALTH_ERROR:
@@ -533,7 +538,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
 
             time.sleep(300)
 
-    @retry(CommandFailed, tries=10, delay=60)
+    @retry(CommandFailed, tries=20, delay=10)
     def check_noobaa_db_size():
 
         while True:
@@ -566,6 +571,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
                 break
             time.sleep(600)
 
+    @retry(Exception, tries=10, delay=10)
     def check_prometheus_alerts():
 
         while True:
@@ -600,6 +606,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
                 break
             time.sleep(300)
 
+    @retry(CommandFailed, tries=10, delay=10)
     def check_noobaa_pod_resource_utilization():
 
         while True:
@@ -628,3 +635,31 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
     for future in as_completed(futures_obj):
         future.result()
     executor.shutdown()
+
+
+def induce_noobaa_failures(nodes, delay=300):
+    """
+    Induce Noobaa specific failures with specific
+    delay between the each type of failures
+
+    Args:
+        nodes (PlatformNodes): PlatformNodes instance
+        delay (int): Time delay between the each failure
+
+    """
+    logger.info(f"Inducing noobaa specific failures after {delay} seconds")
+    failure_type = ["pod-restart", "noobaa-node-restart", "noobaa-nw-failure"]
+    for type in failure_type:
+        time.sleep(delay)
+        if type == "pod-restart":
+            nb_pods = get_noobaa_pods()
+            for pod in nb_pods:
+                pod.delete()
+                logger.info(f"Restarted noobaa pod {pod.name}")
+        elif type == "noobaa-node-restart":
+            nb_core_node = get_pod_node(get_noobaa_core_pod())
+            nodes.restart_nodes([nb_core_node])
+            logger.info(f"Restarted noobaa core node {nb_core_node.name}")
+        else:
+            logger.info("Induce network failure for noobaa core pod")
+            # TODO: This needs to be implemented

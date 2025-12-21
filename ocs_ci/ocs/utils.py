@@ -390,24 +390,6 @@ def setup_deb_repos(node, ubuntu_repo):
     node.exec_command(cmd="sudo apt-get update")
 
 
-def setup_deb_cdn_repo(node, build=None):
-    user = "redhat"
-    passwd = "OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9"
-    num = build.split(".")[0]
-    cmd = (
-        "umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools "
-        "$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list".format(
-            user=user, passwd=passwd, num=num
-        )
-    )
-    node.exec_command(sudo=True, cmd=cmd)
-    node.exec_command(
-        sudo=True,
-        cmd="wget -O - https://www.redhat.com/security/fd431d51.txt | apt-key add -",
-    )
-    node.exec_command(sudo=True, cmd="apt-get update")
-
-
 def setup_cdn_repos(ceph_nodes, build=None):
     repos_13x = [
         "rhel-7-server-rhceph-1.3-mon-rpms",
@@ -1006,7 +988,7 @@ def run_must_gather(
     if command:
         cmd += f" -- {command}"
 
-    log.info(f"OCS logs will be placed in location {log_dir_path}")
+    log.info(f"MG logs will be placed in location {log_dir_path}")
     if output_file:
         output_file = os.path.join(log_dir_path, f"mg_output_{timestamp}.log")
         log.info(f"Must gather std error log will be placed in: {output_file}")
@@ -1020,10 +1002,6 @@ def run_must_gather(
             silent=silent,
             output_file=output_file,
         )
-        if config.DEPLOYMENT["external_mode"] and not ocsci_config.RUN.get(
-            "is_ocp_deployment_failed"
-        ):
-            collect_ceph_external(path=log_dir_path)
         with mg_lock:
             mg_collected_logs += 1
     except (CommandFailed, TimeoutExpired) as ex:
@@ -1048,15 +1026,21 @@ def collect_ceph_external(path):
 
     """
     try:
+        # In case it fails in deployment sooner than we create the toolbox pod
+        # we need to make sure the toolbox pod is created
+        setup_ceph_toolbox()
+        log.info(f"Collecting external ceph logs to: {path}")
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
         current_dir = Path(__file__).parent.parent.parent
         script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
+        # Make sure path exists recurisvely
+        os.makedirs(path, exist_ok=True)
         run_cmd(
             f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path} "
             f"{ocsci_config.ENV_DATA['cluster_namespace']}",
-            timeout=140,
+            timeout=600,
         )
     except Exception as ex:
         log.info(
@@ -1296,6 +1280,14 @@ def _collect_ocs_logs(
             raise ValueError(
                 f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
             )
+        if config.DEPLOYMENT["external_mode"] and not ocsci_config.RUN.get(
+            "is_ocp_deployment_failed"
+        ):
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            external_ceph_log_dir_path = os.path.join(
+                log_dir_path, f"external_ceph_logs_{timestamp}"
+            )
+            collect_ceph_external(path=external_ceph_log_dir_path)
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
         ocp_must_gather_image = cluster_config.REPORTING["ocp_must_gather_image"]
@@ -1387,7 +1379,7 @@ def _collect_ocs_logs(
                     f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
                 )
                 log.info("Collecting submariner logs")
-                out = run_cmd(submariner_log_collect)
+                out = run_cmd(submariner_log_collect, timeout=1200)
                 run_cmd(f"chmod -R 777 {submariner_log_path}")
                 os.chdir(cwd)
                 log.info(out)
@@ -2137,8 +2129,10 @@ def query_nb_db_psql_version():
 
     try:
         raw_output = exec_nb_db_query("SELECT version();")[0]
-    except IndexError:
-        raise UnexpectedBehaviour("Failed to query the NooBaa DB for its version")
+    except (IndexError, CommandFailed) as ex:
+        raise UnexpectedBehaviour(
+            f"Failed to query the NooBaa DB for its version. Exception: {ex}"
+        )
     return re.search(r"PostgreSQL (\S+)", raw_output).group(1)
 
 

@@ -1,0 +1,17 @@
+---
+# Config file for OCP GA 4.20 stable channel
+RUN:
+  client_version: '4.20-ga'
+DEPLOYMENT:
+  ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+  installer_version: "4.20-ga"
+  terraform_version: "1.0.11"
+  ignition_version: "3.2.0"
+ENV_DATA:
+  # TODO: Replace with new GAed template once we have it
+  vm_template: "rhcos-9.6.20250826-1-vmware.x86_64"
+  acm_hub_channel: "release-2.15"
+  acm_version: "2.15"
+  mce_version: "2.10"
+  submariner_version: "0.22.0"
+  oadp_version: "1.5"

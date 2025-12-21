@@ -2,17 +2,19 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import logger
+from ocs_ci.ocs.ui.page_objects.ceph_block_pool import CephBlockPool
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import CreateResourceForm
-from ocs_ci.ocs.ui.page_objects.searchbar import SearchBar
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.page_objects.edit_label_form import EditLabelForm
-from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
-from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
 from ocs_ci.utility import version
 
 
-class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, SearchBar):
-    def __init__(self, block_pool_existed: list = None):
-        StorageSystemTab.__init__(self)
+class StoragePools(CreateResourceForm, EditLabelForm, ResourceList):
+    """
+    Class to represent the Storage Pools page and its functionalities.
+    """
+
+    def __init__(self, pool_existed: list = None):
         CreateResourceForm.__init__(self)
         self.name_input_loc = self.validation_loc["blockpool_name"]
         self.rules = {
@@ -29,7 +31,7 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, Search
                 "rule4"
             ]: self._check_blockpool_not_used_before_rule,
         }
-        self.block_pool_existed = block_pool_existed
+        self.block_pool_existed = pool_existed
 
     def _check_blockpool_not_used_before_rule(self, rule_exp) -> bool:
         """
@@ -55,6 +57,13 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, Search
         )
 
     def verify_cephblockpool_status(self, status_exp: str = "Ready"):
+        """
+        Verifies the status of the default cephblockpool
+
+        Args:
+            status_exp (str): Expected status of the cephblockpool, default is "Ready
+
+        """
         logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHBLOCKPOOL}'")
         cephblockpool_status = self.get_element_text(
             self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}-status"]
@@ -63,6 +72,24 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, Search
             raise CephHealthException(
                 f"cephblockpool status error | expected status:Ready \n "
                 f"actual status:{cephblockpool_status}"
+            )
+
+    def verify_cephfs_status(self, status_exp: str = "Ready"):
+        """
+        Verifies the status of the default cephfilesystem
+
+        Raises:
+            CephHealthException: If the cephfilesystem status is not as expected
+
+        """
+        logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHFS_DATA_POOL}'")
+        cephfs_status = self.get_element_text(
+            self.validation_loc[f"{constants.DEFAULT_CEPHFS_DATA_POOL}-status"]
+        )
+        if not status_exp == cephfs_status:
+            raise CephHealthException(
+                f"cephfilesystem status error | expected status:Ready \n "
+                f"actual status:{cephfs_status}"
             )
 
     def delete_block_pool(self, block_pool_name: str, cannot_be_deleted: bool = False):
@@ -129,3 +156,21 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, Search
         super().proceed_resource_creation()
         if self.ocs_version_semantic >= version.VERSION_4_17:
             self.do_click(self.bp_loc["pool_type_block"])
+
+    def navigate_to_block_pool(self, block_pool_name: str):
+        """
+        Navigate to the specific block pool details page
+
+        Args:
+            block_pool_name (str): Name of the block pool
+
+        Returns:
+            BlockPoolDetails: BlockPoolDetails page object
+
+        """
+        logger.info(
+            f"Navigate to the specific block pool details page {block_pool_name}"
+        )
+        self.nav_to_resource_via_name(block_pool_name)
+
+        return CephBlockPool()

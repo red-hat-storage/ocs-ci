@@ -231,11 +231,11 @@ class OCP(object):
         except ValueError:
             pass
 
-        if out_yaml_format:
-            return yaml.safe_load(out)
-
-        if original_context:
+        if original_context is not None:
             config.switch_ctx(original_context)
+
+        if out_yaml_format:
+            return yaml.load(out, Loader=yaml.CSafeLoader)
         return out
 
     @retry(CommandFailed, tries=3, delay=30, backoff=1)
@@ -791,6 +791,7 @@ class OCP(object):
             )
 
         selector = selector or self.selector
+        resource_name = resource_name or self.resource_name
         command = f"wait {self.kind} {resource_name} --for=jsonpath='{{.status.phase}}'={condition}"
 
         # if selector is used, all resources of kind self.kind with that selector must match the condition, e.g.
@@ -1195,6 +1196,7 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
+    @retry(IndexError, tries=4, delay=20, backoff=1)
     def get_resource(self, resource_name, column, retry=0, wait=3, selector=None):
         """
         Get a column value for a resource based on:
@@ -1403,7 +1405,7 @@ class OCP(object):
         log.info(f"Check if resource: {resource_name} exists.")
         self.check_name_is_specified(resource_name)
         try:
-            self.get(resource_name, selector=selector)
+            self.get(resource_name, selector=selector, silent=True)
             log.info(f"Resource: '{resource_name}', selector: '{selector}' was found.")
             return True
         except CommandFailed:

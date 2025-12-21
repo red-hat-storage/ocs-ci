@@ -40,7 +40,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.node import wait_for_nodes_status
-from pkg_resources import parse_version
+from packaging.version import parse as parse_version
 
 logger = logging.getLogger(__name__)
 
@@ -622,6 +622,7 @@ class CNVInstaller(object):
         else:
             return tarfile.open(fileobj=archive_file_binary_data, mode="r")
 
+    @retry(EOFError, tries=3, delay=30, backoff=1)
     def _extract_virtctl_binary(
         self, archive_file_binary_data, virtctl_download_url, bin_dir
     ):

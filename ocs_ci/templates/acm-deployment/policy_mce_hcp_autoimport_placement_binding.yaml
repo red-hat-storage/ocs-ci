@@ -1,0 +1,13 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: policy-mce-hcp-autoimport-placement-binding
+  namespace: open-cluster-management-global-set
+placementRef:
+  name: policy-mce-hcp-autoimport-placement
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-mce-hcp-autoimport
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy

@@ -9,6 +9,7 @@ under section PYTEST_DONT_REWRITE
 
 # Use the new python 3.7 dataclass decorator, which provides an object similar
 # to a namedtuple, but allows type enforcement and defining methods.
+import functools
 import os
 import yaml
 import logging
@@ -275,6 +276,8 @@ class MultiClusterConfig:
         provider_index = None
         if provider_name:
             provider_index = self.get_cluster_index_by_name(cluster_name=provider_name)
+        elif config.ENV_DATA.get("cluster_type") == "provider":
+            provider_index = config.cur_index
         else:
             for i, cluster in enumerate(self.clusters):
                 if cluster.ENV_DATA["cluster_type"] == "provider":
@@ -297,7 +300,7 @@ class MultiClusterConfig:
                 provider_indexes_list.append(cluster_index)
         return provider_indexes_list
 
-    def get_consumer_indexes_list(self):
+    def get_consumer_indexes_list(self, raise_exception=True):
         """
         Get the consumer cluster indexes
 
@@ -317,7 +320,7 @@ class MultiClusterConfig:
             ]:
                 consumer_indexes_list.append(i)
 
-        if not consumer_indexes_list:
+        if (not consumer_indexes_list) and raise_exception:
             raise ClusterNotFoundException("Didn't find any consumer cluster")
 
         return consumer_indexes_list
@@ -502,6 +505,21 @@ class MultiClusterConfig:
             self.get_cluster_type_indices_list(cluster_type)[num_of_cluster]
         )
 
+    def run_for_all_clusters(self, func):
+        """
+        A decorator to run the decorated function for all clusters
+        and switch context between them.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for cluster_index in range(self.nclusters):
+                self.switch_ctx(cluster_index)
+                logger.info(f"Running '{func.__name__}' for cluster {cluster_index}")
+                func(*args, **kwargs)
+
+        return wrapper
+
     class RunWithConfigContext(object):
         def __init__(self, config_index):
             self.original_config_index = config.cur_index
@@ -544,6 +562,26 @@ class MultiClusterConfig:
                 logger.debug("No provider was found - using current cluster")
                 switch_index = config.cur_index
             super().__init__(switch_index)
+
+    @staticmethod
+    def run_with_provider_context_if_available(func):
+        """
+        Decorator that runs the function using the Provider config if it exists.
+        If no Provider config is found, the function runs with the current config.
+
+        Args:
+            func (callable): Function to decorate.
+
+        Returns:
+            callable: Wrapped function.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with config.RunWithProviderConfigContextIfAvailable():
+                return func(*args, **kwargs)
+
+        return wrapper
 
     class RunWithFirstConsumerConfigContextIfAvailable(RunWithConfigContext):
         """

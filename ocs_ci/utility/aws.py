@@ -8,7 +8,12 @@ import traceback
 import re
 
 from datetime import datetime, timezone
-from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
+from botocore.exceptions import (
+    ClientError,
+    NoCredentialsError,
+    WaiterError,
+    EndpointConnectionError,
+)
 
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, get_infra_id
@@ -2562,6 +2567,9 @@ def update_config_from_s3(
         return None
     except ClientError:
         logger.warning(f"Permission denied to access bucket {bucket_name}")
+        return None
+    except EndpointConnectionError:
+        logger.warning("Failed to fetch auth.yaml from ocs-ci-data")
         return None
 
 

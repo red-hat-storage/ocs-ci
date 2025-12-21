@@ -88,8 +88,27 @@ def wait_for_job_completion(job_name, namespace, timeout=600, sleep_time=30):
 
     Raises:
         TimeoutExpiredError: When job fails to complete in given time
+        ResourceNotFoundError: When job is not found in the cluster
+        CommandFailed: When other command errors occur
     """
     ocp_job = OCP(kind="Job", namespace=namespace, resource_name=job_name)
+
+    # First, check if the job exists before starting timeout loop
+    # This provides early detection of "NotFound" errors
+    try:
+        ocp_job.get()
+        log.debug(f"Job {job_name} found, starting completion wait")
+    except exceptions.CommandFailed as e:
+        # If job doesn't exist, raise specific ResourceNotFoundError
+        if "not found" in str(e).lower() or "notfound" in str(e).lower():
+            log.warning(f"Job {job_name} not found in namespace {namespace}")
+            raise exceptions.ResourceNotFoundError(
+                f"Job {job_name} not found in namespace {namespace}. "
+                "This may indicate the job was deleted, never created, or CSI-Addons is not configured."
+            ) from e
+        # For other command failures, re-raise
+        raise
+
     try:
         for live_job_d in TimeoutIterator(
             timeout=timeout, sleep=sleep_time, func=ocp_job.get

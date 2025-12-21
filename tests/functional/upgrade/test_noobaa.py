@@ -5,7 +5,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
-    aws_platform_required,
     red_squad,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
@@ -28,7 +27,6 @@ DOWNLOADED_OBJS = []
 
 @skipif_aws_creds_are_missing
 @skipif_managed_service
-@aws_platform_required
 @pre_upgrade
 @mcg
 @red_squad
@@ -84,7 +82,6 @@ def test_fill_bucket(
 
 @skipif_aws_creds_are_missing
 @skipif_managed_service
-@aws_platform_required
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
 @mcg
@@ -131,7 +128,6 @@ def test_noobaa_postupgrade(
     bucket.verify_health()
 
 
-@aws_platform_required
 @skipif_managed_service
 @pre_upgrade
 @mcg
@@ -144,7 +140,6 @@ def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
         assert bucket.get("mode") == BS_OPTIMAL
 
 
-@aws_platform_required
 @skipif_managed_service
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2181")

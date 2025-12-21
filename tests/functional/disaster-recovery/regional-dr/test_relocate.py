@@ -11,7 +11,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
-    verify_failover_relocate_status_ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -20,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 @rdr
-@acceptance
 @tier1
 @turquoise_squad
 class TestRelocate:
@@ -35,22 +33,26 @@ class TestRelocate:
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
                 False,
-                marks=pytest.mark.polarion_id("OCS-4425"),
+                marks=[acceptance, pytest.mark.polarion_id("OCS-4425")],
+                id="rbd-cli",
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM],
                 False,
-                marks=pytest.mark.polarion_id("OCS-4725"),
+                marks=[acceptance, pytest.mark.polarion_id("OCS-4725")],
+                id="cephfs-cli",
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
                 True,
                 marks=pytest.mark.polarion_id("OCS-4744"),
+                id="rbd-ui",
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM],
                 True,
                 marks=pytest.mark.polarion_id("OCS-6862"),
+                id="cephfs-ui",
             ),
         ],
     )
@@ -79,6 +81,18 @@ class TestRelocate:
             # Verify the creation of ReplicationDestination resources on secondary cluster
             config.switch_to_cluster_by_name(secondary_cluster_name)
             for wl in workloads:
+                # Verifying the existence of replication group destination and volume snapshots
+                if dr_helpers.is_cg_cephfs_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
                 dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
@@ -104,6 +118,7 @@ class TestRelocate:
                     policy_name=wl.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                     action=constants.ACTION_RELOCATE,
+                    workload_type=wl.workload_type,
                 )
             else:
                 # Relocate action via CLI
@@ -130,17 +145,42 @@ class TestRelocate:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
             for wl in workloads:
-                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                # Verify the deletion of Replication Group Destination
+                # resources on the old secondary cluster
                 config.switch_to_cluster_by_name(secondary_cluster_name)
                 dr_helpers.wait_for_replication_destinations_deletion(
                     wl.workload_namespace
                 )
-                # Verify the creation of ReplicationDestination resources on primary cluster
+
+                cg_enabled = dr_helpers.is_cg_cephfs_enabled()
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=False,
+                    )
+
+                # Verify the creation of Replication Group Destination resources on
+                # the current secondary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
+
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    # Verify the creation of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
                 dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
@@ -150,7 +190,4 @@ class TestRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if via_ui:
-            verify_failover_relocate_status_ui(
-                acm_obj, action=constants.ACTION_RELOCATE
-            )
+        # TODO: Refer PR 13305 and add the UI verification steps when DFBUGS-4314 is fixed

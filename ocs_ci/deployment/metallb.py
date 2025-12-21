@@ -34,7 +34,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_running_ocp_version,
 )
-from pkg_resources import parse_version
+from packaging.version import parse as parse_version
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,6 @@ class MetalLBInstaller:
         self.catalog_source_name = self.get_catsrc_name()
 
         if not self.catalog_source_created():
-            self.correct_idms()
 
             create_optional_operators_catalogsource_non_ga(force=True)
             metallb_catalog_source = CatalogSource(
@@ -521,6 +520,8 @@ class MetalLBInstaller:
             logger.info("MetalLB operator deployment is not requested")
             return True
 
+        self.correct_idms()
+
         logger.info(
             f"Deploying MetalLB and dependant resources to namespace: '{self.namespace_lb}'"
         )
@@ -840,7 +841,13 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
         exec_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
-        wait_for_machineconfigpool_status(node_type="all")
+        if config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
+            force_delete_pods = True
+        else:
+            force_delete_pods = False
+        wait_for_machineconfigpool_status(
+            node_type="all", force_delete_pods=force_delete_pods
+        )
         logger.info("IDMS applied successfully")
         return self.idms_brew_registry_exists()
 
@@ -853,6 +860,10 @@ class MetalLBInstaller:
         This resolves issue with metallb operator deployment installation when they stuck in ImagePullBackOff
 
         """
+        logger.info(
+            "Correcting IDMS Brew registry if it exists, to stop redirection to quay.io:443/acm-d"
+        )
+
         idms_obj = OCP(kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms")
         if idms_obj.check_resource_existence(
             timeout=self.timeout_check_resources_existence, should_exist=True
@@ -873,3 +884,5 @@ class MetalLBInstaller:
             logger.info("ACM Brew IDMS registry corrected successfully")
 
             wait_for_machineconfigpool_status(node_type="all")
+
+        logger.info("IDMS correction is done")

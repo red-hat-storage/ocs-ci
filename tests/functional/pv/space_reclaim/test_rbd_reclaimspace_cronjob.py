@@ -249,7 +249,7 @@ class TestRbdSpaceReclaim(ManageTest):
             pvc_obj.get()
             .get("metadata")
             .get("annotations")
-            .get("reclaimspace.csiaddons.openshift.io/schedule")
+            .get(constants.RECLAIMSPACE_SCHEDULE_ANNOTATION)
         )
 
         assert (

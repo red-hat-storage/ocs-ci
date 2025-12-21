@@ -6,6 +6,8 @@ LSO ( local storage operator ) deployment.
 import json
 import logging
 import tempfile
+import time
+from packaging.version import parse as parse_version
 
 from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
@@ -16,9 +18,11 @@ from ocs_ci.ocs.node import (
     get_compute_node_names,
     get_all_nodes,
     get_node_objs,
+    get_master_nodes,
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.operators import LocalStorageOperator
 from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -30,14 +34,6 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 
-IMAGE_SOURCE_POLICY = ocp.OCP(
-    kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
-)
-OPTIONAL_OPERATOR_CATALOG_SOURCE = ocp.OCP(
-    kind=constants.CATSRC,
-    namespace=constants.MARKETPLACE_NAMESPACE,
-    resource_name="optional-operators",
-)
 
 logger = logging.getLogger(__name__)
 
@@ -58,60 +54,8 @@ def setup_local_storage(storageclass):
 
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
-    ocp_ga_version = get_ocp_ga_version(ocp_version)
-    if not ocp_ga_version:
-        create_optional_operators_catalogsource_non_ga()
-    try:
-        get_lso_channel()
-    except CommandFailed as ex:
-        if "not found" in str(ex):
-            create_optional_operators_catalogsource_non_ga(force=True)
-        else:
-            raise
-
-    logger.info("Retrieving local-storage-operator data from yaml")
-    lso_data = list(
-        templating.load_yaml(constants.LOCAL_STORAGE_OPERATOR, multi_document=True)
-    )
-
-    # ensure namespace is correct
-    lso_namespace = config.ENV_DATA["local_storage_namespace"]
-    for data in lso_data:
-        if data["kind"] == "Namespace":
-            data["metadata"]["name"] = lso_namespace
-        else:
-            data["metadata"]["namespace"] = lso_namespace
-        if data["kind"] == "OperatorGroup":
-            data["spec"]["targetNamespaces"] = [lso_namespace]
-
-    # Update local-storage-operator subscription data with channel
-    for data in lso_data:
-        if data["kind"] == "Subscription":
-            data["spec"]["channel"] = get_lso_channel()
-        if not ocp_ga_version:
-            if data["kind"] == "Subscription":
-                data["spec"]["source"] = "optional-operators"
-
-    # Create temp yaml file and create local storage operator
-    logger.info(
-        "Creating temp yaml file with local-storage-operator data:\n %s", lso_data
-    )
-    lso_data_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="local_storage_operator", delete=False
-    )
-    if not IMAGE_SOURCE_POLICY.is_exist(resource_name=lso_data_yaml.name):
-        templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
-        with open(lso_data_yaml.name, "r") as f:
-            logger.info(f.read())
-        logger.info("Creating local-storage-operator")
-        run_cmd(f"oc create -f {lso_data_yaml.name}")
-
-    local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
-    assert local_storage_operator.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
-        timeout=600,
-    ), "Local storage operator did not reach running phase"
+    lso_operator = LocalStorageOperator(create_catalog=True)
+    lso_operator.deploy()
 
     # Add disks for vSphere/RHV platform
     platform = config.ENV_DATA.get("platform").lower()
@@ -128,18 +72,23 @@ def setup_local_storage(storageclass):
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
         lvd_data = templating.load_yaml(constants.LOCAL_VOLUME_DISCOVERY_YAML)
         # Set local-volume-discovery namespace
-        lvd_data["metadata"]["namespace"] = lso_namespace
+        lvd_data["metadata"]["namespace"] = lso_operator.namespace
 
-        worker_nodes = get_compute_node_names(no_replace=True)
+        storage_node_names = get_compute_node_names(no_replace=True)
+
+        if config.ENV_DATA.get(
+            "odf_provider_mode_deployment", False
+        ) and config.ENV_DATA.get("mark_masters_schedulable", True):
+            storage_node_names.extend(get_master_nodes())
 
         # Update local volume discovery data with Worker node Names
         logger.info(
             "Updating LocalVolumeDiscovery CR data with worker nodes Name: %s",
-            worker_nodes,
+            storage_node_names,
         )
         lvd_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
             "values"
-        ] = worker_nodes
+        ] = storage_node_names
         lvd_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="local_volume_discovery", delete=False
         )
@@ -168,11 +117,12 @@ def setup_local_storage(storageclass):
 
         # Update local volume set data with Worker node Names
         logger.info(
-            "Updating LocalVolumeSet CR data with worker nodes Name: %s", worker_nodes
+            "Updating LocalVolumeSet CR data with storage nodes Name: %s",
+            storage_node_names,
         )
         lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
             "values"
-        ] = worker_nodes
+        ] = storage_node_names
 
         # Set storage class
         logger.info(
@@ -199,7 +149,7 @@ def setup_local_storage(storageclass):
         lv_data = templating.load_yaml(constants.LOCAL_VOLUME_YAML)
 
         # Set local-volume namespace
-        lv_data["metadata"]["namespace"] = lso_namespace
+        lv_data["metadata"]["namespace"] = lso_operator.namespace
 
         # Set storage class
         logger.info(
@@ -242,10 +192,13 @@ def setup_local_storage(storageclass):
         verify_pvs_created(expected_pvs, storageclass)
 
 
+# TODO: remove this function
 def create_optional_operators_catalogsource_non_ga(force=False):
     """
     Creating optional operators CatalogSource and ImageContentSourcePolicy
-    for non-ga OCP.
+    for non-ga OCP. If platform is hci_baremetal then force delete static pods
+    to apply the changes and wait machines in machineconfig pool are ready.
+    If the platform is hci_baremetal we force-delete vm and hcp pods if wait for ready Machines is not successful.
 
     Args:
         force (bool): enable/disable lso catalog setup
@@ -266,20 +219,6 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             ocp_version_image = f"{image}:v{ocp_version}"
             operator["spec"]["image"] = ocp_version_image
 
-    # check if idms bre-registry exist, drop similar ImageContentSourcePolicy from optional_operators_data
-    # their content is almost identical, besides brew-registry has additional mirrors item in it
-    if OCP(
-        kind="ImageDigestMirrorSet", resource_name="brew-registry"
-    ).check_resource_existence(timeout=5, should_exist=True):
-        logger.info(
-            "ImageDigestMirrorSet 'brew-registry' already exists, "
-            "ImageContentSourcePolicy from applied optional_operators_data"
-        )
-        optional_operators_data = [
-            _dict
-            for _dict in optional_operators_data
-            if _dict.get("kind").lower() != "ImageContentSourcePolicy"
-        ]
     optional_operators_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="optional_operators", delete=False
     )
@@ -312,14 +251,23 @@ def create_optional_operators_catalogsource_non_ga(force=False):
     templating.dump_data_to_temp_yaml(
         optional_operators_data, optional_operators_yaml.name
     )
-    if not OPTIONAL_OPERATOR_CATALOG_SOURCE.is_exist():
+    optional_operator_catalog_source = ocp.OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        resource_name="optional-operators",
+    )
+    if not optional_operator_catalog_source.is_exist():
         with open(optional_operators_yaml.name, "r") as f:
             logger.info(f.read())
         logger.info(
             "Creating optional operators CatalogSource and ImageContentSourcePolicy"
         )
-        run_cmd(f"oc create -f {optional_operators_yaml.name}")
-    wait_for_machineconfigpool_status("all")
+        run_cmd(f"oc apply -f {optional_operators_yaml.name}")
+    if config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
+        force_delete_pods = True
+    else:
+        force_delete_pods = False
+    wait_for_machineconfigpool_status("all", force_delete_pods=force_delete_pods)
 
 
 def get_device_paths(worker_names):
@@ -455,11 +403,14 @@ def add_disk_for_vsphere_platform():
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
+            ssd_disk = True
+            if config.ENV_DATA.get("hdd_disks"):
+                ssd_disk = False
             logger.info(f"LSO Deployment type: {constants.VMDK}")
             vsphere_base.attach_disk(
                 config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
                 config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
-                ssd=True,
+                ssd=ssd_disk,
             )
 
         if lso_type == constants.DIRECTPATH:
@@ -498,7 +449,7 @@ def cleanup_nodes_for_lso_install():
     """
     Cleanup before installing lso
     """
-    from ocs_ci.deployment.baremetal import clean_disk
+    from ocs_ci.deployment.baremetal import clean_disks
 
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
@@ -510,9 +461,9 @@ def cleanup_nodes_for_lso_install():
         out = run_cmd(cmd)
         logger.info(out)
         logger.info(f"Mount data cleared from node, {node}")
-        for node_obj in node_objs:
-            clean_disk(node_obj)
-        logger.info("All nodes are wiped")
+    for node_obj in node_objs:
+        clean_disks(node_obj)
+    logger.info("All nodes are wiped")
 
 
 def catalog_source_created(catalogsource_name, namespace=None):
@@ -580,8 +531,6 @@ def lso_upgrade():
     Upgrade lso operator
 
     """
-    import time
-    from pkg_resources import parse_version
     from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
     lso_namespace = config.ENV_DATA["local_storage_namespace"]
@@ -616,6 +565,8 @@ def lso_upgrade():
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
         if not catalog_source_created(catalogsource_name=constants.OPTIONAL_OPERATORS):
+            # TODO: We need to update this upgrade function and probably move to new
+            # operators.py module and start using it here as well.
             create_optional_operators_catalogsource_non_ga()
         else:
             logger.info(f"Catalog Source {constants.OPTIONAL_OPERATORS} already exists")

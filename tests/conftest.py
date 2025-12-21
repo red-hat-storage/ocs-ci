@@ -16,6 +16,7 @@ from shutil import copyfile, rmtree
 from functools import partial
 from copy import deepcopy
 from subprocess import CalledProcessError
+from abc import ABC, abstractmethod
 
 import boto3
 from botocore.exceptions import ClientError
@@ -25,7 +26,7 @@ from collections import namedtuple
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import (
+from ocs_ci.deployment.hub_spoke import (
     hypershift_cluster_factory,
     get_autodistributed_storage_classes,
     skip_if_not_hcp_provider,
@@ -41,10 +42,15 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_resource_not_found_error_label,
     config_index,
 )
+from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs.constants import (
+    RECLAIMSPACE_SCHEDULE_ANNOTATION,
+    KEYROTATION_SCHEDULE_ANNOTATION,
+)
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
@@ -202,6 +208,9 @@ from ocs_ci.helpers.helpers import (
     create_network_fence_class,
     wait_for_resource_state,
     storagecluster_independent_check,
+    get_schedule_precedance_value_from_csi_addons_configmap,
+    set_schedule_precedence,
+    get_reclaimspacecronjob_for_pvc,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -225,8 +234,13 @@ from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
+from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
 log = logging.getLogger(__name__)
+
+odf_cli_runner = ODFCliRunner()
 
 
 class OCSLogFormatter(logging.Formatter):
@@ -379,6 +393,13 @@ def pytest_generate_tests(metafunc):
     """
     # For now we are only dealing with multicluster scenarios in this hook
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        if (
+            ocsci_config.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            # Skipping multicluster upgrade parametrization for Hosted Control Plane platforms
+            # Sequence and handling of OCP and ODF upgrades are different for Hosted Control Plane multicluster upgrade
+            return
         upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
         # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
         roles = None
@@ -628,7 +649,9 @@ def pytest_fixture_setup(fixturedef, request):
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", ""):
         if request.fixturenames.index(fixturedef.argname) == 0:
             for mark in request.node.iter_markers():
-                if mark.name == "config_index":
+                if isinstance(
+                    request.node, pytest.Function
+                ) and request.node.callspec.params.get("cluster_index"):
                     ocsci_config.switch_ctx(mark.args[0])
     _switch_context_helper(request)
 
@@ -1391,6 +1414,7 @@ def pvc_factory_fixture(request, project_factory):
         volume_mode=None,
         size_unit="Gi",
         wait_for_resource_status_timeout=90,
+        pvc_name=None,
     ):
         """
         Args:
@@ -1415,6 +1439,7 @@ def pvc_factory_fixture(request, project_factory):
             size_unit (str): PVC size unit, eg: "Mi"
             wait_for_resource_status_timeout (int): Wait in seconds until the
                 desired PVC status is reached.
+            pvc_name (str): The name of the PVC to create
 
         Returns:
             object: helpers.create_pvc instance.
@@ -1444,6 +1469,7 @@ def pvc_factory_fixture(request, project_factory):
 
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
+                pvc_name=pvc_name,
                 namespace=project.namespace,
                 size=pvc_size,
                 do_reload=False,
@@ -1470,6 +1496,22 @@ def pvc_factory_fixture(request, project_factory):
         _switch_context_helper(request)
 
         pv_objs = []
+
+        # Wait for volumes to detach before PVC deletion for encrypted volumes.
+        # For encrypted volumes, deleting PVCs too early can remove the secret
+        # before detachment, causing volume deletion errors.
+        non_deleted_instances = [
+            instance for instance in instances if not instance.is_deleted
+        ]
+        encrypted_pvcs = [
+            pvc for pvc in non_deleted_instances if helpers.is_pvc_encrypted(pvc)
+        ]
+        if encrypted_pvcs:
+            log.info(
+                f"Waiting for {len(encrypted_pvcs)} encrypted volume(s) to detach "
+                "before PVC deletion"
+            )
+            helpers.wait_for_volume_detachment(pvc_objs=encrypted_pvcs, timeout=180)
 
         # Get PV form PVC instances and delete PVCs
         for instance in instances:
@@ -1762,6 +1804,7 @@ def service_account_factory_fixture(request):
         """
         Delete the service account
         """
+        _switch_context_helper(request)
         for instance in instances:
             original_cluster = None
             if instance.ocp.cluster_context:
@@ -1859,6 +1902,8 @@ def deployment_pod_factory(request, pvc_factory, service_account_factory):
         """
         Delete dc pods
         """
+        _switch_context_helper(request)
+
         for instance in instances:
             delete_deployment_pods(instance)
 
@@ -1980,10 +2025,14 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
 
     node = request.node
 
-    # Skip health check if the test is marked as 'Resiliency'
-    if any(mark.name.lower() == "resiliency" for mark in node.iter_markers()):
-        log.info("Skipping Ceph health check for test marked with 'Resiliency'")
-        return
+    # Skip health check if the test is marked as 'Resiliency' or 'Chaos'
+    skip_markers = ["resiliency", "chaos"]
+    for mark in node.iter_markers():
+        if mark.name.lower() in skip_markers:
+            log.info(
+                f"Skipping Ceph health check for test marked with '{mark.name.title()}'"
+            )
+            return
 
     # ignore ceph health check for the TestFailurePropagator test cases
     if "FailurePropagator" in str(node.cls):
@@ -2008,6 +2057,8 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     ceph_health_check(
                         namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                         fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
                     )
                     log.info("Ceph health check passed at teardown!")
                     if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
@@ -2067,6 +2118,8 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     tries=10,
                     delay=15,
                     fix_ceph_health=True,
+                    update_jira=True,
+                    no_exception_if_jira_issue_updated=True,
                 )
                 if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                     if status:
@@ -2181,6 +2234,7 @@ def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
+    log.info(marks_to_ignore)
     # app labels of resources to be excluded for leftover check
     exclude_labels = [
         constants.must_gather_pod_label,
@@ -3120,62 +3174,64 @@ def nb_stress_cli_pod_fixture(request, scope_name):
         Pod(): Pod object representing stress cli pod
 
     """
-    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
-    # Create the service-ca configmap to be mounted upon pod creation
-    service_ca_data = templating.load_yaml(constants.STRESS_CLI_SERVICE_CA_YAML)
-    resource_type = scope_name or "caconfigmap"
-    service_ca_configmap_name = create_unique_resource_name(
-        constants.STRESSCLI_SERVICE_CA_CM_NAME, resource_type
-    )
-    service_ca_data["metadata"]["name"] = service_ca_configmap_name
-    service_ca_data["metadata"]["namespace"] = namespace
-    s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
-    service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        # Create the service-ca configmap to be mounted upon pod creation
+        service_ca_data = templating.load_yaml(constants.STRESS_CLI_SERVICE_CA_YAML)
+        resource_type = scope_name or "caconfigmap"
+        service_ca_configmap_name = create_unique_resource_name(
+            constants.STRESSCLI_SERVICE_CA_CM_NAME, resource_type
+        )
+        service_ca_data["metadata"]["name"] = service_ca_configmap_name
+        service_ca_data["metadata"]["namespace"] = namespace
+        s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
+        service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
 
-    log.info("Trying to create the Stress CLI service CA")
-    service_ca_configmap = create_resource(**service_ca_data)
-    OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
-        resource_name=service_ca_configmap.name, column="DATA", condition="1"
-    )
-
-    log.info("Creating the Stress CLI StatefulSet")
-    stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
-    stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
-        "name"
-    ] = service_ca_configmap_name
-    stress_cli_sts_dict["metadata"]["namespace"] = namespace
-    update_container_with_mirrored_image(stress_cli_sts_dict)
-    update_container_with_proxy_env(stress_cli_sts_dict)
-    stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
-
-    log.info("Verifying the AWS CLI StatefulSet is running")
-    assert stress_cli_sts_obj, "Failed to create S3CLI STS"
-
-    wait_for_pods_by_label_count(
-        constants.STRESS_CLI_APP_LABEL, expected_count=2, namespace=namespace
-    )
-    stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
-        lambda: [
-            Pod(**pod_info)
-            for pod_info in get_pods_having_label(
-                constants.STRESS_CLI_APP_LABEL, namespace
-            )
-        ]
-    )()
-    for pod_obj in stress_cli_pod_objs:
-        wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
-
-        pod_obj.exec_cmd_on_pod(
-            f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+        log.info("Trying to create the Stress CLI service CA")
+        service_ca_configmap = create_resource(**service_ca_data)
+        OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
+            resource_name=service_ca_configmap.name, column="DATA", condition="1"
         )
 
-        if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
-            "rgw_secure"
-        ):
-            log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
+        log.info("Creating the Stress CLI StatefulSet")
+        stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
+        stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
+            "name"
+        ] = service_ca_configmap_name
+        stress_cli_sts_dict["metadata"]["namespace"] = namespace
+        update_container_with_mirrored_image(stress_cli_sts_dict)
+        update_container_with_proxy_env(stress_cli_sts_dict)
+        stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
+
+        log.info("Verifying the AWS CLI StatefulSet is running")
+        assert stress_cli_sts_obj, "Failed to create S3CLI STS"
+
+        wait_for_pods_by_label_count(
+            constants.STRESS_CLI_APP_LABEL, expected_count=2, namespace=namespace
+        )
+        stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
+            lambda: [
+                Pod(**pod_info)
+                for pod_info in get_pods_having_label(
+                    constants.STRESS_CLI_APP_LABEL, namespace
+                )
+            ]
+        )()
+        for pod_obj in stress_cli_pod_objs:
+            wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
+
             pod_obj.exec_cmd_on_pod(
-                f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+                f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
             )
+
+            if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
+                "rgw_secure"
+            ):
+                log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
+                pod_obj.exec_cmd_on_pod(
+                    f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> "
+                    f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
+                )
 
     def cleanup():
         """
@@ -3374,7 +3430,11 @@ def bucket_factory_session(request, bucket_class_factory_session, mcg_obj_sessio
 
 
 def bucket_factory_fixture(
-    request, bucket_class_factory=None, mcg_obj=None, rgw_obj=None
+    request,
+    bucket_class_factory=None,
+    mcg_obj=None,
+    rgw_obj=None,
+    cluster_context=ocsci_config.RunWithProviderConfigContextIfAvailable,
 ):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
@@ -3390,6 +3450,8 @@ def bucket_factory_fixture(
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
             credentials
         rgw_obj (RGW): An RGW object
+        cluster_context (object): context object in which the bucket will be created.
+            Default is provider context.
 
     """
     created_buckets = []
@@ -3421,55 +3483,57 @@ def bucket_factory_fixture(
                 buckets
 
         """
-        if isinstance(bucketclass, dict):
-            interface = bucketclass["interface"]
+        with cluster_context():
+            if isinstance(bucketclass, dict):
+                interface = bucketclass["interface"]
 
-        current_call_created_buckets = []
-        if interface.lower() not in BUCKET_MAP:
-            raise RuntimeError(
-                f"Invalid interface type received: {interface}. "
-                f'available types: {", ".join(BUCKET_MAP.keys())}'
+            current_call_created_buckets = []
+            if interface.lower() not in BUCKET_MAP:
+                raise RuntimeError(
+                    f"Invalid interface type received: {interface}. "
+                    f'available types: {", ".join(BUCKET_MAP.keys())}'
+                )
+
+            bucketclass = (
+                bucketclass
+                if bucketclass is None or isinstance(bucketclass, BucketClass)
+                else bucket_class_factory(bucketclass)
             )
 
-        bucketclass = (
-            bucketclass
-            if bucketclass is None or isinstance(bucketclass, BucketClass)
-            else bucket_class_factory(bucketclass)
-        )
-
-        for _ in range(amount):
-            bucket_name = helpers.create_unique_resource_name(
-                resource_description="bucket", resource_type=interface.lower()
-            )
-            created_bucket = BUCKET_MAP[interface.lower()](
-                bucket_name,
-                mcg=mcg_obj,
-                rgw=rgw_obj,
-                bucketclass=bucketclass,
-                replication_policy=replication_policy,
-                *args,
-                **kwargs,
-            )
-            current_call_created_buckets.append(created_bucket)
-            created_buckets.append(created_bucket)
-            if verify_health:
-                created_bucket.verify_health(
-                    timeout=kwargs.pop("timeout") if "timeout" in kwargs else 180,
+            for _ in range(amount):
+                bucket_name = helpers.create_unique_resource_name(
+                    resource_description="bucket", resource_type=interface.lower()
+                )
+                created_bucket = BUCKET_MAP[interface.lower()](
+                    bucket_name,
+                    mcg=mcg_obj,
+                    rgw=rgw_obj,
+                    bucketclass=bucketclass,
+                    replication_policy=replication_policy,
+                    *args,
                     **kwargs,
                 )
+                current_call_created_buckets.append(created_bucket)
+                created_buckets.append(created_bucket)
+                if verify_health:
+                    created_bucket.verify_health(
+                        timeout=kwargs.pop("timeout") if "timeout" in kwargs else 180,
+                        **kwargs,
+                    )
 
         return current_call_created_buckets
 
     def bucket_cleanup():
-        for bucket in created_buckets:
-            log.info(f"Cleaning up bucket {bucket.name}")
-            try:
-                bucket.delete()
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "NoSuchBucket":
-                    log.warning(f"{bucket.name} could not be found in cleanup")
-                else:
-                    raise
+        with cluster_context():
+            for bucket in created_buckets:
+                log.info(f"Cleaning up bucket {bucket.name}")
+                try:
+                    bucket.delete()
+                except ClientError as e:
+                    if e.response["Error"]["Code"] == "NoSuchBucket":
+                        log.warning(f"{bucket.name} could not be found in cleanup")
+                    else:
+                        raise
 
     request.addfinalizer(bucket_cleanup)
 
@@ -3738,69 +3802,132 @@ def install_logging(request):
     log.info("Configuring Openshift-logging")
 
     # Gets OCP version to align logging version to OCP version
-    ocp_version = version.get_semantic_ocp_version_from_config()
-
-    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
+    package_manifest = PackageManifest(
+        resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
+        selector="catalog=redhat-operators",
+    )
+    logging_channel = package_manifest.get_default_channel()
 
     # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(
         yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
-
-    # Creates an operator-group for elasticsearch
-    assert ocp_logging_obj.create_elasticsearch_operator_group(
+    # Creates an operator-group for lokistack
+    assert ocp_logging_obj.create_lokistack_operator_group(
         yaml_file=constants.EO_OG_YAML,
         resource_name="openshift-operators-redhat",
         skip_resource_exists=rosa_hcp_depl,
     )
-
-    # Set RBAC policy on the project
-    assert ocp_logging_obj.set_rbac(
-        yaml_file=constants.EO_RBAC_YAML, resource_name="prometheus-k8s"
-    )
-
-    # Creates subscription for elastic-search operator
-    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    # Creates subscription for lokistack operator
+    subscription_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SUB_YAML)
     subscription_yaml["spec"]["channel"] = logging_channel
     helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_elasticsearch_subscription()
-
-    # Checks for Elasticsearch operator
-    elastic_search_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
-    )
-    elastic_search_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
-    )
+    assert ocp_logging_obj.get_lokistack_subscription()
 
     # Creates a namespace openshift-logging
     ocp_logging_obj.create_namespace(
         yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
+    # Create RGW obc
+    obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
+
+    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+        obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
+    else:
+        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
+
+    helpers.create_resource(**obc_yaml)
+
+    ocp_logging_obj.get_obc()
+
+    # Creating secret
+    sample = TimeoutSampler(
+        timeout=180,
+        sleep=20,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
+            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
+        ),
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to get configmap")
+
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
+
+    access_key_cmd = (
+        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
+        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_ACCESS_KEY_ID}}'"
+    )
+    access_key = exec_cmd(access_key_cmd)
+    decoded1 = base64.b64decode(access_key.stdout).decode("utf-8")
+
+    secret_key_cmd = (
+        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
+        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_SECRET_ACCESS_KEY}}'"
+    )
+    secret_key = exec_cmd(secret_key_cmd)
+    decoded2 = base64.b64decode(secret_key.stdout).decode("utf-8")
+
+    secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
+    secret_yaml["stringData"]["access_key_id"] = decoded1
+    secret_yaml["stringData"]["access_key_secret"] = decoded2
+    secret_yaml["stringData"]["bucketnames"] = cm_dict["data"]["BUCKET_NAME"]
+    endpoint = cm_dict["data"]["BUCKET_HOST"]
+    secret_yaml["stringData"]["endpoint"] = f"https://{endpoint}:80"
+    helpers.create_resource(**secret_yaml)
+    assert ocp_logging_obj.get_secret_to_lokistack()
+
+    # creates lokistack
+    # sleeping for few seconds to avoid following error
+    # Internal error occurred: failed calling webhook
+    ocp_logging_obj.create_lokistack(
+        yaml_file=constants.LOKISTACK_YAML, skip_resource_exists=rosa_hcp_depl
+    )
+    log.info("Loki operator is installed successfuly")
 
     # Creates an operator-group for cluster-logging
-    assert ocp_logging_obj.create_clusterlogging_operator_group(
+    ocp_logging_obj.create_clusterlogging_operator_group(
         yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
     )
-
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
     cl_subscription["spec"]["channel"] = logging_channel
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
-    # Creates instance in namespace openshift-logging
-    cluster_logging_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    # creates a service account to be used by the log collector
+    ocp_logging_obj.setup_sa_permissions()
+
+    # Creates ClusterLogForwarder
+    ocp_logging_obj.create_clusterlogforwarder(
+        yaml_file=constants.CLF_YAML, skip_resource_exists=rosa_hcp_depl
     )
-    cluster_logging_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
+    log.info("Openshift Logging operator is installed successfully")
+
+    # Creates namespace for openshift-cluster-observability-operator
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
-    if cluster_logging_operator:
-        log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-        ocp_logging_obj.create_instance()
-    else:
-        log.error("The cluster logging operator pod is not created")
+    # Creates OperatorGroup for openshift-cluster-observability-operator
+    ocp_logging_obj.create_clusterobservability_operator_group(
+        yaml_file=constants.CO_OG_YAML,
+        resource_name=constants.CLUSTER_OBSERVABILITY_OPERATOR,
+        skip_resource_exists=rosa_hcp_depl,
+    )
+    # Creates subscription for openshift-cluster-observability-operator
+    co_subscription_yaml = templating.load_yaml(constants.CO_SUB_YAML)
+    helpers.create_resource(**co_subscription_yaml)
+    assert ocp_logging_obj.get_cluster_observability_subscription()
+
+    # Creates UI Plugin for openshift-cluster-observability-operator
+    ocp_logging_obj.create_UI_Plugin(
+        yaml_file=constants.CO_UI_PLUGIN_YAML, resource_name="logging"
+    )
+    log.info("Cluster Observability operator is installed successfully with UIPlugin")
 
 
 @pytest.fixture
@@ -4989,8 +5116,16 @@ def collect_logs_fixture(request):
                 if not skip_rpm_go_version_collection:
                     utils.collect_pod_container_rpm_package("testcases")
             except Exception as ex:
-                failure_in_mg.append(("rpm_package_info", ex))
-                log.error(f"Failure in collecting RPM package info! Exception: {ex}")
+                # If pod is killed/restarted during this operation, skip if pod not found error is shown
+                if "Error is Error from server (NotFound)" in str(ex):
+                    log.info(
+                        f"One of the pod was not found, assuming it was already deleted. refer {ex}"
+                    )
+                else:
+                    failure_in_mg.append(("rpm_package_info", ex))
+                    log.error(
+                        f"Failure in collecting RPM package info! Exception: {ex}"
+                    )
             if failure_in_mg:
                 if config.REPORTING.get("dont_fail_on_collect_logs"):
                     exception_errors = [str(ex) for ex in failure_in_mg]
@@ -5543,6 +5678,7 @@ def use_client_proxy(request):
         )
         os.environ["http_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
         os.environ["https_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
+        os.environ["no_proxy"] = ",".join(constants.NO_PROXY_LOCALHOST)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -5553,6 +5689,21 @@ def load_cluster_info_file(request):
     example related to disconnected cluster)
     """
     load_cluster_info()
+
+
+@pytest.fixture(scope="module")
+def pv_encryption_kms_setup_factory_module(request):
+    """
+    Create vault resources and setup csi-kms-connection-details configMap
+    """
+
+    # set the KMS provider based on KMS_PROVIDER env value.
+    if ocsci_config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+        return pv_encryption_hpcs_setup_factory(request)
+    elif ocsci_config.ENV_DATA["KMS_PROVIDER"] == constants.AZURE_KV_PROVIDER_NAME:
+        return pv_encryption_azure_kv_setup_factory(request)
+    else:
+        return pv_encryption_vault_setup_factory(request)
 
 
 @pytest.fixture(scope="function")
@@ -6264,7 +6415,11 @@ def mcg_account_factory(request, mcg_obj_session):
     return mcg_account_factory_fixture(request, mcg_obj_session)
 
 
-def mcg_account_factory_fixture(request, mcg_obj_session):
+def mcg_account_factory_fixture(
+    request,
+    mcg_obj_session,
+    cluster_context=ocsci_config.RunWithProviderConfigContextIfAvailable,
+):
     created_accounts = []
 
     def mcg_account_factory_implementation(
@@ -6305,38 +6460,39 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         if gid == -1:
             gid = random.randint(1000, 10000)
 
-        # Build the mcg-cli command for creating an account
-        cli_cmd = (
-            f"account create {name} "
-            f"--allow_bucket_create={allow_bucket_create} "
-            f"--default_resource {default_resource} "
-            f"--gid {gid} "
-            f"--new_buckets_path {new_buckets_path} "
-            f"--nsfs_account_config={nsfs_account_config} "
-            f"--nsfs_only={nsfs_only} "
-            f"--uid {uid} "
-        )
+        with cluster_context():
+            # Build the mcg-cli command for creating an account
+            cli_cmd = (
+                f"account create {name} "
+                f"--allow_bucket_create={allow_bucket_create} "
+                f"--default_resource {default_resource} "
+                f"--gid {gid} "
+                f"--new_buckets_path {new_buckets_path} "
+                f"--nsfs_account_config={nsfs_account_config} "
+                f"--nsfs_only={nsfs_only} "
+                f"--uid {uid} "
+            )
 
-        # Create the account
-        acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
-        created_accounts.append(name)
+            # Create the account
+            acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
+            created_accounts.append(name)
 
-        # Verify that the account was created successfuly and that the response contains the needed data
-        assert "access_key" in str(acc_creation_process_output).lower(), (
-            "Did not find access_key in account creation response. Response:"
-            f" {str(acc_creation_process_output)}"
-        )
+            # Verify that the account was created successfuly and that the response contains the needed data
+            assert "access_key" in str(acc_creation_process_output).lower(), (
+                "Did not find access_key in account creation response. Response:"
+                f" {str(acc_creation_process_output)}"
+            )
 
-        # Prepare the credentials dict
-        acc_secret_dict = OCP(
-            kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-        ).get(f"noobaa-account-{name}")
-        access_key_id = base64.b64decode(
-            acc_secret_dict["data"]["AWS_ACCESS_KEY_ID"]
-        ).decode()
-        access_key = base64.b64decode(
-            acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"]
-        ).decode()
+            # Prepare the credentials dict
+            acc_secret_dict = OCP(
+                kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+            ).get(f"noobaa-account-{name}")
+            access_key_id = base64.b64decode(
+                acc_secret_dict["data"]["AWS_ACCESS_KEY_ID"]
+            ).decode()
+            access_key = base64.b64decode(
+                acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"]
+            ).decode()
 
         return {
             "access_key_id": access_key_id,
@@ -6346,12 +6502,13 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         }
 
     def mcg_account_factory_cleanup():
-        for acc_name in created_accounts:
-            log.info(f"Deleting MCG account {acc_name}")
-            deletion_process_output = mcg_obj_session.exec_mcg_cmd(
-                f"account delete {acc_name}"
-            )
-            assert "Deleted" in str(deletion_process_output)
+        with cluster_context():
+            for acc_name in created_accounts:
+                log.info(f"Deleting MCG account {acc_name}")
+                deletion_process_output = mcg_obj_session.exec_mcg_cmd(
+                    f"account delete {acc_name}"
+                )
+                assert "Deleted" in str(deletion_process_output)
 
     request.addfinalizer(mcg_account_factory_cleanup)
     return mcg_account_factory_implementation
@@ -6442,6 +6599,7 @@ def nsfs_bucket_factory_fixture(
             name=f"nsfs-integrity-test-{random.randrange(100)}",
             default_resource=nsfs_obj.nss.name,
             nsfs_account_config=True,
+            nsfs_only=nsfs_obj.nsfs_only,
             gid=nsfs_obj.gid,
             uid=nsfs_obj.uid,
             ssl=False,
@@ -7452,7 +7610,7 @@ def discovered_apps_dr_workload(request):
         multi_ns_list = []
         # TODO: When cephfs is ready
         if multi_ns and kubeobject <= 1:
-            raise UnsupportedWorkloadError("kubeobject count should be more then 2")
+            raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
@@ -7527,10 +7685,12 @@ def discovered_apps_dr_workload(request):
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
-                    workload_namespace=workload_details["workload_namespace"],
+                    workload_namespace=workload_details["workload_namespace"]
+                    + "-recipe-ns",
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
-                    ],
+                    ]
+                    + "-recipe",
                     discovered_apps_pvc_selector_key=workload_details[
                         "dr_workload_app_pvc_selector_key"
                     ],
@@ -7559,9 +7719,11 @@ def discovered_apps_dr_workload(request):
                         "dr_workload_app_recipe_name_selector_value"
                     ],
                 )
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload(recipe=True)
+
+                instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(recipe=True)
+
         return instances
 
     def teardown():
@@ -7585,7 +7747,7 @@ def discovered_apps_dr_workload(request):
 
 
 @pytest.fixture()
-def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
+def discovered_apps_dr_workload_cnv(request):
     """
     Deploys CNV Discovered App based workload for DR setup
 
@@ -7617,8 +7779,6 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         if shared_drpc_protection:
             workload_key = "dr_cnv_discovered_apps_shared"
         if custom_sc:
-            log.info("Calling fixture to create Custom Pool/SC..")
-            cnv_custom_storage_class()
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
@@ -7659,7 +7819,7 @@ def discovered_apps_dr_workload_cnv(request, cnv_custom_storage_class):
         return instances
 
     def teardown():
-        if request.node.name == "test_acm_kubevirt_using_shared_protection":
+        if "[shared]" in request.node.nodeid:
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
         else:
@@ -7795,11 +7955,30 @@ def operator_pods():
     return operator_pods
 
 
+@pytest.fixture(scope="class")
+def multi_cnv_workload_class(request, storageclass_factory_class, cnv_workload_class):
+    """
+    Class scoped fixture to deploy multiple CNV workload
+
+    """
+    return multi_cnv_workload_factory(
+        request, storageclass_factory_class, cnv_workload_class
+    )
+
+
 @pytest.fixture()
 def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
+    Class scoped fixture to deploy multiple CNV workload
+
+    """
+    return multi_cnv_workload_factory(request, storageclass_factory, cnv_workload)
+
+
+def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
+    """
     Fixture to create virtual machines (VMs) with specific configurations.
-    The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
+    The `pv_encryption_kms_setup_factory_module` fixture is only initialized if `encrypted=True`.
     This fixture sets up multiple VMs with varying storage configurations as specified
     in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
     access mode, and the storage class to be used.
@@ -7830,17 +8009,14 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
         namespace = (
             namespace if namespace else create_unique_resource_name("vm", "namespace")
         )
-
-        kms = None
         if encrypted:
             # Setup csi-kms-connection-details configmap
             log.info("Setting up csi-kms-connection-details configmap")
             pv_encryption_kms_setup_factory = request.getfixturevalue(
-                "pv_encryption_kms_setup_factory"
+                "pv_encryption_kms_setup_factory_module"
             )
             kms = pv_encryption_kms_setup_factory(kv_version="v2")
             log.info("csi-kms-connection-details setup successful")
-
         try:
             kms_id = kms.kmsid
         except (NameError, AttributeError):
@@ -7895,7 +8071,6 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
                     access_mode=vm_config["access_mode"],
                     storageclass=storageclass,
                     pvc_size="30Gi",
-                    source_url=constants.CNV_FEDORA_SOURCE,
                     namespace=namespace,
                 )
 
@@ -8146,7 +8321,11 @@ def ceph_objectstore_tool_fixture(request):
     def teardown():
         deployment_in_maintenance = cot_obj.deployment_in_maintenance
         for deployment_name in list(deployment_in_maintenance):
-            cot_obj.maintenance_stop(deployment_name=deployment_name)
+            try:
+                log.info(f"Cleaning up maintenance mode for {deployment_name}")
+                odf_cli_runner.run_maintenance_stop(deployment_name=deployment_name)
+            except Exception as e:
+                log.warning(f"Failed to stop maintenance for {deployment_name}: {e}")
 
     request.addfinalizer(teardown)
 
@@ -8170,37 +8349,65 @@ def ceph_monstore_tool_fixture(request):
     def teardown():
         deployment_in_maintenance = mot_obj.deployment_in_maintenance
         for deployment_name in list(deployment_in_maintenance):
-            mot_obj.maintenance_stop(deployment_name=deployment_name)
+            try:
+                log.info(f"Cleaning up maintenance mode for {deployment_name}")
+                odf_cli_runner.run_maintenance_stop(deployment_name=deployment_name)
+            except Exception as e:
+                log.warning(f"Failed to stop maintenance for {deployment_name}: {e}")
 
     request.addfinalizer(teardown)
 
     return mot_obj
 
 
-@pytest.fixture()
+@pytest.fixture(scope="class")
+def change_the_noobaa_log_level_class(request):
+    """
+    Class-scoped fixture for changing the noobaa log level
+    """
+    return change_the_noobaa_log_level_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def change_the_noobaa_log_level(request):
+    """
+    Function-scoped fixture for changing the noobaa log level
+    """
+    return change_the_noobaa_log_level_fixture(request)
+
+
+def change_the_noobaa_log_level_fixture(request):
     """
     This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
     """
-    noobaa_cm = OCP(
-        kind="configmap",
-        resource_name="noobaa-config",
-        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-    )
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        noobaa_cm = OCP(
+            kind="configmap",
+            resource_name="noobaa-config",
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        )
 
     def factory(level="all"):
-        assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
-        noobaa_cm.patch(
-            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
-        )
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
+            noobaa_cm.patch(
+                params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}',
+                format_type="merge",
+            )
+            wait_for_pods_to_be_running(
+                pod_names=[pod.name for pod in get_noobaa_pods()]
+            )
 
     def finalizer():
-        level = "default_level"
-        noobaa_cm.patch(
-            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
-        )
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            level = "default_level"
+            noobaa_cm.patch(
+                params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}',
+                format_type="merge",
+            )
+            wait_for_pods_to_be_running(
+                pod_names=[pod.name for pod in get_noobaa_pods()]
+            )
 
     request.addfinalizer(finalizer)
     return factory
@@ -9339,6 +9546,7 @@ def benchmark_workload_storageutilization(request):
         is_completed=True,
         numjobs=1,
         iodepth=16,
+        max_servers=20,
     ):
         """
         Setup of benchmark fio
@@ -9355,6 +9563,7 @@ def benchmark_workload_storageutilization(request):
             is_completed (bool): if True, verify the benchmark operator moved to completed state.
             numjobs (int): Number of threads per job
             iodepth (int): I/O queue depth
+            max_servers (int): Maximum number of fio server pods to deploy.
 
         Returns:
             BenchmarkOperatorFIO: The Benchmark operator FIO object
@@ -9365,6 +9574,7 @@ def benchmark_workload_storageutilization(request):
         size = retry(CommandFailed, tries=6, delay=20, backoff=1)(get_file_size)(
             target_percentage
         )
+        log.info(f"Total size = {size}")
         benchmark_obj = BenchmarkOperatorFIO()
         benchmark_obj.setup_benchmark_fio(
             total_size=size,
@@ -9377,6 +9587,7 @@ def benchmark_workload_storageutilization(request):
             use_kustomize_build=use_kustomize_build,
             numjobs=numjobs,
             iodepth=iodepth,
+            max_servers=max_servers,
         )
         benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 
@@ -9776,15 +9987,18 @@ def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
         # Label the default noobaa PV with a custom label
         # to allow ignoring false leftover errors
         nonlocal default_pvc_labeled
-        if not is_custom_pvc_in_use and not default_pvc_labeled:
-            default_pvc = get_pvc_objs(
+        if not default_pvc_labeled and not use_custom_logs_pvc:
+            get_pvc_results = get_pvc_objs(
                 pvc_names=[constants.DEFAULT_MCG_BUCKET_LOGS_PVC]
-            )[0]
-            default_pvc.add_label(constants.CUSTOM_MCG_LABEL)
-            pv_ocp_obj.add_label(
-                resource_name=default_pvc.backed_pv, label=constants.CUSTOM_MCG_LABEL
             )
-            default_pvc_labeled = True
+            if get_pvc_results:
+                default_pvc = get_pvc_results[0]
+                default_pvc.add_label(constants.CUSTOM_MCG_LABEL)
+                pv_ocp_obj.add_label(
+                    resource_name=default_pvc.backed_pv,
+                    label=constants.CUSTOM_MCG_LABEL,
+                )
+                default_pvc_labeled = True
 
     def cleanup():
         logs_manager.disable_bucket_logging_on_cr()
@@ -10389,3 +10603,507 @@ def distribute_storage_classes_to_all_consumers():
 def disable_debug_logs():
     log.info("Disabling debug logs for the current session")
     logging.disable(logging.DEBUG)
+
+
+@pytest.fixture(scope="session")
+def enable_reclaimspace_on_storageclass():
+    """
+    Enable reclaim space on storage class
+    """
+
+    def factory(sc_obj):
+        """
+        Enable reclaim space annotation on storage class.
+
+        Args:
+            sc_obj: StorageClass object to annotate
+        """
+        sc_obj.annotate("reclaimspace.csiaddons.openshift.io/schedule=@weekly")
+
+    return factory
+
+
+class BaseStorageClassPrecedenceTest(ABC):
+    """
+    Base class for storage class precedence tests.
+    Provides common functionality for ReclaimSpace and KeyRotation tests.
+    """
+
+    # Constants for storage class precedence tests
+    DEFAULT_PVC_SIZE_GIB = 5
+    DEFAULT_TIMEOUT = 300
+    DEFAULT_NUM_PVCS = 2
+    STORAGECLASS_PRECEDENCE = "storageclass"
+
+    def _ensure_pvcs_bound(self, pvcs, timeout=None):
+        """
+        Ensure all provided PVCs reach the Bound state.
+
+        Args:
+            pvcs: List of PVC objects to check
+            timeout: Timeout in seconds for waiting
+
+        Raises:
+            AssertionError: If any PVC fails to reach Bound state
+        """
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
+
+        log.info(
+            f"Waiting for {len(pvcs)} PVCs to reach Bound state (timeout: {timeout}s)"
+        )
+
+        for i, pvc_obj in enumerate(pvcs, 1):
+            log.debug(f"Checking PVC {i}/{len(pvcs)}: {pvc_obj.name}")
+            assert pvc_obj.ocp.wait_for_resource(
+                condition=constants.STATUS_BOUND,
+                resource_name=pvc_obj.name,
+                timeout=timeout,
+            ), f"PVC {pvc_obj.name} did not reach Bound state within {timeout}s"
+
+        log.info(f"All {len(pvcs)} PVCs successfully reached Bound state")
+
+    def _create_pvc_batch(
+        self,
+        multi_pvc_factory,
+        interface,
+        access_modes,
+        size_gib,
+        num_of_pvc,
+        storageclass,
+        project=None,
+        raw_block=False,
+    ):
+        """
+        Create a batch of PVCs with common parameters.
+
+        Args:
+            multi_pvc_factory: Factory function for creating PVCs
+            interface: Storage interface (e.g., CEPHBLOCKPOOL)
+            access_modes: List of access modes
+            size_gib: Size in GiB
+            num_of_pvc: Number of PVCs to create
+            storageclass: StorageClass object
+            project: Project object (optional)
+            raw_block: Whether to use raw block volumes
+
+        Returns:
+            List of created PVC objects
+        """
+        pvc_type = "Block" if raw_block else "Filesystem"
+        log.info(f"Creating {num_of_pvc} RBD {pvc_type} PVCs (size: {size_gib}GiB)")
+
+        factory_kwargs = {
+            "interface": interface,
+            "access_modes": access_modes,
+            "size": size_gib,
+            "num_of_pvc": num_of_pvc,
+            "storageclass": storageclass,
+        }
+
+        if project is not None:
+            factory_kwargs["project"] = project
+
+        return multi_pvc_factory(**factory_kwargs)
+
+    def _create_pods_for_pvcs(
+        self,
+        pod_factory,
+        pvcs,
+        interface,
+        raw_block=False,
+    ):
+        """
+        Create pods for a list of PVCs.
+
+        Args:
+            pod_factory: Factory function for creating pods
+            pvcs: List of PVC objects
+            interface: Storage interface
+            raw_block: Whether PVCs use raw block volumes
+
+        Returns:
+            List of created pod objects
+        """
+        pvc_type = "Block" if raw_block else "Filesystem"
+        log.info(f"Creating {len(pvcs)} pods for RBD {pvc_type} PVCs")
+
+        pods = []
+        for i, pvc_obj in enumerate(pvcs, 1):
+            log.debug(f"Creating pod {i}/{len(pvcs)} for PVC: {pvc_obj.name}")
+
+            pod_kwargs = {
+                "interface": interface,
+                "pvc": pvc_obj,
+                "status": constants.STATUS_RUNNING,
+            }
+
+            if raw_block:
+                pod_kwargs["raw_block_pv"] = True
+
+            pods.append(pod_factory(**pod_kwargs))
+
+        log.info(f"Successfully created {len(pods)} pods")
+        return pods
+
+    def _prepare_pvcs_and_workloads(
+        self,
+        multi_pvc_factory,
+        pod_factory,
+        sc_rbd,
+        size_gib=None,
+        proj_obj=None,
+    ):
+        """
+        Create RBD PVCs (Filesystem and Block) and attach pods to them.
+
+        Args:
+            multi_pvc_factory: Factory to create multiple PVCs
+            pod_factory: Factory to create pods
+            sc_rbd: RBD StorageClass object
+            size_gib: Size of PVCs in GiB
+            proj_obj: Project object (required for encrypted storage)
+        """
+        if size_gib is None:
+            size_gib = self.DEFAULT_PVC_SIZE_GIB
+
+        log.info("Starting PVC and workload preparation")
+
+        # Initialize attributes if they don't exist (for pytest compatibility)
+        if not hasattr(self, "pod_objs"):
+            self.pod_objs = []
+        if not hasattr(self, "rbd_blk_pvcs"):
+            self.rbd_blk_pvcs = []
+
+        self.pod_objs = []
+
+        # Create RBD Filesystem PVCs (RWO)
+        rbd_fs_pvcs = self._create_pvc_batch(
+            multi_pvc_factory=multi_pvc_factory,
+            interface=constants.CEPHBLOCKPOOL,
+            access_modes=[constants.ACCESS_MODE_RWO],
+            size_gib=size_gib,
+            num_of_pvc=self.DEFAULT_NUM_PVCS,
+            storageclass=sc_rbd,
+            project=proj_obj,
+        )
+        self._ensure_pvcs_bound(rbd_fs_pvcs)
+
+        # Create pods for filesystem PVCs
+        fs_pods = self._create_pods_for_pvcs(
+            pod_factory=pod_factory,
+            pvcs=rbd_fs_pvcs,
+            interface=constants.CEPHBLOCKPOOL,
+        )
+        self.pod_objs.extend(fs_pods)
+
+        # Create RBD Block PVCs (RWO)
+        self.rbd_blk_pvcs = self._create_pvc_batch(
+            multi_pvc_factory=multi_pvc_factory,
+            interface=constants.CEPHBLOCKPOOL,
+            access_modes=[f"{constants.ACCESS_MODE_RWO}-Block"],
+            size_gib=size_gib,
+            num_of_pvc=self.DEFAULT_NUM_PVCS,
+            storageclass=sc_rbd,
+            project=proj_obj,
+            raw_block=True,
+        )
+        self._ensure_pvcs_bound(self.rbd_blk_pvcs)
+
+        # Create pods for block PVCs
+        block_pods = self._create_pods_for_pvcs(
+            pod_factory=pod_factory,
+            pvcs=self.rbd_blk_pvcs,
+            interface=constants.CEPHBLOCKPOOL,
+            raw_block=True,
+        )
+        self.pod_objs.extend(block_pods)
+
+        log.info(
+            "Workload preparation completed: RBD-FS=%d, RBD-Block=%d (total pods=%d)",
+            len(rbd_fs_pvcs),
+            len(self.rbd_blk_pvcs),
+            len(self.pod_objs),
+        )
+
+    def _ensure_pods_running(self, timeout=None):
+        """
+        Verify all pods are in Running state.
+
+        Args:
+            timeout: Timeout in seconds for waiting
+
+        Raises:
+            AssertionError: If any pod is not in Running state
+        """
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
+
+        # Initialize pod_objs if it doesn't exist
+        if not hasattr(self, "pod_objs"):
+            self.pod_objs = []
+
+        log.info(f"Verifying {len(self.pod_objs)} pods are in Running state")
+
+        for i, pod in enumerate(self.pod_objs, 1):
+            log.debug(f"Checking pod {i}/{len(self.pod_objs)}: {pod.name}")
+            assert pod.ocp.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=pod.name,
+                timeout=timeout,
+            ), f"Pod {pod.name} is not in Running state within {timeout}s"
+
+        log.info("All pods are running successfully")
+
+    def _annotate_storageclass(self, sc_rbd, annotation_key, schedule):
+        """
+        Annotate StorageClass with schedule.
+
+        Args:
+            sc_rbd: StorageClass object
+            annotation_key: Annotation key
+            schedule: Schedule value
+        """
+        annotation = f"{annotation_key}={schedule}"
+        log.info(f"Annotating StorageClass with: {annotation}")
+        sc_rbd.annotate(annotation)
+
+    def _annotate_pvcs(self, pvcs, annotation_key, schedule):
+        """
+        Annotate PVCs with schedule.
+
+        Args:
+            pvcs: List of PVC objects
+            annotation_key: Annotation key
+            schedule: Schedule value
+        """
+        annotation = f"{annotation_key}={schedule}"
+        log.info(f"Annotating {len(pvcs)} PVCs with: {annotation}")
+
+        for i, pvc_obj in enumerate(pvcs, 1):
+            log.debug(f"Annotating PVC {i}/{len(pvcs)}: {pvc_obj.name}")
+            pvc_obj.annotate(annotation)
+            pvc_obj.reload()
+
+    def _get_schedule_from_resource(self, resource, annotation_key):
+        """
+        Get schedule annotation from a resource.
+
+        Args:
+            resource: Resource object (StorageClass or PVC)
+            annotation_key: Annotation key to look for
+
+        Returns:
+            Schedule value from annotation
+
+        Raises:
+            KeyError: If annotation is not found
+        """
+        resource.reload()
+        try:
+            return resource.data["metadata"]["annotations"][annotation_key]
+        except KeyError:
+            log.error(
+                f"Annotation '{annotation_key}' not found in resource {resource.name}"
+            )
+            raise
+
+    def _wait_for_cronjob_creation(self, pvc_obj, timeout=120):
+        """
+        Wait for CronJob to be created after PVC annotation.
+
+        Args:
+            pvc_obj: PVC object
+            timeout: Timeout in seconds (default: 120)
+
+        Raises:
+            TimeoutExpiredError: If CronJob is not created within timeout
+        """
+        annotation_key = self.get_annotation_key()
+        cronjob_annotation_key = (
+            "reclaimspace.csiaddons.openshift.io/cronjob"
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else "keyrotation.csiaddons.openshift.io/cronjob"
+        )
+
+        log.info(f"Waiting for CronJob creation for PVC: {pvc_obj.name}")
+
+        try:
+            for _ in TimeoutSampler(timeout=timeout, sleep=5, func=lambda: None):
+                pvc_obj.reload()
+                cronjob_name = (
+                    pvc_obj.data.get("metadata", {})
+                    .get("annotations", {})
+                    .get(cronjob_annotation_key)
+                )
+
+                if cronjob_name:
+                    # Verify the CronJob actually exists
+                    cronjob_kind = (
+                        constants.RECLAIMSPACECRONJOB
+                        if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+                        else constants.ENCRYPTIONKEYROTATIONCRONJOB
+                    )
+
+                    try:
+                        cronjob_obj = OCP(
+                            kind=cronjob_kind,
+                            namespace=pvc_obj.namespace,
+                            resource_name=cronjob_name,
+                        )
+                        cronjob_obj.get()  # This will raise an exception if not found
+                        log.info(
+                            f"CronJob '{cronjob_name}' found for PVC '{pvc_obj.name}'"
+                        )
+                        return
+                    except Exception:
+                        log.debug(
+                            f"CronJob '{cronjob_name}' not yet available, continuing to wait..."
+                        )
+
+                log.debug(
+                    f"CronJob annotation not yet present for PVC '{pvc_obj.name}', waiting..."
+                )
+
+        except TimeoutExpiredError:
+            log.error(f"Timeout waiting for CronJob creation for PVC: {pvc_obj.name}")
+            raise
+
+    def _verify_cronjob_schedule(
+        self,
+        pvc_obj,
+        expected_schedule,
+        precedence_type,
+    ):
+        """
+        Verify that a PVC's CronJob has the expected schedule.
+
+        Args:
+            pvc_obj: PVC object
+            expected_schedule: Expected schedule value
+            precedence_type: Type of precedence being tested (for error messages)
+
+        Raises:
+            AssertionError: If schedule doesn't match expected value
+        """
+        log.debug(f"Verifying CronJob schedule for PVC: {pvc_obj.name}")
+
+        # Wait for CronJob to be created after PVC annotation
+        self._wait_for_cronjob_creation(pvc_obj)
+
+        # Use appropriate CronJob function based on annotation key
+        annotation_key = self.get_annotation_key()
+        if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
+            # For KeyRotation tests, use PVKeyrotation helper
+            keyrotation_helper = PVKeyrotation(pvc_obj.storageclass)
+            cronjob = keyrotation_helper.get_keyrotation_cronjob_for_pvc(pvc_obj)
+        else:
+            # For ReclaimSpace tests, use the existing helper
+            cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj)
+
+        actual_schedule = cronjob.data["spec"]["schedule"]
+
+        assert expected_schedule == actual_schedule, (
+            f"PVC {pvc_obj.name} CronJob schedule '{actual_schedule}' "
+            f"does not match expected {precedence_type} schedule '{expected_schedule}'"
+        )
+
+        log.debug(f"✓ PVC {pvc_obj.name} has correct schedule: {actual_schedule}")
+
+    def _verify_precedence_behavior(
+        self,
+        sc_rbd,
+        annotation_key,
+        precedence_type,
+    ):
+        """
+        Verify that PVCs follow the correct precedence behavior.
+
+        Args:
+            sc_rbd: StorageClass object
+            annotation_key: Annotation key for schedules
+            precedence_type: Either 'storageclass' or 'pvc'
+        """
+        # Initialize rbd_blk_pvcs if it doesn't exist
+        if not hasattr(self, "rbd_blk_pvcs"):
+            self.rbd_blk_pvcs = []
+
+        log.info(
+            f"Verifying {precedence_type} precedence behavior for {len(self.rbd_blk_pvcs)} PVCs"
+        )
+
+        # Get StorageClass schedule
+        sc_schedule = self._get_schedule_from_resource(sc_rbd, annotation_key)
+        log.info(f"StorageClass schedule: {sc_schedule}")
+
+        for i, pvc_obj in enumerate(self.rbd_blk_pvcs, 1):
+            log.debug(f"Checking PVC {i}/{len(self.rbd_blk_pvcs)}: {pvc_obj.name}")
+
+            if precedence_type == self.STORAGECLASS_PRECEDENCE:
+                # Should use StorageClass schedule
+                expected_schedule = sc_schedule
+                log.debug(f"PVC {pvc_obj.name} should inherit StorageClass schedule")
+            else:
+                # Should use PVC schedule
+                pvc_schedule = self._get_schedule_from_resource(pvc_obj, annotation_key)
+                expected_schedule = pvc_schedule
+                log.debug(
+                    f"PVC {pvc_obj.name} should use its own schedule: {pvc_schedule}"
+                )
+
+            self._verify_cronjob_schedule(pvc_obj, expected_schedule, precedence_type)
+
+        log.info(f"✓ All PVCs correctly follow {precedence_type} precedence")
+
+    def _ensure_precedence_setting(self, precedence):
+        """
+        Ensure the precedence is set correctly.
+
+        Args:
+            precedence: Desired precedence setting
+        """
+        current_precedence = get_schedule_precedance_value_from_csi_addons_configmap()
+        if current_precedence != precedence:
+            log.info(
+                f"Setting precedence from '{current_precedence}' to '{precedence}'"
+            )
+            set_schedule_precedence(precedence)
+        else:
+            log.info(f"Precedence already set to '{precedence}'")
+
+    @abstractmethod
+    def get_annotation_key(self):
+        """Get the annotation key for this test type."""
+        pass
+
+
+@pytest.fixture
+def reclaimspace_precedence_helper():
+    """
+    Fixture that provides a ReclaimSpace-specific precedence test helper.
+
+    Returns:
+        BaseStorageClassPrecedenceTest: Instance configured for ReclaimSpace tests
+    """
+
+    class ReclaimSpacePrecedenceHelper(BaseStorageClassPrecedenceTest):
+        def get_annotation_key(self):
+            return RECLAIMSPACE_SCHEDULE_ANNOTATION
+
+    return ReclaimSpacePrecedenceHelper()
+
+
+@pytest.fixture
+def keyrotation_precedence_helper():
+    """
+    Fixture that provides a KeyRotation-specific precedence test helper.
+
+    Returns:
+        BaseStorageClassPrecedenceTest: Instance configured for KeyRotation tests
+    """
+
+    class KeyRotationPrecedenceHelper(BaseStorageClassPrecedenceTest):
+        def get_annotation_key(self):
+            return KEYROTATION_SCHEDULE_ANNOTATION
+
+    return KeyRotationPrecedenceHelper()

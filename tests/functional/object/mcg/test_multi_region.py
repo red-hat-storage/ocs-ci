@@ -120,7 +120,7 @@ class TestMultiRegion(MCGTest):
             awscli_pod_session, local_testobjs_dir_path, mcg_bucket_path, mcg_obj
         )
 
-        mcg_obj.check_if_mirroring_is_done(bucket_name)
+        mcg_obj.check_if_mirroring_is_done(bucket_name, timeout=420)
 
         # Bring bucket A down
         aws_client.toggle_aws_bucket_readwrite(backingstore1.uls_name)

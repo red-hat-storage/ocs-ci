@@ -27,6 +27,7 @@ from ocs_ci.utility.utils import (
 logger = logging.getLogger(__name__)
 
 
+# TODO: remove this function and use the one in version.py
 def get_ocp_ga_version(channel):
     """
     Retrieve the latest GA version for
@@ -44,7 +45,7 @@ def get_ocp_ga_version(channel):
     url = "https://api.openshift.com/api/upgrades_info/v1/graph"
     headers = {"Accept": "application/json"}
     payload = {"channel": f"stable-{channel}"}
-    r = requests.get(url, headers=headers, params=payload)
+    r = requests.get(url, headers=headers, params=payload, timeout=120)
     nodes = r.json()["nodes"]
     if nodes:
         versions = [node["version"] for node in nodes]
@@ -261,3 +262,28 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
             wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
 
     return idms_file_dest_location
+
+
+def add_mc_partitioned_disk_on_workers_to_ocp_deployment(disk):
+    """
+    Add Machine Config for partitioned disk on worker nodes to OCP deployment
+
+    Args:
+        disk (str): path to root disk where the additional partition should be created common for all worker nodes
+
+    """
+    role = "worker"
+    logger.info(f"Creating and Adding Partitioned disk MC file for {role}")
+    with open(constants.PARTITIONED_DISK_MC) as file_stream:
+        part_disk_template_obj = yaml.safe_load(file_stream)
+
+    part_disk_template_obj["spec"]["config"]["storage"]["disks"][0]["device"] = disk
+
+    part_disk_template_str = yaml.safe_dump(part_disk_template_obj)
+    part_disk_file = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        "openshift",
+        "98-osd-partition-worker.yaml",
+    )
+    with open(part_disk_file, "w") as f:
+        f.write(part_disk_template_str)

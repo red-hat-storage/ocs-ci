@@ -198,7 +198,9 @@ class VirtualMachine(Virtctl):
             access_mode=self.pvc_access_mode,
             namespace=self.namespace,
         )
-        wait_for_resource_state(self.pvc_obj, state=constants.STATUS_BOUND, timeout=900)
+        wait_for_resource_state(
+            self.pvc_obj, state=constants.STATUS_BOUND, timeout=1200
+        )
         self.pvc_name = self.pvc_obj.name
         vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"] = {
             "claimName": self.pvc_obj.name
@@ -492,20 +494,23 @@ class VirtualMachine(Virtctl):
             )
             sample.wait_for_func_value(value=True)
 
-    def removevolume(self, volume_name, verify=True):
+    def removevolume(self, volume_name, persist=False, verify=True):
         """
         Remove a volume from a VM
 
         Args:
             verify: If true, checks volume_name not present in vm yaml
             volume_name (str): Name of the volume to remove.
+            persist (bool): True if the volume should be persisted.
 
         Returns:
              str: stdout of command
 
         """
         logger.info(f"Removing {volume_name} from {self._vm_name}")
-        self.remove_volume(vm_name=self._vm_name, volume_name=volume_name)
+        self.remove_volume(
+            vm_name=self._vm_name, persist=persist, volume_name=volume_name
+        )
         if verify:
             sample = TimeoutSampler(
                 timeout=600,

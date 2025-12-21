@@ -9,24 +9,24 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.20.0",
+    version="4.21.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
     license="MIT",
     python_requires=">=3.9.18",
     install_requires=[
-        "apache-libcloud==3.1.0",
+        "apache-libcloud==3.8.0",
         "docopt==0.6.2",
         "gevent==23.9.1",
-        "ibm-cos-sdk==2.13.5",
+        "ibm-cos-sdk==2.14.1",
         "reportportal-client==3.2.3",
-        "requests==2.32.3",
+        "requests==2.32.2",
         "paramiko==3.5.0",
-        "pyyaml>=4.2b1",
+        "pyyaml==6.0.3",
         "jinja2==3.1.6",
         "openshift==0.13.2",
-        "boto3==1.24.96",
+        "boto3==1.38.31",
         "munch==2.5.0",
         "pytest-progress==1.2.5",
         "pytest==6.2.5",
@@ -50,7 +50,7 @@ setup(
         "numpy==1.23.2",
         "pandas==1.5.2",
         "tabulate==0.9.0",
-        "python-ipmi==0.4.2",
+        "python-ipmi==0.5.7",
         "scipy==1.12.0",
         "PrettyTable==0.7.2",
         "azure-common==1.1.28",
@@ -59,13 +59,16 @@ setup(
         "azure-mgmt-resource==23.2.0",
         "azure-storage-blob==12.23.1",
         "msrestazure==0.6.3",
-        "python-novaclient==17.1.0",
-        "python-cinderclient==7.1.0",
-        "oslo.utils==8.2.0",  # Dependency of python-novaclient and python-cinderclient
-        "keystoneauth1==4.2.0",
+        "python-novaclient==18.9.0",
+        "python-cinderclient==9.7.0",
+        "oslo.utils==9.0.0",  # Dependency of python-novaclient and python-cinderclient
+        "oslo.i18n==6.5.1",  # Dependency of python-novaclient and python-cinderclient
+        "oslo.serialization==5.7.0",  # Dependency of python-novaclient and python-cinderclient
+        "oslo.serialization==5.7.0",  # Dependency of python-novaclient and python-cinderclient
+        "keystoneauth1==5.11.0",  # Dependency of python-novaclient and python-cinderclient
         "range-key-dict==1.1.0",
         "GitPython==3.1.41",
-        "selenium==3.141.0",
+        "selenium==4.36.0",
         "webdriver-manager==4.0.2",
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
@@ -89,24 +92,27 @@ setup(
         "azure-identity==1.16.1",
         "azure-mgmt-storage==21.0.0",
         "fauxfactory==3.1.0",
-        "google-api-core==2.24.2",
-        "google-api-python-client==2.165.0",
+        "google-api-core==2.25.0",
+        "google-api-python-client==2.171.0",
         "google-auth-httplib2==0.2.0",
         "google-cloud-core==2.4.3",
-        "google-crc32c==1.7.0",
+        "google-crc32c==1.7.1",
         "google-resumable-media==2.7.2",
-        "googleapis-common-protos==1.69.2",
-        "urllib3==1.26.19",
+        "googleapis-common-protos==1.70.0",
+        "urllib3==2.5.0",
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.22",
+        "atlassian-python-api==4.0.7",
         "certbot==3.0.0",
         "certbot-dns-route53==3.0.0",
-        "openshift-python-wrapper==11.0.52",
+        "openshift-python-wrapper==11.0.58",
         # new version of marshmallow 4.0.0 seems to be broken, failing with error:
         # TypeError: __init__() got an unexpected keyword argument 'default'
         "marshmallow==3.26.1",
-        "zope.event==5.0",
+        "zope.event==6.0",
+        "xattr==1.3.0",
+        "pyotp==2.9.0",
     ],
     entry_points={
         "console_scripts": [

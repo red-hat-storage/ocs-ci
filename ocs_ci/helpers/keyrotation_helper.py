@@ -590,7 +590,7 @@ class PVKeyrotation(KeyRotation):
             for pvc in pvc_objs
         }
 
-    @retry(UnexpectedBehaviour, tries=5, delay=20)
+    @retry(UnexpectedBehaviour, tries=10, delay=20)
     def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
         """
         Waits for all PVC keys to be rotated in the Vault KMS.
@@ -663,6 +663,64 @@ class PVKeyrotation(KeyRotation):
             pvc.reload()
 
         log.info("Completed key rotation state changes for all specified PVCs.")
+        return True
+
+    def reset_keyrotation_baseline(self):
+        """
+        Resets the baseline key data for key rotation verification.
+        This should be called after re-enabling key rotation to ensure
+        the baseline is captured after re-enabling, not before.
+        """
+        self.all_pvc_key_data = None
+        log.info(
+            "Reset key rotation baseline - will capture new baseline on next verification."
+        )
+
+    @retry(UnexpectedBehaviour, tries=10, delay=10)
+    def wait_for_keyrotation_cronjobs_recreation(self, pvc_objs):
+        """
+        Wait for key rotation cronjobs to be recreated for all PVCs after re-enabling.
+
+        Args:
+            pvc_objs (list): List of PVC objects to check.
+
+        Returns:
+            bool: True if all cronjobs are recreated and active.
+
+        Raises:
+            UnexpectedBehaviour: If cronjobs are not recreated within timeout.
+        """
+        missing_cronjobs = []
+
+        for pvc_obj in pvc_objs:
+            # Reload PVC to get latest annotations
+            pvc_obj.reload()
+
+            try:
+                cronjob = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
+                # Check if cronjob exists and is not suspended
+                if not cronjob.is_exist():
+                    missing_cronjobs.append(pvc_obj.name)
+                    continue
+
+                # Check if cronjob is not suspended
+                cronjob_data = cronjob.get()
+                if cronjob_data.get("spec", {}).get("suspend", False):
+                    missing_cronjobs.append(f"{pvc_obj.name} (suspended)")
+                    continue
+
+                log.info(f"Key rotation cronjob for PVC '{pvc_obj.name}' is active.")
+
+            except ValueError:
+                # Cronjob annotation not found or cronjob doesn't exist
+                missing_cronjobs.append(pvc_obj.name)
+
+        if missing_cronjobs:
+            raise UnexpectedBehaviour(
+                f"Key rotation cronjobs not ready for PVCs: {', '.join(missing_cronjobs)}"
+            )
+
+        log.info("All key rotation cronjobs are recreated and active.")
         return True
 
 

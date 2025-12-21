@@ -579,7 +579,7 @@ class TestPvPool:
         else:
             # Upload smaller files with grouped dd and s3 sync calls,
             # but limit the batch size to support many small files
-            batch_size = 1000
+            batch_size = 750
             full_batches_num = file_count // batch_size
             remainder = file_count % batch_size
             total_batches_num = full_batches_num + (1 if remainder else 0)

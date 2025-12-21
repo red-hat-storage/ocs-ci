@@ -49,6 +49,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -1781,6 +1782,60 @@ def get_osd_prepare_pods(
     return osd_pods
 
 
+def get_csi_addons_pod():
+    """
+    Find a CSI addon pod that contains the 'csi-addons' container.
+
+    In ODF 4.20, CSI addon functionality is in dedicated pods with the label
+    'app=openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons'.
+
+    Returns:
+        Pod: A Pod object that contains the 'csi-addons' container
+
+    Raises:
+        AssertionError: If no CSI addon pod with 'csi-addons' container is found
+
+    """
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    try:
+        addon_pods = get_pods_having_label(
+            CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        if not addon_pods:
+            raise AssertionError(
+                f"No CSI addon pods found with label '{CSI_RBD_ADDON_NODEPLUGIN_LABEL_420}' "
+                f"in namespace {namespace}"
+            )
+
+        pod_obj = Pod(**addon_pods[0])
+
+        # Verify the pod actually has the 'csi-addons' container
+        csi_addon_container = pod_obj.get_container_data("csi-addons")
+        if not csi_addon_container:
+            raise AssertionError(
+                f"CSI addon pod '{pod_obj.name}' exists but does not contain 'csi-addons' container"
+            )
+
+        logger.info(f"Found CSI addon pod: {pod_obj.name}")
+        return pod_obj
+
+    except Exception as e:
+        # Provide helpful diagnostic information
+        try:
+            all_pods = get_all_pods(namespace=namespace)
+            csi_pod_names = [pod.name for pod in all_pods if "csi" in pod.name.lower()]
+            error_msg = (
+                f"Failed to find CSI addon pod in namespace {namespace}. "
+                f"Error: {str(e)}. Available CSI-related pods: {csi_pod_names}"
+            )
+        except Exception:
+            error_msg = f"Failed to find CSI addon pod in namespace {namespace}. Error: {str(e)}"
+
+        raise AssertionError(error_msg)
+
+
 def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
     """
     Fetches info about osd deployments in the cluster
@@ -1882,17 +1937,36 @@ def get_pod_logs(
     all_containers=False,
     since=None,
     tail=None,
+    grep=None,
+    regex=False,
+    case_senitive=False,
+    context=0,
+    return_empty_string=True,
+    first_match_only=True,
 ):
     """
     Get logs from a given pod
 
-    pod_name (str): Name of the pod
-    container (str): Name of the container
-    namespace (str): Namespace of the pod
-    previous (bool): True, if pod previous log required. False otherwise.
-    all_containers (bool): fetch logs from all containers of the resource
-    since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
-    tail (str): number of lines to tail
+    Args:
+        pod_name (str): Name of the pod
+        container (str): Name of the container
+        namespace (str): Namespace of the pod
+        previous (bool): True, if pod previous log required. False otherwise.
+        all_containers (bool): fetch logs from all containers of the resource
+        since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
+        tail (str): number of lines to tail
+        grep (str): filter the logs by the given string
+        regex (bool): True, if the grep is a regex. False otherwise.
+            Applicable only if grep is provided.
+        case_senitive (bool): True, if the grep is case sensitive. False otherwise.
+            Applicable only if grep is provided.
+        context (int): number of lines to show before and after the matching line
+            Applicable only if grep is provided.
+        return_empty_string (bool): True, if the function should return an empty string if no logs are found.
+            Applicable only if grep is provided. Default value is True.
+        first_match_only (bool): True, if the function should return the first match only. False otherwise.
+            Applicable only if grep is provided. Default value is True.
+
     Returns:
         str: Output from 'oc get logs <pod_name> command
 
@@ -1910,8 +1984,18 @@ def get_pod_logs(
         cmd += f" --since={since}"
     if tail:
         cmd += f" --tail={tail}"
-
-    return pod.exec_oc_cmd(cmd, out_yaml_format=False)
+    if grep:
+        regex_flag = "-E" if regex else ""
+        cmd += f" | grep {regex_flag} '{grep}'"
+        if not case_senitive:
+            cmd += " -i"
+        if context:
+            cmd += f" -C {context}"
+        if first_match_only:
+            cmd += " -m 1"
+        if return_empty_string:
+            cmd += " || echo ''"
+    return pod.exec_oc_cmd(cmd, out_yaml_format=False, shell=bool(grep))
 
 
 def get_pod_node(pod_obj):
@@ -2882,12 +2966,16 @@ def run_osd_removal_job(osd_ids=None):
     Run the ocs-osd-removal job
 
     Args:
-        osd_ids (list): The osd IDs.
+        osd_ids (list | None): The osd IDs.
 
     Returns:
-        ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
+        ocs_ci.ocs.resources.ocs.OCS | None: The ocs-osd-removal job object, or None if no OSDs provided
 
     """
+    if not osd_ids:
+        logger.warning("run_osd_removal_job called with empty osd_ids – nothing to do")
+        return None
+
     osd_ids_str = ",".join(map(str, osd_ids))
 
     cmd_params = "-p FORCE_OSD_REMOVAL=true"
@@ -4344,3 +4432,23 @@ def get_ocs_client_operator_controller_manager(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocs_client_operator_controller_manager = get_pods_having_label(label, namespace)
     return [Pod(**pod) for pod in ocs_client_operator_controller_manager]
+
+
+def get_csi_addons_controller_manager_pod():
+    """
+    Get  csi_addons_controller_manager_pod pod
+
+    Returns:
+        list: The schedule precedence value
+    """
+    # from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+
+    pods = get_pods_having_label(
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    if not pods:
+        return []
+
+    return [Pod(**pod) for pod in pods]

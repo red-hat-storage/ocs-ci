@@ -263,11 +263,11 @@ class PackageManifest(OCP):
             TimeoutExpiredError: in case the resource not found in timeout
 
         """
+        resource_name = resource_name if resource_name else self.resource_name
         log.info(
             f"Waiting for a resource(s) of kind {self._kind}"
             f" identified by name '{resource_name}'"
         )
-        resource_name = resource_name if resource_name else self.resource_name
         self.check_name_is_specified(resource_name)
 
         for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=self.get):
@@ -310,3 +310,5 @@ def get_selector_for_ocs_operator():
         return constants.OPERATOR_INTERNAL_SELECTOR
     except CommandFailed:
         log.info("Catalog source not found!")
+    # TODO: we might need to limit this to ODF only as FDF might come from different source
+    return constants.REDHAT_OPERATOR_SELECTOR

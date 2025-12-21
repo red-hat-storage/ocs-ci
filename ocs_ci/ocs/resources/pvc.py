@@ -8,7 +8,11 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnavailableResourceException, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    UnavailableResourceException,
+    TimeoutExpiredError,
+    CommandFailed,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
@@ -178,7 +182,7 @@ class PVC(OCS):
         """
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeHandle"]
 
-    def resize_pvc(self, new_size, verify=False):
+    def resize_pvc(self, new_size, verify=False, timeout=240):
         """
         Modify the capacity of PVC
 
@@ -186,6 +190,7 @@ class PVC(OCS):
             new_size (int): New size of PVC in Gi
             verify (bool): True to verify the change is reflected on PVC,
                 False otherwise
+            timeout: Time to wait for the verification. To be used with verify=True
 
         Returns:
             bool: True if operation succeeded, False otherwise
@@ -199,7 +204,7 @@ class PVC(OCS):
         ), f"Patch command to modify size of PVC {self.name} has failed."
 
         if verify:
-            for pvc_data in TimeoutSampler(240, 2, self.get):
+            for pvc_data in TimeoutSampler(timeout, 2, self.get):
                 capacity = pvc_data.get("status").get("capacity").get("storage")
                 if capacity == f"{new_size}Gi":
                     break
@@ -765,3 +770,67 @@ def wait_for_pvcs_in_lvs_to_reach_status(
             f"expected status {expected_status} after {timeout} seconds"
         )
         return False
+
+
+def get_pvcs_using_storageclass(
+    storageclass_name: str, namespace: str = None
+) -> list[dict]:
+    """
+    Find all PVCs using a specific StorageClass
+
+    Args:
+        storageclass_name (str): Name of the StorageClass to search for
+        namespace (str): Namespace to search in. If None, searches all namespaces
+
+    Returns:
+        list[dict]: List of PVC information dictionaries containing name, namespace,
+                   storageclass, status, and size
+
+    Raises:
+        ValueError: If storageclass_name is empty or None
+        CommandFailed: If OCP API call fails
+    """
+    if not storageclass_name or not storageclass_name.strip():
+        raise ValueError("storageclass_name cannot be empty or None")
+
+    log.info(
+        f"Searching for PVCs using StorageClass '{storageclass_name}' in namespace: {namespace or 'all'}"
+    )
+
+    try:
+        ocp_obj = OCP(kind=constants.PVC, namespace=namespace)
+        all_pvcs = ocp_obj.get()
+
+        if not all_pvcs or "items" not in all_pvcs:
+            log.info("No PVCs found in the cluster")
+            return []
+
+        matching_pvcs = []
+        for pvc in all_pvcs["items"]:
+            pvc_spec = pvc.get("spec", {})
+            pvc_metadata = pvc.get("metadata", {})
+            pvc_status = pvc.get("status", {})
+
+            if pvc_spec.get("storageClassName") == storageclass_name:
+                pvc_info = {
+                    "name": pvc_metadata.get("name", "unknown"),
+                    "namespace": pvc_metadata.get("namespace", "unknown"),
+                    "storageclass": pvc_spec.get("storageClassName"),
+                    "status": pvc_status.get("phase", "unknown"),
+                    "size": pvc_spec.get("resources", {})
+                    .get("requests", {})
+                    .get("storage", "unknown"),
+                }
+                matching_pvcs.append(pvc_info)
+                log.info(
+                    f"Found PVC: {pvc_info['name']} in namespace {pvc_info['namespace']}"
+                )
+
+        log.info(
+            f"Found {len(matching_pvcs)} PVCs using StorageClass '{storageclass_name}'"
+        )
+        return matching_pvcs
+
+    except CommandFailed as e:
+        log.error(f"Failed to get PVCs: {e}")
+        raise

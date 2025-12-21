@@ -5,7 +5,11 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutExpiredEr
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.ocs.cluster import get_percent_used_capacity, get_osd_utilization
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    get_osd_utilization,
+    CephCluster,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +103,40 @@ def wait_for_auto_scaler_status(
     )
 
 
-def generate_default_scaling_threshold(default_threshold=30, min_diff=7):
+def generate_fixed_scaling_threshold(
+    fix_capacity_to_fillup: int = 240,
+    max_scaling_threshold: int = 35,
+) -> int:
+    """
+    Calculate a fixed scaling threshold (in percent) from a target absolute capacity.
+
+    The threshold is computed as: (fix_capacity_to_fillup / current_ceph_capacity) * 100
+    and then capped by the provided 'max_scaling_threshold'.
+
+    Args:
+        fix_capacity_to_fillup (int): Target capacity amount to 'fill' before scaling
+            (default: 240). Must use the same units as 'get_ceph_capacity()'.
+        max_scaling_threshold (int): Upper bound for the computed threshold percentage
+            (default: 35).
+
+    Returns:
+        int: The scaling threshold percentage (not exceeding 'max_scaling_threshold').
+
+    """
+    ceph_cluster = CephCluster()
+    current_ceph_capacity = round(ceph_cluster.get_ceph_capacity())
+
+    # Compute the threshold percentage from the target absolute capacity.
+    fix_scaling_threshold = int((fix_capacity_to_fillup / current_ceph_capacity) * 100)
+
+    # Cap the threshold at the configured maximum.
+    if fix_scaling_threshold > max_scaling_threshold:
+        fix_scaling_threshold = max_scaling_threshold
+
+    return fix_scaling_threshold
+
+
+def generate_default_scaling_threshold(default_threshold=None, min_diff=7):
     """
     Generate a safe scaling threshold based on current Ceph usage.
 
@@ -113,13 +150,16 @@ def generate_default_scaling_threshold(default_threshold=30, min_diff=7):
     is too close to the current usage, it is increased accordingly.
 
     Args:
-        default_threshold (int): The initial threshold to start with (default: 30).
+        default_threshold (int | None): Initial threshold (default: computed dynamically).
         min_diff (int): Minimum gap (in percentage points) between current usage
                         and scaling threshold to avoid premature scaling (default: 7).
 
     Returns:
         int: A safe and adjusted scaling threshold percentage.
     """
+    if not default_threshold:
+        default_threshold = generate_fixed_scaling_threshold()
+
     ceph_used_capacity = get_percent_used_capacity()
     osds_per_used_capacity = get_osd_utilization()
     logger.info(

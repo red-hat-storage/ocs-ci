@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=../plugin.schema.json
+- id: pod_network_outage
+  config:
+    namespace: "{{ namespace }}"  # Required
+
+    # Optional - directions to apply filters; default: both
+    direction:
+{%- for d in (direction | default(['egress','ingress'])) %}
+      - {{ d }}
+{%- endfor %}
+
+    # Optional - ports to block; default [] (i.e., all ports)
+{%- set in_ports = ingress_ports | default([]) %}
+{%- if in_ports | length == 0 %}
+    ingress_ports: []
+{%- else %}
+    ingress_ports:
+{%- for p in in_ports %}
+      - {{ p }}
+{%- endfor %}
+{%- endif %}
+
+{%- set eg_ports = egress_ports | default([]) %}
+{%- if eg_ports | length == 0 %}
+    egress_ports: []
+{%- else %}
+    egress_ports:
+{%- for p in eg_ports %}
+      - {{ p }}
+{%- endfor %}
+{%- endif %}
+
+    # One of these must be provided
+{%- if pod_name is defined and pod_name %}
+    pod_name: "{{ pod_name }}"
+{%- elif label_selector is defined and label_selector %}
+    label_selector: "{{ label_selector }}"
+{%- else %}
+    # pod_name or label_selector must be provided
+    pod_name: ""
+{%- endif %}
+
+    # Optional: number of matching instances to act on
+    instance_count: {{ instance_count | default(1) }}
+
+    # Durations (seconds). Ensure wait_duration >= ~2 * test_duration.
+    wait_duration: {{ wait_duration | default(300) }}
+    test_duration: {{ test_duration | default(120) }}

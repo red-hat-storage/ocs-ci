@@ -49,6 +49,14 @@ class TestBucketNotifications(MCGTest):
     Test the MCG bucket notifications feature
     """
 
+    # TODO: Remove when https://github.com/red-hat-storage/ocs-ci/issues/13893 is closed
+    @pytest.fixture(scope="class", autouse=True)
+    def increase_noobaa_logging_level(self, change_the_noobaa_log_level_class):
+        """
+        A fixture to set the noobaa log level to all.
+        """
+        change_the_noobaa_log_level_class(level="all")
+
     @pytest.fixture(autouse=True, scope="class")
     def notif_manager(self, request, pvc_factory_class):
         """
@@ -145,9 +153,7 @@ class TestBucketNotifications(MCGTest):
                 func=notif_manager.get_events,
                 topic=topic,
             ):
-                keys_in_notifs = set(
-                    event["s3"]["object"]["key"] for event in events[1:]
-                )
+                keys_in_notifs = set(event["s3"]["object"]["key"] for event in events)
                 delta = obj_keys_set.difference(keys_in_notifs)
                 if not delta:
                     logger.info("All expected events were received by Kafka")

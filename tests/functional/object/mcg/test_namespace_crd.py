@@ -1080,15 +1080,27 @@ class TestNamespace(MCGTest):
 
     @tier4c
     @pytest.mark.parametrize(
-        argnames=["mcg_pod"],
+        argnames=["mcg_pod", "respin_multiple_times"],
         argvalues=[
             pytest.param(
                 *["noobaa-db"],
+                False,
                 marks=[pytest.mark.polarion_id("OCS-2291")],
             ),
-            pytest.param(*["noobaa-core"], marks=pytest.mark.polarion_id("OCS-2319")),
             pytest.param(
-                *["noobaa-operator"], marks=pytest.mark.polarion_id("OCS-2320")
+                *["noobaa-db"],
+                True,
+                marks=[pytest.mark.polarion_id("OCS-6907")],
+            ),
+            pytest.param(
+                *["noobaa-core"],
+                False,
+                marks=pytest.mark.polarion_id("OCS-2319"),
+            ),
+            pytest.param(
+                *["noobaa-operator"],
+                False,
+                marks=pytest.mark.polarion_id("OCS-2320"),
             ),
         ],
     )
@@ -1101,6 +1113,7 @@ class TestNamespace(MCGTest):
         bucket_factory,
         test_directory_setup,
         mcg_pod,
+        respin_multiple_times,
     ):
         """
         Test Write to ns bucket using CRDs and read directly from AWS.
@@ -1148,17 +1161,13 @@ class TestNamespace(MCGTest):
         if not obj_ls:
             raise UnexpectedBehaviour("Failed to sync objects")
 
-        logger.info(f"Respin mcg resource {mcg_pod}")
-        noobaa_pods = pod.get_noobaa_pods()
-        pod_obj = [pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)][0]
-        pod_obj.delete(force=True)
-        logger.info("Wait for noobaa pods to come up")
-        assert pod_obj.ocp.wait_for_resource(
-            condition="Running",
-            selector="app=noobaa",
-            resource_count=len(noobaa_pods),
-            timeout=1000,
-        )
+        if respin_multiple_times:
+            count = 10
+            for _ in range(count):
+                self.respin_mcg_pod(mcg_pod)
+        else:
+            self.respin_mcg_pod(mcg_pod)
+
         logger.info("Wait for noobaa health to be OK")
         ceph_cluster_obj = CephCluster()
         ceph_cluster_obj.wait_for_noobaa_health_ok()
@@ -1439,3 +1448,19 @@ class TestNamespace(MCGTest):
                 )
                 result = False
         return result
+
+    def respin_mcg_pod(self, mcg_pod):
+        """
+        Respin specified mcg pod
+        """
+        logger.info(f"Respin mcg resource {mcg_pod}")
+        noobaa_pods = pod.get_noobaa_pods()
+        pod_obj = [pod for pod in noobaa_pods if pod.name.startswith(mcg_pod)][0]
+        pod_obj.delete(force=True)
+        logger.info("Wait for noobaa pods to come up")
+        assert pod_obj.ocp.wait_for_resource(
+            condition="Running",
+            selector="app=noobaa",
+            resource_count=len(noobaa_pods),
+            timeout=1000,
+        )

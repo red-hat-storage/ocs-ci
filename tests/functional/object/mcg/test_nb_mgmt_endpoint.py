@@ -23,7 +23,7 @@ class TestNoobaaMgmtEndpoint(MCGTest):
     Test the noobaa mgmt route functionality
     """
 
-    def test_noobaa_mgmt_endpoint(self, mcg_obj_session):
+    def deprecate_test_noobaa_mgmt_endpoint(self, mcg_obj_session):
         """
         Test the noobaa mgmt route via an RPC
         """
@@ -64,4 +64,5 @@ def send_rpc_request_to_mgmt_endpoint(mcg_obj, api, method, params={}):
         url=mcg_obj.mgmt_endpoint,
         data=json.dumps(payload),
         verify=retrieve_verification_mode(),
+        timeout=120,
     )

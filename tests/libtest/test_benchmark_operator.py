@@ -68,7 +68,6 @@ class TestBenchmarkOperator(ManageTest):
         """
         benchmark_name = f"fio-benchmark{uuid4().hex[:4]}"
         log.info(f"Starting benchmark {benchmark_name} with fast fill settings")
-        numjobs = 4
         start = time.time()
 
         benchmark_workload_storageutilization(
@@ -76,8 +75,9 @@ class TestBenchmarkOperator(ManageTest):
             bs="4096KiB",
             benchmark_name=benchmark_name,
             is_completed=True,
-            numjobs=numjobs,
+            numjobs=4,
             iodepth=64,
+            max_servers=60,
         )
         end = time.time()
         fill_up_time = end - start

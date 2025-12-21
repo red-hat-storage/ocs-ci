@@ -5,7 +5,11 @@ import shlex
 import subprocess
 
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.wait import WebDriverWait
@@ -38,7 +42,6 @@ from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.ipam import IPAM
 
-
 log = logging.getLogger(__name__)
 
 
@@ -69,14 +72,13 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Home"])
         self.do_click(locator=self.acm_page_nav["Overview_page"])
 
-    def navigate_clusters_page(self, timeout=120, vms=False):
+    @retry(StaleElementReferenceException, tries=3, delay=10, backoff=1)
+    def navigate_clusters_page(self, timeout=120):
         """
         Navigate to ACM Clusters Page
 
         Args:
             timeout (int): Timeout for which an element presence should be checked
-            vms (bool): False by default, if True, navigation happens on the Virtual machines page under Infrastructure
-                        instead of Clusters page on the ACM console, useful with ACM 2.14 and higher use cases
 
         """
         self.page_has_loaded(retries=12, sleep_time=5)
@@ -110,22 +112,13 @@ class AcmPageNavigator(BaseUI):
                 "Successfully expanded Infrastructure sidecar to enable all dropdown options"
             )
         self.take_screenshot()
-        if vms:
-            log.info("Navigate into Virtual machines Page instead")
-            self.do_click(
-                locator=self.acm_page_nav["vms_page"],
-                timeout=timeout,
-                enable_screenshot=True,
-                avoid_stale=True,
-            )
-        else:
-            log.info("Navigate into Clusters Page")
-            self.do_click(
-                locator=self.acm_page_nav["Clusters_page"],
-                timeout=timeout,
-                enable_screenshot=True,
-                avoid_stale=True,
-            )
+        log.info("Navigate into Clusters Page")
+        self.do_click(
+            locator=self.acm_page_nav["Clusters_page"],
+            timeout=timeout,
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
 
     def navigate_bare_metal_assets_page(self):
         """
@@ -205,8 +198,8 @@ class AcmPageNavigator(BaseUI):
         )
         if find_element:
             log.info("Data Services page found")
-            element = self.driver.find_element_by_xpath(
-                "//button[normalize-space()='Data Services']"
+            element = self.driver.find_element(
+                By.XPATH, "//button[normalize-space()='Data Services']"
             )
             if element.get_attribute("aria-expanded") == "false":
                 self.do_click(
@@ -234,50 +227,29 @@ class AcmPageNavigator(BaseUI):
             )
             raise NoSuchElementException
 
-    def navigate_from_ocp_to_acm_cluster_page(self):
+    def navigate_from_ocp_to_acm_cluster_page(self, locator="click-local-cluster"):
         """
         For ACM version 2.7 and above we need to navigate from OCP
         console to ACM multicluster page
 
         """
 
-        try:
-            if not self.check_element_presence(
-                (
-                    self.acm_page_nav["click-local-cluster"][1],
-                    self.acm_page_nav["click-local-cluster"][0],
-                ),
-                timeout=15,
-            ):
-                log.warning("local-cluster is not found while switching to ACM console")
-                self.take_screenshot()
-            else:
-                log.info("Click on local-cluster")
-                self.do_click(self.acm_page_nav["click-local-cluster"])
-                log.info("Select All Clusters view")
-                self.do_click(self.acm_page_nav["all-clusters-view"])
-                self.take_screenshot()
-        except (NoSuchElementException, TimeoutException) as e:
-            log.exception(
-                f"Exception occurred: {e} while switching to 'All Clusters' view"
-            )
-            if not self.check_element_presence(
-                (
-                    self.acm_page_nav["click-admin-dropdown"][1],
-                    self.acm_page_nav["click-admin-dropdown"][0],
-                ),
-                timeout=15,
-            ):
-                log.error(
-                    "Administrator dropdown is not found, can not switch to ACM console"
-                )
-                self.take_screenshot()
-                raise NoSuchElementException
-            else:
-                log.info("Click on Administrator dropdown")
-                self.do_click(self.acm_page_nav["click-admin-dropdown"])
-                log.info("Select Fleet Management view")
-                self.do_click(self.acm_page_nav["fleet-management-view"])
+        self.check_element_presence(
+            (
+                self.acm_page_nav[locator][1],
+                self.acm_page_nav[locator][0],
+            ),
+            timeout=15,
+        )
+        log.info(f"Click on {locator} from OCP console")
+        self.do_click(self.acm_page_nav[locator])
+        if locator == "click-local-cluster":
+            log.info("Select All Clusters view")
+            self.do_click(self.acm_page_nav["all-clusters-view"])
+        else:
+            log.info("Select Fleet Management view")
+            self.do_click(self.acm_page_nav["fleet-management-view"])
+
         # There is a modal dialog box which appears as soon as we login
         # we need to click on close on that dialog box
         if self.check_element_presence(

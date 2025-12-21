@@ -51,13 +51,14 @@ class Virtctl(object):
 
         return run_cmd(command)
 
-    def remove_volume(self, vm_name, volume_name):
+    def remove_volume(self, vm_name, volume_name, persist=False):
         """
         Remove a volume from a VM.
 
         Args:
             vm_name (str): Name of the VM.
             volume_name (str): Name of the volume to remove.
+            persist (bool): True if the volume should be persisted.
 
         Returns:
              str: stdout of command
@@ -65,6 +66,7 @@ class Virtctl(object):
         """
         command = (
             f"{self.base_command} removevolume {vm_name} --volume-name={volume_name}"
+            + (" --persist" if persist else "")
         )
         return run_cmd(command)
 
@@ -194,12 +196,14 @@ class Virtctl(object):
         vm_dest_path = vm_dest_path if vm_dest_path else "."
         if to_vm:
             mandatory_params = [
+                f"--username={vm_username}",
                 f"{local_path}",
-                f"{vm_username}@{vm_name}:{vm_dest_path}",
+                f"vmi/{vm_name}:{vm_dest_path}",
             ]
         else:
             mandatory_params = [
-                f"{vm_username}@{vm_name}:{vm_dest_path} " f"{local_path}",
+                f"--username={vm_username}",
+                f"vmi/{vm_name}:{vm_dest_path} " f"{local_path}",
             ]
 
         command = f"{base_command} {' '.join(extra_params + mandatory_params)}"

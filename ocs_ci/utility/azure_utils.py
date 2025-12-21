@@ -217,7 +217,7 @@ class AZURE:
         """
         if not self._compute_client:
             self._compute_client = ComputeManagementClient(
-                credentials=self.credentials, subscription_id=self._subscription_id
+                credential=self.credentials, subscription_id=self._subscription_id
             )
         return self._compute_client
 
@@ -345,7 +345,7 @@ class AZURE:
 
         """
         for vm_name in vm_names:
-            result = self.compute_client.virtual_machines.restart(
+            result = self.compute_client.virtual_machines.begin_restart(
                 self.cluster_resource_group, vm_name
             )
             result.wait()
@@ -394,7 +394,7 @@ class AZURE:
 
         """
         for vm_name in vm_names:
-            result = self.compute_client.virtual_machines.start(
+            result = self.compute_client.virtual_machines.begin_start(
                 self.cluster_resource_group, vm_name
             )
             result.wait()
@@ -410,7 +410,7 @@ class AZURE:
 
         """
         for vm_name in vm_names:
-            result = self.compute_client.virtual_machines.power_off(
+            result = self.compute_client.virtual_machines.begin_power_off(
                 self.cluster_resource_group, vm_name, skip_shutdown=force
             )
             result.wait()

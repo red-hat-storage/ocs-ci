@@ -51,6 +51,8 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+            self.storage_class = "ibmc-vpc-block-10iops-tier"
         self.page_has_loaded(30, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
@@ -80,36 +82,36 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
 
-    def nav_odf_default_page(self):
+    def nav_storage_data_foundation_overview_page(self):
+        """
+        Navigate to OpenShift Data Foundation Overview page
+
+        Returns:
+            DataFoundationOverview: StorageCluster page object
+        """
+        self.navigate_storage()
+        self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+
+        from ocs_ci.ocs.ui.page_objects.df_overview import DataFoundationOverview
+
+        return DataFoundationOverview()
+
+    def nav_storage_cluster_default_page(self):
         """
         Navigate to OpenShift Data Foundation default page
         Default Data foundation page is Overview at ODF 4.13
         """
 
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+        self.do_click(locator=self.page_nav["storage_cluster"], timeout=90)
         self.page_has_loaded(retries=15)
+        logger.info(f"Default page is {self.driver.title}")
+
         logger.info("Successfully navigated to ODF tab under Storage section")
 
-        from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
+        from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
 
-        default_tab = OverviewTab()
-        logger.info(f"Default page is {self.driver.title}")
-        return default_tab
-
-    def nav_object_storage(self):
-        """
-        Navigate to Object Storage Page
-
-        Returns:
-            ObjectService: ObjectService page object
-        """
-        self.navigate_storage()
-        self.do_click(locator=self.page_nav["object_storage"], timeout=90)
-
-        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
-
-        return ObjectStorage()
+        return StorageClusterPage()
 
     def nav_object_storage_page(self):
         """
@@ -183,14 +185,22 @@ class PageNavigator(BaseUI):
 
     def navigate_operatorhub_page(self):
         """
-        Navigate to OperatorHub Page
+        Navigate to OperatorHub Page, renamed to Software Catalog in version 4.20
 
         """
-        logger.info("Navigate to OperatorHub Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
-        self.do_click(
-            locator=self.page_nav["operatorhub_page"], enable_screenshot=False
+        logger.info("Navigate to OperatorHub Page or Software Catalog")
+        self.choose_expanded_mode(
+            mode=True, locator=self.page_nav["operators_or_ecosystem"]
         )
+        if self.ocp_version_semantic <= version.VERSION_4_19:
+            self.do_click(
+                locator=self.page_nav["operatorhub_page"], enable_screenshot=False
+            )
+        else:
+            self.do_click(
+                locator=self.page_nav["software_catalog"], enable_screenshot=True
+            )
+            logger.info("Navigated to Software Catalog")
 
     def navigate_installed_operators_page(self):
         """
@@ -198,7 +208,9 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Installed Operators Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.choose_expanded_mode(
+            mode=True, locator=self.page_nav["operators_or_ecosystem"]
+        )
         self.page_has_loaded(retries=25, sleep_time=1)
         logger.info("Click on Installed Operators Page")
         self.do_click(
@@ -310,7 +322,7 @@ class PageNavigator(BaseUI):
 
         """
 
-        return self.nav_object_storage().nav_buckets_tab()
+        return self.nav_object_storage_page().nav_buckets_tab()
 
     def navigate_object_bucket_claims_page(self):
         """
@@ -318,7 +330,7 @@ class PageNavigator(BaseUI):
 
         """
 
-        return self.nav_object_storage().nav_object_buckets_claims_tab()
+        return self.nav_object_storage_page().nav_object_buckets_claims_tab()
 
     def navigate_alerting_page(self):
         """
@@ -360,19 +372,23 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
         self.do_click(locator=self.page_nav["Pods"], enable_screenshot=False)
 
-    def navigate_block_pool_page(self):
+    def navigate_storage_pools_page(self):
         """
-        Navigate to block pools page
+        Navigate to storage pools tab of Storage cluster page
 
         """
-        logger.info("Navigate to block pools page")
-        storage_system_details = (
-            self.nav_odf_default_page()
-            .nav_storage_systems_tab()
-            .nav_storagecluster_storagesystem_details()
-        )
-        storage_system_details.nav_ceph_blockpool()
-        logger.info("Now at Block pool page")
+        logger.info("Navigate to block pools tab")
+
+        return self.nav_storage_cluster_default_page().nav_storage_pools_tab()
+
+    def navigate_object_tab(self):
+        """
+        Navigate to Object tab of Storage cluster page
+
+        """
+        logger.info("Navigate to Object tab of Storage Cluster page")
+
+        return self.nav_storage_cluster_default_page().nav_object_tab()
 
     def select_namespace(self, project_name):
         """
@@ -481,3 +497,23 @@ class PageNavigator(BaseUI):
             locator=self.page_nav["storageclients_page"], enable_screenshot=False
         )
         return StorageClients()
+
+    def nav_external_systems_page(self):
+        """
+        Navigate to External Storage Systems Page
+
+        Returns:
+            ExternalStorageSystems: External Storage Systems page object
+        """
+        from ocs_ci.ocs.ui.page_objects.external_storage_systems import (
+            ExternalSystems,
+        )
+
+        logger.info("Navigate to External Storage Systems Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=120)
+        self.do_click(
+            locator=self.page_nav["external_systems_page"],
+            enable_screenshot=False,
+        )
+        return ExternalSystems()

@@ -1,0 +1,28 @@
+---
+# This conifg is for IBM Cloud IPI deployment with custom VPC where we create
+# VPC and network stuff on by own in ocs-ci in us-south (Dallas).
+DEPLOYMENT:
+  openshift_install_timeout: 4800
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'ibm_cloud'
+  deployment_type: 'ipi'
+  region: 'us-south'
+  existing_vpc: true
+  base_domain: 'ibmcloud2.qe.rh-ocs.com'
+  worker_instance_type: 'bx2-16x64'
+  master_instance_type: 'bx2-4x16'
+  worker_availability_zones:
+    - 'us-south-2'
+  master_availability_zones:
+    - 'us-south-2'
+  worker_replicas: 3
+  master_replicas: 3
+  resource_group_name: 'odf-qe'
+  network_resource_group_name: 'odf-qe'
+  vpc_name: 'odf-qe-vpc'
+  control_plane_subnets:
+    - 'sn-20250917-02'
+  compute_subnets:
+    - 'sn-20250917-02'
+  security_group_name: 'odf-qe-sg'

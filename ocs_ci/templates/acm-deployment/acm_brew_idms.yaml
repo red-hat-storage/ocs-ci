@@ -32,4 +32,5 @@ spec:
       source: 'quay.io:443/acm-d/postgresql-13'
     - mirrors:
         - 'quay.io:443/acm-d'
+        - 'brew.registry.redhat.io'
       source: registry.redhat.io/openshift4

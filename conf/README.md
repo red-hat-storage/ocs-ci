@@ -49,6 +49,9 @@ run it belongs here.
 * `ocp_url` - OCP Cluster URL (api or console) used to login to OCP cluster if kubeconfig is not available
 * `cli_params` - Dict that holds onto all CLI parameters
 * `client_version` - OCP client version
+* `use_system_available_oc_client` - if no client avalable in bin dir, use system
+  available client and copy it to bin dir.
+* `skip_oc_client_version_comparison` - do not compare oc client version
 * `bin_dir` - Directory where binaries are downloaded to
 * `google_api_secret` - Filepath to google api secret json file
 * `force_chrome_branch_base` - Chrome base branch for openshift console UI testing
@@ -178,6 +181,10 @@ version.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
 * `storage_cluster_override` - Dictionary with data which will allow you to dynamically override data in storageCluster CR.
 * `konflux_build` - Set to True if build is made by Konflux build system.
+* `enable_data_replication_separation` - Set to True to label worker nodes with `network.rook.io/mon-ip: <IPAddress>` and enable data replication separation.
+* `enable_nested_virtualization` - Enable nested virtualization for vSphere platform primarily. Used for kubevirt on HCP Clusters. It sets options kvm_intel nested=1 options kvm_amd nested=1 in MachineConfig
+* `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
+* `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
 
 #### REPORTING
 
@@ -317,9 +324,10 @@ higher priority).
     * `bm_httpd_server_user` - user name used to ssh to the helper node
     * `bm_tftp_base_dir` - TFTP root dir where are placed files for PXE boot (usually `/tftpboot/`)
     * `bm_dnsmasq_dir` - _dnsmasq_ configuration files place
-    * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
+    * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker)
     * `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
     * `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
+    * `root_disk_common_path` - path to root disk where an additional partition should be created common for all worker nodes (see `partitioned_disk_on_workers` option)
     * `servers` - definition of the servers in the BM environment (map where key is the name of the server)
         * `<server-name>`
             * `mgmt_provider` - defines how the server should be managed (`ipmitool` or `ibmcloud`)
@@ -370,6 +378,14 @@ higher priority).
 * `custom_vpc` - Applicable only for IMB Cloud IPI deployment where we want to create custom VPC and networking
   with specific Address prefixes to prevent /18 CIDR to be used.
 * `ip_prefix` - Applicable only for IMB Cloud IPI deployment when custom_vpc, if not specified: 27 prefix will be used.
+* `existing_vpc` - Set to true to use existing VPC, resource group, and subnets for IBM Cloud IPI deployment.
+* `resource_group_name` - Name of existing resource group for IBM Cloud IPI deployment when using existing VPC.
+* `network_resource_group_name` - Name of existing network resource group for IBM Cloud IPI deployment when using existing VPC (can be same as resource_group_name).
+* `vpc_name` - Name of existing VPC for IBM Cloud IPI deployment when using existing VPC.
+* `control_plane_subnets` - List of existing control plane subnet names for IBM Cloud IPI deployment when using existing VPC.
+* `compute_subnets` - List of existing compute subnet names for IBM Cloud IPI deployment when using existing VPC.
+* `worker_instance_type` - Worker instance type in ibmcloud; example: 'bx2-16x64'
+* `master_instance_type` - Worker instance type in ibmcloud; example: 'bx2-4x16'
 * `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
@@ -379,9 +395,13 @@ higher priority).
 * `continue_upgrade_after_checks_even_if_not_healthy` -  if set to true Rook will continue the OSD daemon upgrade process even if the PGs are not clean.
 * `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
 * `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
+* `hdd_disks` - If set to true, ocs-ci will create HDD disks for LSO cluster.
 * `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 * `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
+* `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
+* `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
+* `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
 
 #### UPGRADE
 
@@ -412,6 +432,12 @@ auth file or pulled from s3.
   * `username` - username for database
   * `password` - password of database user
   * `port` - port where PgSQL server listen to
+* `jira` - Jira related section for reporting purpose, if not provided it will try to read values from /etc/jira.cfg
+  * `url` - URL of Jira instance
+  * `token` - auth token for Jira
+  * `visibility` - E.g. `{"type": "group", "value": "Red Hat Employee"}` which
+    is used as Default value if not provided to do not expose data to public
+
 
 #### MULTICLUSTER
 
@@ -422,6 +448,9 @@ Scenarios that use this data include MDR and RDR deployments.
 * `acm_cluster` - True if the cluster is an ACM hub cluster, otherwise False.
 * `primary_cluster` - True if the cluster is the primary cluster, otherwise False.
 * `active_acm_cluster` - True if the cluster is the active ACM hub cluster, False if passive.
+* `dr_cluster_relations` - List specifying each pair of RDR clusters
+   - ["cluster1", "cluster2"]
+   - ["cluster3", "cluster4"]
 
 ##### ibmcloud
 

@@ -7,6 +7,9 @@ import pytest
 import pandas as pd
 
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions
+from selenium.webdriver.support.wait import WebDriverWait
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -103,25 +106,26 @@ class CreateResourceForm(PageNavigator):
                 f"{failed_cases.to_markdown(headers='keys', index=False, tablefmt='grid')}"
             )
 
-    def _check_all_rules_exist(self, input_loc: tuple):
+    def _check_all_rules_exist(self):
         """
         Clicks on the input validator icon, retrieves the rules from the input location,
         and checks whether they match the list of expected rules. Returns True if they match,
         False otherwise.
 
-        Args:
-            input_loc (tuple): The locator of the input field containing the rules.
-
         Returns:
             bool: True if the list of rules in the input field matches the expected list,
             False otherwise.
         """
-        self.do_click(self.validation_loc["input_value_validator_icon"])
-        rules_elements = self.get_elements(input_loc)
-        rules_texts_statuses = [rule.text for rule in rules_elements if rule.text != ""]
-        # skip parent element
-        rules_texts_statuses = rules_texts_statuses[1:]
-        rules_texts = [rule.split("\n: ")[0] for rule in rules_texts_statuses]
+        rules_texts = self.get_rules_from_popup()
+
+        if len(rules_texts) != len(self.rules):
+            self._report_failed(
+                f"Number of rules mismatch. Expected: {len(self.rules)}, Actual: {len(rules_texts)}\n"
+                f"Expected: {self.rules.keys()}\n"
+                f"Actual: {rules_texts}"
+            )
+            return False
+
         if sorted(rules_texts) != sorted(self.rules.keys()):
             self._report_failed(
                 f"Rules are not identical to the list of expected rules\n"
@@ -131,6 +135,57 @@ class CreateResourceForm(PageNavigator):
             return False
         logger.info(f"All rules found as expected: {rules_texts}")
         return True
+
+    def get_rules_from_popup(self, strip_status: bool = True) -> list[str]:
+        """
+        Retrieve rule entries from the input validation popup.
+
+        Args:
+            strip_status (bool): If True (default) return only rule names with status removed.
+                                 If False return the full rule text (name + status) as displayed.
+
+        Returns:
+            List[str]: A list of rule strings (either names only or full texts depending on strip_status).
+        """
+        self.do_click(self.validation_loc["input_value_validator_icon"])
+        # wait async function to load all rules in popup
+        time.sleep(0.5)
+        container = WebDriverWait(self.driver, 15).until(
+            expected_conditions.presence_of_element_located(
+                self.validation_loc["input_validation_popup_container"]
+            )
+        )
+
+        rules_elements = container.find_elements(By.CSS_SELECTOR, "li")
+        rules_texts_statuses = [
+            rule.text for rule in rules_elements if rule.text and rule.text.strip()
+        ]
+
+        if rules_texts_statuses:
+            first = rules_texts_statuses[0]
+            if not re.search(r"[:\n]", first) and len(rules_texts_statuses) > 1:
+                rules_texts_statuses = rules_texts_statuses[1:]
+
+        if not strip_status:
+            return rules_texts_statuses
+
+        rules_texts: list[str] = []
+        for text in rules_texts_statuses:
+            m = re.match(
+                r"^(?P<name>.*?)\s*(?:\n[:\s\-]*\s*|\s*:\s*)(?P<status>.+)$",
+                text,
+            )
+            if m:
+                rules_texts.append(m.group("name").strip())
+            else:
+                # fallback: use first line, or part before ':' if present, else whole text
+                if "\n" in text:
+                    rules_texts.append(text.split("\n", 1)[0].strip())
+                elif ":" in text:
+                    rules_texts.append(text.split(":", 1)[0].strip())
+                else:
+                    rules_texts.append(text.strip())
+        return rules_texts
 
     def _check_rule_case(self, rule: str, input_text: str, status_exp: str) -> bool:
         """
@@ -230,20 +285,11 @@ class CreateResourceForm(PageNavigator):
         check_pass = True
 
         def get_rule_actual():
-            time_sleep = 2
-            logger.debug(f"sleep {time_sleep} get browser render new popup")
-            time.sleep(time_sleep)
-            for _ in range(3):
-                _rules_elements = self.get_elements(
-                    self.generic_locators["text_input_popup_rules"]
-                )
-                logger.debug(f"sleep {time_sleep} get browser render new popup")
-                time.sleep(time_sleep)
-                if len(_rules_elements) > 0:
-                    break
-            # skip parent element
-            _rules_elements = _rules_elements[1:]
-            return [rule.text for rule in _rules_elements if rule_exp in rule.text]
+            """
+            Helper function to get the actual rule from the popup.
+            """
+            rule_status_list = self.get_rules_from_popup(strip_status=False)
+            return [r for r in rule_status_list if rule_exp in r]
 
         rule_actual = get_rule_actual()
 
@@ -253,10 +299,9 @@ class CreateResourceForm(PageNavigator):
         elif len(rule_actual) < 1:
             self.page_has_loaded(retries=5, sleep_time=5)
             # reload popup to process all input one more time. May not appear if input is large - automation issue
-            self.do_click(self.validation_loc["input_value_validator_icon"])
-            if not len(get_rule_actual()):
+            if not len(rule_actual := get_rule_actual()):
                 self.do_click(self.validation_loc["input_value_validator_icon"])
-            rule_actual = get_rule_actual()
+
             if len(rule_actual) < 1:
                 self._report_failed(f"rule not found -> {rule_actual}'")
                 check_pass = False
@@ -556,40 +601,45 @@ class DataFoundationTabBar(PageNavigator):
     def __init__(self):
         super().__init__()
 
-    def nav_storage_systems_tab(self):
+    def nav_block_and_file_tab(self):
         """
-        Navigate to Storage Systems tab. Accessible from any Data Foundation tabs
+        Navigate to Block and File tab. Accessible from any Data Foundation tabs
         """
-        logger.info("Navigate to Data Foundation - Storage Systems")
-        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=2)
+        self.do_click(self.validation_loc["block-and-file-tab"], enable_screenshot=True)
+        self.page_has_loaded()
 
-        from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
+        from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 
-        return StorageSystemTab()
+        return BlockAndFile()
 
-    def nav_overview_tab(self):
+    def nav_storage_pools_tab(self):
         """
-        Navigate to Overview tab. Accessible from any Data Foundation tabs
+        Navigate to Storage Pools tab. Accessible from any Data Foundation tabs
         """
-        logger.info("Navigate to Data Foundation - Overview")
+        self.do_click(self.validation_loc["storage-pools-tab"], enable_screenshot=True)
+        self.page_has_loaded()
 
-        # check if 'Overview' element is present and active, if not click on 'Overview' tab
-        if not self.get_elements(self.validation_loc["odf-overview-tab-active"]):
-            self.do_click(
-                locator=self.validation_loc["odf-overview"], enable_screenshot=True
-            )
+        from ocs_ci.ocs.ui.page_objects.block_pools import StoragePools
 
-        from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
+        return StoragePools()
 
-        return OverviewTab()
+    def nav_object_tab(self):
+        """
+        Navigate to Object tab. Accessible from any Data Foundation tabs
+        """
+        self.do_click(self.validation_loc["object-tab"], enable_screenshot=True)
+        self.page_has_loaded()
+
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
+
+        return ObjectStorage()
 
     # noinspection PyUnreachableCode
     def nav_topology_tab(self):
         """
         Navigate to ODF Topology tab. Accessible from any Data Foundation tabs
         """
-        self.do_click(self.validation_loc["topology_tab"])
+        self.do_click(self.validation_loc["topology_tab"], enable_screenshot=True)
         self.page_has_loaded()
 
         from ocs_ci.ocs.ui.page_objects.odf_topology_tab import TopologyTab
@@ -599,13 +649,13 @@ class DataFoundationTabBar(PageNavigator):
 
 class DataFoundationDefaultTab(DataFoundationTabBar):
     """
-    Default Foundation default Tab: TopologyTab | OverviewTab
+    Default Foundation default Tab: OverviewTab
     """
 
     def __init__(self):
         DataFoundationTabBar.__init__(self)
 
-    def is_overview_tab(self):
+    def is_block_and_file_tab(self):
         """
         Check if the current tab is Overview tab
 
@@ -613,5 +663,6 @@ class DataFoundationDefaultTab(DataFoundationTabBar):
             bool: True if the current tab is Overview tab, False otherwise
         """
         return (
-            len(self.get_elements(self.validation_loc["odf-overview-tab-active"])) == 1
+            len(self.get_elements(self.validation_loc["block-and-file-tab-active"]))
+            == 1
         )

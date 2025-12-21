@@ -1,0 +1,70 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: policy-mce-hcp-autoimport
+  namespace: open-cluster-management-global-set
+  annotations:
+    policy.open-cluster-management.io/standards: NIST SP 800-53
+    policy.open-cluster-management.io/categories: CM Configuration Management
+    policy.open-cluster-management.io/controls: CM-2 Baseline Configuration
+    policy.open-cluster-management.io/description: Discovered clusters that are of
+      type MultiClusterEngineHCP can be automatically imported into ACM as managed clusters.
+      This policy configure those discovered clusters so they are automatically imported.
+      Fine tuning MultiClusterEngineHCP clusters to be automatically imported
+      can be done by configure filters at the configMap or add annotation to the discoverd cluster.
+spec:
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: mce-hcp-autoimport-config
+        spec:
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: discovery-config
+                  namespace: open-cluster-management-global-set
+                data:
+                  rosa-filter: ""
+          remediationAction: enforce
+          severity: low
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: policy-mce-hcp-autoimport
+        spec:
+          remediationAction: enforce
+          severity: low
+          object-templates-raw: |
+            {{- /* find the MultiClusterEngineHCP DiscoveredClusters */ -}}
+            {{- range $dc := (lookup "discovery.open-cluster-management.io/v1" "DiscoveredCluster" "" "").items }}
+              {{- /* Check for the flag that indicates the import should be skipped */ -}}
+              {{- $skip := "false" -}}
+              {{- range $key, $value := $dc.metadata.annotations }}
+                {{- if and (eq $key "discovery.open-cluster-management.io/previously-auto-imported")
+                           (eq $value "true") }}
+                  {{- $skip = "true" }}
+                {{- end }}
+              {{- end }}
+              {{- /* if the type is MultiClusterEngineHCP and the status is Active */ -}}
+              {{- if and (eq $dc.spec.status "Active")
+                         (contains (fromConfigMap "open-cluster-management-global-set" "discovery-config" "mce-hcp-filter") $dc.spec.displayName)
+                         (eq $dc.spec.type "MultiClusterEngineHCP")
+                         (eq $skip "false") }}
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: discovery.open-cluster-management.io/v1
+                kind: DiscoveredCluster
+                metadata:
+                  name: {{ $dc.metadata.name }}
+                  namespace: {{ $dc.metadata.namespace }}
+                spec:
+                  importAsManagedCluster: true
+              {{- end }}
+            {{- end }}

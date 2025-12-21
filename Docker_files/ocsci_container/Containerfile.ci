@@ -3,7 +3,7 @@ FROM registry.access.redhat.com/ubi9/ubi:latest as BUILDER
 ENV OCS_CI_DIR=/opt/ocs-ci
 WORKDIR "${OCS_CI_DIR}"
 
-RUN dnf install --nodocs -y python39 python3.9-devel git libcurl-devel gcc openssl-devel libxml2-devel skopeo
+RUN dnf install --nodocs -y python3.11 python3.11-devel git libcurl-devel gcc openssl-devel libxml2-devel skopeo
 
 # Copy the entire source tree to the image
 # TODO: Check to see if there are any more files we can drop from the image
@@ -13,7 +13,7 @@ COPY / "${OCS_CI_DIR}"
 
 RUN pushd "${OCS_CI_DIR}" \
     && mkdir -p "${OCS_CI_DIR}/data" \
-    && python3 -m venv venv \
+    && python3.11 -m venv venv \
     && source venv/bin/activate \
     && pip3 install --upgrade pip \
     && pip3 install -r requirements.txt \
@@ -36,7 +36,7 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 
 RUN curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar -C /usr/local/bin -zxvf - oc
 
-RUN dnf install -y --nodocs python39 git jq rsync make \
+RUN dnf install -y --nodocs python3.11 git jq rsync make \
     && dnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf /var/lib/dnf/repos /var/log/dnf.librepo.log /var/log/dnf.log /var/log/dnf.rpm.log /var/log/hawkey.log /var/cache/ldconfig \
     && curl -sL https://github.com/mikefarah/yq/releases/download/v4.32.2/yq_linux_amd64.tar.gz | tar -C /usr/local/bin -zxvf - ./yq_linux_amd64 \
