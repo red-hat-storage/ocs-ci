@@ -18,7 +18,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     get_obj_versions,
     put_bucket_versioning_via_awscli,
-    update_replication_policy,
+    update_replication_policy_and_verify_health,
     upload_obj_versions,
     wait_for_object_versions_match,
 )
@@ -125,7 +125,9 @@ class TestReplicationWithVersioning(MCGTest):
             replication_policy = ReplicationPolicyWithVersioning(
                 target_bucket=target_bucket.name
             )
-            update_replication_policy(source_bucket.name, replication_policy.to_dict())
+            update_replication_policy_and_verify_health(
+                source_bucket, replication_policy.to_dict()
+            )
 
         # 3. Write some versions to the source buckets
         for source_bucket, _ in bucket_pairs:
@@ -178,12 +180,16 @@ class TestReplicationWithVersioning(MCGTest):
         replication_policy = ReplicationPolicyWithVersioning(
             target_bucket=bucket_b.name, prefix=a_to_b_prefix
         )
-        update_replication_policy(bucket_a.name, replication_policy.to_dict())
+        update_replication_policy_and_verify_health(
+            bucket_a, replication_policy.to_dict()
+        )
 
         replication_policy = ReplicationPolicyWithVersioning(
             target_bucket=bucket_a.name, prefix=b_to_a_prefix
         )
-        update_replication_policy(bucket_b.name, replication_policy.to_dict())
+        update_replication_policy_and_verify_health(
+            bucket_b, replication_policy.to_dict()
+        )
 
         # 3. Write some versions to each bucket
         for bucket in (bucket_a, bucket_b):
@@ -240,7 +246,9 @@ class TestReplicationWithVersioning(MCGTest):
         replication_policy = ReplicationPolicyWithVersioning(
             target_bucket=target_bucket.name
         )
-        update_replication_policy(source_bucket.name, replication_policy.to_dict())
+        update_replication_policy_and_verify_health(
+            source_bucket, replication_policy.to_dict()
+        )
 
         # 3. Suspend the versioning on the source bucket
         put_bucket_versioning_via_awscli(

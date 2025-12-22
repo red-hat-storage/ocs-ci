@@ -2212,6 +2212,25 @@ def update_replication_policy(bucket_name, replication_policy_dict):
 
 
 @config.run_with_provider_context_if_available
+def update_replication_policy_and_verify_health(bucket_obj, replication_policy_dict):
+    """
+    Updates the replication policy of a bucket and verifies the health of the bucket.
+    This is useful because the bucket may not be immediately available after the
+    replication policy is updated.
+
+    Args:
+        bucket_obj (ObjectBucket): The bucket object to update the replication policy of
+        replication_policy_dict (dict): A dictionary containing the new replication
+        policy
+
+    Raises:
+        TimeoutExpiredError: If the bucket does not reach a healthy state within 120 seconds
+    """
+    update_replication_policy(bucket_obj.name, replication_policy_dict)
+    bucket_obj.verify_health(timeout=120)
+
+
+@config.run_with_provider_context_if_available
 def get_replication_policy(bucket_name):
     """
     Get the replication policy on a bucket
