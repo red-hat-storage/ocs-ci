@@ -52,27 +52,12 @@ class TestOperatorProbeResilience(ManageTest):
 
     def _patch_csv(self, probe_type, path_value):
         """Helper function to apply JSON patch to the CSV."""
+        base_path = f"/spec/install/spec/deployments/0/spec/template/spec/containers/0/{probe_type}Probe"
         patch_list = [
-            {
-                "op": "replace",
-                "path": f"/spec/install/spec/deployments/0/spec/template/spec/containers/0/{probe_type}Probe/httpGet/path",
-                "value": path_value,
-            },
-            {
-                "op": "replace",
-                "path": f"/spec/install/spec/deployments/0/spec/template/spec/containers/0/{probe_type}Probe/initialDelaySeconds",
-                "value": 5,
-            },
-            {
-                "op": "replace",
-                "path": f"/spec/install/spec/deployments/0/spec/template/spec/containers/0/{probe_type}Probe/periodSeconds",
-                "value": 5,
-            },
-            {
-                "op": "replace",
-                "path": f"/spec/install/spec/deployments/0/spec/template/spec/containers/0/{probe_type}Probe/failureThreshold",
-                "value": 1,
-            },
+            {"op": "replace", "path": f"{base_path}/httpGet/path", "value": path_value},
+            {"op": "replace", "path": f"{base_path}/initialDelaySeconds", "value": 5},
+            {"op": "replace", "path": f"{base_path}/periodSeconds", "value": 5},
+            {"op": "replace", "path": f"{base_path}/failureThreshold", "value": 1},
         ]
         logger.info(f"Patching {self.csv_name} {probe_type} to: {path_value}")
         self.csv_obj.patch(params=patch_list, format_type="json")
