@@ -109,7 +109,7 @@ setup(
         "openshift-python-wrapper==11.0.58",
         # new version of marshmallow 4.0.0 seems to be broken, failing with error:
         # TypeError: __init__() got an unexpected keyword argument 'default'
-        "marshmallow==3.26.1",
+        "marshmallow==3.26.2",
         "zope.event==6.0",
         "xattr==1.3.0",
         "pyotp==2.9.0",
