@@ -1,0 +1,40 @@
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fill-pool-job
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: fill-pool
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: filler
+        image: quay.io/ocsci/busybox:latest
+        imagePullPolicy: IfNotPresent
+        command:
+          - sh
+          - -c
+          - |
+            echo "Filling PVC with zeros..."
+            dd if=/dev/zero of=/mnt/fill/testfile bs=${BLOCK_SIZE:-1M}
+        env:
+        - name: BLOCK_SIZE
+          value: "1M"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        volumeMounts:
+          - name: volume
+            mountPath: /mnt/fill
+      volumes:
+        - name: volume
+          persistentVolumeClaim:
+            claimName: fill-pool-pvc

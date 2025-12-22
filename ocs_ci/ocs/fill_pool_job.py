@@ -7,24 +7,21 @@ from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.pvc import PVC
-from ocs_ci.ocs.resources.pod import Pod
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
+from ocs_ci.utility.utils import exec_cmd
 
 
 log = logging.getLogger(__name__)
 
 
-class FillPoolPod(object):
+class FillPoolJob(object):
     """
-    Fill Pool Pod operations
+    Fill Pool Job operations (assumes a Job manifest).
     """
 
     def __init__(self):
-        """
-        Initialize the FillPoolPod object
-
-        """
         self.name = "<unknown>"
+        self.job_obj = None
         self.pod_obj = None
         self.pvc_obj = None
         self.namespace = None
@@ -38,7 +35,7 @@ class FillPoolPod(object):
         cpu_limit="500m",
         mem_limit="256Mi",
         fill_mode="zero",
-        base_yaml_path=constants.FILL_POOL_POD_YAML,
+        base_yaml_path=constants.FILL_POOL_JOB_YAML,
         pvc_name=None,
         sc_name=constants.DEFAULT_STORAGECLASS_RBD,
         storage="50Gi",
@@ -46,26 +43,10 @@ class FillPoolPod(object):
         wait_for_resource=True,
     ):
         """
-        Create a Pod that fills up the cluster storage by writing data to a PVC.
-        Also creates the linked PVC.
-
-        Args:
-            name (str): Name of the Pod to create.
-            block_size (str): Block size for the dd command.
-            cpu_request (str): CPU request for the Pod.
-            mem_request (str): Memory request for the Pod.
-            cpu_limit (str): CPU limit for the Pod.
-            mem_limit (str): Memory limit for the Pod.
-            fill_mode (str): Mode of filling data, either 'zero' or 'random'.
-            base_yaml_path (str): Path to the base Pod YAML manifest.
-            pvc_name (str): Name of the PVC to create and attach to the Pod.
-            sc_name (str): StorageClass name for the PVC.
-            storage (str): Storage size for the PVC.
-            pvc_base_yaml_path (str): Path to the base PVC YAML manifest.
-            wait_for_resource (bool): Whether to wait for the Pod to be running.
-
+        Create a Job that fills up cluster storage by writing data to a PVC.
+        Assumes manifest is a Job (pod spec under spec.template.spec).
         """
-        self.name = name or create_unique_resource_name("fill-pool-pod", "pod")
+        self.name = name or create_unique_resource_name("fill-pool", "job")
         sc_name = sc_name or constants.DEFAULT_STORAGECLASS_RBD
         proj_obj = helpers.create_project()
         self.namespace = proj_obj.namespace
@@ -75,21 +56,29 @@ class FillPoolPod(object):
 
         input_source = "/dev/zero" if fill_mode == "zero" else "/dev/urandom"
 
-        # Load base Pod manifest
-        pod_data = templating.load_yaml(base_yaml_path)
-        # Apply overrides
-        pod_data["metadata"]["name"] = self.name
-        pod_data["metadata"]["namespace"] = self.namespace
-        container = pod_data["spec"]["containers"][0]
-        volume = pod_data["spec"]["volumes"][0]
+        # Load Job manifest and apply metadata
+        job_data = templating.load_yaml(base_yaml_path)
+        job_data.setdefault("metadata", {})
+        job_data["metadata"]["name"] = self.name
+        job_data["metadata"]["namespace"] = self.namespace
 
-        # Update PVC name in Pod
-        pvc_name = pvc_name or create_unique_resource_name("fill-pool-pvc", "pvc")
-        volume["persistentVolumeClaim"]["claimName"] = pvc_name
+        # Assume Job: pod spec under spec.template.spec
+        template = job_data["spec"]["template"]
+        template.setdefault("metadata", {})
+        template["metadata"]["namespace"] = self.namespace
+        pod_spec = template["spec"]
 
-        # Update BLOCK_SIZE env variable
+        container = pod_spec["containers"][0]
+        volume = pod_spec["volumes"][0]
+
+        # Prepare PVC name and update volume claim
+        pvc_name = pvc_name or create_unique_resource_name("fill-pool", "pvc")
+        if "persistentVolumeClaim" in volume:
+            volume["persistentVolumeClaim"]["claimName"] = pvc_name
+
+        # Update BLOCK_SIZE env variable if present
         for env_var in container.get("env", []):
-            if env_var["name"] == "BLOCK_SIZE":
+            if env_var.get("name") == "BLOCK_SIZE":
                 env_var["value"] = block_size
 
         # Update resources
@@ -98,32 +87,36 @@ class FillPoolPod(object):
             "limits": {"cpu": cpu_limit, "memory": mem_limit},
         }
 
-        # Update command dynamically
-        container["command"] = [
-            "sh",
-            "-c",
+        # Ensure the container will run the dd command
+        dd_cmd = (
             f'echo "Filling PVC with {fill_mode} data..."; '
-            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}}",
-        ]
+            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}}"
+        )
+        container["command"] = ["sh", "-c", dd_cmd]
+        container.pop("args", None)
 
-        pvc_name = pvc_name or create_unique_resource_name("fill-pool-pvc", "pvc")
-        sc_name = sc_name or constants.DEFAULT_STORAGECLASS_RBD
-        # Load base PVC manifest
+        # Prepare PVC manifest
         pvc_data = templating.load_yaml(pvc_base_yaml_path)
-        # Apply overrides
+        pvc_data.setdefault("metadata", {})
         pvc_data["metadata"]["name"] = pvc_name
-        pvc_data["metadata"]["namespace"] = pod_data["metadata"]["namespace"]
+        pvc_data["metadata"]["namespace"] = self.namespace
         pvc_data["spec"]["storageClassName"] = sc_name
         pvc_data["spec"]["resources"]["requests"]["storage"] = storage
 
-        # Create PVC resource in OpenShift
+        # Create PVC resource
         ocs_obj = helpers.create_resource(**pvc_data)
         self.pvc_obj = PVC(**ocs_obj.data)
-        # Create Pod resource in OpenShift
-        ocs_obj = helpers.create_resource(**pod_data)
-        self.pod_obj = Pod(**ocs_obj.data)
-        if wait_for_resource:
-            # Wait for Pod to be in Running state
+
+        # Create Job resource
+        self.job_obj = helpers.create_resource(**job_data)
+        # Get Pod created by the Job
+        label = f"job-name={self.name}"
+        pods = get_pods_having_label(label, namespace=self.namespace)
+        if pods:
+            self.pod_obj = Pod(**pods[0])
+
+        # Wait for Pod to be Running if we wrapped it
+        if wait_for_resource and self.pod_obj:
             self.pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 resource_name=self.pod_obj.name,
@@ -133,14 +126,19 @@ class FillPoolPod(object):
 
     def cleanup(self):
         """
-        Cleanup the Fill Pool Pod resources: Pod, PVC, and Namespace.
-
+        Cleanup resources: Job, Pod, PVC, and Namespace.
         """
-        log.info("Cleaning up Fill Pool Pod resources")
-        if not self.pod_obj and not self.pvc_obj and not self.namespace:
-            log.info("No resources to clean up.")
-            return
+        log.info("Cleaning up Fill Pool Job resources...")
 
+        if self.job_obj:
+            job_name = getattr(self.job_obj, "name", "<unknown>")
+            log.info(f"Deleting Job {job_name}")
+            try:
+                self.job_obj.delete()
+            except Exception as e:
+                log.warning(f"Failed to delete Job {job_name}: {e}")
+
+        # Delete Pod if it still exists
         if self.pod_obj:
             pod_name = getattr(self.pod_obj, "name", "<unknown>")
             log.info(f"Deleting Pod {pod_name}")
@@ -148,6 +146,7 @@ class FillPoolPod(object):
                 self.pod_obj.delete()
             except Exception as e:
                 log.warning(f"Failed to delete Pod {pod_name}: {e}")
+
         if self.pvc_obj:
             pvc_name = getattr(self.pvc_obj, "name", "<unknown>")
             log.info(f"Deleting PVC {pvc_name}")
@@ -157,6 +156,6 @@ class FillPoolPod(object):
                 log.warning(f"Failed to delete PVC {pvc_name}: {e}")
         if self.namespace:
             log.info(f"Deleting Namespace {self.namespace}")
-            catch_exceptions(CommandFailed)(run_cmd)(
+            catch_exceptions(CommandFailed)(exec_cmd)(
                 f"oc delete project {self.namespace}"
             )

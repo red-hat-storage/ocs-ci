@@ -84,7 +84,7 @@ from ocs_ci.ocs.exceptions import (
     MissingDecoratorError,
     UnsupportedWorkloadError,
 )
-from ocs_ci.ocs.fill_pool_pod import FillPoolPod
+from ocs_ci.ocs.fill_pool_job import FillPoolJob
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
@@ -11096,14 +11096,14 @@ def keyrotation_precedence_helper():
 
 
 @pytest.fixture
-def fill_pod_factory(request):
+def fill_job_factory(request):
     """
-    Factory to generate and create a Pod resource in OpenShift to fill up the cluster.
-    Also creates a new namespace for the Pod and PVC.
-    Returns a factory method to create the FillPoolPod object.
+    Factory to generate and create a Job resource in OpenShift to fill up the cluster.
+    Also creates a new namespace for the Job, Pod and PVC.
+    Returns a factory method to create the FillPoolJob object.
 
     """
-    fill_pool_pod_objs = []
+    fill_pool_job_objs = []
 
     def factory(
         name=None,
@@ -11113,13 +11113,13 @@ def fill_pod_factory(request):
         cpu_limit="500m",
         mem_limit="256Mi",
         fill_mode="zero",
-        base_yaml_path=constants.FILL_POOL_POD_YAML,
+        base_yaml_path=constants.FILL_POOL_JOB_YAML,
         pvc_name=None,
         sc_name=constants.DEFAULT_STORAGECLASS_RBD,
         storage="50Gi",
     ):
         """
-        Create a Pod that fills up the cluster storage by writing data to a PVC.
+        Create a Job that fills up the cluster storage by writing data to a PVC.
 
         Args:
             name (str): Name of the Pod to create.
@@ -11129,19 +11129,19 @@ def fill_pod_factory(request):
             cpu_limit (str): CPU limit for the Pod.
             mem_limit (str): Memory limit for the Pod.
             fill_mode (str): Mode of filling data, either 'zero' or 'random'.
-            base_yaml_path (str): Path to the base Pod YAML manifest.
+            base_yaml_path (str): Path to the base Job YAML manifest.
             pvc_name (str): Name of the PVC to create and attach to the Pod.
             sc_name (str): StorageClass name for the PVC.
             storage (str): Storage size for the PVC.
 
         Returns:
-            FillPoolPod: The created FillPoolPod object.
+            FillPoolJob: The created FillPoolJob object.
 
         """
-        fill_pool_pod_obj = FillPoolPod()
-        fill_pool_pod_objs.append(fill_pool_pod_obj)
+        fill_pool_job_obj = FillPoolJob()
+        fill_pool_job_objs.append(fill_pool_job_obj)
 
-        fill_pool_pod_obj.create(
+        fill_pool_job_obj.create(
             name=name,
             block_size=block_size,
             cpu_request=cpu_request,
@@ -11155,16 +11155,16 @@ def fill_pod_factory(request):
             storage=storage,
         )
 
-        return fill_pool_pod_obj
+        return fill_pool_job_obj
 
     def finalizer():
         """
-        Delete created Pods, PVCs, and Namespaces of the FillPoolPod objects.
+        Delete created Jobs, Pods, PVCs, and Namespaces of the FillPoolJob objects.
 
         """
-        for fill_pool_pod_obj in fill_pool_pod_objs:
-            log.info(f"Cleanup the FillPoolPod object {fill_pool_pod_obj.name}")
-            fill_pool_pod_obj.cleanup()
+        for fill_pool_job_obj in fill_pool_job_objs:
+            log.info(f"Cleanup the FillPoolJob object {fill_pool_job_obj.name}")
+            fill_pool_job_obj.cleanup()
 
         timeout = 15
         log.info(f"Wait {timeout} seconds for any capacity changes to reflect")

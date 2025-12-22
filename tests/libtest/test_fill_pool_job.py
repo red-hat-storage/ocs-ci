@@ -17,14 +17,14 @@ log = logging.getLogger(__name__)
 
 @libtest
 @ignore_leftovers
-class TestFillPoolPod(ManageTest):
+class TestFillPoolJob(ManageTest):
     """
-    Test the Fill Pool Pod functionalities
+    Test the Fill Pool Job functionalities
     """
 
-    def test_fill_pool_pod_with_both_modes(self, fill_pod_factory):
+    def test_fill_pool_job_with_both_modes(self, fill_job_factory):
         """
-        Run Fill Pool Pod using both modes to fill the cluster to a target usage.
+        Run Fill Pool Job using both modes to fill the cluster to a target usage.
         Verifies that the workload completes, logs capacity usage and elapsed time.
 
         """
@@ -54,11 +54,11 @@ class TestFillPoolPod(ManageTest):
         )
 
         start = time.time()
-        fill_pod_factory(
+        fill_job_factory(
             fill_mode="zero",
             storage=f"{storage_to_fill_zero_mode}Gi",
         )
-        fill_pod_factory(
+        fill_job_factory(
             fill_mode="random",
             storage=f"{storage_to_fill_random_mode}Gi",
         )
@@ -78,32 +78,32 @@ class TestFillPoolPod(ManageTest):
         fill_up_time = end - start
         used_capacity = get_ceph_used_capacity()
         log.info(
-            f"Fill Pool Pod workload completed. Total used capacity: {used_capacity}GiB. "
+            f"Fill Pool Job workload completed. Total used capacity: {used_capacity}GiB. "
             f"Elapsed time: {fill_up_time} seconds."
         )
 
-    def test_manual_fill_pool_pod_cleanup(self, fill_pod_factory):
+    def test_manual_fill_pool_job_cleanup(self, fill_job_factory):
         """
-        Run Fill Pool Pod and then manually delete it to verify cleanup works as expected.
+        Run Fill Pool Job and then manually delete it to verify cleanup works as expected.
 
         """
         orig_ceph_used_capacity = get_ceph_used_capacity()
         log.info(f"Original used capacity: {orig_ceph_used_capacity}GiB")
 
-        fill_pod_obj = fill_pod_factory(
+        fill_job_obj = fill_job_factory(
             fill_mode="zero",
             storage="50Gi",
         )
-        log.info("Manually deleting the Fill Pool Pod")
-        fill_pod_obj.cleanup()
-        log.info("Fill Pool Pod deleted successfully")
+        log.info("Manually deleting the Fill Pool Job")
+        fill_job_obj.cleanup()
+        log.info("Fill Pool Job deleted successfully")
 
         timeout = 30
         log.info(f"Wait {timeout} seconds for any capacity changes to reflect")
         time.sleep(timeout)
 
         log.info(
-            "Verifying that used capacity remains unchanged after Fill Pool Pod deletion"
+            "Verifying that used capacity remains unchanged after Fill Pool Job deletion"
         )
         used_capacity = get_ceph_used_capacity()
         gap_diff_range = 10  # 10Gi gap
@@ -113,7 +113,7 @@ class TestFillPoolPod(ManageTest):
             <= (orig_ceph_used_capacity + gap_diff_range)
         ):
             raise AssertionError(
-                f"Used capacity changed after Fill Pool Pod deletion. "
+                f"Used capacity changed after Fill Pool Job deletion. "
                 f"Original: {orig_ceph_used_capacity}GiB, Current: {used_capacity}GiB"
             )
-        log.info("Used capacity remains unchanged after Fill Pool Pod deletion")
+        log.info("Used capacity remains unchanged after Fill Pool Job deletion")
