@@ -2410,8 +2410,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "storage_class_noobaa_option": (
-        "#openshift-storage\\.noobaa\\.io-link > a > div:nth-child(1) > span",
-        By.CSS_SELECTOR,
+        "//*[@class='odf-resource-item' and contains(text(), 'openshift-storage.noobaa.io')]",
+        By.XPATH,
     ),
     "obc_bucket_name_input": ("#obc-name", By.CSS_SELECTOR),
     "create_bucket_button_s3": (
@@ -2471,7 +2471,8 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "bucket_list_items": (
-        "//a[starts-with(@href, '/odf/object-storage/buckets/')]",
+        "//a[starts-with(@href, '/odf/object-storage/buckets/')] |"
+        "//a[starts-with(@href, '/odf/object-storage/noobaa/buckets/')]",
         By.XPATH,
     ),
     "bucket_action_button": (
