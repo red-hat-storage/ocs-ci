@@ -27,6 +27,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_ocs_version,
+    ui,
 )
 from ocs_ci.utility.utils import get_vault_cli
 from ocs_ci.ocs import constants
@@ -36,6 +37,7 @@ from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 logger = logging.getLogger(__name__)
 
 
+@ui
 @black_squad
 @pytest.mark.parametrize(
     argnames=["kv_version"],
