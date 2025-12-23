@@ -8,7 +8,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.framework.pytest_customization.marks import tier1, blue_squad
+from ocs_ci.framework.pytest_customization.marks import tier4c, blue_squad
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +21,16 @@ OPERATOR_PROBE_PARAMS = [
 ]
 
 
-@tier1
+@tier4c
 @ignore_leftovers
 @blue_squad
 @pytest.mark.parametrize("csv_prefix, probe_type, healthy_path", OPERATOR_PROBE_PARAMS)
 class TestOperatorProbeResilience(ManageTest):
+    """
+    Test suite to verify the resilience of OCS and MCG operator probes.
+    It ensures that the operators correctly handle liveness and readiness
+    probe failures by restarting or changing pod status.
+    """
 
     @pytest.fixture(autouse=True)
     def setup(self, csv_prefix):
@@ -53,7 +58,13 @@ class TestOperatorProbeResilience(ManageTest):
             self.label_key, self.label_value = "noobaa-operator", "deployment"
 
     def _patch_csv(self, probe_type, path_value):
-        """Helper function to apply JSON patch to the CSV."""
+        """
+        Helper function to apply JSON patch to the CSV.
+
+        Args:
+            probe_type (str): Type of probe to patch (liveness/readiness)
+            path_value (str): The HTTP path value to set for the probe
+        """
         base_path = f"/spec/install/spec/deployments/0/spec/template/spec/containers/0/{probe_type}Probe"
         patch_list = [
             {"op": "replace", "path": f"{base_path}/httpGet/path", "value": path_value},
@@ -65,6 +76,13 @@ class TestOperatorProbeResilience(ManageTest):
         self.csv_obj.patch(params=patch_list, format_type="json")
 
     def test_probe_resilience(self, probe_type, healthy_path):
+        """
+        Test case to verify operator pod behavior when probes fail.
+        1. Patches the operator CSV with an invalid probe path.
+        2. Verifies that liveness failure causes a restart.
+        3. Verifies that readiness failure causes the pod to become NotReady.
+        4. Restores the healthy configuration and ensures stability.
+        """
         logger.info(
             f"Starting {probe_type.upper()} Probe Failure Test for {self.csv_name}"
         )
@@ -114,15 +132,14 @@ class TestOperatorProbeResilience(ManageTest):
                 for p in live_pods:
                     try:
                         pod_data = p.get()
-                        if pod_data.get("status", {}).get("phase") == "Running":
-                            statuses = pod_data.get("status", {}).get(
-                                "containerStatuses", []
-                            )
-                            if statuses and not statuses[0].get("ready"):
-                                logger.info(
-                                    f"Confirmed: Pod {p.name} is Running but NotReady."
-                                )
-                                return True
+                        # Removed Running phase check to allow for Pods in other states
+                        # like 'Pending' or during transition as requested by reviewer.
+                        statuses = pod_data.get("status", {}).get(
+                            "containerStatuses", []
+                        )
+                        if statuses and not statuses[0].get("ready"):
+                            logger.info(f"Confirmed: Pod {p.name} status is NotReady.")
+                            return True
                     except (CommandFailed, TypeError):
                         continue
                 return False
