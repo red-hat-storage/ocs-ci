@@ -29,6 +29,7 @@ from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
+    skipif_hci_provider,
     skipif_rosa_hcp,
     skipif_compact_mode,
 )
@@ -127,7 +128,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier1
     @skipif_managed_service
-    @skipif_hci_provider_and_client
+    @skipif_hci_provider
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
