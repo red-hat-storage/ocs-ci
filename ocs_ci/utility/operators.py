@@ -575,6 +575,8 @@ class MetalLBOperator(Operator):
         operatorgroup_data["metadata"]["annotations"] = {
             "olm.providedAPIs": "MetalLB.v1beta1.metallb.io",
         }
+        # metallb does not support InstallMode OwnNamespace
+        operatorgroup_data["spec"]["targetNamespaces"] = []
 
     def _deployment_verification(self):
         """
