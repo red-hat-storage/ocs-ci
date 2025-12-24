@@ -6041,10 +6041,31 @@ def remove_toleration():
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
-    params = '[{"op": "remove", "path": "/spec/placement"}]'
-    result = storagecluster_obj.patch(params=params, format_type="json")
-    if not result:
-        logger.error("Failed to remove toleration from storagecluster")
+    try:
+        # Check if placement exists before trying to remove it
+        storagecluster_data = storagecluster_obj.get()
+        if "placement" in storagecluster_data.get("spec", {}):
+            params = '[{"op": "remove", "path": "/spec/placement"}]'
+            result = storagecluster_obj.patch(params=params, format_type="json")
+            if not result:
+                logger.error("Failed to remove toleration from storagecluster")
+                success = False
+            else:
+                logger.info(
+                    "Successfully removed placement section from storagecluster"
+                )
+        else:
+            logger.info(
+                "No placement section found in storagecluster, skipping removal"
+            )
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to remove placement from storagecluster: {e}. "
+            "This may be expected if placement was not previously set."
+        )
+        # Avoided to mark as failure since this might be expected
+    except Exception as e:
+        logger.error(f"Unexpected error removing placement from storagecluster: {e}")
         success = False
     logger.info("Remove tolerations from subscriptions")
 
@@ -6070,20 +6091,56 @@ def remove_toleration():
         )
         driver_list = ocp.get_all_resource_names_of_a_kind(kind=constants.DRIVER)
         for driver_name in driver_list:
-            params = (
-                '[{"op": "remove", "path": "/spec/controllerPlugin/tolerations"},'
-                '{"op": "remove", "path": "/spec/nodePlugin/tolerations"}]'
-            )
-            result = driver_obj.patch(
-                resource_name=driver_name, params=params, format_type="json"
-            )
-            if result:
-                logger.info(
-                    f"Successfully removed tolerations from CSI driver {driver_name}"
+            try:
+                # Check if tolerations exist before attempt to remove toleration
+                driver_data = driver_obj.get(resource_name=driver_name)
+                spec = driver_data.get("spec", {})
+                controller_plugin = spec.get("controllerPlugin") or {}
+                node_plugin = spec.get("nodePlugin") or {}
+
+                # Build patch command if paths exist
+                params = []
+                if (
+                    isinstance(controller_plugin, dict)
+                    and "tolerations" in controller_plugin
+                ):
+                    params.append(
+                        {"op": "remove", "path": "/spec/controllerPlugin/tolerations"}
+                    )
+                if isinstance(node_plugin, dict) and "tolerations" in node_plugin:
+                    params.append(
+                        {"op": "remove", "path": "/spec/nodePlugin/tolerations"}
+                    )
+
+                if params:
+                    result = driver_obj.patch(
+                        resource_name=driver_name,
+                        params=json.dumps(params),
+                        format_type="json",
+                    )
+                    if result:
+                        logger.info(
+                            f"Successfully removed tolerations from CSI driver {driver_name}"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to remove tolerations from CSI driver {driver_name}"
+                        )
+                        success = False
+                else:
+                    logger.info(
+                        f"No tolerations found in CSI driver {driver_name}, skipping removal"
+                    )
+            except CommandFailed as e:
+                # Handle case where patch fails (e.g., path doesn't exist)
+                logger.warning(
+                    f"Failed to remove tolerations from CSI driver {driver_name}: {e}. "
+                    "This may be expected if tolerations were not previously added."
                 )
-            else:
+                # Don't mark as failure since this might be expected in negative test cases
+            except Exception as e:
                 logger.error(
-                    f"Failed to remove tolerations from CSI driver {driver_name}"
+                    f"Unexpected error while removing tolerations from CSI driver {driver_name}: {e}"
                 )
                 success = False
 
