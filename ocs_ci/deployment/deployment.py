@@ -3298,7 +3298,7 @@ class MultiClusterDROperatorsDeploy(object):
         if not sample.wait_for_func_status(True):
             raise TimeoutExpiredError("DR Policy failed to reach Succeeded state")
 
-        # Validate DRPolicy grouping for ODF version >= 4.20 (only when CG is enabled)
+        # Validate DRPolicy grouping for ODF version >= 4.21
         if is_cg_enabled():
             logger.info("Validating DRPolicy grouping configuration")
             validate_drpolicy_grouping(drpolicy_name=self.dr_policy_name)
