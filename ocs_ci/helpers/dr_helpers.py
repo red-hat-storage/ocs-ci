@@ -581,7 +581,11 @@ def is_cg_enabled():
     if config.MULTICLUSTER["multicluster_mode"] != constants.RDR_MODE:
         return False
 
-    return config.ENV_DATA.get("cg_enabled", False)
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version > version.VERSION_4_20:
+        return config.ENV_DATA.get("cg_enabled", True)
+    else:
+        return False
 
 
 def get_resource_count(kind, namespace=None):
@@ -1374,7 +1378,7 @@ def validate_drpolicy_grouping(drpolicy_name=None):
     Validate DRPolicy configuration for CG behavior.
 
     This function validates that DRPolicy has grouping=true for every storageClass
-    in status.async.peerClasses in ODF version >= 4.20.
+    in status.async.peerClasses in ODF version >= 4.21
 
     Args:
         drpolicy_name (str, optional): Name of specific DRPolicy to validate.
@@ -1388,12 +1392,12 @@ def validate_drpolicy_grouping(drpolicy_name=None):
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version < version.VERSION_4_20:
-        logger.info("ODF version < 4.20, skipping DRPolicy grouping validation")
+    if ocs_version <= version.VERSION_4_20:
+        logger.info("ODF version < 4.21, skipping DRPolicy grouping validation")
         return True
 
     logger.info(
-        "Validating DRPolicy grouping for ODF version >= 4.20 to ensure CG behavior is properly configured."
+        "Validating DRPolicy grouping for ODF version >= 4.21 to ensure CG behavior is properly configured."
     )
 
     # Get DRPolicy resources
