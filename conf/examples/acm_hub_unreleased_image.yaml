@@ -1,3 +1,4 @@
 ---
 ENV_DATA:
-  acm_unreleased_image: "2.12.0-DOWNSTREAM-2024-10-18-21-57-41"
+  acm_unreleased_image: "2.16.0-DOWNSTREAM-2025-12-15-05-18-13"
+  mce_unreleased_image: "2.11.0-DOWNSTREAM-2025-12-14-23-33-52"
