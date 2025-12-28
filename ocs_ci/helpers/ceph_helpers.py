@@ -1,10 +1,8 @@
 import logging
 
-from ocs_ci.ocs.cluster import get_percent_used_capacity
+from ocs_ci.ocs.cluster import get_percent_used_capacity, get_ceph_used_capacity
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 logger = logging.getLogger(__name__)
 
@@ -47,20 +45,6 @@ def wait_for_percent_used_capacity_reached(
             f"Failed to reach the expected percent used capacity {expected_used_capacity}% "
             f"in the given timeout {timeout}"
         ) from ex
-
-
-def get_ceph_used_capacity() -> float:
-    """
-    Return the cluster used Ceph capacity in GiB.
-
-    Returns:
-        float: Used capacity in GiB.
-
-    """
-    ct_pod = get_ceph_tools_pod()
-    output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-    total_used = int(output.get("stats").get("total_used_raw_bytes"))
-    return total_used / constants.BYTES_IN_GB
 
 
 def wait_for_ceph_used_capacity_reached(expected_used_capacity, timeout=1800, sleep=20):

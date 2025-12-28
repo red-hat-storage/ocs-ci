@@ -8,9 +8,8 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.ceph_helpers import (
     wait_for_ceph_used_capacity_reached,
-    get_ceph_used_capacity,
 )
-from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import CephCluster, get_ceph_used_capacity
 
 log = logging.getLogger(__name__)
 

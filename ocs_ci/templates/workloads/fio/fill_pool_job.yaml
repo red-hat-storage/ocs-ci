@@ -20,7 +20,7 @@ spec:
           - -c
           - |
             echo "Filling PVC with zeros..."
-            dd if=/dev/zero of=/mnt/fill/testfile bs=${BLOCK_SIZE:-1M}
+            dd if=${INPUT_FILE:-/dev/zero} of=/mnt/fill/testfile bs=${BLOCK_SIZE:-1M}
         env:
         - name: BLOCK_SIZE
           value: "1M"
