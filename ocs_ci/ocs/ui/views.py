@@ -2661,8 +2661,13 @@ bucket_tab = {
         "//button[normalize-space()='Manage public access settings']",
         By.XPATH,
     ),
+    "refresh_bucket_button": (
+        "//button[normalize-space()='Refresh']",
+        By.XPATH,
+    ),
     "block_all_public_access_checkbox": (
-        "//label[.//p[contains(., 'Block all public access')]]//input[@type='checkbox']",
+        # "//label[.//p[contains(., 'Block all public access')]]//input[@type='checkbox']",
+        "//label[contains(., 'Block all public access')]//input[@type='checkbox']",
         By.XPATH,
     ),
     "block_all_public_access_msg": (
