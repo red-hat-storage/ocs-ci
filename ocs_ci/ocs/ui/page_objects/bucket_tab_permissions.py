@@ -724,20 +724,41 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             text_unchecked = block_public_access_dict[block_public_access][
                 "text_unchecked"
             ]
-
             # check the checkbox
             self.do_click(
                 self.bucket_tab["manage_public_access_settings_button"],
                 timeout=QUICK_WAIT,
             )
             self.do_click(self.bucket_tab[checkbox], timeout=QUICK_WAIT)
+            logger.info(
+                "**** After click**** "
+                + str(self.get_checkbox_status(self.bucket_tab[checkbox]))
+            )
+            # logger.info("**** After click2**** " + self.get_element_text(self.bucket_tab[msg]))
             self.do_click(
                 self.bucket_tab["save_public_access_settings_button"],
                 timeout=QUICK_WAIT,
             )
+            self.refresh_page()
+            self.page_has_loaded(sleep_time=30)
+            # logger.info("**** Wait for the old checkbox")
+            # self.wait_for_element_to_be_visible(self.bucket_tab[checkbox], timeout=300)
+            # logger.info("**** After waiting for the old checkbox")
 
-            self.page_has_loaded()
-            if not self.get_checkbox_status(self.bucket_tab[checkbox]):
+            # checkbox_new =
+            # ("//p[normalize-space()='Block all public access']/ancestor::label//input[@type='checkbox']",By.XPATH)
+            # checkbox_new = ("//li[@id='PublicAccessBlockConfiguration']//input[@type='checkbox']",
+            #                By.XPATH)
+            checkbox_new = (
+                "//li[@id='PublicAccessBlockConfiguration']/div//input[@type='checkbox']",
+                By.XPATH,
+            )
+
+            logger.info("**** Wait for the new checkbox")
+            self.wait_for_element_to_be_visible(checkbox_new, timeout=360)
+            logger.info("**** After waiting for the new checkbox")
+
+            if not self.get_checkbox_status(checkbox_new):
                 raise ValueError("The checkbox was not checked")
 
             text = self.get_element_text(self.bucket_tab[msg])
@@ -747,12 +768,19 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 )
 
             # uncheck the checkbox
+            logger.info("************ UNCHECKED ************")
             self.do_click(
                 self.bucket_tab["manage_public_access_settings_button"],
                 timeout=QUICK_WAIT,
             )
             self.do_click(self.bucket_tab[checkbox], timeout=QUICK_WAIT)
-
+            logger.info(
+                "**** UAfter click**** "
+                + str(self.get_checkbox_status(self.bucket_tab[checkbox]))
+            )
+            logger.info(
+                "**** UAfter click2**** " + self.get_element_text(self.bucket_tab[msg])
+            )
             self.do_click(
                 self.bucket_tab["save_public_access_settings_button"],
                 timeout=QUICK_WAIT,
@@ -763,7 +791,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             )
             self.do_click(self.bucket_tab["proceed_to_disable_public_access_button"])
 
-            self.page_has_loaded()
+            self.refresh_page()
+            self.page_has_loaded(sleep_time=5)
+            self.wait_for_element_to_be_visible(self.bucket_tab[checkbox])
+            self.wait_for_element_to_be_visible(self.bucket_tab[msg])
+            logger.info("**** Before Ucheckbox")
             if self.get_checkbox_status(self.bucket_tab[checkbox]):
                 raise ValueError("The checkbox was not unchecked")
 
