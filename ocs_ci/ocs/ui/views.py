@@ -252,8 +252,8 @@ deployment_4_11 = {
     "managed-csi_sc": ("managed-csi-link", By.ID),
     "standard_sc": ("standard-link", By.ID),
     "512": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
-    "2048": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.CSS_SELECTOR),
-    "4096": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.CSS_SELECTOR),
+    "2048": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.XPATH),
+    "4096": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.XPATH),
 }
 
 deployment_4_12 = {
