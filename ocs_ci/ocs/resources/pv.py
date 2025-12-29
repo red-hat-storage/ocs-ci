@@ -295,3 +295,113 @@ def wait_for_pvs_in_lvs_to_reach_status(
         timeout=timeout,
         sleep=sleep,
     )
+
+
+def get_pvs_by_names(pv_names):
+    """
+    Get the pv objects by their names
+
+    Args:
+        pv_names (list): The list of PV names to be retrieved.
+
+    Returns:
+        list: List of pv objects that match the provided names.
+
+    """
+    pv_objs = get_all_pvs()["items"]
+    return [pv_obj for pv_obj in pv_objs if get_pv_name(pv_obj) in pv_names]
+
+
+def wait_for_pvs_to_reach_status(pv_names, expected_status, timeout=180, sleep=10):
+    """
+    Wait for the Persistent Volumes (PVs) to reach the expected status within a given timeout.
+
+    Args:
+        pv_names (list): The list of PV names to be monitored.
+        expected_status (str): The expected status of the PVs (e.g., "Bound", "Available").
+        timeout (int): Maximum time to wait for the PVs to reach the expected status, in seconds.
+        sleep (int): Interval between successive checks, in seconds.
+
+    Returns:
+        bool: True if all PVs reach the expected status within the timeout, False otherwise.
+
+    Raises:
+        TimeoutExpiredError: If the PVs do not reach the expected status within the specified timeout.
+        ResourceWrongStatusException: If any PV enters an unexpected or error status.
+    """
+    try:
+        for pv_objs in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_pvs_by_names,
+            pv_names=pv_names,
+        ):
+            statuses = [get_pv_status(pv) for pv in pv_objs]
+            if all(status == expected_status for status in statuses):
+                logger.info(
+                    f"All PVs {pv_names} have reached the expected status: {expected_status}"
+                )
+                return True
+            else:
+                logger.info(
+                    f"Current statuses of PVs {pv_names}: {statuses}. Waiting for all to reach {expected_status}."
+                )
+    except TimeoutError:
+        logger.warning(
+            f"Timeout reached: Not all PVs {pv_names} reached the expected status: {expected_status} "
+            f"within {timeout} seconds."
+        )
+        return False
+
+
+def wait_for_new_pvs_status(
+    current_pv_objs, sc_name, expected_status, num_of_new_pvs=1, timeout=120, sleep=10
+):
+    """
+    Wait for the new pvs, that has been created in a specific storage class, to reach the expected status.
+
+    Args:
+        current_pv_objs (list): List of dictionaries of the current pv objects before creating
+            the new pvs (to be used to identify the new pvs)
+        sc_name (str): The name of the storage class of the pv objects
+        num_of_new_pvs (int): Number of the new pvs that should be in the expected status
+        expected_status (str): The expected status of the new pvs
+        timeout (int): time to wait for the new pv to come up
+        sleep (int): time to sleep between iterations
+
+    Returns:
+        bool: True if the new pvs are in the expected status. False, otherwise.
+
+    """
+    total_pv_objs = []
+
+    try:
+        for total_pv_objs in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_pv_objs_in_sc,
+            sc_name=sc_name,
+        ):
+            num_of_total_pvs = len(total_pv_objs)
+            expected_num_of_total_pvs = len(current_pv_objs) + num_of_new_pvs
+            if num_of_total_pvs == expected_num_of_total_pvs:
+                logger.info(f"Found {expected_num_of_total_pvs} PVs as expected")
+                break
+    except TimeoutError:
+        logger.warning(
+            f"expected to find {expected_num_of_total_pvs} PVs in sc {sc_name}, but find {num_of_total_pvs} PVs"
+        )
+        return False
+
+    old_pv_names = [get_pv_name(pv) for pv in current_pv_objs]
+    total_pv_names = [get_pv_name(pv) for pv in total_pv_objs]
+    new_pv_names = list(set(total_pv_names) - set(old_pv_names))
+    if not wait_for_pvs_to_reach_status(
+        pv_names=new_pv_names,
+        expected_status=expected_status,
+        timeout=timeout,
+        sleep=10,
+    ):
+        return False
+
+    return True

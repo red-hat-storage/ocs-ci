@@ -834,3 +834,110 @@ def get_pvcs_using_storageclass(
     except CommandFailed as e:
         log.error(f"Failed to get PVCs: {e}")
         raise
+
+
+def get_pvcs_in_deviceset(deviceset_name, namespace=None):
+    """
+    Get the Persistent Volume Claims (PVCs) associated with a specific Deviceset.
+
+    Args:
+        deviceset_name (str): The Deviceset name whose PVCs are being retrieved.
+        namespace (str): The namespace where the Deviceset PVCs are located.
+
+    Returns:
+        list: List of PVC objects associated with the specified Deviceset.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvcs = get_all_pvcs(namespace)
+    pvc_items = pvcs.get("items", [])
+    deviceset_pvcs = []
+
+    for pvc in pvc_items:
+        labels = pvc.get("metadata", {}).get("labels", {})
+        device_set_label = labels.get("ceph.rook.io/DeviceSet", "")
+        if device_set_label.startswith(deviceset_name):
+            deviceset_pvcs.append(PVC(**pvc))
+
+    return deviceset_pvcs
+
+
+def wait_for_pvcs_in_deviceset_to_reach_status(
+    deviceset_name, pvc_count, expected_status, namespace=None, timeout=180, sleep=10
+):
+    """
+    Wait for the Persistent Volume Claims (PVCs) associated with a specific Deviceset
+    to reach the expected status within a given timeout.
+
+    Args:
+        deviceset_name (str): The Deviceset name whose PVCs are being monitored.
+        pvc_count (int): The number of PVCs expected to reach the desired status.
+        expected_status (str): The expected status of the PVCs (e.g., "Bound", "Available").
+        namespace (str): The namespace where the Deviceset PVCs are located.
+        timeout (int): Maximum time to wait for the PVCs to reach the expected status, in seconds.
+        sleep (int): Interval between successive checks, in seconds.
+
+    Returns:
+        bool: True, if the PVCs reach the expected status within the specified timeout. False, otherwise.
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    log.info(
+        f"Waiting for the PVCs in the Deviceset {deviceset_name} to reach the "
+        f"expected status {expected_status}"
+    )
+    try:
+        for deviceset_pvcs in TimeoutSampler(
+            func=get_pvcs_in_deviceset,
+            deviceset_name=deviceset_name,
+            namespace=namespace,
+            timeout=timeout,
+            sleep=sleep,
+        ):
+            current_pvc_count = len(deviceset_pvcs)
+            if current_pvc_count != pvc_count:
+                log.warning(
+                    f"The current PVC count {current_pvc_count} is not equal to the "
+                    f"expected PVC count {pvc_count}"
+                )
+                continue
+            pvc_statuses = [pvc.status for pvc in deviceset_pvcs]
+            log.info(f"PVCs statuses = {pvc_statuses}")
+            if all([status == expected_status for status in pvc_statuses]):
+                log.info(
+                    f"All the PVCs in the Deviceset {deviceset_name} reached the "
+                    f"expected status {expected_status}"
+                )
+                return True
+    except TimeoutExpiredError:
+        log.warning(
+            f"The PVCs in the Deviceset {deviceset_name} failed to reach the "
+            f"expected status {expected_status} after {timeout} seconds"
+        )
+        return False
+
+
+def get_deviceclass_pvcs(deviceclass_name, namespace=None):
+    """
+    Get the Persistent Volume Claims (PVCs) associated with a specific DeviceClass.
+
+    Args:
+        deviceclass_name (str): The DeviceClass name whose PVCs are being retrieved.
+        namespace (str): The namespace where the DeviceClass PVCs are located.
+
+    Returns:
+        list: List of PVC objects associated with the specified DeviceClass.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvcs = get_all_pvcs(namespace)
+    pvc_items = pvcs.get("items", [])
+    deviceclass_pvcs = []
+
+    for pvc in pvc_items:
+        crush_device_class = (
+            pvc.get("metadata", {}).get("annotations", {}).get("crushDeviceClass", "")
+        )
+        if crush_device_class == deviceclass_name:
+            deviceclass_pvcs.append(PVC(**pvc))
+
+    return deviceclass_pvcs
