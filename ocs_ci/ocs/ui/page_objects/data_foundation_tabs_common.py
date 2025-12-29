@@ -533,12 +533,14 @@ class CreateResourceForm(PageNavigator):
         provider = "AWS S3" if provider.lower() == "aws" else provider
         self.do_click(self.mcg_stores["store_provider_dropdown"])
         self.do_click(
-            format_locator(self.mcg_stores["store_dropdown_option"], provider)
+            format_locator(self.mcg_stores["store_dropdown_option"], value=provider)
         )
 
         logger.info("Select region")
         self.do_click(self.mcg_stores["store_region_dropdown"])
-        self.do_click(format_locator(self.mcg_stores["store_dropdown_option"], region))
+        self.do_click(
+            format_locator(self.mcg_stores["store_dropdown_option"], value=region)
+        )
 
         logger.info("Select secret")
         self.do_click(self.mcg_stores["store_secret_dropdown"])
