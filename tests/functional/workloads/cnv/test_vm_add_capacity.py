@@ -12,7 +12,7 @@ from ocs_ci.helpers.cnv_helpers import (
     cal_md5sum_vm,
     run_dd_io,
 )
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
+from ocs_ci.helpers.keyrotation_helper import PVKeyRotation
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import TimeoutSampler
@@ -67,7 +67,7 @@ class TestVmAddCapacity(E2ETest):
         proj_obj = project_factory()
         kms.vault_path_token = kms.generate_vault_token()
         kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
-        pvk_obj = PVKeyrotation(sc_obj_def)
+        pvk_obj = PVKeyRotation(sc_obj_def)
         pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
         self.vm_list = []
