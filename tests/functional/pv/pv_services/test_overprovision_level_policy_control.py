@@ -1,5 +1,6 @@
 import logging
 import pytest
+import fauxfactory
 
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
@@ -24,11 +25,14 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True, scope="class")
 def setup_sc(storageclass_factory_class):
+    sc_blk_name = f"sc-test-blk-{fauxfactory.gen_alpha(8).lower()}"
+    sc_fs_name = f"sc-test-fs-{fauxfactory.gen_alpha(8).lower()}"
+
     sc_fs_obj = storageclass_factory_class(
-        interface=constants.CEPHFILESYSTEM, sc_name="sc-test-fs"
+        interface=constants.CEPHFILESYSTEM, sc_name=sc_fs_name
     )
     sc_blk_obj = storageclass_factory_class(
-        interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
+        interface=constants.CEPHBLOCKPOOL, sc_name=sc_blk_name
     )
     return {
         constants.CEPHBLOCKPOOL_SC: None,
@@ -116,14 +120,12 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             9.Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]
 
         """
+        # Quota names for default storage classes (these have fixed names)
         quota_names = {
             constants.CEPHBLOCKPOOL_SC: "ocs-storagecluster-ceph-rbd-quota-sc-test",
             constants.CEPHFILESYSTEM_SC: "ocs-storagecluster-cephfs-quota-sc-test",
-            "sc-test-blk": "sc-test-blk-quota-sc-test",
-            "sc-test-fs": "sc-test-fs-quota-sc-test",
         }
-        self.quota_name = quota_names[sc_name]
-        log.info("Create project with “openshift-quota” label")
+        log.info('Create project with "openshift-quota" label')
         project_name = "ocs-quota-sc-test"
         ocp_project_label = OCP(kind=constants.NAMESPACE)
         ocp_project_label.new_project(project_name=project_name)
@@ -135,13 +137,23 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
 
         sc_obj = setup_sc.get(sc_name)
 
+        # Get the actual storage class name (may have random suffix for sc-test-blk/sc-test-fs)
+        actual_sc_name = sc_obj.name if sc_obj else sc_name
+
+        # Construct quota name based on actual storage class name
+        if sc_name in [constants.CEPHBLOCKPOOL_SC, constants.CEPHFILESYSTEM_SC]:
+            self.quota_name = quota_names[sc_name]
+        else:
+            # For sc-test-blk and sc-test-fs, construct quota name from actual SC name
+            self.quota_name = f"{actual_sc_name}-quota-sc-test"
+
         log.info("Add 'overprovisionControl' section to storagecluster yaml file")
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )
-        sc_name_str = f'"{sc_name}"'
+        sc_name_str = f'"{actual_sc_name}"'
         params = (
             '{"spec": {"overprovisionControl": [{"capacity": "8Gi","storageClassName":'
             + sc_name_str
@@ -161,11 +173,11 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             timeout=60,
             sleep=4,
             func=verify_quota_resource_exist,
-            quota_name=quota_names[sc_name],
+            quota_name=self.quota_name,
         )
         if not sample.wait_for_func_status(result=True):
             err_str = (
-                f"Quota resource {quota_names[sc_name]} does not exist "
+                f"Quota resource {self.quota_name} does not exist "
                 f"after 60 seconds {clusterresourcequota_obj.describe()}"
             )
             log.error(err_str)
@@ -173,7 +185,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
 
         log.info("Check clusterresourcequota output")
         output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_names[sc_name]
+            resource_name=self.quota_name
         )
         log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
@@ -188,14 +200,29 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             size=5,
             status=constants.STATUS_BOUND,
         )
-        output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_names[sc_name]
+        # Wait for quota usage to update after PVC creation
+        log.info("Waiting for quota usage to reflect PVC creation")
+        sample = TimeoutSampler(
+            timeout=120,
+            sleep=5,
+            func=clusterresourcequota_obj.describe,
+            resource_name=self.quota_name,
         )
-        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
-        assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota,
-            expected_strings=["5Gi", "8Gi"],
-        ), f"{output_clusterresourcequota}\n expected string does not exist."
+        for output_clusterresourcequota in sample:
+            log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
+            if self.verify_substrings_in_string(
+                output_string=output_clusterresourcequota,
+                expected_strings=["5Gi", "8Gi"],
+            ):
+                log.info("Quota usage updated successfully")
+                break
+        else:
+            err_str = (
+                f"Quota usage did not update to show 5Gi after 120 seconds. "
+                f"Current output: {output_clusterresourcequota}"
+            )
+            log.error(err_str)
+            raise TimeoutExpiredError(err_str)
         pod_factory(
             interface=sc_type,
             pvc=pvc_obj,
@@ -229,13 +256,29 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
 
         log.info("Resize the PVC to 6Gi and verify it is working [8Gi > 6Gi]")
         pvc_obj.resize_pvc(new_size=6, verify=True)
-        output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_names[sc_name]
+        # Wait for quota usage to update after PVC resize
+        log.info("Waiting for quota usage to reflect PVC resize")
+        sample = TimeoutSampler(
+            timeout=120,
+            sleep=5,
+            func=clusterresourcequota_obj.describe,
+            resource_name=self.quota_name,
         )
-        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
-        assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota, expected_strings=["8Gi", "6Gi"]
-        ), f"{output_clusterresourcequota}\n expected string does not exist."
+        for output_clusterresourcequota in sample:
+            log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
+            if self.verify_substrings_in_string(
+                output_string=output_clusterresourcequota,
+                expected_strings=["8Gi", "6Gi"],
+            ):
+                log.info("Quota usage updated successfully after resize")
+                break
+        else:
+            err_str = (
+                f"Quota usage did not update to show 6Gi after 120 seconds. "
+                f"Current output: {output_clusterresourcequota}"
+            )
+            log.error(err_str)
+            raise TimeoutExpiredError(err_str)
 
         log.info(
             "Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]"
@@ -246,14 +289,29 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             storageclass=sc_obj,
             size=1,
         )
-        output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=quota_names[sc_name]
+        # Wait for quota usage to update after PVC creation
+        log.info("Waiting for quota usage to reflect new PVC creation")
+        sample = TimeoutSampler(
+            timeout=120,
+            sleep=5,
+            func=clusterresourcequota_obj.describe,
+            resource_name=self.quota_name,
         )
-
-        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
-        assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota, expected_strings=["8Gi", "7Gi"]
-        ), f"{output_clusterresourcequota}\n expected string does not exist."
+        for output_clusterresourcequota in sample:
+            log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
+            if self.verify_substrings_in_string(
+                output_string=output_clusterresourcequota,
+                expected_strings=["8Gi", "7Gi"],
+            ):
+                log.info("Quota usage updated successfully after new PVC creation")
+                break
+        else:
+            err_str = (
+                f"Quota usage did not update to show 7Gi after 120 seconds. "
+                f"Current output: {output_clusterresourcequota}"
+            )
+            log.error(err_str)
+            raise TimeoutExpiredError(err_str)
 
     def verify_substrings_in_string(self, output_string, expected_strings):
         """
