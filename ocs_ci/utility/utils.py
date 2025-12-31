@@ -3499,6 +3499,24 @@ def replace_content_in_file(file, old, new, match_and_replace_line=False):
         fd.writelines(file_data)
 
 
+def replace_regexp_in_file(filepath, pattern, new_line):
+    """
+    Replace the first line in filepath matching pattern with new_line.
+    The match is based on a regular expression (re.MULTILINE).
+    """
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+    new_content, count = re.subn(
+        pattern, new_line, content, count=1, flags=re.MULTILINE
+    )
+    if count == 0:
+        print(f"No match found for pattern: {pattern}")
+    else:
+        print(f"Replaced {count} line(s) matching pattern: {pattern}")
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(new_content)
+
+
 @retry((CommandFailed), tries=100, delay=10, backoff=1)
 def wait_for_co(operator):
     """
