@@ -7,6 +7,8 @@ import os
 import re
 import tempfile
 from datetime import datetime
+from ocs_ci.utility.retry import retry
+
 
 import yaml
 
@@ -200,6 +202,7 @@ def create_openshift_install_log_file(cluster_path, console_url):
     logger.info("Created '.openshift_install.log' file")
 
 
+@retry((CommandFailed,), tries=3, delay=10, backoff=2)
 def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
     """
     Get IDMS from catalog image (if exists) and apply it on the cluster (if
