@@ -480,8 +480,8 @@ def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
     base64_char_count = sum(1 for char in non_whitespace if char in base64_chars)
     ratio = base64_char_count / len(non_whitespace)
 
-    # Must be 100% base64 characters (no spaces, punctuation, etc.)
-    if ratio < 1.0:
+    # Must be 95%+ base64 characters to allow YAML prefixes like "- key:"
+    if ratio < 0.95:
         return False
 
     # Additional heuristic: reject if it looks like regular text
@@ -532,7 +532,7 @@ def _extract_base64_blocks(lines: list) -> list:
     return blocks
 
 
-def _truncate_large_base64(output: str, max_base64_size: int = 1024) -> str:
+def truncate_large_base64(output: str, max_base64_size: int = 1024) -> str:
     """
     Truncate large base64 blocks in command output to reduce log noise.
 
@@ -839,7 +839,7 @@ def exec_cmd(
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
-        truncated_stdout = _truncate_large_base64(masked_stdout)
+        truncated_stdout = truncate_large_base64(masked_stdout)
         log.debug(f"Command stdout: {truncated_stdout}")
     else:
         log.debug("Command stdout is empty")
@@ -847,7 +847,7 @@ def exec_cmd(
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
         if not silent:
-            truncated_stderr = _truncate_large_base64(masked_stderr)
+            truncated_stderr = truncate_large_base64(masked_stderr)
             log.warning(f"Command stderr: {truncated_stderr}")
         else:
             if output_file:

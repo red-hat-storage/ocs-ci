@@ -240,7 +240,7 @@ def test_truncate_large_base64_small_output():
     Check that small outputs are returned unchanged (fast path).
     """
     small_output = "status: Running\nname: test-pod"
-    result = utils._truncate_large_base64(small_output, max_base64_size=1024)
+    result = utils.truncate_large_base64(small_output, max_base64_size=1024)
     assert result == small_output
 
 
@@ -253,7 +253,7 @@ def test_truncate_large_base64_single_large_block():
     large_base64_line2 = "AAAAASUVORK5CYII1234567890AB" * 40  # ~1200 chars
     output = f"image: myapp\n{large_base64_line1}\n{large_base64_line2}\nname: test"
 
-    result = utils._truncate_large_base64(output, max_base64_size=1024)
+    result = utils.truncate_large_base64(output, max_base64_size=1024)
 
     # Should contain truncation message
     assert "[BASE64_TRUNCATED:" in result
@@ -273,7 +273,7 @@ def test_truncate_large_base64_small_block_preserved():
     small_base64 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" * 10  # ~360 chars
     output = f"token: {small_base64}\nstatus: active"
 
-    result = utils._truncate_large_base64(output, max_base64_size=1024)
+    result = utils.truncate_large_base64(output, max_base64_size=1024)
 
     # Small base64 should be preserved
     assert small_base64 in result
@@ -289,7 +289,7 @@ def test_truncate_large_base64_multiline_block():
     line2 = "AAAAASUVORK5CYII1234567890AB" * 30  # ~900 chars
     output = f"image: |\n  {line1}\n  {line2}\nname: test-pod"
 
-    result = utils._truncate_large_base64(output, max_base64_size=1024)
+    result = utils.truncate_large_base64(output, max_base64_size=1024)
 
     # Multiline block (~1800 chars) should be truncated
     assert "[BASE64_TRUNCATED:" in result
@@ -302,7 +302,7 @@ def test_truncate_large_base64_no_base64():
     Check that output without base64 is returned unchanged.
     """
     output = "status: Running\nready: 3/3\nage: 5d\nimage: nginx:latest"
-    result = utils._truncate_large_base64(output, max_base64_size=1024)
+    result = utils.truncate_large_base64(output, max_base64_size=1024)
     assert result == output
 
 
@@ -310,5 +310,25 @@ def test_truncate_large_base64_empty_output():
     """
     Check that empty output is handled correctly.
     """
-    assert utils._truncate_large_base64("", max_base64_size=1024) == ""
-    assert utils._truncate_large_base64(None, max_base64_size=1024) is None
+    assert utils.truncate_large_base64("", max_base64_size=1024) == ""
+    assert utils.truncate_large_base64(None, max_base64_size=1024) is None
+
+
+def test_is_base64_block_yaml_prefixed():
+    """
+    Check that _is_base64_block detects base64 with YAML prefixes like '- key:'.
+    """
+    # Simulate YAML line with PNG header pattern (same as other tests)
+    large_base64 = "iVBORw0KGgoAAAANSUhEUgAAAA" * 50  # ~1350 chars
+    yaml_line = f"- base64data: {large_base64}"
+    assert utils._is_base64_block(yaml_line, min_length=100) is True
+
+
+def test_is_base64_block_rejects_regular_text():
+    """
+    Check that _is_base64_block rejects regular text even if 100+ chars.
+    """
+    # Regular text has punctuation which are not base64 characters
+    regular_text = "This is a log message. It has punctuation!"
+    regular_text = regular_text * 3  # Make it 100+ chars
+    assert utils._is_base64_block(regular_text, min_length=100) is False
