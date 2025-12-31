@@ -39,6 +39,7 @@ class AssistedInstallerCluster(object):
         high_availability_mode="Full",
         image_type="minimal-iso",
         static_network_config=None,
+        platform="baremetal",
     ):
         """
         Args:
@@ -66,6 +67,7 @@ class AssistedInstallerCluster(object):
                 [{"mac_interface_map": [{"logical_nic_name": "string", "mac_address": "string"}],
                     "network_yaml": "string"},
                     ...]
+            platform (str): platform type (none, baremetal or vsphere)
 
         """
         self.api = ai.AssistedInstallerAPI()
@@ -120,6 +122,7 @@ class AssistedInstallerCluster(object):
             self.high_availability_mode = high_availability_mode
             self.image_type = image_type
             self.static_network_config = static_network_config
+            self.platform = platform
 
     def load_existing_cluster_configuration(self):
         """
@@ -224,6 +227,9 @@ class AssistedInstallerCluster(object):
             ],
             "ssh_public_key": self.ssh_public_key,
             "pull_secret": self.pull_secret,
+            "platform": {
+                "type": self.platform,
+            },
         }
         cl_data = self.api.create_cluster(cluster_configuration)
         self.id = cl_data["id"]
