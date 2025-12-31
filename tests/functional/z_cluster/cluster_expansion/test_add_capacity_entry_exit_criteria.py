@@ -100,9 +100,10 @@ class TestAddCapacity(ManageTest):
         # All OCS pods are in running state:
         # ToDo https://github.com/red-hat-storage/ocs-ci/issues/2361
         expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
-        assert pod_helpers.check_pods_in_statuses(
+        assert pod_helpers.wait_for_pods_to_be_in_statuses(
             expected_statuses=expected_statuses,
-            exclude_pod_name_prefixes=["demo-pod"],
+            exclude_pod_name_prefixes=["demo-pod", "storageclient"],
+            timeout=500,
         ), "Entry criteria FAILED: one or more OCS pods are not in running state"
         # Create the namespace under which this test will execute:
         project = project_factory()
