@@ -190,6 +190,16 @@ class Submariner(object):
 
         acm_obj.submariner_validation_ui()
 
+        logger.info("Patch oauth cluster to increase token expiry timeout")
+        run_cmd(
+            """oc patch oauth cluster -p '{"spec":{"tokenConfig":{"accessTokenMaxAgeSeconds":172800}}}' --type merge"""
+        )
+        logger.info("oauth cluster patched successfully")
+        # run_cmd(
+        #     """oc patch oauthclient console -p '{"accessTokenMaxAgeSeconds":18000}' --type merge"""
+        # )
+        # logger.info("oauthclient console patched successfully")
+
     def create_acm_brew_idms(self):
         """
         This is a prereq for downstream unreleased submariner
