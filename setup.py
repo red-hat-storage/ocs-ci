@@ -99,7 +99,7 @@ setup(
         "google-crc32c==1.7.1",
         "google-resumable-media==2.7.2",
         "googleapis-common-protos==1.70.0",
-        "urllib3==2.5.0",
+        "urllib3==2.6.0",
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.22",
