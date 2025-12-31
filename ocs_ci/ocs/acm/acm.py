@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 import os
@@ -809,7 +810,7 @@ def import_clusters_via_cli(clusters):
                 'Error is Error from server (NotFound): secrets "auto-import-secret" not found'
                 in str(ex)
             ):
-                continue
+                pass
             else:
                 raise
 
@@ -838,8 +839,12 @@ def import_clusters_via_cli(clusters):
 
         log.info("Waiting for addon pods to be in running state")
         config.switch_to_cluster_by_name(cluster[0])
+
         wait_for_pods_to_be_running(
-            namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
+            namespace=constants.ACM_ADDONS_NAMESPACE,
+            timeout=300,
+            sleep=15,
+            skip_for_status=[constants.STATUS_COMPLETED],
         )
 
         config.switch_acm_ctx()
@@ -910,12 +915,16 @@ def discover_hosted_clusters():
         format_type="merge",
     )
     # Disable metrics and HyperShift operator management
+    log.info("Getting existing values")
+    spec_data = addondeploymentconfig.get(
+        resource_name="hypershift-addon-deploy-config"
+    )["spec"]["customizedVariables"]
+
+    discovery_prefix_data_to_add = {"name": "discoveryPrefix", "value": "dr"}
+    spec_data.append(discovery_prefix_data_to_add)
     addondeploymentconfig.patch(
         resource_name="hypershift-addon-deploy-config",
-        params=(
-            '{"spec":{"customizedVariables":[{"name":"disableMetrics","value": "true"},'
-            '{"name":"disableHOManagement","value": "true"},{"name":"discoveryPrefix","value": "dr"}]}}'
-        ),
+        params=json.dumps({"spec": {"customizedVariables": spec_data}}),
         format_type="merge",
     )
 
