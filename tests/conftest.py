@@ -10853,6 +10853,14 @@ class BaseStorageClassPrecedenceTest(ABC):
         log.info(f"Annotating StorageClass with: {annotation}")
         sc_rbd.annotate(annotation)
 
+        # Give the CSI Addons controller time to process the annotation
+        log.info(
+            "Waiting for CSI Addons controller to process StorageClass annotation..."
+        )
+        import time
+
+        time.sleep(30)
+
     def _annotate_pvcs(self, pvcs, annotation_key, schedule):
         """
         Annotate PVCs with schedule.
@@ -10869,6 +10877,12 @@ class BaseStorageClassPrecedenceTest(ABC):
             log.debug(f"Annotating PVC {i}/{len(pvcs)}: {pvc_obj.name}")
             pvc_obj.annotate(annotation)
             pvc_obj.reload()
+
+        # Give the CSI Addons controller time to process the annotations
+        log.info("Waiting for CSI Addons controller to process PVC annotations...")
+        import time
+
+        time.sleep(30)
 
     def _get_schedule_from_resource(self, resource, annotation_key):
         """
@@ -10893,13 +10907,13 @@ class BaseStorageClassPrecedenceTest(ABC):
             )
             raise
 
-    def _wait_for_cronjob_creation(self, pvc_obj, timeout=120):
+    def _wait_for_cronjob_creation(self, pvc_obj, timeout=300):
         """
         Wait for CronJob to be created after PVC annotation.
 
         Args:
             pvc_obj: PVC object
-            timeout: Timeout in seconds (default: 120)
+            timeout: Timeout in seconds (default: 300, increased from 120 for precedence reconciliation)
 
         Raises:
             TimeoutExpiredError: If CronJob is not created within timeout
@@ -11058,8 +11072,67 @@ class BaseStorageClassPrecedenceTest(ABC):
                 f"Setting precedence from '{current_precedence}' to '{precedence}'"
             )
             set_schedule_precedence(precedence)
+            # Wait for CSI Addons controller manager pods to be ready after restart
+            self._wait_for_csi_addons_controller_ready()
         else:
             log.info(f"Precedence already set to '{precedence}'")
+
+    def _wait_for_csi_addons_controller_ready(self, timeout=180):
+        """
+        Wait for CSI Addons controller manager pods to be ready after restart.
+
+        Args:
+            timeout: Timeout in seconds (default: 180)
+
+        Raises:
+            TimeoutExpiredError: If controller pods are not ready within timeout
+        """
+        from ocs_ci.ocs.resources.pod import (
+            get_csi_addons_controller_manager_pod,
+            wait_for_pods_to_be_running,
+        )
+
+        log.info("Waiting for CSI Addons controller manager pods to be ready...")
+
+        def check_controller_ready():
+            """Check if CSI Addons controller manager pods are ready."""
+            try:
+                pod_objs = get_csi_addons_controller_manager_pod()
+                if not pod_objs:
+                    log.debug("No CSI Addons controller manager pods found yet")
+                    return False
+
+                pod_names = [pod.name for pod in pod_objs]
+                log.debug(f"Found CSI Addons controller pods: {pod_names}")
+
+                # Check if all pods are running
+                namespace = config.ENV_DATA.get(
+                    "cluster_namespace", "openshift-storage"
+                )
+                if wait_for_pods_to_be_running(
+                    namespace=namespace,
+                    pod_names=pod_names,
+                    timeout=10,
+                    raise_pod_not_found_error=False,
+                ):
+                    log.info("CSI Addons controller manager pods are ready")
+                    return True
+                else:
+                    log.debug("CSI Addons controller manager pods not yet running")
+                    return False
+            except Exception as e:
+                log.debug(f"Error checking controller readiness: {e}")
+                return False
+
+        try:
+            for controller_ready in TimeoutSampler(
+                timeout=timeout, sleep=10, func=check_controller_ready
+            ):
+                if controller_ready:
+                    return
+        except TimeoutExpiredError:
+            log.error("Timeout waiting for CSI Addons controller manager to be ready")
+            raise
 
     @abstractmethod
     def get_annotation_key(self):
