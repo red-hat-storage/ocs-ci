@@ -10913,43 +10913,48 @@ class BaseStorageClassPrecedenceTest(ABC):
 
         log.info(f"Waiting for CronJob creation for PVC: {pvc_obj.name}")
 
-        try:
-            for _ in TimeoutSampler(timeout=timeout, sleep=5, func=lambda: None):
-                pvc_obj.reload()
-                cronjob_name = (
-                    pvc_obj.data.get("metadata", {})
-                    .get("annotations", {})
-                    .get(cronjob_annotation_key)
+        def check_cronjob_exists():
+            """Check if CronJob exists for the PVC."""
+            pvc_obj.reload()
+            cronjob_name = (
+                pvc_obj.data.get("metadata", {})
+                .get("annotations", {})
+                .get(cronjob_annotation_key)
+            )
+
+            if cronjob_name:
+                # Verify the CronJob actually exists
+                cronjob_kind = (
+                    constants.RECLAIMSPACECRONJOB
+                    if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+                    else constants.ENCRYPTIONKEYROTATIONCRONJOB
                 )
 
-                if cronjob_name:
-                    # Verify the CronJob actually exists
-                    cronjob_kind = (
-                        constants.RECLAIMSPACECRONJOB
-                        if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
-                        else constants.ENCRYPTIONKEYROTATIONCRONJOB
+                try:
+                    cronjob_obj = OCP(
+                        kind=cronjob_kind,
+                        namespace=pvc_obj.namespace,
+                        resource_name=cronjob_name,
+                    )
+                    cronjob_obj.get()  # This will raise an exception if not found
+                    log.info(f"CronJob '{cronjob_name}' found for PVC '{pvc_obj.name}'")
+                    return True
+                except Exception:
+                    log.debug(
+                        f"CronJob '{cronjob_name}' not yet available, continuing to wait..."
                     )
 
-                    try:
-                        cronjob_obj = OCP(
-                            kind=cronjob_kind,
-                            namespace=pvc_obj.namespace,
-                            resource_name=cronjob_name,
-                        )
-                        cronjob_obj.get()  # This will raise an exception if not found
-                        log.info(
-                            f"CronJob '{cronjob_name}' found for PVC '{pvc_obj.name}'"
-                        )
-                        return
-                    except Exception:
-                        log.debug(
-                            f"CronJob '{cronjob_name}' not yet available, continuing to wait..."
-                        )
+            log.debug(
+                f"CronJob annotation not yet present for PVC '{pvc_obj.name}', waiting..."
+            )
+            return False
 
-                log.debug(
-                    f"CronJob annotation not yet present for PVC '{pvc_obj.name}', waiting..."
-                )
-
+        try:
+            for cronjob_exists in TimeoutSampler(
+                timeout=timeout, sleep=5, func=check_cronjob_exists
+            ):
+                if cronjob_exists:
+                    return
         except TimeoutExpiredError:
             log.error(f"Timeout waiting for CronJob creation for PVC: {pvc_obj.name}")
             raise
