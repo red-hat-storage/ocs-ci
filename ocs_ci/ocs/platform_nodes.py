@@ -96,7 +96,7 @@ class PlatformNodesFactory:
             "AWS": AWSNodes,
             "vsphere": VMWareNodes,
             "aws": AWSNodes,
-            "baremetal": BaremetalNodes,
+            "baremetal": IBMCloudBMNodes,
             "azure": AZURENodes,
             "gcp": GCPNodes,
             "vsphere_lso": VMWareLSONodes,
