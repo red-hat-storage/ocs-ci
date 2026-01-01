@@ -758,7 +758,9 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             self.wait_for_element_to_be_visible(checkbox_new, timeout=360)
             logger.info("**** After waiting for the new checkbox")
 
-            if not self.get_checkbox_status(checkbox_new):
+            if not self.get_checkbox_status(
+                checkbox_new, wait_for_clickable=False, expected_state=True
+            ):
                 raise ValueError("The checkbox was not checked")
 
             text = self.get_element_text(self.bucket_tab[msg])
