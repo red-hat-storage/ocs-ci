@@ -239,6 +239,8 @@ from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
+DEPLOYERS = {}
+
 log = logging.getLogger(__name__)
 
 odf_cli_runner = ODFCliRunner()
@@ -2162,8 +2164,14 @@ def cluster(
     teardown = ocsci_config.RUN["cli_params"]["teardown"]
     deploy = ocsci_config.RUN["cli_params"]["deploy"]
     if teardown or deploy:
-        factory = dep_factory.DeploymentFactory()
-        deployer = factory.get_deployment()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                # Let get initiated deployer for each cluster here to be sure all necesary
+                # values are propagated to all clusters configs
+                DEPLOYERS[config.ENV_DATA["cluster_name"]] = (
+                    dep_factory.DeploymentFactory().get_deployment()
+                )
+        deployer = DEPLOYERS[config.ENV_DATA["cluster_name"]]
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
@@ -2215,9 +2223,11 @@ def cluster(
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
     else:
-        if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            ibmcloud.set_region()
-            ibmcloud.login()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+                    ibmcloud.set_region()
+                    ibmcloud.login()
     if "cephcluster" not in ocsci_config.RUN.keys():
         check_clusters()
     if not ocsci_config.ENV_DATA["skip_ocs_deployment"] and ocsci_config.RUN.get(

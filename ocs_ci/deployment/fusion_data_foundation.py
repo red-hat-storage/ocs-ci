@@ -39,10 +39,23 @@ class FusionDataFoundationDeployment:
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
-        self.storage_class = (
-            storage_class.get_storageclass() or constants.DEFAULT_STORAGECLASS_LSO
-        )
-        self.custom_storage_class_path = None
+        storage_class.set_custom_storage_class_path()
+
+    @property
+    def storage_class(self):
+        if not config.ENV_DATA.get("storage_class"):
+            sc = storage_class.get_storageclass() or constants.DEFAULT_STORAGECLASS_LSO
+            self.storage_class = sc
+            return sc
+        return config.ENV_DATA["storage_class"]
+
+    @storage_class.setter
+    def storage_class(self, value):
+        config.ENV_DATA["storage_class"] = value
+
+    @property
+    def custom_storage_class_path(self):
+        return config.ENV_DATA["custom_storage_class_path"]
 
     def deploy(self):
         """
@@ -194,7 +207,7 @@ class FusionDataFoundationDeployment:
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
-            clustersetup = StorageClusterSetup(self)
+            clustersetup = StorageClusterSetup()
             create_lvs_resource(self.storage_class, self.storage_class)
             add_storage_label()
             clustersetup.setup_storage_cluster()
