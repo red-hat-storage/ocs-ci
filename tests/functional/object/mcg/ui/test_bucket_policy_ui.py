@@ -217,6 +217,7 @@ class TestBucketPolicyUI:
 
         logger.info(f"Successfully completed step-by-step test for {policy_name}")
 
+    @polarion_id("OCS-7414")
     def test_bucket_public_access_with_policy(self, setup_ui_class_factory):
         """
         Tests the correct work of 'Block public access' tab
