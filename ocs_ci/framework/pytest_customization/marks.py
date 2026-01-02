@@ -518,6 +518,14 @@ azure_kv_config_required = pytest.mark.skipif(
     reason="Azure KV config required to run the test.",
 )
 
+azure_performance_plus_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA.get("azure_performance_plus")
+        or config.DEPLOYMENT.get("azure_performance_plus")
+    ),
+    reason="Test runs only when Azure Performance Plus is enabled",
+)
+
 rosa_hcp_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != ROSA_HCP_PLATFORM,
     reason="Test runs ONLY on ROSA HCP cluster",
