@@ -2222,9 +2222,11 @@ def cluster(
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
     else:
-        if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            ibmcloud.set_region()
-            ibmcloud.login()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+                    ibmcloud.set_region()
+                    ibmcloud.login()
     if "cephcluster" not in ocsci_config.RUN.keys():
         check_clusters()
     if not ocsci_config.ENV_DATA["skip_ocs_deployment"] and ocsci_config.RUN.get(
