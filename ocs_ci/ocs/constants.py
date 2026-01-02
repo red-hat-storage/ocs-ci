@@ -564,6 +564,9 @@ DEFAULT_STORAGECLASS_LSO = "localblock"
 
 THIN_CSI_STORAGECLASS = "thin-csi"
 
+# Azure Performance Plus StorageClass
+AZURE_PERFORMANCE_PLUS_STORAGECLASS = "ocs-disk-perfplus-sc"
+
 # Independent mode default StorageClasses
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw"
 
