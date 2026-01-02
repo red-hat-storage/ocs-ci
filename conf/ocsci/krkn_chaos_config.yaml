@@ -60,6 +60,7 @@ ENV_DATA:
         width: 5
         files: 10
         file_size: "1m"
+        openflags: "o_direct"  # Options: o_direct, o_sync, o_dsync, fsync, or empty for buffered I/O
         group_all_fwds_in_one_rd: true
 
         patterns:

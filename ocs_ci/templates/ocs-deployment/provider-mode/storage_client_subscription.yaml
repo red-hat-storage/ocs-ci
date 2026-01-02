@@ -7,17 +7,17 @@ metadata:
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
-    name: openshift-storage-client-operator-group
-    namespace: openshift-storage-client
+    name: openshift-storage-operator-group
+    namespace: openshift-storage
 spec:
     targetNamespaces:
-    - openshift-storage-client
+    - openshift-storage
 ---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
     name: ocs-client-operator
-    namespace: openshift-storage-client
+    namespace: openshift-storage
 spec:
     channel: PLACEHOLDER
     installPlanApproval: Automatic

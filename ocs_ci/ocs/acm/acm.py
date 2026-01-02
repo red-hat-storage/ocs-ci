@@ -964,8 +964,8 @@ def install_clusteradm():
     """
     try:
         run_cmd("clusteradm")
-    except CommandFailed:
-        # Install/re0install clusteradm
+    except (CommandFailed, FileNotFoundError):
+        # Install/reinstall clusteradm
         run_cmd(
             "curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash"
         )

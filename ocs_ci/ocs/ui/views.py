@@ -251,9 +251,9 @@ deployment_4_11 = {
     "gp3-csi_sc": ("gp3-csi-link", By.ID),
     "managed-csi_sc": ("managed-csi-link", By.ID),
     "standard_sc": ("standard-link", By.ID),
-    "512": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
-    "2048": ('button[data-test-dropdown-menu="2 TiB"]', By.CSS_SELECTOR),
-    "4096": ('button[data-test-dropdown-menu="4 TiB"]', By.CSS_SELECTOR),
+    "512": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "2048": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.XPATH),
+    "4096": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.XPATH),
 }
 
 deployment_4_12 = {
@@ -328,6 +328,13 @@ deployment_4_19 = {
         By.XPATH,
     ),
     "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
+}
+deployment_4_21 = {
+    "osd_size_dropdown": (
+        "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
+        By.XPATH,
+    ),
+    "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
 }
 
 generic_locators = {
@@ -2403,8 +2410,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "storage_class_noobaa_option": (
-        "#openshift-storage\\.noobaa\\.io-link > a > div:nth-child(1) > span",
-        By.CSS_SELECTOR,
+        "//*[@class='odf-resource-item' and contains(text(), 'openshift-storage.noobaa.io')]",
+        By.XPATH,
     ),
     "obc_bucket_name_input": ("#obc-name", By.CSS_SELECTOR),
     "create_bucket_button_s3": (
@@ -2464,7 +2471,8 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "bucket_list_items": (
-        "//a[starts-with(@href, '/odf/object-storage/buckets/')]",
+        "//a[starts-with(@href, '/odf/object-storage/buckets/')] |"
+        "//a[starts-with(@href, '/odf/object-storage/noobaa/buckets/')]",
         By.XPATH,
     ),
     "bucket_action_button": (
@@ -2850,6 +2858,70 @@ data_foundation_overview = {
     ),
 }
 locators = {
+    "4.21": {
+        "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
+        "generic": {**generic_locators, **generic_locators_4_19},
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+            **deployment_4_15,
+            **deployment_4_16,
+            **deployment_4_17,
+            **deployment_4_19,
+            **deployment_4_21,
+        },
+        "obc": obc,
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+            **pvc_4_19,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+            **acm_configuration_4_14,
+            **acm_configuration_4_16,
+            **acm_configuration_4_18,
+            **acm_page_nav_419,
+            **acm_configuration_4_19,
+            **acm_page_nav_420,
+            **acm_configuration_4_20,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+            **validation_4_17,
+            **validation_4_18,
+            **validation_4_20,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+        "alerting": alerting,
+        "bucket_tab": bucket_tab,
+        "data_foundation_overview": data_foundation_overview,
+    },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},

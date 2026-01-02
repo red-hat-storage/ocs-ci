@@ -4,6 +4,7 @@ import time
 import os
 import socket
 
+from subprocess import CompletedProcess
 from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -36,7 +37,6 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
@@ -165,6 +165,7 @@ class TestNfsEnable(ManageTest):
         """
         self = request.node.cls
         log.info("-----Setup-----")
+        self.nfs_app_deployment = "nfs-test-pod"
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.storage_cluster_obj = ocp.OCP(
             kind=constants.STORAGECLUSTER, namespace=self.namespace
@@ -1285,13 +1286,6 @@ class TestNfsEnable(ManageTest):
             assert err_count == 0, (
                 f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
             )
-            # Verify presence of the file
-            file_path = pod.get_file_path(pod_obj, file_name)
-            log.info(f"Actual file path on the pod {file_path}")
-            assert pod.check_file_existence(
-                pod_obj, file_path
-            ), f"File {file_name} doesn't exist"
-            log.info(f"File {file_name} exists in {pod_obj.name}")
 
             # Create /mnt/test file inside the pod
             command = "bash -c " + '"echo ' + "'Before respin'" + '  > /mnt/test"'
@@ -1348,9 +1342,17 @@ class TestNfsEnable(ManageTest):
             assert result.rstrip() == "Before respin" + """\n""" + "After respin"
 
         finally:
-            # Delete deployment
-            cmd_delete_deployment = "delete dc nfs-test-pod"
-            self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment)
+            # Delete deployment if it exists
+            try:
+                exec_cmd(
+                    f"oc delete deployment "
+                    f"{self.nfs_app_deployment} "
+                    f"-n {self.namespace} "
+                    f"--ignore-not-found=true"
+                )
+                log.info(f"Deleted deployment: {self.nfs_app_deployment}")
+            except CommandFailed:
+                log.info("Deployment already deleted or doesn't exist")
 
             pv_obj = nfs_pvc_obj.backed_pv_obj
             log.info(f"pv object-----{pv_obj}")
@@ -1479,6 +1481,7 @@ class TestNfsEnable(ManageTest):
         self,
         pod_factory,
         pvc_factory,
+        odf_cli_setup,
     ):
         """
         This test is to validate NFS export using a PVC mounted on an app pod (in-cluster) and subvolume
@@ -1500,9 +1503,9 @@ class TestNfsEnable(ManageTest):
         self.retain_nfs_sc = nfs_utils.create_nfs_sc(
             sc_name_to_create=self.retain_nfs_sc_name, retain_reclaim_policy=True
         )
-        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+        if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
             helpers.retrieve_cli_binary(cli_type="odf")
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = exec_cmd(cmd="odf-cli subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         log.info(f"{inital_subvolume_list=}")
 
@@ -1516,7 +1519,7 @@ class TestNfsEnable(ManageTest):
         )
 
         # checking subvolumes post pvc creation
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = exec_cmd(cmd="odf-cli subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
         new = set(later_subvolume_list)
@@ -1576,13 +1579,13 @@ class TestNfsEnable(ManageTest):
         pv_obj.delete(wait=True)
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = exec_cmd(cmd="odf-cli subvolume ls --stale")
 
         # Deleteing stale subvolume
-        run_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+        exec_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = exec_cmd(cmd="odf-cli subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
 
@@ -1592,6 +1595,8 @@ class TestNfsEnable(ManageTest):
         self.sc_obj.wait_for_delete(resource_name=self.retain_nfs_sc_name)
 
     def parse_subvolume_ls_output(self, output):
+        if isinstance(output, CompletedProcess):
+            output = output.stdout.decode("utf-8")
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:

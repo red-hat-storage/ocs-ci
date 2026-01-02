@@ -75,6 +75,10 @@ TEMPLATE_DEPLOYMENT_LOGGING = os.path.join(
 TEMPLATE_DEPLOYMENT_EO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "elasticsearch_operator"
 )
+TEMPLATE_DEPLOYMENT_LO = os.path.join(TEMPLATE_DEPLOYMENT_LOGGING, "lokistack_operator")
+TEMPLATE_DEPLOYMENT_CO = os.path.join(
+    TEMPLATE_DEPLOYMENT_LOGGING, "clusterobservability_operator"
+)
 TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
@@ -196,6 +200,7 @@ STORAGESYSTEM = "StorageSystem"
 STORAGECLUSTERPEER = "StorageClusterPeer"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
+OBC = "ObjectBucketClaim"
 POD = "Pod"
 ROUTE = "Route"
 SERVICE = "Service"
@@ -306,10 +311,13 @@ AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
 ROLE = "Role"
 ROLEBINDING = "Rolebinding"
 SUBSCRIPTION = "Subscription"
+UIPLUGIN = "UIPlugin"
 SUBSCRIPTION_COREOS = "subscriptions.operators.coreos.com"
 SUBSCRIPTION_CLUSTER_MANAGEMENT = "subscriptions.apps.open-cluster-management.io"
 NAMESPACES = "Namespaces"
+LOKISTACK = "LokiStack"
 CLUSTER_LOGGING = "ClusterLogging"
+CLUSTER_LOG_FORWADER = "ClusterLogForwarder"
 OPERATOR_GROUP = "OperatorGroup"
 SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
@@ -334,7 +342,7 @@ ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
 VOLSYNC_SYSTEM_NAMESPACE = "volsync-system"
 OPENSHIFT_NAMESPACE = "openshift"
-OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
+OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
 OPENSHIFT_INGRESS_OPERATOR_NAMESPACE = "openshift-ingress-operator"
 MANAGED_FUSION_NAMESPACE = "managed-fusion"
@@ -342,6 +350,7 @@ OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_API_CLUSTER_OPERATOR = "kube-apiserver"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
+OPENSHIFT_CLUSTER_OBSERVABILITY_OPERATOR = "openshift-cluster-observability-operator"
 OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
 OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
 OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
@@ -356,7 +365,12 @@ INFRA_MACHINE = "infra"
 MOUNT_POINT = "/var/lib/www/html"
 TOLERATION_KEY = "node.ocs.openshift.io/storage"
 CLUSTERLOGGING_SUBSCRIPTION = "cluster-logging"
+CLUSTER_OBSERVABILITY_SUBSCRIPTION = "cluster-observability-operator"
 ELASTICSEARCH_SUBSCRIPTION = "elasticsearch-operator"
+LOKISTACK_SUBSCRIPTION = "loki-operator"
+OBJECT_BUCKET_CLAIM = "loki-bucket-rgw"
+LOKISTACK_SEC = "logging-loki-s3"
+CLUSTER_OBSERVABILITY_OPERATOR = "cluster-observability-operator"
 START = "START"
 END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
@@ -905,7 +919,13 @@ JENKINS_BUILDCONFIG_YAML = os.path.join(TEMPLATE_JENKINS_DIR, "buildconfig.yaml"
 
 SMALLFILE_BENCHMARK_YAML = os.path.join(TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml")
 
-CEPHFS_STRESS_YAML = os.path.join(TEMPLATE_CEPHFS_STRESS_DIR, "cephfs_stress.yaml")
+CEPHFS_STRESS_POD_YAML = os.path.join(
+    TEMPLATE_CEPHFS_STRESS_DIR, "cephfs_stress_pod.yaml"
+)
+
+CEPHFS_STRESS_JOB_YAML = os.path.join(
+    TEMPLATE_CEPHFS_STRESS_DIR, "cephfs_stress_job.yaml"
+)
 
 OSD_SCALE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_OSD_SCALE_DIR, "osd_scale_benchmark.yaml"
@@ -1066,12 +1086,21 @@ OC_MIRROR_IMAGESET_CONFIG_V2 = os.path.join(
 
 CSI_CEPHFS_ROX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "csi-cephfs-rox.yaml")
 
-# Openshift-logging elasticsearch operator deployment yamls
-EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
+# Openshift-logging lokistack operator deployment yamls
+LOKI_OPERATOR_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-sub.yaml")
+LOKI_OPERATOR_OBC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-obc.yaml")
+LOKI_OPERATOR_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-sec.yaml")
+LOKISTACK_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "lo-lokistack.yaml")
+CLF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_LO, "clf-cr.yaml")
 
+# Openshift-cluster-observability-operator deployment yamls
+CO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-namespace.yaml")
+CO_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-og.yaml")
+CO_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-sub.yaml")
+CO_UI_PLUGIN_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CO, "co-ui-plugin.yaml")
+
+EO_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml")
 EO_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-og.yaml")
-EO_RBAC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-rbac.yaml")
-EO_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml")
 
 OLM_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml")
 CERT_MANAGER_NS_YAML = os.path.join(
@@ -1215,7 +1244,7 @@ NMSTATE_INSTANCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "nmstate_instance.yaml"
 )
 NMSTATE_NAMESPACE = "openshift-nmstate"
-NMSTATE_CSV_NAME = "kubernetes-nmstate-operator"
+NMSTATE_OPERATOR = NMSTATE_CSV_NAME = "kubernetes-nmstate-operator"
 
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")
@@ -1459,7 +1488,7 @@ VM_POWERED_OFF = "poweredOff"
 VM_POWERED_ON = "poweredOn"
 
 # Azure VM power statuses
-VM_STOPPED = "deallocated"
+VM_STOPPED = "stopped"
 VM_STOPPING = "deallocating"
 VM_STARTED = "running"
 VM_STARTING = "starting"
@@ -1899,6 +1928,7 @@ LATEST_TAGS = (
     "latest-stable",
     "-rc",
 )
+STABLE = "stable"
 EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ODF_SUBSCRIPTION = "odf-operator"
@@ -2480,6 +2510,10 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] = [
     "cnsa-dependencies",
     "odf-external-snapshotter-operator",
 ]
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
+)
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
@@ -3635,3 +3669,7 @@ RBD_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
 )
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+
+# Fill pool job and PVC Yaml files
+FILL_POOL_JOB_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_job.yaml")
+FILL_POOL_PVC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pvc.yaml")
