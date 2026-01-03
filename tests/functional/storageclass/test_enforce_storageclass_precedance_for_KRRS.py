@@ -75,12 +75,13 @@ class TestEnforceStorageclassPrecedenceForReclaimSpace:
         reclaimspace_precedence_helper._annotate_storageclass(
             sc_rbd, RECLAIMSPACE_SCHEDULE_ANNOTATION, WEEKLY_SCHEDULE
         )
+        # ReclaimSpace works on filesystem PVCs, not raw block PVCs
         reclaimspace_precedence_helper._annotate_pvcs(
-            reclaimspace_precedence_helper.rbd_blk_pvcs,
+            reclaimspace_precedence_helper.rbd_fs_pvcs,
             RECLAIMSPACE_SCHEDULE_ANNOTATION,
             DAILY_SCHEDULE,
         )
-        logger.info("Annotations applied to StorageClass and PVCs")
+        logger.info("Annotations applied to StorageClass and filesystem PVCs")
 
         # Step 5: Verify StorageClass precedence in ReclaimSpaceCronJobs is by default
         logger.info("=== Testing StorageClass Precedence (Default) ===")

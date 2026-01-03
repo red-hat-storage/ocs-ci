@@ -10759,11 +10759,13 @@ class BaseStorageClassPrecedenceTest(ABC):
             self.pod_objs = []
         if not hasattr(self, "rbd_blk_pvcs"):
             self.rbd_blk_pvcs = []
+        if not hasattr(self, "rbd_fs_pvcs"):
+            self.rbd_fs_pvcs = []
 
         self.pod_objs = []
 
         # Create RBD Filesystem PVCs (RWO)
-        rbd_fs_pvcs = self._create_pvc_batch(
+        self.rbd_fs_pvcs = self._create_pvc_batch(
             multi_pvc_factory=multi_pvc_factory,
             interface=constants.CEPHBLOCKPOOL,
             access_modes=[constants.ACCESS_MODE_RWO],
@@ -10772,12 +10774,12 @@ class BaseStorageClassPrecedenceTest(ABC):
             storageclass=sc_rbd,
             project=proj_obj,
         )
-        self._ensure_pvcs_bound(rbd_fs_pvcs)
+        self._ensure_pvcs_bound(self.rbd_fs_pvcs)
 
         # Create pods for filesystem PVCs
         fs_pods = self._create_pods_for_pvcs(
             pod_factory=pod_factory,
-            pvcs=rbd_fs_pvcs,
+            pvcs=self.rbd_fs_pvcs,
             interface=constants.CEPHBLOCKPOOL,
         )
         self.pod_objs.extend(fs_pods)
@@ -10806,7 +10808,7 @@ class BaseStorageClassPrecedenceTest(ABC):
 
         log.info(
             "Workload preparation completed: RBD-FS=%d, RBD-Block=%d (total pods=%d)",
-            len(rbd_fs_pvcs),
+            len(self.rbd_fs_pvcs),
             len(self.rbd_blk_pvcs),
             len(self.pod_objs),
         )
@@ -10953,9 +10955,9 @@ class BaseStorageClassPrecedenceTest(ABC):
                     cronjob_obj.get()  # This will raise an exception if not found
                     log.info(f"CronJob '{cronjob_name}' found for PVC '{pvc_obj.name}'")
                     return True
-                except Exception:
+                except Exception as e:
                     log.debug(
-                        f"CronJob '{cronjob_name}' not yet available, continuing to wait..."
+                        f"CronJob '{cronjob_name}' not yet available: {e}, continuing to wait..."
                     )
 
             log.debug(
@@ -10970,7 +10972,33 @@ class BaseStorageClassPrecedenceTest(ABC):
                 if cronjob_exists:
                     return
         except TimeoutExpiredError:
+            # Enhanced error logging for debugging
+            pvc_obj.reload()
             log.error(f"Timeout waiting for CronJob creation for PVC: {pvc_obj.name}")
+            log.error(
+                f"PVC annotations: {pvc_obj.data.get('metadata', {}).get('annotations', {})}"
+            )
+            log.error(f"Annotation key being checked: {cronjob_annotation_key}")
+
+            # Check CSI Addons controller status
+            try:
+                from ocs_ci.ocs.resources.pod import (
+                    get_csi_addons_controller_manager_pod,
+                )
+
+                controller_pods = get_csi_addons_controller_manager_pod()
+                controller_pod_names = (
+                    [p.name for p in controller_pods]
+                    if controller_pods
+                    else "None found"
+                )
+                log.error(f"CSI Addons controller pods: {controller_pod_names}")
+                if controller_pods:
+                    for pod in controller_pods:
+                        log.error(f"Controller pod {pod.name} status: {pod.status()}")
+            except Exception as e:
+                log.error(f"Failed to check controller status: {e}")
+
             raise
 
     def _verify_cronjob_schedule(
@@ -10992,11 +11020,21 @@ class BaseStorageClassPrecedenceTest(ABC):
         """
         log.debug(f"Verifying CronJob schedule for PVC: {pvc_obj.name}")
 
+        # Verify PVC has the schedule annotation
+        annotation_key = self.get_annotation_key()
+        pvc_obj.reload()
+        pvc_schedule_annotation = (
+            pvc_obj.data.get("metadata", {}).get("annotations", {}).get(annotation_key)
+        )
+        log.info(
+            f"PVC {pvc_obj.name} schedule annotation ({annotation_key}): "
+            f"{pvc_schedule_annotation}"
+        )
+
         # Wait for CronJob to be created after PVC annotation
         self._wait_for_cronjob_creation(pvc_obj)
 
         # Use appropriate CronJob function based on annotation key
-        annotation_key = self.get_annotation_key()
         if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
             # For KeyRotation tests, use PVKeyrotation helper
             keyrotation_helper = PVKeyrotation(pvc_obj.storageclass)
@@ -11028,20 +11066,36 @@ class BaseStorageClassPrecedenceTest(ABC):
             annotation_key: Annotation key for schedules
             precedence_type: Either 'storageclass' or 'pvc'
         """
-        # Initialize rbd_blk_pvcs if it doesn't exist
-        if not hasattr(self, "rbd_blk_pvcs"):
-            self.rbd_blk_pvcs = []
+        # Select appropriate PVCs based on test type
+        # ReclaimSpace: Use filesystem PVCs (ReclaimSpace works on filesystem, not raw block)
+        # KeyRotation: Use block PVCs (both work, but tests use block)
+        if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION:
+            if not hasattr(self, "rbd_fs_pvcs") or not self.rbd_fs_pvcs:
+                log.warning("No filesystem PVCs found, falling back to block PVCs")
+                pvcs_to_check = getattr(self, "rbd_blk_pvcs", [])
+            else:
+                pvcs_to_check = self.rbd_fs_pvcs
+                log.info(
+                    f"Using {len(pvcs_to_check)} filesystem PVCs for ReclaimSpace test"
+                )
+        else:
+            # KeyRotation test
+            pvcs_to_check = getattr(self, "rbd_blk_pvcs", [])
+            log.info(f"Using {len(pvcs_to_check)} block PVCs for KeyRotation test")
+
+        if not pvcs_to_check:
+            raise ValueError("No PVCs available to verify precedence behavior")
 
         log.info(
-            f"Verifying {precedence_type} precedence behavior for {len(self.rbd_blk_pvcs)} PVCs"
+            f"Verifying {precedence_type} precedence behavior for {len(pvcs_to_check)} PVCs"
         )
 
         # Get StorageClass schedule
         sc_schedule = self._get_schedule_from_resource(sc_rbd, annotation_key)
         log.info(f"StorageClass schedule: {sc_schedule}")
 
-        for i, pvc_obj in enumerate(self.rbd_blk_pvcs, 1):
-            log.debug(f"Checking PVC {i}/{len(self.rbd_blk_pvcs)}: {pvc_obj.name}")
+        for i, pvc_obj in enumerate(pvcs_to_check, 1):
+            log.debug(f"Checking PVC {i}/{len(pvcs_to_check)}: {pvc_obj.name}")
 
             if precedence_type == self.STORAGECLASS_PRECEDENCE:
                 # Should use StorageClass schedule
