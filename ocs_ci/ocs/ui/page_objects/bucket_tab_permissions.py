@@ -763,6 +763,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             )
             self.do_click(self.bucket_tab["proceed_to_disable_public_access_button"])
 
+            self.page_has_loaded()
             self.wait_for_element_to_be_visible(self.bucket_tab[checkbox])
             if self.get_checkbox_status(self.bucket_tab[checkbox]):
                 raise ValueError("The checkbox was not unchecked")
