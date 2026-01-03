@@ -351,20 +351,38 @@ class BaseUI:
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 
-    def get_checkbox_status(self, locator, timeout=30):
+    def get_checkbox_status(
+        self, locator, timeout=30, *, wait_for_clickable=True, expected_state=None
+    ):
         """
         Checkbox Status
 
         Args:
             locator (tuple): (GUI element needs to operate on (str), type (By))
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+            wait_for_clickable (bool): When True wait for element to be clickable; otherwise wait for presence.
+            expected_state (bool | None): When provided, wait for checkbox selection state to match before returning.
 
         return:
-            bool: True if element is Enabled, False otherwise
+            bool: True if element is selected, False otherwise
 
         """
         wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        by, value = locator[1], locator[0]
+
+        if expected_state is not None:
+            wait.until(
+                ec.element_located_selection_state_to_be((by, value), expected_state)
+            )
+
+        if wait_for_clickable:
+            try:
+                element = wait.until(ec.element_to_be_clickable((by, value)))
+            except TimeoutException:
+                element = wait.until(ec.presence_of_element_located((by, value)))
+        else:
+            element = wait.until(ec.presence_of_element_located((by, value)))
+
         return element.is_selected()
 
     def select_checkbox_status(self, status, locator):
