@@ -735,6 +735,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 timeout=QUICK_WAIT,
             )
 
+            self.page_has_loaded()
             if not self.get_checkbox_status(
                 self.bucket_tab[checkbox], wait_for_clickable=False, expected_state=True
             ):
