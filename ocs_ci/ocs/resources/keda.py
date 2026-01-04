@@ -17,8 +17,6 @@ from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
-KEDACORE_REPO_URL = "https://kedacore.github.io/charts"
-
 
 class KEDA:
     """
@@ -72,7 +70,7 @@ class KEDA:
         # Install KEDA via the Helm CLI
         try:
             # Add the KEDA repository to helm
-            exec_cmd(f"helm repo add kedacore {KEDACORE_REPO_URL}")
+            exec_cmd(f"helm repo add kedacore {constants.KEDACORE_REPO_URL}")
             exec_cmd("helm repo update")
 
         except CommandFailed as e:
@@ -87,16 +85,17 @@ class KEDA:
             exec_cmd(install_cmd)
         except CommandFailed as e:
             e_msg = str(e).lower()
-            if e_msg.contains("customresourcedefinitions") and e_msg.contains(
-                "not found"
-            ):
+            if "customresourcedefinitions" in e_msg and "not found" in e_msg:
                 logger.warning("Some KEDA CRDs are not yet established")
 
-                # Wait a bit for the CRDs
+                # Targeted workaround for a rare race-condition error:
+                # Sometimes KEDA's pods are ready but some of its CRDs (i.e. ScaledObject)
+                # are still being processed. If installation still fails, there's a good
+                # chance it's an environment blocker, so we don't keep retrying here.
                 sleep(10)
                 OCP().exec_oc_cmd(
                     (
-                        "oc wait --for=condition=Established"
+                        "oc wait --for=condition=Established "
                         "crds -l app.kubernetes.io/part-of=keda-operator"
                     )
                 )
