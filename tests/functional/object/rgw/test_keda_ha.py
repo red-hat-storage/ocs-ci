@@ -1,6 +1,5 @@
 import logging
 
-import pandas as pd
 import pytest
 
 from ocs_ci.framework import config
@@ -133,27 +132,6 @@ class TestKedaHA:
         finally:
             # 4. Stop the warp workload
             warp_workload_runner.stop()
-
-            # Optional: Log findings from the last warp run
-            try:
-                last_report = warp_workload_runner.warp.get_last_report()
-                if last_report is not None:
-                    num_of_errors = (
-                        pd.to_numeric(last_report["errors"], errors="coerce")
-                        .fillna(0)
-                        .astype(int)
-                        .sum()
-                    )
-                    average_throughput = (
-                        pd.to_numeric(last_report["mb_per_sec"], errors="coerce")
-                        .fillna(0)
-                        .astype(float)
-                        .mean()
-                    )
-                    logger.info(f"Number of errors: {num_of_errors}")
-                    logger.info(f"Average throughput: {average_throughput:.2f} MB/s")
-            except Exception as e:
-                logger.warning(f"Failed to get last report: {e}")
 
         # 5. Wait for the RGW pods to downscale to the min replica count
         try:

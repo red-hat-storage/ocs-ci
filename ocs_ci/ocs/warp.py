@@ -18,7 +18,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
 from ocs_ci.utility import templating
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class Warp(object):
@@ -72,7 +72,7 @@ class Warp(object):
         helpers.add_scc_policy(sa_name=self.sa_name, namespace=self.namespace)
 
         # Create test pvc+pod
-        logger.info(f"Create Warp pod to generate S3 workload in {self.namespace}")
+        log.info(f"Create Warp pod to generate S3 workload in {self.namespace}")
         pvc_size = "50Gi"
         self.pod_name = "warppod"
         self.pvc_obj = helpers.create_pvc(
@@ -153,7 +153,7 @@ class Warp(object):
         """
 
         # Running warp S3 benchmark
-        logger.info("Running Minio Warp S3 benchmark")
+        log.info("Running Minio Warp S3 benchmark")
         timeout = timeout if timeout else 3600
         self.access_key = access_key if access_key else self.access_key
         self.secret_key = secret_key if secret_key else self.secret_key
@@ -183,7 +183,7 @@ class Warp(object):
             for p in self.client_pods:
                 command = f"{self.warp_bin_dir} client"
                 thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
-            logger.info("Wait for 5 seconds after the clients are started listening!")
+            log.info("Wait for 5 seconds after the clients are started listening!")
             time.sleep(5)
             for client in self.client_ips:
                 self.client_str += (
@@ -219,7 +219,7 @@ class Warp(object):
             timeout=180,
         )
         if os.path.getsize(f"{self.warp_dir}/{self.output_file}") != 0:
-            logger.info("Workload was running...")
+            log.info("Workload was running...")
         else:
             raise UnexpectedBehaviour(
                 f"Output file {self.output_file} is empty, "
@@ -234,9 +234,9 @@ class Warp(object):
         """
         if multi_client:
             if self.service_obj:
-                logger.info(f"Deleting the service {self.service_obj.name}")
+                log.info(f"Deleting the service {self.service_obj.name}")
                 self.service_obj.delete()
-        logger.info("Deleting pods and deployment config")
+        log.info("Deleting pods and deployment config")
         if self.pod_obj:
             pod.delete_deployment_pods(self.pod_obj)
         if self.pvc_obj:
@@ -256,7 +256,7 @@ class Warp(object):
             df = pd.read_csv(StringIO(output_csv), sep="\t")
             return df
         except CommandFailed as e:
-            logger.warning(f"Failed to get last report: {e}")
+            log.warning(f"Failed to get last report: {e}")
             return None
 
 
@@ -308,10 +308,10 @@ class WarpWorkloadRunner:
             timeout (int): Timeout for each warp iteration (default: 60 seconds)
         """
         if self.thread and self.thread.is_alive():
-            logger.warning("Warp workload is already running")
+            log.warning("Warp workload is already running")
             return
 
-        logger.info("Starting warp workload in background thread")
+        log.info("Starting warp workload in background thread")
         self.request.addfinalizer(self.stop)
         self.stop_event = threading.Event()
 
@@ -319,7 +319,7 @@ class WarpWorkloadRunner:
             """Run warp benchmark in a loop until stop event is set"""
             while not self.stop_event.is_set():
                 try:
-                    logger.info("Running warp workload")
+                    log.info("Running warp workload")
                     self.warp.run_benchmark(
                         workload_type=workload_type,
                         bucket_name=bucket_name,
@@ -335,18 +335,18 @@ class WarpWorkloadRunner:
                         multi_client=False,
                     )
                 except Exception as e:
-                    logger.warning(f"Warp workload iteration failed: {e}")
+                    log.warning(f"Warp workload iteration failed: {e}")
                     if self.stop_event.is_set():
                         break
 
         self.thread = threading.Thread(target=run_warp_workload)
         self.thread.start()
-        logger.info("Warp workload thread started")
+        log.info("Warp workload thread started")
 
     def stop(self):
         """Stop the warp workload"""
         if not self.stop_event:
-            logger.warning("Stop event is not set, cannot stop warp workload")
+            log.warning("Stop event is not set, cannot stop warp workload")
             return
 
         if self.thread and self.thread.is_alive():
@@ -354,8 +354,8 @@ class WarpWorkloadRunner:
 
             self.thread.join(timeout=120)
             if self.thread.is_alive():
-                logger.error("Warp workload thread is still alive after join")
+                log.error("Warp workload thread is still alive after join")
 
-            logger.info("Warp workload thread stopped")
+            log.info("Warp workload thread stopped")
         else:
-            logger.warning("Warp workload thread is not running")
+            log.warning("Warp workload thread is not running")
