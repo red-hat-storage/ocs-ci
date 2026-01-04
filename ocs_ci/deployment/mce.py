@@ -206,11 +206,18 @@ class MCEInstaller(object):
             namespace=constants.HYPERSHIFT_NAMESPACE,
         )
 
+        check_resources_timeout = 600
+        if config.ENV_DATA["platform"] in constants.CLOUD_PLATFORMS:
+            logger.info(
+                "Cloud platform detected; wait for hypershift supported-versions configmap twice longer"
+            )
+            check_resources_timeout = check_resources_timeout * 2
+
         # configMap is created during hypershift installation in around 5 min.
         # Increasing this timeout to 10 min for safer deployment.
         if not configmaps_obj.check_resource_existence(
             should_exist=True,
-            timeout=600,
+            timeout=check_resources_timeout,
             resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP,
         ):
             raise UnavailableResourceException(
