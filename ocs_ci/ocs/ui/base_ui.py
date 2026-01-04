@@ -779,7 +779,7 @@ def copy_dom(name_suffix: str = "", dom_folder=None):
         name_suffix = f"_{name_suffix}"
     filename = os.path.join(
         dom_folder,
-        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}_DOM.txt",
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}_DOM.html",
     )
     logger.info(f"Copy DOM file: {filename}")
     html = SeleniumDriver().page_source
