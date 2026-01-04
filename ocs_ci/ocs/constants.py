@@ -1209,6 +1209,7 @@ METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
 METALLB_WEBHOOK_PREFIX = "metallb-operator-webhook-server"
 METALLB_DEFAULT_NAMESPACE = "metallb-system"
+METALLB_OPERATOR_NAME = "metallb-operator"
 METALLB_KIND = "MetalLB"
 METALLB_OPERATOR_GROUP_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_METALLB, "operator-group.yaml"
