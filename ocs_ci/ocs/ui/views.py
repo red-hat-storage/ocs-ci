@@ -2674,7 +2674,6 @@ bucket_tab = {
         By.XPATH,
     ),
     "block_all_public_access_checkbox": (
-        # "//label[.//p[contains(., 'Block all public access')]]//input[@type='checkbox']",
         "//label[contains(., 'Block all public access')]//input[@type='checkbox']",
         By.XPATH,
     ),
