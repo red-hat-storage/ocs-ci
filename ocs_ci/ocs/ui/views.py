@@ -490,7 +490,8 @@ mcg_stores = {
         By.XPATH,
     ),
     "store_dropdown_option": (
-        "//ul[contains(@class, 'c-dropdown__menu')]//a[normalize-space()='{}']",
+        "//ul[contains(@class, 'c-dropdown__menu')]//a[normalize-space()='{value}'] | "
+        "//ul[contains(@class, 'c-menu__list')]//button[@id='{value}']",
         By.XPATH,
     ),
     "store_secret_option": ("//*[contains(text(), '{}')]", By.XPATH),
