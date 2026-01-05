@@ -165,6 +165,10 @@ class TestProfileDefaultValuesCheck(ManageTest):
             pytest.param(*["balanced"], marks=pytest.mark.polarion_id("OCS-5644")),
         ],
     )
+    @pytest.mark.skipif(
+        config.ENV_DATA.get("vsan_intransit_encryption", False),
+        reason="Worker node memory and CPU insufficient for profile changes",
+    )
     def test_change_cluster_resource_profile(self, perf_profile):
         """
         Testcase to validate osd, mgr, mon, mds and rgw pod memory and cpu values
