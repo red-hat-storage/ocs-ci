@@ -468,7 +468,7 @@ def check_mirroring_status_ok(
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
                 return True
             # Fail fast if count exceeds expected range - indicates leftover resources
-            if current_value > max(expected_value):
+            if current_value is not None and current_value > max(expected_value):
                 raise UnexpectedBehaviour(
                     f"Replaying count ({current_value}) exceeds expected ({max(expected_value)}). "
                     f"Clean up leftover DRPCs and namespaces before retrying."
@@ -500,6 +500,14 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
         logger.info(
             f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
         )
+        # Pre-check: Fail fast if replaying count exceeds expected (indicates leftover resources)
+        # This avoids waiting for full timeout when the issue is leftover DRPCs/namespaces
+        try:
+            check_mirroring_status_ok(replaying_images=replaying_images)
+        except UnexpectedBehaviour:
+            config.switch_ctx(restore_index)
+            raise
+
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=5,
@@ -1253,7 +1261,7 @@ def get_backend_volumes_for_pvcs(namespace):
         logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            # Skip volsync related PVCs
+            # Skip VolSync-related PVCs (prefixed with "volsync" or "vs-")
             if pvc_obj.name.startswith("volsync") or pvc_obj.name.startswith("vs-"):
                 continue
 
@@ -1564,7 +1572,16 @@ def verify_last_group_sync_time(
                 "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
             )
     else:
-        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+        # Wait for lastGroupSyncTime to be set (may be None after failover/relocate)
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info(
+                "lastGroupSyncTime is not set yet. Waiting for sync to complete..."
+            )
 
     # Verify lastGroupSyncTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
