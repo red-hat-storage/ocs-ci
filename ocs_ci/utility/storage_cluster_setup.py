@@ -81,6 +81,11 @@ class StorageClusterSetup(object):
         if config.ENV_DATA.get("odf_provider_mode_deployment", False):
             cluster_data["spec"]["providerAPIServerServiceType"] = "NodePort"
 
+        if config.DEPLOYMENT.get("provider_api_server_service_type"):
+            cluster_data["spec"]["providerAPIServerServiceType"] = (
+                config.DEPLOYMENT.get("provider_api_server_service_type")
+            )
+
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
             comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
