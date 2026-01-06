@@ -62,7 +62,6 @@ class FusionDataFoundationDeployment:
         Installs IBM Fusion Data Foundation.
         """
 
-        self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
@@ -71,6 +70,8 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
+        if self.lso_enabled:
+            self.ensure_lso_installed()
         self.setup_storage()
 
     def ensure_lso_installed(self):
