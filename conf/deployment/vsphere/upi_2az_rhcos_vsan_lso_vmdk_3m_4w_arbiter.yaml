@@ -13,6 +13,8 @@ DEPLOYMENT:
   dummy_zone_node_labels: true
   network_split_setup: true
   network_zone_latency: 5
+  host_network: true
+  provider_api_server_service_type: 'ClusterIP'
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
