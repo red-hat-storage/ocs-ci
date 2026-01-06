@@ -66,7 +66,6 @@ class FusionDataFoundationDeployment:
         Installs IBM Fusion Data Foundation.
         """
 
-        self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
@@ -202,6 +201,8 @@ class FusionDataFoundationDeployment:
         Setup storage
         """
         logger.info("Configuring storage.")
+        if self.lso_enabled:
+            self.ensure_lso_installed()
         self.patch_catalogsource()
 
         fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")
