@@ -232,21 +232,41 @@ class Deployment(object):
     def platform(self):
         return config.ENV_DATA["platform"]
 
+    @platform.setter
+    def platform(self, value):
+        config.ENV_DATA["platform"] = value
+
     @property
     def ocp_deployment_type(self):
         return config.ENV_DATA["deployment_type"]
+
+    @ocp_deployment_type.setter
+    def ocp_deployment_type(self, value):
+        config.ENV_DATA["ocp_deployment_type"] = value
 
     @property
     def cluster_path(self):
         return config.ENV_DATA["cluster_path"]
 
+    @cluster_path.setter
+    def cluster_path(self, value):
+        config.ENV_DATA["cluster_path"] = value
+
     @property
     def namespace(self):
         return config.ENV_DATA["cluster_namespace"]
 
+    @namespace.setter
+    def namespace(self, value):
+        config.ENV_DATA["namespace"] = value
+
     @property
     def custom_storage_class_path(self):
         return config.ENV_DATA["custom_storage_class_path"]
+
+    @custom_storage_class_path.setter
+    def custom_storage_class_path(self, value):
+        config.ENV_DATA["custom_storage_class_path"] = value
 
     class OCPDeployment(BaseOCPDeployment):
         """
