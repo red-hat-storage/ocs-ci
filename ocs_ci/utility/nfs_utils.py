@@ -49,14 +49,14 @@ def nfs_enable(
 
     # Enable nfs feature for storage-cluster using patch command
     assert storage_cluster_obj.patch(
-        resource_name="ocs-storagecluster",
+        resource_name=config.ENV_DATA["storage_cluster_name"],
         params=nfs_spec_enable,
         format_type="merge",
     ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
 
     # Enable ROOK_CSI_ENABLE_NFS via patch request
     assert config_map_obj.patch(
-        resource_name="rook-ceph-operator-config",
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
         params=rook_csi_config_enable,
         format_type="merge",
     ), "configmap/rook-ceph-operator-config not patched"
@@ -119,14 +119,14 @@ def nfs_disable(
     rook_csi_config_disable = '{"data":{"ROOK_CSI_ENABLE_NFS": "false"}}'
 
     assert storage_cluster_obj.patch(
-        resource_name="ocs-storagecluster",
+        resource_name=config.ENV_DATA["storage_cluster_name"],
         params=nfs_spec_disable,
         format_type="merge",
     ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
 
     # Disable ROOK_CSI_ENABLE_NFS via patch request
     assert config_map_obj.patch(
-        resource_name="rook-ceph-operator-config",
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
         params=rook_csi_config_disable,
         format_type="merge",
     ), "configmap/rook-ceph-operator-config not patched"
@@ -403,8 +403,26 @@ def nfs_access_for_clients(nfs_sc):
     # Create nfs-load balancer service
     hostname_add = create_nfs_load_balancer_service(provider_storage_cluster_obj)
 
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_21
+    ):
+
+        update_nfs_endpoint(hostname_add)
+
     # Distribute the scs to consumers
     distribute_nfs_storage_class_to_all_consumers(nfs_sc)
+
+    # verify nfs server details shared
+    server = fetch_nfs_server_details_on_client_cluster()
+
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_21
+    ):
+        server == hostname_add
+    else:
+        server == "ocs-storagecluster-cephnfs-service"
 
     # switch to consumer
     config.switch_to_consumer()
@@ -509,30 +527,62 @@ def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
         return True  # Don't block deployment on check failure
 
 
-def update_nfs_endpoint():
+def update_nfs_endpoint(host_details):
     """
     This method is to pass nfs external endpoint under storagecluster.spec.nfs
+
+    Args:
+        host_details(str): host details
 
     """
     storage_cluster_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
-    nfs_spec_enable = '{"spec": {"nfs":{ExternalEndpoint}}}'
+    external_endpoint_details = (
+        f'{{"spec": {{"nfs": {{"externalEndpoint": "{host_details}"}}}}}}'
+    )
     assert storage_cluster_obj.patch(
-        resource_name="ocs-storagecluster",
-        params=nfs_spec_enable,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
+        params=external_endpoint_details,
         format_type="merge",
     ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
 
 
-def fetch_nfs_spec_details():
+def remove_nfs_endpoint_details():
     """
-    This method is to fetch nfs spec details
+    This method is to remove nfs external endpoint details if available
 
-    Returns:
-        dict: nfs spec details
     """
+    config.switch_to_provider()
     storage_cluster_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
-    return storage_cluster_obj.get().get("spec").get("nfs")
+    if "externalEndpoint" in storage_cluster_obj.data["spec"]["nfs"]:
+        remove_nfs_endpoint_details = '{"spec": {"nfs": {"externalEndpoint": null}}}'
+        assert storage_cluster_obj.patch(
+            resource_name=config.ENV_DATA["storage_cluster_name"],
+            params=remove_nfs_endpoint_details,
+            format_type="merge",
+        ), "storagecluster.ocs.openshift.io/ocs-storagecluster not patched"
+
+    # switch to consumer
+    config.switch_to_consumer()
+
+
+def fetch_nfs_server_details_on_client_cluster():
+    """
+    Fetch the NFS server endpoint configured on the client (consumer) cluster.
+
+    Returns:
+        str: NFS server endpoint (IP address or hostname) configured
+             in the NFS StorageClass.
+
+    """
+    # switch to consumer
+    config.switch_to_consumer()
+
+    nfs_sc_obj = ocp.OCP(
+        kind=constants.STORAGECLASS, resource_name=constants.NFS_STORAGECLASS_NAME
+    )
+
+    return nfs_sc_obj.data["parameters"]["server"]

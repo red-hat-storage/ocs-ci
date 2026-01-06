@@ -32,6 +32,7 @@ from ocs_ci.framework.testlib import (
     nfs_outcluster_test_platform_required,
     skipif_external_mode,
     skipif_hci_client,
+    hci_client_required,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.ocs.resources import pod, ocs
@@ -178,7 +179,7 @@ class TestNfsEnable(ManageTest):
         self.service_obj = ocp.OCP(kind=constants.SERVICE, namespace=self.namespace)
         self.pvc_obj = ocp.OCP(kind=constants.PVC, namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
-        self.nfs_sc = "ocs-storagecluster-ceph-nfs"
+        self.nfs_sc = "constants.NFS_STORAGECLASS_NAME"
         self.nfs_sc_copy = "ocs-storagecluster-ceph-nfs-copy"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
         self.retain_nfs_sc_name = "ocs-storagecluster-ceph-nfs-retain"
@@ -1607,3 +1608,28 @@ class TestNfsEnable(ManageTest):
             fs, sv, svg, status = item.split(" ")
             subvolumes.append((fs, sv, svg, status))
         return subvolumes
+
+    @tier1
+    @skipif_ocs_version("<4.21")
+    @hci_client_required
+    def test_default_nfs_server_details_displayed_if_external_endpoint_details_unavailable(
+        self,
+    ):
+        """
+        Verify if nfs.externalEndpoint is unavailable in StorageCluster then NFS server endpoint details <ip/hostname>
+        will not be available when distributing NFS SC with clients, default server will be displayed
+
+        """
+        # remove nfs external endpoint details from storagecluster
+        nfs_utils.remove_nfs_endpoint_details()
+
+        server = nfs_utils.fetch_nfs_server_details_on_client_cluster()
+        # validate default nfs server details is displayed
+        assert (
+            server == "ocs-storagecluster-cephnfs-service"
+        ), f"Expected default NFS server service, got: {server}"
+
+        # Update nfs external endpoint details in storagecluster
+        # switch to provider
+        config.switch_to_provider()
+        nfs_utils.update_nfs_endpoint(self.hostname_add)
