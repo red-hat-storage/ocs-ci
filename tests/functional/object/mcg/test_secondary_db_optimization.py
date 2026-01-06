@@ -63,12 +63,18 @@ class TestSecondaryDbOptimization(MCGTest):
                 ocp_obj.patch(
                     params=json.dumps(params_dict, indent=4), format_type="merge"
                 )
+            else:
+                ocp_obj.patch(
+                    resource_name=constants.NB_DB_CNPG_CLUSTER_NAME,
+                    params='[{"op": "remove", "path": "/spec/postgresql/parameters/log_statement"}]',
+                    format_type="json",
+                )
 
         def implementation():
-            default_log_level = ocp_obj.get()["spec"]["postgresql"]["parameters"][
+            original_log_level = ocp_obj.get()["spec"]["postgresql"]["parameters"].get(
                 "log_statement"
-            ]
-            if default_log_level != "all":
+            )
+            if original_log_level != "all":
                 params_dict["spec"]["postgresql"]["parameters"]["log_statement"] = "all"
                 ocp_obj.patch(
                     params=json.dumps(params_dict, indent=4), format_type="merge"
