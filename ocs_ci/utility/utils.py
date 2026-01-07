@@ -5652,7 +5652,6 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
-@config.run_with_provider_context_if_available
 def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get the NooBaa DB pod that has been assigned the
@@ -5664,25 +5663,9 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
-    # importing here to avoid circular imports
-    from ocs_ci.ocs.resources import pod
-
-    try:
-        nb_db_pod = pod.Pod(
-            **pod.get_pods_having_label(
-                label=constants.NB_DB_PRIMARY_POD_LABEL,
-                namespace=namespace,
-            )[0]
-        )
-    except IndexError:
-        raise ResourceNotFoundError(
-            f"The NooBaa DB pod with label {constants.NB_DB_PRIMARY_POD_LABEL} "
-            f"was not found in namespace {namespace}"
-        )
-    return nb_db_pod
+    return get_nb_db_pod_by_cnpg_label(constants.NB_DB_PRIMARY_POD_LABEL, namespace)
 
 
-@config.run_with_provider_context_if_available
 def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get the NooBaa DB pod that has been assigned the
@@ -5694,18 +5677,36 @@ def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    return get_nb_db_pod_by_cnpg_label(constants.NB_DB_SECONDARY_POD_LABEL, namespace)
+
+
+@config.run_with_provider_context_if_available
+def get_nb_db_pod_by_cnpg_label(
+    cnpg_label, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Get one of the NooBaa DB CNPG pods
+
+    Args:
+        cnpg_label (str): The CNPG label that describes the pod role
+        namespace (str): The namespace of the NooBaa DB pod
+
+    Returns:
+        Pod: The pod
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+    """
+    # importing here to avoid circular imports
     from ocs_ci.ocs.resources import pod
 
     try:
         nb_db_pod = pod.Pod(
-            **pod.get_pods_having_label(
-                label=constants.NB_DB_SECONDARY_POD_LABEL,
-                namespace=namespace,
-            )[0]
+            **pod.get_pods_having_label(label=cnpg_label, namespace=namespace)[0]
         )
     except IndexError:
         raise ResourceNotFoundError(
-            f"The NooBaa DB pod with label {constants.NB_DB_SECONDARY_POD_LABEL} "
+            f"The NooBaa DB pod with label {cnpg_label} "
             f"was not found in namespace {namespace}"
         )
     return nb_db_pod
