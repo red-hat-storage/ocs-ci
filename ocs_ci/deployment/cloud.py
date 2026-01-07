@@ -117,5 +117,13 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     gather_bootstrap()
                 except Exception as ex:
                     logger.error(ex)
-            raise e
+            if "Waiting up to" in str(e):
+                run_cmd(
+                    f"{self.installer} wait-for install-complete "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600,
+                )
+            else:
+                raise e
         self.test_cluster()
