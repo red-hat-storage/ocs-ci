@@ -4163,6 +4163,113 @@ def get_pod_used_memory_in_mebibytes(podname):
                 return memory_value
 
 
+def get_pod_metrics(pod_name, namespace=None):
+    """
+    Get memory and CPU metrics for a specific pod using oc adm top.
+
+    Args:
+        pod_name (str): Name of the pod
+        namespace (str): Namespace where the pod is located
+
+    Returns:
+        dict: Dictionary with 'memory_mib' and 'cpu_millicores' keys
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocp_obj = OCP(namespace=namespace)
+
+    try:
+        # Get pod metrics using oc adm top
+        cmd = f"adm top pod {pod_name} -n {namespace}"
+        output = ocp_obj.exec_oc_cmd(cmd, out_yaml_format=False)
+
+        # Parse output: NAME CPU(cores) MEMORY(bytes)
+        # Example: pod-name 50m 125Mi
+        lines = output.strip().split("\n")
+        for line in lines:
+            parts = line.split()
+            # Check exact match on first column (pod name) to avoid substring matching issues
+            if len(parts) >= 3 and parts[0] == pod_name:
+                cpu_str = parts[1]
+                memory_str = parts[2]
+
+                # Parse CPU (e.g., "50m" -> 50 millicores)
+                cpu_millicores = 0
+                if cpu_str.endswith("m"):
+                    cpu_millicores = int(cpu_str.replace("m", ""))
+                elif "." in cpu_str:
+                    cpu_millicores = int(float(cpu_str) * 1000)
+                else:
+                    cpu_millicores = int(cpu_str) * 1000
+
+                # Parse memory (e.g., "125Mi" -> 125 MiB)
+                memory_mib = 0
+                if memory_str.endswith("Mi"):
+                    memory_mib = int(memory_str.replace("Mi", ""))
+                elif memory_str.endswith("Gi"):
+                    memory_mib = int(float(memory_str.replace("Gi", "")) * 1024)
+                elif memory_str.endswith("Ki"):
+                    memory_mib = int(int(memory_str.replace("Ki", "")) / 1024)
+                else:
+                    # Assume bytes
+                    memory_mib = int(int(memory_str) / (1024 * 1024))
+
+                # Validate parsed values are not zero
+                if memory_mib == 0 or cpu_millicores == 0:
+                    logger.warning(
+                        f"Parsed metrics for pod {pod_name} resulted in zero values: "
+                        f"memory_mib={memory_mib}, cpu_millicores={cpu_millicores}. "
+                        f"Raw values: cpu={cpu_str}, memory={memory_str}"
+                    )
+
+                return {
+                    "memory_mib": memory_mib,
+                    "cpu_millicores": cpu_millicores,
+                }
+
+        logger.warning(f"Could not parse metrics for pod {pod_name}")
+        return {"memory_mib": 0, "cpu_millicores": 0}
+
+    except Exception as e:
+        logger.error(f"Error getting metrics for pod {pod_name}: {e}")
+        return {"memory_mib": 0, "cpu_millicores": 0}
+
+
+def get_pods_aggregated_metrics(pod_objs):
+    """
+    Get aggregated metrics for multiple pods.
+
+    Args:
+        pod_objs (list): List of Pod objects
+
+    Returns:
+        dict: Dictionary with aggregated metrics including:
+            - total_memory_mib: Sum of memory across all pods
+            - total_cpu_millicores: Sum of CPU across all pods
+            - max_memory_mib: Maximum memory among all pods
+            - max_cpu_millicores: Maximum CPU among all pods
+            - pod_count: Number of pods
+    """
+    total_memory_mib = 0
+    total_cpu_millicores = 0
+    max_memory_mib = 0
+    max_cpu_millicores = 0
+
+    for pod in pod_objs:
+        metrics = get_pod_metrics(pod.name, pod.namespace)
+        total_memory_mib += metrics["memory_mib"]
+        total_cpu_millicores += metrics["cpu_millicores"]
+        max_memory_mib = max(max_memory_mib, metrics["memory_mib"])
+        max_cpu_millicores = max(max_cpu_millicores, metrics["cpu_millicores"])
+
+    return {
+        "total_memory_mib": total_memory_mib,
+        "total_cpu_millicores": total_cpu_millicores,
+        "max_memory_mib": max_memory_mib,
+        "max_cpu_millicores": max_cpu_millicores,
+        "pod_count": len(pod_objs),
+    }
+
+
 def get_ceph_csi_ctrl_pods(namespace=None):
     """
     Fetches info about the ceph csi ctrl pods in the cluster
