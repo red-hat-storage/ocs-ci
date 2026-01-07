@@ -2883,6 +2883,8 @@ def ceph_health_check_with_toolbox_recovery(
     tries: int = 20,
     delay: int = 30,
     fix_ceph_health: bool = True,
+    update_jira: bool = True,
+    no_exception_if_jira_issue_updated: bool = False,
 ) -> bool:
     """
     Perform ceph health check with automatic toolbox pod recovery.
@@ -2895,6 +2897,8 @@ def ceph_health_check_with_toolbox_recovery(
         tries (int): Number of retries for health check.
         delay (int): Delay between retries in seconds.
         fix_ceph_health (bool): Whether to attempt fixing ceph health issues.
+        update_jira (bool): Whether to update Jira on health issues.
+        no_exception_if_jira_issue_updated (bool): Skip exception if Jira was updated.
 
     Returns:
         bool: True if ceph health check passes.
@@ -2909,6 +2913,8 @@ def ceph_health_check_with_toolbox_recovery(
             tries=tries,
             delay=delay,
             fix_ceph_health=fix_ceph_health,
+            update_jira=update_jira,
+            no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
         )
     except NoRunningCephToolBoxException:
         logger.warning(
@@ -2920,6 +2926,8 @@ def ceph_health_check_with_toolbox_recovery(
                 tries=tries,
                 delay=delay,
                 fix_ceph_health=fix_ceph_health,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
             )
         raise
 
