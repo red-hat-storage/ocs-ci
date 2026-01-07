@@ -177,7 +177,7 @@ def test_blackbox_pod_after_upgrade():
     """
     ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
     if ocs_version <= version.get_semantic_version("4.20"):
-        pytest.skip("The test is not supported on version less than 4.20")
+        pytest.skip("The test is not supported on version less than 4.21")
     else:
         ocp_obj = ocp.OCP(
             kind=constants.POD,
@@ -194,5 +194,5 @@ def test_blackbox_pod_after_upgrade():
             assert (
                 labels.get("app.kubernetes.io/name") == "odf-blackbox-exporter"
             ), f"Unexpected pod label on {pod_name}"
-            log.info(f"pod: {pod_name}")
+
         log.info("Blackbox exporter pod exists after upgrade")
