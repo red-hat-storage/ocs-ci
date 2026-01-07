@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     brown_squad,
     mcg,
-    black_squad,
+    purple_squad,
     skipif_external_mode,
     skipif_hci_client,
 )
@@ -168,8 +168,8 @@ def deprecated_test_noobaa_service_mon_after_ocs_upgrade():
 @post_upgrade
 @skipif_external_mode
 @skipif_hci_client
-@pytest.mark.polarion_id("")  # to be added
-@black_squad
+@pytest.mark.polarion_id("OCS-7419")
+@purple_squad
 def test_blackbox_pod_after_upgrade():
     """
     Check blackbox exporter pod exists after upgrade
