@@ -36,15 +36,71 @@ class TestFailoverAndRelocate:
             False,  # primary_cluster_down = False
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
+            False,
+            3,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4430")],
             id="primary_up-rbd-cli",
+        ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_up-rbd-custom_pool_replica2_with_compression",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
+            False,
+            3,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4427")],
             id="primary_down-rbd-cli",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            3,
+            None,
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica3_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            3,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica3_with_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            2,
+            None,
+           # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica2_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica2_with_compression",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
@@ -54,11 +110,61 @@ class TestFailoverAndRelocate:
             id="primary_up-cephfs-cli",
         ),
         pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_up-cephfs-custom_pool_replica2_with_compression",
+        ),
+        pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
             marks=[acceptance, pytest.mark.polarion_id("OCS-4727")],
             id="primary_down-cephfs-cli",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            3,
+            None,
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica3_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            3,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica3_with_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            2,
+            None,
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica2_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica2_with_compression",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
@@ -91,16 +197,21 @@ class TestFailoverAndRelocate:
     ]
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
+        argnames=["primary_cluster_down", "pvc_interface", "via_ui", "custom_sc", "replica", "compression"], argvalues=params
     )
     def test_failover_and_relocate(
         self,
         primary_cluster_down,
         pvc_interface,
         via_ui,
+        custom_sc,
+        replica,
+        compression,
         setup_acm_ui,
         dr_workload,
         nodes_multicluster,
+        cnv_custom_storage_class,
+        cephfs_custom_storage_class,
         node_restart_teardown,
     ):
         """
@@ -112,9 +223,19 @@ class TestFailoverAndRelocate:
         """
         if via_ui:
             acm_obj = AcmAddClusters()
+        
+        if custom_sc:
+            if pvc_interface == constants.CEPHBLOCKPOOL:
+                logger.info("Calling fixture to create Custom rbd Pool/SC..")
+                cnv_custom_storage_class(replica=replica, compression=compression)
+
+            elif pvc_interface == constants.CEPHFILESYSTEM:
+                logger.info("Calling fixture to create Custom Pool/SC..")
+                cephfs_custom_storage_class(replica=replica, compression=compression)
+            
 
         workloads = dr_workload(
-            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
+            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface, custom_sc=custom_sc
         )
         drpc_subscription = DRPC(namespace=workloads[0].workload_namespace)
         drpc_appset = DRPC(
