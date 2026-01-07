@@ -317,9 +317,9 @@ class StorageClusterSetup(object):
             deviceset_data_part["name"] = (
                 constants.DEFAULT_DEVICESET_LSO_PVC_NAME + "-part"
             )
-            if self.deployment.storage_class:
+            if config.ENV_DATA.get("storage_class"):
                 deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
-                    self.deployment.storage_class + "-part"
+                    config.ENV_DATA["storage_class"] + "-part"
                 )
             elif deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"]:
                 deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
