@@ -3730,3 +3730,6 @@ ENABLE_RGW_HPA_ANNOTATION_KEY = "ocs.openshift.io/enable-rgw-autoscale"
 # Monitoring status
 MON_STATUS_UP = "up"
 MON_STATUS_DOWN = "down"
+=======
+# ODF 4.21 health overview resources
+BLACKBOX_POD_LABEL = "app.kubernetes.io/name=odf-blackbox-exporter"

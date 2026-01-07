@@ -12,6 +12,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     brown_squad,
     mcg,
+    black_squad,
+    skipif_external_mode,
+    skipif_hci_client,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -160,3 +163,37 @@ def deprecated_test_noobaa_service_mon_after_ocs_upgrade():
             servicemonitor["metadata"]["name"] != "noobaa-service-monitor"
         ), "noobaa-service-monitor exist"
     log.info("noobaa-service-monitor does not exist")
+
+
+@post_upgrade
+@skipif_external_mode
+@skipif_hci_client
+@pytest.mark.polarion_id("")  # to be added
+@black_squad
+def test_blackbox_pod_after_upgrade():
+    """
+    Check blackbox exporter pod exists after upgrade
+
+    """
+    ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+    if ocs_version <= version.get_semantic_version("4.20"):
+        pytest.skip("The test is not supported on version less than 4.20")
+    else:
+        ocp_obj = ocp.OCP(
+            kind=constants.POD,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=constants.BLACKBOX_POD_LABEL,
+        )
+        Pods = ocp_obj.get()
+        pods = Pods.get("items", [])
+        assert pods, "No pods found"
+
+        for pod in pods:
+            # log.info(f"Checking pod : {pod}")
+            pod_name = pod["metadata"]["name"]
+            labels = pod["metadata"].get("labels", {})
+            assert (
+                labels.get("app.kubernetes.io/name") == "odf-blackbox-exporter"
+            ), f"Unexpected pod label on {pod_name}"
+            log.info(f"pod: {pod_name}")
+        log.info("Blackbox exporter pod exists after upgrade")
