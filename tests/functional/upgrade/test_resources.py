@@ -189,7 +189,6 @@ def test_blackbox_pod_after_upgrade():
         assert pods, "No pods found"
 
         for pod in pods:
-            # log.info(f"Checking pod : {pod}")
             pod_name = pod["metadata"]["name"]
             labels = pod["metadata"].get("labels", {})
             assert (
