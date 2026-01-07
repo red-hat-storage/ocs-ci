@@ -2184,7 +2184,7 @@ def patch_replication_policy_to_bucket(
 
 
 @config.run_with_provider_context_if_available
-def update_replication_policy(bucket_name, replication_policy_dict):
+def update_replication_policy(bucket_name, replication_policy_dict, **kwargs):
     """
     Updates the replication policy of a bucket
 
@@ -2192,6 +2192,14 @@ def update_replication_policy(bucket_name, replication_policy_dict):
         bucket_name (str): The name of the bucket to update
         replication_policy_dict (dict): A dictionary containing the new replication
         policy
+
+    Optional Args passed as kwargs:
+        verify_health (bool): Whether to verify the health of the bucket after updating the replication policy.
+        Requires an ObjectBucket instance to be passed in as as the bucket_obj argument.
+
+        bucket_obj (ObjectBucket): The bucket object for verifying the health of the bucket.
+        verify_health_timeout (int): The timeout in seconds to wait for the bucket to reach a healthy state.
+
     """
     replication_policy_patch_dict = {
         "spec": {
@@ -2210,24 +2218,16 @@ def update_replication_policy(bucket_name, replication_policy_dict):
         resource_name=bucket_name,
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
+    # Optional health verification
+    verify_health = kwargs.get("verify_health", False)
+    bucket_obj = kwargs.get("bucket_obj", None)
+    timeout = kwargs.get("verify_health_timeout", 120)
+    if verify_health and bucket_obj:
+        # Import here to avoid circular import
+        from ocs_ci.ocs.resources.objectbucket import ObjectBucket
 
-@config.run_with_provider_context_if_available
-def update_replication_policy_and_verify_health(bucket_obj, replication_policy_dict):
-    """
-    Updates the replication policy of a bucket and verifies the health of the bucket.
-    This is useful because the bucket may not be immediately available after the
-    replication policy is updated.
-
-    Args:
-        bucket_obj (ObjectBucket): The bucket object to update the replication policy of
-        replication_policy_dict (dict): A dictionary containing the new replication
-        policy
-
-    Raises:
-        TimeoutExpiredError: If the bucket does not reach a healthy state within 120 seconds
-    """
-    update_replication_policy(bucket_obj.name, replication_policy_dict)
-    bucket_obj.verify_health(timeout=120)
+        if isinstance(bucket_obj, ObjectBucket):
+            bucket_obj.verify_health(timeout=timeout)
 
 
 @config.run_with_provider_context_if_available

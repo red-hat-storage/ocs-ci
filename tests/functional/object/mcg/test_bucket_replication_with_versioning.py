@@ -18,9 +18,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     get_obj_versions,
     put_bucket_versioning_via_awscli,
-    update_replication_policy_and_verify_health,
     upload_obj_versions,
     wait_for_object_versions_match,
+    update_replication_policy,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
@@ -125,8 +125,11 @@ class TestReplicationWithVersioning(MCGTest):
             replication_policy = ReplicationPolicyWithVersioning(
                 target_bucket=target_bucket.name
             )
-            update_replication_policy_and_verify_health(
-                source_bucket, replication_policy.to_dict()
+            update_replication_policy(
+                source_bucket.name,
+                replication_policy.to_dict(),
+                verify_health=True,
+                bucket_obj=source_bucket,
             )
 
         # 3. Write some versions to the source buckets
@@ -180,15 +183,21 @@ class TestReplicationWithVersioning(MCGTest):
         replication_policy = ReplicationPolicyWithVersioning(
             target_bucket=bucket_b.name, prefix=a_to_b_prefix
         )
-        update_replication_policy_and_verify_health(
-            bucket_a, replication_policy.to_dict()
+        update_replication_policy(
+            bucket_a.name,
+            replication_policy.to_dict(),
+            verify_health=True,
+            bucket_obj=bucket_a,
         )
 
         replication_policy = ReplicationPolicyWithVersioning(
             target_bucket=bucket_a.name, prefix=b_to_a_prefix
         )
-        update_replication_policy_and_verify_health(
-            bucket_b, replication_policy.to_dict()
+        update_replication_policy(
+            bucket_b.name,
+            replication_policy.to_dict(),
+            verify_health=True,
+            bucket_obj=bucket_b,
         )
 
         # 3. Write some versions to each bucket
@@ -246,8 +255,11 @@ class TestReplicationWithVersioning(MCGTest):
         replication_policy = ReplicationPolicyWithVersioning(
             target_bucket=target_bucket.name
         )
-        update_replication_policy_and_verify_health(
-            source_bucket, replication_policy.to_dict()
+        update_replication_policy(
+            source_bucket.name,
+            replication_policy.to_dict(),
+            verify_health=True,
+            bucket_obj=source_bucket,
         )
 
         # 3. Suspend the versioning on the source bucket
