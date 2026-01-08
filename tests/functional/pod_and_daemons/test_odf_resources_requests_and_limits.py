@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     BaseTest,
     polarion_id,
 )
-from ocs_ci.framework.pytest_customization.marks import brown_squad,jira
+from ocs_ci.framework.pytest_customization.marks import brown_squad, jira
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
