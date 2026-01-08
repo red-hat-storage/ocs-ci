@@ -166,7 +166,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
         ],
     )
     @pytest.mark.skipif(
-        config.ENV_DATA.get("vsan_intransit_encryption", False),
+        config.ENV_DATA.get("in_transit_encryption", False),
         reason="Worker node memory and CPU insufficient for profile changes",
     )
     def test_change_cluster_resource_profile(self, perf_profile):
