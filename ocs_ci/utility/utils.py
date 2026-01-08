@@ -464,6 +464,7 @@ def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
 
     Returns:
         bool: True if text appears to be base64 encoded
+
     """
     if not text_block or len(text_block) < min_length:
         return False
@@ -471,7 +472,12 @@ def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
     # Base64 alphabet: A-Z, a-z, 0-9, +, /, = (padding)
     # Using string module to avoid detect-secrets false positive
     base64_chars = set(string.ascii_letters + string.digits + "+/=")
-    non_whitespace = text_block.replace("\n", "").replace("\r", "").replace(" ", "")
+    non_whitespace = (
+        text_block.replace("\n", "")
+        .replace("\r", "")
+        .replace(" ", "")
+        .replace("\t", "")
+    )
 
     if not non_whitespace:
         return False
@@ -509,6 +515,7 @@ def _extract_base64_blocks(lines: list) -> list:
 
     Returns:
         list: List of tuples (start_index, end_index, is_base64_block)
+
     """
     blocks = []
     current_block_start = None
@@ -545,6 +552,7 @@ def truncate_large_base64(output: str, max_base64_size: int = 1024) -> str:
 
     Returns:
         str: Output with large base64 blocks truncated
+
     """
     if not output or len(output) < max_base64_size:
         return output
