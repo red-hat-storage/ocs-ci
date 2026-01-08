@@ -1178,7 +1178,7 @@ class OCP(object):
                 self.get(resource_name=resource_name)
             except CommandFailed as ex:
                 if "NotFound" in str(ex):
-                    log.info(f"{self.kind} {resource_name} got deleted successfully")
+                    log.info(f"{self.kind} {resource_name} get deleted successfully")
                     return True
                 elif ignore_command_failed_exception:
                     log.warning(
@@ -1549,7 +1549,7 @@ def get_all_resource_of_kind_containing_string(search_string, kind):
     resource_list = []
     for resource in OCP(kind=kind).get().get("items"):
         if search_string in resource["metadata"]["name"]:
-            resource_list.append(resource)
+            resource_list.append(resource.get("metadata").get("name"))
     return resource_list
 
 
