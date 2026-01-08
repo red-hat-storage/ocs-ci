@@ -523,6 +523,7 @@ class TestBucketCreate:
         bucket_ui.create_bucket_ui("s3")
         bucket_ui.nav_object_storage_page()
         bucket_ui.create_bucket_ui("obc")
+        bucket_ui.nav_object_storage_page()
 
         bucket_ui.nav_buckets_page()
 
