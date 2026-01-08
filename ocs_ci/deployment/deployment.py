@@ -499,7 +499,7 @@ class Deployment(object):
                             if (
                                 get_provider_service_type() != "NodePort"
                                 and cluster.ENV_DATA.get("cluster_type", "").lower()
-                                == constants.HCI_CLIENT
+                                != constants.HCI_CLIENT
                             ):
                                 ptch = (
                                     f'\'{{"spec": {{"network": {{"multiClusterService": '
