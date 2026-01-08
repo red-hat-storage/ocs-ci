@@ -324,11 +324,40 @@ def extract_image_digest_mirror_set():
     return filename
 
 
+def is_not_arbiter_node(node_obj):
+    """
+    Determines if a node contains the arbiter zone label.
+    Used to filter arbiter node from node list.
+
+    Args:
+        node_obj (OCP): OCP Node object
+
+    Returns:
+        bool: True if node doesn't contain the labelj, False if it does
+
+    """
+    arbiter_zone = config.DEPLOYMENT.get(
+        "arbiter_zone", constants.ARBITER_ZONE_LABEL[0]
+    )
+    zone_key = "topology.kubernetes.io/zone"
+    data = node_obj.data
+    metadata = data.get("metadata")
+    labels = metadata.get("labels")
+    return not labels.get(zone_key) == arbiter_zone
+
+
 def add_storage_label():
     """
-    Add storage label on worker nodes.
+    Add storage label on nodes.
     """
-    nodes = node.get_nodes(node_type="worker")
+    if config.ENV_DATA.get("mark_masters_schedulable", False):
+        all_nodes = node.get_all_nodes()
+        nodes = node.get_node_objs(all_nodes)
+        # Filter arbiter node if configured
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            nodes = list(filter(is_not_arbiter_node, nodes))
+    else:
+        nodes = node.get_nodes(node_type="worker")
     node.label_nodes(nodes)
 
 
