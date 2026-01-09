@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
+from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp, jira
 from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
@@ -306,6 +306,7 @@ class TestDiskFailures(ManageTest):
     @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5502")
     @skipif_external_mode
+    @jira("DFBUGS-4534")
     def test_recovery_from_volume_deletion_cli_tool(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
