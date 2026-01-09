@@ -3394,7 +3394,6 @@ PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
 
 DISCOVERED_APPS = "DiscoveredApps"
 DR_OPS_NAMESPACE = "openshift-dr-ops"
-DR_OPS_NAMESAPCE = DR_OPS_NAMESPACE  # Deprecated: typo, use DR_OPS_NAMESPACE
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
 
 DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
