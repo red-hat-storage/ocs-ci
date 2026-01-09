@@ -88,7 +88,7 @@ def get_current_primary_cluster_name(
     if discovered_apps:
         if not resource_name:
             raise ValueError("Resource name is expected")
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpc_data = DRPC(namespace=namespace, resource_name=resource_name).get()
     else:
         drpc_data = DRPC(namespace=namespace).get()
@@ -124,7 +124,7 @@ def get_current_secondary_cluster_name(
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
     if discovered_apps:
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         primary_cluster_name = get_current_primary_cluster_name(
             namespace=namespace,
             resource_name=resource_name,
@@ -200,7 +200,7 @@ def get_scheduling_interval(
     if discovered_apps:
         if not resource_name:
             raise ValueError("Resource name is expected")
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpolicy_obj = DRPC(
             namespace=namespace, resource_name=resource_name
         ).drpolicy_obj
@@ -249,7 +249,7 @@ def failover(
             f'"failoverCluster":"{failover_cluster}",'
             f'"preferredCluster":"{old_primary}"}}}}'
         )
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:
         drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
@@ -314,7 +314,7 @@ def relocate(
             f'"failoverCluster":"{old_primary}",'
             f'"preferredCluster":"{preferred_cluster}"}}}}'
         )
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:
         drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
@@ -859,7 +859,7 @@ def wait_for_replication_resources_creation(
 
     """
 
-    vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
 
     wait_for_resource_existence(
         kind=constants.VOLUME_REPLICATION_GROUP,
@@ -970,7 +970,7 @@ def wait_for_replication_resources_deletion(
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
-    vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
         resource_kind = constants.REPLICATION_SOURCE
@@ -2200,7 +2200,7 @@ def do_discovered_apps_cleanup(
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
-    drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE, resource_name=drpc_name)
+    drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESPACE, resource_name=drpc_name)
     drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
     time.sleep(90)
     assert drpc_obj.get_progression_status(
@@ -2246,7 +2246,7 @@ def do_discovered_apps_cleanup_multi_ns(
     config.switch_acm_ctx()
 
     drpc_obj = DRPC(
-        namespace=constants.DR_OPS_NAMESAPCE,
+        namespace=constants.DR_OPS_NAMESPACE,
         resource_name=workload_instance[0].discovered_apps_placement_name,
     )
     drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
@@ -2270,7 +2270,7 @@ def do_discovered_apps_cleanup_multi_ns(
 
     wait_for_vrg_state(
         vrg_state=vrg_state,
-        vrg_namespace=constants.DR_OPS_NAMESAPCE,
+        vrg_namespace=constants.DR_OPS_NAMESPACE,
         resource_name=vrg_name,
     )
     config.switch_acm_ctx()
@@ -2304,13 +2304,13 @@ def disable_dr_rdr(discovered_apps=False):
 
     # Delete the placement under openshift-dr-ops namespace
     if discovered_apps:
-        run_cmd(f"oc delete drpc --all -n {constants.DR_OPS_NAMESAPCE}")
-        run_cmd(f"oc delete placement --all -n {constants.DR_OPS_NAMESAPCE}")
+        run_cmd(f"oc delete drpc --all -n {constants.DR_OPS_NAMESPACE}")
+        run_cmd(f"oc delete placement --all -n {constants.DR_OPS_NAMESPACE}")
     sample = TimeoutSampler(
         timeout=300,
         sleep=5,
         func=verify_drpc_placement_deletion,
-        cmd=f"oc get placement -n '{constants.DR_OPS_NAMESAPCE}'",
+        cmd=f"oc get placement -n '{constants.DR_OPS_NAMESPACE}'",
         expected_output_lst="No resources found",
     )
     if not sample.wait_for_func_status(result=True):

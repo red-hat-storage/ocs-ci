@@ -1381,7 +1381,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         placement_yaml_data["metadata"]["annotations"][
             "cluster.open-cluster-management.io/experimental-scheduling-disable"
         ] = "true"
-        placement_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        placement_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
         placement_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
@@ -1420,13 +1420,13 @@ class BusyboxDiscoveredApps(DRWorkload):
         drpc_yaml_data["metadata"]["name"] = (
             drpc_name or self.discovered_apps_placement_name
         )
-        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
             placement_name or self.discovered_apps_placement_name + "-placement-1"
         )
-        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESPACE
         drcp_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
@@ -1474,13 +1474,13 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.workload_namespace
         )
         drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
-        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
             self.discovered_apps_placement_name + "-placement-1"
         )
-        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESPACE
         drpc_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
@@ -1539,12 +1539,12 @@ class BusyboxDiscoveredApps(DRWorkload):
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {drpc_name or self.discovered_apps_placement_name} "
+                f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {drpc_name or self.discovered_apps_placement_name} "
                 f"{ignore_not_found_param}"
             )
             log.info("Deleting Placement")
             run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} "
+                f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
                 f"{self.discovered_apps_placement_name}-placement-1 {ignore_not_found_param}"
             )
 
@@ -1781,7 +1781,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         placement_yaml_data["metadata"]["annotations"][
             "cluster.open-cluster-management.io/experimental-scheduling-disable"
         ] = "true"
-        placement_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        placement_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
         placement_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
@@ -1804,13 +1804,13 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         log.info(self.discovered_apps_pvc_selector_key)
         drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
-        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
             self.discovered_apps_placement_name + "-placement-1"
         )
-        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESPACE
         drcp_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
@@ -1892,18 +1892,18 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             log.info("Deleting DRPC")
             try:
                 run_cmd(
-                    f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}"
                 )
             except CommandFailed:
                 # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
                 # hence deletion fails
                 run_cmd(
-                    f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-drpc"
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-drpc"
                 )
                 log.info("DRPC deleted")
             log.info("Deleting Placement")
             run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
+                f"oc delete placement -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-placement-1"
             )
 
         for cluster in get_non_acm_cluster_config():
