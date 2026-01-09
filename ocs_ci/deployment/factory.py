@@ -105,6 +105,10 @@ class DeploymentFactory(object):
             from .rhv import RHVIPI
 
             self.cls_map["rhv_ipi"] = RHVIPI
+        elif self.deployment_platform == constants.IBM_HCI_PLATFORM:
+            from .ibm_hci import IMB_HCI_IPI
+
+            self.cls_map["ibm_hci_ipi"] = IMB_HCI_IPI
         elif self.deployment_platform == constants.ACM_OCP_DEPLOYMENT:
             from .multicluster_deployment import OCPDeployWithACM
 
