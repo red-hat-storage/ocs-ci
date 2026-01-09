@@ -1,6 +1,7 @@
 ---
 DEPLOYMENT:
   allow_lower_instance_requirements: false
+  sts_enabled: true
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'ipi'
@@ -28,8 +29,6 @@ ENV_DATA:
   # Example of multi arch release image, if not provided it will automatically
   # find in quay.
   # release_img: 'quay.io/openshift-release-dev/ocp-release:4.21.0-rc.0-multi'
-#REPORTING:
-  #polarion:
-    # TODO: add polarion ID for this graviton deployment
-    # https://issues.redhat.com/browse/RHSTOR-2044
-    # deployment_id: 'OCS-XXXX'
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-5468'

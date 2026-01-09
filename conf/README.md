@@ -402,6 +402,13 @@ higher priority).
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
 * `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
+* `early_testing` - set to True if it's early testing of RHCOS and provide  release_img
+    e.g. registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2
+* `release_img` - release image for early testing of RHCOS or multi arch setup
+* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
+* `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
+    proper OCP release image for OCP deployment or you can set custom via
+    release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.
 
 #### UPGRADE
 
