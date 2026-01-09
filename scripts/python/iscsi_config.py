@@ -48,7 +48,6 @@ def ssh_run(host, cmd, username=USERNAME):
                 password=os.environ.get("TARGET_PASSWORD"),
                 timeout=10,
             )
-
         stdin, stdout, stderr = client.exec_command(cmd)
         out = stdout.read().decode().strip()
         err = stderr.read().decode().strip()
