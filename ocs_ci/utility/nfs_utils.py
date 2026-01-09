@@ -452,6 +452,10 @@ def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
     """
     Check if cluster has sufficient resources for NFS deployment.
 
+    For Provider-Client setups:
+    - NFS runs on the Provider cluster, so only Provider needs to meet requirements
+    - Client clusters just consume the distributed NFS StorageClass, so they skip this check
+
     Args:
         min_cpu (int): Minimum CPU cores per worker node (default: 12)
         min_memory (int): Minimum memory in bytes per worker node (default: 32GB)
@@ -461,6 +465,15 @@ def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
     """
     try:
         from ocs_ci.ocs.node import get_nodes
+        from ocs_ci.ocs.cluster import is_hci_client_cluster
+
+        # Skip resource check for client clusters NFS runs on Provider, clients just consume the StorageClass
+        if is_hci_client_cluster():
+            log.info(
+                "Skipping NFS resource check for client cluster. "
+                "NFS runs on Provider cluster."
+            )
+            return True
 
         # Check worker nodes only (OCS/ODF runs on worker nodes)
         worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
