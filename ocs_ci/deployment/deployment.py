@@ -985,7 +985,7 @@ class Deployment(object):
                 )
         if config.ENV_DATA.get("config_iscsi", True):
             exec_cmd(
-                f"./scripts/python/iscsi_config.py {config.ENV_DATA['cluster_path']}",
+                f"python scripts/python/iscsi_config.py {config.ENV_DATA['cluster_path']}",
                 shell=True,
             )
 
