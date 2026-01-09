@@ -13,6 +13,7 @@ EXPECTED_KEYS = {
     "ceph-username",
     "ceph-secret",
     "token",
+    "dmcrypt-key",
 }
 EXPECTED_NAMES = {"rook-ceph-config", "rook-ceph-mon", "ocs-kms-token"}
 
