@@ -90,7 +90,7 @@ def wipe_luns_on_target(target_vm_ip, target_iqn, username):
                 log.info(" Removed signatures")
 
 
-def verify_cleanup(target_vm_ip, target_iqn, username_target):
+def verify_cleanup(target_vm_ip, target_iqn, username_target, worker_iqns):
     """
     Verify cleanup was successful.
     """
@@ -100,13 +100,16 @@ def verify_cleanup(target_vm_ip, target_iqn, username_target):
 
     # Check ACLs on target
     log.info("\nChecking target ACLs...")
-    check_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls ls 2>&1"
-    success, stdout, stderr = ssh_run(target_vm_ip, check_cmd, username_target)
+    for iqn in worker_iqns:
+        check_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls/{iqn} ls 2>&1"
+        success, stdout, stderr = ssh_run(target_vm_ip, check_cmd, username_target)
 
-    if "No ACLs" in stdout or not stdout:
-        log.info(" No ACLs remaining")
-    else:
-        raise Exception(f"ACLs still exist:\n{stdout}")
+        if "No such path" in stdout:
+            log.info(f" ACL for {iqn} successfully removed")
+        else:
+            raise Exception(f"ACL for {iqn} still exists:\n{stdout}")
+    success, stdout, stderr = ssh_run(target_vm_ip, check_cmd, username_target)
+    log.info(" All ACLs verified as removed.")
 
 
 def cleanup_iscsi_target(
@@ -116,7 +119,6 @@ def cleanup_iscsi_target(
     worker_ips,
     wipe_data,
     username_target,
-    username_worker,
 ):
     """
     Complete cleanup of iSCSI target.
@@ -148,9 +150,7 @@ def cleanup_iscsi_target(
             wipe_luns_on_target(target_vm_ip, target_iqn, username_target)
 
         # Step 5: Verify
-        verify_cleanup(
-            target_vm_ip, target_iqn, worker_ips, username_target, username_worker
-        )
+        verify_cleanup(target_vm_ip, target_iqn, username_target, worker_iqns)
 
         log.info("\n" + "=" * 70)
         log.info("✓ CLEANUP COMPLETED SUCCESSFULLY")
@@ -166,7 +166,7 @@ def cleanup_iscsi_target(
 
 if __name__ == "__main__":
 
-    KUBECONFIG_PATH = "/Users/avdhootsagare/auth_odf/auth/kubeconfig"
+    KUBECONFIG_PATH = "/Users/avdhootsagare/auth_odf/auth/kubeconfig.1"
     # Get worker nodes
     worker_node_ips = get_worker_node_ips(KUBECONFIG_PATH)
     log.info(f"Current available worker nodes are {worker_node_ips}")
@@ -181,7 +181,7 @@ if __name__ == "__main__":
         target_iqn=TARGET_IQN,
         worker_iqns=worker_iqns,
         worker_ips=worker_node_ips,
-        wipe_data=True,
+        wipe_data=False,
         username_target="root",
         username_worker="core",
     )
