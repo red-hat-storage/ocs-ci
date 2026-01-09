@@ -91,6 +91,10 @@ class Warp(object):
             ports=self.ports,
         )
 
+        helpers.wait_for_resource_state(
+            self.pod_obj, constants.STATUS_RUNNING, timeout=120
+        )
+
         if multi_client:
             self.client_pods = [
                 Pod(**pod_info)
