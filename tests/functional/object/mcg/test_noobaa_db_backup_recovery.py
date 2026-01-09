@@ -3,7 +3,7 @@ import pytest
 
 from time import sleep
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
+    tier2,
     red_squad,
     mcg,
     skipif_mcg_only,
@@ -38,16 +38,16 @@ def remove_db_info_from_sc(request):
         recovery_params = (
             '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
         )
-        ocs_storage_obj.patch(
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-            params=backup_params,
-            format_type="json",
-        )
-        ocs_storage_obj.patch(
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-            params=recovery_params,
-            format_type="json",
-        )
+        for i in [backup_params, recovery_params]:
+            try:
+                ocs_storage_obj.patch(
+                    resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                    params=i,
+                    format_type="json",
+                )
+            except Exception as e:
+                logger.error(e)
+                pass
         logger.info(
             "Successfully removed backup and recovery section from Storage cluster"
         )
@@ -71,7 +71,7 @@ class TestNoobaaDbBackupRecoveryOps:
     Test CNPG based noobaa DB Backup and recovery functionality
     """
 
-    @tier1
+    @tier2
     @skipif_mcg_only
     def test_noobaa_db_backup_recovery_op(
         self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
@@ -86,9 +86,10 @@ class TestNoobaaDbBackupRecoveryOps:
             6: Validate data is present in OBC after recovery
         """
 
-        # Step 1: Create OBC and write data
+        # 1: Create OBC and write data
         obj_download_path = test_directory_setup.result_dir
-        bucket_name = bucket_factory(1)[0].name
+        bucket_obj = bucket_factory(1)[0]
+        bucket_name = bucket_obj.name
         full_object_path = f"s3://{bucket_name}"
 
         sync_object_directory(
@@ -104,7 +105,7 @@ class TestNoobaaDbBackupRecoveryOps:
             recursive=True,
         )
 
-        # Step 2: Validate Noobaa CR is accepting backup configuration in it
+        # 2: Validate Noobaa CR is accepting backup configuration in it
         # get storagecluster object
         ocs_storage_obj = OCP(
             kind="storagecluster",
@@ -113,11 +114,12 @@ class TestNoobaaDbBackupRecoveryOps:
         )
         # patch storagecluster object
         num_backups = 2
-        snapshot_class = "ocs-storagecluster-rbdplugin-snapclass"
-        schedule_cron_interval = 2
+        snapshot_class = "vpc-block-snapshot"
+        schedule_cron_interval = 5
 
         # TO DO
         # Add support for MCG only
+        # https://github.com/red-hat-storage/ocs-ci/issues/14092
         """if config.ENV_DATA["mcg_only_deployment"]:
             snapshot_class = "default driver based snapshot"
         """
@@ -130,6 +132,8 @@ class TestNoobaaDbBackupRecoveryOps:
 
         ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
         logger.info("DB backup info patched successfully")
+        # Add sleep to reflect patched values in respective CRs
+        sleep(15)
         ocs_storage_obj.reload_data()
         db_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
             "multiCloudGateway"
@@ -185,6 +189,7 @@ class TestNoobaaDbBackupRecoveryOps:
         recovery_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")[
             "spec"
         ]["multiCloudGateway"]["dbRecovery"]
+        sleep(15)
         noobaa_obj.reload_data()
         recovery_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
             "dbRecovery"
@@ -215,8 +220,8 @@ class TestNoobaaDbBackupRecoveryOps:
             selector=constants.NOOBAA_APP_LABEL,
             timeout=900,
         )
-        # Add sleep to make bucket available after recovery
-        sleep(60)
+        # Verify Bucket health after recovery process
+        bucket_obj.verify_health(timeout=600)
 
         # 6: Validate data is present in OBC after recovery
         sync_object_directory(

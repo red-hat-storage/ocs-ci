@@ -26,6 +26,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
@@ -207,13 +208,66 @@ class Deployment(object):
     """
 
     def __init__(self):
-        self.platform = config.ENV_DATA["platform"]
-        self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
-        self.cluster_path = config.ENV_DATA["cluster_path"]
-        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.sts_role_arn = None
-        self.storage_class = storage_class.get_storageclass()
-        self.custom_storage_class_path = None
+        storage_class.set_custom_storage_class_path()
+        logger.info(
+            f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
+        )
+
+    # Because of for different platform multicluster run, as by wrong design we define only one deployer
+    # We need use config to hold the storage class for each cluster.
+    # See issue: https://issues.redhat.com/browse/OCSQE-4214 for more details
+    @property
+    def storage_class(self):
+        if not config.ENV_DATA.get("storage_class"):
+            sc = storage_class.get_storageclass()
+            self.storage_class = sc
+            return sc
+        return config.ENV_DATA["storage_class"]
+
+    @storage_class.setter
+    def storage_class(self, value):
+        config.ENV_DATA["storage_class"] = value
+
+    @property
+    def platform(self):
+        return config.ENV_DATA["platform"]
+
+    @platform.setter
+    def platform(self, value):
+        config.ENV_DATA["platform"] = value
+
+    @property
+    def ocp_deployment_type(self):
+        return config.ENV_DATA["deployment_type"]
+
+    @ocp_deployment_type.setter
+    def ocp_deployment_type(self, value):
+        config.ENV_DATA["ocp_deployment_type"] = value
+
+    @property
+    def cluster_path(self):
+        return config.ENV_DATA["cluster_path"]
+
+    @cluster_path.setter
+    def cluster_path(self, value):
+        config.ENV_DATA["cluster_path"] = value
+
+    @property
+    def namespace(self):
+        return config.ENV_DATA["cluster_namespace"]
+
+    @namespace.setter
+    def namespace(self, value):
+        config.ENV_DATA["namespace"] = value
+
+    @property
+    def custom_storage_class_path(self):
+        return config.ENV_DATA["custom_storage_class_path"]
+
+    @custom_storage_class_path.setter
+    def custom_storage_class_path(self, value):
+        config.ENV_DATA["custom_storage_class_path"] = value
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -408,7 +462,7 @@ class Deployment(object):
                 # Run ocs_install_verification here only in case of multicluster.
                 # For single cluster, test_deployment will take care.
                 if config.multicluster:
-                    for i in range(config.multicluster):
+                    for i in range(config.nclusters):
                         if i in get_all_acm_indexes():
                             continue
                         else:
@@ -442,26 +496,32 @@ class Deployment(object):
                             )
                             storage_cluster.reload_data()
                             storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
-                            ptch = (
-                                f'\'{{"spec": {{"network": {{"multiClusterService": '
-                                f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
-                            )
-                            ptch_cmd = (
-                                f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                                f"-n openshift-storage  --type merge --patch {ptch}"
-                            )
-                            run_cmd(ptch_cmd)
-                            ocs_registry_image = config.DEPLOYMENT.get(
-                                "ocs_registry_image", None
-                            )
-                            storage_cluster.reload_data()
-                            assert (
-                                storage_cluster.data.get("spec")
-                                .get("network")
-                                .get("multiClusterService")
-                                .get("enabled")
-                            ), "Failed to update StorageCluster globalnet"
-                            validate_serviceexport()
+                            if (
+                                get_provider_service_type() != "NodePort"
+                                and cluster.ENV_DATA.get("cluster_type", "").lower()
+                                == constants.HCI_CLIENT
+                            ):
+                                ptch = (
+                                    f'\'{{"spec": {{"network": {{"multiClusterService": '
+                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+                                    f'"enabled": true}}}}}}}}\''
+                                )
+                                ptch_cmd = (
+                                    f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+                                    f"-n openshift-storage  --type merge --patch {ptch}"
+                                )
+                                run_cmd(ptch_cmd)
+                                ocs_registry_image = config.DEPLOYMENT.get(
+                                    "ocs_registry_image", None
+                                )
+                                storage_cluster.reload_data()
+                                assert (
+                                    storage_cluster.data.get("spec")
+                                    .get("network")
+                                    .get("multiClusterService")
+                                    .get("enabled")
+                                ), "Failed to update StorageCluster globalnet"
+                                validate_serviceexport()
                             ocs_install_verification(
                                 timeout=2000, ocs_registry_image=ocs_registry_image
                             )
@@ -785,7 +845,7 @@ class Deployment(object):
             else:
                 x_addr_list = None
             if config.DEPLOYMENT.get("arbiter_deployment"):
-                arbiter_zone = self.get_arbiter_location()
+                arbiter_zone = get_arbiter_location()
                 logger.debug("detected arbiter zone: %s", arbiter_zone)
             else:
                 arbiter_zone = None
@@ -1172,40 +1232,6 @@ class Deployment(object):
                     return
                 logger.debug(f"Still waiting for the CSV: {csv_name}")
 
-    def get_arbiter_location(self):
-        """
-        Get arbiter mon location for storage cluster
-        """
-        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
-            "arbiter_autodetect"
-        ):
-            return config.DEPLOYMENT.get("arbiter_zone")
-
-        # below logic will autodetect arbiter_zone
-        nodes = ocp.OCP(kind="node").get().get("items", [])
-
-        worker_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.WORKER_LABEL in node["metadata"]["labels"]
-            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
-        }
-
-        master_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.MASTER_LABEL in node["metadata"]["labels"]
-        }
-
-        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
-
-        if len(arbiter_locations) < 1:
-            raise UnavailableResourceException(
-                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
-            )
-
-        return arbiter_locations[0]
-
     def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
@@ -1539,7 +1565,7 @@ class Deployment(object):
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
 
-        storage_cluster_setup = StorageClusterSetup(deployment=self)
+        storage_cluster_setup = StorageClusterSetup()
         storage_cluster_setup.setup_storage_cluster()
 
         if config.DEPLOYMENT["infra_nodes"]:
@@ -4049,3 +4075,38 @@ MULTICLUSTER_DR_MAP = {
     "regional-dr": RDRMultiClusterDROperatorsDeploy,
     "metro-dr": MDRMultiClusterDROperatorsDeploy,
 }
+
+
+def get_arbiter_location():
+    """
+    Get arbiter mon location for storage cluster
+    """
+    if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+        "arbiter_autodetect"
+    ):
+        return config.DEPLOYMENT.get("arbiter_zone")
+
+    # below logic will autodetect arbiter_zone
+    nodes = ocp.OCP(kind="node").get().get("items", [])
+
+    worker_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.WORKER_LABEL in node["metadata"]["labels"]
+        and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+    }
+
+    master_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.MASTER_LABEL in node["metadata"]["labels"]
+    }
+
+    arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+    if len(arbiter_locations) < 1:
+        raise UnavailableResourceException(
+            "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+        )
+
+    return arbiter_locations[0]

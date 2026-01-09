@@ -99,7 +99,7 @@ setup(
         "google-crc32c==1.7.1",
         "google-resumable-media==2.7.2",
         "googleapis-common-protos==1.70.0",
-        "urllib3==2.5.0",
+        "urllib3==2.6.3",
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.22",
@@ -109,7 +109,7 @@ setup(
         "openshift-python-wrapper==11.0.58",
         # new version of marshmallow 4.0.0 seems to be broken, failing with error:
         # TypeError: __init__() got an unexpected keyword argument 'default'
-        "marshmallow==3.26.1",
+        "marshmallow==3.26.2",
         "zope.event==6.0",
         "xattr==1.3.0",
         "pyotp==2.9.0",

@@ -200,6 +200,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
+    ceph_health_check_with_toolbox_recovery,
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
     setup_pod_directories,
@@ -238,6 +239,8 @@ from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+
+DEPLOYERS = {}
 
 log = logging.getLogger(__name__)
 
@@ -2055,7 +2058,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
                     # "flip-flopping ceph health OK and warn because of:
                     # HEALTH_WARN Reduced data availability: 2 pgs peering
-                    ceph_health_check(
+                    ceph_health_check_with_toolbox_recovery(
                         namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                         fix_ceph_health=True,
                         update_jira=True,
@@ -2083,7 +2086,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+                ceph_health_check_with_toolbox_recovery(
+                    namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                )
 
                 if (
                     not multi_storagecluster_external_health_passed
@@ -2114,7 +2119,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             log.info("Checking for Ceph Health OK ")
             external_multi_storagecluster_status = False
             try:
-                status = ceph_health_check(
+                status = ceph_health_check_with_toolbox_recovery(
                     namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                     tries=10,
                     delay=15,
@@ -2162,8 +2167,14 @@ def cluster(
     teardown = ocsci_config.RUN["cli_params"]["teardown"]
     deploy = ocsci_config.RUN["cli_params"]["deploy"]
     if teardown or deploy:
-        factory = dep_factory.DeploymentFactory()
-        deployer = factory.get_deployment()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                # Let get initiated deployer for each cluster here to be sure all necesary
+                # values are propagated to all clusters configs
+                DEPLOYERS[config.ENV_DATA["cluster_name"]] = (
+                    dep_factory.DeploymentFactory().get_deployment()
+                )
+        deployer = DEPLOYERS[config.ENV_DATA["cluster_name"]]
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
@@ -2215,9 +2226,11 @@ def cluster(
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
     else:
-        if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            ibmcloud.set_region()
-            ibmcloud.login()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+                    ibmcloud.set_region()
+                    ibmcloud.login()
     if "cephcluster" not in ocsci_config.RUN.keys():
         check_clusters()
     if not ocsci_config.ENV_DATA["skip_ocs_deployment"] and ocsci_config.RUN.get(

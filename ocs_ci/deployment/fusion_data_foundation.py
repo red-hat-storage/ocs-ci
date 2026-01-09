@@ -23,6 +23,8 @@ from ocs_ci.utility.utils import run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
+from ocs_ci.utility.operators import LocalStorageOperator
+
 import time
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
@@ -37,15 +39,30 @@ class FusionDataFoundationDeployment:
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
-        self.storage_class = (
-            storage_class.get_storageclass() or constants.DEFAULT_STORAGECLASS_LSO
-        )
-        self.custom_storage_class_path = None
+        storage_class.set_custom_storage_class_path()
+
+    @property
+    def storage_class(self):
+        if not config.ENV_DATA.get("storage_class"):
+            sc = storage_class.get_storageclass() or constants.DEFAULT_STORAGECLASS_LSO
+            self.storage_class = sc
+            return sc
+        return config.ENV_DATA["storage_class"]
+
+    @storage_class.setter
+    def storage_class(self, value):
+        config.ENV_DATA["storage_class"] = value
+
+    @property
+    def custom_storage_class_path(self):
+        return config.ENV_DATA["custom_storage_class_path"]
 
     def deploy(self):
         """
         Installs IBM Fusion Data Foundation.
         """
+
+        self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
@@ -55,6 +72,17 @@ class FusionDataFoundationDeployment:
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.setup_storage()
+
+    def ensure_lso_installed(self):
+        """
+        In the case of LSO is not available - bring catalog for unreleased version and install it
+        """
+
+        logger.info("Ensuring Local Storage Operator (LSO) is installed")
+        lso_operator = LocalStorageOperator()
+        if not lso_operator.is_available():
+            lso_operator.create_catalog()
+            lso_operator.deploy()
 
     def create_image_tag_mirror_set(self):
         """
@@ -179,7 +207,7 @@ class FusionDataFoundationDeployment:
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
-            clustersetup = StorageClusterSetup(self)
+            clustersetup = StorageClusterSetup()
             create_lvs_resource(self.storage_class, self.storage_class)
             add_storage_label()
             clustersetup.setup_storage_cluster()

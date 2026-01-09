@@ -43,6 +43,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NoRunningCephToolBoxException,
     ResourceNotFoundError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
@@ -57,6 +58,7 @@ from ocs_ci.utility.vsphere import VSPHERE
 from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    ceph_health_check,
     TimeoutSampler,
     ocsci_log_path,
     run_cmd,
@@ -2874,6 +2876,60 @@ def wait_for_ct_pod_recovery():
         else:
             return False
     return True
+
+
+def ceph_health_check_with_toolbox_recovery(
+    namespace: str,
+    tries: int = 20,
+    delay: int = 30,
+    fix_ceph_health: bool = True,
+    update_jira: bool = True,
+    no_exception_if_jira_issue_updated: bool = False,
+) -> bool:
+    """
+    Perform ceph health check with automatic toolbox pod recovery.
+
+    If the ceph toolbox pod is not running (e.g., after node disruption tests),
+    this function will wait for the toolbox pod to recover before retrying.
+
+    Args:
+        namespace (str): Kubernetes namespace for ceph cluster.
+        tries (int): Number of retries for health check.
+        delay (int): Delay between retries in seconds.
+        fix_ceph_health (bool): Whether to attempt fixing ceph health issues.
+        update_jira (bool): Whether to update Jira on health issues.
+        no_exception_if_jira_issue_updated (bool): Skip exception if Jira was updated.
+
+    Returns:
+        bool: True if ceph health check passes.
+
+    Raises:
+        NoRunningCephToolBoxException: If toolbox pod doesn't recover.
+        CephHealthException: If ceph health check fails after retries.
+    """
+    try:
+        return ceph_health_check(
+            namespace=namespace,
+            tries=tries,
+            delay=delay,
+            fix_ceph_health=fix_ceph_health,
+            update_jira=update_jira,
+            no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+        )
+    except NoRunningCephToolBoxException:
+        logger.warning(
+            "Ceph toolbox pod not running. Waiting for recovery before retry..."
+        )
+        if wait_for_ct_pod_recovery():
+            return ceph_health_check(
+                namespace=namespace,
+                tries=tries,
+                delay=delay,
+                fix_ceph_health=fix_ceph_health,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
+        raise
 
 
 def label_worker_node(node_list, label_key, label_value):

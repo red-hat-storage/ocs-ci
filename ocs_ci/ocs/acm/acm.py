@@ -1,8 +1,8 @@
+import json
 import logging
 import time
 import os
 import tempfile
-import requests
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -37,7 +37,6 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility.utils import (
     TimeoutSampler,
-    get_ocp_version,
     get_running_acm_version,
     string_chunkify,
     run_cmd,
@@ -195,8 +194,9 @@ class AcmAddClusters(AcmPageNavigator):
                 if s.MULTICLUSTER["multicluster_index"] != primary_index
             ][0]
         # submariner catalogsource creation
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.create_submariner_downstream_unreleased_catalogsource()
+        submariner_image = config.ENV_DATA.get("submariner_image")
+        if submariner_image:
+            self.create_submariner_downstream_catalogsource(image=submariner_image)
 
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
         cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
@@ -289,8 +289,8 @@ class AcmAddClusters(AcmPageNavigator):
                 )
                 for _ in range(increase_gateway_number):
                     self.do_click(self.page_nav["gateway-count-btn"])
-            if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-                self.submariner_unreleased_downstream_info()
+            if submariner_image:
+                self.submariner_downstream_info()
             self.take_screenshot()
             log.info("Click on Next button for cluster [{cluster_nr}]")
             self.do_click(self.page_nav["next-btn"])
@@ -305,7 +305,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["install-btn"])
         return cluster_set_name
 
-    def submariner_unreleased_downstream_info(self):
+    def submariner_downstream_info(self):
         log.info("Use custom Submariner subscription ")
         self.do_click(self.page_nav["submariner-custom-subscription"])
         log.info("Clear existing Source")
@@ -416,8 +416,9 @@ class AcmAddClusters(AcmPageNavigator):
             globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
 
         """
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.create_submariner_downstream_unreleased_catalogsource()
+        submariner_image = config.ENV_DATA.get("submariner_image")
+        if submariner_image:
+            self.create_submariner_downstream_catalogsource(image=submariner_image)
         submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
         all_documents = []
         log.info("Creating ManagedClusterSet")
@@ -461,13 +462,13 @@ class AcmAddClusters(AcmPageNavigator):
             submariner_config_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
                 "cluster_name"
             ]
-            if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-                submariner_unreleased_channel = (
-                    config.ENV_DATA.get("submariner_unreleased_channel")
-                    if config.ENV_DATA.get("submariner_unreleased_channel")
+            if submariner_image:
+                submariner_channel = (
+                    config.ENV_DATA.get("submariner_channel")
+                    if config.ENV_DATA.get("submariner_channel")
                     else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
                 )
-                channel_name = "stable-" + submariner_unreleased_channel
+                channel_name = "stable-" + submariner_channel
                 subscription_config = {
                     "source": "submariner-catalogsource",
                     "sourceNamespace": "openshift-marketplace",
@@ -500,31 +501,20 @@ class AcmAddClusters(AcmPageNavigator):
         config.switch_acm_ctx()
         run_cmd(cmd=f"oc create -f {submariner_data_file.name}")
 
-    def create_submariner_downstream_unreleased_catalogsource(self):
+    def create_submariner_downstream_catalogsource(self, image=None):
         """
-        Create Catalogsource for installing Downstream Unreleased Submariner
+        Create Catalogsource for installing Downstream Submariner
+
+        Args:
+            image (str): Image path.
 
         """
         submariner_downstream_unreleased = templating.load_yaml(
             constants.SUBMARINER_DOWNSTREAM_UNRELEASED
         )
         # Update catalog source
-        submariner_full_url = "".join(
-            [
-                constants.SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL,
-                config.ENV_DATA["submariner_version"],
-            ]
-        )
-
-        version_tag = config.ENV_DATA.get("submariner_unreleased_image", None)
-        if version_tag is None:
-            resp = requests.get(submariner_full_url, verify=False, timeout=120)
-            raw_msg = resp.json()["raw_messages"]
-            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-                f"v{get_ocp_version()}"
-            ].split(":")[1]
-        submariner_downstream_unreleased["spec"]["image"] = ":".join(
-            [constants.BREW_REPO, version_tag]
+        submariner_downstream_unreleased["spec"]["image"] = (
+            image if image else config.ENV_DATA.get("submariner_image")
         )
         submariner_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="submariner_downstream_unreleased", delete=False
@@ -809,7 +799,7 @@ def import_clusters_via_cli(clusters):
                 'Error is Error from server (NotFound): secrets "auto-import-secret" not found'
                 in str(ex)
             ):
-                continue
+                pass
             else:
                 raise
 
@@ -838,8 +828,12 @@ def import_clusters_via_cli(clusters):
 
         log.info("Waiting for addon pods to be in running state")
         config.switch_to_cluster_by_name(cluster[0])
+
         wait_for_pods_to_be_running(
-            namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
+            namespace=constants.ACM_ADDONS_NAMESPACE,
+            timeout=300,
+            sleep=15,
+            skip_for_status=[constants.STATUS_COMPLETED],
         )
 
         config.switch_acm_ctx()
@@ -910,12 +904,16 @@ def discover_hosted_clusters():
         format_type="merge",
     )
     # Disable metrics and HyperShift operator management
+    log.info("Getting existing values")
+    spec_data = addondeploymentconfig.get(
+        resource_name="hypershift-addon-deploy-config"
+    )["spec"]["customizedVariables"]
+
+    discovery_prefix_data_to_add = {"name": "discoveryPrefix", "value": "dr"}
+    spec_data.append(discovery_prefix_data_to_add)
     addondeploymentconfig.patch(
         resource_name="hypershift-addon-deploy-config",
-        params=(
-            '{"spec":{"customizedVariables":[{"name":"disableMetrics","value": "true"},'
-            '{"name":"disableHOManagement","value": "true"},{"name":"discoveryPrefix","value": "dr"}]}}'
-        ),
+        params=json.dumps({"spec": {"customizedVariables": spec_data}}),
         format_type="merge",
     )
 

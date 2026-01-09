@@ -9,11 +9,12 @@ DEPLOYMENT:
   # https://docs.openshift.com/container-platform/4.7/post_installation_configuration/machine-configuration-tasks.html#machine-config-overview-post-install-machine-configuration-tasks
   ignition_version: "3.2.0" # TODO: We might want to update to 3.5 or later: https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/release_notes/ocp-4-19-release-notes
 ENV_DATA:
-  vm_template: "rhcos-9.6.20250826-1-vmware.x86_64"
-  acm_hub_channel: "release-2.15"
-  acm_version: "2.15"
-  mce_version: "2.10"
-  submariner_version: "0.21.0"
+  vm_template: "rhcos-9.6.20251023-0-vmware.x86_64"
+  acm_hub_channel: "release-2.16"
+  acm_version: "2.16"
+  mce_version: "2.11"
+  submariner_version: "0.22.0"
+  submariner_image: "registry.redhat.io/redhat/redhat-operator-index@sha256:58d597646541fce982dbb646cb0aecc79abeb4f2abe9abb00c8e2078ae383050"
   # Below values needs to be changed when acm and submariner are GAed
   submariner_source: "downstream"
   submariner_release_type: "unreleased"
