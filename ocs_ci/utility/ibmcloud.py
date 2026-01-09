@@ -505,7 +505,7 @@ class IBMCloud(object):
 
         for node in nodes:
             worker_id = node.get()["spec"]["providerID"].split("/")[-1]
-            cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {worker_id} -f"
+            cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {worker_id} -f --hard"
             out = run_ibmcloud_cmd(cmd)
             logger.info(f"Node restart command output: {out}")
 
@@ -734,7 +734,7 @@ class IBMCloud(object):
 
         if len(worker_nodes_not_ready) > 0:
             for not_ready_node in worker_nodes_not_ready:
-                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {not_ready_node} -f"
+                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {not_ready_node} -f --hard"
                 out = run_ibmcloud_cmd(cmd)
                 logger.info(f"Node restart command output: {out}")
 
