@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
-
 import paramiko
 import sys
 import logging
 import subprocess
 import json
 import os
+import re
 
 
 log = logging.getLogger(__name__)
@@ -157,15 +156,6 @@ def get_worker_iqns(worker_node_ips):
     iqns = []
     ("\n=== Collecting Worker IQNs ===")
     for node_ip in worker_node_ips:
-        check_iscsi_command = "which iscsiadm"
-        iscsiadm_installed = ssh_run(node_ip, check_iscsi_command, username="core")
-        if not iscsiadm_installed:
-            log.info(f"[{node_ip}] iscsiadm not found. Installing...")
-            ssh_run(
-                node_ip,
-                "sudo yum install -y iscsi-initiator-utils || sudo apt install -y open-iscsi",
-                username="core",
-            )
         start_iscsi_command = (
             "sudo systemctl enable iscsid && sudo systemctl start iscsid"
         )
@@ -220,8 +210,6 @@ def configure_target(target_iqn, target_ip, worker_iqns, username=USERNAME):
         # Get list of LUNs to map
         lun_list_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls"
         success, stdout, stderr = ssh_run(target_ip, lun_list_cmd, username)
-
-        import re
 
         lun_numbers = re.findall(r"lun(\d+)", stdout)
 

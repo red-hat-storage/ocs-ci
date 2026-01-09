@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-
 import sys
 import logging
 import os
+import re
 
 from iscsi_config import (
     get_worker_node_ips,
@@ -72,7 +71,6 @@ def wipe_luns_on_target(target_vm_ip, target_iqn, username):
     for line in stdout.split("\n"):
         if "/dev/" in line:
             # Extract device path
-            import re
 
             match = re.search(r"(/dev/[a-z0-9]+)", line)
             if match:
@@ -106,7 +104,7 @@ def verify_cleanup(target_vm_ip, target_iqn, username_target):
     if "No ACLs" in stdout or not stdout:
         log.info(" No ACLs remaining")
     else:
-        log.info(f" ACLs: {stdout}")
+        raise Exception(f"ACLs still exist:\n{stdout}")
 
 
 def cleanup_iscsi_target(
