@@ -57,6 +57,27 @@ class TestOperatorProbeResilience(ManageTest):
         else:
             self.label_key, self.label_value = "noobaa-operator", "deployment"
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, probe_type, healthy_path):
+        """
+        Register the finalizer to restore the CSV state
+        """
+
+        def finalizer():
+            logger.info(f"Finalizer: Restoring {self.csv_name} to {healthy_path}")
+            # Resetting to healthy state
+            self._patch_csv(probe_type, healthy_path)
+
+            # Create a POD OCP object to wait for the selector
+            pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
+            pod_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=f"{self.label_key}={self.label_value}",
+                timeout=300,
+            )
+
+        request.addfinalizer(finalizer)
+
     def _patch_csv(self, probe_type, path_value):
         """
         Helper function to apply JSON patch to the CSV.
