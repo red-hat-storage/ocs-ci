@@ -8,7 +8,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.framework.pytest_customization.marks import tier4c, blue_squad
+from ocs_ci.framework.pytest_customization.marks import tier4c, blue_squad, polarion_id
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ OPERATOR_PROBE_PARAMS = [
 @tier4c
 @ignore_leftovers
 @blue_squad
+@polarion_id("OCS-7421")
 @pytest.mark.parametrize("csv_prefix, probe_type, healthy_path", OPERATOR_PROBE_PARAMS)
 class TestOperatorProbeResilience(ManageTest):
     """
