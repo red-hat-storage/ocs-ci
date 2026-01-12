@@ -1,7 +1,7 @@
 ---
-# This config will provide the necessary values for early testing of RHCOS based on RHEL 8.4
+# This config is just an example which will provide the necessary values for early testing of RHCOS based on RHEL 8.4
 ENV_DATA:
   early_testing: True
-  RELEASE_IMG: "registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2"
+  release_img: "registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2"
   # vm_template_overwrite parameter overwrites the vm_template
   vm_template_overwrite: "rhcos-47.84.202103151537-0-vmware.x86_64"

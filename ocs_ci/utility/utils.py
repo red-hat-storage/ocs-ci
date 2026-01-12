@@ -3230,6 +3230,72 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version
     raise TagNotFoundException("Couldn't find any desired tag!")
 
 
+def get_latest_ocp_multi_image(version: str = None) -> str:
+    """
+    Get latest OCP multi-arch image tag for given major.minor version.
+    Optimized with paging early-exit and debug logging.
+
+    Args:
+        version (str): OCP version to get the latest multi-arch image for, if not
+            provided, the current OCP version will be used.
+
+    Returns:
+        str: Latest OCP multi-arch image:tag
+
+    Raises:
+        TagNotFoundException: If no matching tag is found
+    """
+    if not version:
+        version = str(version_module.get_semantic_ocp_version_from_config())
+    tag_regex = re.compile(rf"^{re.escape(version)}\.\d+(-rc\.\d+|-ec\.\d+)?-multi$")
+
+    page = 1
+    max_pages = 50
+
+    while page <= max_pages:
+        params = {
+            "onlyActiveTags": "true",
+            "limit": "100",
+            "page": page,
+        }
+
+        response = requests.get(
+            constants.OCP_MULTI_ARCH_QUAY_API_URL,
+            params=params,
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        tags = data.get("tags", [])
+        log.debug(f"[OCP multi tag lookup] page={page}, tags_in_page={len(tags)}")
+
+        for tag in tags:
+            name = tag["name"]
+
+            if name.startswith("v"):
+                continue
+
+            if not tag_regex.match(name):
+                continue
+
+            log.info(
+                f"[OCP multi tag lookup] Found matching tag on page {page}: {name}"
+            )
+            return f"{constants.OCP_MULTI_ARCH_IMAGE}:{name}"
+
+        if not data.get("has_additional"):
+            log.debug(f"[OCP multi tag lookup] No more pages after page {page}")
+            break
+
+        page += 1
+
+    raise TagNotFoundException(
+        f"Couldn't find multi-arch OCP tag for version {version} "
+        f"after scanning {page - 1} pages"
+    )
+
+
 def get_next_version_available_for_upgrade(current_tag):
     """
     This function returns the tag built after the current_version

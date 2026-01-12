@@ -118,6 +118,10 @@ AUTO_SCALING_DIR = os.path.join(TEMPLATE_DIR, "storage-auto-scaling")
 PARTITIONED_DISK_MC = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "98-osd-partition-worker.yaml"
 )
+OCP_MULTI_ARCH_IMAGE = "quay.io/openshift-release-dev/ocp-release"
+OCP_MULTI_ARCH_QUAY_API_URL = (
+    "https://quay.io/api/v1/repository/openshift-release-dev/ocp-release/tag/"
+)
 
 # Statuses
 STATUS_READY = "Ready"
