@@ -983,11 +983,6 @@ class Deployment(object):
                 logger.warning(
                     f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
                 )
-        if config.ENV_DATA.get("config_iscsi", True):
-            exec_cmd(
-                f"python scripts/python/iscsi_config.py {config.ENV_DATA['cluster_path']}",
-                shell=True,
-            )
 
     def label_and_taint_nodes(self):
         """
