@@ -23,6 +23,7 @@ def get_operator_csv_names(namespace=None):
 
     Returns:
         tuple: (ocs_csv_name, odf_csv_name)
+
     """
     if namespace is None:
         namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -60,6 +61,7 @@ def check_operatorcondition_upgradeable_false(
 
     Returns:
         bool: True if condition is met, False otherwise
+
     """
     if not csv_name:
         log.warning(

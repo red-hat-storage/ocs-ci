@@ -8,7 +8,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    pre_upgrade,
     brown_squad,
     skipif_mcg_only,
     tier2,
@@ -38,6 +37,7 @@ def mon_pod_down(request):
 
     Returns:
         str: The MON deployment name that was scaled down
+
     """
     namespace = config.ENV_DATA["cluster_namespace"]
 
@@ -146,7 +146,6 @@ def mon_pod_down(request):
     return mon_deployment_name
 
 
-@pre_upgrade
 @brown_squad
 @skipif_mcg_only
 @tier2
@@ -177,6 +176,7 @@ class TestODFUpgradePrecheckCephHealth(ManageTest):
             mon_pod_down: Fixture that scales down one MON deployment
                 and restores it in teardown
             threading_lock: Threading lock for Prometheus API calls
+
         """
         namespace = config.ENV_DATA["cluster_namespace"]
 
