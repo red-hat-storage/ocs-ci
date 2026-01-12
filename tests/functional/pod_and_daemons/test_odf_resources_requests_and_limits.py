@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     BaseTest,
     polarion_id,
 )
-from ocs_ci.framework.pytest_customization.marks import brown_squad, jira
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
@@ -24,7 +24,6 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version("<4.20")
-@jira("DFBUGS-5080")
 class TestLiveResourcesPresenceAndFormat(BaseTest):
     """
     Functional test to verify that live pod resource values (requests/limits)
