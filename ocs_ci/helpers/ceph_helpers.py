@@ -1,6 +1,7 @@
 from ocs_ci.ocs.cluster import logger, get_percent_used_capacity
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
+import time
 
 
 def wait_for_percent_used_capacity_reached(
@@ -41,3 +42,72 @@ def wait_for_percent_used_capacity_reached(
             f"Failed to reach the expected percent used capacity {expected_used_capacity}% "
             f"in the given timeout {timeout}"
         ) from ex
+    
+def cleanup_stale_cephfs_subvolumes(odf_cli_runner, log):
+    """
+    Runbook-aligned mitigation:
+    1. List stale subvolumes
+    2. Delete each stale subvolume
+    3. Verify cleanup
+    """
+    log.info("Running cleanup of stale CephFS subvolumes using ODF CLI")
+
+    try:
+        result = odf_cli_runner.run_command("subvolume ls --stale")
+        out = result.stdout.decode().strip() if hasattr(result, "stdout") else str(result)
+
+        log.info(f"Raw output of 'odf subvolume ls --stale': {out}")
+
+        if not out:
+            log.info("No stale subvolumes found")
+            return
+
+        lines = out.splitlines()
+
+        # Skip header
+        if len(lines) <= 1:
+            log.info("No stale subvolumes found after header parsing")
+            return
+
+        lines = lines[1:]
+
+        for line in lines:
+            parts = line.split()
+
+            # Safety guard
+            if len(parts) < 3:
+                log.warning(f"Unexpected odf output format: {line}")
+                continue
+
+            # Expected format:
+            # Filesystem  Subvolume  SubvolumeGroup  State
+            filesystem = parts[0]
+            subvol = parts[1]
+            group = parts[2]
+
+            log.info(
+                f"Deleting stale subvolume: {subvol}, "
+                f"fs: {filesystem}, group: {group}"
+            )
+
+            delete_out = odf_cli_runner.run_command(
+                f"subvolume delete {filesystem} {subvol} {group}"
+            )
+            log.info(f"Delete output for {subvol}: {delete_out}")
+
+        # Verify cleanup
+        result = odf_cli_runner.run_command("subvolume ls --stale")
+        remaining = result.stdout.decode().strip()
+        log.info(f"Post-cleanup stale list: {remaining}")
+
+        if remaining and "stale" in remaining.lower():
+            log.warning(
+                f"Stale subvolumes still present after cleanup: {remaining}"
+            )
+        else:
+            log.info("All stale subvolumes successfully cleaned up")
+
+    except Exception as e:
+        log.error(f"Failed to cleanup stale subvolumes: {e}")
+
+
