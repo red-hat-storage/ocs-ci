@@ -4,6 +4,7 @@ from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ def verify_new_pvs_available_in_sc(old_pv_objs, sc_name, num_of_new_pvs=1, timeo
             if num_of_total_pvs == expected_num_of_total_pvs:
                 logger.info(f"Found {expected_num_of_total_pvs} PVs as expected")
                 break
-    except TimeoutError:
+    except TimeoutExpiredError:
         logger.warning(
             f"expected to find {expected_num_of_total_pvs} PVs in sc {sc_name}, but find {num_of_total_pvs} PVs"
         )
@@ -328,6 +329,7 @@ def wait_for_pvs_to_reach_status(pv_names, expected_status, timeout=180, sleep=1
     Raises:
         TimeoutExpiredError: If the PVs do not reach the expected status within the specified timeout.
         ResourceWrongStatusException: If any PV enters an unexpected or error status.
+
     """
     try:
         for pv_objs in TimeoutSampler(
@@ -346,7 +348,7 @@ def wait_for_pvs_to_reach_status(pv_names, expected_status, timeout=180, sleep=1
                 logger.info(
                     f"Current statuses of PVs {pv_names}: {statuses}. Waiting for all to reach {expected_status}."
                 )
-    except TimeoutError:
+    except TimeoutExpiredError:
         logger.warning(
             f"Timeout reached: Not all PVs {pv_names} reached the expected status: {expected_status} "
             f"within {timeout} seconds."
@@ -387,7 +389,7 @@ def wait_for_new_pvs_status(
             if num_of_total_pvs == expected_num_of_total_pvs:
                 logger.info(f"Found {expected_num_of_total_pvs} PVs as expected")
                 break
-    except TimeoutError:
+    except TimeoutExpiredError:
         logger.warning(
             f"expected to find {expected_num_of_total_pvs} PVs in sc {sc_name}, but find {num_of_total_pvs} PVs"
         )
