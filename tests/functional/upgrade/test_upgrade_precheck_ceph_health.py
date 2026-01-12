@@ -13,137 +13,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
 )
 from ocs_ci.framework.testlib import ManageTest
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.deployment import get_mon_deployments
-from ocs_ci.utility.utils import run_ceph_health_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_ceph_health_cmd
 from ocs_ci.utility.prometheus import PrometheusAPI
-from ocs_ci.helpers.helpers import modify_deployment_replica_count
-from ocs_ci.helpers.upgrade_precheck_helpers import (
+from ocs_ci.ocs.resources.csv import (
     get_operator_csv_names,
     check_operatorcondition_upgradeable_false,
 )
 
 log = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="function")
-def mon_pod_down(request):
-    """
-    Fixture to scale down one MON deployment to cause HEALTH_WARN.
-    This keeps the MON down for a while before rook creates a replacement.
-    Restores the MON deployment in teardown.
-
-    Returns:
-        str: The MON deployment name that was scaled down
-
-    """
-    namespace = config.ENV_DATA["cluster_namespace"]
-
-    # Get MON deployments
-    mon_deployments = get_mon_deployments(namespace=namespace)
-    if len(mon_deployments) < 3:
-        pytest.skip("Need at least 3 MON deployments to safely test MON down scenario")
-
-    # Select one MON deployment to scale down
-    mon_deployment_to_scale = mon_deployments[0]
-    mon_deployment_name = mon_deployment_to_scale.name
-    log.info(
-        f"Scaling down MON deployment {mon_deployment_name} "
-        "to 0 replicas to cause HEALTH_WARN"
-    )
-
-    # Scale down the MON deployment to 0 replicas
-    modify_deployment_replica_count(
-        deployment_name=mon_deployment_name,
-        replica_count=0,
-        namespace=namespace,
-    )
-    log.info(
-        f"Successfully scaled down MON deployment {mon_deployment_name} "
-        "to 0 replicas"
-    )
-
-    # Wait for ceph health to show warning
-    log.info("Waiting for ceph health to show warning...")
-    timeout = 300
-
-    def check_health_warn():
-        """Check if health status contains WARN"""
-        health_status = run_ceph_health_cmd(namespace=namespace, detail=False)
-        return "WARN" in health_status or "HEALTH_WARN" in health_status
-
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=10,
-        func=check_health_warn,
-    )
-
-    try:
-        if sample.wait_for_func_status(result=True):
-            health_status = run_ceph_health_cmd(namespace=namespace, detail=False)
-            log.info(f"Ceph health status: {health_status}")
-        else:
-            log.warning("Failed to get HEALTH_WARN status within timeout")
-    except Exception as e:
-        log.warning(f"Failed to get HEALTH_WARN status: {e}")
-        # Continue anyway as the MON deployment is scaled down
-
-    # Add finalizer to restore MON deployment
-    def finalizer():
-        """Teardown: Scale up the MON deployment back to 1 replica"""
-        log.info(
-            f"Scaling up MON deployment {mon_deployment_name} " "back to 1 replica..."
-        )
-        try:
-            modify_deployment_replica_count(
-                deployment_name=mon_deployment_name,
-                replica_count=1,
-                namespace=namespace,
-            )
-            log.info(
-                f"Successfully scaled up MON deployment {mon_deployment_name} "
-                "to 1 replica"
-            )
-
-            # Wait for deployment to have 1 available replica
-            log.info("Waiting for MON deployment to have 1 available replica...")
-            deployment_obj = OCP(
-                kind=constants.DEPLOYMENT,
-                namespace=namespace,
-                resource_name=mon_deployment_name,
-            )
-            sample = TimeoutSampler(
-                timeout=600,
-                sleep=10,
-                func=lambda: (
-                    deployment_obj.get().get("status", {}).get("availableReplicas", 0)
-                    == 1
-                ),
-            )
-            if sample.wait_for_func_status(result=True):
-                log.info(
-                    f"MON deployment {mon_deployment_name} " "has 1 available replica"
-                )
-            else:
-                log.warning(
-                    f"MON deployment {mon_deployment_name} "
-                    "did not reach 1 available replica within timeout. "
-                    "Cluster may be in an unhealthy state."
-                )
-
-            # Wait for ceph health to return to HEALTH_OK
-            log.info("Waiting for ceph health to return to HEALTH_OK...")
-            ceph_cluster = CephCluster()
-            ceph_cluster.cluster_health_check(timeout=600)
-            log.info("Ceph cluster health restored to HEALTH_OK")
-        except Exception as e:
-            log.error(f"Failed to restore MON deployment or ceph health: {e}")
-            # Log but don't fail - this is teardown
-
-    request.addfinalizer(finalizer)
-    return mon_deployment_name
 
 
 @brown_squad
@@ -199,13 +76,8 @@ class TestODFUpgradePrecheckCephHealth(ManageTest):
         # Check OperatorCondition CRs for OCS and ODF operators
         log.info("Checking OperatorCondition CRs for OCS and ODF operators")
 
-        # Get operator namespace (CSVs are in openshift-storage namespace)
-        operator_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
-
         # Get CSV names for OCS and ODF operators
-        ocs_csv_name, odf_csv_name = get_operator_csv_names(
-            namespace=operator_namespace
-        )
+        ocs_csv_name, odf_csv_name = get_operator_csv_names(namespace=namespace)
 
         log.info(f"OCS CSV name: {ocs_csv_name}")
         log.info(f"ODF CSV name: {odf_csv_name}")
@@ -214,14 +86,14 @@ class TestODFUpgradePrecheckCephHealth(ManageTest):
         ocs_condition_met = check_operatorcondition_upgradeable_false(
             operator_name="OCS",
             csv_name=ocs_csv_name,
-            namespace=operator_namespace,
+            namespace=namespace,
         )
 
         # Check ODF OperatorCondition
         odf_condition_met = check_operatorcondition_upgradeable_false(
             operator_name="ODF",
             csv_name=odf_csv_name,
-            namespace=operator_namespace,
+            namespace=namespace,
         )
 
         # Log assertion results
