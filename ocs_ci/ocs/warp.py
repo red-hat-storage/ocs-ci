@@ -1,18 +1,22 @@
+import concurrent.futures as futures
+from io import StringIO
 import logging
 import os
+from tempfile import mkdtemp
+import threading
 import time
 
-import concurrent.futures as futures
+import pandas as pd
+
+from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.utility import templating
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
-from ocs_ci.ocs import constants
-from ocs_ci.framework import config
-from ocs_ci.ocs.resources import pod
-from tempfile import mkdtemp
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -123,6 +127,8 @@ class Warp(object):
         tls=False,
         insecure=False,
         debug=False,
+        workload_type="put",
+        kwargs=None,
     ):
         """
          Running Warp S3 benchmark
@@ -142,7 +148,8 @@ class Warp(object):
             tls (Boolean): Use TLS (HTTPS) for transport
             insecure (Boolean): disable TLS certification verification
             debug (Boolean): Enable debug output
-
+            workload_type (str): Type of workload to run (put, get, stat, mixed, etc.)
+            kwargs (dict): Additional keyword arguments to pass to the warp command
         """
 
         # Running warp S3 benchmark
@@ -185,7 +192,11 @@ class Warp(object):
             self.client_str = self.client_str.rstrip(",")
             multi_client_options = "".join(f"--warp-client={self.client_str} ")
 
-        cmd = f"{self.warp_bin_dir} put " + base_options + multi_client_options
+        cmd = (
+            f"{self.warp_bin_dir} {workload_type} "
+            + base_options
+            + multi_client_options
+        )
         self.pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
 
         if validate:
@@ -226,5 +237,125 @@ class Warp(object):
                 log.info(f"Deleting the service {self.service_obj.name}")
                 self.service_obj.delete()
         log.info("Deleting pods and deployment config")
-        pod.delete_deployment_pods(self.pod_obj)
-        self.pvc_obj.delete()
+        if self.pod_obj:
+            pod.delete_deployment_pods(self.pod_obj)
+        if self.pvc_obj:
+            self.pvc_obj.delete()
+
+    def get_last_report(self):
+        """
+        Get the last report from the warp workload runner
+
+        Returns:
+            pd.DataFrame: The last report from the warp workload runner
+        """
+        try:
+            output_csv = self.pod_obj.exec_cmd_on_pod(
+                command=f"cat {self.output_file}", out_yaml_format=False, silent=True
+            )
+            df = pd.read_csv(StringIO(output_csv), sep="\t")
+            return df
+        except CommandFailed as e:
+            log.warning(f"Failed to get last report: {e}")
+            return None
+
+
+class WarpWorkloadRunner:
+    """
+    Helper class to run a warp workload continuously in a background thread
+    """
+
+    def __init__(self, request, host, multi_client=False):
+        """
+        Initialize the workload runner
+
+        Args:
+            request (pytest.FixtureRequest): The request object
+            host (str): The host to use for the warp workload
+            multi_client (bool): Whether to use a multi-client benchmark
+        """
+        self.warp = Warp()
+        self.request = request
+        self.request.addfinalizer(self.warp.cleanup)
+        self.warp.host = host
+        self.warp.create_resource_warp()
+        self.thread = None
+        self.stop_event = None
+
+    def start(
+        self,
+        access_key,
+        secret_key,
+        bucket_name,
+        workload_type="put",
+        concurrent=10,
+        obj_size="1MiB",
+        duration="30s",
+        timeout=300,
+    ):
+        """
+        Start a continuous warp workload in a background thread
+
+        Args:
+            access_key (str): S3 access key
+            secret_key (str): S3 secret key
+            bucket_name (str): Name of the bucket to use
+            request (pytest.FixtureRequest): The pytest request object
+            workload_type (str): Type of workload to run (put, get, stat, mixed, etc.)
+            concurrent (int): number of concurrent
+            obj_size (int): size of object
+            duration (str): Duration for each warp iteration (default: "30s")
+            timeout (int): Timeout for each warp iteration (default: 60 seconds)
+        """
+        if self.thread and self.thread.is_alive():
+            log.warning("Warp workload is already running")
+            return
+
+        log.info("Starting warp workload in background thread")
+        self.request.addfinalizer(self.stop)
+        self.stop_event = threading.Event()
+
+        def run_warp_workload():
+            """Run warp benchmark in a loop until stop event is set"""
+            while not self.stop_event.is_set():
+                try:
+                    log.info("Running warp workload")
+                    self.warp.run_benchmark(
+                        workload_type=workload_type,
+                        bucket_name=bucket_name,
+                        access_key=access_key,
+                        secret_key=secret_key,
+                        duration=duration,
+                        concurrent=concurrent,
+                        obj_size=obj_size,
+                        timeout=timeout,
+                        tls=True,
+                        insecure=True,
+                        validate=False,
+                        multi_client=False,
+                    )
+                except Exception as e:
+                    log.warning(f"Warp workload iteration failed: {e}")
+                    if self.stop_event.is_set():
+                        break
+
+        self.thread = threading.Thread(target=run_warp_workload)
+        self.thread.start()
+        log.info("Warp workload thread started")
+
+    def stop(self):
+        """Stop the warp workload"""
+        if not self.stop_event:
+            log.warning("Stop event is not set, cannot stop warp workload")
+            return
+
+        if self.thread and self.thread.is_alive():
+            self.stop_event.set()
+
+            self.thread.join(timeout=120)
+            if self.thread.is_alive():
+                log.error("Warp workload thread is still alive after join")
+
+            log.info("Warp workload thread stopped")
+        else:
+            log.warning("Warp workload thread is not running")

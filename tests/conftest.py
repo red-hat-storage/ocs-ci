@@ -75,6 +75,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
     ResourceWrongStatusException,
+    UnexpectedBehaviour,
     UnsupportedPlatformError,
     PoolDidNotReachReadyState,
     StorageclassNotCreated,
@@ -91,6 +92,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
+from ocs_ci.ocs.resources.keda import KEDA
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 from ocs_ci.ocs.scale_lib import FioPodScale
@@ -11210,3 +11212,81 @@ def fill_job_factory(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="class")
+def install_helm_class(request):
+    return install_helm_fixture(request)
+
+
+def install_helm_fixture(request):
+    """
+    Install Helm client
+    """
+    # Check if already installed
+    try:
+        exec_cmd("helm version")
+        log.info("Helm client is already installed")
+        return
+    except FileNotFoundError:
+        log.info("Helm client is not installed - installing it")
+
+    def install():
+        # Download the install script
+        tmp_dir = tempfile.mkdtemp(prefix="helm_dir_")
+        url = "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
+        exec_cmd(f"curl -fsSL -o {tmp_dir}/get_helm.sh {url}")
+
+        # Make the script executable
+        exec_cmd(f"chmod 700 {tmp_dir}/get_helm.sh")
+
+        # Install Helm in a non-restricted directory for no-sudo installation
+        bin_dir = os.path.expanduser("~/.local/bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        os.environ["HELM_INSTALL_DIR"] = bin_dir
+        exec_cmd(f"{tmp_dir}/get_helm.sh --no-sudo")
+
+        # Verify the installation
+        exec_cmd("helm version")
+        log.info("Helm client installed successfully")
+
+    def uninstall():
+        helm_bin_path = exec_cmd("which helm").stdout.strip().decode("utf-8")
+        exec_cmd(f"rm -rf {helm_bin_path}")
+
+        # Verify the uninstallation
+        try:
+            exec_cmd("helm version")
+            raise Exception("Helm client is still installed")
+        except FileNotFoundError:
+            log.info("Helm client uninstalled successfully")
+
+    request.addfinalizer(uninstall)
+    install()
+    return
+
+
+@pytest.fixture(scope="class")
+def keda_class(request, install_helm_class):
+    return keda_fixture(request)
+
+
+def keda_fixture(request):
+    """
+    Install Keda, add a cleanup finalizer and return the KEDA object
+    """
+    keda = KEDA(
+        workload_namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+    )
+    request.addfinalizer(keda.cleanup)
+
+    if not keda.is_installed():
+        keda.install()
+    else:
+        log.info("KEDA is already installed, skipping installation")
+
+    keda.setup_access_to_thanos_metrics()
+    if not keda.can_read_thanos_metrics():
+        raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
+
+    return keda
