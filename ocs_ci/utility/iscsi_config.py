@@ -7,17 +7,18 @@ import os
 import re
 
 from ocs_ci.ocs import node
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
 
 
-USERNAME = "root"
+USERNAME = config.ENV_DATA.get("iscsi_target_username")
 key_path = "~/.ssh/openshift-dev.pem"
 key_path = os.path.expanduser(key_path)
 
-TARGET_IQN = "iqn.2003-01.org.linux-iscsi.localhost.x8664:sn.d7a7c8437192"
-TARGET_IP = "10.1.161.239"
+TARGET_IQN = config.ENV_DATA.get("iscsi_target_iqn")
+TARGET_IP = config.ENV_DATA.get("iscsi_target_ip")
 
 BACKSTORES = ["disk0", "disk1", "disk2"]  # Already created on target
 MOUNT_BASE = "/mnt/iscsi_lun"
@@ -45,7 +46,7 @@ def ssh_run(host, cmd, username=USERNAME):
             client.connect(
                 host,
                 username=username,
-                password=os.environ.get("TARGET_PASSWORD"),
+                password=config.ENV_DATA.get("iscsi_target_password"),
                 timeout=10,
             )
         stdin, stdout, stderr = client.exec_command(cmd)
@@ -375,16 +376,17 @@ def cleanup_iscsi_target(
 
 
 if __name__ == "__main__":
-    KUBECONFIG_PATH = "/Users/avdhootsagare/auth_odf/auth/kubeconfig"
     # Get worker nodes
-    worker_node_ips = get_worker_node_ips(KUBECONFIG_PATH)
+    kubeconfig_path = os.path.join(
+        config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+    )
+    worker_node_ips = get_worker_node_ips(kubeconfig_path)
     log.info(f"Current available worker nodes are {worker_node_ips}")
     worker_iqns = get_worker_iqns(worker_node_ips)
     if not worker_iqns:
         log.info("No IQNs found! Exiting...")
         sys.exit(1)
 
-    # Setup
     # setup_target_environment(TARGET_IP)
     configure_target(TARGET_IQN, TARGET_IP, worker_iqns)
     for worker_ip in worker_node_ips:
