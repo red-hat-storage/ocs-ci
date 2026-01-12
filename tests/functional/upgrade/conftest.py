@@ -7,10 +7,15 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod, cal_md5sum
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import modify_deployment_replica_count
+from ocs_ci.utility.utils import run_ceph_health_cmd, TimeoutSampler
 
 
 log = logging.getLogger(__name__)
@@ -726,3 +731,121 @@ def rook_operator_configmap_cleanup(request):
             )
 
     request.addfinalizer(restore_values)
+
+
+@pytest.fixture(scope="function")
+def mon_pod_down(request):
+    """
+    Fixture to scale down one MON deployment to cause HEALTH_WARN.
+    This keeps the MON down for a while before rook creates a replacement.
+    Restores the MON deployment in teardown.
+
+    Returns:
+        str: The MON deployment name that was scaled down
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    # Get MON deployments
+    mon_deployments = get_mon_deployments(namespace=namespace)
+    if len(mon_deployments) < 3:
+        pytest.skip("Need at least 3 MON deployments to safely test MON down scenario")
+
+    # Select one MON deployment to scale down
+    mon_deployment_to_scale = mon_deployments[0]
+    mon_deployment_name = mon_deployment_to_scale.name
+    log.info(
+        f"Scaling down MON deployment {mon_deployment_name} "
+        "to 0 replicas to cause HEALTH_WARN"
+    )
+
+    # Scale down the MON deployment to 0 replicas
+    modify_deployment_replica_count(
+        deployment_name=mon_deployment_name,
+        replica_count=0,
+        namespace=namespace,
+    )
+    log.info(
+        f"Successfully scaled down MON deployment {mon_deployment_name} "
+        "to 0 replicas"
+    )
+
+    # Wait for ceph health to show warning
+    log.info("Waiting for ceph health to show warning...")
+    timeout = 300
+
+    def check_health_warn():
+        """Check if health status contains WARN"""
+        health_status = run_ceph_health_cmd(namespace=namespace, detail=False)
+        return "WARN" in health_status or "HEALTH_WARN" in health_status
+
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=check_health_warn,
+    )
+
+    try:
+        if sample.wait_for_func_status(result=True):
+            health_status = run_ceph_health_cmd(namespace=namespace, detail=False)
+            log.info(f"Ceph health status: {health_status}")
+        else:
+            log.warning("Failed to get HEALTH_WARN status within timeout")
+    except Exception as e:
+        log.warning(f"Failed to get HEALTH_WARN status: {e}")
+        # Continue anyway as the MON deployment is scaled down
+
+    # Add finalizer to restore MON deployment
+    def finalizer():
+        """Teardown: Scale up the MON deployment back to 1 replica"""
+        log.info(
+            f"Scaling up MON deployment {mon_deployment_name} " "back to 1 replica..."
+        )
+        try:
+            modify_deployment_replica_count(
+                deployment_name=mon_deployment_name,
+                replica_count=1,
+                namespace=namespace,
+            )
+            log.info(
+                f"Successfully scaled up MON deployment {mon_deployment_name} "
+                "to 1 replica"
+            )
+
+            # Wait for deployment to have 1 available replica
+            log.info("Waiting for MON deployment to have 1 available replica...")
+            deployment_obj = OCP(
+                kind=constants.DEPLOYMENT,
+                namespace=namespace,
+                resource_name=mon_deployment_name,
+            )
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=lambda: (
+                    deployment_obj.get().get("status", {}).get("availableReplicas", 0)
+                    == 1
+                ),
+            )
+            if sample.wait_for_func_status(result=True):
+                log.info(
+                    f"MON deployment {mon_deployment_name} " "has 1 available replica"
+                )
+            else:
+                log.warning(
+                    f"MON deployment {mon_deployment_name} "
+                    "did not reach 1 available replica within timeout. "
+                    "Cluster may be in an unhealthy state."
+                )
+
+            # Wait for ceph health to return to HEALTH_OK
+            log.info("Waiting for ceph health to return to HEALTH_OK...")
+            ceph_cluster = CephCluster()
+            ceph_cluster.cluster_health_check(timeout=600)
+            log.info("Ceph cluster health restored to HEALTH_OK")
+        except Exception as e:
+            log.error(f"Failed to restore MON deployment or ceph health: {e}")
+            # Log but don't fail - this is teardown
+
+    request.addfinalizer(finalizer)
+    return mon_deployment_name
