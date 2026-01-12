@@ -3,10 +3,10 @@
 import paramiko
 import sys
 import logging
-import subprocess
-import json
 import os
 import re
+
+from ocs_ci.ocs import node
 
 
 log = logging.getLogger(__name__)
@@ -78,11 +78,6 @@ def setup_target_environment(target_vm_ip, username=USERNAME):
     commands = [
         # Create target directory
         "mkdir -p /etc/target",
-        # Mount configfs
-        "mount -t configfs configfs /sys/kernel/config 2>/dev/null || true",
-        # Load kernel modules
-        "modprobe target_core_mod",
-        "modprobe iscsi_target_mod",
         # Start and enable target service
         "systemctl start target",
         "systemctl enable target",
@@ -109,36 +104,17 @@ def get_worker_node_ips(kubeconfig_path):
     Returns:
     list: A list of IP addresses of worker nodes or an empty list on failure.
     """
-    # Command to get node details in JSON
-    cmd = [
-        "oc",
-        "--kubeconfig",
-        kubeconfig_path,
-        "get",
-        "nodes",
-        "-l",
-        "node-role.kubernetes.io/worker",
-        "-o",
-        "json",
-    ]
-
     try:
-        result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        log.error("Error running oc command:", e.output.decode())
+        # Use ocs_ci.utils.node.get_node_ips to get worker node IPs
+        worker_ips = node.get_node_ips(
+            kubeconfig_path,
+            label_selector="node-role.kubernetes.io/worker",
+            field_selector="status.phase=Ready",
+        )
+        return worker_ips
+    except Exception as e:
+        log.error("Error getting worker node IPs:", e)
         return []
-
-    data = json.loads(result)
-
-    worker_ips = []
-
-    # Parse each worker node
-    for node in data.get("items", []):
-        for addr in node["status"]["addresses"]:
-            if addr["type"] == "InternalIP":
-                worker_ips.append(addr["address"])
-
-    return worker_ips
 
 
 # --------------------------------------------------------
@@ -146,30 +122,28 @@ def get_worker_node_ips(kubeconfig_path):
 # --------------------------------------------------------
 def get_worker_iqns(worker_node_ips):
     """
-    Configures the iSCSI target with given IQNs and IP.
-    This function is a placeholder and requires implementation.
+    Collects iSCSI initiator IQNs from worker nodes.
 
     Parameters:
-    target_iqn (str): The IQN of the target node.
-    target_ip (str): The IP address of the target node.
-    worker_iqns (list): List of IQNs of worker nodes.
+    worker_node_ips (list): List of IP addresses of worker nodes.
+
+    Returns:
+    list: A list of IQNs of worker nodes or an empty list on failure.
     """
     iqns = []
-    ("\n=== Collecting Worker IQNs ===")
-    for node_ip in worker_node_ips:
-        start_iscsi_command = (
-            "sudo systemctl enable iscsid && sudo systemctl start iscsid"
-        )
-        ssh_run(node_ip, start_iscsi_command, username="core")
+    log.info("\n=== Collecting Worker IQNs ===")
 
-        success, iqn, err = ssh_run(
-            node_ip,
-            "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2",
-            username="core",
+    for node_ip in worker_node_ips:
+        iqns.append(
+            ssh_run(
+                node_ip,
+                command="grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2",
+                username="core",
+            )[0]
+            .stdout.decode()
+            .strip()
         )
-        if iqn:
-            log.info(f"[{node_ip}] Found IQN: {iqn}")
-            iqns.append(iqn)
+        log.info(f"Worker {node_ip} IQN: {iqns[-1]}")
     return iqns
 
 
@@ -411,7 +385,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Setup
-    # setup_target_environment(target_ip)
+    # setup_target_environment(TARGET_IP)
     configure_target(TARGET_IQN, TARGET_IP, worker_iqns)
     for worker_ip in worker_node_ips:
         configure_initiators(worker_ip)
