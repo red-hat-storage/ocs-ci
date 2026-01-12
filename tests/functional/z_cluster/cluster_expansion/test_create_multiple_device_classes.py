@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_no_lso,
     skipif_bm,
     skipif_hci_provider_or_client,
+    polarion_id,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
@@ -30,7 +31,6 @@ from ocs_ci.ocs.resources.pvc import wait_for_pvcs_in_deviceset_to_reach_status
 from ocs_ci.ocs.resources.storage_cluster import (
     add_new_deviceset_in_storagecluster,
     get_storage_cluster,
-    get_storage_size,
     get_first_sc_name_from_storagecluster,
 )
 from ocs_ci.helpers.helpers import (
@@ -151,6 +151,7 @@ class TestMultipleDeviceClasses(ManageTest):
         )
 
     @tier2
+    @polarion_id("OCS-7431")
     def test_add_new_ssd_device_class_same_size(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
@@ -194,7 +195,9 @@ class TestMultipleDeviceClasses(ManageTest):
         suffix = "".join(random.choices("0123456789", k=5))
         device_class_name = f"{lvs_obj.name}-{suffix}"
         deviceset_name = device_class_name
-        storage_size = get_storage_size()
+        # The storage size defined as "1" in the deviceset as per documentation,
+        # but will default to the existing OSD size
+        storage_size = "1"
         log.info(
             f"Add a new deviceset in the storagecluster for the new LocalVolumeSet: {device_class_name} "
             f"which will also create a new deviceclass"
