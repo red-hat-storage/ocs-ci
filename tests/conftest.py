@@ -195,6 +195,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
+    get_latest_ocp_multi_image,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
@@ -2203,10 +2204,19 @@ def cluster(
         )
         get_openshift_client(force_download=force_download)
 
-    # set environment variable for early testing of RHCOS
-    if ocsci_config.ENV_DATA.get("early_testing"):
-        release_img = ocsci_config.ENV_DATA["RELEASE_IMG"]
-        log.info(f"Running early testing of RHCOS with release image: {release_img}")
+    multi_arch = ocsci_config.ENV_DATA.get("multi_arch")
+    if ocsci_config.ENV_DATA.get("early_testing") or multi_arch:
+        release_img = ocsci_config.ENV_DATA.get("release_img")
+        if not release_img and ocsci_config.ENV_DATA.get("multi_arch"):
+            release_img = get_latest_ocp_multi_image()
+        if not release_img:
+            raise ValueError(
+                "No release_img provided in config under ENV_DATA section!"
+            )
+        log.info(
+            f"Running early testing of RHCOS or multi-arch testing with release image: {release_img}"
+        )
+        # set environment variables for early testing of RHCOS or multi-arch
         os.environ["RELEASE_IMG"] = release_img
         os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
 
