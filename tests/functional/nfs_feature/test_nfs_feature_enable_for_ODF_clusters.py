@@ -1810,3 +1810,6 @@ class TestNfsEnable(ManageTest):
 
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+
+        log.info("delete non default nfs storageclass created for the test")
+        self.sc_obj.delete(resource_name=self.nfs_sc_copy)

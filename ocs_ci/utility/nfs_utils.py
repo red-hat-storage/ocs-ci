@@ -133,15 +133,15 @@ def nfs_disable(
         format_type="merge",
     ), "configmap/rook-ceph-operator-config not patched"
 
-    # Delete the nfs StorageClass
-    sc.delete()
-
     # Delete CephNFS
     cmd_delete_cephnfs = "delete CephNFS ocs-storagecluster-cephnfs"
     storage_cluster_obj.exec_oc_cmd(cmd_delete_cephnfs)
 
     # Wait untill nfs-ganesha pod deleted
     pod_obj.wait_for_delete(resource_name=nfs_ganesha_pod_name)
+
+    # Delete the nfs StorageClass
+    sc.delete()
 
     if (
         version_module.get_semantic_ocs_version_from_config()
