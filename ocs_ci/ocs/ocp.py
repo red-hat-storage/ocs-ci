@@ -2128,9 +2128,7 @@ def set_overprovision_policy(capacity, quota_name, sc_name, label):
     params = (
         '{"spec": {"overprovisionControl": [{"capacity": "' + capacity + '",'
         '"storageClassName":"' + sc_name + '", "quotaName": "' + quota_name + '",'
-        '"selector": {"labels": {"matchLabels": '
-        + label.__str__().replace("'", '"')
-        + "}}}]}}"
+        '"selector": {"matchLabels": ' + label.__str__().replace("'", '"') + "}}]}}"
     )
 
     storagecluster_obj = OCP(

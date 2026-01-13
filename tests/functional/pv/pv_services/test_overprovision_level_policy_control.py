@@ -160,7 +160,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             '{"spec": {"overprovisionControl": [{"capacity": "8Gi","storageClassName":'
             + sc_name_str
             + ', "quotaName": '
-            '"quota-sc-test", "selector": {"labels": {"matchLabels": {"openshift-quota":"quota-sc-test"}}}}]}}'
+            '"quota-sc-test", "selector": {"matchLabels": {"openshift-quota":"quota-sc-test"}}}]}}'
         )
         storagecluster_obj.patch(
             params=params,
