@@ -118,14 +118,23 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 break
 
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
-        output_clusterresourcequota = clusterresourcequota_obj.describe(
+        quota_resource = clusterresourcequota_obj.get(
             resource_name=overprovision_resource_name
         )
 
-        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
+        # Extract quota values
+        used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+        hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+        used_storage = used.get("requests.storage", "0")
+        hard_storage = hard.get("requests.storage", "0")
+
+        log.info(
+            f"Cluster Resource Quota {overprovision_resource_name}: "
+            f"used={used_storage}, hard={hard_storage}"
+        )
 
         assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota, expected_strings=["50Gi"]
+            output_string=f"{used_storage} {hard_storage}", expected_strings=["50Gi"]
         )
 
         log.info(

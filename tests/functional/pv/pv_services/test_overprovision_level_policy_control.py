@@ -179,20 +179,28 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         )
         if not sample.wait_for_func_status(result=True):
             err_str = (
-                f"Quota resource {self.quota_name} does not exist "
-                f"after 60 seconds {clusterresourcequota_obj.describe()}"
+                f"Quota resource {self.quota_name} does not exist after 60 seconds"
             )
             log.error(err_str)
             raise TimeoutExpiredError(err_str)
 
         log.info("Check clusterresourcequota output")
-        output_clusterresourcequota = clusterresourcequota_obj.describe(
-            resource_name=self.quota_name
+        quota_resource = clusterresourcequota_obj.get(resource_name=self.quota_name)
+
+        # Extract quota values
+        used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+        hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+        used_storage = used.get("requests.storage", "0")
+        hard_storage = hard.get("requests.storage", "0")
+
+        log.info(
+            f"Cluster Resource Quota {self.quota_name}: "
+            f"used={used_storage}, hard={hard_storage}"
         )
-        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
         assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota, expected_strings=["8Gi", "0"]
-        ), f"{output_clusterresourcequota}\n expected string does not exist."
+            output_string=f"{used_storage} {hard_storage}",
+            expected_strings=["8Gi", "0"],
+        ), f"Expected strings not found. Used: {used_storage}, Hard: {hard_storage}"
 
         log.info("Create 5Gi pvc on project ocs-quota-sc-test")
         pvc_obj = pvc_factory(
@@ -202,29 +210,9 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             size=5,
             status=constants.STATUS_BOUND,
         )
-        # Wait for quota usage to update after PVC creation
-        log.info("Waiting for quota usage to reflect PVC creation")
-        sample = TimeoutSampler(
-            timeout=120,
-            sleep=5,
-            func=clusterresourcequota_obj.describe,
-            resource_name=self.quota_name,
+        self.wait_for_quota_usage_update(
+            clusterresourcequota_obj, ["5Gi", "8Gi"], "PVC creation"
         )
-        for output_clusterresourcequota in sample:
-            log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
-            if self.verify_substrings_in_string(
-                output_string=output_clusterresourcequota,
-                expected_strings=["5Gi", "8Gi"],
-            ):
-                log.info("Quota usage updated successfully")
-                break
-        else:
-            err_str = (
-                f"Quota usage did not update to show 5Gi after 120 seconds. "
-                f"Current output: {output_clusterresourcequota}"
-            )
-            log.error(err_str)
-            raise TimeoutExpiredError(err_str)
         pod_factory(
             interface=sc_type,
             pvc=pvc_obj,
@@ -258,29 +246,9 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
 
         log.info("Resize the PVC to 6Gi and verify it is working [8Gi > 6Gi]")
         pvc_obj.resize_pvc(new_size=6, verify=True)
-        # Wait for quota usage to update after PVC resize
-        log.info("Waiting for quota usage to reflect PVC resize")
-        sample = TimeoutSampler(
-            timeout=120,
-            sleep=5,
-            func=clusterresourcequota_obj.describe,
-            resource_name=self.quota_name,
+        self.wait_for_quota_usage_update(
+            clusterresourcequota_obj, ["8Gi", "6Gi"], "PVC resize"
         )
-        for output_clusterresourcequota in sample:
-            log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
-            if self.verify_substrings_in_string(
-                output_string=output_clusterresourcequota,
-                expected_strings=["8Gi", "6Gi"],
-            ):
-                log.info("Quota usage updated successfully after resize")
-                break
-        else:
-            err_str = (
-                f"Quota usage did not update to show 6Gi after 120 seconds. "
-                f"Current output: {output_clusterresourcequota}"
-            )
-            log.error(err_str)
-            raise TimeoutExpiredError(err_str)
 
         log.info(
             "Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]"
@@ -291,26 +259,63 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             storageclass=sc_obj,
             size=1,
         )
-        # Wait for quota usage to update after PVC creation
-        log.info("Waiting for quota usage to reflect new PVC creation")
+        self.wait_for_quota_usage_update(
+            clusterresourcequota_obj, ["8Gi", "7Gi"], "new PVC creation"
+        )
+
+    def wait_for_quota_usage_update(
+        self, clusterresourcequota_obj, expected_strings, operation_description
+    ):
+        """
+        Wait for quota usage to update and verify expected strings.
+
+        Args:
+            clusterresourcequota_obj (OCP): ClusterResourceQuota object
+            expected_strings (list): List of strings to verify in quota output
+            operation_description (str): Description of the operation for logging
+
+        Raises:
+            TimeoutExpiredError: If quota usage doesn't update within timeout
+        """
+        log.info(f"Waiting for quota usage to reflect {operation_description}")
         sample = TimeoutSampler(
             timeout=120,
             sleep=5,
-            func=clusterresourcequota_obj.describe,
+            func=clusterresourcequota_obj.get,
             resource_name=self.quota_name,
         )
-        for output_clusterresourcequota in sample:
-            log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
-            if self.verify_substrings_in_string(
-                output_string=output_clusterresourcequota,
-                expected_strings=["8Gi", "7Gi"],
-            ):
-                log.info("Quota usage updated successfully after new PVC creation")
-                break
+        for quota_resource in sample:
+            # Extract used and hard quota values from the resource
+            try:
+                used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+                hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+
+                # Get storage request values
+                used_storage = used.get("requests.storage", "0")
+                hard_storage = hard.get("requests.storage", "0")
+
+                log.info(
+                    f"Quota usage for {self.quota_name}: "
+                    f"used={used_storage}, hard={hard_storage}"
+                )
+
+                # Check if the expected values are present
+                quota_info = f"{used_storage} {hard_storage}"
+                if self.verify_substrings_in_string(
+                    output_string=quota_info,
+                    expected_strings=expected_strings,
+                ):
+                    log.info(
+                        f"Quota usage updated successfully after {operation_description}"
+                    )
+                    return
+            except (KeyError, AttributeError) as e:
+                log.warning(f"Failed to parse quota resource: {e}")
+                continue
         else:
             err_str = (
-                f"Quota usage did not update to show 7Gi after 120 seconds. "
-                f"Current output: {output_clusterresourcequota}"
+                f"Quota usage did not update to show {expected_strings} after 120 seconds "
+                f"for {operation_description}."
             )
             log.error(err_str)
             raise TimeoutExpiredError(err_str)
