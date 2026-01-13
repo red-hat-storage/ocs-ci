@@ -1538,18 +1538,18 @@ def get_all_resource_names_of_a_kind(kind):
 
 def get_all_resource_of_kind_containing_string(search_string, kind):
     """
-    Return all the resource of kind which name contain search_string
+    Return all the resource names of kind which name contain search_string
     Args:
          search_string (str): The string to search in name of the resource
          kind (str): Kind of the resource to search for
     Returns:
-        (list): List of resource
+        (list): List of resource names
     """
 
     resource_list = []
     for resource in OCP(kind=kind).get().get("items"):
         if search_string in resource["metadata"]["name"]:
-            resource_list.append(resource)
+            resource_list.append(resource.get("metadata").get("name"))
     return resource_list
 
 
