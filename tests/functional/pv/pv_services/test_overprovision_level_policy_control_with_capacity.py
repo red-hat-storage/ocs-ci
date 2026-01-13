@@ -122,11 +122,12 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
             resource_name=overprovision_resource_name
         )
 
-        # Extract quota values
+        # Extract quota values - the key includes the storage class name
+        quota_key = f"{sc_name}.storageclass.storage.k8s.io/requests.storage"
         used = quota_resource.get("status", {}).get("total", {}).get("used", {})
         hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
-        used_storage = used.get("requests.storage", "0")
-        hard_storage = hard.get("requests.storage", "0")
+        used_storage = used.get(quota_key, "0")
+        hard_storage = hard.get(quota_key, "0")
 
         log.info(
             f"Cluster Resource Quota {overprovision_resource_name}: "

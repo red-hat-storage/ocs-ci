@@ -149,6 +149,11 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             # For sc-test-blk and sc-test-fs, construct quota name from actual SC name
             self.quota_name = f"{actual_sc_name}-quota-sc-test"
 
+        # Store the quota key format which includes the storage class name
+        self.quota_key = (
+            f"{actual_sc_name}.storageclass.storage.k8s.io/requests.storage"
+        )
+
         log.info("Add 'overprovisionControl' section to storagecluster yaml file")
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
@@ -196,7 +201,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         for quota_resource in sample:
             try:
                 hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
-                hard_storage = hard.get("requests.storage", "0")
+                hard_storage = hard.get(self.quota_key, "0")
                 log.info(
                     f"Checking quota {self.quota_name}, hard limit: {hard_storage}"
                 )
@@ -214,8 +219,8 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         # Extract quota values for final verification
         used = quota_resource.get("status", {}).get("total", {}).get("used", {})
         hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
-        used_storage = used.get("requests.storage", "0")
-        hard_storage = hard.get("requests.storage", "0")
+        used_storage = used.get(self.quota_key, "0")
+        hard_storage = hard.get(self.quota_key, "0")
 
         log.info(
             f"Cluster Resource Quota {self.quota_name}: "
@@ -314,9 +319,9 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
                 used = quota_resource.get("status", {}).get("total", {}).get("used", {})
                 hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
 
-                # Get storage request values
-                used_storage = used.get("requests.storage", "0")
-                hard_storage = hard.get("requests.storage", "0")
+                # Get storage request values using the correct quota key
+                used_storage = used.get(self.quota_key, "0")
+                hard_storage = hard.get(self.quota_key, "0")
 
                 log.info(
                     f"Quota usage for {self.quota_name}: "
