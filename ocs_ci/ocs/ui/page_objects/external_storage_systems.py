@@ -5,6 +5,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
 )
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 
 
 class ExternalSystems(ResourceList):
@@ -74,7 +75,6 @@ class ExternalSystems(ResourceList):
         username,
         password,
         filesystem_name,
-        expected_alert=None,
     ):
         """
         Connect IBM Scale as External system
@@ -86,7 +86,10 @@ class ExternalSystems(ResourceList):
             username (str): username
             password (str): password
             filesystem_name (str): name of the filesystem
-            expected_alert (str): text of the expected alert message
+
+        Returns:
+            "Success" if there was no alert raised
+            Text of the alert otherwise
 
         """
         self.connect_external_system()
@@ -102,12 +105,50 @@ class ExternalSystems(ResourceList):
         self.do_send_keys(self.external_systems["filesystem_name"], filesystem_name)
         logger.info("Click Connect Scale")
         self.do_click(locator=self.external_systems["connect_scale_final"])
-        if expected_alert:
-            self.wait_until_expected_text_is_found(
+        try:
+            self.wait_for_element_to_be_present(
                 locator=self.external_systems["alert_description"],
-                expected_text=expected_alert,
                 timeout=30,
             )
+            alert_text = self.get_element_text(
+                locator=self.external_systems["alert_description"]
+            )
+            return f"{alert_text}"
+        except TimeoutError:
+            return "Success"
+
+    def connect_scale_filesystem(self, scale_name, filesystem_name):
+        """
+        Connect an additional scale filesystem
+
+        Args:
+            scale_name (str): name of the scale cluster
+            filesystem_name (str): name of the additional filesystem
+        """
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        self.do_click(locator=self.external_systems["actions_button"])
+        self.do_click(locator=self.external_systems["add_filesystem"])
+        self.do_send_keys(
+            self.external_systems["filesystem_name_input"], filesystem_name
+        )
+        self.do_click(locator=self.external_systems["add_button"])
+
+    def delete_scale_filesystem(self, scale_name, filesystem_name):
+        """
+        Delete a scale filesystem
+
+        Args:
+            scale_name (str): name of the scale cluster
+            filesystem_name (str): name of the  filesystem
+        """
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        self.do_click(locator=self.external_systems["scale_link"])
+        self.do_click(
+            format_locator(self.external_systems["filesystem_link"]), filesystem_name
+        )
+        self.do_click(locator=self.external_systems["actions_button"])
+        self.do_click(locator=self.external_systems["delete_filesystem"])
+        self.do_click(locator=self.external_systems["confirm_delete"])
 
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):

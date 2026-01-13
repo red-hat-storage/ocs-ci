@@ -2910,6 +2910,42 @@ external_systems = {
         "[class*='-c-alert__description']",
         By.CSS_SELECTOR,
     ),
+    "filter": (
+        "//input[@data-test='name-filter-input']",
+        By.XPATH,
+    ),
+    "actions_button": (
+        "//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "add_filesystem": (
+        "ADD_REMOTE_FILE_SYSTEM",
+        By.ID,
+    ),
+    "filesystem_name_input": (
+        "remote-file-system-name",
+        By.ID,
+    ),
+    "add_button": (
+        "//footer//button[contains(text(), 'Add')]",
+        By.XPATH,
+    ),
+    "scale_link": (
+        "//a[contains(@href, '/odf/external-systems/scale')]",
+        By.XPATH,
+    ),
+    "filesystem_link": (
+        "//td/a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "delete_filesystem": (
+        "Delete",
+        By.ID,
+    ),
+    "confirm_delete": (
+        "//button[@data-test='delete-action']",
+        By.XPATH,
+    ),
 }
 locators = {
     "4.21": {
