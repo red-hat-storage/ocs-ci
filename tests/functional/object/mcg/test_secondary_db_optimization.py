@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     red_squad,
     polarion_id,
     mcg,
-    tier1,
+    tier2,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -83,7 +83,7 @@ class TestSecondaryDbOptimization(MCGTest):
         request.addfinalizer(finalizer)
         implementation()
 
-    @tier1
+    @tier2
     @polarion_id("OCS-7410")
     @config.run_with_provider_context_if_available
     def test_secondary_db_ro_queries(self, add_env_vars_to_noobaa_core):
