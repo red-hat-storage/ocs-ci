@@ -160,7 +160,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             '{"spec": {"overprovisionControl": [{"capacity": "8Gi","storageClassName":'
             + sc_name_str
             + ', "quotaName": '
-            '"quota-sc-test", "selector": {"matchLabels": {"openshift-quota":"quota-sc-test"}}}]}}'
+            '"quota-sc-test", "selector": {"labels": {"matchLabels": {"openshift-quota":"quota-sc-test"}}}}]}}'
         )
         storagecluster_obj.patch(
             params=params,
@@ -184,10 +184,34 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             log.error(err_str)
             raise TimeoutExpiredError(err_str)
 
-        log.info("Check clusterresourcequota output")
-        quota_resource = clusterresourcequota_obj.get(resource_name=self.quota_name)
+        log.info("Waiting for clusterresourcequota hard limit to be set")
+        # Wait for the hard limit to be properly configured
+        sample = TimeoutSampler(
+            timeout=120,
+            sleep=5,
+            func=clusterresourcequota_obj.get,
+            resource_name=self.quota_name,
+        )
+        quota_resource = None
+        for quota_resource in sample:
+            try:
+                hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+                hard_storage = hard.get("requests.storage", "0")
+                log.info(
+                    f"Checking quota {self.quota_name}, hard limit: {hard_storage}"
+                )
+                if hard_storage == "8Gi":
+                    log.info("Hard limit is correctly set to 8Gi")
+                    break
+            except (KeyError, AttributeError) as e:
+                log.warning(f"Failed to parse quota resource: {e}")
+                continue
+        else:
+            err_str = f"Quota resource {self.quota_name} hard limit was not set to 8Gi after 120 seconds"
+            log.error(err_str)
+            raise TimeoutExpiredError(err_str)
 
-        # Extract quota values
+        # Extract quota values for final verification
         used = quota_resource.get("status", {}).get("total", {}).get("used", {})
         hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
         used_storage = used.get("requests.storage", "0")
