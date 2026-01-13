@@ -59,6 +59,7 @@ ERRMSG = "Error in command"
 @skip_for_provider_if_ocs_version("<4.19")
 @skipif_lean_deployment
 @polarion_id("OCS-4270")
+@skipif_hci_client
 class TestDefaultNfsDisabled(ManageTest):
     """
     Test nfs feature enable for ODF 4.11
@@ -179,7 +180,7 @@ class TestNfsEnable(ManageTest):
         self.service_obj = ocp.OCP(kind=constants.SERVICE, namespace=self.namespace)
         self.pvc_obj = ocp.OCP(kind=constants.PVC, namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
-        self.nfs_sc = "constants.NFS_STORAGECLASS_NAME"
+        self.nfs_sc = constants.NFS_STORAGECLASS_NAME
         self.nfs_sc_copy = "ocs-storagecluster-ceph-nfs-copy"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
         self.retain_nfs_sc_name = "ocs-storagecluster-ceph-nfs-retain"
@@ -222,8 +223,12 @@ class TestNfsEnable(ManageTest):
             yield
             # Disable nfs feature
             nfs_utils.disable_nfs_service_from_provider(self.sc, nfs_ganesha_pod)
-            # Delete nfs sc created
-            self.sc_obj.delete(resource_name=self.nfs_sc_copy)
+            if (
+                version_module.get_semantic_ocs_version_from_config()
+                < version_module.VERSION_4_21
+            ):
+                # Delete nfs sc created
+                self.sc_obj.delete(resource_name=self.nfs_sc_copy)
 
         else:
             nfs_ganesha_pod_name = nfs_utils.nfs_enable(
