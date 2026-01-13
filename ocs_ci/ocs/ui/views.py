@@ -1442,6 +1442,14 @@ acm_configuration_4_20 = {
     "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
     "cnv-vm-name": ('//a[@data-test-id="{}"]', By.XPATH),
     "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
+    "azure_base_domain_resource_group": (
+        "//input[@id='baseDomainResourceGroupName']",
+        By.XPATH,
+    ),
+    "azure_client_id": ("//input[@id='clientId']", By.XPATH),
+    "azure_client_secret": ("//input[@id='clientSecret']", By.XPATH),
+    "azure_subscription_id": ("//input[@id='subscriptionId']", By.XPATH),
+    "azure_tenent_id": ("//input[@id='tenantId']", By.XPATH),
 }
 
 add_capacity = {
