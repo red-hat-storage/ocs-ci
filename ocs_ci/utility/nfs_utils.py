@@ -415,6 +415,7 @@ def nfs_access_for_clients(nfs_sc):
 
     # verify nfs server details shared
     server = fetch_nfs_server_details_on_client_cluster()
+    print(f"nfs server details: {server}")
 
     if (
         version_module.get_semantic_ocs_version_from_config()
