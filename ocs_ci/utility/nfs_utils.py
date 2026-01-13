@@ -141,11 +141,11 @@ def nfs_disable(
     pod_obj.wait_for_delete(resource_name=nfs_ganesha_pod_name)
 
     # Delete the nfs StorageClass
-    sc.delete()
+    sc_obj.delete(resource_name=constants.NFS_STORAGECLASS_NAME)
 
     if (
         version_module.get_semantic_ocs_version_from_config()
-        < version_module.VERSION_4_21
+        >= version_module.VERSION_4_21
     ):
         # remove externalendpoint details
         remove_nfs_endpoint_details()
