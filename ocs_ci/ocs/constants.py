@@ -28,6 +28,7 @@ REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
 TEMPLATE_DEPLOYMENT_DIR_OCP = os.path.join(TEMPLATE_DIR, "ocp-deployment")
+TEMPLATE_DEPLOYMENT_DIR_OLS = os.path.join(TEMPLATE_DIR, "ols")
 TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER = os.path.join(TEMPLATE_DIR, "cert-manager")
 TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
@@ -3118,6 +3119,14 @@ PATCH_SPECIFIC_SOURCES_CMD = (
     '\'{{"spec":{{"sources":[{{"disabled":{disable},"name":"{source_name}"'
     "}}]}}}}' --type=merge"
 )
+
+# OLS constants
+OLS_CONFIG_KIND = "OLSConfig"
+OLS_OPERATOR_NAMESPACE = "openshift-lightspeed"
+OLS_OPERATOR_NAME = "lightspeed-operator.openshift-lightspeed"
+OLS_OPERATOR_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-operator.yaml")
+OLS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-secret.yaml")
+OLS_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-config.yaml")
 
 # Submariner constants
 SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"

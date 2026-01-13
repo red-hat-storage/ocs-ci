@@ -782,6 +782,7 @@ aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
 blue_squad = pytest.mark.blue_squad
 brown_squad = pytest.mark.brown_squad
+cyan_squad = pytest.mark.cyan_squad
 green_squad = pytest.mark.green_squad
 grey_squad = pytest.mark.grey_squad
 magenta_squad = pytest.mark.magenta_squad
