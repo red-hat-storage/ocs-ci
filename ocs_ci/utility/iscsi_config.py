@@ -1,81 +1,32 @@
-#!/usr/bin/env python3
+"""
+This module is used for configuring iscsi.
+"""
 
-import paramiko
 import sys
 import logging
 import os
 import re
+import argparse
 
 from ocs_ci.ocs import node
 from ocs_ci.framework import config
-
+from ocs_ci.utility.connection import Connection
 
 log = logging.getLogger(__name__)
 
 
-USERNAME = config.ENV_DATA.get("iscsi_target_username")
 key_path = "~/.ssh/openshift-dev.pem"
 key_path = os.path.expanduser(key_path)
 
-TARGET_IQN = config.ENV_DATA.get("iscsi_target_iqn")
-TARGET_IP = config.ENV_DATA.get("iscsi_target_ip")
 
-BACKSTORES = ["disk0", "disk1", "disk2"]  # Already created on target
-MOUNT_BASE = "/mnt/iscsi_lun"
-
-
-def ssh_run(host, cmd, username=USERNAME):
-    """
-    Executes a command on a remote host via SSH using Paramiko.
-
-    Parameters:
-    host (str): The hostname or IP address of the remote server.
-    cmd (str): The command to execute on the remote server.
-
-    Returns:
-    (str): stdout objects from the command execution
-    """
-    log.info(f"\n[{host}] ➜ {cmd}")
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        if username == "core":
-            private_key = paramiko.RSAKey.from_private_key_file(key_path)
-            client.connect(host, username=username, pkey=private_key, timeout=10)
-        else:
-            client.connect(
-                host,
-                username=username,
-                password=config.ENV_DATA.get("iscsi_target_password"),
-                timeout=10,
-            )
-        stdin, stdout, stderr = client.exec_command(cmd)
-        out = stdout.read().decode().strip()
-        err = stderr.read().decode().strip()
-
-        if out:
-            log.info(out)
-        if err:
-            log.error("ERROR:", err)
-        return True, out, err
-
-    except Exception as e:
-        log.error(f"SSH ERROR on {host}: {e}")
-        return None
-    finally:
-        client.close()
-
-
-def setup_target_environment(target_vm_ip, username=USERNAME):
+def setup_target_environment(target_node_ssh):
     """
     Set up target environment on remote target VM via SSH.
 
     Parameters:
-    target_vm_ip (str): IP address of the target VM
-    username (str): SSH username (default: root)
+    target_node_ssh (Connection): An established SSH connection to the target VM.
     """
-    log.info(f"Setting up target environment on {target_vm_ip}...")
-
+    log.info("Setting up target environment")
     commands = [
         # Create target directory
         "mkdir -p /etc/target",
@@ -88,8 +39,10 @@ def setup_target_environment(target_vm_ip, username=USERNAME):
 
     for cmd in commands:
         log.info(f"Executing on target VM: {cmd}")
-        success, stdout, stderr = ssh_run(target_vm_ip, cmd, username)
-        if not success and "already" not in stderr.lower():
+
+        retcode, stdout, stderr = target_node_ssh.exec_cmd(cmd)
+
+        if not retcode and "already" not in stderr.lower():
             log.warning(f"Command warning: {stderr}")
         if stdout:
             log.debug(f"Output: {stdout.strip()}")
@@ -135,23 +88,25 @@ def get_worker_iqns(worker_node_ips):
     log.info("\n=== Collecting Worker IQNs ===")
 
     for node_ip in worker_node_ips:
-        iqns.append(
-            ssh_run(
-                node_ip,
-                command="grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2",
-                username="core",
-            )[0]
-            .stdout.decode()
-            .strip()
+        node_ssh = Connection(
+            host=node_ip,
+            user="core",
+            private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
         )
-        log.info(f"Worker {node_ip} IQN: {iqns[-1]}")
+        log.info(f"Connecting to worker node {node_ip} to get IQN...")
+
+        retcode, stdout, stderr = node_ssh.exec_cmd(
+            cmd="grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
+        )
+        iqns.append(stdout.strip())
+        log.info(f"Worker {node_ip} IQN: {stdout.strip()}")
     return iqns
 
 
 # --------------------------------------------------------
 # STEP 2: Configure Target VM
 # --------------------------------------------------------
-def configure_target(target_iqn, target_ip, worker_iqns, username=USERNAME):
+def configure_target(target_node_ssh, target_iqn, worker_iqns):
     """
     Configures the iSCSI target with given IQNs and IP.
     This function is a placeholder and requires implementation.
@@ -163,28 +118,27 @@ def configure_target(target_iqn, target_ip, worker_iqns, username=USERNAME):
     """
 
     # Setup environment first
-
+    # setup_target_environment(target_node_ssh)
     # Check if target exists
     check_cmd = f"targetcli ls /iscsi/{target_iqn} 2>/dev/null"
-    success, stdout, stderr = ssh_run(target_ip, check_cmd, username)
+    success, stdout, stderr = target_node_ssh(check_cmd)
     if not success:
-        log.info(f"Creating iSCSI target {target_iqn} on {target_ip}...")
         create_target_cmd = f"targetcli /iscsi create {target_iqn}"
-        ssh_run(target_ip, create_target_cmd, username)
+        target_node_ssh(create_target_cmd)
     else:
-        log.info(f"iSCSI target {target_iqn} already exists on {target_ip}.")
+        log.info(f"iSCSI target {target_iqn} already exists")
         log.info("Adding workers...")
 
     # Add LUNs and ACLs for each worker IQN
     for worker_iqn in worker_iqns:
         # Add ACL
         acl_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls create {worker_iqn}"
-        ssh_run(target_ip, acl_cmd, username)
+        target_node_ssh(acl_cmd)
         log.info(f"AddedACL for worker IQN: {worker_iqn}")
 
         # Get list of LUNs to map
         lun_list_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls"
-        success, stdout, stderr = ssh_run(target_ip, lun_list_cmd, username)
+        target_node_ssh(lun_list_cmd)
 
         lun_numbers = re.findall(r"lun(\d+)", stdout)
 
@@ -197,13 +151,13 @@ def configure_target(target_iqn, target_ip, worker_iqns, username=USERNAME):
                 f"create {lun_num} {lun_num} 2>&1 || "
                 f"echo 'LUN mapping may already exist'"
             )
-            success, stdout, stderr = ssh_run(target_ip, map_cmd, username)
+            target_node_ssh(map_cmd)
             log.info(f"LUN{lun_num} mapping result: {stdout.strip()}")
 
     # Save configuration
     log.info("Saving target configuration...")
     save_cmd = "targetcli saveconfig"
-    success, stdout, stderr = ssh_run(target_ip, save_cmd, username)
+    success, stdout, stderr = target_node_ssh(save_cmd)
 
     if success:
         log.info("Configuration saved successfully")
@@ -214,7 +168,7 @@ def configure_target(target_iqn, target_ip, worker_iqns, username=USERNAME):
 # --------------------------------------------------------
 # STEP 3: Configure iSCSI Initiator on each Worker
 # --------------------------------------------------------
-def configure_initiators(worker_ip):
+def configure_initiators(worker_ips):
     """
     Configures a worker node as an iSCSI initiator.
     This function installs necessary packages, discovers targets, logs in to the target,
@@ -225,17 +179,25 @@ def configure_initiators(worker_ip):
     """
 
     log.info("\n=== Configuring Worker Nodes as Initiators ===")
+
     cmds = [
-        f"sudo iscsiadm -m discovery -t sendtargets -p {TARGET_IP}:3260",
-        f"sudo iscsiadm -m node -T {TARGET_IQN} -p {TARGET_IP}:3260 --login",
+        f"sudo iscsiadm -m discovery -t sendtargets -p {config.ENV_DATA['iscsi_target_ip']}:3260",
+        f"sudo iscsiadm -m node -T {config.ENV_DATA['iscsi_target_iqn']} -p \
+        {config.ENV_DATA['iscsi_target_ip']}:3260 --login",
         "sudo systemctl enable --now iscsid || sudo systemctl enable --now open-iscsi",
     ]
-    for cmd in cmds:
-        ssh_run(worker_ip, cmd, username="core")
-    log.info(f"Worker {worker_ip} successfully logged in to target.")
+
+    for worker_ip in worker_ips:
+        worker_node_ssh = Connection(
+            host=worker_ip,
+            user="core",
+            private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+        )
+        for cmd in cmds:
+            worker_node_ssh(worker_ip, cmd, username="core")
 
 
-def remove_acls_from_target(target_vm_ip, target_iqn, worker_iqns, username):
+def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
     """
     Remove ACLs and LUN mappings from target using targetcli.
     """
@@ -250,7 +212,7 @@ def remove_acls_from_target(target_vm_ip, target_iqn, worker_iqns, username):
         delete_acl_cmd = (
             f"targetcli /iscsi/{target_iqn}/tpg1/acls delete {worker_iqn} 2>&1"
         )
-        success, stdout, stderr = ssh_run(target_vm_ip, delete_acl_cmd, username)
+        success, stdout, stderr = target_node_ssh(delete_acl_cmd)
 
         if success or "does not exist" in stdout.lower():
             log.info(" ACL is deleted")
@@ -259,11 +221,11 @@ def remove_acls_from_target(target_vm_ip, target_iqn, worker_iqns, username):
 
     # Save configuration
     save_cmd = "targetcli saveconfig 2>&1"
-    ssh_run(target_vm_ip, save_cmd, username)
+    target_node_ssh(save_cmd)
     log.info("\n Configuration saved")
 
 
-def wipe_luns_on_target(target_vm_ip, target_iqn, username):
+def wipe_luns_on_target(target_node_ssh, target_iqn, username):
     """
     Wipe LUN data on target VM.
     """
@@ -273,7 +235,7 @@ def wipe_luns_on_target(target_vm_ip, target_iqn, username):
 
     # Get LUN paths
     get_luns_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls 2>&1"
-    success, stdout, stderr = ssh_run(target_vm_ip, get_luns_cmd, username)
+    success, stdout, stderr = target_node_ssh(get_luns_cmd)
 
     if not success or not stdout:
         log.info(" No LUNs found")
@@ -292,16 +254,16 @@ def wipe_luns_on_target(target_vm_ip, target_iqn, username):
 
                 # Wipe device
                 wipe_cmd = f"dd if=/dev/zero of={device} bs=1M count=100 2>&1"
-                ssh_run(target_vm_ip, wipe_cmd, username)
+                target_node_ssh(wipe_cmd)
                 log.info(f" Wiped {device}")
 
                 # Remove signatures
                 wipefs_cmd = f"wipefs -a {device} 2>&1"
-                ssh_run(target_vm_ip, wipefs_cmd, username)
+                target_node_ssh(wipefs_cmd)
                 log.info(" Removed signatures")
 
 
-def verify_cleanup(target_vm_ip, target_iqn, username_target, worker_iqns):
+def verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns):
     """
     Verify cleanup was successful.
     """
@@ -313,18 +275,17 @@ def verify_cleanup(target_vm_ip, target_iqn, username_target, worker_iqns):
     log.info("\nChecking target ACLs...")
     for iqn in worker_iqns:
         check_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls/{iqn} ls 2>&1"
-        success, stdout, stderr = ssh_run(target_vm_ip, check_cmd, username_target)
+        success, stdout, stderr = target_node_ssh(check_cmd)
 
         if "No such path" in stdout:
             log.info(f" ACL for {iqn} successfully removed")
         else:
             raise Exception(f"ACL for {iqn} still exists:\n{stdout}")
-    success, stdout, stderr = ssh_run(target_vm_ip, check_cmd, username_target)
     log.info(" All ACLs verified as removed.")
 
 
 def cleanup_iscsi_target(
-    target_vm_ip,
+    target_node_ssh,
     target_iqn,
     worker_iqns,
     worker_ips,
@@ -346,25 +307,26 @@ def cleanup_iscsi_target(
     log.info("\n" + "=" * 70)
     log.info("iSCSI TARGET CLEANUP - START")
     log.info("=" * 70)
-    log.info(f"Target VM: {target_vm_ip}")
     log.info(f"Target IQN: {target_iqn}")
     log.info(f"Workers: {len(worker_ips)}")
     log.info(f"Wipe data: {wipe_data}")
 
     try:
 
-        # Step 3: Remove ACLs
-        remove_acls_from_target(target_vm_ip, target_iqn, worker_iqns, username_target)
+        # Step 1: Remove ACLs
+        remove_acls_from_target(
+            target_node_ssh, target_iqn, worker_iqns, username_target
+        )
 
-        # Step 4: Wipe target LUNs
+        # Step 2: Wipe target LUNs
         if wipe_data:
-            wipe_luns_on_target(target_vm_ip, target_iqn, username_target)
+            wipe_luns_on_target(target_node_ssh, target_iqn, username_target)
 
-        # Step 5: Verify
-        verify_cleanup(target_vm_ip, target_iqn, username_target, worker_iqns)
+        # Step 3: Verify cleanup
+        verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns)
 
         log.info("\n" + "=" * 70)
-        log.info("✓ CLEANUP COMPLETED SUCCESSFULLY")
+        log.info("CLEANUP COMPLETED SUCCESSFULLY")
         log.info("=" * 70)
 
     except Exception as e:
@@ -375,7 +337,33 @@ def cleanup_iscsi_target(
         raise e
 
 
-if __name__ == "__main__":
+def iscsi_setup():
+    log.info("Setting up iSCSI configuration...")
+    kubeconfig_path = os.path.join(
+        config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+    )
+    worker_node_ips = get_worker_node_ips(kubeconfig_path)
+    log.info(f"Current available worker nodes are {worker_node_ips}")
+    worker_iqns = get_worker_iqns(worker_node_ips)
+    if not worker_iqns:
+        log.info("No IQNs found! Exiting...")
+        sys.exit(1)
+
+    target_node_ssh = Connection(
+        host=config.ENV_DATA.get("iscsi_target_ip"),
+        user=config.ENV_DATA.get("iscsi_target_username"),
+        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+    )
+
+    configure_target(
+        target_node_ssh, config.ENV_DATA.get("iscsi_target_iqn"), worker_iqns
+    )
+
+    configure_initiators(worker_node_ips)
+
+
+def iscsi_teardown():
+    log.info("Tearing down iSCSI target...")
     # Get worker nodes
     kubeconfig_path = os.path.join(
         config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
@@ -387,18 +375,77 @@ if __name__ == "__main__":
         log.info("No IQNs found! Exiting...")
         sys.exit(1)
 
-    # setup_target_environment(TARGET_IP)
-    configure_target(TARGET_IQN, TARGET_IP, worker_iqns)
-    for worker_ip in worker_node_ips:
-        configure_initiators(worker_ip)
-
-    # Teardown
-    cleanup_iscsi_target(
-        target_vm_ip=TARGET_IP,
-        target_iqn=TARGET_IQN,
-        worker_iqns=worker_iqns,
-        worker_ips=worker_node_ips,
-        wipe_data=False,
-        username_target="root",
-        username_worker="core",
+    target_node_ssh = Connection(
+        host=config.ENV_DATA.get("iscsi_target_ip"),
+        user=config.ENV_DATA.get("iscsi_target_username"),
+        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
     )
+
+    cleanup_iscsi_target(
+        target_node_ssh,
+        config.ENV_DATA.get("iscsi_target_iqn"),
+        worker_iqns,
+        worker_node_ips,
+        wipe_data=True,
+    )
+
+
+def init_arg_parser():
+    """
+    Initialize argument parser for iscsi setup/teardown
+
+    Returns:
+        object: Parsed arguments
+    """
+    parser = argparse.ArgumentParser(
+        description="iSCSI Setup/Teardown Utility",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Set up iSCSI configuration",
+    )
+    parser.add_argument(
+        "--teardown",
+        action="store_true",
+        help="Tear down iSCSI configuration instead of setting it up",
+    )
+    parser.add_argument(
+        "--target-ip",
+        type=str,
+        help="IP address of the iSCSI target node",
+    )
+    parser.add_argument(
+        "--target-iqn",
+        type=str,
+        help="IQN of the iSCSI target node",
+    )
+    parser.add_argument(
+        "--target-username",
+        type=str,
+        help="SSH username for the iSCSI target node",
+    )
+    parser.add_argument(
+        "--password",
+        type=str,
+        help="SSH password for the iSCSI target node",
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    "main Function to setup iscsi target and initiators"
+    args = init_arg_parser()
+    if args.setup:
+        iscsi_setup()
+    elif args.teardown:
+        iscsi_teardown()
+    else:
+        log.error("Please provide either --setup or --teardown argument")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
