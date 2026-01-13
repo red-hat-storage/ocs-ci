@@ -16,6 +16,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
 log = logging.getLogger(__name__)
 
@@ -415,7 +416,6 @@ def nfs_access_for_clients(nfs_sc):
 
     # verify nfs server details shared
     server = fetch_nfs_server_details_on_client_cluster()
-    print(f"nfs server details: {server}")
 
     if (
         version_module.get_semantic_ocs_version_from_config()
@@ -555,12 +555,13 @@ def remove_nfs_endpoint_details():
 
     """
     config.switch_to_provider()
-    storage_cluster_obj = ocp.OCP(
-        kind=constants.STORAGECLUSTER, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    storage_cluster = StorageCluster(
+        resource_name=config.ENV_DATA["storage_cluster_name"],
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
-    if "externalEndpoint" in storage_cluster_obj.data["spec"]["nfs"]:
+    if "externalEndpoint" in storage_cluster.data["spec"]["nfs"]:
         remove_nfs_endpoint_details = '{"spec": {"nfs": {"externalEndpoint": null}}}'
-        assert storage_cluster_obj.patch(
+        assert storage_cluster.patch(
             resource_name=config.ENV_DATA["storage_cluster_name"],
             params=remove_nfs_endpoint_details,
             format_type="merge",
