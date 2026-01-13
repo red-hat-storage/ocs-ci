@@ -268,12 +268,6 @@ class TestNfsEnable(ManageTest):
                 nfs_utils.delete_nfs_load_balancer_service(
                     self.storage_cluster_obj,
                 )
-            if (
-                version_module.get_semantic_ocs_version_from_config()
-                < version_module.VERSION_4_21
-            ):
-                # remove externalendpoint details
-                nfs_utils.remove_nfs_endpoint_details()
 
     def teardown(self):
         """

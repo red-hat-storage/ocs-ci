@@ -118,6 +118,7 @@ def nfs_disable(
 
     nfs_spec_disable = '{"spec": {"nfs":{"enable": false}}}'
     rook_csi_config_disable = '{"data":{"ROOK_CSI_ENABLE_NFS": "false"}}'
+    sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
 
     assert storage_cluster_obj.patch(
         resource_name=config.ENV_DATA["storage_cluster_name"],
@@ -141,6 +142,19 @@ def nfs_disable(
 
     # Wait untill nfs-ganesha pod deleted
     pod_obj.wait_for_delete(resource_name=nfs_ganesha_pod_name)
+
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        < version_module.VERSION_4_21
+    ):
+        # remove externalendpoint details
+        remove_nfs_endpoint_details()
+
+        # delete nfs non default storageclass if available
+        if ocp.OCP(kind=constants.STORAGECLASS).is_exist(
+            resource_name=constants.COPY_NFS_STORAGECLASS_NAME
+        ):
+            sc_obj.delete(resource_name=constants.COPY_NFS_STORAGECLASS_NAME)
 
 
 def create_nfs_load_balancer_service(
