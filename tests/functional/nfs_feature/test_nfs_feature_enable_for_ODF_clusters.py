@@ -1627,6 +1627,7 @@ class TestNfsEnable(ManageTest):
         """
         # remove nfs external endpoint details from storagecluster
         nfs_utils.remove_nfs_endpoint_details()
+        time.sleep(40)
 
         server = nfs_utils.fetch_nfs_server_details_on_client_cluster()
         # validate default nfs server details is displayed
