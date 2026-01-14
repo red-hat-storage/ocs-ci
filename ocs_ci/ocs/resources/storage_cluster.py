@@ -3477,3 +3477,31 @@ def check_unnecessary_pods_present():
             raise InvalidPodPresent(
                 f"Pods {invalid_pods_found} should not be present because Ceph is not available"
             )
+
+
+def get_default_storagecluster(namespace=None):
+    """
+    Get the default storage cluster
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: The default storage cluster
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+    )
+    if sc_obj.is_exist(resource_name=constants.DEFAULT_CLUSTERNAME):
+        sc_name = constants.DEFAULT_CLUSTERNAME
+    elif sc_obj.is_exist(resource_name=constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE):
+        sc_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+    else:
+        sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+
+    return ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+        resource_name=sc_name,
+    )
