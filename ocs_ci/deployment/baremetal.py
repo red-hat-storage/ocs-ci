@@ -653,7 +653,7 @@ class BAREMETALUPI(BAREMETALBASE):
                 f"{self.installer} wait-for install-complete "
                 f"--dir {self.cluster_path} "
                 f"--log-level {log_cli_level}",
-                timeout=1800,
+                timeout=3600,
             )
             logger.info("Removing Bootstrap Ip for DNS Records")
             self.aws.update_hosted_zone_record(
