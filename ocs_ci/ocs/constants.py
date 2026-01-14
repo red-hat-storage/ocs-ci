@@ -2559,7 +2559,26 @@ NOOBAA_POD_NAMES = [
     NOOBAA_DB_STATEFULSET,
     NOOBAA_CORE_STATEFULSET,
 ]
-CEPH_PODS_NAMES = [ROOK_CEPH_OPERATOR]
+MON_POD_NAMES = "rook-ceph-mon"
+OSD_POD_NAMES = "rook-ceph-osd"
+MDS_POD_NAMES = "rook-ceph-mds"
+MGR_POD_NAMES = "rook-ceph-mgr"
+RBD_MIRROR_POD_NAMES = "rook-ceph-rbd-mirror"
+RGW_POD_NAMES = "rook-ceph-rgw"
+CRASHCOLLECTOR_POD_NAMES = "rook-ceph-crashcollector"
+EXPORTER_POD_NAMES = "rook-ceph-exporter"
+CEPH_PODS_NAMES = [
+    ROOK_CEPH_OPERATOR,
+    MON_POD_NAMES,
+    OSD_POD_NAMES,
+    MDS_POD_NAMES,
+    MGR_POD_NAMES,
+    RBD_MIRROR_POD_NAMES,
+    RGW_POD_NAMES,
+    CRASHCOLLECTOR_POD_NAMES,
+    EXPORTER_POD_NAMES,
+]
+
 
 # LSO
 ROOT_DISK_NAME = "sda"
