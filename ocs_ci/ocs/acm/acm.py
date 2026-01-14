@@ -973,7 +973,10 @@ def discover_hosted_clusters():
         resource_name="hypershift-addon-deploy-config"
     )["spec"]["customizedVariables"]
 
-    discovery_prefix_data_to_add = {"name": "discoveryPrefix", "value": "dr"}
+    discovery_prefix_data_to_add = {
+        "name": "discoveryPrefix",
+        "value": constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX,
+    }
     spec_data.append(discovery_prefix_data_to_add)
     addondeploymentconfig.patch(
         resource_name="hypershift-addon-deploy-config",
