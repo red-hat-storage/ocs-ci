@@ -1742,10 +1742,26 @@ class HypershiftHostedOCP(
             self.update_hcp_binary()
 
         # Enable central infrastructure management service for agent
-        if config.ENV_DATA.get("enable_infrastructure_management_for_agent"):
-            provisioning_obj = OCS(
-                **OCP(kind=constants.PROVISIONING).get().get("items")[0]
-            )
+        if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
+            # create Provisioning resource if not present
+
+            provisioning_ocp = OCP(kind=constants.PROVISIONING)
+            provisioning_items = provisioning_ocp.get(dont_raise=True) or {}
+            provisioning_item_list = provisioning_items.get("items") or []
+            if not provisioning_item_list:
+                template_yaml = os.path.join(
+                    constants.TEMPLATE_DIR, "hosted-cluster", "provisioning.yaml"
+                )
+                provisioning_data = templating.load_yaml(template_yaml)
+                helpers.create_resource(**provisioning_data)
+                for provisioning_items in TimeoutSampler(
+                    300, 10, provisioning_ocp.get, dont_raise=True
+                ):
+                    provisioning_item_list = provisioning_items.get("items") or []
+                    if provisioning_item_list:
+                        break
+
+            provisioning_obj = OCS(**provisioning_item_list[0])
             if not provisioning_obj.data["spec"].get("watchAllNamespaces"):
                 provisioning_obj.ocp.patch(
                     resource_name=provisioning_obj.name,
