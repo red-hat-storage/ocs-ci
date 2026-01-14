@@ -8,6 +8,8 @@ import tempfile
 import time
 from datetime import datetime
 
+import yaml
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cluster import is_hci_cluster
@@ -42,6 +44,7 @@ from ocs_ci.ocs.utils import (
     enable_mco_console_plugin,
     set_recovery_as_primary,
     get_all_acm_indexes,
+    get_non_acm_cluster_indexes,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -52,6 +55,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
     is_cluster_y_version_upgraded,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
@@ -2745,3 +2749,69 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+
+def enable_literal_block_style():
+    class LiteralString(str):
+        pass
+
+    yaml.add_representer(
+        LiteralString,
+        lambda dumper, data: dumper.represent_scalar(
+            "tag:yaml.org,2002:str", data, style="|"
+        ),
+    )
+
+    return LiteralString
+
+
+def create_ingress_cert_dr(
+    cert_name="user-ca-bundle",
+    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+    patch_proxy=True,
+):
+
+    non_acm_indexes = get_non_acm_cluster_indexes()
+    ingress_data = templating.load_yaml(constants.OC_INGRESS_CERT_YAML)
+    LiteralString = enable_literal_block_style()
+    ssl_data = []
+
+    for non_acm_index in non_acm_indexes:
+        config.switch_ctx(non_acm_index)
+        default_ingress_cert = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.DEFAULT_INGRESS_CRT_OPENSHIFT,
+            namespace=constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE,
+        )
+
+        ssl_data.append(
+            default_ingress_cert.get()["data"]["ca-bundle.crt"].strip() + "\n"
+        )
+        ingress_data["data"]["ca-bundle.crt"] = LiteralString("".join(ssl_data))
+        ingress_data["metadata"]["name"] = cert_name
+        ingress_data["metadata"]["namespace"] = namespace
+        ingress_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="ingress_cert_", delete=False
+        )
+        templating.dump_data_to_temp_yaml(ingress_data, ingress_file.name)
+
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        with config.RunWithConfigContext(index):
+            logger.info(f"[{cluster_name}] Creating Ingress cert")
+            run_cmd(cmd=f"oc create -f {ingress_file.name}")
+            if patch_proxy:
+                logger.info(f"[{cluster_name}] Proxy patch")
+                cmd = (
+                    f"oc patch proxy/cluster --type=merge"
+                    f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
+                )
+                run_cmd(cmd=cmd)
+
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        with config.RunWithConfigContext(index):
+            logger.info(f"[{cluster_name}] Waiting for MachineConfigPool to be updated")
+            wait_for_machineconfigpool_status(node_type="all")

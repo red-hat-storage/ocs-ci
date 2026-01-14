@@ -52,6 +52,7 @@ from ocs_ci.helpers.dr_helpers import (
     validate_storage_cluster_peer_state,
     verify_volsync,
     validate_drpolicy_grouping,
+    create_ingress_cert_dr,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -3884,6 +3885,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         RDR specific steps for deploy
         """
         # current CTX: ACM
+
+        if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            create_ingress_cert_dr()
+
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
             config.switch_ctx(i)
