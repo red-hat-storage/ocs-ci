@@ -567,6 +567,7 @@ class AcmAddClusters(AcmPageNavigator):
             azure_cluster_index (str): The index of the Azure cluster
 
         """
+        log.info("Enter Azure cluster details")
         self.do_send_keys(
             self.page_nav["azure_base_domain_resource_group"],
             config.clusters[azure_cluster_index].ENV_DATA.get(
