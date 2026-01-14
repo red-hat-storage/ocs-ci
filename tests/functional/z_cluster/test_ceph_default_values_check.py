@@ -1,6 +1,7 @@
 import collections
 import logging
 import pytest
+import re
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
@@ -272,33 +273,45 @@ class TestCephDefaultValuesCheck(ManageTest):
     @skipif_managed_service
     @skipif_ocs_version("<4.9")
     @tier2
-    def deprecated_test_noobaa_postgres_cm_post_ocs_upgrade(self):
+    def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Impotant !!! Postgres configmap replaced with CNPG in 4.19.
 
         Validate noobaa postgres configmap post OCS upgrade
 
         """
-        cm_obj = OCP(
-            kind=constants.CONFIGMAP,
-            resource_name=constants.NOOBAA_POSTGRES_CONFIGMAP,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
-        config_data = config_data.split("\n")
-        config_data = config_data[5:]
-        log.info(
-            "Validating that the values configured in noobaa-postgres configmap "
-            "match the ones stored in ocs-ci"
-        )
         ocs_version = version.get_semantic_ocs_version_from_config()
         log.info(f"ocs version----{ocs_version}")
+
+        # ConfigMap is not present from OCS 4.19 onwards
+        if ocs_version <= version.VERSION_4_18:
+            cm_obj = OCP(
+                kind=constants.CONFIGMAP,
+                resource_name=constants.NOOBAA_POSTGRES_CONFIGMAP,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
+            config_data = config_data.split("\n")
+            config_data = config_data[5:]
+
+        else:
+            nooba_db_primary_pod = pod.get_primary_nb_db_pod()
+            raw_data = nooba_db_primary_pod.exec_cmd_on_pod(
+                "cat /var/lib/postgresql/data/pgdata/custom.conf"
+            )
+            config_data = re.findall(r"\S+\s*=\s*'[^']*'", raw_data)
+
+        log.info(
+            "Validating that the values configured in noobaa-postgres configmap or in CNPG's config "
+            "match the ones stored in ocs-ci"
+        )
         if ocs_version <= version.VERSION_4_8:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
-            stored_values.remove("")
+
         elif ocs_version >= version.VERSION_4_9:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_9.split("\n")
-            stored_values.remove("")
+
+        stored_values = [v.strip() for v in stored_values if v.strip()]
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
