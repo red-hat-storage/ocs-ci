@@ -88,9 +88,15 @@ class FillPoolJob(object):
         }
 
         # Ensure the container will run the dd command
+        # Insure to handle the case of "No space left on device" error gracefully
         dd_cmd = (
             f'echo "Filling PVC with {fill_mode} data..."; '
-            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}}"
+            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}} 2>/tmp/dd_err; "
+            f"EXIT_STATUS=$?; "
+            f"if [ $EXIT_STATUS -ne 0 ] && grep -q 'No space left on device' /tmp/dd_err; then "
+            f"  cat /tmp/dd_err; echo 'Capacity reached. Exiting successfully.'; exit 0; "
+            f"fi; "
+            f"cat /tmp/dd_err; exit $EXIT_STATUS"
         )
         container["command"] = ["sh", "-c", dd_cmd]
         container.pop("args", None)
@@ -123,6 +129,22 @@ class FillPoolJob(object):
                 timeout=180,
                 sleep=10,
             )
+
+    def wait_for_completion(self, timeout=3600, sleep=30):
+        """
+        Wait for the Fill Pool Job Pod to complete.
+        """
+        if not self.pod_obj:
+            raise RuntimeError("Fill Pool Job Pod object is not available")
+
+        log.info(f"Waiting for Fill Pool Job Pod {self.pod_obj.name} to complete...")
+        self.pod_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_COMPLETED,
+            resource_name=self.pod_obj.name,
+            timeout=timeout,
+            sleep=sleep,
+        )
+        log.info(f"Fill Pool Job Pod {self.pod_obj.name} has completed.")
 
     def cleanup(self):
         """
