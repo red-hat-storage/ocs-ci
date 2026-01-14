@@ -2302,93 +2302,137 @@ class Deployment(object):
 
         # Before starting the configuration, verify the presence of the pods cluster-proxy-proxy-agent,
         # klusterlet-addon-workmgr and managed-serviceaccount-addon-agent in the default addons namespace
-        for pod_label in [
-            "open-cluster-management.io/addon=cluster-proxy",
-            "component=work-manager",
-            "addon-agent=managed-serviceaccount",
-        ]:
-            if not wait_for_pods_by_label_count(
-                label=pod_label,
-                expected_count=1,
+        acm_version = get_acm_version()
+        if version.compare_versions(f"{acm_version} <= 2.14"):
+            logger.info(
+                "Setting Up Configure ACM to import MCE operator cluster via Manual Way"
+            )
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+            ]:
+                if not wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=constants.ACM_ADDONS_NAMESPACE,
+                    timeout=300,
+                    sleep=10,
+                ):
+                    raise ResourceNotFoundError(
+                        f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                    )
+
+            # Verify the status of existing pods in the default addons namespace
+            all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
+            if not wait_for_pods_to_be_in_statuses(
+                expected_statuses=[
+                    constants.STATUS_RUNNING,
+                    constants.STATUS_COMPLETED,
+                ],
+                pod_names=[pod_obj.name for pod_obj in all_pods],
                 namespace=constants.ACM_ADDONS_NAMESPACE,
                 timeout=300,
                 sleep=10,
             ):
-                raise ResourceNotFoundError(
-                    f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                raise ResourceWrongStatusException(
+                    f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
                 )
 
-        # Verify the status of existing pods in the default addons namespace
-        all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
-        if not wait_for_pods_to_be_in_statuses(
-            expected_statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-            pod_names=[pod_obj.name for pod_obj in all_pods],
-            namespace=constants.ACM_ADDONS_NAMESPACE,
-            timeout=300,
-            sleep=10,
-        ):
-            raise ResourceWrongStatusException(
-                f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
+            # Create AddOnDeploymentConfig to install add-ons in a different multicluster
+            # engine operator namespace so that
+            # the multicluster engine operator can self-manage with the local-cluster add-ons while
+            # ACM manages multicluster engine operator at the same time
+            logger.info(
+                "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
+            )
+            addon_deployment_config = helpers.create_resource(
+                **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
             )
 
-        # Create AddOnDeploymentConfig to install add-ons in a different multicluster engine operator namespace so that
-        # the multicluster engine operator can self-manage with the local-cluster add-ons while
-        # ACM manages multicluster engine operator at the same time
-        logger.info(
-            "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
-        )
-        addon_deployment_config = helpers.create_resource(
-            **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
-        )
-
-        # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
-        # in the namespace that is specified in the AddOnDeploymentConfig
-        patch_cmd = (
-            f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
-            f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
-            f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
-            f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
-        )
-
-        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
-        for management_addon in [
-            "work-manager",
-            "managed-serviceaccount",
-            "cluster-proxy",
-        ]:
-            addon_obj.patch(
-                resource_name=management_addon, params=patch_cmd, format_type="merge"
+            # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
+            # in the namespace that is specified in the AddOnDeploymentConfig
+            patch_cmd = (
+                f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
+                f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
+                f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
+                f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
             )
 
-        # Verify the presence and Running status of the pods cluster-proxy-proxy-agent, klusterlet-addon-workmgr and
-        # managed-serviceaccount-addon-agent
-        for pod_label in [
-            "open-cluster-management.io/addon=cluster-proxy",
-            "component=work-manager",
-            "addon-agent=managed-serviceaccount",
-        ]:
-            wait_for_pods_by_label_count(
-                label=pod_label,
-                expected_count=1,
+            addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+            for management_addon in [
+                "work-manager",
+                "managed-serviceaccount",
+                "cluster-proxy",
+            ]:
+                addon_obj.patch(
+                    resource_name=management_addon,
+                    params=patch_cmd,
+                    format_type="merge",
+                )
+
+            # Verify the presence and Running status of the pods cluster-proxy-proxy-agent,
+            # klusterlet-addon-workmgr and managed-serviceaccount-addon-agent
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+            ]:
+                wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=addon_deployment_config.data["spec"][
+                        "agentInstallNamespace"
+                    ],
+                    timeout=900,
+                    sleep=20,
+                )
+            wait_for_pods_to_be_running(
                 namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
                 timeout=900,
                 sleep=20,
             )
-        wait_for_pods_to_be_running(
-            namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
-            timeout=900,
-            sleep=20,
-        )
 
-        # Create a KlusterletConfig resource that is used by ManagedCluster resources to import multicluster engine
-        # operator clusters so that the klusterlet is installed with a different name to avoid the conflict
-        klusterlet_config = helpers.create_resource(
-            **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
-        )
+            # Create a KlusterletConfig resource that is used by ManagedCluster resources to import multicluster engine
+            # operator clusters so that the klusterlet is installed with a different name to avoid the conflict
+            helpers.create_resource(
+                **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
+            )
 
-        logger.info(
-            "Configured Red Hat ACM to import multicluster engine operator clusters"
-        )
+            logger.info(
+                "Configured Red Hat ACM to import multicluster engine operator clusters"
+            )
+
+        else:
+            logger.info(
+                "Setting Up Configure ACM to import MCE operator cluster via Automated Way"
+            )
+
+            cmd = (
+                "oc patch addondeploymentconfig hypershift-addon-deploy-config "
+                "-n multicluster-engine "
+                "--type=merge "
+                '-p \'{"spec":{"customizedVariables":[{"name":"configureMceImport","value":"true"}]}}\''
+            )
+            run_cmd(cmd=cmd)
+            logger.info("Sleeping for 60 Sec for Background Activity")
+            time.sleep(60)
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+                "component=application-manager",
+            ]:
+                if not wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=constants.ACM_ADDONS_NAMESPACE_DISCOVERY,
+                    timeout=400,
+                    sleep=10,
+                ):
+                    raise ResourceNotFoundError(
+                        f"Pod with label {pod_label} not found in the ns {constants.ACM_ADDONS_NAMESPACE_DISCOVERY}"
+                    )
 
         # Configuration for backup and restore. Add backup label to the default and new addondeploymentconfig,
         # clustermanagementaddon and KlusterletConfig
@@ -2396,17 +2440,36 @@ class Deployment(object):
             "Add label for backup in addondeploymentconfigs, clustermanagementaddons and klusterletconfig"
         )
         backup_label = "cluster.open-cluster-management.io/backup=true"
-        addon_deployment_config.add_label(label=backup_label)
-        addon_deployment_config.ocp.add_label(
-            resource_name="hypershift-addon-deploy-config", label=backup_label
+        addon_deployment_config = OCP(
+            kind=constants.ADDONDEPLOYMENTCONFIG,
+            namespace=constants.MCE_NAMESPACE,
         )
+        klusterlet_config = OCP(
+            kind=constants.KLUSTERLET_CONFIG,
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+        )
+        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+
+        addon_deployment_config.add_label(
+            label=backup_label,
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
+        )
+        addon_deployment_config.add_label(
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
+            label=backup_label,
+        )
+
         for management_addon in [
             "work-manager",
             "managed-serviceaccount",
             "cluster-proxy",
+            "application-manager",
         ]:
             addon_obj.add_label(resource_name=management_addon, label=backup_label)
-        klusterlet_config.add_label(label=backup_label)
+        klusterlet_config.add_label(
+            label=backup_label,
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+        )
 
     def deploy_acm_hub_unreleased(self):
         """

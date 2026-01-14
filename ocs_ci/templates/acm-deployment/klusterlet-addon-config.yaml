@@ -8,8 +8,6 @@ spec:
     enabled: true
   certPolicyController:
     enabled: true
-  iamPolicyController:
-    enabled: true
   policyController:
     enabled: true
   searchCollector:
