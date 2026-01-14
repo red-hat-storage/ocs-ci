@@ -349,7 +349,8 @@ generic_locators = {
     "create_resource_button": ("yaml-create", By.ID),
     "search_resource_field": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "first_dropdown_option": (
-        'a[data-test="dropdown-menu-item-link"]',
+        'a[data-test="dropdown-menu-item-link"], '
+        'li[data-test="dropdown-menu-item-link"] button',
         By.CSS_SELECTOR,
     ),
     "storage_class": (
@@ -357,7 +358,8 @@ generic_locators = {
         By.XPATH,
     ),
     "second_dropdown_option": (
-        '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
+        '//a[@data-test="dropdown-menu-item-link"]/../../li[2] | '
+        '//li[@data-test="dropdown-menu-item-link"]/../li[2]//button',
         By.XPATH,
     ),
     "actions": (
@@ -2837,6 +2839,13 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
 }
+bucket_tab_4_21 = {
+    "storage_class_dropdown": (
+        "//button[@data-test='sc-dropdown']",
+        By.XPATH,
+    ),
+    "bucketclass_dropdown": ("//button[@data-test='bc-dropdown']", By.XPATH),
+}
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
 }
@@ -2919,7 +2928,7 @@ locators = {
         "topology": topology,
         "mcg_stores": mcg_stores,
         "alerting": alerting,
-        "bucket_tab": bucket_tab,
+        "bucket_tab": {**bucket_tab, **bucket_tab_4_21},
         "data_foundation_overview": data_foundation_overview,
     },
     "4.20": {
