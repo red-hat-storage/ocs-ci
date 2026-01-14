@@ -1144,7 +1144,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
             OCP.set_kubeconfig(self.kubeconfig)
             if not config.ENV_DATA["sno"]:
-                timeout = 1800
                 # wait for all nodes to generate CSR
                 # From OCP version 4.4 and above, we have to approve CSR manually
                 # for all the nodes
@@ -1173,7 +1172,7 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{self.installer} wait-for install-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=timeout,
+                    timeout=3600,
                 )
 
                 # Approving CSRs here in-case if any exists
