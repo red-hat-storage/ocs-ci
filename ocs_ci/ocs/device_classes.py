@@ -3,17 +3,18 @@ import random
 
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs.cluster import check_ceph_osd_tree
-from ocs_ci.ocs.exceptions import CephHealthException
+from ocs_ci.ocs.exceptions import CephHealthException, ResourceNotFoundError
 from ocs_ci.ocs.node import add_disk_to_node, get_node_objs
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.ocs.resources.pvc import wait_for_pvcs_in_lvs_to_reach_status
+from ocs_ci.ocs.resources.pvc import wait_for_pvcs_in_deviceset_to_reach_status
 from ocs_ci.ocs.resources.storage_cluster import (
     get_storage_size,
     get_device_class,
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
-    get_deviceset_sc_name_per_count,
+    get_deviceset_name_per_count,
 )
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import sum_of_two_storage_sizes
 
 from ocs_ci.ocs import constants, defaults
@@ -103,6 +104,49 @@ def create_new_lvs_for_new_deviceclass(
     return lvs_obj
 
 
+def get_default_lvs_obj():
+    """
+    Get the default LocalVolumeSet object
+
+    Returns:
+        OCS: The OCS instance for the LocalVolumeSet resource
+
+    """
+    resource_name = constants.LOCAL_BLOCK_RESOURCE
+    lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+    )
+    if not lvs_obj.is_exist(resource_name=resource_name):
+        raise ResourceNotFoundError(
+            f"The LocalVolumeSet resource {resource_name} not found"
+        )
+
+    lvs_data = lvs_obj.get(resource_name=resource_name)
+    return OCS(**lvs_data)
+
+
+def add_disks_matching_lvs_size(worker_nodes, ssd=True):
+    """
+    Add new disks for an existing LocalVolumeSet resource
+    The disk size will be equal to the existing OSD size.
+
+    Args:
+        worker_nodes (list): The worker node names to be used in the LocalVolumeSet resource.
+        ssd (bool): if True, mark disk as SSD
+
+    """
+    osd_size = get_storage_size()
+    log.info(f"the osd size is {osd_size}")
+
+    # The disk size will be equal to the existing OSD size
+    disk_size_in_gb = osd_size
+    disk_size = int(disk_size_in_gb[:-2])
+    worker_node_objs = get_node_objs(worker_nodes)
+    for n in worker_node_objs:
+        add_disk_to_node(n, disk_size=disk_size, ssd=ssd)
+
+
 def check_ceph_state_post_add_deviceclass():
     """
     Check the Ceph state post add a new deviceclass.
@@ -127,30 +171,24 @@ def check_ceph_state_post_add_deviceclass():
         raise CephHealthException("The ceph osd tree checks didn't finish successfully")
 
 
-def verification_steps_after_adding_new_deviceclass():
+def verify_deviceclasses_steps():
     """
     The function verify the following:
-    1. Wait for the LocalVolumeSet PVCs to reach the Bound state.
+    1. Wait for the DeviceSet PVCs to reach the Bound state.
     2. Wait for the OSD pods to reach the Running state.
     3. Check the Ceph state post add a new deviceclass as defined in the function
     'check_ceph_state_post_add_deviceclass'.
 
     """
-    deviceclass_name_per_count = get_deviceset_sc_name_per_count()
-    log.info(f"deviceclass name per count = {deviceclass_name_per_count}")
-    lvs_obj = OCP(
-        kind=constants.LOCAL_VOLUME_SET, namespace=defaults.LOCAL_STORAGE_NAMESPACE
-    )
-    lvs_items = lvs_obj.data["items"]
-    log.info("Wait for the LocalVolumeSet PVCs to reach the Bound state")
-    for lvs_data in lvs_items:
-        lvs_name = lvs_data["metadata"]["name"]
-        pvc_count = deviceclass_name_per_count[lvs_name]
-        wait_for_pvcs_in_lvs_to_reach_status(
-            lvs_name, pvc_count, constants.STATUS_BOUND
+    deviceset_name_per_count = get_deviceset_name_per_count()
+    log.info(f"deviceclass name per count = {deviceset_name_per_count}")
+
+    for deviceset_name, pvc_count in deviceset_name_per_count.items():
+        wait_for_pvcs_in_deviceset_to_reach_status(
+            deviceset_name, pvc_count, constants.STATUS_BOUND
         )
 
-    osd_pods_count = sum(deviceclass_name_per_count.values())
+    osd_pods_count = sum(deviceset_name_per_count.values())
     pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     log.info("Waiting for the OSD pods to reach the Running state")
     pod_obj.wait_for_resource(
