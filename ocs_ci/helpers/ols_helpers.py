@@ -5,6 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.utility.utils import exec_cmd, run_cmd
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
@@ -25,13 +26,7 @@ def do_deploy_ols():
     log.info("Creating OpenshiftLightspeed Operator")
 
     # check if OLS is already installed
-    if OCP(
-        kind=constants.OPERATOR_KIND, namespace=constants.OLS_OPERATOR_NAMESPACE
-    ).check_resource_existence(
-        should_exist=True,
-        resource_name=constants.OLS_OPERATOR_NAME,
-        timeout=10,
-    ):
+    if validate_ols_operator_installed(timeout=10):
         log.info("OLS Operator already installed")
         return True
 
@@ -48,6 +43,7 @@ def do_deploy_ols():
 def validate_ols_operator_installed(
     namespace=constants.OLS_OPERATOR_NAMESPACE,
     operator_name=constants.OLS_OPERATOR_NAME,
+    timeout=600,
 ):
     """
 
@@ -58,6 +54,7 @@ def validate_ols_operator_installed(
     Args:
         namespace (str): Namespace
         operator_name (str): Name of the operator
+        timeout (int): Time to wait OLS CSV reached in succeeded state
 
     Returns:
         bool : True if operator installation succeeaded
@@ -69,8 +66,10 @@ def validate_ols_operator_installed(
 
     """
     log.info(f"Validating installation of OLS operator {operator_name}")
-    ocp_obj = OCP(kind=constants.CLUSTER_SERVICE_VERSION, namespace=namespace)
-    return ocp_obj.wait_for_phase(phase=constants.SUCCEEDED, timeout=600)
+    csv_obj = CSV(
+        resource_name="lightspeed-operator-controller-manager", namespace=namespace
+    )
+    return csv_obj.wait_for_phase(phase=constants.SUCCEEDED, timeout=timeout)
 
 
 def create_ols_secret():
