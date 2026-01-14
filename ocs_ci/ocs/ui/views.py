@@ -359,7 +359,7 @@ generic_locators = {
     ),
     "second_dropdown_option": (
         '//a[@data-test="dropdown-menu-item-link"]/../../li[2] | '
-        '//li[@data-test="dropdown-menu-item-link"]/../li[2]//button',
+        '//li[@data-test="dropdown-menu-item-link"][2]//button',
         By.XPATH,
     ),
     "actions": (
