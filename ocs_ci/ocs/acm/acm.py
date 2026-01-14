@@ -22,6 +22,7 @@ from ocs_ci.ocs.acm.acm_constants import (
     ACM_PAGE_TITLE_2_7_ABOVE,
     ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED,
 )
+from ocs_ci.ocs.node import label_nodes, get_nodes
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
@@ -295,6 +296,15 @@ class AcmAddClusters(AcmPageNavigator):
                         if config.clusters[cluster_index].ENV_DATA["cluster_name"]
                         in azure_page.text
                     ][0]
+                    with config.RunWithConfigContext(azure_index):
+                        worker_nodes = get_nodes(
+                            node_type=constants.WORKER_MACHINE,
+                            num_of_nodes=increase_gateway_number + 1,
+                        )
+                        label_nodes(
+                            nodes=worker_nodes,
+                            label=constants.SUBMARINER_GATEWAY_NODE_LABEL,
+                        )
                     self.enter_azure_details(azure_cluster_index=azure_index)
                 except NoSuchElementException:
                     pass
