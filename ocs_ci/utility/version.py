@@ -462,7 +462,7 @@ def get_running_odf_client_version():
             defaults.ODF_CLIENT_OPERATOR, namespace=namespace
         )
     except Exception as e:
-        # try second time to search ns. On Client clusters we usually have storage ns "openshift-storage-client"
+        # try second time to search ns. On Client clusters we usually have storage ns "openshift-storage"
         if "not found" in str(e):
             ns_data = OCP(kind=constants.NAMESPACE).get().get("items", [])
             ns_list = [
