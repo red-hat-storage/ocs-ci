@@ -1513,9 +1513,10 @@ class TestNfsEnable(ManageTest):
         self.retain_nfs_sc = nfs_utils.create_nfs_sc(
             sc_name_to_create=self.retain_nfs_sc_name, retain_reclaim_policy=True
         )
-        if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
+        if not (Path(config.RUN["bin_dir"]) / "odf").exists():
             helpers.retrieve_cli_binary(cli_type="odf")
-        output = exec_cmd(cmd="odf-cli subvolume ls")
+        odf_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
+        output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         log.info(f"{inital_subvolume_list=}")
 
@@ -1529,7 +1530,7 @@ class TestNfsEnable(ManageTest):
         )
 
         # checking subvolumes post pvc creation
-        output = exec_cmd(cmd="odf-cli subvolume ls")
+        output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
         new = set(later_subvolume_list)
@@ -1589,13 +1590,15 @@ class TestNfsEnable(ManageTest):
         pv_obj.delete(wait=True)
 
         # Checking for stale volumes
-        output = exec_cmd(cmd="odf-cli subvolume ls --stale")
+        output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls --stale")
 
         # Deleteing stale subvolume
-        exec_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+        exec_cmd(
+            cmd=f"{odf_cli_path} subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
+        )
 
         # Checking for stale volumes
-        output = exec_cmd(cmd="odf-cli subvolume ls --stale")
+        output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
 
