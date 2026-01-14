@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.ceph_helpers import (
-    wait_for_mon_down,
+    wait_for_mon_status,
     wait_for_mons_in_quorum,
     get_mon_quorum_count,
 )
@@ -28,6 +28,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     recover_node_to_ready_state,
 )
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +126,9 @@ class TestCephMonHealthCheck(ManageTest):
         mon_id, node_name = select_mon_id_and_node()
 
         drain_nodes([node_name])
-        wait_for_mon_down(mon_id=mon_id, timeout=300)
+        wait_for_mon_status(
+            mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=180
+        )
         res = verify_mon_healthcheck_timeout_value_in_logs(mon_id, mon_timeout_seconds)
         assert res, "Mon healthcheck timeout value not found in logs"
         # Add a small gap to the timeout to account for any delays

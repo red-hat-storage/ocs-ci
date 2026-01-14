@@ -20,7 +20,9 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-def patch_storagecluster_mon_healthcheck(mon_timeout, mon_interval="20s", sc_obj=None):
+def patch_storagecluster_mon_healthcheck(
+    mon_timeout, mon_interval="20s", sc_obj=None
+) -> bool:
     """
     Patch the ceph mon healthcheck configuration in the storagecluster resource
 
@@ -51,7 +53,7 @@ def patch_storagecluster_mon_healthcheck(mon_timeout, mon_interval="20s", sc_obj
     return sc_obj.patch(params=json.dumps(patch_ops), format_type="json")
 
 
-def delete_storagecluster_mon_healthcheck(sc_obj=None):
+def delete_storagecluster_mon_healthcheck(sc_obj=None) -> bool:
     """
     Delete the ceph mon healthcheck configuration from the storagecluster resource
 
@@ -72,7 +74,7 @@ def delete_storagecluster_mon_healthcheck(sc_obj=None):
     return sc_obj.patch(params=json.dumps(patch_ops), format_type="json")
 
 
-def get_storagecluster_mon_healthcheck(sc_obj=None):
+def get_storagecluster_mon_healthcheck(sc_obj=None) -> dict:
     """
     Get the ceph mon healthcheck status from the storagecluster resource
     Handles both object structures:
@@ -98,7 +100,7 @@ def get_storagecluster_mon_healthcheck(sc_obj=None):
     return mon_healthcheck
 
 
-def get_cephcluster_mon_healthcheck(cc_obj=None):
+def get_cephcluster_mon_healthcheck(cc_obj=None) -> dict:
     """
     Get the ceph mon healthcheck status from the cephcluster resource
     Handles both object structures:
@@ -131,7 +133,7 @@ def get_cephcluster_mon_healthcheck(cc_obj=None):
     return mon_healthcheck
 
 
-def verify_mon_healthcheck_consistency(sc_obj=None, cc_obj=None):
+def verify_mon_healthcheck_consistency(sc_obj=None, cc_obj=None) -> bool:
     """
     Verify that the mon healthcheck configurations in StorageCluster and CephCluster are consistent.
 
@@ -161,7 +163,7 @@ def verify_mon_healthcheck_consistency(sc_obj=None, cc_obj=None):
 
 def wait_for_mon_healthcheck_consistency(
     sc_obj=None, cc_obj=None, timeout=120, sleep=10
-):
+) -> None:
     """
     Wait until the mon healthcheck configurations in StorageCluster and CephCluster are consistent.
 
@@ -198,7 +200,7 @@ def wait_for_mon_healthcheck_timeout_in_logs(
     since="1m",
     timeout=300,
     sleep=20,
-):
+) -> list:
     """
     Wait for expected mon healthcheck timeout patterns to appear in the
     rook-ceph-operator pod logs and return the matched log lines.
@@ -265,7 +267,7 @@ def verify_mon_healthcheck_timeout_value_in_logs(
     since="1m",
     timeout=300,
     sleep=20,
-):
+) -> bool:
     """
     Verify that the expected mon healthcheck timeout value appears in the
     rook-ceph-operator pod logs. The function waits for the log pattern to appear and then checks
@@ -326,7 +328,7 @@ def verify_mon_healthcheck_timeout_value_in_logs(
     return True
 
 
-def wait_for_mon_pod_restart(mon_id, timeout=300, sleep=20):
+def wait_for_mon_pod_restart(mon_id, timeout=300, sleep=20) -> None:
     """
     Wait until the monitor pod for a specified monitor ID restarts.
 
@@ -353,7 +355,7 @@ def wait_for_mon_pod_restart(mon_id, timeout=300, sleep=20):
         )
 
 
-def select_mon_id_and_node():
+def select_mon_id_and_node() -> tuple[str, str]:
     """
     Select a monitor ID and its corresponding node name.
 
@@ -362,6 +364,9 @@ def select_mon_id_and_node():
 
     """
     mon_nodes = get_mon_running_nodes()
+    if not mon_nodes:
+        raise ValueError("No monitor nodes found in the cluster")
+
     node_name = random.choice(mon_nodes)
     logger.info(f"Selected mon node for drain: {node_name}")
     mon_id = get_node_mon_ids(node_name)[0]
