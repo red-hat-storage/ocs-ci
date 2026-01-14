@@ -335,6 +335,22 @@ deployment_4_21 = {
         By.XPATH,
     ),
     "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "drop_down_performance": (
+        "//button[contains(@class,'odf-configure-performance__selector')]",
+        By.XPATH,
+    ),
+    "lean_mode": (
+        "//span[contains(@class, 'menu') and contains(text(), 'Lean mode')]",
+        By.XPATH,
+    ),
+    "balanced_mode": (
+        "//span[contains(@class, 'menu') and contains(text(), 'Balanced mode')]",
+        By.XPATH,
+    ),
+    "performance_mode": (
+        "//span[contains(@class, 'menu') and contains(text(), 'Performance mode')]",
+        By.XPATH,
+    ),
 }
 
 generic_locators = {
