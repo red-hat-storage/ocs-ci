@@ -111,12 +111,9 @@ def get_worker_iqns(worker_node_names):
 
         try:
             # First, ensure iSCSI service is started
-            # Try both iscsid and open-iscsi service names (different distros use different names)
             start_service_cmd = (
                 "systemctl start iscsid 2>/dev/null || "
-                "systemctl start open-iscsi 2>/dev/null || "
                 "systemctl enable --now iscsid 2>/dev/null || "
-                "systemctl enable --now open-iscsi 2>/dev/null || "
                 "true"
             )
             ocp_obj.exec_oc_debug_cmd(
@@ -155,9 +152,7 @@ def get_worker_iqns(worker_node_names):
                     # Start iSCSI service via SSH
                     start_cmd = (
                         "sudo systemctl start iscsid 2>/dev/null || "
-                        "sudo systemctl start open-iscsi 2>/dev/null || "
                         "sudo systemctl enable --now iscsid 2>/dev/null || "
-                        "sudo systemctl enable --now open-iscsi 2>/dev/null || "
                         "true"
                     )
                     node_ssh.exec_cmd(start_cmd)
@@ -585,7 +580,6 @@ def verify_iscsi_devices(worker_node_names, target_iqn):
 
     This function detects iSCSI block devices by:
     1. Using lsblk to find devices with transport type 'iscsi'
-    2. Getting device information from iscsiadm session details
 
     Parameters:
     worker_node_names (list): List of worker node names (strings).
@@ -606,7 +600,6 @@ def verify_iscsi_devices(worker_node_names, target_iqn):
         block_devices = []
 
         try:
-            # Method 1: Use lsblk to find devices with transport type 'iscsi'
             lsblk_cmd = "lsblk -o NAME,TYPE,TRAN,SIZE,MODEL -n | grep -i iscsi"
             stdout = ocp_obj.exec_oc_debug_cmd(
                 node=node_name, cmd_list=[lsblk_cmd], use_root=True, timeout=60
@@ -621,24 +614,6 @@ def verify_iscsi_devices(worker_node_names, target_iqn):
                     parts = line.split()
                     if parts:
                         block_devices.append(parts[0])
-
-            # Method 2: Get device information from iscsiadm session details
-            # This is the most reliable method as it directly queries the iSCSI session
-            device_name_cmd = (
-                "iscsiadm -m session -P 3 2>/dev/null | "
-                "grep 'Attached scsi disk' | awk '{print $4}' | "
-                "sed 's|/dev/||' | sort -u"
-            )
-            stdout2 = ocp_obj.exec_oc_debug_cmd(
-                node=node_name, cmd_list=[device_name_cmd], use_root=True, timeout=60
-            )
-            if stdout2:
-                session_devices = [
-                    line.strip() for line in stdout2.split("\n") if line.strip()
-                ]
-                for dev_name in session_devices:
-                    if dev_name and dev_name not in block_devices:
-                        block_devices.append(dev_name)
 
             # Count unique devices
             unique_devices = list(set(block_devices))
@@ -752,7 +727,7 @@ def verify_iscsi_setup():
         return {"skipped": True, "reason": "iSCSI not configured"}
 
     try:
-        # Get worker node names (works on pure OCP clusters without OCS)
+        # Get worker node names
         worker_node_names = get_worker_node_names()
 
         if not worker_node_names:
