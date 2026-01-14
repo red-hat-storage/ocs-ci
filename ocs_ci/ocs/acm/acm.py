@@ -575,19 +575,19 @@ class AcmAddClusters(AcmPageNavigator):
         )
         self.do_send_keys(
             self.page_nav["azure_client_id"],
-            config.clusters[azure_cluster_index].AUTH.get("clientId"),
+            config.clusters[azure_cluster_index].AUTH.get("azure_client_id"),
         )
         self.do_send_keys(
             self.page_nav["azure_client_secret"],
-            config.clusters[azure_cluster_index].AUTH.get("clientSecret"),
+            config.clusters[azure_cluster_index].AUTH.get("azure_client_secret"),
         )
         self.do_send_keys(
             self.page_nav["azure_subscription_id"],
-            config.clusters[azure_cluster_index].AUTH.get("subscriptionId"),
+            config.clusters[azure_cluster_index].AUTH.get("azure_subscription_id"),
         )
         self.do_send_keys(
             self.page_nav["azure_tenent_id"],
-            config.clusters[azure_cluster_index].AUTH.get("tenantId"),
+            config.clusters[azure_cluster_index].AUTH.get("azure_tenant_id"),
         )
 
 
