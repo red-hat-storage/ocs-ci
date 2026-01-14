@@ -3922,6 +3922,7 @@ def search_pattern_in_pod_logs(
     namespace=None,
     container=None,
     all_containers=False,
+    since=None,
 ):
     """
     Searches for the given regular expression pattern in the logs of a pod and returns all matching lines.
@@ -3932,6 +3933,8 @@ def search_pattern_in_pod_logs(
         namespace (str, optional): The namespace of the pod. Defaults to None.
         container (str, optional): The name of the container to search logs for. Defaults to None.
         all_containers (bool, optional): Whether to search logs for all containers in the pod. Defaults to False.
+        since (str, optional): Only return logs newer than a relative duration like 5s, 2m, or 3h.
+            Defaults to None.
 
     Returns:
         A list of matched lines with the pattern.
@@ -3942,6 +3945,7 @@ def search_pattern_in_pod_logs(
         namespace=namespace,
         container=container,
         all_containers=all_containers,
+        since=since,
     )
 
     matched_lines = [line for line in pod_logs.split("\n") if re.search(pattern, line)]
@@ -4457,3 +4461,76 @@ def get_csi_addons_controller_manager_pod():
         return []
 
     return [Pod(**pod) for pod in pods]
+
+
+def wait_for_matching_pattern_in_pod_logs(
+    pod_name,
+    pattern,
+    namespace=None,
+    container=None,
+    all_containers=False,
+    since=None,
+    timeout=300,
+    sleep=20,
+):
+    """
+    Waits for a matching pattern in the logs of a pod until timeout is reached.
+
+    Args:
+        pod_name (str): The name of the pod.
+        pattern (str): The regular expression pattern to search for.
+        namespace (str, optional): The namespace of the pod. Defaults to None.
+        container (str, optional): The name of the container to search logs for. Defaults to None.
+        all_containers (bool, optional): Whether to search logs for all containers in the pod. Defaults to False.
+        since (str, optional): Only return logs newer than a relative duration like 5s, 2m, or 3h.
+            Defaults to None.
+        timeout (int): Maximum time to wait for the pattern to appear in seconds.
+        sleep (int): Time in seconds to sleep between attempts.
+
+    Returns:
+        list: The list of matched lines with the pattern if found within timeout, else False.
+
+    Raises:
+        TimeoutExpiredError: If the pattern is not found within the specified timeout.
+
+    """
+    logger.info(f"Waiting for pattern '{pattern}' in logs of pod '{pod_name}'")
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=search_pattern_in_pod_logs,
+        pod_name=pod_name,
+        pattern=pattern,
+        namespace=namespace,
+        container=container,
+        all_containers=all_containers,
+        since=since,
+    )
+    try:
+        for matched_lines in sampler:
+            if matched_lines:
+                logger.info(f"Pattern '{pattern}' found in logs of pod '{pod_name}'.")
+                return matched_lines
+    except TimeoutExpiredError as e:
+        raise TimeoutExpiredError(
+            f"Pattern '{pattern}' not found in logs of pod '{pod_name}' within {timeout} seconds."
+        ) from e
+
+
+def get_mon_pod_by_id(mon_id, namespace=None):
+    """
+    Function to get monitor pod by mon_id label
+
+    Args:
+        mon_id (str): mon id of the monitor pod
+        namespace (str): Namespace in which monitor pod is running
+
+    Returns:
+        Pod: Pod object of the monitor pod
+
+    """
+    mons = get_pods_having_label(label=f"mon={mon_id}", namespace=namespace)
+    if not mons:
+        raise ValueError(f"Monitor pod with id {mon_id} not found")
+
+    return Pod(**mons[0])
