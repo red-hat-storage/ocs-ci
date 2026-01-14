@@ -9,6 +9,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import (
     verify_quota_resource_exist,
     create_unique_resource_name,
+    wait_for_quota_usage_update,
+    verify_substrings_in_string,
 )
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import green_squad
@@ -226,7 +228,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             f"Cluster Resource Quota {self.quota_name}: "
             f"used={used_storage}, hard={hard_storage}"
         )
-        assert self.verify_substrings_in_string(
+        assert verify_substrings_in_string(
             output_string=f"{used_storage} {hard_storage}",
             expected_strings=["8Gi", "0"],
         ), f"Expected strings not found. Used: {used_storage}, Hard: {hard_storage}"
@@ -239,8 +241,12 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             size=5,
             status=constants.STATUS_BOUND,
         )
-        self.wait_for_quota_usage_update(
-            clusterresourcequota_obj, ["5Gi", "8Gi"], "PVC creation"
+        wait_for_quota_usage_update(
+            clusterresourcequota_obj,
+            self.quota_name,
+            self.quota_key,
+            ["5Gi", "8Gi"],
+            "PVC creation",
         )
         pod_factory(
             interface=sc_type,
@@ -260,7 +266,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             )
         except Exception as e:
             log.info(e)
-            assert self.verify_substrings_in_string(
+            assert verify_substrings_in_string(
                 output_string=str(e), expected_strings=["5Gi", "6Gi", "8Gi"]
             ), f"The error does not contain strings:{str(e)}"
 
@@ -269,14 +275,18 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             pvc_obj.resize_pvc(new_size=20, verify=True)
         except Exception as e:
             log.info(e)
-            assert self.verify_substrings_in_string(
+            assert verify_substrings_in_string(
                 output_string=str(e), expected_strings=["15Gi", "5Gi", "8Gi"]
             ), f"The error does not contain strings:{str(e)}"
 
         log.info("Resize the PVC to 6Gi and verify it is working [8Gi > 6Gi]")
         pvc_obj.resize_pvc(new_size=6, verify=True)
-        self.wait_for_quota_usage_update(
-            clusterresourcequota_obj, ["8Gi", "6Gi"], "PVC resize"
+        wait_for_quota_usage_update(
+            clusterresourcequota_obj,
+            self.quota_name,
+            self.quota_key,
+            ["8Gi", "6Gi"],
+            "PVC resize",
         )
 
         log.info(
@@ -288,81 +298,10 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             storageclass=sc_obj,
             size=1,
         )
-        self.wait_for_quota_usage_update(
-            clusterresourcequota_obj, ["8Gi", "7Gi"], "new PVC creation"
+        wait_for_quota_usage_update(
+            clusterresourcequota_obj,
+            self.quota_name,
+            self.quota_key,
+            ["8Gi", "7Gi"],
+            "new PVC creation",
         )
-
-    def wait_for_quota_usage_update(
-        self, clusterresourcequota_obj, expected_strings, operation_description
-    ):
-        """
-        Wait for quota usage to update and verify expected strings.
-
-        Args:
-            clusterresourcequota_obj (OCP): ClusterResourceQuota object
-            expected_strings (list): List of strings to verify in quota output
-            operation_description (str): Description of the operation for logging
-
-        Raises:
-            TimeoutExpiredError: If quota usage doesn't update within timeout
-        """
-        log.info(f"Waiting for quota usage to reflect {operation_description}")
-        sample = TimeoutSampler(
-            timeout=120,
-            sleep=5,
-            func=clusterresourcequota_obj.get,
-            resource_name=self.quota_name,
-        )
-        for quota_resource in sample:
-            # Extract used and hard quota values from the resource
-            try:
-                used = quota_resource.get("status", {}).get("total", {}).get("used", {})
-                hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
-
-                # Get storage request values using the correct quota key
-                used_storage = used.get(self.quota_key, "0")
-                hard_storage = hard.get(self.quota_key, "0")
-
-                log.info(
-                    f"Quota usage for {self.quota_name}: "
-                    f"used={used_storage}, hard={hard_storage}"
-                )
-
-                # Check if the expected values are present
-                quota_info = f"{used_storage} {hard_storage}"
-                if self.verify_substrings_in_string(
-                    output_string=quota_info,
-                    expected_strings=expected_strings,
-                ):
-                    log.info(
-                        f"Quota usage updated successfully after {operation_description}"
-                    )
-                    return
-            except (KeyError, AttributeError) as e:
-                log.warning(f"Failed to parse quota resource: {e}")
-                continue
-        else:
-            err_str = (
-                f"Quota usage did not update to show {expected_strings} after 120 seconds "
-                f"for {operation_description}."
-            )
-            log.error(err_str)
-            raise TimeoutExpiredError(err_str)
-
-    def verify_substrings_in_string(self, output_string, expected_strings):
-        """
-        Verify substrings in string
-
-        Args:
-           output_string (str): the output of cmd
-           expected_strings (list) : list of strings
-
-        Returns:
-            bool: return True if all expected_strings in output_string, otherwise False
-
-        """
-        for expected_string in expected_strings:
-            if expected_string not in output_string:
-                log.error(f"expected string:{expected_string} not in {output_string}")
-                return False
-        return True
