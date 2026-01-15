@@ -173,7 +173,6 @@ def get_worker_iqns(worker_node_names):
 def configure_target(target_node_ssh, target_iqn, worker_iqns):
     """
     Configures the iSCSI target with given IQNs and IP.
-    This function is a placeholder and requires implementation.
 
     Parameters:
         target_node_ssh (object): An established SSH connection to the target VM.
