@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - name: my-container
-      image: quay.io/ocsci/nginx:fio
+      image: quay.io/ocsci/nginx:nov18-3
       securityContext:
          capabilities: {}
       volumeDevices:
