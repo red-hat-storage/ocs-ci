@@ -6,12 +6,14 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import purple_squad
 from ocs_ci.framework.testlib import deployment
 from ocs_ci.utility.iscsi_config import verify_iscsi_setup
 
 log = logging.getLogger(__name__)
 
 
+@purple_squad
 @deployment
 def test_iscsi_setup_verification():
     """
@@ -85,6 +87,7 @@ def test_iscsi_setup_verification():
     log.info(f"Devices found per node: {verification_results.get('devices', {})}")
 
 
+@purple_squad
 @deployment
 def test_iscsi_connectivity():
     """
@@ -138,6 +141,7 @@ def test_iscsi_connectivity():
     )
 
 
+@purple_squad
 @deployment
 def test_iscsi_sessions():
     """
@@ -186,6 +190,7 @@ def test_iscsi_sessions():
     )
 
 
+@purple_squad
 @deployment
 def test_iscsi_devices():
     """
