@@ -658,6 +658,8 @@ AVAILABILITY_POLICIES = [
     AVAILABILITY_POLICY_SINGLE,
     AVAILABILITY_POLICY_HA,
 ]
+DISABLE_DEFAULT_SOURCES = True
+AUTO_REPAIR = True
 
 # CNV VM constants
 VIRTUAL_MACHINE = "VirtualMachine"
@@ -1735,7 +1737,6 @@ AZURE_PLATFORM = "azure"
 AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
-VSPHERE_AGENT_PLATFORM = "vsphere_agent"
 BAREMETAL_PLATFORM = "baremetal"
 IBM_POWER_PLATFORM = "powervs"
 IBM_CLOUD_BAREMETAL_PLATFORM = "ibm_cloud_baremetal"
@@ -1902,6 +1903,7 @@ config_keys_expressions_to_censor = [
     "LogsAnalyticsWorkspaceID",
     "TenantID",
     "db_url",
+    ".dockerconfigjson",
 ]
 
 # packages

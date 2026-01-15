@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from ocs_ci import framework
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.hyperconverged import HyperConverged
-from ocs_ci.deployment.mce import MCEInstaller
+from ocs_ci.deployment.mce import MCEInstaller, set_mirror_registry_configmap
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
@@ -301,29 +301,33 @@ def enable_nested_virtualization():
     logger.info("All the nodes are upgraded")
 
 
+@config.run_with_provider_context_if_available
 def create_agent_service_config():
     """
-    Create AgentServiceConfig resource
+    Create AgentServiceConfig resource in case it does not exist
 
     """
-    template_yaml = os.path.join(
-        constants.TEMPLATE_DIR, "hosted-cluster", "agent_service_config.yaml"
-    )
-    agent_service_config_data = templating.load_yaml(template_yaml)
-    # TODO: Add custom OS image details
-    helpers.create_resource(**agent_service_config_data)
+    if not len(OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True)["items"]):
+        template_yaml = os.path.join(
+            constants.TEMPLATE_DIR, "hosted-cluster", "agent_service_config.yaml"
+        )
+        agent_service_config_data = templating.load_yaml(template_yaml)
+        # TODO: Add custom OS image details
+        helpers.create_resource(**agent_service_config_data)
 
-    # Verify new pods that should be created
-    wait_for_pods_to_be_in_statuses_concurrently(
-        app_selectors_to_resource_count_list=[
-            {"app=assisted-service": 1},
-            {"app=assisted-image-service": 1},
-        ],
-        namespace="multicluster-engine",
-        timeout=600,
-        status=constants.STATUS_RUNNING,
-    )
-    logger.info("Created AgentServiceConfig.")
+        # Verify new pods that should be created
+        wait_for_pods_to_be_in_statuses_concurrently(
+            app_selectors_to_resource_count_list=[
+                {"app=assisted-service": 1},
+                {"app=assisted-image-service": 1},
+            ],
+            namespace="multicluster-engine",
+            timeout=600,
+            status=constants.STATUS_RUNNING,
+        )
+        logger.info("Created AgentServiceConfig.")
+    else:
+        logger.info("AgentServiceConfig already exists.")
 
 
 def get_onboarding_token_from_secret(secret_name):
@@ -1538,6 +1542,40 @@ def get_hosted_cluster_version_history(cluster_name: str):
         return history
 
 
+@config.run_with_provider_context_if_available
+def create_patch_provisioning():
+    """
+    Create or patch the provisioning resource to set watchAllNamespaces to true.
+    This is required for hosted cluster creation using agent platform.
+    """
+    provisioning_ocp = OCP(kind=constants.PROVISIONING)
+    provisioning_items = provisioning_ocp.get(dont_raise=True) or {}
+    provisioning_item_list = provisioning_items.get("items") or []
+    if not provisioning_item_list:
+        template_yaml = os.path.join(
+            constants.TEMPLATE_DIR, "hosted-cluster", "provisioning.yaml"
+        )
+        provisioning_data = templating.load_yaml(template_yaml)
+        helpers.create_resource(**provisioning_data)
+        for provisioning_items in TimeoutSampler(
+            300, 10, provisioning_ocp.get, dont_raise=True
+        ):
+            provisioning_item_list = provisioning_items.get("items") or []
+            if provisioning_item_list:
+                break
+
+    provisioning_obj = OCS(**provisioning_item_list[0])
+    if not provisioning_obj.data["spec"].get("watchAllNamespaces"):
+        provisioning_obj.ocp.patch(
+            resource_name=provisioning_obj.name,
+            params='{"spec":{"watchAllNamespaces": true }}',
+            format_type="merge",
+        )
+        assert provisioning_obj.get()["spec"].get(
+            "watchAllNamespaces"
+        ), "Cannot proceed with hosted cluster creation using agent."
+
+
 class HypershiftHostedOCP(
     SpokeOCP,
     HyperShiftBase,
@@ -1619,7 +1657,7 @@ class HypershiftHostedOCP(
             log_step(
                 f"Deploy HyperShift hosted OCP cluster '{self.name}' using Agent platform"
             )
-            self.set_mirror_registry_configmap()
+            set_mirror_registry_configmap()
 
             if self.name in get_hosted_cluster_names():
                 logger.info(f"HyperShift hosted cluster {self.name} already exists")
@@ -1745,37 +1783,8 @@ class HypershiftHostedOCP(
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
             # create Provisioning resource if not present
 
-            provisioning_ocp = OCP(kind=constants.PROVISIONING)
-            provisioning_items = provisioning_ocp.get(dont_raise=True) or {}
-            provisioning_item_list = provisioning_items.get("items") or []
-            if not provisioning_item_list:
-                template_yaml = os.path.join(
-                    constants.TEMPLATE_DIR, "hosted-cluster", "provisioning.yaml"
-                )
-                provisioning_data = templating.load_yaml(template_yaml)
-                helpers.create_resource(**provisioning_data)
-                for provisioning_items in TimeoutSampler(
-                    300, 10, provisioning_ocp.get, dont_raise=True
-                ):
-                    provisioning_item_list = provisioning_items.get("items") or []
-                    if provisioning_item_list:
-                        break
-
-            provisioning_obj = OCS(**provisioning_item_list[0])
-            if not provisioning_obj.data["spec"].get("watchAllNamespaces"):
-                provisioning_obj.ocp.patch(
-                    resource_name=provisioning_obj.name,
-                    params='{"spec":{"watchAllNamespaces": true }}',
-                    format_type="merge",
-                )
-                assert provisioning_obj.get()["spec"].get(
-                    "watchAllNamespaces"
-                ), "Cannot proceed with hosted cluster creation using agent."
-
-            if not len(
-                OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True)["items"]
-            ):
-                create_agent_service_config()
+            create_patch_provisioning()
+            create_agent_service_config()
 
     def _compute_target_release_image(self):
         """
@@ -3034,6 +3043,7 @@ class AgentWorkflow:
     def __init__(self, name: str):
         self.name = name
 
+    @config.run_with_provider_context_if_available
     def approve_agents(self):
         """
         Approve agents for the hosted cluster
@@ -3085,6 +3095,7 @@ class AgentWorkflow:
             logger.error("Timeout waiting for agents to be approved")
             return False
 
+    @config.run_with_provider_context_if_available
     def wait_agents_available(self, expected_count, timeout=600):
         """
         Wait for a specific number of agents to be available in the namespace

@@ -410,6 +410,33 @@ def get_latest_supported_hypershift_version() -> str | None:
     return hcp_version
 
 
+def resolve_ocp_image(ocp_version: str) -> str:
+    """
+    Resolve OCP image based on the provided ocp_version.
+    If ocp_version is not provided, it will use the version from the hosting platform.
+
+    Args:
+        ocp_version (str): OCP version of the cluster
+
+    Returns:
+        str: OCP index image (registry:tag)
+
+    """
+    if not ocp_version:
+        with config.RunWithProviderConfigContextIfAvailable():
+            provider_version = get_ocp_version()
+        if "nightly" in provider_version:
+            index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+        else:
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+    else:
+        if "nightly" in ocp_version:
+            index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
+        else:
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+    return index_image
+
+
 class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
@@ -753,14 +780,7 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        if not ocp_version:
-            provider_version = get_ocp_version()
-            if "nightly" in provider_version:
-                index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
-            else:
-                index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
-        else:
-            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+        index_image = resolve_ocp_image(ocp_version)
 
         if not name:
             name = "hcp-" + datetime.now().strftime("%f")
