@@ -1,6 +1,7 @@
 import collections
 import logging
 import pytest
+import re
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
@@ -270,11 +271,12 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
-    @skipif_ocs_version("<4.9")
+    @skipif_ocs_version(['<4.9', '>=4.19'])
     @tier2
-    def deprecated_test_noobaa_postgres_cm_post_ocs_upgrade(self):
+    def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Impotant !!! Postgres configmap replaced with CNPG in 4.19.
+        skipping the test for ocs>=4.19
 
         Validate noobaa postgres configmap post OCS upgrade
 
