@@ -214,6 +214,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
   spending time on MG which is timeouting.
 * `rp_additional_info` - any additional information placed to Report Portal launch description
+* `tarball_mg_logs` - pack MG files to tarball
+* `delete_packed_mg_logs` - applicable only if `tarball_mg_logs` is True, delete the individual MG files in case they were successfully packed
 
 #### ENV_DATA
 
