@@ -224,3 +224,98 @@ def check_operatorcondition_upgradeable_false(
             f"or not found: {e}."
         )
         return False
+
+
+def check_operatorcondition_upgradeable_false_version_mismatch(
+    operator_name, csv_name, namespace, timeout=300
+):
+    """
+    Check if OperatorCondition shows Upgradeable=False due to ODFVersionAheadOfOCP.
+
+    Args:
+        operator_name (str): Name of the operator (for logging)
+        csv_name (str): CSV name of the operator
+        namespace (str): Namespace where OperatorCondition is located
+        timeout (int): Timeout in seconds to wait for condition
+
+    Returns:
+        bool: True if condition is met, False otherwise
+
+    """
+    if not csv_name:
+        log.warning(
+            f"Skipping {operator_name} OperatorCondition check - " "CSV name not found"
+        )
+        return False
+
+    log.info(f"Checking {operator_name} OperatorCondition: {csv_name}")
+    operatorcondition = OCP(
+        kind="OperatorCondition",
+        namespace=namespace,
+    )
+
+    def _check_condition():
+        """Check if OperatorCondition shows Upgradeable=False"""
+        oc_data = operatorcondition.get(resource_name=csv_name, dont_raise=True)
+        if not oc_data:
+            return False
+
+        # OperatorCondition can be a single item or list
+        items = (
+            oc_data.get("items", [])
+            if isinstance(oc_data, dict) and "items" in oc_data
+            else []
+        )
+        if not items and isinstance(oc_data, dict) and "status" in oc_data:
+            # Single resource, not a list
+            items = [oc_data]
+
+        for item in items:
+            conditions = item.get("status", {}).get("conditions", [])
+            for condition in conditions:
+                if condition.get("type") == "Upgradeable":
+                    status = condition.get("status")
+                    reason = condition.get("reason", "")
+                    message = condition.get("message", "")
+                    log.info(
+                        f"{operator_name} OperatorCondition Upgradeable "
+                        f"status: {status}, reason: {reason}, "
+                        f"message: {message}"
+                    )
+                    # Check for version mismatch reasons
+                    # Expected: Reason: "ODFVersionAheadOfOCP"
+                    # Expected message :
+                    # "ODF version is already ahead of OCP."
+                    if (
+                        status == "False"
+                        and "ODFVersionAheadOfOCP" in reason
+                        and "ODF version is already ahead of OCP" in message
+                        and "Further ODF upgrade would make it incompatible" in message
+                    ):
+                        return True
+        return False
+
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=_check_condition,
+    )
+    try:
+        if sample.wait_for_func_status(result=True):
+            log.info(
+                f"{operator_name} OperatorCondition shows "
+                "Upgradeable=False with ODFVersionAheadOfOCP reason"
+            )
+            return True
+        else:
+            log.warning(
+                f"{operator_name} OperatorCondition did not show "
+                "Upgradeable=False within timeout."
+            )
+            return False
+    except Exception as e:
+        log.warning(
+            f"{operator_name} OperatorCondition may not be updated yet "
+            f"or not found: {e}."
+        )
+        return False
