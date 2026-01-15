@@ -455,6 +455,142 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
+def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
+    """
+    Check if a text block is likely base64 encoded data.
+
+    Args:
+        text_block (str): Text to check for base64 encoding
+        min_length (int): Minimum length to consider (default 100 chars)
+
+    Returns:
+        bool: True if text appears to be base64 encoded
+
+    """
+    if not text_block or len(text_block) < min_length:
+        return False
+
+    # Base64 alphabet: A-Z, a-z, 0-9, +, /, = (padding)
+    # Using string module to avoid detect-secrets false positive
+    base64_chars = set(string.ascii_letters + string.digits + "+/=")
+    non_whitespace = (
+        text_block.replace("\n", "")
+        .replace("\r", "")
+        .replace(" ", "")
+        .replace("\t", "")
+    )
+
+    if not non_whitespace:
+        return False
+
+    # Check character composition
+    base64_char_count = sum(1 for char in non_whitespace if char in base64_chars)
+    ratio = base64_char_count / len(non_whitespace)
+
+    # Must be 95%+ base64 characters to allow YAML prefixes like "- key:"
+    if ratio < 0.95:
+        return False
+
+    # Additional heuristic: reject if it looks like regular text
+    # Regular text is heavily lowercase-skewed (80%+ lowercase)
+    # Base64 can have any distribution, so we only reject obvious text patterns
+    upper_count = sum(1 for c in non_whitespace if c.isupper())
+    lower_count = sum(1 for c in non_whitespace if c.islower())
+
+    # If there are letters, check if it's heavily lowercase (indicates text)
+    if upper_count + lower_count > 0:
+        lower_ratio = lower_count / (upper_count + lower_count)
+        # Regular text typically has 80%+ lowercase
+        if lower_ratio > 0.85:
+            return False
+
+    return True
+
+
+def _extract_base64_blocks(lines: list) -> list:
+    """
+    Group consecutive base64 lines into blocks with their indices.
+
+    Args:
+        lines (list): List of output lines to process
+
+    Returns:
+        list: List of tuples (start_index, end_index, is_base64_block)
+
+    """
+    blocks = []
+    current_block_start = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        is_base64 = _is_base64_block(stripped, min_length=50)
+
+        if is_base64:
+            if current_block_start is None:
+                current_block_start = i
+        else:
+            if current_block_start is not None:
+                blocks.append((current_block_start, i - 1, True))
+                current_block_start = None
+
+    # Handle base64 block at end of output
+    if current_block_start is not None:
+        blocks.append((current_block_start, len(lines) - 1, True))
+
+    return blocks
+
+
+def truncate_large_base64(output: str, max_base64_size: int = 1024) -> str:
+    """
+    Truncate large base64 blocks in command output to reduce log noise.
+
+    Only truncates base64 strings larger than max_base64_size to preserve
+    small base64-encoded secrets that may need to be decoded for debugging.
+
+    Args:
+        output (str): Command output to process
+        max_base64_size (int): Maximum size for base64 blocks (default 1024 chars)
+
+    Returns:
+        str: Output with large base64 blocks truncated
+
+    """
+    if not output or len(output) < max_base64_size:
+        return output
+
+    lines = output.split("\n")
+    base64_blocks = _extract_base64_blocks(lines)
+
+    if not base64_blocks:
+        return output
+
+    result_lines = []
+    last_processed = -1
+
+    for start_idx, end_idx, _ in base64_blocks:
+        # Add non-base64 lines before this block
+        result_lines.extend(lines[last_processed + 1 : start_idx])
+
+        # Process base64 block
+        block_lines = lines[start_idx : end_idx + 1]
+        block_text = "\n".join(block_lines)
+
+        if len(block_text) > max_base64_size:
+            result_lines.append(
+                f"[BASE64_TRUNCATED: {len(block_text)} chars removed for log brevity]"
+            )
+        else:
+            # Block is small, keep it (might be a secret to decode)
+            result_lines.extend(block_lines)
+
+        last_processed = end_idx
+
+    # Add remaining non-base64 lines after last block
+    result_lines.extend(lines[last_processed + 1 :])
+
+    return "\n".join(result_lines)
+
+
 def run_cmd(
     cmd,
     secrets=None,
@@ -710,14 +846,16 @@ def exec_cmd(
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
-        log.debug(f"Command stdout: {masked_stdout}")
+        truncated_stdout = truncate_large_base64(masked_stdout)
+        log.debug(f"Command stdout: {truncated_stdout}")
     else:
         log.debug("Command stdout is empty")
 
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
         if not silent:
-            log.warning(f"Command stderr: {masked_stderr}")
+            truncated_stderr = truncate_large_base64(masked_stderr)
+            log.warning(f"Command stderr: {truncated_stderr}")
         else:
             if output_file:
                 with open(output_file, "a") as out_fd:
