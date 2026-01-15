@@ -6125,7 +6125,25 @@ def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30
 
     for attempt in range(max_retries):
         log.info(f"Node cleanup check: Attempt {attempt + 1}/{max_retries}")
-        current_nodes = get_nodes()
+        try:
+            # api server can be unresponsive for short periods during the node drain, so wrap in a safe get
+            def _safe_get_nodes():
+                try:
+                    return get_nodes()
+                except CommandFailed as ex:
+                    log.warning(f"get_nodes failed (retrying): {ex}")
+                    return []
+
+            current_nodes = None
+            for nodes_sample in TimeoutSampler(300, 30, _safe_get_nodes):
+                if nodes_sample:
+                    current_nodes = nodes_sample
+                    break
+                log.warning("get_nodes returned no nodes; retrying...")
+        except TimeoutExpiredError:
+            log.error("Timed out (300s) waiting for nodes list; aborting cleanup loop")
+            return False
+
         if not current_nodes:
             log.warning(
                 f"No nodes found for type '{node_type}'. Assuming task is complete or not applicable."
