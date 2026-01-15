@@ -257,6 +257,7 @@ class TestNSFSObjectIntegrity(MCGTest):
             access_key=nsfs_obj.s3_creds["access_key"],
             s3_internal_endpoint=nsfs_obj.s3_creds["endpoint"],
             region=constants.DEFAULT_AWS_REGION,  # any region will do, we don't use it
+            ssl=nsfs_obj.s3_creds["ssl"],
         )
         objs_amount = 200
         uploaded_objs = write_random_test_objects_to_bucket(
