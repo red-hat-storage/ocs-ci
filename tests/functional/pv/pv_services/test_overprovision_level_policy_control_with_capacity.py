@@ -12,7 +12,10 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
     skipif_external_mode,
 )
-from ocs_ci.helpers.helpers import verify_quota_resource_exist
+from ocs_ci.helpers.helpers import (
+    verify_quota_resource_exist,
+    create_unique_resource_name,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -20,8 +23,9 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True, scope="class")
 def setup_sc(storageclass_factory_class):
+    sc_name = create_unique_resource_name("test-blk", "sc")
     sc_blk_obj = storageclass_factory_class(
-        interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
+        interface=constants.CEPHBLOCKPOOL, sc_name=sc_name
     )
     yield {
         constants.CEPHBLOCKPOOL_SC: None,
@@ -114,14 +118,24 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 break
 
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
-        output_clusterresourcequota = clusterresourcequota_obj.describe(
+        quota_resource = clusterresourcequota_obj.get(
             resource_name=overprovision_resource_name
         )
 
-        log.info(f"Output Cluster Resource Quota: {output_clusterresourcequota}")
+        # Extract quota values - the key includes the storage class name
+        quota_key = f"{sc_name}.storageclass.storage.k8s.io/requests.storage"
+        used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+        hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+        used_storage = used.get(quota_key, "0")
+        hard_storage = hard.get(quota_key, "0")
+
+        log.info(
+            f"Cluster Resource Quota {overprovision_resource_name}: "
+            f"used={used_storage}, hard={hard_storage}"
+        )
 
         assert self.verify_substrings_in_string(
-            output_string=output_clusterresourcequota, expected_strings=["50Gi"]
+            output_string=f"{used_storage} {hard_storage}", expected_strings=["50Gi"]
         )
 
         log.info(
