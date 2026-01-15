@@ -175,6 +175,9 @@ class BaseUI:
         self.data_foundation_overview = self.deep_get(
             locators_for_current_ocp_version(), "data_foundation_overview"
         )
+        self.external_storage_systems_loc = self.deep_get(
+            locators_for_current_ocp_version(), "external_storage_systems"
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"

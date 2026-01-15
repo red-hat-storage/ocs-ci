@@ -2873,6 +2873,17 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
+
+external_storage_systems = {
+    "san_storage_radio_label": (
+        'label.pf-v5-c-radio__label[for="san-storage"]',
+        By.CSS_SELECTOR,
+    ),
+    "connect_san_title": (
+        'span[data-test-id="resource-title"].odf-resource-item__resource-name.odf-title-status',
+        By.CSS_SELECTOR,
+    ),
+}
 locators = {
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -2937,6 +2948,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
+        "external_storage_systems": external_storage_systems,
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},

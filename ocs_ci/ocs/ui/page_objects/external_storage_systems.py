@@ -36,6 +36,20 @@ class ExternalSystems(ResourceList):
         self.nav_to_resource_via_name(esc_name)
         return ExternalStorageCluster()
 
+    def click_san_storage_radio(self):
+        """
+        Click on the SAN storage radio label on the Connect to external storage page.
+        This is located under Storage -> External system -> Connect to external storage page.
+
+        Returns:
+            None
+        """
+        logger.info("Click on SAN storage radio label")
+        self.do_click(
+            locator=self.external_storage_systems_loc["san_storage_radio_label"],
+            enable_screenshot=True,
+        )
+
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
     """
