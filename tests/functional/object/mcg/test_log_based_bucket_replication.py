@@ -460,6 +460,7 @@ class TestLogBasedBucketReplication(MCGTest):
 
         logger.info(f"Restarting {target_pod_name}'s node")
         noobaa_running_node_restart(pod_name=target_pod_name)
+        mcg_obj_session.wait_for_ready_status()
 
         delete_objects_from_source_and_wait_for_deletion_sync(
             mcg_obj_session,
