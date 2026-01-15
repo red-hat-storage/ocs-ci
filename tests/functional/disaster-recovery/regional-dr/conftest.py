@@ -126,6 +126,7 @@ def cephfs_custom_storage_class(request, storageclass_factory):
             else:
                 try:
                     sc_obj = storageclass_factory(
+                        interface=constants.CEPHFILESYSTEM,
                         sc_name=cephfs_sc_name,
                         replica=replica,
                         compression=compression,
