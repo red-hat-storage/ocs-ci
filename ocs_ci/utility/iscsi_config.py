@@ -6,7 +6,6 @@ import sys
 import logging
 import os
 import re
-import argparse
 
 from ocs_ci.ocs import node, ocp, constants
 from ocs_ci.framework import config
@@ -490,51 +489,6 @@ def iscsi_teardown():
     )
 
 
-def init_arg_parser():
-    """
-    Initialize argument parser for iscsi setup/teardown
-
-    Returns:
-        object: Parsed arguments
-    """
-    parser = argparse.ArgumentParser(
-        description="iSCSI Setup/Teardown Utility",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "--setup",
-        action="store_true",
-        help="Set up iSCSI configuration",
-    )
-    parser.add_argument(
-        "--teardown",
-        action="store_true",
-        help="Tear down iSCSI configuration instead of setting it up",
-    )
-    parser.add_argument(
-        "--target-ip",
-        type=str,
-        help="IP address of the iSCSI target node",
-    )
-    parser.add_argument(
-        "--target-iqn",
-        type=str,
-        help="IQN of the iSCSI target node",
-    )
-    parser.add_argument(
-        "--target-username",
-        type=str,
-        help="SSH username for the iSCSI target node",
-    )
-    parser.add_argument(
-        "--password",
-        type=str,
-        help="SSH password for the iSCSI target node",
-    )
-
-    return parser.parse_args()
-
-
 def verify_iscsi_sessions(worker_node_names, target_iqn):
     """
     Verify iSCSI sessions are established on worker nodes.
@@ -794,19 +748,3 @@ def verify_iscsi_setup():
 
         traceback.print_exc()
         return {"error": str(e)}
-
-
-def main():
-    "main Function to setup iscsi target and initiators"
-    args = init_arg_parser()
-    if args.setup:
-        iscsi_setup()
-    elif args.teardown:
-        iscsi_teardown()
-    else:
-        log.error("Please provide either --setup or --teardown argument")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

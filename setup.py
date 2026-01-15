@@ -128,7 +128,6 @@ setup(
             "rosa-ocp-version=ocs_ci.utility.rosa:rosa_ocp_version_endpoint",
             "deploy-fusion=ocs_ci.framework.fusion.main:main",
             "deploy-fdf=ocs_ci.framework.fusion_data_foundation.main:main",
-            "iscsi-config=ocs_ci.utility.iscsi_config:main",
         ],
     },
     zip_safe=True,
