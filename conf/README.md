@@ -374,6 +374,9 @@ higher priority).
       * `storage_quota` - storage quota for the hosted cluster
       * `provider_cluster_name` - Name of the provider cluster if storageclient is required/present in the hosted cluster. This is optional and useful when there are more than one provider cluster in the config, provider mode RDR for example
       * `hosted_cluster_platform` - Platform of the hosted cluster, e.g. kubevirt, agent. kubevirt is default.
+      * `infra_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "HighlyAvailable"
+      * `disable_default_sources` - If set to true, default sources will be disabled on the hosted cluster
+      * `auto_repair` - If set to true, auto repair of the nodes will be enabled on the hosted cluster
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
@@ -414,6 +417,10 @@ higher priority).
 * `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
     proper OCP release image for OCP deployment or you can set custom via
     release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.
+* `cp_availability_policy` - similar to clusters.<cluster name>.cp_availability_policy but applied to the Agent hosted cluster
+* `infra_availability_policy` - similar to clusters.<cluster name>.cp_availability_policy but applied to the infra nodes of Agent hosted cluster
+* `disable_default_sources` - similar to clusters.<cluster name>.disable_default_sources but applied to the Agent hosted cluster
+* `auto_repair` - similar to clusters.<cluster name>.auto_repair but applied to the Agent hosted cluster
 
 #### UPGRADE
 

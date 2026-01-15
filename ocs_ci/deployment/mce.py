@@ -8,6 +8,7 @@ import json
 import re
 from packaging.version import parse as parse_version
 
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -33,6 +34,22 @@ from ocs_ci.ocs.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def set_mirror_registry_configmap():
+    """
+    Set mirror registry config cm for mce/hypershift
+
+    Raises:
+        CommandFailed: If the 'oc create' command fails.
+    """
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        logger.info("Setting mirror registry cm for mce/hypershift")
+        mirror_registry_cm_yaml = templating.load_yaml(
+            constants.MIRROR_REGISTRY_CONFIG_CM_YAML
+        )
+        helpers.apply_resource(**mirror_registry_cm_yaml)
 
 
 class MCEInstaller(object):
@@ -729,25 +746,3 @@ class MCEInstaller(object):
             f"desired is {desired_mm[0]}.{desired_mm[1]}: match={matches}"
         )
         return matches
-
-    def set_mirror_registry_configmap(self):
-        """
-        Set mirror registry config cm for mce/hypershift
-
-        Raises:
-            CommandFailed: If the 'oc create' command fails.
-        """
-        logger.info("Setting mirror registry config cm for mce/hypershift")
-        mirror_registry_cm_yaml = templating.load_yaml(
-            constants.MIRROR_REGISTRY_CONFIG_CM_YAML
-        )
-        mirror_registry_cm_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="mirror_registry_cm_manifest", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            mirror_registry_cm_yaml, mirror_registry_cm_manifest.name
-        )
-        exec_cmd(
-            f"oc apply -f {mirror_registry_cm_manifest.name} -n {self.mce_namespace}",
-            timeout=2400,
-        )

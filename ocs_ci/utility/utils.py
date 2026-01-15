@@ -913,6 +913,8 @@ def bin_xml_escape(arg):
 
 def download_file(url, filename, **kwargs):
     """
+    ! Deprecated, use download_with_retries instead !
+
     Download a file from a specified url
 
     Args:
@@ -930,13 +932,13 @@ def download_file(url, filename, **kwargs):
         f.write(r.content)
 
 
-def download_with_retries(url, boot_image_path, max_retries=3):
+def download_with_retries(url, filename, max_retries=3):
     """
     Download file with retries and proper error handling
 
     Args:
         url (str): URL of the file to download
-        boot_image_path (str): Path where to save the downloaded file
+        filename (str): Path where to save the downloaded file
         max_retries (int): Maximum number of retries for downloading the file
 
     Returns:
@@ -954,11 +956,11 @@ def download_with_retries(url, boot_image_path, max_retries=3):
     session.mount("https://", adapter)
 
     try:
-        with session.get(url, stream=True, timeout=(10, 30), verify=False) as response:
+        with session.get(url, stream=True, timeout=(10, 60), verify=False) as response:
             response.raise_for_status()
             total_size = int(response.headers.get("content-length", 0))
 
-            with open(boot_image_path, "wb") as f:
+            with open(filename, "wb") as f:
                 downloaded = 0
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
@@ -969,12 +971,12 @@ def download_with_retries(url, boot_image_path, max_retries=3):
                                 f"Downloaded {downloaded}/{total_size} bytes ({100 * downloaded // total_size}%)"
                             )
 
-            log.info(f"Successfully downloaded ISO to {boot_image_path}")
-            return boot_image_path
+            log.info(f"Successfully downloaded ISO to {filename}")
+            return filename
     except requests.exceptions.RequestException as e:
         log.error(f"Failed to download ISO: {e}")
-        if os.path.exists(boot_image_path):
-            os.remove(boot_image_path)
+        if os.path.exists(filename):
+            os.remove(filename)
         return None
 
 
@@ -1081,30 +1083,7 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        try:
-            version = expose_ocp_version(version)
-        except Exception as e:
-            log.error(
-                f"Failed to download the openshift installer {version}. Exception '{e}'"
-            )
-            # check given version is GA'ed or not
-            version_major_minor = str(
-                version_module.get_semantic_version(version, only_major_minor=True)
-            )
-            # For GA'ed version, check for N, N-1 and N-2 versions
-            for current_version_count in range(3):
-                previous_version = version_module.get_previous_version(
-                    version_major_minor, current_version_count
-                )
-                log.debug(
-                    f"previous version with count {current_version_count} is {previous_version}"
-                )
-                if is_ocp_version_gaed(previous_version):
-                    # Download GA'ed version
-                    version = expose_ocp_version(f"{previous_version}-ga")
-                    break
-                else:
-                    log.debug(f"version {previous_version} is not GA'ed")
+        version = expose_ocp_version_safe(version)
 
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
@@ -1123,6 +1102,37 @@ def get_openshift_installer(
     installer_version = run_cmd(f"{installer_binary_path} version")
     log.info(f"OpenShift Installer version: {installer_version}")
     return installer_binary_path
+
+
+def expose_ocp_version_safe(version) -> str:
+    """
+    This helper function exposes latest nightly version or GA version of OCP.
+    """
+    try:
+        version = expose_ocp_version(version)
+    except Exception as e:
+        log.warning(
+            f"Failed to download the openshift installer {version}. Exception '{e}'"
+        )
+        # check given version is GA'ed or notbbb
+        version_major_minor = str(
+            version_module.get_semantic_version(version, only_major_minor=True)
+        )
+        # For GA'ed version, check for N, N-1 and N-2 versions
+        for current_version_count in range(3):
+            previous_version = version_module.get_previous_version(
+                version_major_minor, current_version_count
+            )
+            log.debug(
+                f"previous version with count {current_version_count} is {previous_version}"
+            )
+            if is_ocp_version_gaed(previous_version):
+                # Download GA'ed version
+                version = expose_ocp_version(f"{previous_version}-ga")
+                break
+            else:
+                log.debug(f"version {previous_version} is not GA'ed")
+    return version
 
 
 def get_ocm_cli(
@@ -1421,7 +1431,7 @@ def is_ocp_version_gaed(version):
         version (str): OCP version ( eg: 4.16, 4.15 )
 
     Returns:
-        bool: True if OCP is GA'ed otherwise False
+        bool: True if OCP is GA'ed otherwise None
 
     """
     channel = f"stable-{version}"

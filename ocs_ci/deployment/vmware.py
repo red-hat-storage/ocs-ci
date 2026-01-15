@@ -41,6 +41,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     RDMDiskNotFound,
     PassThroughEnabledDeviceNotFound,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.node import (
     get_node_ips,
@@ -87,6 +88,8 @@ from ocs_ci.utility.utils import (
     get_ocp_upgrade_history,
     add_chrony_to_ocp_deployment,
     download_with_retries,
+    expose_ocp_version_safe,
+    is_ocp_version_gaed,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -97,6 +100,11 @@ from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs.exceptions import ConnectivityFail
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.framework.logger_helper import log_step
+from .helpers.hypershift_base import HyperShiftBase
+from .hub_spoke import create_agent_service_config, create_patch_provisioning
+from .mce import MCEInstaller, set_mirror_registry_configmap
+from ..helpers.helpers import change_default_storageclass
+from ..utility.deployment import get_ocp_ga_version
 
 logger = logging.getLogger(__name__)
 
@@ -2104,6 +2112,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
             # Initialize Terraform. It will be used later for infrastructure creation
             self.terraform_work_dir = os.path.join(os.getcwd(), "terraform/ai/vsphere/")
             self.terraform = Terraform(self.terraform_work_dir)
+            self.mce_installer = MCEInstaller()
 
         def deploy_prereq(self):
             """
@@ -2122,6 +2131,17 @@ class VSPHEREAgentAI(VSPHEREBASE):
                     {"clusterName": self.cluster_name, "infraID": self.cluster_name},
                     metadata_file,
                 )
+
+            # patch default sc. This is a prerequisite for assistant-service PVCs and pods to be scheduled properly
+            with config.RunWithProviderConfigContextIfAvailable():
+                change_default_storageclass(constants.CEPHBLOCKPOOL_SC)
+
+            create_patch_provisioning()
+            set_mirror_registry_configmap()
+            create_agent_service_config()
+
+            # wait for 3 minutes to let the assistant service to propagate correct values
+            time.sleep(60 * 3)
 
             log_step("Create host inventory and wait for min image creation")
             self.agent_workflow.create_host_inventory()
@@ -2183,6 +2203,54 @@ class VSPHEREAgentAI(VSPHEREBASE):
             log_step("removing reserved API and Ingress IPs")
             release_reserved_ips(self.cluster_name)
 
+            log_step("Create agent using available hosts")
+            ocp_version = config.DEPLOYMENT["installer_version"]
+            if (
+                ocp_version
+                and is_ocp_version_gaed(ocp_version)
+                and len(ocp_version.split(".")) in [1, 2]
+            ):
+                ocp_version = get_ocp_ga_version(ocp_version)
+                logger.info(
+                    f"using OCP GA version for Agent cluster deployment {ocp_version}"
+                )
+            elif ocp_version and "nightly" in ocp_version.lower():
+                ocp_version = expose_ocp_version_safe(ocp_version)
+                logger.info(
+                    f"using OCP Nightly version for Agent cluster deployment {ocp_version}"
+                )
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    f"OCP version for Agent cluster deployment invalid: "
+                    f"{config.DEPLOYMENT['installer_version']}"
+                )
+
+            cp_availability_policy = config.ENV_DATA.get(
+                "cp_availability_policy", constants.AVAILABILITY_POLICY_HA
+            )
+            infra_availability_policy = config.ENV_DATA.get(
+                "infra_availability_policy", constants.AVAILABILITY_POLICY_HA
+            )
+            disable_default_sources = config.ENV_DATA.get(
+                "disable_default_sources", constants.DISABLE_DEFAULT_SOURCES
+            )
+            auto_repair = config.ENV_DATA.get("auto_repair", constants.AUTO_REPAIR)
+            nodepool_replicas = config.ENV_DATA["worker_replicas"]
+
+            with config.RunWithProviderConfigContextIfAvailable():
+                hypershift = HyperShiftBase()
+            hypershift.update_hcp_binary()
+
+            hypershift.create_agent_ocp_cluster(
+                self.cluster_name,
+                nodepool_replicas=nodepool_replicas,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+                auto_repair=auto_repair,
+            )
+
         def generate_terraform_vars(self):
             """
             Generates the terraform.tfvars.json file
@@ -2213,6 +2281,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 "compute_data_disks_size": config.ENV_DATA.get(
                     "device_size", defaults.DEVICE_SIZE
                 ),
+                "control_plane_count": 0,
             }
             if config.ENV_DATA.get("vsphere_storage_policy"):
                 tfvars["vsphere_storage_policy"] = config.ENV_DATA[
@@ -2266,7 +2335,9 @@ class VSPHEREAgentAI(VSPHEREBASE):
             )
 
             try:
-                return download_with_retries(iso_url, self.discovery_iso_image)
+                return download_with_retries(
+                    iso_url, self.discovery_iso_image, max_retries=20
+                )
             except Exception as e:
                 self.discovery_iso_image = None
                 logger.error(f"Failed to download ISO image: {e}")
@@ -3007,16 +3078,16 @@ def delete_dns_records():
             aws.delete_record(record, hosted_zone_id)
 
 
-def modify_dns_records(api_ips, apps_ips, ttl=60):
+def modify_dns_records(api_ips, ingress_ips, ttl=60):
     """
     Update existing DNS records with multiple IP addresses.
 
     Args:
         api_ips (list(str)): IPs for api.<cluster>.
-        apps_ips (list(str)): IPs for *.apps.<cluster>.
+        ingress_ips (list(str)): IPs for *.apps.<cluster>.
         ttl (int, optional): TTL for the records (defaults to 60).
     """
-    if not api_ips or not apps_ips:
+    if not api_ips or not ingress_ips:
         raise ValueError("Both api_ips and apps_ips must be provided")
 
     cluster_domain = (
@@ -3025,7 +3096,7 @@ def modify_dns_records(api_ips, apps_ips, ttl=60):
     )
     record_map = {
         f"api.{cluster_domain}.": api_ips,
-        f"*.apps.{cluster_domain}.": apps_ips,
+        f"*.apps.{cluster_domain}.": ingress_ips,
     }
 
     aws = AWS()
