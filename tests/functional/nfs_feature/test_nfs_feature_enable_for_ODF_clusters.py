@@ -231,7 +231,7 @@ class TestNfsEnable(ManageTest):
             if (
                 platform == constants.AWS_PLATFORM
                 or platform == constants.IBMCLOUD_PLATFORM
-                or platform == constants.HCI_BAREMETAL
+                or platform == constants.IBM_BAREMETAL
             ):
                 # Create loadbalancer service for nfs
                 self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
@@ -252,7 +252,7 @@ class TestNfsEnable(ManageTest):
             if (
                 platform == constants.AWS_PLATFORM
                 or platform == constants.IBMCLOUD_PLATFORM
-                or platform == constants.HCI_BAREMETAL
+                or platform == constants.IBM_BAREMETAL
             ):
                 # Delete ocs nfs Service
                 nfs_utils.delete_nfs_load_balancer_service(

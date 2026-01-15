@@ -835,7 +835,7 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
         exec_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
-        if config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
+        if config.ENV_DATA.get("platform").lower() == constants.IBM_BAREMETAL:
             force_delete_pods = True
         else:
             force_delete_pods = False

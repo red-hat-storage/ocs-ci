@@ -13,7 +13,7 @@ DEPLOYMENT:
   local_storage: true
   deploy_hyperconverged: false # use when unreleased version on Clients is needed
 ENV_DATA:
-  platform: "hci_baremetal"
+  platform: "ibm_baremetal"
   cluster_type: "provider" # it is necessary to run the Hosted clusters deployment on the Provider cluster
   deploy_acm_hub_cluster: true
   acm_version: "2.10" # this is an example, please provide the desired version
