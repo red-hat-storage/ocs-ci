@@ -15,16 +15,12 @@ from ocs_ci.utility.connection import Connection
 log = logging.getLogger(__name__)
 
 
-key_path = "~/.ssh/openshift-dev.pem"
-key_path = os.path.expanduser(key_path)
-
-
 def setup_target_environment(target_node_ssh):
     """
     Set up target environment on remote target VM via SSH.
 
     Parameters:
-    target_node_ssh (Connection): An established SSH connection to the target VM.
+        target_node_ssh (Connection): An established SSH connection to the target VM.
     """
     log.info("Setting up target environment")
     commands = [
@@ -53,10 +49,10 @@ def get_worker_node_ips(kubeconfig_path):
     Collects worker node IPs from the Kubernetes cluster using oc command.
 
     Parameters:
-    kubeconfig_path (str): Path to the kubeconfig file.
+        kubeconfig_path (str): Path to the kubeconfig file.
 
     Returns:
-    list: A list of IP addresses of worker nodes or an empty list on failure.
+        list: A list of IP addresses of worker nodes or an empty list on failure.
     """
     try:
         # Use ocs_ci.utils.node.get_node_ips to get worker node IPs
@@ -77,7 +73,7 @@ def get_worker_node_names():
     This function works on pure OCP clusters without OCS installed.
 
     Returns:
-    list: A list of worker node names (strings).
+        list: A list of worker node names (strings).
     """
     try:
         worker_node_names = node.get_worker_nodes()
@@ -96,13 +92,13 @@ def get_worker_iqns(worker_node_names):
     This function ensures the iSCSI service is started before reading the IQN.
 
     Parameters:
-    worker_node_names (list): List of worker node names (strings).
+        worker_node_names (list): List of worker node names (strings).
 
     Returns:
-    list: A list of IQNs of worker nodes or an empty list on failure.
+        list: A list of IQNs of worker nodes or an empty list on failure.
     """
     iqns = []
-    log.info("\n=== Collecting Worker IQNs ===")
+    log.info("=== Collecting Worker IQNs ===")
 
     ocp_obj = ocp.OCP()
 
@@ -147,7 +143,7 @@ def get_worker_iqns(worker_node_names):
                     node_ssh = Connection(
                         host=node_ip,
                         user="core",
-                        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+                        private_key=config.DEPLOYMENT["ssh_key_private"],
                     )
                     # Start iSCSI service via SSH
                     start_cmd = (
@@ -180,19 +176,19 @@ def configure_target(target_node_ssh, target_iqn, worker_iqns):
     This function is a placeholder and requires implementation.
 
     Parameters:
-    target_node_ssh (object): An established SSH connection to the target VM.
-    target_iqn (str): Target iSCSI IQN.
-    worker_iqns (list): List of IQNs of worker nodes.
+        target_node_ssh (object): An established SSH connection to the target VM.
+        target_iqn (str): Target iSCSI IQN.
+        worker_iqns (list): List of IQNs of worker nodes.
     """
 
     # Setup environment first
     # setup_target_environment(target_node_ssh)
     # Check if target exists
     check_cmd = f"targetcli ls /iscsi/{target_iqn} 2>/dev/null"
-    success, stdout, stderr = target_node_ssh(check_cmd)
+    success, stdout, stderr = target_node_ssh.exec_cmd(check_cmd)
     if not success:
         create_target_cmd = f"targetcli /iscsi create {target_iqn}"
-        target_node_ssh(create_target_cmd)
+        target_node_ssh.exec_cmd(create_target_cmd)
     else:
         log.info(f"iSCSI target {target_iqn} already exists")
         log.info("Adding workers...")
@@ -201,12 +197,12 @@ def configure_target(target_node_ssh, target_iqn, worker_iqns):
     for worker_iqn in worker_iqns:
         # Add ACL
         acl_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls create {worker_iqn}"
-        target_node_ssh(acl_cmd)
+        target_node_ssh.exec_cmd(acl_cmd)
         log.info(f"AddedACL for worker IQN: {worker_iqn}")
 
         # Get list of LUNs to map
         lun_list_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls"
-        target_node_ssh(lun_list_cmd)
+        target_node_ssh.exec_cmd(lun_list_cmd)
 
         lun_numbers = re.findall(r"lun(\d+)", stdout)
 
@@ -219,13 +215,13 @@ def configure_target(target_node_ssh, target_iqn, worker_iqns):
                 f"create {lun_num} {lun_num} 2>&1 || "
                 f"echo 'LUN mapping may already exist'"
             )
-            target_node_ssh(map_cmd)
+            target_node_ssh.exec_cmd(map_cmd)
             log.info(f"LUN{lun_num} mapping result: {stdout.strip()}")
 
     # Save configuration
     log.info("Saving target configuration...")
     save_cmd = "targetcli saveconfig"
-    success, stdout, stderr = target_node_ssh(save_cmd)
+    success, stdout, stderr = target_node_ssh.exec_cmd(save_cmd)
 
     if success:
         log.info("Configuration saved successfully")
@@ -243,7 +239,7 @@ def configure_initiators(worker_node_names):
     and enables the iSCSI service.
 
     Parameters:
-    worker_node_names (list): List of worker node names (strings).
+        worker_node_names (list): List of worker node names (strings).
     """
 
     log.info("\n=== Configuring Worker Nodes as Initiators ===")
@@ -282,7 +278,7 @@ def configure_initiators(worker_node_names):
                     worker_node_ssh = Connection(
                         host=node_ip,
                         user="core",
-                        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+                        private_key=config.DEPLOYMENT["ssh_key_private"],
                     )
                     log.info(f"Using SSH fallback for {node_ip}...")
                     for cmd in cmds:
@@ -310,7 +306,7 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
         delete_acl_cmd = (
             f"targetcli /iscsi/{target_iqn}/tpg1/acls delete {worker_iqn} 2>&1"
         )
-        success, stdout, stderr = target_node_ssh(delete_acl_cmd)
+        success, stdout, stderr = target_node_ssh.exec_cmd(delete_acl_cmd)
 
         if success or "does not exist" in stdout.lower():
             log.info(" ACL is deleted")
@@ -319,7 +315,7 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
 
     # Save configuration
     save_cmd = "targetcli saveconfig 2>&1"
-    target_node_ssh(save_cmd)
+    target_node_ssh.exec_cmd(save_cmd)
     log.info("\n Configuration saved")
 
 
@@ -333,7 +329,7 @@ def wipe_luns_on_target(target_node_ssh, target_iqn, username):
 
     # Get LUN paths
     get_luns_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls 2>&1"
-    success, stdout, stderr = target_node_ssh(get_luns_cmd)
+    success, stdout, stderr = target_node_ssh.exec_cmd(get_luns_cmd)
 
     if not success or not stdout:
         log.info(" No LUNs found")
@@ -352,12 +348,12 @@ def wipe_luns_on_target(target_node_ssh, target_iqn, username):
 
                 # Wipe device
                 wipe_cmd = f"dd if=/dev/zero of={device} bs=1M count=100 2>&1"
-                target_node_ssh(wipe_cmd)
+                target_node_ssh.exec_cmd(wipe_cmd)
                 log.info(f" Wiped {device}")
 
                 # Remove signatures
                 wipefs_cmd = f"wipefs -a {device} 2>&1"
-                target_node_ssh(wipefs_cmd)
+                target_node_ssh.exec_cmd(wipefs_cmd)
                 log.info(" Removed signatures")
 
 
@@ -373,7 +369,7 @@ def verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns):
     log.info("\nChecking target ACLs...")
     for iqn in worker_iqns:
         check_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls/{iqn} ls 2>&1"
-        success, stdout, stderr = target_node_ssh(check_cmd)
+        success, stdout, stderr = target_node_ssh.exec_cmd(check_cmd)
 
         if "No such path" in stdout:
             log.info(f" ACL for {iqn} successfully removed")
@@ -394,13 +390,12 @@ def cleanup_iscsi_target(
     Complete cleanup of iSCSI target.
 
     Parameters:
-    target_vm_ip: Target VM IP address
-    target_iqn: Target IQN
-    worker_iqns: List of worker IQNs to remove
-    worker_ips: List of worker IP addresses
-    wipe_data: Whether to wipe data (default: True)
-    username_target: SSH user for target VM
-    username_worker: SSH user for workers
+        target_vm_ip: Target VM IP address
+        target_iqn: Target IQN
+        worker_iqns: List of worker IQNs to remove
+        worker_ips: List of worker IP addresses
+        wipe_data: Whether to wipe data (default: True)
+        username_target: SSH user for target VM
     """
     log.info("\n" + "=" * 70)
     log.info("iSCSI TARGET CLEANUP - START")
@@ -436,6 +431,9 @@ def cleanup_iscsi_target(
 
 
 def iscsi_setup():
+    """
+    Setup iSCSI target and initiators.
+    """
     log.info("Setting up iSCSI configuration...")
 
     # Get worker node names (works on pure OCP clusters without OCS)
@@ -453,7 +451,7 @@ def iscsi_setup():
     target_node_ssh = Connection(
         host=config.ENV_DATA.get("iscsi_target_ip"),
         user=config.ENV_DATA.get("iscsi_target_username"),
-        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+        private_key=config.DEPLOYMENT["ssh_key_private"],
     )
 
     configure_target(
@@ -463,6 +461,9 @@ def iscsi_setup():
 
 
 def iscsi_teardown():
+    """
+    Tear down iSCSI target.
+    """
     log.info("Tearing down iSCSI target...")
     # Get worker nodes
     kubeconfig_path = os.path.join(
@@ -478,7 +479,7 @@ def iscsi_teardown():
     target_node_ssh = Connection(
         host=config.ENV_DATA.get("iscsi_target_ip"),
         user=config.ENV_DATA.get("iscsi_target_username"),
-        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+        private_key=config.DEPLOYMENT["ssh_key_private"],
     )
 
     cleanup_iscsi_target(
@@ -540,11 +541,11 @@ def verify_iscsi_sessions(worker_node_names, target_iqn):
     Verify iSCSI sessions are established on worker nodes.
 
     Parameters:
-    worker_node_names (list): List of worker node names (strings).
-    target_iqn (str): Target iSCSI IQN to verify.
+        worker_node_names (list): List of worker node names (strings).
+        target_iqn (str): Target iSCSI IQN to verify.
 
     Returns:
-    dict: Dictionary with node name as key and verification result as value.
+        dict: Dictionary with node name as key and verification result as value.
     """
     results = {}
     log.info("\n=== Verifying iSCSI Sessions ===")
@@ -582,11 +583,11 @@ def verify_iscsi_devices(worker_node_names, target_iqn):
     1. Using lsblk to find devices with transport type 'iscsi'
 
     Parameters:
-    worker_node_names (list): List of worker node names (strings).
-    target_iqn (str): Target iSCSI IQN to verify.
+        worker_node_names (list): List of worker node names (strings).
+        target_iqn (str): Target iSCSI IQN to verify.
 
     Returns:
-    dict: Dictionary with node name as key and device information as value.
+        dict: Dictionary with node name as key and device information as value.
     """
     results = {}
     log.info("\n=== Verifying iSCSI Devices ===")
@@ -651,12 +652,12 @@ def verify_iscsi_target_connectivity(worker_node_names, target_ip, target_port=3
     Verify network connectivity to iSCSI target from worker nodes.
 
     Parameters:
-    worker_node_names (list): List of worker node names (strings).
-    target_ip (str): iSCSI target IP address.
-    target_port (int): iSCSI target port (default: 3260).
+        worker_node_names (list): List of worker node names (strings).
+        target_ip (str): iSCSI target IP address.
+        target_port (int): iSCSI target port (default: 3260).
 
     Returns:
-    dict: Dictionary with node name as key and connectivity result as value.
+        dict: Dictionary with node name as key and connectivity result as value.
     """
     results = {}
     log.info("\n=== Verifying iSCSI Target Connectivity ===")
@@ -714,7 +715,7 @@ def verify_iscsi_setup():
     Comprehensive verification of iSCSI setup.
 
     Returns:
-    dict: Dictionary containing all verification results.
+        dict: Dictionary containing all verification results.
     """
     log.info("\n" + "=" * 70)
     log.info("iSCSI SETUP VERIFICATION - START")

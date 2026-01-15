@@ -1,0 +1,2 @@
+DEPLOYMENT:
+  iscsi_setup: True
