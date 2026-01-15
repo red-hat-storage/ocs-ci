@@ -985,9 +985,7 @@ class Deployment(object):
                     f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
                 )
         # Setup iSCSI if configured
-        if config.ENV_DATA.get("iscsi_target_ip") and config.ENV_DATA.get(
-            "iscsi_target_iqn"
-        ):
+        if config.ENV_DATA.get("iscsi_setup", False):
             try:
                 logger.info("Setting up iSCSI configuration after OCP deployment...")
                 iscsi_setup()
