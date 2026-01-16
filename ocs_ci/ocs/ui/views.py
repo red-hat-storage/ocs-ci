@@ -588,6 +588,17 @@ obc = {
     ),
 }
 
+obc_4_21 = {
+    "storageclass_dropdown": (
+        "button[data-test='sc-dropdown']",
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass_dropdown": (
+        "button[data-test='bc-dropdown']",
+        By.CSS_SELECTOR,
+    ),
+}
+
 pvc = {
     "select_openshift-storage_project": (
         'a[id="openshift-storage-link"]',
@@ -2839,13 +2850,6 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
 }
-bucket_tab_4_21 = {
-    "storage_class_dropdown": (
-        "//button[@data-test='sc-dropdown']",
-        By.XPATH,
-    ),
-    "bucketclass_dropdown": ("//button[@data-test='bc-dropdown']", By.XPATH),
-}
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
 }
@@ -2885,7 +2889,7 @@ locators = {
             **deployment_4_19,
             **deployment_4_21,
         },
-        "obc": obc,
+        "obc": {**obc, **obc_4_21},
         "pvc": {
             **pvc,
             **pvc_4_7,
@@ -2928,7 +2932,7 @@ locators = {
         "topology": topology,
         "mcg_stores": mcg_stores,
         "alerting": alerting,
-        "bucket_tab": {**bucket_tab, **bucket_tab_4_21},
+        "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
     },
     "4.20": {
