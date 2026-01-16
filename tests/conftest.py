@@ -7614,7 +7614,11 @@ def discovered_apps_dr_workload(request):
     instances = []
 
     def factory(
-        kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL, multi_ns=False, workloads=None
+        kubeobject=1,
+        recipe=0,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        multi_ns=False,
+        workloads=None,
     ):
         """
         Args:
