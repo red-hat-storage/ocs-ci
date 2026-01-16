@@ -375,11 +375,18 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         timeout = 600
+        cluster_set_name = (
+            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+        )
+        azure_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get(
+            selector=f"cluster.open-cluster-management.io/clusterset={cluster_set_name},cloud=Azure"
+        )
+
         ibm_cloud_managed = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
-        if ibm_cloud_managed:
+        if ibm_cloud_managed or azure_clusters:
             timeout = 2100
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
@@ -393,9 +400,6 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
-        cluster_set_name = (
-            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
-        )
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
