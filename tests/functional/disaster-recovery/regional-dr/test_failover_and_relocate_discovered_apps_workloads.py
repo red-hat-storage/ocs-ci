@@ -4,19 +4,17 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import acceptance, tier1, tier4, skipif_ocs_version
+from ocs_ci.framework.testlib import tier1, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
-from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
 
 @rdr
+@tier1
 @turquoise_squad
 @skipif_ocs_version("<4.16")
 class TestFailoverAndRelocateWithDiscoveredAppsWorkloads:
@@ -26,24 +24,12 @@ class TestFailoverAndRelocateWithDiscoveredAppsWorkloads:
     """
 
     @pytest.mark.parametrize(
-        argnames=["pvc_interface","workload"],
+        argnames=["pvc_interface", "workload"],
         argvalues=[
-            pytest.param(
-                constants.CEPHBLOCKPOOL,
-                "filebrowser"
-            ),
-            pytest.param(
-                constants.CEPHFILESYSTEM,
-                "filebrowser"
-            ),
-            pytest.param(
-                constants.CEPHBLOCKPOOL,
-                "mongodb"
-            ),
-            pytest.param(
-                constants.CEPHFILESYSTEM,
-                "mongodb"
-            ),
+            pytest.param(constants.CEPHBLOCKPOOL, "filebrowser"),
+            pytest.param(constants.CEPHFILESYSTEM, "filebrowser"),
+            pytest.param(constants.CEPHBLOCKPOOL, "mongodb"),
+            pytest.param(constants.CEPHFILESYSTEM, "mongodb"),
         ],
     )
     def test_failover_and_relocate_discovered_apps_workloads(
@@ -101,7 +87,6 @@ class TestFailoverAndRelocateWithDiscoveredAppsWorkloads:
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
-
 
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
