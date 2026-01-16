@@ -379,7 +379,8 @@ class AcmAddClusters(AcmPageNavigator):
             config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
         )
         azure_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get(
-            selector=f"cluster.open-cluster-management.io/clusterset={cluster_set_name},cloud=Azure"
+            selector=f"cluster.open-cluster-management.io/clusterset={cluster_set_name},cloud=Azure",
+            dont_raise=True,
         )
 
         ibm_cloud_managed = (
