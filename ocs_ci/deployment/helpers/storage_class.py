@@ -35,6 +35,11 @@ def get_storageclass() -> str:
 
     """
     logger.info("Getting storageclass")
+    if config.DEPLOYMENT.get("local_storage", False):
+        storage_class = constants.DEFAULT_STORAGECLASS_LSO
+        logger.info(f"LSO is enabled, using {storage_class}")
+        return storage_class
+
     platform = config.ENV_DATA.get("platform")
     customized_deployment_storage_class = config.DEPLOYMENT.get(
         "customized_deployment_storage_class"
