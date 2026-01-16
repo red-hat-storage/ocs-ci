@@ -249,6 +249,7 @@ class CNVInstaller(object):
             f"{constants.HYPERCONVERGED} {constants.KUBEVIRT_HYPERCONVERGED} met condition: Available"
         )
 
+    @retry(CommandFailed, tries=3, delay=30, backoff=2)
     def enable_software_emulation(self):
         """
         Enable software emulation. This is needed on a cluster where the nodes do not support hardware emulation.
@@ -266,15 +267,20 @@ class CNVInstaller(object):
             logger.info("Skipping enabling software emulation")
         else:
             logger.info("Enabling software emulation on the cluster")
-            ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
-            annonation = (
-                'kubevirt.kubevirt.io/jsonpatch=\'[{ "op": "add", "path": "/spec/configuration/developerConfiguration",'
-                ' "value": { "useEmulation": true } }]\''
-            )
-            ocp.annotate(
-                annotation=annonation, resource_name=constants.KUBEVIRT_HYPERCONVERGED
-            )
-            logger.info("successfully enabled software emulation on the cluster")
+            try:
+                ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
+                annonation = (
+                    'kubevirt.kubevirt.io/jsonpatch=\'[{ "op": "add", "path": "/spec/configuration/'
+                    'developerConfiguration",'
+                    ' "value": { "useEmulation": true } }]\''
+                )
+                ocp.annotate(
+                    annotation=annonation,
+                    resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+                )
+                logger.info("successfully enabled software emulation on the cluster")
+            except CommandFailed as e:
+                logger.error(e)
 
     def cnv_hyperconverged_installed(self):
         """
