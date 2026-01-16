@@ -7643,17 +7643,16 @@ def discovered_apps_dr_workload(request):
             raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
-        if workloads:
-            if workloads == "filebrowser":
-                if pvc_interface == constants.CEPHFILESYSTEM:
-                    workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
-                else:
-                    workload_key = "dr_workload_discovered_apps_filebrowser_rbd"
-            elif workloads == "mongodb":
-                if pvc_interface == constants.CEPHFILESYSTEM:
-                    workload_key = "dr_workload_discovered_apps_mongodb_cephfs"
-                else:
-                    workload_key = "dr_workload_discovered_apps_mongod_rbd"
+        if workloads == "filebrowser":
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
+            else:
+                workload_key = "dr_workload_discovered_apps_filebrowser_rbd"
+        elif workloads == "mongodb":
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                workload_key = "dr_workload_discovered_apps_mongodb_cephfs"
+            else:
+                workload_key = "dr_workload_discovered_apps_mongodb_rbd"
 
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
 

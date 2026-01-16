@@ -70,7 +70,7 @@ class TestFailoverAndRelocateWithDiscoveredAppsWorkloads:
             resource_name=rdr_workload.discovered_apps_placement_name,
         )
         drpc_obj = DRPC(
-            namespace=constants.DR_OPS_NAMESAPCE,
+            namespace=constants.DR_OPS_NAMESPACE,
             resource_name=rdr_workload.discovered_apps_placement_name,
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
