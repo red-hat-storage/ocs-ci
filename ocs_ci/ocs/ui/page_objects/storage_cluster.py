@@ -1,5 +1,6 @@
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import logger
+from ocs_ci.ocs.ui.page_objects.InfraHealth import InfraHealthModal
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.page_objects.block_pools import StoragePools
 from ocs_ci.ocs.ui.page_objects.encryption_module import EncryptionModule
@@ -8,7 +9,12 @@ from ocs_ci.ocs.ui.page_objects.odf_topology_tab import TopologyTab
 
 
 class StorageClusterPage(
-    BlockAndFile, ObjectStorage, StoragePools, TopologyTab, EncryptionModule
+    BlockAndFile,
+    ObjectStorage,
+    StoragePools,
+    TopologyTab,
+    EncryptionModule,
+    InfraHealthModal,
 ):
     """
     Storage cluster tab Class
