@@ -410,6 +410,33 @@ def get_latest_supported_hypershift_version() -> str | None:
     return hcp_version
 
 
+def resolve_ocp_image(ocp_version: str) -> str:
+    """
+    Resolve OCP image based on the provided ocp_version.
+    If ocp_version is not provided, it will use the version from the hosting platform.
+
+    Args:
+        ocp_version (str): OCP version of the cluster
+
+    Returns:
+        str: OCP index image (registry:tag)
+
+    """
+    if not ocp_version:
+        with config.RunWithProviderConfigContextIfAvailable():
+            provider_version = get_ocp_version()
+        if "nightly" in provider_version:
+            index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+        else:
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+    else:
+        if "nightly" in ocp_version:
+            index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
+        else:
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+    return index_image
+
+
 class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
@@ -713,6 +740,121 @@ class HyperShiftBase:
 
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)
+
+        return name
+
+    @config.run_with_provider_context_if_available
+    def create_agent_ocp_cluster(
+        self,
+        name: str = None,
+        nodepool_replicas: int = defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT,
+        ocp_version=None,
+        cp_availability_policy=None,
+        infra_availability_policy=None,
+        disable_default_sources=None,
+        auto_repair=True,
+    ):
+        """
+        Create agent hosted cluster. Default parameters have minimal requirements for the cluster.
+
+        Args:
+            name (str): Name of the cluster
+            nodepool_replicas (int): Number of nodes in the cluster
+            ocp_version (str): OCP version of the cluster
+            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable; if SingleReplica
+                selected, cluster will be created with etcd kube-apiserver, kube-controller-manager,
+                openshift-oauth-apiserver, openshift-controller-manager, kube-scheduler with min available
+                quorum 1 in pdb.
+            infra_availability_policy (str): Infra availability policy, default HighlyAvailable, if SingleReplica
+                selected, cluster will be created with etcd ingress controller, monitoring, cloud controller with min
+                available quorum 1 in pdb.
+            disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
+            auto_repair (bool): Enables machine autorepair with machine health checks, default True
+
+        Returns:
+            str: Name of the hosted cluster
+
+        """
+
+        self.save_mirrors_list_to_file()
+        pull_secret_path = download_pull_secret()
+
+        # If ocp_version is not provided, get the version from Hosting Platform
+        index_image = resolve_ocp_image(ocp_version)
+
+        if not name:
+            name = "hcp-" + datetime.now().strftime("%f")
+
+        logger.info("Creating agent hosted cluster")
+
+        create_hcp_cluster_cmd = (
+            f"{self.hypershift_binary_path} create cluster agent "
+            f"--name {name} "
+            f"--agent-namespace {name} "
+            f"--base-domain {config.ENV_DATA['base_domain']} "
+            f"--api-server-address api.{name}.{config.ENV_DATA['base_domain']} "
+            f"--release-image {index_image} "
+            f"--node-pool-replicas {nodepool_replicas} "
+            f"--pull-secret {pull_secret_path} "
+            f"--image-content-sources {self.idms_mirrors_path} "
+            "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
+            "--olm-catalog-placement Guest "
+        )
+
+        if auto_repair:
+            create_hcp_cluster_cmd += " --auto-repair"
+
+        if (
+            cp_availability_policy
+            and cp_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            create_hcp_cluster_cmd += (
+                f" --control-plane-availability-policy {cp_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Control plane availability policy {cp_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
+            )
+
+        if (
+            infra_availability_policy
+            and infra_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            create_hcp_cluster_cmd += (
+                f" --infra-availability-policy {infra_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Infrastructure availability policy {infra_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
+            )
+
+        if disable_default_sources:
+            create_hcp_cluster_cmd += " --olm-disable-default-sources"
+
+        logger.info("Creating HyperShift hosted cluster")
+        exec_cmd(create_hcp_cluster_cmd)
+
+        agents_obj = OCP(kind="agents", namespace=name)
+        nodepool_replicas = (
+            config.ENV_DATA["clusters"]
+            .get(name)
+            .get("nodepool_replicas", defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT)
+        )
+
+        agents_obj.wait_for_resource(
+            condition="Discovered",
+            resource_count=nodepool_replicas,
+            timeout=1800,
+            sleep=30,
+        )
+        for agent_info in agents_obj.get()["items"]:
+            agents_obj.patch(
+                resource_name=agent_info["metadata"]["name"],
+                params='{"spec":{"approved":true}}',
+                format_type="merge",
+            )
 
         return name
 
