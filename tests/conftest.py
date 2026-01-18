@@ -2326,6 +2326,30 @@ def resource_checker(request):
         )
 
 
+@pytest.fixture
+def osd_cleanup_state_check():
+    """
+    Opt-in fixture to validate OSD cleanup state before test.
+
+    Tests use this by adding it as a parameter:
+        def test_example(self, osd_cleanup_state_check):
+            ...
+
+    Skips test if pending OSD jobs or unexpected device classes are found.
+
+    """
+    from ocs_ci.helpers.sanity_helpers import check_osd_cleanup_state
+
+    log.info("Checking OSD cleanup state")
+    issues = check_osd_cleanup_state()
+
+    if issues:
+        issues_str = "\n  - ".join(issues)
+        pytest.skip(f"OSD cleanup state check failed:\n  - {issues_str}")
+
+    log.info("OSD cleanup state check passed")
+
+
 @pytest.fixture(scope="session")
 def log_cli_level(pytestconfig):
     """

@@ -212,7 +212,7 @@ class TestResizeOSD(ManageTest):
 
     @tier1
     @polarion_id("OCS-5506")
-    def test_resize_osd(self):
+    def test_resize_osd(self, osd_cleanup_state_check):
         """
         Test resize OSD
         """
