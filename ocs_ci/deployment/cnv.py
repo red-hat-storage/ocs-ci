@@ -228,11 +228,13 @@ class CNVInstaller(object):
         Raises:
             TimeoutExpiredError: If the HyperConverged resource does not become available within the specified time.
         """
-        logger.info("Deploying the HyperConverged CR")
-        try:
-            OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace).get()
 
+        try:
+            logger.info(f"Checking if {constants.HYPERCONVERGED} exists")
+            OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace).get()
+            logger.info(f"Found {constants.HYPERCONVERGED} skipping creation")
         except CommandFailed:
+            logger.info("Deploying the HyperConverged CR")
             hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
             hyperconverged_yaml = OCS(**hyperconverged_yaml_file)
             hyperconverged_yaml.create()
