@@ -365,7 +365,8 @@ generic_locators = {
     "create_resource_button": ("yaml-create", By.ID),
     "search_resource_field": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "first_dropdown_option": (
-        'a[data-test="dropdown-menu-item-link"]',
+        'a[data-test="dropdown-menu-item-link"], '
+        'li[data-test="dropdown-menu-item-link"] button',
         By.CSS_SELECTOR,
     ),
     "storage_class": (
@@ -373,7 +374,8 @@ generic_locators = {
         By.XPATH,
     ),
     "second_dropdown_option": (
-        '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
+        '//a[@data-test="dropdown-menu-item-link"]/../../li[2] | '
+        '//li[@data-test="dropdown-menu-item-link"][2]//button',
         By.XPATH,
     ),
     "actions": (
@@ -598,6 +600,17 @@ obc = {
     "namespace_store_folder": ('input[id="folder-name"]', By.CSS_SELECTOR),
     "namespace_store_create_item": (
         'button[data-test="namespacestore-create-button"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+obc_4_21 = {
+    "storageclass_dropdown": (
+        "button[data-test='sc-dropdown']",
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass_dropdown": (
+        "button[data-test='bc-dropdown']",
         By.CSS_SELECTOR,
     ),
 }
@@ -2898,7 +2911,7 @@ locators = {
             **deployment_4_19,
             **deployment_4_21,
         },
-        "obc": obc,
+        "obc": {**obc, **obc_4_21},
         "pvc": {
             **pvc,
             **pvc_4_7,
