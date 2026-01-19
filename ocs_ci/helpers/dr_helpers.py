@@ -1235,7 +1235,8 @@ def get_backend_volumes_for_pvcs(namespace):
         logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            if pvc_obj.name.startswith("volsync"):
+            # Skip volsync related PVCs
+            if pvc_obj.name.startswith("volsync") or pvc_obj.name.startswith("vs-"):
                 continue
 
             if pvc_obj.backed_sc in [
