@@ -923,7 +923,10 @@ acm_page_nav_420 = {
 }
 
 acm_configuration = {
-    "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
+    "cluster-sets": (
+        "//a[normalize-space()='Cluster sets'] | //button[.//span[normalize-space()='Cluster sets']]",
+        By.XPATH,
+    ),
     "create-cluster-set": (
         "[class*='c-button'][class*='m-primary']",
         By.CSS_SELECTOR,
@@ -955,7 +958,10 @@ acm_configuration = {
         "//span[contains(@class,'c-modal-box__title-text')]",
         By.XPATH,
     ),
-    "submariner-tab": ("//a[normalize-space()='Submariner add-ons']", By.XPATH),
+    "submariner-tab": (
+        "//a[normalize-space()='Submariner add-ons'] | //button[.//span[normalize-space()='Submariner add-ons']]",
+        By.XPATH,
+    ),
     "install-submariner-btn": (
         "//button[normalize-space()='Install Submariner add-ons']",
         By.XPATH,
