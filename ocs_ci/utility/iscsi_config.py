@@ -320,39 +320,87 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
 def wipe_luns_on_target(target_node_ssh, target_iqn, username):
     """
     Wipe LUN data on target VM.
+    Also deletes IBM Spectrum Scale related resources.
+    Only wipes devices that are referenced in LocalDisks resources.
     """
     log.info("\n" + "=" * 70)
     log.info("STEP 4: Wiping LUN data on target")
     log.info("=" * 70)
 
-    # Get LUN paths
-    get_luns_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls 2>&1"
-    success, stdout, stderr = target_node_ssh.exec_cmd(get_luns_cmd)
+    # Collect device paths from LocalDisks before deletion
+    devices_to_wipe = set()
 
-    if not success or not stdout:
-        log.info(" No LUNs found")
-        return
+    # Delete IBM Spectrum Scale StorageClasses
+    try:
+        log.info(
+            "Deleting StorageClasses with provisioner spectrumscale.csi.ibm.com..."
+        )
+        sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
+        storageclasses = sc_obj.get(all_namespaces=True)
 
-    # Parse output to find device paths
-    # Example: lun0 -> /backstores/block/disk1 (/dev/sdb)
-    for line in stdout.split("\n"):
-        if "/dev/" in line:
-            # Extract device path
+        for sc in storageclasses.get("items", []):
+            provisioner = sc.get("provisioner", "")
+            if provisioner == "spectrumscale.csi.ibm.com":
+                sc_name = sc.get("metadata", {}).get("name")
+                if sc_name:
+                    try:
+                        sc_obj.delete(resource_name=sc_name, wait=False)
+                        log.info(f"Deleted StorageClass: {sc_name}")
+                    except Exception as e:
+                        log.warning(f"Failed to delete StorageClass {sc_name}: {e}")
+    except Exception as e:
+        log.warning(f"Error while deleting StorageClasses: {e}")
 
-            match = re.search(r"(/dev/[a-z0-9]+)", line)
-            if match:
-                device = match.group(1)
-                log.info(f"\n  Device: {device}")
+    # Delete LocalDisks custom resource from ibm-spectrum-scale namespace
+    try:
+        log.info("Deleting LocalDisks resource from ibm-spectrum-scale namespace...")
+        localdisk_obj = ocp.OCP(
+            kind="localdisks.scale.spectrum.ibm.com", namespace="ibm-spectrum-scale"
+        )
+        try:
+            localdisks = localdisk_obj.get(all_namespaces=False)
+            for ld in localdisks.get("items", []):
+                device_path = ld.get("spec", {}).get("device")
+                if device_path:
+                    devices_to_wipe.add(device_path)
+                    log.info(
+                        f"Found device in LocalDisk {ld.get('metadata', {}).get('name')}: {device_path}"
+                    )
+                ld_name = ld.get("metadata", {}).get("name")
+                if ld_name:
+                    try:
+                        localdisk_obj.delete(resource_name=ld_name, wait=False)
+                        log.info(f"Deleted LocalDisk: {ld_name}")
+                    except Exception as e:
+                        log.warning(f"Failed to delete LocalDisk {ld_name}: {e}")
+        except Exception as e:
+            # Resource might not exist, which is fine
+            log.debug(f"LocalDisks resource not found or already deleted: {e}")
+    except Exception as e:
+        log.warning(f"Error while deleting LocalDisks: {e}")
 
-                # Wipe device
-                wipe_cmd = f"dd if=/dev/zero of={device} bs=1M count=100 2>&1"
-                target_node_ssh.exec_cmd(wipe_cmd)
-                log.info(f" Wiped {device}")
+    log.info(
+        f"Will wipe {len(devices_to_wipe)} device(s) from LocalDisks: {devices_to_wipe}"
+    )
+    # Wipe only the devices collected from LocalDisks
+    for device in devices_to_wipe:
+        log.info(f"\n  Device: {device}")
 
-                # Remove signatures
-                wipefs_cmd = f"wipefs -a {device} 2>&1"
-                target_node_ssh.exec_cmd(wipefs_cmd)
-                log.info(" Removed signatures")
+        # Wipe device
+        wipe_cmd = f"dd if=/dev/zero of={device} bs=1M count=100 2>&1"
+        retcode, stdout, stderr = target_node_ssh.exec_cmd(wipe_cmd)
+        if retcode == 0:
+            log.info(f" Wiped {device}")
+        else:
+            log.warning(f" Failed to wipe {device}: {stderr}")
+
+        # Remove signatures
+        wipefs_cmd = f"wipefs -a -f {device} 2>&1"
+        retcode, stdout, stderr = target_node_ssh.exec_cmd(wipefs_cmd)
+        if retcode == 0:
+            log.info(f" Removed signatures from {device}")
+        else:
+            log.warning(f" Failed to remove signatures from {device}: {stderr}")
 
 
 def verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns):
