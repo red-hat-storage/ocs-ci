@@ -2269,9 +2269,7 @@ class Deployment(object):
             log_level (str): log level for installer (default: DEBUG)
         """
         # Teardown iSCSI if configured (before destroying cluster)
-        if config.ENV_DATA.get("iscsi_target_ip") and config.ENV_DATA.get(
-            "iscsi_target_iqn"
-        ):
+        if config.ENV_DATA.get("iscsi_setup", False):
             try:
                 logger.info(
                     "Tearing down iSCSI configuration before cluster destruction..."

@@ -430,6 +430,7 @@ higher priority).
 * `iscsi_target_username`- The username for authenticating with the iSCSI target.
 * `iscsi_target_password`- The password for the iSCSI target authentication.
 * `iscsi_target_iqn`- The iSCSI Qualified Name (IQN) identifying the iSCSI target.
+* `iscsi_setup` - Configure iscsi or not (Default: false). Necessory for FDF backed by SAN storage.
 
 #### UPGRADE
 
