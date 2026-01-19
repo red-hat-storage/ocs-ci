@@ -942,6 +942,7 @@ def run_must_gather(
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
     mg_options=None,
+    since_time=None,
 ):
     """
     Runs the must-gather tool against the cluster
@@ -958,6 +959,7 @@ def run_must_gather(
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
         mg_options (str): Options of must gather command For example "--host_network=True"
+        since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     Returns:
         mg_output (str): must-gather cli output
@@ -983,6 +985,8 @@ def run_must_gather(
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if since_time:
+        cmd += f" --since-time={since_time}"
     if mg_options:
         cmd += f" {mg_options}"
     if command:
@@ -1209,6 +1213,7 @@ def _collect_ocs_logs(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    since_time=None,
 ):
     """
     This function runs in thread
@@ -1271,6 +1276,7 @@ def _collect_ocs_logs(
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
             mg_options=mg_options,
+            since_time=since_time,
         )
         mg_collected_types.add("ocs")
         if (
@@ -1300,6 +1306,7 @@ def _collect_ocs_logs(
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            since_time=since_time,
         )
         run_must_gather(
             ocp_log_dir_path,
@@ -1309,6 +1316,7 @@ def _collect_ocs_logs(
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            since_time=since_time,
         )
         mg_collected_types.add("ocp")
     if mcg:
@@ -1397,6 +1405,7 @@ def collect_ocs_logs(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    since_time=None,
 ):
     """
     Collects OCS logs
@@ -1417,6 +1426,7 @@ def collect_ocs_logs(
         skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
+        since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     """
     cwd = os.getcwd()
@@ -1439,6 +1449,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
             if ocs:
@@ -1457,6 +1468,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
             if mcg:
@@ -1475,6 +1487,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
 
