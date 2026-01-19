@@ -96,7 +96,7 @@ class PlatformNodesFactory:
             "AWS": AWSNodes,
             "vsphere": VMWareNodes,
             "aws": AWSNodes,
-            "baremetal": IBMCloudBMNodes,
+            "baremetal": BaremetalNodes,
             "azure": AZURENodes,
             "gcp": GCPNodes,
             "vsphere_lso": VMWareLSONodes,
@@ -111,6 +111,7 @@ class PlatformNodesFactory:
             "hci_baremetal": IBMCloudBMNodes,
             "kubevirt_vm": KubevirtVMNodes,
             "ibm_cloud_ipi": IBMCloudIPI,
+            "baremetal_ai": IBMCloudBMNodes,
         }
 
     def get_nodes_platform(self):
@@ -136,6 +137,11 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ipi":
                 platform += "_ipi"
+
+        if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ai":
+                platform += "_ai"
+
         return self.cls_map[platform]()
 
 
