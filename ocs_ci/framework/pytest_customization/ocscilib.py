@@ -7,6 +7,7 @@ all the config before pytest run. This run_ocsci.py is just a wrapper for
 pytest which proccess config and passes all params to pytest.
 """
 
+import datetime
 import logging
 import os
 import pandas as pd
@@ -62,6 +63,9 @@ __all__ = [
 
 current_factory = logging.getLogRecordFactory()
 log = logging.getLogger(__name__)
+
+# Global variable to store test start time
+test_start_time = None
 
 
 def _pytest_addoption_cluster_specific(parser):
@@ -833,6 +837,19 @@ def pytest_runtest_makereport(item, call):
         mcg_logs_collection = bool(mcg_markers_to_collect & item_markers)
         try:
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
+                # Format test start time in RFC3339 format for must-gather
+                # Subtract 5 minutes buffer to capture events before test started
+                global test_start_time
+                since_time_str = None
+                if test_start_time:
+                    # Add 5 minute buffer before test start time
+                    time_with_buffer = test_start_time - datetime.timedelta(minutes=5)
+                    # RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
+                    since_time_str = time_with_buffer.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    log.info(
+                        f"Collecting logs since: {since_time_str} (5 min buffer before test start)"
+                    )
+
                 utils.collect_ocs_logs(
                     dir_name=test_case_name,
                     ocp=ocp_logs_collection,
@@ -842,6 +859,7 @@ def pytest_runtest_makereport(item, call):
                     output_file=True,
                     skip_after_max_fail=True,
                     timeout=timeout,
+                    since_time=since_time_str,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")
@@ -924,12 +942,16 @@ def pytest_runtest_setup(item):
     try:
         start_monitor_memory()
 
-        global consumed_ram_start_test
+        global consumed_ram_start_test, test_start_time
         consumed_ram_start_test = get_consumed_ram()
+
+        # Capture test start time in UTC for must-gather --since-time option
+        test_start_time = datetime.datetime.utcnow()
 
         log.debug(
             f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_ram_start_test)}"
         )
+        log.debug(f"Test start time (UTC): {test_start_time.isoformat()}Z")
     except Exception:
         log.exception("Got exception while start to monitor memory")
 
