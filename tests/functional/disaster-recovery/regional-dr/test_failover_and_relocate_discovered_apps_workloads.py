@@ -88,6 +88,9 @@ class TestFailoverAndRelocateWithDiscoveredAppsWorkloads:
             drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
 
+        logger.info("Checking for lastGroupSyncTime")
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
             namespace=rdr_workload.workload_namespace,
@@ -156,6 +159,9 @@ class TestFailoverAndRelocateWithDiscoveredAppsWorkloads:
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
+
+        logger.info("Checking for lastGroupSyncTime")
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
