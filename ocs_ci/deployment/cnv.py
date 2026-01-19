@@ -15,7 +15,7 @@ import tarfile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -219,7 +219,7 @@ class CNVInstaller(object):
             resource_name=catalogsource_name,
         )
 
-    @retry(TimeoutExpired, tries=2, delay=30, backoff=1)
+    @retry((TimeoutExpiredError, TimeoutExpired), tries=2, delay=30, backoff=1)
     @catch_exceptions((CommandFailed))
     def deploy_hyper_converged(self):
         """
@@ -231,9 +231,11 @@ class CNVInstaller(object):
 
         try:
             logger.info(f"Checking if {constants.HYPERCONVERGED} exists")
-            OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace).get()
+            OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace).get()["items"][
+                0
+            ]
             logger.info(f"Found {constants.HYPERCONVERGED} skipping creation")
-        except CommandFailed:
+        except IndexError:
             logger.info("Deploying the HyperConverged CR")
             hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
             hyperconverged_yaml = OCS(**hyperconverged_yaml_file)
