@@ -26,6 +26,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.ocs.acm.acm import verify_running_acm
 from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
@@ -2294,6 +2295,7 @@ class Deployment(object):
             self.deploy_multicluster_hub()
         if config.ENV_DATA.get("configure_acm_to_import_mce"):
             self.configure_acm_to_import_mce_clusters()
+        verify_running_acm()
 
     def configure_acm_to_import_mce_clusters(self):
         """
