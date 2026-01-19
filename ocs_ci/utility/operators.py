@@ -8,6 +8,7 @@ from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
+from ocs_ci.ocs.node import get_all_nodes
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -457,11 +458,18 @@ class NMStateOperator(Operator):
         Verify the pods for NMState Operator are running
 
         """
+        # the list of pods is this:
+        # nmstate-console-plugin-*
+        # nmstate-metrics-*
+        # nmstate-operator-*
+        # nmstate-webhook-*
+        # nmstate-handler-* for each node
+        number_of_expected_pods = 4 + len(get_all_nodes())
         sample = TimeoutSampler(
             timeout=300,
             sleep=10,
             func=self.count_nmstate_pods_running,
-            count=10,
+            count=number_of_expected_pods,
         )
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError(
