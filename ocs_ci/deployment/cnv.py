@@ -7,6 +7,8 @@ import os
 import logging
 import tempfile
 import platform
+from subprocess import TimeoutExpired
+
 import requests
 import zipfile
 import tarfile
@@ -217,6 +219,7 @@ class CNVInstaller(object):
             resource_name=catalogsource_name,
         )
 
+    @retry(TimeoutExpired, tries=2, delay=30, backoff=1)
     @catch_exceptions((CommandFailed))
     def deploy_hyper_converged(self):
         """
@@ -226,9 +229,13 @@ class CNVInstaller(object):
             TimeoutExpiredError: If the HyperConverged resource does not become available within the specified time.
         """
         logger.info("Deploying the HyperConverged CR")
-        hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
-        hyperconverged_yaml = OCS(**hyperconverged_yaml_file)
-        hyperconverged_yaml.create()
+        try:
+            OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace).get()
+
+        except CommandFailed:
+            hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
+            hyperconverged_yaml = OCS(**hyperconverged_yaml_file)
+            hyperconverged_yaml.create()
 
         # Verify the installation was completed successfully by checking the HyperConverged CR
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
