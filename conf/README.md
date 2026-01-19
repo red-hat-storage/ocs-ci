@@ -410,6 +410,11 @@ higher priority).
 * `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
     proper OCP release image for OCP deployment or you can set custom via
     release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.
+* `iscsi_target_ip` - The IP of iscsi server
+* `iscsi_target_username`- The username for authenticating with the iSCSI target.
+* `iscsi_target_password`- The password for the iSCSI target authentication.
+* `iscsi_target_iqn`- The iSCSI Qualified Name (IQN) identifying the iSCSI target.
+* `iscsi_setup` - Configure iscsi or not (Default: false). Necessory for FDF backed by SAN storage.
 
 #### UPGRADE
 
