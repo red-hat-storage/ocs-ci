@@ -3618,6 +3618,8 @@ DEVICECLASS_STORAGECLASS_YAML = os.path.join(
 
 
 # NFS
+NFS_STORAGECLASS_NAME = "ocs-storagecluster-ceph-nfs"
+COPY_NFS_STORAGECLASS_NAME = "ocs-storagecluster-ceph-nfs-copy"
 NFS_NAMESPACE_NAME = "nfs-storage"
 NFS_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "nfs")
 NFS_SA_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "nfs_sa.yaml")
