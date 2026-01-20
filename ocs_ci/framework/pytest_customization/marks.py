@@ -79,7 +79,9 @@ csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
-system_test = pytest.mark.system_test
+system = pytest.mark.system
+# system_test mark is deprecated, use system instead
+system_test = compose(system, pytest.mark.system_test)
 performance = pytest.mark.performance
 performance_a = pytest.mark.performance_a
 performance_b = pytest.mark.performance_b
