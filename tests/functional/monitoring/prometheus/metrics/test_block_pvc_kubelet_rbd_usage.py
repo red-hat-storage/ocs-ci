@@ -131,7 +131,8 @@ def validate_all_layers(prom_api, pvc_obj, namespace, expected_mib, volume_mode)
         ), f"Kubelet reports less used than written! Kube: {kube_metrics['used']}, Target: {expected_bytes}"
     else:
         # Filesystem mode: Kubelet Capacity (statfs) is always smaller than Ceph Capacity (RBD size)
-        # We allow small tolerance Percentage/Margin for XFS/Ext4 overhead (around 50 MB)- Let's say total capacity for FS mode PVCs is reflecting as 973MB at Kubelet side instead of 1024MB at cpeh rbd side
+        # We allow small tolerance Percentage/Margin for XFS/Ext4 overhead (around 50 MB)
+        # Total capacity for FS mode PVCs is reflecting as 973MB at Kubelet side instead of 1024MB at cpeh rbd side
         tolerance_factor = 0.90
         assert kube_metrics["capacity"] >= (
             ceph_metrics["capacity"] * tolerance_factor
