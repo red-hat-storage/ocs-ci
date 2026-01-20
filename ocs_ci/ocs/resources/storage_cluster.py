@@ -63,6 +63,7 @@ from ocs_ci.ocs.node import (
     get_nodes_where_ocs_pods_running,
     get_provider_internal_node_ips,
     add_disk_stretch_arbiter,
+    has_taint,
 )
 from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.ocs.version import get_ocp_version
@@ -183,6 +184,16 @@ def ocs_install_verification(
     from ocs_ci.ocs.resources.storageconsumer import verify_storage_consumer_resources
 
     number_of_worker_nodes = len(get_nodes())
+    if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+        number_of_worker_nodes = number_of_worker_nodes - len(
+            [
+                node_obj
+                for node_obj in get_nodes()
+                if has_taint(
+                    node_obj, taint="node-role.submariner.io/gateway=true:NoSchedule"
+                )
+            ]
+        )
     namespace = config.ENV_DATA["cluster_namespace"]
     log.info("Verifying OCS installation")
     if config.ENV_DATA.get("disable_components"):
