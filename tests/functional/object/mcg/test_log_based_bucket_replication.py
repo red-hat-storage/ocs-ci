@@ -24,7 +24,6 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
-from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)
@@ -399,8 +398,6 @@ class TestLogBasedBucketReplication(MCGTest):
             self.DEFAULT_TIMEOUT,
         )
 
-    _nodes_tested = []
-
     @tier4b
     @skipif_vsphere_ipi
     @pytest.mark.parametrize(
@@ -433,23 +430,6 @@ class TestLogBasedBucketReplication(MCGTest):
         """
         mockup_logger, source_bucket, target_bucket = log_based_replication_setup
 
-        # Skip the rest of the test and pass if the target pod's node
-        # was already reset with a previous passing parametrization of this test
-        logger.info(
-            f"Checking if {target_pod_name}'s node has already passed this test with a previous param"
-        )
-        target_pod = [
-            pods for pods in get_noobaa_pods() if target_pod_name in pods.name
-        ][0]
-        target_node_name = get_pod_node(target_pod).name
-        if target_node_name in self._nodes_tested:
-            logger.info(
-                f"Skipping the rest of the test because {target_pod_name}'s node has already passed this test"
-            )
-            return
-        else:
-            logger.info(f"{target_pod_name}'s node has not passed this test yet")
-
         upload_test_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
             source_bucket,
@@ -469,9 +449,6 @@ class TestLogBasedBucketReplication(MCGTest):
             mockup_logger,
             self.DEFAULT_TIMEOUT,
         )
-
-        # Keep track of the target node to prevent its redundant testing in this scenario
-        self._nodes_tested.append(target_node_name)
 
 
 def upload_test_objects_to_source_and_wait_for_replication(
