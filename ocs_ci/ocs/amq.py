@@ -185,14 +185,9 @@ class AMQ(object):
         """
 
         _rc = True
-        get_pods_timeout = 300
-
-        # In FIPS mode the entity-operator pod takes longer to start up
-        if config.ENV_DATA.get("fips"):
-            get_pods_timeout = 900
 
         for pod in TimeoutSampler(
-            get_pods_timeout, 10, get_pod_name_by_pattern, pod_pattern, namespace
+            900, 10, get_pod_name_by_pattern, pod_pattern, namespace
         ):
             try:
                 if pod is not None and len(pod) == expected_pods:
