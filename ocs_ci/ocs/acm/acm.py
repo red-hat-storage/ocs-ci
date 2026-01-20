@@ -273,22 +273,25 @@ class AcmAddClusters(AcmPageNavigator):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
-        increase_gateway_number = 2
-        if ibm_cloud_managed:
-            increase_gateway_number = 1
-
         azure_clusters_indices = [
             cluster_index
             for cluster_index in [primary_index, secondary_index]
             if config.clusters[cluster_index].ENV_DATA["platform"]
             == constants.AZURE_PLATFORM
         ]
+
+        increase_gateway_number = 2
+        if ibm_cloud_managed or azure_clusters_indices:
+            increase_gateway_number = 1
+
+        found_azure_page = False
         for cluster_nr in range(1, 3):
             if azure_clusters_indices:
                 try:
                     azure_page = self.driver.find_element(
-                        By.XPATH, "//*[contains(text(), 'on Microsoft Azure')]"
+                        self.page_nav["submariner_addon_azure_page"]
                     )
+                    found_azure_page = True
                     azure_index = [
                         cluster_index
                         for cluster_index in azure_clusters_indices
@@ -297,7 +300,8 @@ class AcmAddClusters(AcmPageNavigator):
                     ][0]
                     self.enter_azure_details(azure_cluster_index=azure_index)
                 except NoSuchElementException:
-                    pass
+                    if (not found_azure_page) and cluster_nr == 2:
+                        raise
             if not ibm_cloud_managed:
                 log.info(
                     f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"

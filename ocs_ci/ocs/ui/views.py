@@ -1450,6 +1450,10 @@ acm_configuration_4_20 = {
     "azure_client_secret": ("//input[@id='clientSecret']", By.XPATH),
     "azure_subscription_id": ("//input[@id='subscriptionId']", By.XPATH),
     "azure_tenent_id": ("//input[@id='tenantId']", By.XPATH),
+    "submariner_addon_azure_page": (
+        "//*[contains(text(), 'on Microsoft Azure')]",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
