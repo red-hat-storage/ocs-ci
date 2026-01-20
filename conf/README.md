@@ -185,6 +185,7 @@ version.
 * `enable_nested_virtualization` - Enable nested virtualization for vSphere platform primarily. Used for kubevirt on HCP Clusters. It sets options kvm_intel nested=1 options kvm_amd nested=1 in MachineConfig
 * `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
 * `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
+* `submariner_cli_deployment` - Enforce Submariner CLI deployment.
 
 #### REPORTING
 
@@ -324,7 +325,7 @@ higher priority).
     * `bm_httpd_server_user` - user name used to ssh to the helper node
     * `bm_tftp_base_dir` - TFTP root dir where are placed files for PXE boot (usually `/tftpboot/`)
     * `bm_dnsmasq_dir` - _dnsmasq_ configuration files place
-    * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
+    * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker)
     * `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
     * `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
     * `root_disk_common_path` - path to root disk where an additional partition should be created common for all worker nodes (see `partitioned_disk_on_workers` option)
@@ -378,6 +379,14 @@ higher priority).
 * `custom_vpc` - Applicable only for IMB Cloud IPI deployment where we want to create custom VPC and networking
   with specific Address prefixes to prevent /18 CIDR to be used.
 * `ip_prefix` - Applicable only for IMB Cloud IPI deployment when custom_vpc, if not specified: 27 prefix will be used.
+* `existing_vpc` - Set to true to use existing VPC, resource group, and subnets for IBM Cloud IPI deployment.
+* `resource_group_name` - Name of existing resource group for IBM Cloud IPI deployment when using existing VPC.
+* `network_resource_group_name` - Name of existing network resource group for IBM Cloud IPI deployment when using existing VPC (can be same as resource_group_name).
+* `vpc_name` - Name of existing VPC for IBM Cloud IPI deployment when using existing VPC.
+* `control_plane_subnets` - List of existing control plane subnet names for IBM Cloud IPI deployment when using existing VPC.
+* `compute_subnets` - List of existing compute subnet names for IBM Cloud IPI deployment when using existing VPC.
+* `worker_instance_type` - Worker instance type in ibmcloud; example: 'bx2-16x64'
+* `master_instance_type` - Worker instance type in ibmcloud; example: 'bx2-4x16'
 * `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
@@ -394,6 +403,13 @@ higher priority).
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
 * `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
+* `early_testing` - set to True if it's early testing of RHCOS and provide  release_img
+    e.g. registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2
+* `release_img` - release image for early testing of RHCOS or multi arch setup
+* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
+* `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
+    proper OCP release image for OCP deployment or you can set custom via
+    release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.
 
 #### UPGRADE
 
@@ -424,6 +440,12 @@ auth file or pulled from s3.
   * `username` - username for database
   * `password` - password of database user
   * `port` - port where PgSQL server listen to
+* `jira` - Jira related section for reporting purpose, if not provided it will try to read values from /etc/jira.cfg
+  * `url` - URL of Jira instance
+  * `token` - auth token for Jira
+  * `visibility` - E.g. `{"type": "group", "value": "Red Hat Employee"}` which
+    is used as Default value if not provided to do not expose data to public
+
 
 #### MULTICLUSTER
 

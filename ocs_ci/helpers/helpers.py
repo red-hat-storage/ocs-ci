@@ -43,6 +43,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NoRunningCephToolBoxException,
     ResourceNotFoundError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
@@ -54,8 +55,10 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.vsphere import VSPHERE
+from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    ceph_health_check,
     TimeoutSampler,
     ocsci_log_path,
     run_cmd,
@@ -309,7 +312,7 @@ def create_pod(
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
     if deployment:
-        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DEPLOY_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(f"test-{interface}", "pod")
@@ -318,6 +321,11 @@ def create_pod(
     if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        # Ensure selector field exists (defensive check for custom pod_dict_path)
+        if "selector" not in pod_data["spec"]:
+            pod_data["spec"]["selector"] = {}
+        if "matchLabels" not in pod_data["spec"]["selector"]:
+            pod_data["spec"]["selector"]["matchLabels"] = {}
         pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
@@ -461,9 +469,43 @@ def create_pod(
         logger.info(deployment_obj.name)
         deployment_name = deployment_obj.name
         label = f"name={deployment_name}"
+
+        # Determine how many pods to wait for based on PVC access mode and replica count
+        wait_resource_count = None
+        if pvc_name and replica_count > 1:
+            try:
+                # Get PVC object to check access mode
+                pvc_obj = pvc.PVC(name=pvc_name, namespace=namespace)
+                pvc_obj.reload()
+                pvc_access_mode = pvc_obj.get_pvc_access_mode
+
+                # For RWO volumes with multiple replicas, only one pod can be Running
+                # For RWX volumes, all replicas can be Running, so wait for all
+                if pvc_access_mode == constants.ACCESS_MODE_RWO:
+                    wait_resource_count = 1
+                    logger.info(
+                        f"PVC {pvc_name} has RWO access mode with {replica_count} replicas. "
+                        f"Waiting for 1 pod to be Running."
+                    )
+                # For RWX or other access modes, wait for all replicas (resource_count=None)
+                else:
+                    logger.info(
+                        f"PVC {pvc_name} has {pvc_access_mode} access mode with {replica_count} replicas. "
+                        f"Waiting for all pods to be Running."
+                    )
+            except Exception as ex:
+                # If we can't determine access mode, default to waiting for 1 pod
+                # to avoid timeout issues with RWO volumes
+                logger.warning(
+                    f"Could not determine PVC access mode for {pvc_name}: {ex}. "
+                    f"Defaulting to wait for 1 pod."
+                )
+                wait_resource_count = 1
+
         assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
+            resource_count=wait_resource_count,
             timeout=360,
             sleep=3,
         )
@@ -2836,6 +2878,60 @@ def wait_for_ct_pod_recovery():
     return True
 
 
+def ceph_health_check_with_toolbox_recovery(
+    namespace: str,
+    tries: int = 20,
+    delay: int = 30,
+    fix_ceph_health: bool = True,
+    update_jira: bool = True,
+    no_exception_if_jira_issue_updated: bool = False,
+) -> bool:
+    """
+    Perform ceph health check with automatic toolbox pod recovery.
+
+    If the ceph toolbox pod is not running (e.g., after node disruption tests),
+    this function will wait for the toolbox pod to recover before retrying.
+
+    Args:
+        namespace (str): Kubernetes namespace for ceph cluster.
+        tries (int): Number of retries for health check.
+        delay (int): Delay between retries in seconds.
+        fix_ceph_health (bool): Whether to attempt fixing ceph health issues.
+        update_jira (bool): Whether to update Jira on health issues.
+        no_exception_if_jira_issue_updated (bool): Skip exception if Jira was updated.
+
+    Returns:
+        bool: True if ceph health check passes.
+
+    Raises:
+        NoRunningCephToolBoxException: If toolbox pod doesn't recover.
+        CephHealthException: If ceph health check fails after retries.
+    """
+    try:
+        return ceph_health_check(
+            namespace=namespace,
+            tries=tries,
+            delay=delay,
+            fix_ceph_health=fix_ceph_health,
+            update_jira=update_jira,
+            no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+        )
+    except NoRunningCephToolBoxException:
+        logger.warning(
+            "Ceph toolbox pod not running. Waiting for recovery before retry..."
+        )
+        if wait_for_ct_pod_recovery():
+            return ceph_health_check(
+                namespace=namespace,
+                tries=tries,
+                delay=delay,
+                fix_ceph_health=fix_ceph_health,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
+        raise
+
+
 def label_worker_node(node_list, label_key, label_value):
     """
     Function to label worker node for running app pods on specific worker nodes.
@@ -3133,10 +3229,12 @@ def validate_pods_are_running_and_not_restarted(pod_name, pod_restart_count, nam
     )
     pod_state = pod_obj.get("status").get("phase")
     if pod_state == "Running" and restart_count == pod_restart_count:
-        logger.info("Pod is running state and restart count matches with previous one")
+        logger.info(
+            f"{pod_name} is running state and restart count matches with previous one"
+        )
         return True
     logger.error(
-        f"Pod is in {pod_state} state and restart count of pod {restart_count}"
+        f"{pod_name} is in {pod_state} state and restart count of pod {restart_count}"
     )
     logger.info(f"{pod_obj}")
     return False
@@ -4559,7 +4657,7 @@ def get_noobaa_db_used_space():
 
     """
     noobaa_db_pod_obj = pod.get_noobaa_pods(
-        noobaa_label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+        noobaa_label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE
     )
     cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
         command="df -h /var/lib/pgsql/", out_yaml_format=False
@@ -4898,8 +4996,9 @@ def verify_log_exist_in_pods_logs(
             container=container,
             all_containers=all_containers_flag,
             since=since,
+            grep=expected_log,
+            return_empty_string=True,
         )
-        logger.info(f"logs osd:{pod_logs}")
         if expected_log in pod_logs:
             return True
     return False
@@ -5044,16 +5143,16 @@ def odf_cli_set_log_level(service, log_level, subsystem):
     """
     from pathlib import Path
 
-    if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
+    if not (Path(config.RUN["bin_dir"]) / "odf").exists():
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(
         f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
     )
-    cmd = f"odf-cli set ceph log-level {service} {subsystem} {log_level}"
+    cmd = f"odf set ceph log-level {service} {subsystem} {log_level}"
 
     logger.info(cmd)
-    return exec_cmd(cmd, use_shell=True)
+    return exec_cmd(cmd, shell=True)
 
 
 def get_ceph_log_level(service, subsystem):
@@ -5460,11 +5559,10 @@ def upgrade_multus_holder_design():
         return
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
-        from ocs_ci.deployment.nmstate import NMStateInstaller
-
-        logger.info("Install NMState operator and create an instance")
-        nmstate_obj = NMStateInstaller()
-        nmstate_obj.running_nmstate()
+        nmstate_operator = NMStateOperator(
+            create_catalog=True,
+        )
+        nmstate_operator.deploy()
         configure_node_network_configuration_policy_on_all_worker_nodes()
     reset_all_osd_pods()
     enable_csi_disable_holder_pods()
@@ -6841,3 +6939,67 @@ def verify_socket_on_node(node_name, host_path, socket_name):
         node=node_name, cmd_list=[f"ls -l {host_path}/{socket_name}"]
     )
     return socket_name in debug_node_output
+
+
+def set_rook_log_level():
+    """
+    Set the rook log level
+    """
+    rook_log_level = config.DEPLOYMENT.get("rook_log_level")
+    if rook_log_level:
+        set_configmap_log_level_rook_ceph_operator(rook_log_level)
+
+
+def check_osds_down(osd_ids: list[str]) -> bool:
+    """
+    Check if specified OSDs are marked as 'down' in Ceph
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to check
+
+    Returns:
+        bool: True if all OSDs are down, False otherwise
+    """
+    log = logging.getLogger(__name__)
+    ceph_pod = pod.get_ceph_tools_pod()
+    osd_dump = ceph_pod.exec_ceph_cmd("ceph osd dump")
+
+    osds_status = {}
+    for osd in osd_dump["osds"]:
+        osd_id = str(osd["osd"])
+        if osd_id in osd_ids:
+            osds_status[osd_id] = {"up": osd["up"], "in": osd["in"]}
+
+    for osd_id, status in osds_status.items():
+        state = "up" if status["up"] == 1 else "down"
+        log.info(f"OSD {osd_id}: {state}")
+
+    all_down = all(status["up"] == 0 for status in osds_status.values())
+    return all_down
+
+
+def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) -> None:
+    """
+    Wait for OSDs to be marked as 'down' in Ceph using polling
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to wait for
+        timeout (int): Timeout in seconds (default: 300)
+        sleep (int): Sleep interval between checks (default: 10)
+
+    Raises:
+        TimeoutExpiredError: If OSDs don't go down within timeout
+    """
+    log = logging.getLogger(__name__)
+    log.info(f"Waiting for OSDs {osd_ids} to be marked as 'down' in Ceph")
+
+    sample = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_osds_down, osd_ids=osd_ids
+    )
+
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"OSDs {osd_ids} did not go down within {timeout} seconds"
+        )
+
+    log.info(f"All OSDs {osd_ids} are now marked as 'down'")

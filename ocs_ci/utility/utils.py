@@ -64,6 +64,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.jira import JiraHelper
 from psutil._common import bytes2human
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 
@@ -610,7 +611,6 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
-    use_shell=False,
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
@@ -633,7 +633,6 @@ def exec_cmd(
         threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
-        use_shell (bool): If True will pass the cmd without splitting
         cluster_config (MultiClusterConfig): In case of multicluster environment this object
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
@@ -783,6 +782,8 @@ def download_file(url, filename, **kwargs):
 
     """
     log.debug(f"Download '{url}' to '{filename}'.")
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 600
     with open(filename, "wb") as f:
         r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
@@ -804,6 +805,8 @@ def get_url_content(url, **kwargs):
 
     """
     log.debug(f"Download '{url}' content.")
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 600
     r = requests.get(url, **kwargs)
     assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
     return r.content
@@ -1310,7 +1313,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
         force_download (bool): Force vault cli download even if already present
 
     """
-    res = requests.get(constants.VAULT_VERSION_INFO_URL)
+    res = requests.get(constants.VAULT_VERSION_INFO_URL, timeout=120)
     version = res.url.split("/")[-1].lstrip("v")
     bin_dir = os.path.expanduser(bind_dir or config.RUN["bin_dir"])
     system = platform.system()
@@ -1348,13 +1351,13 @@ def get_vault_cli(bind_dir=None, force_download=False):
 
 def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0] + "/"
-    r = requests.get(base_build_url)
+    r = requests.get(base_build_url, timeout=120)
     extracting_condition = b"Extracting" in r.content
     failed_build = b"FAILED.md" in r.content
     if extracting_condition:
         log.info("Build is extracting now, may take up to a minute.")
     if failed_build:
-        r = requests.get(base_build_url + "FAILED.md")
+        r = requests.get(base_build_url + "FAILED.md", timeout=120)
         log.info(
             f"Nightly build is not properly generated! Failed with reason: {r.content}"
         )
@@ -1517,6 +1520,14 @@ class TimeoutSampler(object):
         self.func_args = func_args
         self.func_kwargs = func_kwargs
 
+        # In case of underlying func has timeout or sleep parameter, user needs to pass it
+        # as func_timeout or func_sleep to avoid conflict.
+        if "func_timeout" in func_kwargs:
+            func_kwargs["timeout"] = func_kwargs["func_timeout"]
+            del func_kwargs["func_timeout"]
+        if "func_sleep" in func_kwargs:
+            func_kwargs["sleep"] = func_kwargs["func_sleep"]
+            del func_kwargs["func_sleep"]
         # Timestamps of the first and most recent samples
         self.start_time = None
         self.last_sample_time = None
@@ -1625,6 +1636,14 @@ class TimeoutIterator(TimeoutSampler):
             func_args = []
         if func_kwargs is None:
             func_kwargs = {}
+        # In case of underlying func has timeout or sleep parameter, we need to pass it to the super class
+        # so that it can be used in the super class without conflict.
+        if "timeout" in func_kwargs:
+            func_kwargs["func_timeout"] = func_kwargs["timeout"]
+            del func_kwargs["timeout"]
+        if "sleep" in func_kwargs:
+            func_kwargs["func_sleep"] = func_kwargs["sleep"]
+            del func_kwargs["sleep"]
         super().__init__(timeout, sleep, func, *func_args, **func_kwargs)
 
 
@@ -2259,6 +2278,7 @@ def get_csi_versions():
     return csi_versions
 
 
+# TODO: remove this function and use the one in version.py
 def get_ocp_version(seperator=None):
     """
     *The deprecated form of 'get current ocp version'*
@@ -2621,30 +2641,80 @@ def ceph_health_resolve_crash():
 
 def ceph_health_resolve_mon_slow_ops(health_status):
     """
-    Fix ceph health issue with mon slow ops
+    Fix Ceph health issue with mon slow ops.
+    Supports both 'mon.e has slow ops' and 'daemons [mon.e,mon.f] have slow ops'
     """
-    log.warning("Trying to fix the issue with mon slow ops by restarting mon pod")
-    mon_pattern = r"mon\.([a-z]) has slow ops"
-    match = re.search(mon_pattern, health_status)
-    mon_id = None
-    if match:
-        mon_id = match.group(1)
-        log.warning(f"Problematic MON ID with slow ops: {mon_id} will be restarted")
-    if mon_id:
-        from ocs_ci.ocs import ocp
+    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
 
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning("No MON IDs found in health status. Cannot resolve slow ops.")
+        return
+
+    log.warning(f"Detected problematic MON IDs with slow ops: {mon_ids}")
+
+    restart_mon_pods(mon_ids)
+
+
+def ceph_health_resolve_network_partition(health_status):
+    """
+    Fix Ceph health issue with mon network partition.
+    """
+    log.warning(
+        "Trying to fix the issue with mon newtork parition by restarting MON pod(s)"
+    )
+
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning(
+            "No MON IDs found in health status. Cannot resolve network partition detected issue."
+        )
+        return
+
+    log.warning(
+        f"Detected problematic MON IDs with network partition detected: {mon_ids}"
+    )
+
+    restart_mon_pods(mon_ids)
+
+
+def restart_mon_pods(mon_ids):
+    """
+    Restart the MON pods.
+
+    Args:
+        mon_ids (list): List of MON IDs
+    """
+    from ocs_ci.ocs import ocp
+
+    for mon_id in mon_ids:
+        log.warning(f"Restarting MON '{mon_id}' ...")
         ocp.OCP().exec_oc_cmd(
             f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
         )
 
 
-def ceph_health_recover(health_status, namespace=None):
+def ceph_health_recover(
+    health_status,
+    namespace=None,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Function which tries to recover ceph health to be HEALTH OK
 
     Args:
         health_status (str): Ceph health status
         namespace (str): Namespace of OCS
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered
 
     Raises:
         CephHealthNotRecoveredException: When Ceph health was not recovered
@@ -2667,19 +2737,47 @@ def ceph_health_recover(health_status, namespace=None):
             "func_kwargs": {},
             "ceph_health_tries": 5,
             "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-2781",
+                    "pattern": r"mgr module prometheus crashed in",
+                },
+            ],
         },
         {
-            "pattern": r"slow ops, oldest one blocked for \d+ sec, mon\.([a-z]) has slow ops",
+            "pattern": r"slow ops, oldest one blocked for \d+ sec, .*(?:has|have) slow ops",
             "func": ceph_health_resolve_mon_slow_ops,
             "func_args": [health_status],
             "func_kwargs": {},
             "ceph_health_tries": 6,
             "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-2456",
+                    "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
+                    == "regional-dr",
+                },
+            ],
+        },
+        {
+            "pattern": r"HEALTH_WARN \d+ network partitions? detected",
+            "func": ceph_health_resolve_network_partition,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-4521",
+                    "pattern": r"Netsplit detected between mon",
+                },
+            ],
         },
         # TODO: Add more patterns and fix functions
     ]
     for fix_dict in ceph_health_fixes:
         pattern = fix_dict["pattern"]
+        jira_issues = fix_dict.get("known_issues", [])
         if re.search(pattern, health_status):
             log.info(
                 "Trying to fix Ceph Health because we found in Health status the matching pattern"
@@ -2695,6 +2793,56 @@ def ceph_health_recover(health_status, namespace=None):
                 ocp=False,
                 timeout=defaults.MUST_GATHER_TIMEOUT,
             )
+            jenkins_build_url = config.RUN.get("jenkins_build_url", "")
+            base_logs_url = config.RUN.get("logs_url", "")
+            mg_log_url = (
+                f"{base_logs_url}/failed_testcase_ocs_logs_{config.RUN['run_id']}/"
+            )
+            odf_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
+            try:
+                odf_version = version_module.get_running_odf_version()
+            except Exception:
+                odf_version = version_module.get_ocs_version_from_csv()
+            ocp_version = version_module.get_semantic_ocp_running_version()
+            issue_confirmed = False
+            issue_commented = False
+            jira_issue_id = None
+            for jira_issue in jira_issues:
+                jira_issue_id = jira_issue["issue"]
+                jira_issue_pattern = jira_issue.get("pattern")
+                jira_issue_function = jira_issue.get("func")
+                if jira_issue_pattern:
+                    if re.search(jira_issue["pattern"], health_status):
+                        issue_confirmed = True
+                if jira_issue_function:
+                    issue_confirmed = jira_issue_function()
+                if issue_confirmed:
+                    break
+            if issue_confirmed and update_jira:
+                msg_lines = [
+                    "*OCS-CI report*",
+                    f"ODF version: {odf_version}",
+                    f"OCP version: {ocp_version}",
+                ]
+                if odf_registry_image:
+                    msg_lines.append(f"ODF registry image: {odf_registry_image}")
+                if jenkins_build_url:
+                    msg_lines.append(f"Issue reproduced in job: {jenkins_build_url}")
+                if mg_log_url:
+                    msg_lines.append(f"MG logs collected here: {mg_log_url}")
+                msg = "\n".join(msg_lines)
+                try:
+                    jira_helper = JiraHelper()
+                    jira_issue = jira_helper.get_issue(jira_issue_id)
+                    jira_issue_summary = jira_issue["fields"]["summary"]
+                    log.error(
+                        f"Hitting jira issue: {jira_issue_id} - {jira_issue_summary}"
+                    )
+                    jira_helper.add_comment(jira_issue_id, msg)
+                    issue_commented = True
+                except Exception as ex:
+                    log.error(f"Failed to connect or comment to Jira: {ex}")
+
             fix_dict["func"](
                 *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
             )
@@ -2708,6 +2856,12 @@ def ceph_health_recover(health_status, namespace=None):
                 raise CephHealthNotRecoveredException(
                     f"Attempt to try to recover the Ceph Health failed! Exception: {ex}"
                 )
+            if update_jira and issue_commented and no_exception_if_jira_issue_updated:
+                log.info(
+                    f"Jira issue: {jira_issue_id} was updated and ceph health was recovered,"
+                    " no exception will be raised"
+                )
+                return
             raise CephHealthRecoveredException(
                 "Ceph health was not OK and got forcibly recovered to not block other tests"
                 f" after the issue: {pattern} !"
@@ -2716,7 +2870,14 @@ def ceph_health_recover(health_status, namespace=None):
             )
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False):
+def ceph_health_check(
+    namespace=None,
+    tries=20,
+    delay=30,
+    fix_ceph_health=False,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Args:
         namespace (str): Namespace of OCS
@@ -2725,7 +2886,9 @@ def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False)
         delay (int): Delay in seconds between retries
         fix_ceph_health (bool): If True, it will try to fix the health to be OK
             even if it will recover, we will get an exception CephHealthRecoveredException
-
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered. Applicable only if fix_ceph_health is True.
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
             delay of 30 seconds if default values are not changed via args.
@@ -2743,10 +2906,17 @@ def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False)
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace, fix_ceph_health)
+    )(ceph_health_check_base)(
+        namespace, fix_ceph_health, update_jira, no_exception_if_jira_issue_updated
+    )
 
 
-def ceph_health_check_base(namespace=None, fix_ceph_health=False):
+def ceph_health_check_base(
+    namespace=None,
+    fix_ceph_health=False,
+    update_jira=True,
+    no_exception_if_jira_issue_updated=False,
+):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
@@ -2755,6 +2925,9 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
             (default: config.ENV_DATA['cluster_namespace'])
         fix_ceph_health (bool): If True, it will try to fix the health to be OK
             even if it will recover, we will get an exception CephHealthRecoveredException
+        update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+        no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira issue is updated
+            and ceph health is recovered. Applicable only if fix_ceph_health is True.
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
@@ -2766,15 +2939,25 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    health = run_ceph_health_cmd(namespace)
+    health = run_ceph_health_cmd(namespace, detail=True)
 
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
+        log.warning(f"Ceph cluster health is not HEALTH_OK: {health}")
         if fix_ceph_health:
-            ceph_health_recover(health, namespace)
-        raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+            ceph_health_recover(
+                health,
+                namespace,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
+            return True
+        else:
+            raise CephHealthException(
+                f"Ceph cluster health is not OK. Health: {health}"
+            )
 
 
 def create_ceph_health_cmd(namespace):
@@ -2797,12 +2980,13 @@ def create_ceph_health_cmd(namespace):
     return ceph_health_cmd
 
 
-def run_ceph_health_cmd(namespace):
+def run_ceph_health_cmd(namespace, detail=False):
     """
     Run the ceph health command
 
     Args:
         namespace: Namespace of OCS
+        detail: If True, it will run the ceph health command with detail option
 
     Raises:
         CommandFailed: In case the rook-ceph-tools pod failed to reach the Ready state.
@@ -2819,9 +3003,11 @@ def run_ceph_health_cmd(namespace):
         ct_pod = get_ceph_tools_pod(namespace=namespace)
     except (AssertionError, CephToolBoxNotFoundException) as ex:
         raise CommandFailed(ex)
-
+    ceph_cmd = "ceph health"
+    if detail:
+        ceph_cmd += " detail"
     return ct_pod.exec_ceph_cmd(
-        ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
+        ceph_cmd=ceph_cmd, format=None, out_yaml_format=False, timeout=120
     )
 
 
@@ -3044,6 +3230,72 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version
     raise TagNotFoundException("Couldn't find any desired tag!")
 
 
+def get_latest_ocp_multi_image(version: str = None) -> str:
+    """
+    Get latest OCP multi-arch image tag for given major.minor version.
+    Optimized with paging early-exit and debug logging.
+
+    Args:
+        version (str): OCP version to get the latest multi-arch image for, if not
+            provided, the current OCP version will be used.
+
+    Returns:
+        str: Latest OCP multi-arch image:tag
+
+    Raises:
+        TagNotFoundException: If no matching tag is found
+    """
+    if not version:
+        version = str(version_module.get_semantic_ocp_version_from_config())
+    tag_regex = re.compile(rf"^{re.escape(version)}\.\d+(-rc\.\d+|-ec\.\d+)?-multi$")
+
+    page = 1
+    max_pages = 50
+
+    while page <= max_pages:
+        params = {
+            "onlyActiveTags": "true",
+            "limit": "100",
+            "page": page,
+        }
+
+        response = requests.get(
+            constants.OCP_MULTI_ARCH_QUAY_API_URL,
+            params=params,
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        tags = data.get("tags", [])
+        log.debug(f"[OCP multi tag lookup] page={page}, tags_in_page={len(tags)}")
+
+        for tag in tags:
+            name = tag["name"]
+
+            if name.startswith("v"):
+                continue
+
+            if not tag_regex.match(name):
+                continue
+
+            log.info(
+                f"[OCP multi tag lookup] Found matching tag on page {page}: {name}"
+            )
+            return f"{constants.OCP_MULTI_ARCH_IMAGE}:{name}"
+
+        if not data.get("has_additional"):
+            log.debug(f"[OCP multi tag lookup] No more pages after page {page}")
+            break
+
+        page += 1
+
+    raise TagNotFoundException(
+        f"Couldn't find multi-arch OCP tag for version {version} "
+        f"after scanning {page - 1} pages"
+    )
+
+
 def get_next_version_available_for_upgrade(current_tag):
     """
     This function returns the tag built after the current_version
@@ -3184,6 +3436,7 @@ def query_quay_for_operator_tags(
             page=page,
         ),
         headers=headers,
+        timeout=120,
     )
     if not resp.ok:
         raise requests.RequestException(resp.json())
@@ -3205,7 +3458,15 @@ def check_if_executable_in_path(exec_name):
     return which(exec_name) is not None
 
 
-def upload_file(server, localpath, remotepath, user=None, password=None, key_file=None):
+def upload_file(
+    server,
+    localpath,
+    remotepath,
+    user=None,
+    password=None,
+    key_file=None,
+    ssh_connection=None,
+):
     """
     Upload a file to remote server
 
@@ -3214,23 +3475,33 @@ def upload_file(server, localpath, remotepath, user=None, password=None, key_fil
         localpath (str): Local file to upload
         remotepath (str): Target path on the remote server. filename should be included
         user (str): User to use for the remote connection
+        password (str): Password to use for the remote connection
+        key_file (str): Key file to use for the remote connection
+        ssh_connection (SSHClient): SSH connection to use for the remote connection
 
     """
     if not user:
         user = "root"
     try:
-        ssh = SSHClient()
-        ssh.set_missing_host_key_policy(AutoAddPolicy())
-        if password:
-            ssh.connect(hostname=server, username=user, password=password)
+        if ssh_connection:
+            sftp = ssh_connection.client.open_sftp()
+            log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+            sftp.put(localpath, remotepath)
+            sftp.close()
+            return
         else:
-            log.info(key_file)
-            ssh.connect(hostname=server, username=user, key_filename=key_file)
-        sftp = ssh.open_sftp()
-        log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
-        sftp.put(localpath, remotepath)
-        sftp.close()
-        ssh.close()
+            ssh = SSHClient()
+            ssh.set_missing_host_key_policy(AutoAddPolicy())
+            if password:
+                ssh.connect(hostname=server, username=user, password=password)
+            else:
+                log.info(key_file)
+                ssh.connect(hostname=server, username=user, key_filename=key_file)
+            sftp = ssh.open_sftp()
+            log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+            sftp.put(localpath, remotepath)
+            sftp.close()
+            ssh.close()
     except AuthenticationException as authException:
         log.error(f"Authentication failed: {authException}")
         raise authException
@@ -3690,7 +3961,9 @@ def get_available_ocp_versions(channel):
     """
     headers = {"Accept": "application/json"}
     req = requests.get(
-        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel), headers=headers
+        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel),
+        headers=headers,
+        timeout=120,
     )
     data = req.json()
     versions = [Version(node["version"]) for node in data["nodes"]]
@@ -4750,6 +5023,20 @@ def get_client_version(client_binary_path):
         return stdout["releaseClientVersion"]
 
 
+def get_server_version():
+    """
+    Get version reported by `oc version`.
+
+    Returns:
+        str: version reported by `oc version`.
+
+    """
+    cmd = "oc version -o json"
+    resp = exec_cmd(cmd)
+    stdout = json.loads(resp.stdout.decode())
+    return stdout["openshiftVersion"]
+
+
 def clone_notify():
     """
     Repository contains the source code of notify tool,
@@ -5117,6 +5404,7 @@ def get_latest_acm_tag_unreleased(version):
     response = requests.get(
         "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/",
         params=params,
+        timeout=120,
     )
     responce_data = response.json()
     for data in responce_data["tags"]:
@@ -5258,7 +5546,7 @@ def create_unreleased_oadp_catalog():
         TagNotFoundException: if no image tag for oadp oprator found in brew
 
     """
-    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False)
+    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False, timeout=120)
     json_data = resp.json()["raw_messages"]
     image_tag = None
     ocp_version = version_module.get_semantic_ocp_version_from_config()
@@ -5364,7 +5652,6 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
-@config.run_with_provider_context_if_available
 def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get the NooBaa DB pod that has been assigned the
@@ -5376,19 +5663,50 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    return get_nb_db_pod_by_cnpg_label(constants.NB_DB_PRIMARY_POD_LABEL, namespace)
+
+
+def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get the NooBaa DB pod that has been assigned the
+    secondary role by the CNPG operator.
+
+    Returns:
+        Pod: The NooBaa DB pod object
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+    """
+    return get_nb_db_pod_by_cnpg_label(constants.NB_DB_SECONDARY_POD_LABEL, namespace)
+
+
+@config.run_with_provider_context_if_available
+def get_nb_db_pod_by_cnpg_label(
+    cnpg_label, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Get one of the NooBaa DB CNPG pods
+
+    Args:
+        cnpg_label (str): The CNPG label that describes the pod role
+        namespace (str): The namespace of the NooBaa DB pod
+
+    Returns:
+        Pod: The pod
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+    """
     # importing here to avoid circular imports
     from ocs_ci.ocs.resources import pod
 
     try:
         nb_db_pod = pod.Pod(
-            **pod.get_pods_having_label(
-                label=constants.NB_DB_PRIMARY_POD_LABEL,
-                namespace=namespace,
-            )[0]
+            **pod.get_pods_having_label(label=cnpg_label, namespace=namespace)[0]
         )
     except IndexError:
         raise ResourceNotFoundError(
-            f"The NooBaa DB pod with label {constants.NB_DB_PRIMARY_POD_LABEL} "
+            f"The NooBaa DB pod with label {cnpg_label} "
             f"was not found in namespace {namespace}"
         )
     return nb_db_pod

@@ -250,6 +250,50 @@ ENV_DATA:
       vm_secret: "vm-secret-1", vm_username: "cirros",
     }
   ]
+  dr_workload_discovered_apps_filebrowser_rbd: [
+    { name: "filebrowser-dict-1-rbd", workload_dir: "rdr/file-browser/rbd/workloads/app-filebrowser-1/",
+      pod_count: 2, pvc_count: 1,
+      dr_workload_app_pod_selector_key: "workloadpattern",
+      dr_workload_app_pod_selector_value: "filebrowser_io",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "firebrowser_app1",
+      workload_namespace: "filebrowser-dict-1-rbd",
+      dr_workload_app_placement_name: "filebrowser-dict-1-rbd",
+      }
+  ]
+  dr_workload_discovered_apps_filebrowser_cephfs: [
+    { name: "filebrowser-dict-1-cephfs", workload_dir: "rdr/file-browser/cephfs/workloads/app-filebrowser-1/",
+      pod_count: 2, pvc_count: 1,
+      dr_workload_app_pod_selector_key: "workloadpattern",
+      dr_workload_app_pod_selector_value: "filebrowser_io",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "firebrowser_app1",
+      workload_namespace: "filebrowser-dict-1-cephfs",
+      dr_workload_app_placement_name: "filebrowser-dict-1-cephfs",
+    }
+  ]
+  dr_workload_discovered_apps_mongodb_rbd: [
+    { name: "mongodb-dict-1-rbd", workload_dir: "rdr/mongodb/app-mongodb-1/resources/deployment",
+      pod_count: 2, pvc_count: 1,
+      dr_workload_app_pod_selector_key: "app-name",
+      dr_workload_app_pod_selector_value: "app-mongodb-rbd-1",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "mongodb",
+      workload_namespace: "mongodb-dict-1-rbd",
+      dr_workload_app_placement_name: "mongodb-dict-1-rbd",
+    }
+  ]
+  dr_workload_discovered_apps_mongodb_cephfs: [
+    { name: "mongodb-dict-1-cephfs", workload_dir: "rdr/mongodb-cephfs/app-mongodb-1/resources/deployment",
+      pod_count: 2, pvc_count: 1,
+      dr_workload_app_pod_selector_key: "app-name",
+      dr_workload_app_pod_selector_value: "app-mongodb-cephfs-1",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "mongodb",
+      workload_namespace: "mongodb-dict-1-cephfs",
+      dr_workload_app_placement_name: "mongodb-dict-1-cephfs",
+    }
+  ]
 
   dr_workload_appset_with_custom_pool_rbd: [
     { name: "appset-busybox-1-with-custom-pool", workload_dir: "rdr/busybox/rbd/custom_sc_resources/app-busybox-1",

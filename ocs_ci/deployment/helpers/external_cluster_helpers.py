@@ -8,6 +8,7 @@ import logging
 import re
 import tempfile
 import uuid
+import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
@@ -15,6 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
     ExternalClusterCephfsMissing,
     ExternalClusterCephSSHAuthDetailsMissing,
+    ExternalClusterDisableCertificateCheckFailed,
     ExternalClusterExporterRunFailed,
     ExternalClusterRBDNamespaceCreationFailed,
     ExternalClusterRGWEndPointMissing,
@@ -71,11 +73,20 @@ class ExternalCluster(object):
                 "No SSH Auth to connect to external RHCS cluster provided! "
                 "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
             )
+        # adding jump host configuration to connect to external RHCS cluster on ibmcloud via jump host
+        self.jump_host = config.DEPLOYMENT.get("ssh_jump_host", None)
+
+        if self.jump_host and not self.jump_host.get("private_key"):
+            self.jump_host["private_key"] = os.path.expanduser(
+                config.DEPLOYMENT["ssh_key_private"]
+            )
+
         self.rhcs_conn = Connection(
             host=self.host,
             user=self.user,
             password=self.password,
             private_key=self.ssh_key,
+            jump_host=self.jump_host,
         )
 
     def get_external_cluster_details(self):
@@ -179,7 +190,13 @@ class ExternalCluster(object):
             use_configmap = False
         script_path = generate_exporter_script(use_configmap=use_configmap)
         upload_file(
-            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+            self.host,
+            script_path,
+            script_path,
+            self.user,
+            self.password,
+            self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
         return script_path
 
@@ -200,6 +217,7 @@ class ExternalCluster(object):
             self.user,
             self.password,
             self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else self.ssh_key,
         )
         return remote_rgw_cert_ca_path
 
@@ -329,7 +347,13 @@ class ExternalCluster(object):
         """
         script_path = create_config_ini_file(params=params)
         upload_file(
-            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+            self.host,
+            script_path,
+            script_path,
+            self.user,
+            self.password,
+            self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
         return script_path
 
@@ -543,7 +567,7 @@ class ExternalCluster(object):
             namespace (str): Name of RBD namespace
 
         Returns:
-            str: RBD Namepsace name
+            str: RBD Namespace name
 
         Raises:
             ExternalClusterRBDNamespaceCreationFailed: In case fails to create RBD namespace
@@ -557,6 +581,20 @@ class ExternalCluster(object):
             logger.error(f"Failed to create RBD namespace in {rbd}. Error: {err}")
             raise ExternalClusterRBDNamespaceCreationFailed
         return namespace
+
+    def disable_certificate_check(self):
+        """
+        Disable certificate check
+
+        Raises:
+            ExternalClusterDisableCertificateCheckFailed: In case fails to disable certificate check
+
+        """
+        cmd = "ceph config set mgr mgr/cephadm/certificate_check_period 0"
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.error(f"Failed to disable certificate check. Error: {err}")
+            raise ExternalClusterDisableCertificateCheckFailed
 
 
 def get_exporter_script_from_configmap():

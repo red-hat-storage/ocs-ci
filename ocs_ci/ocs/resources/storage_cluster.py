@@ -25,7 +25,6 @@ from ocs_ci.helpers.managed_services import (
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
-    CephHealthRecoveredException,
     CommandFailed,
     InvalidPodPresent,
     ResourceNotFoundError,
@@ -33,6 +32,7 @@ from ocs_ci.ocs.exceptions import (
     PVNotSufficientException,
     ResourceWrongStatusException,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
@@ -767,24 +767,17 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
 
-    rdr_run = config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
-
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
     if not (fusion_aas_consumer or hci_cluster):
         # Temporarily disable health check for hci until we have enough healthy clusters
-        try:
-            assert utils.ceph_health_check(
-                namespace,
-                health_check_tries,
-                health_check_delay,
-                fix_ceph_health=True,
-            )
-        except CephHealthRecoveredException as ex:
-            if rdr_run and "slow ops" in str(ex):
-                # Related issue: https://github.com/red-hat-storage/ocs-ci/issues/11244
-                log.warning("For RDR run we ignore slow ops error as it was recovered!")
-            else:
-                raise
+        assert utils.ceph_health_check(
+            namespace,
+            health_check_tries,
+            health_check_delay,
+            fix_ceph_health=True,
+            update_jira=True,
+            no_exception_if_jira_issue_updated=True,
+        )
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
@@ -871,10 +864,11 @@ def ocs_install_verification(
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
     # RDR with globalnet submariner
-    if config.MULTICLUSTER.get(
-        "multicluster_mode"
-    ) == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
-        "enable_globalnet", True
+    if (
+        config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        and get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+        and get_provider_service_type() != "NodePort"
+        and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
     ):
         validate_serviceexport()
 
@@ -2072,9 +2066,12 @@ def get_osd_replica_count():
     return replica_count
 
 
-def verify_multus_network():
+def verify_multus_network(skip_mds=False):
     """
     Verify Multus network(s) created successfully and are present on relevant pods.
+
+    Args:
+        skip_mds (bool): If True, skip MDS pod and MDS map validation
     """
 
     public_net_created = config.ENV_DATA["multus_create_public_net"]
@@ -2155,10 +2152,13 @@ def verify_multus_network():
     if public_net_created:
         log.info("Verifying multus public network exists on ceph pods")
         mon_pods = get_mon_pods()
-        mds_pods = get_mds_pods()
         mgr_pods = get_mgr_pods()
         rgw_pods = get_rgw_pods()
-        ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
+        if skip_mds:
+            ceph_pods = [*mon_pods, *mgr_pods, *rgw_pods]
+        else:
+            mds_pods = get_mds_pods()
+            ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
         for _pod in ceph_pods:
             pod_networks = _pod.data["metadata"]["annotations"][
                 "k8s.v1.cni.cncf.io/networks"
@@ -2192,24 +2192,25 @@ def verify_multus_network():
             not pod_validation_failures
         ), f"There were several failues in multus annotation validations: {pod_validation_failures}"
 
-        log.info("Verifying MDS Map IPs are in the multus public network range")
-        ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
-            "ceph fs dump --format json"
-        )
-        mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
-        for _, gid_data in mds_map["info"].items():
-            if not config.DEPLOYMENT.get("ipv6"):
-                ip = gid_data["addr"].split(":")[0]
-                range = config.ENV_DATA["multus_public_net_range"]
+        if not skip_mds:
+            log.info("Verifying MDS Map IPs are in the multus public network range")
+            ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
+                "ceph fs dump --format json"
+            )
+            mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
+            for _, gid_data in mds_map["info"].items():
+                if not config.DEPLOYMENT.get("ipv6"):
+                    ip = gid_data["addr"].split(":")[0]
+                    range = config.ENV_DATA["multus_public_net_range"]
 
-            else:
-                gid_dt_ip = gid_data["addr"]
-                pattern = r"^\[([\da-f:]+)\]"
-                match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
-                ip = match.group(1)
-                range = config.ENV_DATA["multus_public_ipv6_net_range"]
+                else:
+                    gid_dt_ip = gid_data["addr"]
+                    pattern = r"^\[([\da-f:]+)\]"
+                    match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
+                    ip = match.group(1)
+                    range = config.ENV_DATA["multus_public_ipv6_net_range"]
 
-            assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
+                assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
 
     log.info("Verifying StorageCluster multus network data")
     sc = get_storage_cluster()
@@ -3429,9 +3430,8 @@ def check_unnecessary_pods_present():
     present.
     """
     no_noobaa = config.COMPONENTS["disable_noobaa"]
-    no_ceph = (
-        config.DEPLOYMENT["external_mode"] or config.ENV_DATA["mcg_only_deployment"]
-    )
+    mcg_only = config.ENV_DATA["mcg_only_deployment"]
+    no_ceph = config.DEPLOYMENT["external_mode"]
     pod_names = [
         pod.name for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
     ]
@@ -3450,7 +3450,7 @@ def check_unnecessary_pods_present():
             raise InvalidPodPresent(
                 f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
             )
-    if no_ceph:
+    if mcg_only:
         for invalid_pod_name in constants.CEPH_PODS_NAMES:
             invalid_pods_found.extend(
                 [
@@ -3463,3 +3463,45 @@ def check_unnecessary_pods_present():
             raise InvalidPodPresent(
                 f"Pods {invalid_pods_found} should not be present because Ceph is not available"
             )
+    if no_ceph:
+        for invalid_pod_name in constants.CEPH_PODS_NAMES:
+            if invalid_pod_name != constants.ROOK_CEPH_OPERATOR:
+                invalid_pods_found.extend(
+                    [
+                        pod_name
+                        for pod_name in pod_names
+                        if pod_name.startswith(invalid_pod_name)
+                    ]
+                )
+        if invalid_pods_found:
+            raise InvalidPodPresent(
+                f"Pods {invalid_pods_found} should not be present because Ceph is not available"
+            )
+
+
+def get_default_storagecluster(namespace=None):
+    """
+    Get the default storage cluster
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: The default storage cluster
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+    )
+    if sc_obj.is_exist(resource_name=constants.DEFAULT_CLUSTERNAME):
+        sc_name = constants.DEFAULT_CLUSTERNAME
+    elif sc_obj.is_exist(resource_name=constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE):
+        sc_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+    else:
+        sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+
+    return ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+        resource_name=sc_name,
+    )

@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_or_client,
     skipif_disconnected_cluster,
     green_squad,
+    jira,
 )
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
@@ -154,6 +155,7 @@ class TestRbDPool(ManageTest):
 
     @pytest.mark.polarion_id("OCS-3890")
     @tier2
+    @jira("DFBUGS-4552")
     def test_multiple_sc_one_pool(
         self,
         setup_ui_class,

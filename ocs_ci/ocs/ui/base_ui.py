@@ -6,6 +6,8 @@ import gc
 import time
 import zipfile
 from functools import reduce
+
+import pyotp
 from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
@@ -349,20 +351,38 @@ class BaseUI:
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 
-    def get_checkbox_status(self, locator, timeout=30):
+    def get_checkbox_status(
+        self, locator, timeout=30, *, wait_for_clickable=True, expected_state=None
+    ):
         """
         Checkbox Status
 
         Args:
             locator (tuple): (GUI element needs to operate on (str), type (By))
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+            wait_for_clickable (bool): When True wait for element to be clickable; otherwise wait for presence.
+            expected_state (bool | None): When provided, wait for checkbox selection state to match before returning.
 
         return:
-            bool: True if element is Enabled, False otherwise
+            bool: True if element is selected, False otherwise
 
         """
         wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        by, value = locator[1], locator[0]
+
+        if expected_state is not None:
+            wait.until(
+                ec.element_located_selection_state_to_be((by, value), expected_state)
+            )
+
+        if wait_for_clickable:
+            try:
+                element = wait.until(ec.element_to_be_clickable((by, value)))
+            except TimeoutException:
+                element = wait.until(ec.presence_of_element_located((by, value)))
+        else:
+            element = wait.until(ec.presence_of_element_located((by, value)))
+
         return element.is_selected()
 
     def select_checkbox_status(self, status, locator):
@@ -777,7 +797,7 @@ def copy_dom(name_suffix: str = "", dom_folder=None):
         name_suffix = f"_{name_suffix}"
     filename = os.path.join(
         dom_folder,
-        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}_DOM.txt",
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}_DOM.html",
     )
     logger.info(f"Copy DOM file: {filename}")
     html = SeleniumDriver().page_source
@@ -873,6 +893,7 @@ class SeleniumDriver(WebDriver):
                 config.DEPLOYMENT.get("proxy")
                 or config.DEPLOYMENT.get("disconnected")
                 or config.ENV_DATA.get("private_link")
+                or config.DEPLOYMENT.get("ipv6")
             ) and config.ENV_DATA.get("client_http_proxy"):
                 client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
                 # there is a big difference between configuring not authenticated
@@ -888,6 +909,9 @@ class SeleniumDriver(WebDriver):
                     )
                     chrome_options.add_argument(
                         f"--proxy-server={client_proxy.geturl()}"
+                    )
+                    chrome_options.add_argument(
+                        f"--proxy-bypass-list={','.join(constants.NO_PROXY_LOCALHOST)}"
                     )
                 elif not headless:
                     # authenticated proxy, not headless mode
@@ -942,6 +966,21 @@ class SeleniumDriver(WebDriver):
             logger.info("SeleniumDriver instance attr not found")
 
 
+def generate_otp_token(secret):
+    """
+    Generate OTP token for specific OTP secret
+
+    Args:
+        secret (string): OTP secret phrase
+
+    Returns:
+        str: OTP token
+
+    """
+    totp = pyotp.TOTP(secret)
+    return totp.now()
+
+
 @retry(
     exception_to_check=(TimeoutException, WebDriverException, AttributeError),
     tries=3,
@@ -949,7 +988,7 @@ class SeleniumDriver(WebDriver):
     backoff=2,
     func=garbage_collector_webdriver,
 )
-def login_ui(console_url=None, username=None, password=None):
+def login_ui(console_url=None, username=None, password=None, otp_secret=None, **kwargs):
     """
     Login to OpenShift Console
 
@@ -957,11 +996,21 @@ def login_ui(console_url=None, username=None, password=None):
         console_url (str): ocp console url
         username(str): User which is other than admin user,
         password(str): Password of user other than admin user
+        otp_secret(str): Secret for OTP 2F authentication from which we generate token
 
     return:
         driver (Selenium WebDriver)
 
     """
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        # Those data are required for UI testing for IBM Managed ROKS
+        username = config.AUTH["ibmcloud"]["username"]
+        password = config.AUTH["ibmcloud"]["password"]
+        otp_secret = config.AUTH["ibmcloud"]["otp_secret"]
     default_console = False
     if not console_url:
         console_url = get_ocp_url()
@@ -978,6 +1027,76 @@ def login_ui(console_url=None, username=None, password=None):
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console()
+    if ibm_cloud_managed:
+        username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
+        username_el.send_keys(username)
+        continue_login_el = wait_for_element_to_be_clickable(
+            login_loc["continue_button"], 60
+        )
+        continue_login_el.click()
+        try:
+            WebDriverWait(driver, 10).until(
+                ec.title_contains(login_loc["w3id_page_title"])
+            )
+            w3login_page = True
+        except TimeoutException:
+            w3login_page = False
+        if w3login_page:
+            wait_for_element_to_be_clickable(login_loc["w3id_credentials_signin"], 60)
+            w3id_credentials_btn = driver.find_element(
+                by=login_loc["w3id_credentials_signin"][1],
+                value=login_loc["w3id_credentials_signin"][0],
+            )
+            w3id_credentials_btn.click()
+            username_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_username"], 60
+            )
+            username_el.send_keys(username)
+            password_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_password"], 60
+            )
+            password_el.send_keys(password)
+            w3id_singin_el = wait_for_element_to_be_clickable(
+                login_loc["w3id_singin"], 60
+            )
+            w3id_singin_el.click()
+            time.sleep(5)
+            try:
+                WebDriverWait(driver, 10).until(
+                    ec.title_contains(login_loc["w3id_page_title"])
+                )
+                w3id_2fa_otp_el = wait_for_element_to_be_clickable(
+                    login_loc["w3id_2fa"], 60
+                )
+                w3id_2fa_otp_el.click()
+                w3id_2fa_otp_input_el = wait_for_element_to_be_clickable(
+                    login_loc["w3id_2fa_otp_input"], 60
+                )
+                w3id_2fa_otp_input_el.send_keys(generate_otp_token(otp_secret))
+                w3id_2fa_otp_sumbit_btn = wait_for_element_to_be_clickable(
+                    login_loc["w3id_2fa_otp_sumbit_btn"], 60
+                )
+                w3id_2fa_otp_sumbit_btn.click()
+            except TimeoutException:
+                # Sometimes the 2fa is not required, so we need to pass this
+                pass
+
+        else:
+            password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
+            password_el.send_keys(password)
+            click_login_el = wait_for_element_to_be_clickable(
+                login_loc["click_login"], 60
+            )
+            click_login_el.click()
+            login_2fa_input_el = wait_for_element_to_be_clickable(
+                login_loc["login_2fa_input"], 60
+            )
+            login_2fa_input_el.send_keys(generate_otp_token(otp_secret))
+            login_2fa_submit_btn = wait_for_element_to_be_clickable(
+                login_loc["w3id_2fa_otp_sumbit_btn"], 60
+            )
+            login_2fa_submit_btn.click()
+        return driver
 
     try:
         wait = WebDriverWait(driver, 15)
@@ -1027,6 +1146,18 @@ def login_ui(console_url=None, username=None, password=None):
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     )
 
+    def _skip_tour():
+        # Skip tour if it appears, if not found, continue without clicking
+        # we don't want to wait for Tour Guide more than 15 sec, because in most cases it will not be present
+        if any(
+            (driver.find_elements(*login_loc["skip_tour"][::-1]) or time.sleep(5))
+            for _ in range(3)
+        ):
+            skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
+            skip_tour_el.click()
+        else:
+            logger.info("Skip tour element not found. Continuing without clicking.")
+
     if hci_platform_conf:
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
@@ -1036,6 +1167,9 @@ def login_ui(console_url=None, username=None, password=None):
         if current_url != dashboard_url:
             # timeout is unusually high for different scenarios when default page is not loaded immediately
             logger.info("Navigate to 'Local Cluster' page")
+
+            _skip_tour()
+
             navigate_to_local_cluster(
                 acm_page=locators_for_current_ocp_version()["acm_page"], timeout=180
             )
@@ -1051,16 +1185,7 @@ def login_ui(console_url=None, username=None, password=None):
     if default_console is True:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
-    # Skip tour if it appears, if not found, continue without clicking
-    # we don't want to wait for Tour Guide more than 15 sec, because in most cases it will not be present
-    if any(
-        (driver.find_elements(*login_loc["skip_tour"][::-1]) or time.sleep(5))
-        for _ in range(3)
-    ):
-        skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
-        skip_tour_el.click()
-    else:
-        logger.info("Skip tour element not found. Continuing without clicking.")
+    _skip_tour()
 
     return driver
 

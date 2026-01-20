@@ -75,6 +75,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
     ResourceWrongStatusException,
+    UnexpectedBehaviour,
     UnsupportedPlatformError,
     PoolDidNotReachReadyState,
     StorageclassNotCreated,
@@ -84,12 +85,14 @@ from ocs_ci.ocs.exceptions import (
     MissingDecoratorError,
     UnsupportedWorkloadError,
 )
+from ocs_ci.ocs.fill_pool_job import FillPoolJob
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
+from ocs_ci.ocs.resources.keda import KEDA
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 from ocs_ci.ocs.scale_lib import FioPodScale
@@ -195,10 +198,12 @@ from ocs_ci.utility.utils import (
     run_cmd,
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
+    get_latest_ocp_multi_image,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
+    ceph_health_check_with_toolbox_recovery,
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
     setup_pod_directories,
@@ -234,6 +239,11 @@ from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
+from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+
+DEPLOYERS = {}
 
 log = logging.getLogger(__name__)
 
@@ -2051,9 +2061,11 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
                     # "flip-flopping ceph health OK and warn because of:
                     # HEALTH_WARN Reduced data availability: 2 pgs peering
-                    ceph_health_check(
+                    ceph_health_check_with_toolbox_recovery(
                         namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                         fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
                     )
                     log.info("Ceph health check passed at teardown!")
                     if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
@@ -2077,7 +2089,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+                ceph_health_check_with_toolbox_recovery(
+                    namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                )
 
                 if (
                     not multi_storagecluster_external_health_passed
@@ -2108,11 +2122,13 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             log.info("Checking for Ceph Health OK ")
             external_multi_storagecluster_status = False
             try:
-                status = ceph_health_check(
+                status = ceph_health_check_with_toolbox_recovery(
                     namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                     tries=10,
                     delay=15,
                     fix_ceph_health=True,
+                    update_jira=True,
+                    no_exception_if_jira_issue_updated=True,
                 )
                 if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                     if status:
@@ -2154,8 +2170,14 @@ def cluster(
     teardown = ocsci_config.RUN["cli_params"]["teardown"]
     deploy = ocsci_config.RUN["cli_params"]["deploy"]
     if teardown or deploy:
-        factory = dep_factory.DeploymentFactory()
-        deployer = factory.get_deployment()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                # Let get initiated deployer for each cluster here to be sure all necesary
+                # values are propagated to all clusters configs
+                DEPLOYERS[config.ENV_DATA["cluster_name"]] = (
+                    dep_factory.DeploymentFactory().get_deployment()
+                )
+        deployer = DEPLOYERS[config.ENV_DATA["cluster_name"]]
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
@@ -2196,10 +2218,19 @@ def cluster(
         )
         get_openshift_client(force_download=force_download)
 
-    # set environment variable for early testing of RHCOS
-    if ocsci_config.ENV_DATA.get("early_testing"):
-        release_img = ocsci_config.ENV_DATA["RELEASE_IMG"]
-        log.info(f"Running early testing of RHCOS with release image: {release_img}")
+    multi_arch = ocsci_config.ENV_DATA.get("multi_arch")
+    if ocsci_config.ENV_DATA.get("early_testing") or multi_arch:
+        release_img = ocsci_config.ENV_DATA.get("release_img")
+        if not release_img and ocsci_config.ENV_DATA.get("multi_arch"):
+            release_img = get_latest_ocp_multi_image()
+        if not release_img:
+            raise ValueError(
+                "No release_img provided in config under ENV_DATA section!"
+            )
+        log.info(
+            f"Running early testing of RHCOS or multi-arch testing with release image: {release_img}"
+        )
+        # set environment variables for early testing of RHCOS or multi-arch
         os.environ["RELEASE_IMG"] = release_img
         os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
 
@@ -2207,9 +2238,11 @@ def cluster(
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
     else:
-        if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            ibmcloud.set_region()
-            ibmcloud.login()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+                    ibmcloud.set_region()
+                    ibmcloud.login()
     if "cephcluster" not in ocsci_config.RUN.keys():
         check_clusters()
     if not ocsci_config.ENV_DATA["skip_ocs_deployment"] and ocsci_config.RUN.get(
@@ -3795,69 +3828,132 @@ def install_logging(request):
     log.info("Configuring Openshift-logging")
 
     # Gets OCP version to align logging version to OCP version
-    ocp_version = version.get_semantic_ocp_version_from_config()
-
-    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
+    package_manifest = PackageManifest(
+        resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
+        selector="catalog=redhat-operators",
+    )
+    logging_channel = package_manifest.get_default_channel()
 
     # Creates namespace openshift-operators-redhat
     ocp_logging_obj.create_namespace(
         yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
-
-    # Creates an operator-group for elasticsearch
-    assert ocp_logging_obj.create_elasticsearch_operator_group(
+    # Creates an operator-group for lokistack
+    assert ocp_logging_obj.create_lokistack_operator_group(
         yaml_file=constants.EO_OG_YAML,
         resource_name="openshift-operators-redhat",
         skip_resource_exists=rosa_hcp_depl,
     )
-
-    # Set RBAC policy on the project
-    assert ocp_logging_obj.set_rbac(
-        yaml_file=constants.EO_RBAC_YAML, resource_name="prometheus-k8s"
-    )
-
-    # Creates subscription for elastic-search operator
-    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    # Creates subscription for lokistack operator
+    subscription_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SUB_YAML)
     subscription_yaml["spec"]["channel"] = logging_channel
     helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_elasticsearch_subscription()
-
-    # Checks for Elasticsearch operator
-    elastic_search_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
-    )
-    elastic_search_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
-    )
+    assert ocp_logging_obj.get_lokistack_subscription()
 
     # Creates a namespace openshift-logging
     ocp_logging_obj.create_namespace(
         yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
+    # Create RGW obc
+    obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
+
+    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+        obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
+    else:
+        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
+
+    helpers.create_resource(**obc_yaml)
+
+    ocp_logging_obj.get_obc()
+
+    # Creating secret
+    sample = TimeoutSampler(
+        timeout=180,
+        sleep=20,
+        func=run_cmd_verify_cli_output,
+        cmd=(
+            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
+            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
+        ),
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Failed to get configmap")
+
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
+
+    access_key_cmd = (
+        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
+        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_ACCESS_KEY_ID}}'"
+    )
+    access_key = exec_cmd(access_key_cmd)
+    decoded1 = base64.b64decode(access_key.stdout).decode("utf-8")
+
+    secret_key_cmd = (
+        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
+        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_SECRET_ACCESS_KEY}}'"
+    )
+    secret_key = exec_cmd(secret_key_cmd)
+    decoded2 = base64.b64decode(secret_key.stdout).decode("utf-8")
+
+    secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
+    secret_yaml["stringData"]["access_key_id"] = decoded1
+    secret_yaml["stringData"]["access_key_secret"] = decoded2
+    secret_yaml["stringData"]["bucketnames"] = cm_dict["data"]["BUCKET_NAME"]
+    endpoint = cm_dict["data"]["BUCKET_HOST"]
+    secret_yaml["stringData"]["endpoint"] = f"https://{endpoint}:80"
+    helpers.create_resource(**secret_yaml)
+    assert ocp_logging_obj.get_secret_to_lokistack()
+
+    # creates lokistack
+    # sleeping for few seconds to avoid following error
+    # Internal error occurred: failed calling webhook
+    ocp_logging_obj.create_lokistack(
+        yaml_file=constants.LOKISTACK_YAML, skip_resource_exists=rosa_hcp_depl
+    )
+    log.info("Loki operator is installed successfuly")
 
     # Creates an operator-group for cluster-logging
-    assert ocp_logging_obj.create_clusterlogging_operator_group(
+    ocp_logging_obj.create_clusterlogging_operator_group(
         yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
     )
-
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
     cl_subscription["spec"]["channel"] = logging_channel
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
-    # Creates instance in namespace openshift-logging
-    cluster_logging_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    # creates a service account to be used by the log collector
+    ocp_logging_obj.setup_sa_permissions()
+
+    # Creates ClusterLogForwarder
+    ocp_logging_obj.create_clusterlogforwarder(
+        yaml_file=constants.CLF_YAML, skip_resource_exists=rosa_hcp_depl
     )
-    cluster_logging_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
+    log.info("Openshift Logging operator is installed successfully")
+
+    # Creates namespace for openshift-cluster-observability-operator
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
     )
-    if cluster_logging_operator:
-        log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-        ocp_logging_obj.create_instance()
-    else:
-        log.error("The cluster logging operator pod is not created")
+    # Creates OperatorGroup for openshift-cluster-observability-operator
+    ocp_logging_obj.create_clusterobservability_operator_group(
+        yaml_file=constants.CO_OG_YAML,
+        resource_name=constants.CLUSTER_OBSERVABILITY_OPERATOR,
+        skip_resource_exists=rosa_hcp_depl,
+    )
+    # Creates subscription for openshift-cluster-observability-operator
+    co_subscription_yaml = templating.load_yaml(constants.CO_SUB_YAML)
+    helpers.create_resource(**co_subscription_yaml)
+    assert ocp_logging_obj.get_cluster_observability_subscription()
+
+    # Creates UI Plugin for openshift-cluster-observability-operator
+    ocp_logging_obj.create_UI_Plugin(
+        yaml_file=constants.CO_UI_PLUGIN_YAML, resource_name="logging"
+    )
+    log.info("Cluster Observability operator is installed successfully with UIPlugin")
 
 
 @pytest.fixture
@@ -5608,6 +5704,7 @@ def use_client_proxy(request):
         )
         os.environ["http_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
         os.environ["https_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
+        os.environ["no_proxy"] = ",".join(constants.NO_PROXY_LOCALHOST)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -7522,6 +7619,7 @@ def discovered_apps_dr_workload(request):
         pvc_interface=constants.CEPHBLOCKPOOL,
         multi_ns=False,
         custom_sc=False,
+        workloads=None,
     ):
         """
         Args:
@@ -7551,6 +7649,18 @@ def discovered_apps_dr_workload(request):
                 workload_key = "dr_workload_discovered_apps_cephfs_custom_pool_and_sc"
             else:
                 workload_key = "dr_workload_discovered_apps_cephfs"
+            workload_key = "dr_workload_discovered_apps_cephfs"
+        if workloads == "filebrowser":
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
+            else:
+                workload_key = "dr_workload_discovered_apps_filebrowser_rbd"
+        elif workloads == "mongodb":
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                workload_key = "dr_workload_discovered_apps_mongodb_cephfs"
+            else:
+                workload_key = "dr_workload_discovered_apps_mongodb_rbd"
+
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
 
         if bool(kubeobject):
@@ -7757,7 +7867,7 @@ def discovered_apps_dr_workload_cnv(request):
         return instances
 
     def teardown():
-        if request.node.name == "test_acm_kubevirt_using_shared_protection":
+        if "[shared]" in request.node.nodeid:
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
         else:
@@ -8298,8 +8408,23 @@ def ceph_monstore_tool_fixture(request):
     return mot_obj
 
 
-@pytest.fixture()
+@pytest.fixture(scope="class")
+def change_the_noobaa_log_level_class(request):
+    """
+    Class-scoped fixture for changing the noobaa log level
+    """
+    return change_the_noobaa_log_level_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def change_the_noobaa_log_level(request):
+    """
+    Function-scoped fixture for changing the noobaa log level
+    """
+    return change_the_noobaa_log_level_fixture(request)
+
+
+def change_the_noobaa_log_level_fixture(request):
     """
     This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
     """
@@ -11030,3 +11155,160 @@ def keyrotation_precedence_helper():
             return KEYROTATION_SCHEDULE_ANNOTATION
 
     return KeyRotationPrecedenceHelper()
+
+
+@pytest.fixture
+def fill_job_factory(request):
+    """
+    Factory to generate and create a Job resource in OpenShift to fill up the cluster.
+    Also creates a new namespace for the Job, Pod and PVC.
+    Returns a factory method to create the FillPoolJob object.
+
+    """
+    fill_pool_job_objs = []
+
+    def factory(
+        name=None,
+        block_size="1M",
+        cpu_request="100m",
+        mem_request="128Mi",
+        cpu_limit="500m",
+        mem_limit="256Mi",
+        fill_mode="zero",
+        base_yaml_path=constants.FILL_POOL_JOB_YAML,
+        pvc_name=None,
+        sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+        storage="50Gi",
+    ):
+        """
+        Create a Job that fills up the cluster storage by writing data to a PVC.
+
+        Args:
+            name (str): Name of the Pod to create.
+            block_size (str): Block size for the dd command.
+            cpu_request (str): CPU request for the Pod.
+            mem_request (str): Memory request for the Pod.
+            cpu_limit (str): CPU limit for the Pod.
+            mem_limit (str): Memory limit for the Pod.
+            fill_mode (str): Mode of filling data, either 'zero' or 'random'.
+            base_yaml_path (str): Path to the base Job YAML manifest.
+            pvc_name (str): Name of the PVC to create and attach to the Pod.
+            sc_name (str): StorageClass name for the PVC.
+            storage (str): Storage size for the PVC.
+
+        Returns:
+            FillPoolJob: The created FillPoolJob object.
+
+        """
+        fill_pool_job_obj = FillPoolJob()
+        fill_pool_job_objs.append(fill_pool_job_obj)
+
+        fill_pool_job_obj.create(
+            name=name,
+            block_size=block_size,
+            cpu_request=cpu_request,
+            mem_request=mem_request,
+            cpu_limit=cpu_limit,
+            mem_limit=mem_limit,
+            fill_mode=fill_mode,
+            base_yaml_path=base_yaml_path,
+            pvc_name=pvc_name,
+            sc_name=sc_name,
+            storage=storage,
+        )
+
+        return fill_pool_job_obj
+
+    def finalizer():
+        """
+        Delete created Jobs, Pods, PVCs, and Namespaces of the FillPoolJob objects.
+
+        """
+        for fill_pool_job_obj in fill_pool_job_objs:
+            log.info(f"Cleanup the FillPoolJob object {fill_pool_job_obj.name}")
+            fill_pool_job_obj.cleanup()
+
+        timeout = 15
+        log.info(f"Wait {timeout} seconds for any capacity changes to reflect")
+        time.sleep(timeout)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def install_helm_class(request):
+    return install_helm_fixture(request)
+
+
+def install_helm_fixture(request):
+    """
+    Install Helm client
+    """
+    # Check if already installed
+    try:
+        exec_cmd("helm version")
+        log.info("Helm client is already installed")
+        return
+    except FileNotFoundError:
+        log.info("Helm client is not installed - installing it")
+
+    def install():
+        # Download the install script
+        tmp_dir = tempfile.mkdtemp(prefix="helm_dir_")
+        url = "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
+        exec_cmd(f"curl -fsSL -o {tmp_dir}/get_helm.sh {url}")
+
+        # Make the script executable
+        exec_cmd(f"chmod 700 {tmp_dir}/get_helm.sh")
+
+        # Install Helm in a non-restricted directory for no-sudo installation
+        bin_dir = os.path.expanduser("~/.local/bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        os.environ["HELM_INSTALL_DIR"] = bin_dir
+        exec_cmd(f"{tmp_dir}/get_helm.sh --no-sudo")
+
+        # Verify the installation
+        exec_cmd("helm version")
+        log.info("Helm client installed successfully")
+
+    def uninstall():
+        helm_bin_path = exec_cmd("which helm").stdout.strip().decode("utf-8")
+        exec_cmd(f"rm -rf {helm_bin_path}")
+
+        # Verify the uninstallation
+        try:
+            exec_cmd("helm version")
+            raise Exception("Helm client is still installed")
+        except FileNotFoundError:
+            log.info("Helm client uninstalled successfully")
+
+    request.addfinalizer(uninstall)
+    install()
+    return
+
+
+@pytest.fixture(scope="class")
+def keda_class(request, install_helm_class):
+    return keda_fixture(request)
+
+
+def keda_fixture(request):
+    """
+    Install Keda, add a cleanup finalizer and return the KEDA object
+    """
+    keda = KEDA(
+        workload_namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+    )
+    request.addfinalizer(keda.cleanup)
+
+    if not keda.is_installed():
+        keda.install()
+    else:
+        log.info("KEDA is already installed, skipping installation")
+
+    keda.setup_access_to_thanos_metrics()
+    if not keda.can_read_thanos_metrics():
+        raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
+
+    return keda

@@ -181,6 +181,7 @@ class PagerDutyAPI(object):
             headers=headers,
             verify=False,
             params=payload,
+            timeout=120,
         )
         return response
 
@@ -212,6 +213,7 @@ class PagerDutyAPI(object):
             headers=headers,
             verify=False,
             json=payload,
+            timeout=120,
         )
         return response
 
@@ -239,6 +241,7 @@ class PagerDutyAPI(object):
             self._endpoint + pattern,
             headers=headers,
             verify=False,
+            timeout=120,
         )
         return response
 

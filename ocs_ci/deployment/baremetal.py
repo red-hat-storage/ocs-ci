@@ -117,7 +117,9 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             str: response status
         """
         headers = {"content-type": "application/json"}
-        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        response = requests.get(
+            url=self.bm_config["bm_status_check"], headers=headers, timeout=60
+        )
         response.encoding = "utf-8-sig"
         return response.json()[0]["status"]
 
@@ -129,7 +131,10 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             str: username
         """
         headers = {"content-type": "application/json"}
-        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        response = requests.get(
+            url=self.bm_config["bm_status_check"], headers=headers, timeout=60
+        )
+        response.encoding = "utf-8-sig"
         return response.json()[0]["user"]
 
     def update_bm_status(self, bm_status):
@@ -168,11 +173,12 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         Destroy OCP cluster
         """
-        logger.info("Updating BM status")
-        result = self.update_bm_status(constants.BM_STATUS_ABSENT)
-        assert (
-            result == constants.BM_STATUS_RESPONSE_UPDATED
-        ), "Failed to update request"
+        if self.bm_config.get("bm_status_check"):
+            logger.info("Updating BM status")
+            result = self.update_bm_status(constants.BM_STATUS_ABSENT)
+            assert (
+                result == constants.BM_STATUS_RESPONSE_UPDATED
+            ), "Failed to update request"
 
     def configure_dnsmasq_on_helper_vm(self):
         """
@@ -647,7 +653,7 @@ class BAREMETALUPI(BAREMETALBASE):
                 f"{self.installer} wait-for install-complete "
                 f"--dir {self.cluster_path} "
                 f"--log-level {log_cli_level}",
-                timeout=1800,
+                timeout=3600,
             )
             logger.info("Removing Bootstrap Ip for DNS Records")
             self.aws.update_hosted_zone_record(

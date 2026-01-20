@@ -51,7 +51,7 @@ from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
 logger = logging.getLogger(__name__)
 
 
-@retry(CommandFailed, tries=5, delay=10)
+@retry((CommandFailed, AssertionError), tries=5, delay=10)
 def verify_pod_count_unchanged(number_of_pods_before):
     number_of_pods_after = len(
         get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])

@@ -76,9 +76,17 @@ class TestPodsCsiLogRotation(BaseTest):
             f"Number of compressed logs = {gz_logs_num}, current log file size = {current_log_file_size}"
         )
 
-        # pump current log file size
+        # Delete log file first to clear any logrotate state
         pod_obj.exec_cmd_on_pod(
-            command=f" truncate -s 560M {logs_dir + log_file_name}",
+            command=f"rm -f {logs_dir + log_file_name}",
+            container_name="log-rotator",
+            out_yaml_format=False,
+            shell=True,
+        )
+
+        # pump current log file size - truncate now creates a NEW file
+        pod_obj.exec_cmd_on_pod(
+            command=f"truncate -s 560M {logs_dir + log_file_name}",
             container_name="log-rotator",
             out_yaml_format=False,
             shell=True,

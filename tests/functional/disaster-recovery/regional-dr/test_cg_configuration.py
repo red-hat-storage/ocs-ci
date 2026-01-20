@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 @acceptance
 @turquoise_squad
 @post_ocs_upgrade
-@skipif_ocs_version("<4.20")
+@skipif_ocs_version("<4.21")
 class TestCGConfiguration:
     """
-    Test for validating CG behavior for ODF version >= 4.20
+    Test for validating CG behavior for ODF version >= 4.21
 
     """
 

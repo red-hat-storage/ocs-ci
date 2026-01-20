@@ -127,7 +127,7 @@ class ACMUpgrade(object):
             acm_catsrc["spec"]["image"] = self.acm_registry_image
         else:
             # Update catalog source
-            resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False)
+            resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False, timeout=120)
             raw_msg = resp.json()["raw_messages"]
             # TODO: Find way to get ocp version before upgrade
             # Adding try and KeyError exception as the key 'index_image' does not exist,

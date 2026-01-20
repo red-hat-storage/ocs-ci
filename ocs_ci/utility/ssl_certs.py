@@ -189,6 +189,7 @@ class OCSCertificate(Certificate):
         r = requests.post(
             f"{self.signing_service}/get_cert",
             crypto.dump_certificate_request(crypto.FILETYPE_PEM, self.csr),
+            timeout=120,
         )
         self.crt = r.content.decode()
 

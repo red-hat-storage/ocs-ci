@@ -272,8 +272,10 @@ class TestCephDefaultValuesCheck(ManageTest):
     @skipif_managed_service
     @skipif_ocs_version("<4.9")
     @tier2
-    def test_noobaa_postgres_cm_post_ocs_upgrade(self):
+    def deprecated_test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
+        Impotant !!! Postgres configmap replaced with CNPG in 4.19.
+
         Validate noobaa postgres configmap post OCS upgrade
 
         """

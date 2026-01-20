@@ -92,7 +92,13 @@ class TestSTSClient:
 
         # create a bucket using noobaa admin creds
         bucket_1 = "first-bucket"
-        retry(ClientError, tries=5, delay=5)(new_bucket)(bucket_name=bucket_1)
+        try:
+            retry(ClientError, tries=5, delay=5)(new_bucket)(bucket_name=bucket_1)
+        except ClientError as e:
+            if "BucketAlreadyExists" in str(e):
+                logger.info(f"Bucket {bucket_1} already exists")
+            else:
+                raise
         logger.info(f"Created bucket {bucket_1}")
 
         # create a noobaa account
@@ -158,7 +164,7 @@ class TestSTSClient:
             tries=15,
             delay=60,
             backoff=1,
-            text_in_exception="An error occurred (Unknown) when calling the AssumeRole operation: Unknown",
+            text_in_exception="AccessDenied",
         )(sts_assume_role)(
             awscli_pod_session,
             role_name,

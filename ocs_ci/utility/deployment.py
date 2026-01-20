@@ -7,6 +7,8 @@ import os
 import re
 import tempfile
 from datetime import datetime
+from ocs_ci.utility.retry import retry
+
 
 import yaml
 
@@ -27,6 +29,7 @@ from ocs_ci.utility.utils import (
 logger = logging.getLogger(__name__)
 
 
+# TODO: remove this function and use the one in version.py
 def get_ocp_ga_version(channel):
     """
     Retrieve the latest GA version for
@@ -44,7 +47,7 @@ def get_ocp_ga_version(channel):
     url = "https://api.openshift.com/api/upgrades_info/v1/graph"
     headers = {"Accept": "application/json"}
     payload = {"channel": f"stable-{channel}"}
-    r = requests.get(url, headers=headers, params=payload)
+    r = requests.get(url, headers=headers, params=payload, timeout=120)
     nodes = r.json()["nodes"]
     if nodes:
         versions = [node["version"] for node in nodes]
@@ -199,6 +202,7 @@ def create_openshift_install_log_file(cluster_path, console_url):
     logger.info("Created '.openshift_install.log' file")
 
 
+@retry((CommandFailed,), tries=3, delay=10, backoff=2)
 def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
     """
     Get IDMS from catalog image (if exists) and apply it on the cluster (if

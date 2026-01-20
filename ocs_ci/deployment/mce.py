@@ -206,11 +206,18 @@ class MCEInstaller(object):
             namespace=constants.HYPERSHIFT_NAMESPACE,
         )
 
+        check_resources_timeout = 600
+        if config.ENV_DATA["platform"] in constants.CLOUD_PLATFORMS:
+            logger.info(
+                "Cloud platform detected; wait for hypershift supported-versions configmap twice longer"
+            )
+            check_resources_timeout = check_resources_timeout * 2
+
         # configMap is created during hypershift installation in around 5 min.
         # Increasing this timeout to 10 min for safer deployment.
         if not configmaps_obj.check_resource_existence(
             should_exist=True,
-            timeout=600,
+            timeout=check_resources_timeout,
             resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP,
         ):
             raise UnavailableResourceException(
@@ -391,18 +398,8 @@ class MCEInstaller(object):
 
         upgrade_pass = None
 
-        # another upgrade logic automated in following block
-        # When OCP upgrades, load_ocp_version_config_file func is called and mce version getting updated in env_data
-        if not self.upgrade_version:
-            if parse_version(config.ENV_DATA["mce_version"]) > parse_version(
-                self.get_running_mce_version()
-            ):
-                self.upgrade_version = config.ENV_DATA["mce_version"]
-
-        parsed_versions = self.get_parsed_versions()
-
         if Deployment().acm_operator_installed():
-            logger.info(
+            logger.warning(
                 "ACM operator is installed, aborting MCE upgrade, use ACMUpgrade().run_upgrade()"
             )
             return upgrade_pass
@@ -410,6 +407,21 @@ class MCEInstaller(object):
         if not self.mce_installed():
             logger.warning("MCE operator is not deployed before upgrade, abort upgrade")
             return upgrade_pass
+
+        # another upgrade logic automated in following block
+        # When OCP upgrades, load_ocp_version_config_file func is called and mce version getting updated in env_data
+        if not self.upgrade_version:
+            self.upgrade_version = config.ENV_DATA["mce_version"]
+
+        if parse_version(config.ENV_DATA["mce_version"]) <= parse_version(
+            self.get_running_mce_version()
+        ):
+            logger.info(
+                "MCE is already at the desired upgrade version or higher, no upgrade needed."
+            )
+            return upgrade_pass
+
+        parsed_versions = self.get_parsed_versions()
 
         self.version_change = parsed_versions[1] > parsed_versions[0]
         if not self.version_change:

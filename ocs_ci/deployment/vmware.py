@@ -119,10 +119,6 @@ class VSPHEREBASE(Deployment):
         self.cluster_launcer_repo_path = os.path.join(
             constants.EXTERNAL_DIR, "v4-scaleup"
         )
-        if config.ENV_DATA.get("use_custom_sc_in_deployment"):
-            self.custom_storage_class_path = os.path.join(
-                constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
-            )
         os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
         os.environ["TF_LOG_PATH"] = os.path.join(
             config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
@@ -903,7 +899,8 @@ class VSPHEREUPI(VSPHEREBASE):
                             [
                                 cluster_domain,
                                 config.DEPLOYMENT.get("disconnected_no_proxy", ""),
-                            ],
+                            ]
+                            + constants.NO_PROXY_LOCALHOST,
                         ),
                     }
                 if config.DEPLOYMENT.get("disconnected"):
@@ -917,7 +914,8 @@ class VSPHEREUPI(VSPHEREBASE):
                             [
                                 cluster_domain,
                                 config.DEPLOYMENT.get("disconnected_no_proxy", ""),
-                            ],
+                            ]
+                            + constants.NO_PROXY_LOCALHOST,
                         ),
                     }
                     install_config_obj.update(
@@ -1146,7 +1144,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
             OCP.set_kubeconfig(self.kubeconfig)
             if not config.ENV_DATA["sno"]:
-                timeout = 1800
                 # wait for all nodes to generate CSR
                 # From OCP version 4.4 and above, we have to approve CSR manually
                 # for all the nodes
@@ -1175,7 +1172,7 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{self.installer} wait-for install-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=timeout,
+                    timeout=3600,
                 )
 
                 # Approving CSRs here in-case if any exists
@@ -1785,6 +1782,7 @@ class VSPHEREAI(VSPHEREBASE):
                 ingress_vip=self.ingress_vip,
                 ssh_public_key=self.get_ssh_key(),
                 pull_secret=self.get_pull_secret(),
+                platform="vsphere",
             )
 
             # create (register) cluster in Assisted Installer console

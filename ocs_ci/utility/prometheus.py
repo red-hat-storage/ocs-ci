@@ -476,6 +476,7 @@ class PrometheusAPI(object):
                         "headers": headers,
                         "verify": self._cacert,
                         "params": payload,
+                        "timeout": 60,
                     },
                 ):
                     response = sample_response
@@ -502,6 +503,7 @@ class PrometheusAPI(object):
                     headers=headers,
                     verify=self._cacert,
                     params=payload,
+                    timeout=60,
                 )
             return response
 

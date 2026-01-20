@@ -23,8 +23,10 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_ocs_version,
     tier1,
+    ui,
     acceptance,
     cloud_platform_required,
+    skipif_lean_deployment,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -130,6 +132,7 @@ def add_capacity_test(ui_flag=False):
 @skipif_ibm_power
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@skipif_lean_deployment
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
@@ -144,6 +147,7 @@ class TestAddCapacity(ManageTest):
         add_capacity_test(ui_flag=False)
 
     @tier1
+    @ui
     @black_squad
     def test_add_capacity_ui(self, reduce_and_resume_cluster_load):
         """
@@ -164,6 +168,7 @@ class TestAddCapacity(ManageTest):
 @skipif_hci_provider_and_client
 @skipif_no_lso
 @skipif_stretch_cluster
+@skipif_lean_deployment
 class TestAddCapacityLSO(ManageTest):
     """
     Add capacity on lso cluster
@@ -178,6 +183,7 @@ class TestAddCapacityLSO(ManageTest):
         storage_cluster.add_capacity_lso(ui_flag=False)
 
     @tier1
+    @ui
     @black_squad
     def test_add_capacity_lso_ui(self, reduce_and_resume_cluster_load):
         """
@@ -197,6 +203,7 @@ class TestAddCapacityLSO(ManageTest):
 @cloud_platform_required
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@skipif_lean_deployment
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade

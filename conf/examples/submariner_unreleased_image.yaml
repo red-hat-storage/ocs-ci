@@ -1,3 +1,3 @@
 ---
 ENV_DATA:
-  submariner_unreleased_image: "847836"
+  submariner_image: "registry.redhat.io/redhat/redhat-operator-index@sha256:58d597646541fce982dbb646cb0aecc79abeb4f2abe9abb00c8e2078ae383050"

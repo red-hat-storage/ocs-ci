@@ -181,6 +181,13 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     if sampler:
                         logger.info("Installation Completed Successfully!")
                         break
+            elif "Waiting up to" in str(e):
+                run_cmd(
+                    f"{self.installer} wait-for install-complete "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600,
+                )
             else:
                 raise e
         self.test_cluster()

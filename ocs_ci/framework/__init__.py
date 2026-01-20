@@ -505,6 +505,21 @@ class MultiClusterConfig:
             self.get_cluster_type_indices_list(cluster_type)[num_of_cluster]
         )
 
+    def run_for_all_clusters(self, func):
+        """
+        A decorator to run the decorated function for all clusters
+        and switch context between them.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for cluster_index in range(self.nclusters):
+                self.switch_ctx(cluster_index)
+                logger.info(f"Running '{func.__name__}' for cluster {cluster_index}")
+                func(*args, **kwargs)
+
+        return wrapper
+
     class RunWithConfigContext(object):
         def __init__(self, config_index):
             self.original_config_index = config.cur_index

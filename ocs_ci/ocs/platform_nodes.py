@@ -2386,11 +2386,23 @@ class AZURENodes(NodesBase):
         self.azure.stop_vm_instances(node_names, force=force)
 
         if wait:
-            # When the node is not reachable then the node reaches status NotReady.
-            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
-            wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
-            )
+            nodes_not_stopped = []
+            for vm_name in node_names:
+                try:
+                    for vm_state in TimeoutSampler(
+                        timeout=timeout,
+                        sleep=3,
+                        func=self.azure.get_vm_power_status,
+                        vm_name=vm_name,
+                    ):
+                        if vm_state == constants.VM_STOPPED:
+                            break
+                except TimeoutExpiredError:
+                    nodes_not_stopped.append(vm_name)
+            if nodes_not_stopped:
+                raise TimeoutExpiredError(
+                    f"Timeout waiting for the nodes {nodes_not_stopped} to stop"
+                )
 
     def start_nodes(self, nodes, timeout=540, wait=True):
         """

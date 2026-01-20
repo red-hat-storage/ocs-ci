@@ -9,7 +9,7 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.20.0",
+    version="4.21.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
@@ -23,7 +23,7 @@ setup(
         "reportportal-client==3.2.3",
         "requests==2.32.2",
         "paramiko==3.5.0",
-        "pyyaml==6.0",
+        "pyyaml==6.0.3",
         "jinja2==3.1.6",
         "openshift==0.13.2",
         "boto3==1.38.31",
@@ -50,7 +50,7 @@ setup(
         "numpy==1.23.2",
         "pandas==1.5.2",
         "tabulate==0.9.0",
-        "python-ipmi==0.4.2",
+        "python-ipmi==0.5.7",
         "scipy==1.12.0",
         "PrettyTable==0.7.2",
         "azure-common==1.1.28",
@@ -99,18 +99,20 @@ setup(
         "google-crc32c==1.7.1",
         "google-resumable-media==2.7.2",
         "googleapis-common-protos==1.70.0",
-        "urllib3==2.5.0",
+        "urllib3==2.6.3",
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.22",
+        "atlassian-python-api==4.0.7",
         "certbot==3.0.0",
         "certbot-dns-route53==3.0.0",
         "openshift-python-wrapper==11.0.58",
         # new version of marshmallow 4.0.0 seems to be broken, failing with error:
         # TypeError: __init__() got an unexpected keyword argument 'default'
-        "marshmallow==3.26.1",
+        "marshmallow==3.26.2",
         "zope.event==6.0",
         "xattr==1.3.0",
+        "pyotp==2.9.0",
     ],
     entry_points={
         "console_scripts": [

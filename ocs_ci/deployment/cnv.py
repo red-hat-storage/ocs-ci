@@ -237,7 +237,7 @@ class CNVInstaller(object):
         result = ocp.wait(
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             condition="Available",
-            timeout=600,
+            timeout=1000,
         )
         if not result:
             err_str = (
@@ -622,6 +622,7 @@ class CNVInstaller(object):
         else:
             return tarfile.open(fileobj=archive_file_binary_data, mode="r")
 
+    @retry(EOFError, tries=3, delay=30, backoff=1)
     def _extract_virtctl_binary(
         self, archive_file_binary_data, virtctl_download_url, bin_dir
     ):

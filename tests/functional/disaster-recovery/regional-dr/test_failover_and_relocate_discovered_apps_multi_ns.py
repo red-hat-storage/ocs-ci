@@ -70,7 +70,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
         drpc_obj = DRPC(
-            namespace=constants.DR_OPS_NAMESAPCE,
+            namespace=constants.DR_OPS_NAMESPACE,
             resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
@@ -115,10 +115,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             workload_instance=rdr_workload,
         )
 
-        # Verify resources creation on secondary cluster (failoverCluster)
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-
         for index in range(len(rdr_workload)):
+            # Verify resources creation on secondary cluster (failoverCluster)
+            config.switch_to_cluster_by_name(secondary_cluster_name)
             dr_helpers.wait_for_all_resources_creation(
                 pvc_count=rdr_workload[index].workload_pvc_count,
                 pod_count=rdr_workload[index].workload_pod_count,
@@ -168,9 +167,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             expected_count=wl.workload_pvc_count,
                         )
 
+        config.switch_to_cluster_by_name(secondary_cluster_name)
         wait_for_vrg_state(
             vrg_state="primary",
-            vrg_namespace=constants.DR_OPS_NAMESAPCE,
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
             resource_name=rdr_workload[index].discovered_apps_placement_name,
         )
 
@@ -182,7 +182,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 resource_name=rdr_workload[0].discovered_apps_placement_name,
             )
         )
-        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             rdr_workload[0].workload_namespace,
             discovered_apps=True,
@@ -215,6 +214,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             multi_ns=True,
         )
         for index in range(len(rdr_workload)):
+            config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
             dr_helpers.wait_for_all_resources_creation(
                 pvc_count=rdr_workload[index].workload_pvc_count,
                 pod_count=rdr_workload[index].workload_pod_count,
@@ -230,7 +230,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     # Verify the deletion of Replication Group Destination resources
                     # on the old secondary cluster
                     config.switch_to_cluster_by_name(
-                        primary_cluster_name_after_failover
+                        primary_cluster_name_before_failover
                     )
                     dr_helpers.wait_for_replication_destinations_deletion(
                         wl.workload_namespace
@@ -266,10 +266,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             namespace=wl.workload_namespace,
                             expected_count=wl.workload_pvc_count,
                         )
-
+        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         wait_for_vrg_state(
             vrg_state="primary",
-            vrg_namespace=constants.DR_OPS_NAMESAPCE,
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
             resource_name=rdr_workload[index].discovered_apps_placement_name,
         )
 

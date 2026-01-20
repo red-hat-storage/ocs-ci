@@ -9,6 +9,7 @@ from abc import ABC
 import yaml
 import copy
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from ocs_ci import framework
 from ocs_ci.deployment.cnv import CNVInstaller
@@ -60,6 +61,7 @@ from ocs_ci.ocs.resources.storageconsumer import (
     get_ready_consumers_names,
     check_consumer_svg,
     verify_storage_consumer_resources,
+    verify_last_heartbeat_timestamp,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
@@ -72,6 +74,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
     wait_for_machineconfigpool_status,
+    get_server_version,
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.ssl_certs import (
@@ -81,6 +84,7 @@ from ocs_ci.utility.ssl_certs import (
 from ocs_ci.utility.version import (
     get_running_odf_version,
     get_running_odf_client_version,
+    get_semantic_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -1052,6 +1056,11 @@ class HostedClients(HyperShiftBase):
             cluster_names
         )
 
+        heartbeat_stable = []
+        for cluster_name in cluster_names:
+            if storage_installation_requested(cluster_name):
+                heartbeat_stable.append(verify_last_heartbeat_timestamp(cluster_name))
+
         assert (
             hosted_ocp_verification_passed
         ), "Some of the hosted OCP clusters are not ready"
@@ -1073,6 +1082,10 @@ class HostedClients(HyperShiftBase):
         assert all(
             storage_consumers_verified
         ), "Storage consumer resources verification failed for some of the clusters"
+
+        assert all(
+            heartbeat_stable
+        ), "Last heartbeat timestamp verification failed on some of the consumer clusters"
 
         return hosted_odf_clusters_installed
 
@@ -1139,12 +1152,16 @@ class HostedClients(HyperShiftBase):
             if cluster_names_paths_dict
             else list(config.ENV_DATA.get("clusters", {}).keys())
         )
-        # filter out non-hosted clusters
+        # filter out non-hosted clusters if they exist in the provided config
         cluster_names = [
             name
             for name in cluster_names
-            if config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
-            == "hci_client"
+            if (
+                config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                is None
+                or config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                == "hci_client"
+            )
         ]
 
         for name in cluster_names:
@@ -1207,6 +1224,76 @@ class HostedClients(HyperShiftBase):
             # this is non-critical operation, it should not fail deployment or upgrade on multiple clusters,
             # thus exception is broad
             logger.error(f"Failed to apply IDMS mirrors to HostedClusters: {e}")
+
+    def upgrade_ocp_on_kubevirt_clusters(self):
+        """
+        Upgrade OCP on hosted OCP clusters deployed using KubeVirt platform.
+        """
+        if MCEInstaller().wait_mce_resources():
+            raise UnexpectedDeploymentConfiguration(
+                "MCE resources are present, cannot proceed with OCP upgrade on KubeVirt clusters"
+            )
+
+        # apply admin ack on hosting clusters to allow OCP upgrade for 4.19 version
+        # https://access.redhat.com/articles/7130599
+        # checked manually - there are no Removed Kubernetes APIs on the deployed IBM BM multi-client cluster
+        if config.ENV_DATA.get("ocp_version", "") == "4.19":
+            OCP().exec_oc_cmd(
+                f"patch cm admin-acks -n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+                f'--patch \'{{"data":{{"ack-4.19-admissionregistration-v1beta1-api-removals-in-4.20":"true"}}}}\' '
+            )
+
+        cluster_names = list(config.ENV_DATA.get("clusters").keys())
+        cluster_names = [
+            name
+            for name in cluster_names
+            if config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+            == "hci_client"
+        ]
+
+        if not cluster_names:
+            cluster_names = get_hosted_cluster_names()
+
+        if cluster_names:
+            self.update_hcp_binary(install_latest=True)
+            wait_for_machineconfigpool_status("all")
+
+        ocp_upgrade_results = []
+        for cluster_name in cluster_names:
+            if not self.verify_hosted_ocp_cluster_from_provider(cluster_name):
+                logger.warning(
+                    f"Skipping OCP upgrade on hosted OCP cluster '{cluster_name}' since it is not ready"
+                )
+                continue
+
+            logger.info(f"Upgrading OCP on hosted OCP cluster '{cluster_name}'")
+            hypershift_cluster = HypershiftHostedOCP(cluster_name)
+
+            hypershift_cluster.apply_admin_acks_to_hosted_cluster()
+            hypershift_cluster.patch_hosted_cluster_for_ocp_upgrade()
+            hypershift_cluster.patch_nodepool_for_ocp_upgrade()
+
+            logger.info(
+                "Waiting 7 min, to not pollute logs while image download, reconcile are in progress"
+            )
+            time.sleep(60 * 7)
+
+            ocp_upgrade_results.append(
+                hypershift_cluster.wait_hosted_cluster_upgrade_completed()
+            )
+
+        assert all(
+            ocp_upgrade_results
+        ), "OCP upgrade failed on some of the hosted OCP clusters"
+
+        heartbeat_stable = []
+        for cluster_name in cluster_names:
+            heartbeat_stable.append(verify_last_heartbeat_timestamp(cluster_name))
+
+        assert all(heartbeat_stable), (
+            "Last heartbeat timestamp verification failed "
+            "on some of the storage consumers post Upgrade"
+        )
 
 
 class SpokeOCP(ABC):
@@ -1399,6 +1486,37 @@ class ExternalOCP(SpokeOCP, Deployment):
         return True
 
 
+@catch_exceptions(Exception)
+def get_hosted_cluster_version_history(cluster_name: str):
+    """
+    Get hosted cluster version history.
+
+    Args:
+        cluster_name (str): Name of the cluster
+
+    Returns:
+        list: json list of version history entries. example for a deploy and upgrade [
+            {"completionTime":"2025-05-07T13:12:04Z","image":"quay.io/openshift-release-dev/ocp-release@sha256:<sha>",
+            "startedTime":"2025-05-07T13:07:19Z","state":"Completed","verified":false,"version":"4.19.0-ec.5"},
+            {"completionTime":"2025-04-30T08:27:46Z","image":"quay.io/openshift-release-dev/ocp-release@sha256:<sha>",
+            "startedTime":"2025-04-30T08:19:01Z","state":"Completed","verified":false,"version":"4.18.9"}]
+
+    """
+    with config.RunWithProviderConfigContextIfAvailable():
+        ocp_hc = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=constants.CLUSTERS_NAMESPACE,
+        )
+        hosted = ocp_hc.get(cluster_name)
+        history = hosted.get("status", {}).get("version", {}).get("history") or []
+        if not isinstance(history, list):
+            logger.warning(
+                f"Unexpected type for version history on HostedCluster '{cluster_name}': {type(history)}"
+            )
+            return []
+        return history
+
+
 class HypershiftHostedOCP(
     SpokeOCP,
     HyperShiftBase,
@@ -1549,6 +1667,8 @@ class HypershiftHostedOCP(
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
+            # create Provisioning resource if not present
+
             provisioning_obj = OCS(
                 **OCP(kind=constants.PROVISIONING).get().get("items")[0]
             )
@@ -1567,6 +1687,255 @@ class HypershiftHostedOCP(
             ):
                 create_agent_service_config()
                 create_host_inventory()
+
+    def _compute_target_release_image(self):
+        """
+        Compute the target release image for OCP upgrade based on:
+        - Configured ocp_version in config.ENV_DATA["clusters"][cluster_name] and configured version is
+          lower than provider version
+        - If configured version is matching to existing hosted ocp version,
+          use the provider OCP version from get_server_version()
+
+        Returns:
+            str: Full release image reference, or None if it cannot be determined.
+        """
+        ocp_version = (
+            config.ENV_DATA.get("clusters", {}).get(self.name, {}).get("ocp_version")
+        )
+        ocp_version = str(ocp_version).strip() if ocp_version is not None else None
+        provider_version = get_server_version()
+
+        if (
+            ocp_version
+            and "nightly" not in ocp_version
+            and len(ocp_version.split(".")) == 2
+        ):
+            try:
+                ocp_version = get_ocp_ga_version(ocp_version)
+            except Exception as e:
+                # since hypershift client can be not the only one in upgrade scenario, proceed with warning
+                logger.warning(
+                    f"Bad configuration. Failed to resolve GA version for '{ocp_version}': {e}"
+                )
+
+        if not ocp_version:
+            logger.info(
+                f"No ocp_version configured for cluster '{self.name}'; will use provider version"
+            )
+        else:
+            desired_sem = get_semantic_version(ocp_version)
+            provider_sem = get_semantic_version(provider_version)
+            if desired_sem >= provider_sem:
+                logger.warning(
+                    "desired ocp_version from configuration is higher or equal to provider version"
+                )
+                return None
+
+            running_hosted_ocp_version = self.get_hosted_cluster_ocp_version()
+            if get_semantic_version(running_hosted_ocp_version) >= desired_sem:
+                logger.warning(
+                    f"Hosted cluster '{self.name}' is at version '{running_hosted_ocp_version}' "
+                    f"which matches or higher than desired ocp_version '{ocp_version}', proceed with provider version"
+                )
+                ocp_version = None
+
+        target_version = ocp_version or provider_version
+        if "nightly" in target_version:
+            return f"{constants.REGISTRY_SVC}:{target_version}"
+        return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
+
+    @if_version("<4.20")
+    def apply_admin_acks_to_hosted_cluster(self):
+        """
+        perform patch to hosted cluster necessary for 4.19 to 4.20 upgrade
+        """
+        self.exec_oc_cmd(
+            f"patch cm admin-acks -n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+            f'--patch \'{{"data":{{"ack-4.19-admissionregistration-v1beta1-api-removals-in-4.20":"true"}}}}\' '
+        )
+
+    def patch_hosted_cluster_for_ocp_upgrade(self):
+        """
+        Patch hosted cluster to allow OCP upgrade
+
+        Returns:
+            bool: True if patch is applied, False otherwise
+
+        """
+        image = self._compute_target_release_image()
+        if not image:
+            return False
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                ocp_hc = OCP(
+                    kind=constants.HOSTED_CLUSTERS,
+                    namespace=constants.CLUSTERS_NAMESPACE,
+                )
+                patch_body = json.dumps({"spec": {"release": {"image": image}}})
+                logger.info(
+                    f"Patching HostedCluster '{self.name}' to target release image: {image}"
+                )
+                # Use exec_oc_cmd directly to avoid return parsing quirks
+                ocp_hc.exec_oc_cmd(
+                    f"patch hostedclusters {self.name} --type=merge -p '{patch_body}'",
+                    out_yaml_format=False,
+                )
+                return True
+        except Exception as e:
+            logger.error(
+                f"Failed to patch HostedCluster '{self.name}' for OCP upgrade: {e}"
+            )
+            return False
+
+    def patch_nodepool_for_ocp_upgrade(
+        self,
+    ):
+        """
+        Patch nodepool to allow OCP upgrade
+
+        Returns:
+            bool: True if patch is applied, False otherwise
+
+        """
+        image = self._compute_target_release_image()
+        if not image:
+            return False
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                ocp_np = OCP(
+                    kind="nodepools",
+                    namespace=constants.CLUSTERS_NAMESPACE,
+                )
+                patch_body = json.dumps({"spec": {"release": {"image": image}}})
+                logger.info(
+                    f"Patching NodePool '{self.name}' to target release image: {image}"
+                )
+                ocp_np.exec_oc_cmd(
+                    f"patch nodepools {self.name} --type=merge -p '{patch_body}'",
+                    out_yaml_format=False,
+                )
+                return True
+        except Exception as e:
+            logger.error(f"Failed to patch NodePool '{self.name}' for OCP upgrade: {e}")
+            return False
+
+    def get_hosted_cluster_ocp_version(self):
+        """
+        Get hosted cluster OCP version from version history.
+
+        Returns:
+            Optional[str]: Version string (e.g. 4.18.9) if available, otherwise None.
+        """
+        try:
+            history = get_hosted_cluster_version_history(self.name)
+            if not history:
+                logger.warning(
+                    f"No version history found for HostedCluster '{self.name}'"
+                )
+                return None
+
+            def _parse_ts(ts):
+                if not ts:
+                    return datetime.min.replace(tzinfo=timezone.utc)
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+            completed = [e for e in history if e.get("state") == "Completed"]
+            candidates = completed or history
+            candidates.sort(
+                key=lambda e: _parse_ts(
+                    e.get("completionTime") or e.get("startedTime")
+                ),
+                reverse=True,
+            )
+            hosted_ocp_version_history = candidates[0].get("version")
+            if not hosted_ocp_version_history:
+                logger.warning(
+                    f"Latest version entry missing 'version' for HostedCluster '{self.name}'"
+                )
+                return None
+            return hosted_ocp_version_history
+        except Exception as e:
+            logger.error(
+                f"Failed to determine hosted cluster OCP version for '{self.name}': {e}"
+            )
+            return None
+
+    def wait_hosted_cluster_upgrade_completed(self, timeout=3600):
+        """
+        Wait for hosted cluster upgrade to complete.
+
+        Args:
+            timeout (int): Timeout in seconds to wait for upgrade completion.
+
+        Checks:
+          - HostedCluster `.status.version.history[0].state` == "Completed"
+          - NodePool `.status.conditions[?(@.type=="UpdatingVersion")].status` != "True"
+
+        Returns:
+            bool: True if upgrade completed within timeout, False otherwise.
+
+        """
+        logger.info(
+            f"Waiting for hosted cluster '{self.name}' upgrade completion (timeout={timeout}s)"
+        )
+        sleep_interval = 60
+
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                ocp_np = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE)
+                jsonpath = '{.status.conditions[?(@.type=="UpdatingVersion")].status}'
+
+                def _sample():
+                    history = get_hosted_cluster_version_history(self.name)
+                    latest_state_sample = None
+                    if history and isinstance(history, list) and len(history) > 0:
+                        latest_state_sample = history[0].get("state")
+
+                    try:
+                        nodepool_status_sample = ocp_np.exec_oc_cmd(
+                            f"get nodepools {self.name} -o jsonpath='{jsonpath}'",
+                            out_yaml_format=False,
+                        )
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not get nodepool status for '{self.name}': {e}"
+                        )
+                        nodepool_status_sample = ""
+
+                    return latest_state_sample, nodepool_status_sample
+
+                for latest_state, nodepool_status in TimeoutSampler(
+                    timeout, sleep_interval, _sample
+                ):
+                    logger.debug(
+                        f"HostedCluster '{self.name}' latest state='{latest_state}', "
+                        f"NodePool '{self.name}' UpdatingVersion='{nodepool_status}'"
+                    )
+                    if not latest_state or not nodepool_status:
+                        logger.error(
+                            f"Hosted cluster '{self.name}' or its nodepool not found"
+                        )
+                        return False
+
+                    if (
+                        latest_state == "Completed"
+                        and nodepool_status.lower() != "true"
+                    ):
+                        logger.info(f"Hosted cluster '{self.name}' upgrade completed")
+                        return True
+
+        except TimeoutExpiredError:
+            logger.error(
+                f"Timeout waiting for hosted cluster '{self.name}' upgrade to complete"
+            )
+            return False
+        except Exception as exc:
+            logger.error(
+                f"Error while waiting for hosted cluster '{self.name}' upgrade: {exc}"
+            )
+            return False
+
+        return False
 
     def apply_idms_to_hosted_clusters(self):
         """
@@ -1603,7 +1972,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         self.catsrc_image = f"{self.odf_registry}:{self.odf_version}"
         self.namespace_client = config.ENV_DATA.get(
-            "client_namespace", "openshift-storage-client"
+            "client_namespace", "openshift-storage"
         )
         # default cluster name picked from the storage client yaml
         storage_client_data = templating.load_yaml(
@@ -1886,7 +2255,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            resource_name="openshift-storage-client-operator-group",
+            resource_name="openshift-storage-operator-group",
             should_exist=True,
         )
 
@@ -2395,9 +2764,7 @@ def hypershift_cluster_factory(
     ]:
         cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
         if not cl_name_ver_dict:
-            logger.warning(
-                "No hosted clusters found. Please create hosted clusters first."
-            )
+            logger.warning("Hosted clusters were not found.")
             return
         deployed_clusters = list(cl_name_ver_dict.keys())
 
@@ -2449,7 +2816,7 @@ def hypershift_cluster_factory(
             )
             continue
 
-        # creating this configuration is necessary to run multicluster job. It will have actual specs of cluster.
+        # creating this configuration is necessary to run multicluster job. It will have actual specs of the cluster.
         client_conf_default_dir = os.path.join(
             FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
         )
@@ -2495,7 +2862,7 @@ def hypershift_cluster_factory(
                     "installer_version"
                 ] = running_ocp_version
 
-            with ocsci_config.RunWithConfigContext(default_index):
+            with ocsci_config.RunWithProviderConfigContextIfAvailable():
                 cluster_path = create_cluster_dir(cluster_name)
                 def_client_config_dict["ENV_DATA"]["cluster_path"] = cluster_path
                 kubeconf_paths = (
@@ -2504,13 +2871,11 @@ def hypershift_cluster_factory(
                     )
                 )
                 if not kubeconf_paths:
-                    from ocs_ci.framework.exceptions import (
-                        ClusterKubeconfigNotFoundError,
+                    logger.warning(
+                        "kubeconfig was not found after download attempt; "
+                        "abort pushing kubeconfig to the multicluster config"
                     )
-
-                    raise ClusterKubeconfigNotFoundError(
-                        f"Failed to download kubeconfig for cluster {cluster_name}"
-                    )
+                    continue
                 else:
                     kubeconf_path = [
                         path for path in kubeconf_paths if cluster_name in path

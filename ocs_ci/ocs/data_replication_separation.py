@@ -7,6 +7,8 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 
 log = logging.getLogger(__name__)
@@ -203,3 +205,41 @@ def validate_csi_pods_have_host_network():
             ]
         )
     return validate_pods_have_host_network(pods)
+
+
+@config.run_with_provider_context_if_available
+def validate_mon_ip_annotation_on_workers():
+    """
+    Validate that worker nodes have correctly setnetwork.rook.io/mon-ip annotation.
+    It should be a private ip of the node.
+
+    Returns:
+        bool: True if all nodes have correct annotation
+    """
+    nodes_obj = OCP(kind="node")
+    nodes = nodes_obj.get().get("items", [])
+    worker_nodes = [
+        node for node in nodes if constants.WORKER_LABEL in node["metadata"]["labels"]
+    ]
+    if not worker_nodes:
+        raise UnavailableResourceException("No worker node found!")
+    correct_annotations = True
+    for worker in worker_nodes:
+        log.info(
+            f"Checking node {worker['metadata']['name']} for annotation network.rook.io/mon-ip"
+        )
+        network_data = (
+            config.ENV_DATA.get("baremetal", {})
+            .get("servers", {})
+            .get(worker["metadata"]["name"])
+        )
+        annotation_ip = (
+            worker.get("metadata").get("annotations", {}).get("network.rook.io/mon-ip")
+        )
+        if annotation_ip != network_data["private_ip"]:
+            log.error(
+                f"Node {worker['metadata']['name']} has annotation network.rook.io/mon-ip={annotation_ip}"
+                f" instead of network.rook.io/mon-ip={network_data['private_ip']}"
+            )
+            correct_annotations = False
+    return correct_annotations

@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cephfs-stress-job
+  namespace: default
+spec:
+  parallelism: 5
+  completions: 5
+  backoffLimit: 0
+  template:
+    metadata:
+      name: cephfs-stress-pod
+    spec:
+      containers:
+      - name: cephfs-stress
+        image: quay.io/ocsci/cephfs-stress-pod:latest
+        imagePullPolicy: Always
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Initializing Stress Test on pod: $(hostname)..."
+            export BASE_DIR="${BASE_DIR}/$(hostname)"
+            mkdir -p $BASE_DIR
+            export OUTPUT_DIR="${OUTPUT_DIR}/$(hostname)"
+            mkdir -p $OUTPUT_DIR
+            echo "Base Dir:   $BASE_DIR"
+            echo "Output Dir: $OUTPUT_DIR"
+            python3 /script/cephfs_stress_script.py
+        env:
+          - name: BASE_DIR         # directory used by smallfile to perform file and directory operations (e.g., append, stat, chmod, ls-l, etc.)
+            value: "/mnt"
+          - name: BASE_FILE_COUNT  # Base file count, to multiply with scaling factor - Total files = BASE_FILE_COUNT * THREADS
+            value: "5000"
+          - name: MULTIPLICATION_FACTORS # Dynamic scaling of file creation - base_file_count * MULTIPLICATION_FACTORS
+            value: "1,2"
+          - name: FILES_SIZE       # File size in KB
+            value: "4"
+          - name: OPERATIONS       # File and directory operations to perform, Pass as a comma-separated string
+            value: "create,append,rename,stat,chmod,ls-l"
+          - name: OUTPUT_DIR
+            value: "/mnt/output"
+          - name: THREADS
+            value: "8"
+        volumeMounts:
+        - mountPath: /mnt
+          name: mypvc
+      restartPolicy: Never
+      volumes:
+      - name: mypvc
+        persistentVolumeClaim:
+          claimName: stress-pvc
