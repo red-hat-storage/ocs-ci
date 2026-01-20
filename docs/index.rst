@@ -33,6 +33,7 @@ and functionality using AWS and other supported platforms.
    release_guidelines.md
    usecases/index.rst
    multicluster_test_example.md
+   uv.md
 
 
 Indices and tables
