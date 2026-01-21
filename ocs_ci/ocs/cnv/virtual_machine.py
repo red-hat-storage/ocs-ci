@@ -152,15 +152,19 @@ class VirtualMachine(Virtctl):
         vm_data = templating.load_yaml(constants.CNV_VM_TEMPLATE_YAML)
         vm_data["metadata"]["name"] = self._vm_name
         vm_data["metadata"]["namespace"] = self.namespace
+
+        # Escape special characters in password for YAML/cloud-init
+        # Replace double quotes and backslashes that could break YAML format
+        escaped_password = self.password.replace("\\", "\\\\").replace('"', '\\"')
+
         vm_data["spec"]["template"]["spec"]["volumes"][1]["cloudInitNoCloud"][
             "userData"
-        ] = f"""
-        #cloud-config
-        user: admin
-        password: "{self.password}"
-        chpasswd:
-            expire: False
-        """
+        ] = f"""#cloud-config
+user: admin
+password: "{escaped_password}"
+chpasswd:
+    expire: False
+"""
         return vm_data
 
     def _create_namespace_if_not_exists(self):
