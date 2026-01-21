@@ -152,7 +152,7 @@ REPORTING:
   collect_logs_on_success_run: False
   rp_client_log_level: "ERROR"
   max_mg_fail_attempts: 3
-  tarball_mg_logs: false
+  tarball_mg_logs: true
   delete_packed_mg_logs: true
 
 # This is the default information about environment.
