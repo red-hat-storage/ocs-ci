@@ -330,7 +330,7 @@ def is_not_arbiter_node(node_obj):
     Used to filter arbiter node from node list.
 
     Args:
-        node_obj (OCP): OCP Node object
+        node_obj (ocs_ci.ocs.ocp.OCP): OCP Node object
 
     Returns:
         bool: True if node doesn't contain the labelj, False if it does
