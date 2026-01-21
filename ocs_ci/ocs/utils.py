@@ -949,7 +949,8 @@ def run_must_gather(
     Runs the must-gather tool against the cluster
 
     Args:
-        log_dir_path (str): directory for dumped must-gather logs
+        log_dir_path (str): directory for dumped must-gather logs (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
         cluster_config (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
@@ -1967,7 +1968,8 @@ def collect_pod_container_rpm_package(dir_name):
     Collect information about rpm packages from all containers + go version
 
     Args:
-        dir_name(str): directory to store container rpm package info
+        dir_name(str): directory to store container rpm package info (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
 
     """
     # Import pod here to avoid circular dependency issue
