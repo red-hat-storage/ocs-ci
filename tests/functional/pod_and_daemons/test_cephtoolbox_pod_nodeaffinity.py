@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 @brown_squad
 class TestCephtoolboxPod:
-    @pytest.fixture(scope="session", autouse=True)
+    @pytest.fixture(scope="class", autouse=True)
     def teardown(self, request):
         def finalizer():
             """
