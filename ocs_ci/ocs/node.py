@@ -7,6 +7,8 @@ from collections import defaultdict
 from operator import itemgetter
 import random
 import json
+import base64
+import os
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -50,6 +52,145 @@ from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.vsphere import VSPHERE
 
 log = logging.getLogger(__name__)
+
+
+class Node(OCP):
+    """
+    Node class inherits OCP class and contains all the methods related to
+    node operations
+    """
+
+    def __init__(self, resource_name=None, namespace=None, use_root=True, **kwargs):
+        """
+        Initializer for Node class
+
+        Args:
+            resource_name (str): Name of the node
+            namespace (str): Namespace of the node
+            use_root (bool): Whether to use root user or not for running commands
+
+        """
+        super(Node, self).__init__(
+            kind=constants.NODE, resource_name=resource_name, **kwargs
+        )
+
+        self._namespace = namespace or constants.DEFAULT_NAMESPACE
+        self.use_root = use_root
+
+    def run_cmd(self, cmd, namespace=None, use_root=None, timeout=300):
+        """
+        Run command on the node
+
+        Args:
+            cmd (str): Command to run.
+            namespace (str): Namespace of the node. If None, default namespace will be used.
+            use_root (bool): Whether to use root user or not for running the command.
+            timeout (int): Timeout for the command execution (in seconds)
+
+        Returns:
+            str: Output of the command execution
+
+        Raises:
+            CommandFailed: In case the command execution fails
+
+        """
+        namespace = namespace or self.namespace
+        use_root = use_root if use_root is not None else self.use_root
+
+        log.info(f"Running command '{cmd}' on node '{self.resource_name}'")
+        return self.exec_oc_debug_cmd(
+            node=self.resource_name,
+            cmd_list=[cmd],
+            namespace=namespace,
+            use_root=use_root,
+            timeout=timeout,
+        )
+
+    def run_script(
+        self,
+        script_path: str,
+        args: str = "",
+        namespace: str = None,
+        use_root: bool = None,
+        timeout: int = 600,
+    ):
+        """
+        Execute a shell script directly on a node (inside chroot /host)
+        using oc debug.
+
+        Args:
+            script_path (str): Full path to the script on the node.
+            args (str): Optional arguments to pass to the script.
+            namespace (str): Namespace for the debug pod.
+            use_root (bool): Whether to use root user or not for running the command.
+            timeout (int): Timeout for the command execution (in seconds).
+
+        Returns:
+            str: Output of the script execution.
+
+        Raises:
+            CommandFailed: In case the script execution fails.
+
+        """
+        log.info(
+            f"Running the script {script_path} with the args '{args}' "
+            f"on the worker node {self.resource_name}"
+        )
+        # Build the command — single element, no single quotes inside
+        cmd = f"set -euo pipefail; " f"bash {script_path} {args} "
+        return self.run_cmd(cmd, namespace, use_root, timeout)
+
+    def upload_script(
+        self,
+        script_src_path: str,
+        script_dest_path: str,
+        namespace: str = None,
+        use_root: bool = None,
+        timeout: int = 300,
+    ):
+        """
+        Upload a shell script to a node using base64 encoding via `oc debug`.
+
+        The script is read locally, base64-encoded, and decoded on the node
+        using `echo | base64 -d`.
+
+        Args:
+            script_src_path (str): Local path to the script.
+            script_dest_path (str): Destination path on the node.
+            namespace (str): Namespace for the debug pod.
+            use_root (bool): Whether to use root user or not for running the command.
+            timeout (int): Timeout for the oc debug command (in seconds).
+
+        Returns:
+            str: Output of the command execution.
+
+        Raises:
+            FileNotFoundError: If the local script file does not exist.
+            CommandFailed: In case the command execution fails.
+
+        """
+        if not os.path.exists(script_src_path):
+            raise FileNotFoundError(f"Script not found at {script_src_path}")
+
+        # Read and encode the script
+        with open(script_src_path, "rb") as f:
+            script_content = f.read()
+        script_b64 = base64.b64encode(script_content).decode("utf-8").replace("\n", "")
+
+        log.info(
+            f"Uploading script from '{script_src_path}' to node '{self.resource_name}' "
+            f"at '{script_dest_path}'"
+        )
+        # Build the shell command
+        upload_cmd = (
+            f"set -euo pipefail; "
+            f'echo "{script_b64}" | base64 -d > {script_dest_path} && '
+            f"chmod 755 {script_dest_path} && "
+            f'echo "Script written to {script_dest_path}" && ls -l {script_dest_path}'
+        )
+
+        # Execute the command on the node
+        return self.run_cmd(upload_cmd, namespace, use_root, timeout)
 
 
 def get_node_objs(node_names=None):
