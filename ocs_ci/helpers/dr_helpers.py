@@ -36,6 +36,7 @@ from ocs_ci.ocs.node import (
     get_node_internal_ip,
     get_worker_nodes,
 )
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster, validate_serviceexport
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
@@ -2592,6 +2593,12 @@ def create_service_exporter(annotate=True):
         ):
             logger.info("Skipping ServiceExport creation for multiclient cluster")
             continue
+        elif (
+            get_provider_service_type() != "NodePort"
+            and cluster.ENV_DATA.get("cluster_type", "").lower() != constants.HCI_CLIENT
+        ):
+            logger.info("Checking if multiClusterService exists")
+            create_multiclusterservice_dr()
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
 
@@ -2815,3 +2822,44 @@ def create_ingress_cert_dr(
         with config.RunWithConfigContext(index):
             logger.info(f"[{cluster_name}] Waiting for MachineConfigPool to be updated")
             wait_for_machineconfigpool_status(node_type="all")
+
+
+def create_multiclusterservice_dr():
+    """
+    This function is used to create multiClusterService used for RDR
+
+    Returns:
+        bool: true when multiClusterService already exists
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if (
+        storage_cluster.data.get("spec")
+        .get("network")
+        .get("multiClusterService")
+        .get("enabled")
+    ):
+        logger.info("Found multiClusterService skipping creation")
+        return
+    logger.info("multiClusterService not found creating now")
+    ptch = (
+        f'\'{{"spec": {{"network": {{"multiClusterService": '
+        f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+        f'"enabled": true}}}}}}}}\''
+    )
+    ptch_cmd = (
+        f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+        f"-n openshift-storage  --type merge --patch {ptch}"
+    )
+    run_cmd(ptch_cmd)
+    storage_cluster.reload_data()
+    assert (
+        storage_cluster.data.get("spec")
+        .get("network")
+        .get("multiClusterService")
+        .get("enabled")
+    ), "Failed to update StorageCluster globalnet"
+    validate_serviceexport()

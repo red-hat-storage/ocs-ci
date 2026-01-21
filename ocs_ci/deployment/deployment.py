@@ -53,6 +53,7 @@ from ocs_ci.helpers.dr_helpers import (
     verify_volsync,
     validate_drpolicy_grouping,
     create_ingress_cert_dr,
+    create_multiclusterservice_dr,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -124,7 +125,6 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     get_osd_count,
     StorageCluster,
-    validate_serviceexport,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -504,24 +504,7 @@ class Deployment(object):
                                 and cluster.ENV_DATA.get("cluster_type", "").lower()
                                 != constants.HCI_CLIENT
                             ):
-                                ptch = (
-                                    f'\'{{"spec": {{"network": {{"multiClusterService": '
-                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
-                                    f'"enabled": true}}}}}}}}\''
-                                )
-                                ptch_cmd = (
-                                    f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                                    f"-n openshift-storage  --type merge --patch {ptch}"
-                                )
-                                run_cmd(ptch_cmd)
-                                storage_cluster.reload_data()
-                                assert (
-                                    storage_cluster.data.get("spec")
-                                    .get("network")
-                                    .get("multiClusterService")
-                                    .get("enabled")
-                                ), "Failed to update StorageCluster globalnet"
-                                validate_serviceexport()
+                                create_multiclusterservice_dr()
                             ocs_registry_image = config.DEPLOYMENT.get(
                                 "ocs_registry_image", None
                             )
@@ -3727,10 +3710,22 @@ class MultiClusterDROperatorsDeploy(object):
 
         """
 
-        ca_cert_path = get_root_ca_cert()
-        logger.info("Encoding Ca Cert")
-        ca_cert_data_byte = open(ca_cert_path, "r").read().encode("ascii")
-        ca_cert_data_encode = base64.b64encode(ca_cert_data_byte).decode("ascii")
+        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            ca_cert_path = get_root_ca_cert()
+            logger.info("Encoding Ca Cert")
+            ca_cert_data_byte = open(ca_cert_path, "r").read().encode("ascii")
+            ca_cert_data_encode = base64.b64encode(ca_cert_data_byte).decode("ascii")
+        else:
+            with config.RunWithPrimaryConfigContext():
+                config_data = ocp.OCP(
+                    kind=constants.CONFIGMAP,
+                    resource_name="user-ca-bundle",
+                    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+                ).get()
+                ca_cert_data = config_data["data"]["ca-bundle.crt"]
+                ca_cert_data_encode = base64.b64encode(
+                    ca_cert_data.encode("ascii")
+                ).decode("ascii")
         dr_ramen_hub_configmap_data = self.meta_obj.get_ramen_resource()
         ramen_config = yaml.safe_load(
             dr_ramen_hub_configmap_data.data["data"]["ramen_manager_config.yaml"]
