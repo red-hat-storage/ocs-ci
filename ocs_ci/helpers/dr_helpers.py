@@ -2946,7 +2946,7 @@ def create_ingress_cert_dr(
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
         with config.RunWithConfigContext(index):
             logger.info(f"[{cluster_name}] Creating Ingress cert")
-            # run_cmd(cmd=f"oc create -f {ingress_file.name}")
+            run_cmd(cmd=f"oc create -f {ingress_file.name}")
             if patch_proxy:
                 logger.info(f"[{cluster_name}] Proxy patch")
                 cmd = (
@@ -2984,7 +2984,7 @@ def create_multiclusterservice_dr():
         ):
             logger.info("Found multiClusterService skipping creation")
             return
-    except AttributeError as ex:
+    except AttributeError:
         logger.info("multiClusterService not found creating now")
     ptch = (
         f'\'{{"spec": {{"network": {{"multiClusterService": '
