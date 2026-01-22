@@ -2836,15 +2836,17 @@ def create_multiclusterservice_dr():
         resource_name=storage_cluster_name,
         namespace=config.ENV_DATA["cluster_namespace"],
     )
-    if (
-        storage_cluster.data.get("spec")
-        .get("network")
-        .get("multiClusterService")
-        .get("enabled")
-    ):
-        logger.info("Found multiClusterService skipping creation")
-        return
-    logger.info("multiClusterService not found creating now")
+    try:
+        if (
+            storage_cluster.data.get("spec")
+            .get("network")
+            .get("multiClusterService")
+            .get("enabled")
+        ):
+            logger.info("Found multiClusterService skipping creation")
+            return
+    except AttributeError as ex:
+        logger.info("multiClusterService not found creating now")
     ptch = (
         f'\'{{"spec": {{"network": {{"multiClusterService": '
         f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
