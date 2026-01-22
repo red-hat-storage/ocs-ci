@@ -1250,11 +1250,33 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the storageclass
+        Delete the storageclass with retry
         """
+
+        @retry((CommandFailed, TimeoutExpiredError), tries=3, delay=5, backoff=2)
+        def delete_storageclass_with_retry(sc_instance):
+            """
+            Delete storageclass with retry on failure
+
+            Args:
+                sc_instance: StorageClass instance to delete
+
+            Raises:
+                CommandFailed: If delete operation fails
+                TimeoutExpiredError: If wait_for_delete times out
+            """
+            log.info(f"Attempting to delete storageclass: {sc_instance.name}")
+            sc_instance.delete()
+            sc_instance.ocp.wait_for_delete(sc_instance.name, timeout=120)
+            log.info(f"Successfully deleted storageclass: {sc_instance.name}")
+
         for instance in instances:
-            instance.delete()
-            instance.ocp.wait_for_delete(instance.name, timeout=120)
+            try:
+                delete_storageclass_with_retry(instance)
+            except (CommandFailed, TimeoutExpiredError) as e:
+                log.error(
+                    f"Failed to delete storageclass {instance.name} after retries: {e}"
+                )
 
     request.addfinalizer(finalizer)
     return factory
