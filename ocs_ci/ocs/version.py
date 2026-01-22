@@ -230,8 +230,7 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
 def main():
     """
     Main fuction of version reporting command line tool.
-    used by entry point report-version from setup.py
-    to invoke this function.
+    Used by entry point report-version to invoke this function.
 
     """
     ap = argparse.ArgumentParser(description="report OCS version for QE purposes")
