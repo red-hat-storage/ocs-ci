@@ -879,8 +879,8 @@ class Deployment(object):
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
-        # self.do_gitops_deploy()
-        # self.do_deploy_oadp()
+        self.do_gitops_deploy()
+        self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_mce()
@@ -3882,7 +3882,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # current CTX: ACM
 
         if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
-            # create_ingress_cert_dr()
+            create_ingress_cert_dr()
             pass
 
         acm_indexes = get_all_acm_indexes()
