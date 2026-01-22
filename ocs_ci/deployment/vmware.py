@@ -35,7 +35,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
-from ocs_ci.framework import config, Config
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -100,9 +100,15 @@ from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs.exceptions import ConnectivityFail
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.framework.logger_helper import log_step
-from .helpers.hypershift_base import HyperShiftBase
+from .helpers.hypershift_base import (
+    HyperShiftBase,
+    create_kubeconfig_file_hosted_cluster,
+    prepare_vsphere_agent_host_cluster_config,
+    wait_for_hosted_cluster_available,
+    wait_for_worker_nodes_ready,
+)
 from .hub_spoke import create_agent_service_config, create_patch_provisioning
-from .mce import MCEInstaller, set_mirror_registry_configmap
+from .mce import set_mirror_registry_configmap
 from ..helpers.helpers import change_default_storageclass
 from ..utility.deployment import get_ocp_ga_version
 
@@ -2053,35 +2059,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
                     "in DEPLOYMENT section: hub_cluster_path, hub_cluster_name"
                 )
 
-            # prepare config object for the HUB Cluster
-            cluster_config = Config()
-            # TODO: update platform, deployment_type somehow, if needed
-            cluster_path = os.path.expanduser(config.DEPLOYMENT.get("hub_cluster_path"))
-            def_client_config_dict = {
-                "DEPLOYMENT": {},
-                "ENV_DATA": {
-                    "cluster_name": config.DEPLOYMENT.get("hub_cluster_name"),
-                    "cluster_path": cluster_path,
-                    "platform": None,
-                    "deployment_type": None,
-                    "cluster_type": "provider",
-                },
-                "RUN": {
-                    "kubeconfig": os.path.join(
-                        cluster_path, cluster_config.RUN["kubeconfig_location"]
-                    )
-                },
-            }
-            keys = [
-                "run_id",
-                "log_dir",
-                "bin_dir",
-                "jenkins_build_url",
-                "logs_url",
-            ]
-            for key in keys:
-                def_client_config_dict["RUN"][key] = config.RUN.get(key, "")
-            cluster_config.update(def_client_config_dict)
+            cluster_config = prepare_vsphere_agent_host_cluster_config()
             logger.info(
                 "Inserting HUB cluster config to Multicluster Config "
                 f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
@@ -2112,7 +2090,6 @@ class VSPHEREAgentAI(VSPHEREBASE):
             # Initialize Terraform. It will be used later for infrastructure creation
             self.terraform_work_dir = os.path.join(os.getcwd(), "terraform/ai/vsphere/")
             self.terraform = Terraform(self.terraform_work_dir)
-            self.mce_installer = MCEInstaller()
 
         def deploy_prereq(self):
             """
@@ -2190,6 +2167,18 @@ class VSPHEREAgentAI(VSPHEREBASE):
             self.terraform.apply(self.terraform_vars_file)
             os.chdir(previous_dir)
 
+            # we need to populate the container policy for all created VMs
+            # this is a workaround for vSphere clusters with strict network policies
+            # https://issues.redhat.com/browse/OCPBUGS-74272
+            log_step("Populating container policy on created VMs")
+            server = config.ENV_DATA["vsphere_server"]
+            user = config.ENV_DATA["vsphere_user"]
+            password = config.ENV_DATA["vsphere_password"]
+            vsphere = VSPHERE(server, user, password)
+            vm_list = vsphere.get_vms_by_string(self.cluster_name)
+            vm_ip_list = vsphere.get_vms_ips(vm_list)
+            populate_containers_policy(vm_ip_list)
+
             self.agent_workflow.wait_agents_available(
                 config.ENV_DATA["worker_replicas"]
             )
@@ -2198,10 +2187,15 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 "Modifying DNS records for API and Ingress, pointing to host (machines) IPs"
             )
             agent_ip_list = self.agent_workflow.get_agents_external_ip_list()
-            modify_dns_records(agent_ip_list, agent_ip_list)
 
-            log_step("removing reserved API and Ingress IPs")
-            release_reserved_ips(self.cluster_name)
+            with config.RunWithProviderConfigContextIfAvailable():
+                master_node_ips = get_node_ips(constants.MASTER_MACHINE)
+
+            create_dns_records_api_int(master_node_ips)
+
+            logger.info("Waiting 60 seconds for DNS records to propagate")
+            time.sleep(60)
+            modify_dns_records(api_ips=master_node_ips, ingress_ips=agent_ip_list)
 
             log_step("Create agent using available hosts")
             ocp_version = config.DEPLOYMENT["installer_version"]
@@ -2239,7 +2233,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
 
             with config.RunWithProviderConfigContextIfAvailable():
                 hypershift = HyperShiftBase()
-            hypershift.update_hcp_binary()
+                hypershift.update_hcp_binary()
 
             hypershift.create_agent_ocp_cluster(
                 self.cluster_name,
@@ -2249,6 +2243,18 @@ class VSPHEREAgentAI(VSPHEREBASE):
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 auto_repair=auto_repair,
+            )
+
+            log_step("Waiting for hosted cluster to become available")
+            wait_for_hosted_cluster_available(self.cluster_name, timeout=1200, sleep=30)
+
+            create_kubeconfig_file_hosted_cluster()
+
+            log_step(
+                "Waiting for worker nodes to appear and become ready in inventory of the Agent cluster"
+            )
+            wait_for_worker_nodes_ready(
+                timeout=1200, sleep=30, expected_nodes=nodepool_replicas
             )
 
         def generate_terraform_vars(self):
@@ -3022,11 +3028,34 @@ def create_dns_records(ips):
 
     """
     logger.info("creating DNS records")
-    aws = AWS()
     dns_record_names = [
         f"api.{config.ENV_DATA.get('cluster_name')}",
         f"*.apps.{config.ENV_DATA.get('cluster_name')}",
     ]
+    _create_dns_records_helper(dns_record_names, ips)
+
+
+def create_dns_records_api_int(ip_list):
+    """
+    Create DNS record for api-int prefix
+
+    Args:
+        ip_list list(str): IP addresses for the api-int DNS record
+
+    Example:
+        For cluster_name='<cluster_name>' and base_domain='qe.rh-ocs.com',
+        creates: api-int.<cluster_name>.qe.rh-ocs.com -> ip
+    """
+    logger.info("Creating api-int DNS record")
+    dns_record_name = f"api-int.{config.ENV_DATA.get('cluster_name')}"
+    _create_dns_records_helper([dns_record_name], ip_list)
+
+
+def _create_dns_records_helper(dns_record_names: list[str], ips: list):
+    """
+    Helper function to create DNS records. Not supposed to be called directly.
+    """
+    aws = AWS()
     responses = []
     dns_record_mapping = {}
     for index, record in enumerate(dns_record_names):
@@ -3069,6 +3098,13 @@ def delete_dns_records():
         f"api.{cluster_domain}.",
         f"\\052.apps.{cluster_domain}.",
     ]
+
+    # Only delete api-int for hosted cluster agent platform
+    if config.ENV_DATA.get("hosted_cluster_platform") == "agent":
+        records_to_delete.append(f"api-int.{cluster_domain}.")
+        logger.info(
+            "Including api-int DNS record for deletion (hosted cluster agent platform)"
+        )
 
     # delete the records
     hosted_zone_id = aws.get_hosted_zone_id_for_domain()
@@ -3200,3 +3236,44 @@ def release_reserved_ips(name: str):
             f"ingress.{name}",
         ]
     )
+
+
+def populate_containers_policy(vm_ip_list):
+    """
+    Populate /etc/containers/policy.json with relaxed defaults
+
+    Args:
+        vm_ip_list (list): List of VM IPs to configure
+    """
+    logger.info("Populating /etc/containers/policy.json on VMs")
+    # Populate remote command to set containers policy with relaxed defaults
+    cmd = """sudo tee /etc/containers/policy.json >/dev/null <<'EOF'
+{
+  \"default\": [
+    {
+      \"type\": \"insecureAcceptAnything\"
+    }
+  ],
+  \"transports\": {
+    \"docker\": {
+      \"registry.redhat.io/multicluster-engine\": [
+        {
+          \"type\": \"insecureAcceptAnything\"
+        }
+      ]
+    }
+  }
+}
+EOF
+"""
+
+    for ip in vm_ip_list:
+        ssh = Connection(
+            host=ip,
+            user=constants.VSPHERE_NODE_USER,
+            password="",
+            private_key=os.path.expanduser(config.DEPLOYMENT["ssh_key_private"]),
+            stdout=True,
+        )
+        _, out, _ = ssh.exec_cmd(cmd)
+        logger.info(f"Output for {ip}: {out}")

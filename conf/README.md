@@ -186,6 +186,8 @@ version.
 * `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
 * `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
 * `submariner_cli_deployment` - Enforce Submariner CLI deployment.
+* `hub_cluster_name` - Name of the Management cluster. Applicable for Agent deployments, where the hub cluster is pre-created.
+* `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
 
 #### REPORTING
 

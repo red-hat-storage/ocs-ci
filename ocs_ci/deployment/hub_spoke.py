@@ -3133,6 +3133,7 @@ class AgentWorkflow:
             )
             return False
 
+    @config.run_with_provider_context_if_available
     def get_agents_external_ip_list(self):
         """
         Get the external IP address of the agent machines
@@ -3223,8 +3224,20 @@ class AgentWorkflow:
 
         infra_env_namespace = self.name
 
-        # Create project
-        create_project(project_name=infra_env_namespace)
+        ocp_ns = OCP(kind="namespace")
+        if ocp_ns.check_resource_existence(
+            timeout=5, resource_name=infra_env_namespace, should_exist=True
+        ):
+            logger.warning(f"Project {infra_env_namespace} already exists")
+        else:
+            create_project(project_name=infra_env_namespace)
+
+        ocp_infra_env = OCP(kind=constants.INFRA_ENV, namespace=infra_env_namespace)
+        if ocp_infra_env.check_resource_existence(
+            timeout=5, resource_name=self.name, should_exist=True
+        ):
+            logger.warning(f"InfraEnv {self.name} already exists in namespace.")
+            return ocp_infra_env
 
         infra_env = None
         for data in infra_env_data:
@@ -3274,7 +3287,7 @@ class AgentWorkflow:
         )
 
         for sample in TimeoutSampler(
-            timeout=timeout, sleep=30, func=self.image_created_in_infraenv
+            timeout=timeout, sleep=30, func=self._image_created_in_infraenv
         ):
             if sample:
                 logger.info(f"Image successfully created in InfraEnv '{self.name}'")
@@ -3286,7 +3299,7 @@ class AgentWorkflow:
         )
         return False
 
-    def image_created_in_infraenv(self):
+    def _image_created_in_infraenv(self):
         """
         Check if the image is created in the InfraEnv
 

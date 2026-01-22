@@ -14,9 +14,10 @@ spec:
   pullSecretRef:
     name: pull-secret
   sshAuthorizedKey: ssh-public-key-value
-  nmStateConfigLabelSelector:
-      matchLabels:
-        infraenvs.agent-install.openshift.io: agents-infra-env
+# not used with default vSphere platform and MCE 2.10
+#  nmStateConfigLabelSelector:
+#      matchLabels:
+#        infraenvs.agent-install.openshift.io: agents-infra-env
   mirrorRegistryRef:
     name: mirror-registry-config
     namespace: multicluster-engine

@@ -950,13 +950,14 @@ def download_with_retries(url, filename, max_retries=3):
         backoff_factor=2,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"],
+        respect_retry_after_header=True,
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
 
     try:
-        with session.get(url, stream=True, timeout=(10, 60), verify=False) as response:
+        with session.get(url, stream=True, timeout=(10, 180), verify=False) as response:
             response.raise_for_status()
             total_size = int(response.headers.get("content-length", 0))
 

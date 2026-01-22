@@ -12,7 +12,7 @@ from ocs_ci.deployment.helpers.idms_parser import (
     extract_image_content_sources,
 )
 from ocs_ci.deployment.ocp import download_pull_secret
-from ocs_ci.framework import config
+from ocs_ci.framework import config, Config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
@@ -602,7 +602,7 @@ class HyperShiftBase:
 
         if not config.ENV_DATA.get("hcp_version"):
             logger.error("hcp_version is not set in config.ENV_DATA")
-            return
+            install_latest = True
 
         self.delete_hcp_and_hypershift_bin()
         self.install_hcp_and_hypershift_from_git(install_latest)
@@ -796,9 +796,11 @@ class HyperShiftBase:
             f"--release-image {index_image} "
             f"--node-pool-replicas {nodepool_replicas} "
             f"--pull-secret {pull_secret_path} "
+            f"--ssh-key {os.path.expanduser(config.DEPLOYMENT.get('ssh_key'))} "
             f"--image-content-sources {self.idms_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
             "--olm-catalog-placement Guest "
+            f"--etcd-storage-class {constants.DEFAULT_STORAGECLASS_RBD} "
         )
 
         if auto_repair:
@@ -836,14 +838,6 @@ class HyperShiftBase:
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)
 
-        agents_obj = OCP(kind="agents", namespace=name)
-        agents_obj.wait_for_resource(
-            column="STAGE",
-            condition="Discovered",
-            resource_count=nodepool_replicas,
-            timeout=1800,
-            sleep=30,
-        )
         return name
 
     def verify_hosted_ocp_cluster_from_provider(self, name):
@@ -933,21 +927,21 @@ class HyperShiftBase:
                 return True
 
     def download_hosted_cluster_kubeconfig(
-        self, name: str, hosted_cluster_path: str, from_hcp: bool = True
+        self, name: str, cluster_path: str, from_hcp: bool = True
     ):
         """
         Download HyperShift hosted cluster kubeconfig
 
         Args:
             name (str): name of the cluster
-            hosted_cluster_path (str): path to create auth_path folder and download kubeconfig there
+            cluster_path (str): path to create auth_path folder and download kubeconfig there
             from_hcp (bool): if True, use hcp binary to download kubeconfig, otherwise use ocp secret
 
         Returns:
             str: path to the downloaded kubeconfig, None if failed
 
         """
-        path_abs = os.path.expanduser(hosted_cluster_path)
+        path_abs = os.path.expanduser(cluster_path)
         auth_path = os.path.join(path_abs, "auth")
         os.makedirs(auth_path, exist_ok=True)
         kubeconfig_path = os.path.join(auth_path, "kubeconfig")
@@ -1237,3 +1231,215 @@ def create_cluster_dir(cluster_name):
     )
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def prepare_vsphere_agent_host_cluster_config():
+    """
+    Prepares config object for the HUB Cluster to be used as host cluster
+    for vSphere Agent Assisted Installer deployment
+
+    Returns:
+        Config: Config object for the HUB Cluster
+
+    """
+    cluster_config = Config()
+    cluster_path = os.path.expanduser(config.DEPLOYMENT.get("hub_cluster_path"))
+    def_client_config_dict = {
+        "DEPLOYMENT": {},
+        "ENV_DATA": {
+            "cluster_name": config.DEPLOYMENT.get("hub_cluster_name"),
+            "cluster_path": cluster_path,
+            "platform": "vsphere",
+            "deployment_type": "ai",
+            "cluster_type": "provider",
+        },
+        "RUN": {
+            "kubeconfig": os.path.join(
+                cluster_path, cluster_config.RUN["kubeconfig_location"]
+            )
+        },
+    }
+    keys = [
+        "run_id",
+        "log_dir",
+        "bin_dir",
+        "jenkins_build_url",
+        "logs_url",
+    ]
+    for key in keys:
+        def_client_config_dict["RUN"][key] = config.RUN.get(key, "")
+    cluster_config.update(def_client_config_dict)
+    return cluster_config
+
+
+@retry(CommandFailed, tries=5, delay=30, backoff=1)
+def create_kubeconfig_file_hosted_cluster():
+    """
+    Export kubeconfig to auth directory in cluster path.
+
+    This function is wrapped with retry decorator to handle CommandFailed errors.
+    It will retry up to 5 times with 30 sec  delay between attempts.
+    """
+    cluster_path = config.ENV_DATA["cluster_path"]
+    cluster_name = config.ENV_DATA["cluster_name"]
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        hypershift = HyperShiftBase()
+        kubeconfig_path = hypershift.download_hosted_cluster_kubeconfig(
+            cluster_name, cluster_path=cluster_path
+        )
+
+    config.RUN["kubeconfig"] = kubeconfig_path
+    logger.info("Created kubeconfig file")
+
+
+def wait_for_worker_nodes_ready(timeout=600, sleep=10, expected_nodes=None):
+    """
+    Wait for worker nodes to appear in the agent cluster inventory and become ready.
+    This function operates on the default context (agent cluster).
+
+    Args:
+        timeout (int): Maximum time in seconds to wait for nodes to be ready (default: 600)
+        sleep (int): Time in seconds to sleep between checks (default: 10)
+        expected_nodes (int): Expected number of worker nodes. If None, waits for at least one node.
+
+    Raises:
+        TimeoutExpiredError: If worker nodes don't appear or become ready within the timeout
+
+    """
+    from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
+
+    logger.info("Waiting for worker nodes to appear in agent cluster inventory")
+
+    try:
+        worker_nodes = []
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_nodes,
+            node_type=constants.WORKER_MACHINE,
+        ):
+            if sample:
+                worker_nodes = sample
+                if expected_nodes is None and len(worker_nodes) > 0:
+                    logger.info(
+                        f"Found {len(worker_nodes)} worker node(s): "
+                        f"{[node.name for node in worker_nodes]}"
+                    )
+                    break
+                elif expected_nodes and len(worker_nodes) >= expected_nodes:
+                    logger.info(
+                        f"Found {len(worker_nodes)} worker node(s) (expected: {expected_nodes}): "
+                        f"{[node.name for node in worker_nodes]}"
+                    )
+                    break
+                else:
+                    current_count = len(worker_nodes) if worker_nodes else 0
+                    expected_count = expected_nodes if expected_nodes else "at least 1"
+                    logger.info(
+                        f"Waiting for worker nodes to appear. "
+                        f"Current: {current_count}, Expected: {expected_count}"
+                    )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Worker nodes did not appear in agent cluster inventory within {timeout} seconds"
+        )
+        raise
+
+    # Wait for worker nodes to become Ready
+    logger.info("Waiting for worker nodes to become Ready")
+    node_names = [node.name for node in worker_nodes]
+    wait_for_nodes_status(
+        node_names=node_names,
+        status=constants.NODE_READY,
+        timeout=timeout,
+        sleep=sleep,
+    )
+    logger.info("All worker nodes are ready")
+
+
+@config.run_with_provider_context_if_available
+def get_hosted_cluster_condition_status(cluster_name, condition_type="Available"):
+    """
+    Get hosted cluster condition status
+
+    Equivalent to: oc get hostedcluster <cluster_name> -n clusters
+                   -o jsonpath='{.status.conditions[?(@.type=="<condition_type>")].status}'
+
+    Args:
+        cluster_name (str): Name of the hosted cluster
+        condition_type (str): Type of condition to check (default: "Available")
+                             Other common types: "Ready", "Progressing", "Degraded"
+
+    Returns:
+        str: Condition status (typically "True", "False", or "Unknown")
+        None: If condition not found or command fails
+
+    """
+
+    logger.info(
+        f"Getting hosted cluster '{cluster_name}' condition status for type '{condition_type}'"
+    )
+
+    try:
+        ocp_hc = OCP(
+            kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+        )
+        jsonpath = f'{{.status.conditions[?(@.type=="{condition_type}")].status}}'
+
+        status = ocp_hc.exec_oc_cmd(
+            f"get hostedclusters {cluster_name} -o jsonpath='{jsonpath}'",
+            out_yaml_format=False,
+        )
+
+        # status is a string when out_yaml_format=False
+        status_str = str(status) if status else ""
+
+        logger.info(
+            f"Hosted cluster '{cluster_name}' condition '{condition_type}' status: {status_str}"
+        )
+        return status_str.strip() if status_str else None
+
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to get hosted cluster '{cluster_name}' condition status: {e}"
+        )
+        return None
+
+
+def wait_for_hosted_cluster_available(cluster_name, timeout=600, sleep=30):
+    """
+    Wait for hosted cluster to become available using TimeoutSampler
+
+    ! Executed always from Provider context !
+
+    Args:
+        cluster_name (str): Name of the hosted cluster
+        timeout (int): Timeout in seconds (default: 600 = 10 minutes)
+        sleep (int): Sleep interval between checks in seconds (default: 30)
+
+    Returns:
+        bool: True if cluster becomes available, False if timeout
+
+    Raises:
+        TimeoutExpiredError: If cluster doesn't become available within timeout
+
+    """
+    logger.info(f"Waiting for hosted cluster '{cluster_name}' to become available")
+
+    for sample in TimeoutSampler(
+        timeout,
+        sleep,
+        get_hosted_cluster_condition_status,
+        cluster_name,
+        constants.STATUS_AVAILABLE,
+    ):
+        if sample == "True":
+            logger.info(f"Hosted cluster '{cluster_name}' is available")
+            return True
+        else:
+            logger.info(
+                f"Hosted cluster '{cluster_name}' availability status: {sample}. Waiting..."
+            )
+
+    return False

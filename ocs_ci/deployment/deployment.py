@@ -958,6 +958,7 @@ class Deployment(object):
         if config.ENV_DATA["deployment_type"] not in (
             constants.MANAGED_DEPL_TYPE,
             constants.MANAGED_CP_DEPL_TYPE,
+            constants.AI_AGENT_DEPL_TYPE,
         ):
             add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):

@@ -256,6 +256,7 @@ class MCEInstaller(object):
         if sampler.wait_for_func_value(True):
             logger.info(f"Version {ocp_version} found in supported-versions configmap")
 
+    @config.run_with_provider_context_if_available
     def get_supported_versions(self):
         """
         Get supported versions from the supported-versions configmap.
