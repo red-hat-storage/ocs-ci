@@ -273,10 +273,35 @@ class AcmAddClusters(AcmPageNavigator):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
+        azure_clusters_indices = [
+            cluster_index
+            for cluster_index in [primary_index, secondary_index]
+            if config.clusters[cluster_index].ENV_DATA["platform"]
+            == constants.AZURE_PLATFORM
+        ]
+
         increase_gateway_number = 2
-        if ibm_cloud_managed:
+        if ibm_cloud_managed or azure_clusters_indices:
             increase_gateway_number = 1
+
+        found_azure_page = False
         for cluster_nr in range(1, 3):
+            if azure_clusters_indices:
+                try:
+                    azure_page = self.driver.find_element(
+                        self.page_nav["submariner_addon_azure_page"]
+                    )
+                    found_azure_page = True
+                    azure_index = [
+                        cluster_index
+                        for cluster_index in azure_clusters_indices
+                        if config.clusters[cluster_index].ENV_DATA["cluster_name"]
+                        in azure_page.text
+                    ][0]
+                    self.enter_azure_details(azure_cluster_index=azure_index)
+                except NoSuchElementException:
+                    if (not found_azure_page) and cluster_nr == 2:
+                        raise
             if not ibm_cloud_managed:
                 log.info(
                     f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
@@ -344,11 +369,19 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         timeout = 600
+        cluster_set_name = (
+            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+        )
+        azure_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get(
+            selector=f"cluster.open-cluster-management.io/clusterset={cluster_set_name},cloud=Azure",
+            dont_raise=True,
+        )
+
         ibm_cloud_managed = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
-        if ibm_cloud_managed:
+        if ibm_cloud_managed or azure_clusters:
             timeout = 2100
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
@@ -362,9 +395,6 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
-        cluster_set_name = (
-            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
-        )
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
@@ -537,6 +567,38 @@ class AcmAddClusters(AcmPageNavigator):
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
         config.switch_ctx(old_ctx)
+
+    def enter_azure_details(self, azure_cluster_index):
+        """
+        Enter Azure details in Submariner install page
+
+        Args:
+            azure_cluster_index (str): The index of the Azure cluster
+
+        """
+        log.info("Enter Azure cluster details")
+        self.do_send_keys(
+            self.page_nav["azure_base_domain_resource_group"],
+            config.clusters[azure_cluster_index].ENV_DATA.get(
+                "azure_base_domain_resource_group_name"
+            ),
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_secret"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_secret"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_subscription_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["subscription_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_tenent_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["tenant_id"],
+        )
 
 
 def copy_kubeconfig(file=None, return_str=False):
