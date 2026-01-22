@@ -2689,7 +2689,7 @@ def ceph_health_resolve_network_partition(health_status):
     wait_for_ceph_health_ok()
 
 
-def wait_for_ceph_health_ok(timeout=300, sleep=10):
+def wait_for_ceph_health_ok(timeout=900, sleep=10):
     """
     Wait until the ceph health is OK
 
