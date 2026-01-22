@@ -56,10 +56,10 @@ ERRMSG = "Error in command"
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skipif_hci_client
 @skip_for_provider_if_ocs_version("<4.19")
 @skipif_lean_deployment
 @polarion_id("OCS-4270")
-@skipif_hci_client
 class TestDefaultNfsDisabled(ManageTest):
     """
     Test nfs feature enable for ODF 4.11
