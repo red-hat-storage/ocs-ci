@@ -202,6 +202,7 @@ class Operator:
         )
         self._create_catalog(mirrored_index_image, self.unreleased_catalog_name)
 
+    @retry(CommandFailed, tries=5, delay=30, backoff=1)
     def is_available(self):
         """
         Check if the operator is available
