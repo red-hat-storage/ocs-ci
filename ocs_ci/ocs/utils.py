@@ -5,10 +5,12 @@ import os
 import pickle
 import re
 import threading
+import tarfile
 import time
 import traceback
 import subprocess
 import shlex
+import shutil
 from subprocess import TimeoutExpired
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -948,7 +950,8 @@ def run_must_gather(
     Runs the must-gather tool against the cluster
 
     Args:
-        log_dir_path (str): directory for dumped must-gather logs
+        log_dir_path (str): directory for dumped must-gather logs (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
         cluster_config (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
@@ -1017,6 +1020,16 @@ def run_must_gather(
         if mg_output:
             log.error(f"Must-Gather Output: {mg_output}")
         export_mg_pods_logs(log_dir_path=log_dir_path)
+
+    if config.REPORTING.get("tarball_mg_logs"):
+        tarball_path = f"{log_dir_path}.tar.gz"
+        try:
+            with tarfile.open(tarball_path, "w:gz") as tar:
+                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            if config.REPORTING.get("delete_packed_mg_logs"):
+                shutil.rmtree(log_dir_path)
+        except Exception as err:
+            log.error(f"Failed during packing files! Error: {err}")
 
     return mg_output
 
@@ -1968,7 +1981,8 @@ def collect_pod_container_rpm_package(dir_name):
     Collect information about rpm packages from all containers + go version
 
     Args:
-        dir_name(str): directory to store container rpm package info
+        dir_name(str): directory to store container rpm package info (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
 
     """
     # Import pod here to avoid circular dependency issue
@@ -2034,6 +2048,16 @@ def collect_pod_container_rpm_package(dir_name):
                     go_log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-go-version.log"
                     with open(go_log_file_name, "w") as f:
                         f.write(go_output)
+
+    if config.REPORTING.get("tarball_mg_logs"):
+        tarball_path = f"{package_log_dir_path}.tar.gz"
+        try:
+            with tarfile.open(tarball_path, "w:gz") as tar:
+                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            if config.REPORTING.get("delete_packed_mg_logs"):
+                shutil.rmtree(log_dir_path)
+        except Exception as err:
+            log.error(f"Failed during packing files! Error: {err}")
 
 
 def is_dr_scenario():
