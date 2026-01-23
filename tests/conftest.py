@@ -1986,6 +1986,8 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     ceph_health_check(
                         namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                         fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
                     )
                     log.info("Ceph health check passed at teardown!")
                     if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
@@ -2045,6 +2047,8 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     tries=10,
                     delay=15,
                     fix_ceph_health=True,
+                    update_jira=True,
+                    no_exception_if_jira_issue_updated=True,
                 )
                 if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                     if status:
