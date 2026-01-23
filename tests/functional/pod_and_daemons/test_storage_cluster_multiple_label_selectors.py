@@ -27,14 +27,21 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
+@tier3
+@polarion_id("OCS-7464")
 @brown_squad
 @ignore_leftovers
 class TestStorageClusterLabelSelector(ManageTest):
-
+    """
+    Test class to verify storage cluster behavior with multiple label selectors
+    """
     @pytest.fixture(autouse=True)
     def teardown(self, request):
+        """
+        Teardown to restore original storage cluster configuration and remove labels
+        """
         def finalizer():
-            logger.info("Starting teardown")
+            logger.info("Starting teardown: Removing label selectors and node labels")
 
             worker_nodes = get_worker_nodes()
 
@@ -44,7 +51,7 @@ class TestStorageClusterLabelSelector(ManageTest):
                 )
                 remove_label_from_worker_node(worker_nodes, label_key="portworx")
             except Exception as e:
-                logger.warning(f"Failed removing labels: {e}")
+                logger.warning(f"Failed removing labels from nodes: {e}")
 
             try:
                 storagecluster_obj = OCP(
@@ -60,23 +67,32 @@ class TestStorageClusterLabelSelector(ManageTest):
                     time.sleep(60)
                     verify_storage_cluster()
             except Exception as e:
-                logger.warning(f"Failed restoring storagecluster: {e}")
+                logger.warning(f"Failed to remove labelSelector from storage cluster: {e}")
 
+            logger.info("Waiting for all OCS pods to be in Running state")
             try:
                 wait_for_pods_to_be_running(
                     namespace=config.ENV_DATA["cluster_namespace"], timeout=600
                 )
             except Exception as e:
-                logger.warning(f"Pods not fully recovered: {e}")
+                logger.warning(f"Some pods may not be running after teardown: {e}")
 
         request.addfinalizer(finalizer)
 
-    @tier3
-    @polarion_id("xxx")
     def test_storage_cluster_multiple_label_selectors(self):
-
+        """
+        Test to verify storage cluster behavior with multiple label selectors
+        
+        Steps:
+        1. Add two label selectors to storage cluster spec
+        2. Add corresponding labels to all worker nodes
+        3. Verify node labels are applied
+        4. Delete ocs-metrics-exporter pod
+        5. Monitor pod status and verify stability
+        6. Verify no pods go into continuous terminating/running loop
+        7. Verify rook-ceph-operator doesn't go into CLBO
+        """
         logger.info("Step 1: Patching storage cluster")
-
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -93,39 +109,51 @@ class TestStorageClusterLabelSelector(ManageTest):
                 }
             }
         }
-
+        logger.info(f"Patching storage cluster with labelSelector: {label_selector_patch}")
         storagecluster_obj.patch(
             params=json.dumps(label_selector_patch),
             format_type="merge",
         )
-
+        logger.info("Waiting for storage cluster to process the labelSelector patch")
         time.sleep(30)
 
-        logger.info("Step 2: Label worker nodes")
-
+        logger.info("Step 2: Adding custom labels to all worker nodes")
         worker_nodes = get_worker_nodes()
-
+        logger.info("Adding label: node-role.kubernetes.io/infra-logging=")
         label_worker_node(
             worker_nodes,
             label_key="node-role.kubernetes.io/infra-logging",
             label_value="",
         )
-
+        logger.info("Adding label: portworx=true")
         label_worker_node(
             worker_nodes,
             label_key="portworx",
             label_value="true",
         )
 
-        logger.info("Step 3: Waiting for stabilization")
-        time.sleep(60)
-
+        logger.info("Step 3: Verifying node labels have been added")
+        node_obj = OCP(kind="node")
+        
+        nodes_with_infra_label = node_obj.exec_oc_cmd(
+            "get nodes -l node-role.kubernetes.io/infra-logging",
+            out_yaml_format=False
+        )
+        logger.info(f"Nodes with infra-logging label:\n{nodes_with_infra_label}")
+        assert len(worker_nodes) > 0, "No nodes found with infra-logging label"
+        
+        nodes_with_portworx_label = node_obj.exec_oc_cmd(
+            "get nodes -l portworx=true",
+            out_yaml_format=False
+        )
+        logger.info(f"Nodes with portworx label:\n{nodes_with_portworx_label}")
+        assert len(worker_nodes) > 0, "No nodes found with portworx label"        
+        
+        logger.info("Step 4: Delete ocs-metrics-exporter pod")
         pod_obj = OCP(
             kind=constants.POD,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-
-        logger.info("Step 4: Fetching metrics exporter pods")
 
         def get_metrics_pods():
             return get_pods_having_label(
@@ -136,7 +164,6 @@ class TestStorageClusterLabelSelector(ManageTest):
         metrics_pods = get_metrics_pods()
         assert metrics_pods, "No ocs-metrics-exporter pods found!"
 
-        logger.info("Step 5: Deleting metrics exporter pod(s)")
         for pod in metrics_pods:
             pod_name = pod["metadata"]["name"]
             logger.info(f"Deleting pod {pod_name}")
@@ -144,7 +171,8 @@ class TestStorageClusterLabelSelector(ManageTest):
 
         time.sleep(30)
 
-        logger.info("Step 6: Monitoring pod behavior")
+        logger.info("Step 5 and 6: Monitoring pod status for stability and Verify no pods " \
+        "go into continuous terminating/running loop")
 
         monitoring_duration = 300
         check_interval = 30
@@ -190,25 +218,22 @@ class TestStorageClusterLabelSelector(ManageTest):
 
         except Exception:
             logger.info("Monitoring window completed")
-
-        logger.info("Step 7: Analyzing behavior")
-
+        
+        logger.info("Step 7: Analyzing pod stability")
         unique_uids = set(uid_history)
-
         logger.info(f"Observed metrics exporter pod UIDs: {unique_uids}")
-
         assert len(unique_uids) <= 2, (
             f"ocs-metrics-exporter pod is continuously recreated: {unique_uids}"
         )
-
         assert not clbo_detected, "rook-ceph-operator entered CrashLoopBackOff"
-
+        logger.info("Verifying storage cluster is in Ready state")
         verify_storage_cluster()
 
+        logger.info("Verifying all pods are in Running state")
         wait_for_pods_to_be_running(
             namespace=config.ENV_DATA["cluster_namespace"], timeout=300
         )
-
-        logger.info("Test passed: Pods stable with multiple label selectors")
+        logger.info("Test passed: Pods remained stable with multiple "
+            "label selectors")
 
 # AI assisted code
