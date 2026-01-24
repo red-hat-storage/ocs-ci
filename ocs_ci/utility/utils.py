@@ -709,8 +709,9 @@ def exec_cmd(
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
+    truncated_stdout = truncate_long_lines(masked_stdout)
     if len(completed_process.stdout) > 0:
-        log.debug(f"Command stdout: {masked_stdout}")
+        log.debug(f"Command stdout: {truncated_stdout}")
     else:
         log.debug("Command stdout is empty")
 
@@ -769,6 +770,46 @@ def bin_xml_escape(arg):
         "[^\u0009\u000a\u000d\u0020-\u007e\u0080-\ud7ff\ue000-\ufffd\u10000-\u10ffFF]"
     )
     return re.sub(illegal_xml_re, repl, str(arg))
+
+
+def truncate_long_lines(output: str, max_line_length: int = 500) -> str:
+    """
+    Truncate individual lines that exceed max_line_length.
+
+    Preserves:
+    - First N/2 chars (includes log prefix and key info)
+    - Last 50 chars (for context)
+    - Adds truncation marker in middle
+
+    Args:
+        output: Command output to process
+        max_line_length: Maximum line length before truncation
+
+    Returns:
+        str: Output with long lines truncated
+    """
+    if not output:
+        return output
+
+    lines = output.split("\n")
+    result = []
+
+    for line in lines:
+        if len(line) > max_line_length:
+            # Keep prefix and suffix, truncate middle
+            prefix_len = max_line_length // 2
+            suffix_len = 50
+            truncated_chars = max(0, len(line) - prefix_len - suffix_len)
+            if truncated_chars > 0:
+                result.append(
+                    f"{line[:prefix_len]}[...{truncated_chars} chars truncated...]{line[-suffix_len:]}"
+                )
+            else:
+                result.append(line)  # Edge case: line just over threshold
+        else:
+            result.append(line)
+
+    return "\n".join(result)
 
 
 def download_file(url, filename, **kwargs):
