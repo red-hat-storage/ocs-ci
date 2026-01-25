@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 import random
+import string
 import time
 import tempfile
 import threading
@@ -4458,6 +4459,112 @@ def user_factory(request, htpasswd_identity_provider, htpasswd_path):
 @pytest.fixture(scope="session")
 def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
     return users.user_factory(request, htpasswd_path)
+
+
+@pytest.fixture(scope="function")
+def dev_user_factory(request, user_factory, mcg_obj_session):
+    """
+    Factory fixture to create dev users with minimal RBAC for Object Storage access.
+
+    Creates an OpenShift user via htpasswd, binds to noobaa-odf-ui ClusterRole,
+    and creates a NooBaa account with S3 credentials.
+    Automatically cleans up RBAC bindings and MCG accounts after test.
+
+    Returns:
+        func: Factory function that returns DevUser dataclass instance.
+
+    Example:
+        def test_dev_user(self, dev_user_factory):
+            dev_user = dev_user_factory()
+            # dev_user.username, dev_user.password for OpenShift login
+            # dev_user.secret_namespace, dev_user.secret_name for S3 login modal
+
+    """
+    created_users = []
+    created_mcg_accounts = []
+    clusterrole_created = False
+
+    def factory(username=None, password=None):
+        nonlocal clusterrole_created
+
+        if not clusterrole_created:
+            users.create_noobaa_ui_clusterrole()
+            clusterrole_created = True
+
+        # Generate safe username (10-15 alphanumeric chars, starts with letter)
+        if username is None:
+            username = random.choice(string.ascii_lowercase)
+            username += "".join(
+                random.choice(string.ascii_lowercase + string.digits)
+                for _ in range(random.randint(9, 14))
+            )
+
+        # Generate safe password (12-16 chars, safe punctuation only)
+        if password is None:
+            safe_punctuation = "!@#%^*()-_=+"
+            chars = string.ascii_letters + string.digits + safe_punctuation
+            password = "".join(
+                random.choice(chars) for _ in range(random.randint(12, 16))
+            )
+
+        # Create OpenShift user
+        ocp_username, ocp_password = user_factory(username=username, password=password)
+
+        # Bind user to noobaa-odf-ui ClusterRole
+        users.bind_user_to_noobaa_ui_role(ocp_username)
+        created_users.append(ocp_username)
+
+        # Create NooBaa account for S3 access
+        mcg_account_name = f"dev-{ocp_username}"
+        cli_cmd = (
+            f"account create {mcg_account_name} "
+            f"--allow_bucket_create=true "
+            f"--default_resource {constants.DEFAULT_NOOBAA_BACKINGSTORE} "
+        )
+        mcg_obj_session.exec_mcg_cmd(cli_cmd)
+        created_mcg_accounts.append(mcg_account_name)
+
+        # Get S3 secret info for the created account
+        secret_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        secret_name = f"noobaa-account-{mcg_account_name}"
+
+        dev_user = users.DevUser(
+            username=ocp_username,
+            password=ocp_password,
+            secret_namespace=secret_namespace,
+            secret_name=secret_name,
+        )
+
+        # Save credentials to file for manual debugging
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix=f"dev_user_creds_{ocp_username}_",
+            suffix=".txt",
+            dir=constants.DATA_DIR,
+            delete=False,
+        ) as f:
+            f.write(f"username: {ocp_username}\n")
+            f.write(f"password: {ocp_password}\n")
+            f.write(f"secret_namespace: {secret_namespace}\n")
+            f.write(f"secret_name: {secret_name}\n")
+            log.info(f"Dev user credentials saved to: {f.name}")
+
+        return dev_user
+
+    def finalizer():
+        # Clean up RBAC bindings
+        for username in created_users:
+            users.delete_user_noobaa_ui_binding(username)
+        # Clean up MCG accounts
+        for acc_name in created_mcg_accounts:
+            try:
+                mcg_obj_session.exec_mcg_cmd(f"account delete {acc_name}")
+                log.info(f"Deleted MCG account {acc_name}")
+            except CommandFailed as e:
+                log.warning(f"Failed to delete MCG account {acc_name}: {e}")
+
+    request.addfinalizer(finalizer)
+    return factory
 
 
 @pytest.fixture(autouse=True)
