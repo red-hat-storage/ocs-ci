@@ -1186,6 +1186,12 @@ OPERATOR_SOURCE_SECRET_YAML = os.path.join(
 OPERATOR_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml")
 
 HTPASSWD_IDP_YAML = os.path.join(TEMPLATE_AUTHENTICATION_DIR, "htpasswd_provider.yaml")
+NOOBAA_ODF_UI_CLUSTERROLE_YAML = os.path.join(
+    TEMPLATE_AUTHENTICATION_DIR, "noobaa_odf_ui_clusterrole.yaml"
+)
+NOOBAA_ODF_UI_CLUSTERROLEBINDING_YAML = os.path.join(
+    TEMPLATE_AUTHENTICATION_DIR, "noobaa_odf_ui_clusterrolebinding.yaml"
+)
 
 IBM_COS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ibm-cloud-secret.yaml")
 OCS_OPERATOR_CSV_YAML = "ocs-operator.clusterserviceversion.yaml"
