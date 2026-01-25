@@ -29,26 +29,74 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 log = getLogger(__name__)
 
-_FAILURE_DOMAINS = None
+
+def _get_failure_domains_from_storagecluster() -> list[str]:
+    """
+    Get failure domains from StorageCluster status.failureDomainValues.
+
+    Returns:
+        list[str]: Failure domain names, or empty list if not available.
+    """
+    try:
+        storage_cluster = OCP(
+            kind=STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        sc_data = storage_cluster.get()
+        items = sc_data.get("items", [])
+        if not items:
+            log.debug("No StorageCluster items found")
+            return []
+
+        failure_domain_values = (
+            items[0].get("status", {}).get("failureDomainValues", [])
+        )
+        if failure_domain_values:
+            log.info(
+                f"Got failure domains from StorageCluster status: {failure_domain_values}"
+            )
+            return failure_domain_values
+
+        log.debug("failureDomainValues not found in StorageCluster status")
+        return []
+    except (CommandFailed, KeyError, IndexError) as e:
+        log.debug(f"Failed to get failure domains from StorageCluster: {e}")
+        return []
 
 
 def get_failure_domains() -> list[str]:
     """
-    Gets Cluster Failure Domains
+    Gets Cluster Failure Domains.
+
+    Priority:
+        1. config.ENV_DATA["worker_availability_zones"] (if configured)
+        2. StorageCluster.status.failureDomainValues (source of truth)
+        3. Legacy: Parse from CephBlockPool names (fallback)
 
     Returns:
-        list: Failure Domains names
+        list[str]: Failure Domain names
     """
-    global _FAILURE_DOMAINS
-    if _FAILURE_DOMAINS is None:
-        try:
-            _FAILURE_DOMAINS = config.ENV_DATA.get(
-                "worker_availability_zones", get_failures_domain_name()
-            )
-        except CommandFailed as e:
-            print(f"Error initializing FAILURE_DOMAINS: {e}")
-            _FAILURE_DOMAINS = []
-    return _FAILURE_DOMAINS
+    # Priority 1: Config override
+    config_zones = config.ENV_DATA.get("worker_availability_zones")
+    if config_zones:
+        log.info(f"Using failure domains from config: {config_zones}")
+        return config_zones
+
+    # Priority 2: StorageCluster status (source of truth, available immediately)
+    sc_domains = _get_failure_domains_from_storagecluster()
+    if sc_domains:
+        return sc_domains
+
+    # Priority 3: Legacy fallback - parse CephBlockPool names
+    try:
+        cbp_domains = get_failures_domain_name()
+        if cbp_domains:
+            return cbp_domains
+    except CommandFailed as e:
+        log.warning(f"Failed to get failure domains from CephBlockPools: {e}")
+
+    log.warning("No failure domains found from any source")
+    return []
 
 
 def get_failures_domain_name() -> list[str]:
