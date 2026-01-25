@@ -4,7 +4,6 @@ This module is used for configuring iscsi.
 
 import sys
 import logging
-import os
 import re
 
 from ocs_ci.ocs import node, ocp, constants
@@ -43,7 +42,7 @@ def setup_target_environment(target_node_ssh):
             log.debug(f"Output: {stdout.strip()}")
 
 
-def get_worker_node_ips(kubeconfig_path):
+def get_worker_node_ips():
     """
     Collects worker node IPs from the Kubernetes cluster using oc command.
 
@@ -55,11 +54,7 @@ def get_worker_node_ips(kubeconfig_path):
     """
     try:
         # Use ocs_ci.utils.node.get_node_ips to get worker node IPs
-        worker_ips = node.get_node_ips(
-            kubeconfig_path,
-            label_selector="node-role.kubernetes.io/worker",
-            field_selector="status.phase=Ready",
-        )
+        worker_ips = node.get_node_ips()
         return worker_ips
     except Exception as e:
         log.error("Error getting worker node IPs:", e)
@@ -181,28 +176,49 @@ def configure_target(target_node_ssh, target_iqn, worker_iqns):
 
     # Setup environment first
     # setup_target_environment(target_node_ssh)
+
     # Check if target exists
-    check_cmd = f"targetcli ls /iscsi/{target_iqn} 2>/dev/null"
-    success, stdout, stderr = target_node_ssh.exec_cmd(check_cmd)
-    if not success:
+    check_cmd = f"targetcli /iscsi/{target_iqn} ls 2>/dev/null"
+    retcode, stdout, stderr = target_node_ssh.exec_cmd(check_cmd)
+    if retcode != 0:
         create_target_cmd = f"targetcli /iscsi create {target_iqn}"
-        target_node_ssh.exec_cmd(create_target_cmd)
+        retcode, stdout, stderr = target_node_ssh.exec_cmd(create_target_cmd)
+        if retcode != 0 and "already exists" not in (stdout + stderr).lower():
+            log.error(f"Failed to create iSCSI target {target_iqn}: {stderr or stdout}")
+            return
     else:
-        log.info(f"iSCSI target {target_iqn} already exists")
-        log.info("Adding workers...")
+        log.info(f"iSCSI target {target_iqn} already exists. Adding workers...")
 
     # Add LUNs and ACLs for each worker IQN
     for worker_iqn in worker_iqns:
         # Add ACL
         acl_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls create {worker_iqn}"
-        target_node_ssh.exec_cmd(acl_cmd)
-        log.info(f"AddedACL for worker IQN: {worker_iqn}")
+        retcode, stdout, stderr = target_node_ssh.exec_cmd(acl_cmd)
+        if retcode != 0:
+            # targetcli returns non-zero if ACL already exists (idempotency case)
+            msg = (stdout + stderr).strip()
+            if "already exists" in msg.lower():
+                log.info(f"ACL already exists for worker IQN: {worker_iqn}")
+            else:
+                log.error(f"Failed to add ACL for {worker_iqn}: {msg}")
+                continue
+        else:
+            log.info(f"Added ACL for worker IQN: {worker_iqn}")
 
         # Get list of LUNs to map
         lun_list_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/luns ls"
-        target_node_ssh.exec_cmd(lun_list_cmd)
+        retcode, stdout, stderr = target_node_ssh.exec_cmd(lun_list_cmd)
+        if retcode != 0:
+            log.error(f"Failed to get list of LUNs: {stderr}")
+            continue
 
         lun_numbers = re.findall(r"lun(\d+)", stdout)
+        if not lun_numbers:
+            log.warning(
+                f"No LUNs found under /iscsi/{target_iqn}/tpg1/luns. "
+                f"Create backstores/LUNs before attempting ACL mapping."
+            )
+            continue
 
         for lun_num in lun_numbers:
             log.info(f"Mapping LUN{lun_num} to {worker_iqn}...")
@@ -213,18 +229,21 @@ def configure_target(target_node_ssh, target_iqn, worker_iqns):
                 f"create {lun_num} {lun_num} 2>&1 || "
                 f"echo 'LUN mapping may already exist'"
             )
-            target_node_ssh.exec_cmd(map_cmd)
-            log.info(f"LUN{lun_num} mapping result: {stdout.strip()}")
+            retcode, map_stdout, map_stderr = target_node_ssh.exec_cmd(map_cmd)
+            log.info(
+                f"LUN{lun_num} mapping result (rc={retcode}): "
+                f"{(map_stdout + map_stderr).strip()}"
+            )
 
     # Save configuration
     log.info("Saving target configuration...")
     save_cmd = "targetcli saveconfig"
-    success, stdout, stderr = target_node_ssh.exec_cmd(save_cmd)
+    retcode, stdout, stderr = target_node_ssh.exec_cmd(save_cmd)
 
-    if success:
+    if retcode == 0:
         log.info("Configuration saved successfully")
     else:
-        log.warning(f"Save warning: {stderr}")
+        log.warning(f"Save warning: {stderr or stdout}")
 
 
 # --------------------------------------------------------
@@ -304,9 +323,9 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
         delete_acl_cmd = (
             f"targetcli /iscsi/{target_iqn}/tpg1/acls delete {worker_iqn} 2>&1"
         )
-        success, stdout, stderr = target_node_ssh.exec_cmd(delete_acl_cmd)
+        retcode, stdout, stderr = target_node_ssh.exec_cmd(delete_acl_cmd)
 
-        if success or "does not exist" in stdout.lower():
+        if retcode == 0 or "does not exist" in stdout.lower():
             log.info(" ACL is deleted")
         else:
             log.warning(f"Warning: {stdout}")
@@ -428,7 +447,6 @@ def cleanup_iscsi_target(
     target_node_ssh,
     target_iqn,
     worker_iqns,
-    worker_ips,
     wipe_data,
     username_target,
 ):
@@ -447,7 +465,6 @@ def cleanup_iscsi_target(
     log.info("iSCSI TARGET CLEANUP - START")
     log.info("=" * 70)
     log.info(f"Target IQN: {target_iqn}")
-    log.info(f"Workers: {len(worker_ips)}")
     log.info(f"Wipe data: {wipe_data}")
 
     try:
@@ -497,7 +514,8 @@ def iscsi_setup():
     target_node_ssh = Connection(
         host=config.ENV_DATA.get("iscsi_target_ip"),
         user=config.ENV_DATA.get("iscsi_target_username"),
-        private_key=config.DEPLOYMENT["ssh_key_private"],
+        password=config.ENV_DATA.get("iscsi_target_password"),
+        stdout=True,
     )
 
     configure_target(
@@ -511,13 +529,15 @@ def iscsi_teardown():
     Tear down iSCSI target.
     """
     log.info("Tearing down iSCSI target...")
+    target_iqn = config.ENV_DATA.get("iscsi_target_iqn")
     # Get worker nodes
-    kubeconfig_path = os.path.join(
-        config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
-    )
-    worker_node_ips = get_worker_node_ips(kubeconfig_path)
-    log.info(f"Current available worker nodes are {worker_node_ips}")
-    worker_iqns = get_worker_iqns(worker_node_ips)
+    worker_node_names = get_worker_node_names()
+    if not worker_node_names:
+        log.error("No worker nodes found!")
+        sys.exit(1)
+
+    log.info(f"Current available worker nodes: {worker_node_names}")
+    worker_iqns = get_worker_iqns(worker_node_names)
     if not worker_iqns:
         log.info("No IQNs found! Exiting...")
         sys.exit(1)
@@ -525,14 +545,15 @@ def iscsi_teardown():
     target_node_ssh = Connection(
         host=config.ENV_DATA.get("iscsi_target_ip"),
         user=config.ENV_DATA.get("iscsi_target_username"),
-        private_key=config.DEPLOYMENT["ssh_key_private"],
+        password=config.ENV_DATA.get("iscsi_target_password"),
+        stdout=True,
     )
 
     cleanup_iscsi_target(
         target_node_ssh,
-        config.ENV_DATA.get("iscsi_target_iqn"),
+        target_iqn,
         worker_iqns,
-        worker_node_ips,
+        username_target=config.ENV_DATA.get("iscsi_target_username"),
         wipe_data=True,
     )
 
