@@ -2240,6 +2240,8 @@ validation_4_21 = {
         "//a[contains(@class, '-c-breadcrumb__link') and text()='Overview']",
         By.XPATH,
     ),
+    "silenced_alerts_btn": ("//span[contains(text(), 'Silenced Alerts')]/..", By.XPATH),
+    "last_24_hours_btn": ("//span[contains(text(), 'Last 24 hours')]/..", By.XPATH),
     "severity_filter": (
         "//button[contains(@class,'health-overview-filter-toolbox__check-type')]",
         By.XPATH,
@@ -2258,6 +2260,10 @@ validation_4_21 = {
     ),
     "silence_alerts": (
         "//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "unsilence_alerts": (
+        "//button[normalize-space()='Unsilence']",
         By.XPATH,
     ),
     "silence_popup": (
