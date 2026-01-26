@@ -709,7 +709,7 @@ def pytest_runtest_makereport(item, call):
 
     # Only add properties during the teardown phase to capture all collected logs
     if report.when == "teardown":
-        test_name = item.nodeid
+        test_name = item.name
 
         # Get logs details for this test case from config
         test_logs_details = ocsci_config.REPORTING.get("test_logs_details", {})
@@ -5185,7 +5185,7 @@ def collect_logs_fixture(request):
                                 silent=True,
                                 output_file=True,
                                 timeout=timeout,
-                                test_case_name="session_logs",
+                                test_case_name="session_end_logs",
                             )
                     except Exception as ex:
                         failure_in_mg.append((mg_target, ex))
