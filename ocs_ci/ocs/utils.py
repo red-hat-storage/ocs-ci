@@ -1045,9 +1045,17 @@ def run_must_gather(
                         "cluster_name", "unknown"
                     )
                     run_id = config.RUN.get("run_id")
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                    # Determine log type from image name
+                    log_type = (
+                        "ocp-must-gather"
+                        if "ocp" in image.lower()
+                        else "ocs-must-gather"
+                    )
+
                     # Use test_case_name in prefix for better organization
-                    prefix = f"{cluster_name}/{run_id}/{test_case_name}/{timestamp}"
+                    prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/{timestamp_str}"
 
                     log.info(f"Uploading must-gather logs to S3: {tarball_path}")
                     result = upload_logs_to_s3_if_configured(
@@ -1055,9 +1063,9 @@ def run_must_gather(
                         prefix=prefix,
                         metadata={
                             "cluster-name": cluster_name,
-                            "test-case-name": test_case_name,
-                            "collection-timestamp": timestamp,
-                            "log-type": "must-gather",
+                            "test-case-name": test_case_name or "unknown",
+                            "collection-timestamp": timestamp_str,
+                            "log-type": log_type,
                         },
                     )
 
@@ -1065,6 +1073,46 @@ def run_must_gather(
                         log.info("Must-gather logs uploaded to S3 successfully")
                         log.info(f"Download URL: {result.get('presigned_url')}")
                         log.info(f"URL expires at: {result.get('url_expires_at')}")
+
+                        # Store S3 upload details in config for junit XML reporting
+                        # Calculate relative path from logs folder
+                        logs_dir = os.path.expanduser(config.RUN["log_dir"])
+                        try:
+                            relative_mg_path = os.path.relpath(log_dir_path, logs_dir)
+                        except ValueError:
+                            # If paths are on different drives (Windows), use absolute path
+                            relative_mg_path = log_dir_path
+
+                        # Initialize test_logs_details if not exists
+                        if "test_logs_details" not in config.REPORTING:
+                            config.REPORTING["test_logs_details"] = {}
+
+                        # Get or create list for this test case
+                        test_case_key = test_case_name or "session_logs"
+                        if test_case_key not in config.REPORTING["test_logs_details"]:
+                            config.REPORTING["test_logs_details"][test_case_key] = []
+
+                        # Store metadata about this collection
+                        log_metadata = {
+                            "log_type": log_type,
+                            "s3_url": result.get("presigned_url"),
+                            "s3_object_key": result.get("object_key"),
+                            "s3_bucket": result.get("bucket"),
+                            "url_expires_at": result.get("url_expires_at"),
+                            "retention_expires_at": result.get("retention_expires_at"),
+                            "collection_timestamp": timestamp_str,
+                            "relative_mg_path": relative_mg_path,
+                            "tarball_path": tarball_path,
+                            "cluster_name": cluster_name,
+                            "size_bytes": result.get("size_bytes"),
+                        }
+
+                        config.REPORTING["test_logs_details"][test_case_key].append(
+                            log_metadata
+                        )
+                        log.info(
+                            f"Stored S3 upload details for test case: {test_case_key}"
+                        )
                     else:
                         log.warning("Failed to upload must-gather logs to S3")
                 except ImportError:

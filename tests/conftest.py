@@ -699,6 +699,59 @@ def pytest_fixture_post_finalizer(fixturedef, request):
                     break
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """
+    Add S3 logs details to test case properties in junit XML.
+    This hook runs after each test phase (setup, call, teardown).
+    """
+    outcome = yield
+    report = outcome.get_result()
+
+    # Only add properties during the teardown phase to capture all collected logs
+    if report.when == "teardown":
+        test_name = item.nodeid
+
+        # Get logs details for this test case from config
+        test_logs_details = ocsci_config.REPORTING.get("test_logs_details", {})
+
+        if test_name in test_logs_details:
+            logs_list = test_logs_details[test_name]
+
+            # Add properties for each log collection (OCS MG, OCP MG, etc.)
+            for log_info in logs_list:
+                log_type = log_info.get("log_type", "unknown")
+                prefix = f"log_{log_type}"
+
+                # Add key properties to junit XML
+                if log_info.get("s3_url"):
+                    report.user_properties.append((f"{prefix}_url", log_info["s3_url"]))
+
+                if log_info.get("s3_object_key"):
+                    report.user_properties.append(
+                        (f"{prefix}_object_key", log_info["s3_object_key"])
+                    )
+
+                if log_info.get("relative_mg_path"):
+                    report.user_properties.append(
+                        (f"{prefix}_mg_path", log_info["relative_mg_path"])
+                    )
+
+                if log_info.get("url_expires_at"):
+                    report.user_properties.append(
+                        (f"{prefix}_url_expires", log_info["url_expires_at"])
+                    )
+
+                if log_info.get("collection_timestamp"):
+                    report.user_properties.append(
+                        (f"{prefix}_timestamp", log_info["collection_timestamp"])
+                    )
+
+            log.info(
+                f"Added {len(logs_list)} S3 log entries to junit XML for test: {test_name}"
+            )
+
+
 @pytest.fixture()
 def supported_configuration():
     """
