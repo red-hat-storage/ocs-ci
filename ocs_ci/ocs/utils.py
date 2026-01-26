@@ -1028,6 +1028,42 @@ def run_must_gather(
                 tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
             if config.REPORTING.get("delete_packed_mg_logs"):
                 shutil.rmtree(log_dir_path)
+
+            # Upload tarball to S3 if configured
+            if config.REPORTING.get("s3_logs_upload"):
+                try:
+                    from ocs_ci.utility.s3_logs_uploader import (
+                        upload_logs_to_s3_if_configured,
+                    )
+
+                    # Create prefix from cluster name and timestamp
+                    cluster_name = cluster_config.ENV_DATA.get(
+                        "cluster_name", "unknown"
+                    )
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    prefix = f"{cluster_name}/{timestamp}"
+
+                    log.info(f"Uploading must-gather logs to S3: {tarball_path}")
+                    result = upload_logs_to_s3_if_configured(
+                        file_path=tarball_path,
+                        prefix=prefix,
+                        metadata={
+                            "cluster-name": cluster_name,
+                            "collection-timestamp": timestamp,
+                            "log-type": "must-gather",
+                        },
+                    )
+
+                    if result and result.get("success"):
+                        log.info("Must-gather logs uploaded to S3 successfully")
+                        log.info(f"Download URL: {result.get('presigned_url')}")
+                        log.info(f"URL expires at: {result.get('url_expires_at')}")
+                    else:
+                        log.warning("Failed to upload must-gather logs to S3")
+                except ImportError:
+                    log.warning("S3 logs uploader not available (boto3 not installed)")
+                except Exception as e:
+                    log.error(f"Error uploading must-gather logs to S3: {e}")
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
 

@@ -154,6 +154,9 @@ REPORTING:
   max_mg_fail_attempts: 3
   tarball_mg_logs: true
   delete_packed_mg_logs: true
+  # S3 logs upload configuration
+  # Set to true to enable automatic upload of must-gather logs to S3
+  s3_logs_upload: false
 
 # This is the default information about environment.
 ENV_DATA:
