@@ -1,2 +1,2 @@
-DEPLOYMENT:
+ENV_DATA:
   iscsi_setup: True
