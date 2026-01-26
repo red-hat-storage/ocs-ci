@@ -1939,7 +1939,7 @@ def get_pod_logs(
     tail=None,
     grep=None,
     regex=False,
-    case_senitive=False,
+    case_sensitive=False,
     context=0,
     return_empty_string=True,
     first_match_only=True,
@@ -1958,7 +1958,7 @@ def get_pod_logs(
         grep (str): filter the logs by the given string
         regex (bool): True, if the grep is a regex. False otherwise.
             Applicable only if grep is provided.
-        case_senitive (bool): True, if the grep is case sensitive. False otherwise.
+        case_sensitive (bool): True, if the grep is case sensitive. False otherwise.
             Applicable only if grep is provided.
         context (int): number of lines to show before and after the matching line
             Applicable only if grep is provided.
@@ -1987,7 +1987,7 @@ def get_pod_logs(
     if grep:
         regex_flag = "-E" if regex else ""
         cmd += f" | grep {regex_flag} '{grep}'"
-        if not case_senitive:
+        if not case_sensitive:
             cmd += " -i"
         if context:
             cmd += f" -C {context}"
