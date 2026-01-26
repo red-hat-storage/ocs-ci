@@ -934,6 +934,131 @@ def apply_oc_resource(
     occli.apply(cfg_file)
 
 
+def create_tarball_and_upload_to_s3(
+    log_dir_path,
+    cluster_config=None,
+    test_case_name=None,
+    log_type=None,
+):
+    """
+    Create tarball from log directory and upload to S3 if configured.
+
+    This is a generalized helper function that can be used by any log collection
+    function to create a tarball and upload it to S3 storage.
+
+    Args:
+        log_dir_path (str): Directory to pack into tarball
+        cluster_config: Cluster configuration object (defaults to ocsci_config)
+        test_case_name (str): Test case name for organizing S3 uploads
+        log_type (str): Type of logs (e.g., 'external-ceph', 'noobaa-db', 'submariner')
+
+    Returns:
+        str: Path to created tarball or None if tarball creation is disabled
+    """
+    if not config.REPORTING.get("tarball_mg_logs"):
+        log.debug("Tarball creation is disabled in config")
+        return None
+    log_type = log_type or "unknown_log_type"
+    if not cluster_config:
+        cluster_config = ocsci_config
+
+    tarball_path = f"{log_dir_path}.tar.gz"
+    try:
+        log.info(f"Creating tarball: {tarball_path}")
+        with tarfile.open(tarball_path, "w:gz") as tar:
+            tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+
+        if config.REPORTING.get("delete_packed_mg_logs"):
+            log.info(f"Deleting original directory: {log_dir_path}")
+            shutil.rmtree(log_dir_path)
+
+        # Upload tarball to S3 if configured
+        if config.REPORTING.get("s3_logs_upload") and config.AUTH.get(
+            "logs_s3_endpoint_details"
+        ):
+            try:
+                from ocs_ci.utility.s3_logs_uploader import (
+                    upload_logs_to_s3_if_configured,
+                )
+
+                # Create prefix from cluster name and timestamp
+                cluster_name = cluster_config.ENV_DATA.get(
+                    "cluster_name", "unknown_cluster"
+                )
+                run_id = config.RUN.get("run_id")
+                timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                # Use test_case_name in prefix for better organization
+                prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/{timestamp_str}"
+
+                log.info(f"Uploading logs to S3: {tarball_path}")
+                result = upload_logs_to_s3_if_configured(
+                    file_path=tarball_path,
+                    prefix=prefix,
+                    metadata={
+                        "cluster-name": cluster_name,
+                        "test-case-name": test_case_name or "unknown",
+                        "collection-timestamp": timestamp_str,
+                        "log-type": log_type,
+                    },
+                )
+
+                if result and result.get("success"):
+                    log.info(f"Logs uploaded to S3 successfully for {log_type}")
+                    log.info(f"Download URL: {result.get('presigned_url')}")
+                    log.info(f"URL expires at: {result.get('url_expires_at')}")
+
+                    # Store S3 upload details in config for junit XML reporting
+                    # Calculate relative path from logs folder
+                    logs_dir = os.path.expanduser(config.RUN["log_dir"])
+                    try:
+                        relative_log_path = os.path.relpath(log_dir_path, logs_dir)
+                    except ValueError:
+                        # If paths are on different drives (Windows), use absolute path
+                        relative_log_path = log_dir_path
+
+                    # Initialize test_logs_details if not exists
+                    if "test_logs_details" not in config.REPORTING:
+                        config.REPORTING["test_logs_details"] = {}
+
+                    # Get or create list for this test case
+                    test_case_key = test_case_name or "session_logs"
+                    if test_case_key not in config.REPORTING["test_logs_details"]:
+                        config.REPORTING["test_logs_details"][test_case_key] = []
+
+                    # Store metadata about this collection
+                    log_metadata = {
+                        "log_type": log_type or "unknown",
+                        "s3_url": result.get("presigned_url"),
+                        "s3_object_key": result.get("object_key"),
+                        "s3_bucket": result.get("bucket"),
+                        "url_expires_at": result.get("url_expires_at"),
+                        "retention_expires_at": result.get("retention_expires_at"),
+                        "collection_timestamp": timestamp_str,
+                        "relative_log_path": relative_log_path,
+                        "tarball_path": tarball_path,
+                        "cluster_name": cluster_name,
+                        "size_bytes": result.get("size_bytes"),
+                    }
+
+                    config.REPORTING["test_logs_details"][test_case_key].append(
+                        log_metadata
+                    )
+                    log.info(f"Stored S3 upload details for test case: {test_case_key}")
+                else:
+                    log.warning(f"Failed to upload {log_type} logs to S3")
+            except ImportError:
+                log.warning("S3 logs uploader not available (boto3 not installed)")
+            except Exception as e:
+                log.error(f"Error uploading {log_type} logs to S3: {e}")
+
+    except Exception as err:
+        log.error(f"Failed during packing/uploading files! Error: {err}")
+        return None
+
+    return tarball_path
+
+
 def run_must_gather(
     log_dir_path,
     image,
@@ -1026,117 +1151,34 @@ def run_must_gather(
             log.error(f"Must-Gather Output: {mg_output}")
         export_mg_pods_logs(log_dir_path=log_dir_path)
 
-    if config.REPORTING.get("tarball_mg_logs"):
-        tarball_path = f"{log_dir_path}.tar.gz"
-        try:
-            with tarfile.open(tarball_path, "w:gz") as tar:
-                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
-            if config.REPORTING.get("delete_packed_mg_logs"):
-                shutil.rmtree(log_dir_path)
+    # Use explicit log_type if provided, otherwise infer from image name
+    if not log_type:
+        log_type = "ocp-must-gather" if "ocp" in image.lower() else "ocs-must-gather"
 
-            # Upload tarball to S3 if configured
-            if config.REPORTING.get("s3_logs_upload") and config.AUTH.get(
-                "logs_s3_endpoint_details"
-            ):
-                try:
-                    from ocs_ci.utility.s3_logs_uploader import (
-                        upload_logs_to_s3_if_configured,
-                    )
-
-                    # Create prefix from cluster name and timestamp
-                    cluster_name = cluster_config.ENV_DATA.get(
-                        "cluster_name", "unknown"
-                    )
-                    run_id = config.RUN.get("run_id")
-                    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-                    # Use explicit log_type if provided, otherwise infer from image name
-                    if not log_type:
-                        log_type = (
-                            "ocp-must-gather"
-                            if "ocp" in image.lower()
-                            else "ocs-must-gather"
-                        )
-
-                    # Use test_case_name in prefix for better organization
-                    prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/{timestamp_str}"
-
-                    log.info(f"Uploading must-gather logs to S3: {tarball_path}")
-                    result = upload_logs_to_s3_if_configured(
-                        file_path=tarball_path,
-                        prefix=prefix,
-                        metadata={
-                            "cluster-name": cluster_name,
-                            "test-case-name": test_case_name or "unknown",
-                            "collection-timestamp": timestamp_str,
-                            "log-type": log_type,
-                        },
-                    )
-
-                    if result and result.get("success"):
-                        log.info("Must-gather logs uploaded to S3 successfully")
-                        log.info(f"Download URL: {result.get('presigned_url')}")
-                        log.info(f"URL expires at: {result.get('url_expires_at')}")
-
-                        # Store S3 upload details in config for junit XML reporting
-                        # Calculate relative path from logs folder
-                        logs_dir = os.path.expanduser(config.RUN["log_dir"])
-                        try:
-                            relative_mg_path = os.path.relpath(log_dir_path, logs_dir)
-                        except ValueError:
-                            # If paths are on different drives (Windows), use absolute path
-                            relative_mg_path = log_dir_path
-
-                        # Initialize test_logs_details if not exists
-                        if "test_logs_details" not in config.REPORTING:
-                            config.REPORTING["test_logs_details"] = {}
-
-                        # Get or create list for this test case
-                        test_case_key = test_case_name or "session_logs"
-                        if test_case_key not in config.REPORTING["test_logs_details"]:
-                            config.REPORTING["test_logs_details"][test_case_key] = []
-
-                        # Store metadata about this collection
-                        log_metadata = {
-                            "log_type": log_type,
-                            "s3_url": result.get("presigned_url"),
-                            "s3_object_key": result.get("object_key"),
-                            "s3_bucket": result.get("bucket"),
-                            "url_expires_at": result.get("url_expires_at"),
-                            "retention_expires_at": result.get("retention_expires_at"),
-                            "collection_timestamp": timestamp_str,
-                            "relative_mg_path": relative_mg_path,
-                            "tarball_path": tarball_path,
-                            "cluster_name": cluster_name,
-                            "size_bytes": result.get("size_bytes"),
-                        }
-
-                        config.REPORTING["test_logs_details"][test_case_key].append(
-                            log_metadata
-                        )
-                        log.info(
-                            f"Stored S3 upload details for test case: {test_case_key}"
-                        )
-                    else:
-                        log.warning("Failed to upload must-gather logs to S3")
-                except ImportError:
-                    log.warning("S3 logs uploader not available (boto3 not installed)")
-                except Exception as e:
-                    log.error(f"Error uploading must-gather logs to S3: {e}")
-        except Exception as err:
-            log.error(f"Failed during packing files! Error: {err}")
+    # Create tarball and upload to S3 using the generalized helper function
+    create_tarball_and_upload_to_s3(
+        log_dir_path=log_dir_path,
+        cluster_config=cluster_config,
+        test_case_name=test_case_name,
+        log_type=log_type,
+    )
 
     return mg_output
 
 
-def collect_ceph_external(path):
+def collect_ceph_external(path, cluster_config=None, test_case_name=None):
     """
     Collect ceph commands via cli tool on External mode cluster
 
     Args:
         path(str): The destination for saving the ceph files [output ceph commands]
+        cluster_config: Cluster configuration object (defaults to ocsci_config)
+        test_case_name (str): Test case name for organizing S3 uploads
 
     """
+    if not cluster_config:
+        cluster_config = ocsci_config
+
     try:
         # In case it fails in deployment sooner than we create the toolbox pod
         # we need to make sure the toolbox pod is created
@@ -1153,6 +1195,14 @@ def collect_ceph_external(path):
             f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path} "
             f"{ocsci_config.ENV_DATA['cluster_namespace']}",
             timeout=600,
+        )
+
+        # Create tarball and upload to S3 if configured
+        create_tarball_and_upload_to_s3(
+            log_dir_path=path,
+            cluster_config=cluster_config,
+            test_case_name=test_case_name,
+            log_type="external-ceph-logs",
         )
     except Exception as ex:
         log.info(
@@ -1250,7 +1300,7 @@ def get_helper_pods_output(log_dir_path):
             log.error(e)
 
 
-def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
+def collect_noobaa_db_dump(log_dir_path, cluster_config=None, test_case_name=None):
     """
     Collect the Noobaa DB dump
 
@@ -1258,6 +1308,7 @@ def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
         log_dir_path (str): directory for dumped Noobaa DB
         cluster_config (MultiClusterConfig): If multicluster scenario then this object will have
             specific cluster config
+        test_case_name (str): Test case name for organizing S3 uploads
 
     """
     from ocs_ci.ocs.resources.pod import (
@@ -1265,6 +1316,9 @@ def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
         download_file_from_pod,
         Pod,
     )
+
+    if not cluster_config:
+        cluster_config = ocsci_config
 
     ocs_version = version.get_semantic_ocs_version_from_config(
         cluster_config=cluster_config
@@ -1291,20 +1345,24 @@ def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
         return
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
     create_directory_path(ocs_log_dir_path)
-    ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
-    if ocs_version < version.VERSION_4_7:
-        cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
-        remote_path = "/opt/app-root/src/nbcore.gz"
-    else:
-        cmd = 'bash -c "pg_dump nbcore | gzip > /tmp/nbcore.gz"'
-        remote_path = "/tmp/nbcore.gz"
+    db_dump_file_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
+    cmd = 'bash -c "pg_dump nbcore | gzip > /tmp/nbcore.gz"'
+    remote_path = "/tmp/nbcore.gz"
 
     nb_db_pod.exec_cmd_on_pod(cmd, cluster_config=cluster_config)
     download_file_from_pod(
         pod_name=nb_db_pod.name,
         remotepath=remote_path,
-        localpath=ocs_log_dir_path,
+        localpath=db_dump_file_path,
         namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+    )
+
+    # Create tarball and upload to S3 if configured
+    create_tarball_and_upload_to_s3(
+        log_dir_path=ocs_log_dir_path,
+        cluster_config=cluster_config,
+        test_case_name=test_case_name,
+        log_type="noobaa-db-dump",
     )
 
 
@@ -1420,7 +1478,11 @@ def _collect_ocs_logs(
             external_ceph_log_dir_path = os.path.join(
                 log_dir_path, f"external_ceph_logs_{timestamp}"
             )
-            collect_ceph_external(path=external_ceph_log_dir_path)
+            collect_ceph_external(
+                path=external_ceph_log_dir_path,
+                cluster_config=cluster_config,
+                test_case_name=test_case_name,
+            )
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
         ocp_service_log_dir_path = os.path.join(
@@ -1464,7 +1526,9 @@ def _collect_ocs_logs(
                     == cluster_config.MULTICLUSTER["multicluster_index"]
                 ):
                     break
-                collect_noobaa_db_dump(log_dir_path, cluster_config)
+                collect_noobaa_db_dump(
+                    log_dir_path, cluster_config, test_case_name=test_case_name
+                )
                 mg_collected_types.add("mcg")
                 break
             except CommandFailed as ex:
@@ -1527,6 +1591,14 @@ def _collect_ocs_logs(
                 run_cmd(f"chmod -R 777 {submariner_log_path}")
                 os.chdir(cwd)
                 log.info(out)
+
+                # Create tarball and upload to S3 if configured
+                create_tarball_and_upload_to_s3(
+                    log_dir_path=submariner_log_path,
+                    cluster_config=cluster_config,
+                    test_case_name=test_case_name,
+                    log_type="submariner-logs",
+                )
 
 
 def collect_ocs_logs(
