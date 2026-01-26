@@ -256,18 +256,22 @@ class S3LogsUploader:
             }
 
     def generate_presigned_url(
-        self, object_key: str, expiration_days: int = 30
+        self, object_key: str, expiration_days: Optional[int] = None
     ) -> Optional[str]:
         """
         Generate a presigned URL for downloading an object.
 
         Args:
             object_key: S3 object key (including any prefix)
-            expiration_days: Number of days until URL expires (default: 30)
+            expiration_days: Number of days until URL expires. If not specified, uses default from retention policy.
 
         Returns:
             Presigned URL string, or None if generation fails
         """
+        # Use retention policy default if not specified
+        if expiration_days is None:
+            expiration_days = self.retention_policy["default"]
+
         try:
             expiration_seconds = expiration_days * 24 * 60 * 60
 
@@ -291,7 +295,6 @@ class S3LogsUploader:
         file_path: str,
         prefix: Optional[str] = None,
         object_name: Optional[str] = None,
-        expiration_days: int = 30,
         metadata: Optional[Dict[str, str]] = None,
         retention_days: Optional[int] = None,
     ) -> Dict[str, Any]:
@@ -302,9 +305,9 @@ class S3LogsUploader:
             file_path: Path to the file to upload
             prefix: Optional prefix to organize files
             object_name: Optional custom object name
-            expiration_days: Number of days until URL expires (default: 30)
             metadata: Optional metadata to attach to the object
             retention_days: Optional retention period in days. If not specified, uses default from policy.
+                           This value is used for both file retention and URL expiration.
 
         Returns:
             Dictionary containing upload details and presigned URL:
@@ -313,6 +316,10 @@ class S3LogsUploader:
                 - url_expiration_days: Number of days until URL expires
                 - url_expires_at: ISO format timestamp of URL expiration
         """
+        # Use retention policy default if not specified
+        if retention_days is None:
+            retention_days = self.retention_policy["default"]
+
         # Upload the file
         upload_result = self.upload_file(
             file_path=file_path,
@@ -322,17 +329,17 @@ class S3LogsUploader:
             retention_days=retention_days,
         )
 
-        # If upload succeeded, generate presigned URL
+        # If upload succeeded, generate presigned URL using same retention period
         if upload_result["success"]:
             presigned_url = self.generate_presigned_url(
-                object_key=upload_result["object_key"], expiration_days=expiration_days
+                object_key=upload_result["object_key"], expiration_days=retention_days
             )
 
             upload_result["presigned_url"] = presigned_url
-            upload_result["url_expiration_days"] = expiration_days
+            upload_result["url_expiration_days"] = retention_days
 
             # Calculate expiration timestamp
-            expiration_time = datetime.utcnow() + timedelta(days=expiration_days)
+            expiration_time = datetime.utcnow() + timedelta(days=retention_days)
             upload_result["url_expires_at"] = expiration_time.isoformat() + "Z"
 
         return upload_result
@@ -341,6 +348,8 @@ class S3LogsUploader:
 def get_s3_config_from_ocs_ci():
     """
     Get S3 configuration from ocs-ci config object.
+
+    Combines S3 endpoint details from AUTH section with retention policy from REPORTING section.
 
     Returns:
         Dictionary containing S3 configuration, or None if not available
@@ -356,6 +365,18 @@ def get_s3_config_from_ocs_ci():
             )
             return None
 
+        # Get retention policy from REPORTING section
+        retention_policy = ocsci_config.REPORTING.get("s3_logs_retention_policy")
+        if retention_policy:
+            s3_config["retention_policy"] = retention_policy
+            logger.debug(
+                f"Using retention policy from REPORTING config: {retention_policy}"
+            )
+        else:
+            logger.debug(
+                "No retention policy found in REPORTING config, using defaults"
+            )
+
         return s3_config
     except Exception as e:
         logger.error(f"Failed to get S3 config from ocs-ci: {e}")
@@ -366,7 +387,6 @@ def upload_logs_to_s3_if_configured(
     file_path: str,
     prefix: Optional[str] = None,
     object_name: Optional[str] = None,
-    expiration_days: int = 30,
     metadata: Optional[Dict[str, str]] = None,
     retention_days: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -380,7 +400,6 @@ def upload_logs_to_s3_if_configured(
         file_path: Path to the file to upload
         prefix: Optional prefix to organize files
         object_name: Optional custom object name
-        expiration_days: Number of days until URL expires (default: 30)
         metadata: Optional metadata to attach to the object
         retention_days: Optional retention period in days
 
@@ -398,7 +417,6 @@ def upload_logs_to_s3_if_configured(
             file_path=file_path,
             prefix=prefix,
             object_name=object_name,
-            expiration_days=expiration_days,
             metadata=metadata,
             retention_days=retention_days,
         )
@@ -432,11 +450,11 @@ Examples:
   # Upload with custom prefix for organization
   %(prog)s -f must-gather.tar.gz -p "execution_123/test_case_456"
 
-  # Upload with custom expiration (7 days)
-  %(prog)s -f must-gather.tar.gz -e 7
-
-  # Upload with custom retention period
+  # Upload with custom retention period (affects both file retention and URL expiration)
   %(prog)s -f must-gather.tar.gz -r 180
+
+  # Upload with custom object name
+  %(prog)s -f must-gather.tar.gz -o my-custom-name.tar.gz
         """,
     )
 
@@ -462,18 +480,11 @@ Examples:
     )
 
     parser.add_argument(
-        "-e",
-        "--expiration",
-        type=int,
-        default=30,
-        help="URL expiration in days (default: 30)",
-    )
-
-    parser.add_argument(
         "-r",
         "--retention",
         type=int,
-        help="Object retention period in days (default: from config, typically 90). "
+        help="Object retention period in days (default: from config retention policy). "
+        "Used for both file retention and URL expiration. "
         "Will be validated against min/max limits from retention policy.",
     )
 
@@ -515,7 +526,6 @@ Examples:
             file_path=args.file,
             prefix=args.prefix,
             object_name=args.object_name,
-            expiration_days=args.expiration,
             retention_days=args.retention,
         )
 

@@ -156,7 +156,12 @@ REPORTING:
   delete_packed_mg_logs: true
   # S3 logs upload configuration
   # Set to true to enable automatic upload of must-gather logs to S3
-  s3_logs_upload: false
+  s3_logs_upload: true
+  # S3 retention policy for uploaded logs (in days)
+  s3_logs_retention_policy:
+    min: 30      # Minimum retention period (30 days)
+    max: 730     # Maximum retention period (2 years)
+    default: 183  # Default retention if not specified (6 months)
   # Storage for test case logs details (S3 URLs, paths, etc.)
   # Structure: {test_case_name: [list of log collection metadata dicts]}
   test_logs_details: {}
