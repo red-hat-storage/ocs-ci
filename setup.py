@@ -128,6 +128,7 @@ setup(
             "rosa-ocp-version=ocs_ci.utility.rosa:rosa_ocp_version_endpoint",
             "deploy-fusion=ocs_ci.framework.fusion.main:main",
             "deploy-fdf=ocs_ci.framework.fusion_data_foundation.main:main",
+            "upload-logs-to-s3=ocs_ci.utility.s3_logs_uploader:main",
         ],
     },
     zip_safe=True,
