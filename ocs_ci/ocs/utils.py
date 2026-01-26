@@ -946,6 +946,7 @@ def run_must_gather(
     mg_options=None,
     since_time=None,
     test_case_name=None,
+    log_type=None,
 ):
     """
     Runs the must-gather tool against the cluster
@@ -965,6 +966,8 @@ def run_must_gather(
         mg_options (str): Options of must gather command For example "--host_network=True"
         since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
         test_case_name (str): Test case name for organizing S3 uploads
+        log_type (str): Type of must-gather logs (e.g., 'ocs-must-gather', 'ocp-must-gather',
+                       'ocp-service-logs', 'acm-must-gather')
 
     Returns:
         mg_output (str): must-gather cli output
@@ -1047,12 +1050,13 @@ def run_must_gather(
                     run_id = config.RUN.get("run_id")
                     timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-                    # Determine log type from image name
-                    log_type = (
-                        "ocp-must-gather"
-                        if "ocp" in image.lower()
-                        else "ocs-must-gather"
-                    )
+                    # Use explicit log_type if provided, otherwise infer from image name
+                    if not log_type:
+                        log_type = (
+                            "ocp-must-gather"
+                            if "ocp" in image.lower()
+                            else "ocs-must-gather"
+                        )
 
                     # Use test_case_name in prefix for better organization
                     prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/{timestamp_str}"
@@ -1399,6 +1403,7 @@ def _collect_ocs_logs(
             mg_options=mg_options,
             since_time=since_time,
             test_case_name=test_case_name,
+            log_type="ocs-must-gather",
         )
         mg_collected_types.add("ocs")
         if (
@@ -1432,6 +1437,8 @@ def _collect_ocs_logs(
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
             since_time=since_time,
+            test_case_name=test_case_name,
+            log_type="ocp-must-gather",
         )
         run_must_gather(
             ocp_service_log_dir_path,
@@ -1442,6 +1449,8 @@ def _collect_ocs_logs(
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
             since_time=since_time,
+            test_case_name=test_case_name,
+            log_type="ocp-service-logs",
         )
         mg_collected_types.add("ocp")
     if mcg:
@@ -1483,6 +1492,8 @@ def _collect_ocs_logs(
                     acm_mustgather_path,
                     acm_mustgather_image,
                     cluster_config=cluster_config,
+                    test_case_name=test_case_name,
+                    log_type="acm-must-gather",
                 )
 
             # We want to skip submariner log collection if it's in import clusters phase
