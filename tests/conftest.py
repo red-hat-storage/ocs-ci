@@ -2026,6 +2026,57 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
         record_testsuite_property(f"rp_{dr_operator_name}", dr_operator_version)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def session_s3_logs_testsuite_properties(request, record_testsuite_property):
+    """
+    Add session-level S3 logs details to testsuite properties in junit XML.
+    This runs at the end of the session to capture session_end_logs.
+    """
+
+    def finalizer():
+        # Get session-level logs details from config
+        test_logs_details = ocsci_config.REPORTING.get("test_logs_details", {})
+
+        # Look for session_end_logs
+        if "session_end_logs" in test_logs_details:
+            logs_list = test_logs_details["session_end_logs"]
+
+            # Add properties for each log collection (OCS MG, OCP MG, etc.)
+            for log_info in logs_list:
+                log_type = log_info.get("log_type", "unknown")
+                prefix = f"session_log_{log_type}"
+
+                # Add key properties to junit XML at testsuite level
+                if log_info.get("s3_url"):
+                    record_testsuite_property(f"{prefix}_url", log_info["s3_url"])
+
+                if log_info.get("s3_object_key"):
+                    record_testsuite_property(
+                        f"{prefix}_object_key", log_info["s3_object_key"]
+                    )
+
+                if log_info.get("url_expires_at"):
+                    record_testsuite_property(
+                        f"{prefix}_url_expires", log_info["url_expires_at"]
+                    )
+
+                if log_info.get("collection_timestamp"):
+                    record_testsuite_property(
+                        f"{prefix}_timestamp", log_info["collection_timestamp"]
+                    )
+
+                if log_info.get("retention_expires_at"):
+                    record_testsuite_property(
+                        f"{prefix}_retention_expires", log_info["retention_expires_at"]
+                    )
+
+            log.info(
+                f"Added {len(logs_list)} session-level S3 log entries to junit XML testsuite properties"
+            )
+
+    request.addfinalizer(finalizer)
+
+
 @pytest.fixture(scope="session")
 def tier_marks_name():
     """
