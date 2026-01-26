@@ -219,6 +219,7 @@ Reporting related config. (Do not store secret data in the repository!).
 * `rp_additional_info` - any additional information placed to Report Portal launch description
 * `tarball_mg_logs` - pack MG files to tarball
 * `delete_packed_mg_logs` - applicable only if `tarball_mg_logs` is True, delete the individual MG files in case they were successfully packed
+* `s3_logs_upload` - Enable automatic upload of must-gather logs to S3 (IBM Cloud Object Storage) (Default: false)
 
 #### ENV_DATA
 
@@ -460,6 +461,17 @@ auth file or pulled from s3.
   * `token` - auth token for Jira
   * `visibility` - E.g. `{"type": "group", "value": "Red Hat Employee"}` which
     is used as Default value if not provided to do not expose data to public
+* `logs_s3_endpoint_details` - S3 endpoint details for uploading logs to IBM Cloud Object Storage (COS)
+  * `cos_name` - Name of the COS instance (optional, for reference)
+  * `bucket_name` - Target bucket name where logs will be uploaded
+  * `region` - IBM Cloud region (e.g., 'us-south', 'us-east', 'eu-de')
+  * `cos_hmac_keys` - HMAC credentials for S3-compatible access
+    * `access_key_id` - HMAC access key ID
+    * `secret_access_key` - HMAC secret access key
+  * `retention_policy` - (Optional) Object retention policy configuration
+    * `min` - Minimum retention period in days (default: 30)
+    * `max` - Maximum retention period in days (default: 730, i.e., 2 years)
+    * `default` - Default retention if not specified (default: 90)
 
 
 #### MULTICLUSTER
