@@ -953,6 +953,7 @@ def pytest_runtest_makereport(item, call):
                     skip_after_max_fail=True,
                     timeout=timeout,
                     since_time=since_time_str,
+                    test_case_name=test_case_name,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")
