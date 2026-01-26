@@ -3250,9 +3250,8 @@ def get_latest_ocp_multi_image(version: str = None) -> str:
     tag_regex = re.compile(rf"^{re.escape(version)}\.\d+(-rc\.\d+|-ec\.\d+)?-multi$")
 
     page = 1
-    max_pages = 50
 
-    while page <= max_pages:
+    while True:
         params = {
             "onlyActiveTags": "true",
             "limit": "100",
