@@ -157,6 +157,9 @@ REPORTING:
   # S3 logs upload configuration
   # Set to true to enable automatic upload of must-gather logs to S3
   s3_logs_upload: false
+  # Storage for test case logs details (S3 URLs, paths, etc.)
+  # Structure: {test_case_name: [list of log collection metadata dicts]}
+  test_logs_details: {}
 
 # This is the default information about environment.
 ENV_DATA:
