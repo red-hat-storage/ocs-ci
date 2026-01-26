@@ -4641,3 +4641,27 @@ def get_mon_pod_by_id(mon_id, namespace=None):
         raise ValueError(f"Monitor pod with id {mon_id} not found")
 
     return Pod(**mons[0])
+
+
+def get_deviceclass_osd_pods(deviceclass_name, namespace=None):
+    """
+    Get the deviceclass osd pods
+
+    Args:
+        deviceclass_name (str): The deviceclass name
+        namespace (str): Namespace in which ceph cluster lives
+            (default: config.ENV_DATA["cluster_namespace"])
+
+    Returns:
+        list : The deviceclass osd pod objects
+
+    """
+    from ocs_ci.ocs.resources.pvc import get_deviceclass_pvcs
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvcs = get_deviceclass_pvcs(deviceclass_name, namespace)
+    pvc_names = [pvc.name for pvc in pvcs]
+    osd_pods = get_osd_pods()
+    deviceclass_osd_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
+
+    return deviceclass_osd_pods
