@@ -5237,6 +5237,7 @@ def collect_logs_fixture(request):
                                 silent=True,
                                 output_file=True,
                                 timeout=timeout,
+                                test_case_name="session_logs",
                             )
                     except Exception as ex:
                         failure_in_mg.append((mg_target, ex))

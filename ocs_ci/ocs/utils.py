@@ -945,6 +945,7 @@ def run_must_gather(
     timeout=defaults.MUST_GATHER_TIMEOUT,
     mg_options=None,
     since_time=None,
+    test_case_name=None,
 ):
     """
     Runs the must-gather tool against the cluster
@@ -963,6 +964,7 @@ def run_must_gather(
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
         mg_options (str): Options of must gather command For example "--host_network=True"
         since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
+        test_case_name (str): Test case name for organizing S3 uploads
 
     Returns:
         mg_output (str): must-gather cli output
@@ -1030,7 +1032,9 @@ def run_must_gather(
                 shutil.rmtree(log_dir_path)
 
             # Upload tarball to S3 if configured
-            if config.REPORTING.get("s3_logs_upload"):
+            if config.REPORTING.get("s3_logs_upload") and config.AUTH.get(
+                "logs_s3_endpoint_details"
+            ):
                 try:
                     from ocs_ci.utility.s3_logs_uploader import (
                         upload_logs_to_s3_if_configured,
@@ -1040,8 +1044,10 @@ def run_must_gather(
                     cluster_name = cluster_config.ENV_DATA.get(
                         "cluster_name", "unknown"
                     )
+                    run_id = config.RUN.get("run_id")
                     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    prefix = f"{cluster_name}/{timestamp}"
+                    # Use test_case_name in prefix for better organization
+                    prefix = f"{cluster_name}/{run_id}/{test_case_name}/{timestamp}"
 
                     log.info(f"Uploading must-gather logs to S3: {tarball_path}")
                     result = upload_logs_to_s3_if_configured(
@@ -1049,6 +1055,7 @@ def run_must_gather(
                         prefix=prefix,
                         metadata={
                             "cluster-name": cluster_name,
+                            "test-case-name": test_case_name,
                             "collection-timestamp": timestamp,
                             "log-type": "must-gather",
                         },
@@ -1263,9 +1270,26 @@ def _collect_ocs_logs(
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
     since_time=None,
+    test_case_name=None,
 ):
     """
     This function runs in thread
+
+    Args:
+        cluster_config: Cluster configuration object
+        dir_name (str): Directory name for log storage
+        ocp (bool): Whether to gather OCP logs
+        ocs (bool): Whether to gather OCS logs
+        mcg (bool): True for collecting MCG logs (noobaa db dump)
+        status_failure (bool): Whether the collection is after success or failure
+        ocs_flags (str): flags to ocs must gather command
+        mg_options (str): Options of must gather command
+        silent (bool): True if silent mode
+        output_file (bool): True if direct whole output to file
+        skip_after_max_fail (bool): Skip MG collection after max failures
+        timeout (int): Max timeout to wait for MG to complete
+        since_time (str): Only return logs after a specific date (RFC3339)
+        test_case_name (str): Test case name for organizing S3 uploads
 
     """
     global mg_collected_types
@@ -1326,6 +1350,7 @@ def _collect_ocs_logs(
             timeout=timeout,
             mg_options=mg_options,
             since_time=since_time,
+            test_case_name=test_case_name,
         )
         mg_collected_types.add("ocs")
         if (
@@ -1458,6 +1483,7 @@ def collect_ocs_logs(
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
     since_time=None,
+    test_case_name=None,
 ):
     """
     Collects OCS logs
@@ -1479,6 +1505,7 @@ def collect_ocs_logs(
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
         since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
+        test_case_name (str): Test case name for organizing S3 uploads
 
     """
     cwd = os.getcwd()
@@ -1502,6 +1529,7 @@ def collect_ocs_logs(
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
                         since_time=since_time,
+                        test_case_name=test_case_name,
                     )
                 )
             if ocs:
@@ -1521,6 +1549,7 @@ def collect_ocs_logs(
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
                         since_time=since_time,
+                        test_case_name=test_case_name,
                     )
                 )
             if mcg:
@@ -1540,6 +1569,7 @@ def collect_ocs_logs(
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
                         since_time=since_time,
+                        test_case_name=test_case_name,
                     )
                 )
 
