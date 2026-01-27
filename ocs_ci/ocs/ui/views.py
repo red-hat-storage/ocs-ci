@@ -2235,6 +2235,32 @@ validation_4_20 = {
     ),
 }
 
+validation_4_21 = {
+    "infra_health_checks": (
+        "//a[text()='View health checks']",
+        By.XPATH,
+    ),
+    # web element returns overall score with text like '66%'
+    "infra_health_score": (
+        "//div[@class='odf-infrastructure-health-card__score']//h2",
+        By.XPATH,
+    ),
+    # web element returns number of checks with text like '3'
+    "critical_issues_count": {
+        "//small[normalize-space(.)='Critical']/preceding-sibling::h4",
+        By.XPATH,
+    },
+    "moderate_issues_count": {
+        "//small[normalize-space(.)='Moderate']/preceding-sibling::h4",
+        By.XPATH,
+    },
+    "minor_issues_count": {
+        "//small[normalize-space(.)='Minor']/preceding-sibling::h4",
+        By.XPATH,
+    },
+    "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
