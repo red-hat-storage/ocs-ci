@@ -43,12 +43,6 @@ def verify_provider_mode_deployment():
     )
     pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.RGW_APP_LABEL,
-        resource_count=1,
-        timeout=300,
-    )
-    pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
         selector=constants.PROVIDER_SERVER_LABEL,
         resource_count=1,
         timeout=300,
