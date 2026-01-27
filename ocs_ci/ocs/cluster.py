@@ -66,6 +66,7 @@ from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
     wait_for_pods_to_be_in_statuses,
+    get_ceph_tools_pod,
 )
 
 logger = logging.getLogger(__name__)
@@ -1836,6 +1837,32 @@ def validate_pg_balancer():
         logger.info("pg_balancer is not active")
 
 
+def get_ceph_df_stats() -> dict:
+    """
+    Return the cluster Ceph df stats.
+
+    Returns:
+        dict: Ceph df stats.
+
+    """
+    ct_pod = get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+    return output.get("stats")
+
+
+def get_ceph_used_capacity() -> float:
+    """
+    Return the cluster used Ceph capacity in GiB.
+
+    Returns:
+        float: Used capacity in GiB.
+
+    """
+    ceph_df_stats = get_ceph_df_stats()
+    total_used = int(ceph_df_stats.get("total_used_raw_bytes"))
+    return total_used / constants.BYTES_IN_GB
+
+
 @retry((ZeroDivisionError, CommandFailed))
 def get_percent_used_capacity():
     """
@@ -1845,10 +1872,9 @@ def get_percent_used_capacity():
         float: The percentage of the used capacity in the cluster
 
     """
-    ct_pod = pod.get_ceph_tools_pod()
-    output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-    total_used = output.get("stats").get("total_used_raw_bytes")
-    total_avail = output.get("stats").get("total_bytes")
+    ceph_df_stats = get_ceph_df_stats()
+    total_used = ceph_df_stats.get("total_used_raw_bytes")
+    total_avail = ceph_df_stats.get("total_bytes")
     return 100.0 * total_used / total_avail
 
 
