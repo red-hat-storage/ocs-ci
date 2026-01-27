@@ -170,6 +170,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `save_mem_report` - If True, test run memory report CSV file will be saved in `RUN["log_dir"]/stats_log_dir_<run_id>`
   directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
   exporting env variable: export SAVE_MEM_REPORT=true
+* `tarball_mg_logs` - pack MG files to tarball
+* `delete_packed_mg_logs` - applicable only if `tarball_mg_logs` is True, delete the individual MG files in case they were successfully packed
 
 #### ENV_DATA
 
