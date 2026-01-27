@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pushgateway
+  labels:
+    app: pushgateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pushgateway
+  template:
+    metadata:
+      labels:
+        app: pushgateway
+    spec:
+      containers:
+      - name: pushgateway
+        image: quay.io/prometheus/pushgateway:latest
+        ports:
+        - containerPort: 9091
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pushgateway
+  labels:
+    app: pushgateway
+spec:
+  ports:
+  - port: 9091
+    targetPort: 9091
+    protocol: TCP
+    name: http
+  selector:
+    app: pushgateway
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: pushgateway
+  labels:
+    app: pushgateway
+spec:
+  subdomain: ''
+  to:
+    kind: Service
+    name: pushgateway
+    weight: 100
+  port:
+    targetPort: 9091
+  wildcardPolicy: None
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pushgateway
+  labels:
+    app: pushgateway
+spec:
+  selector:
+    matchLabels:
+      app: pushgateway
+  endpoints:
+  - port: http
+    interval: 30s

@@ -154,3 +154,12 @@ class TestKedaHA:
         except TimeoutExpiredError:
             logger.error("RGW did not downscale as expected.")
             raise
+
+    def test_pushgateway_integration(self, pushgateway):
+        """
+        Test the integration of the Pushgateway with the RGW deployment
+        """
+        pushgateway.send_custom_metric(
+            metric_name="test_metric",
+            metric_value="300",
+        )

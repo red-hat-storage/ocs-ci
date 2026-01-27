@@ -2,6 +2,7 @@ import base64
 import copy
 import logging
 import os
+from ocs_ci.ocs.resources.pushgateway import Pushgateway
 import pandas as pd
 import random
 import time
@@ -11305,3 +11306,63 @@ def keda_fixture(request):
         raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
 
     return keda
+
+
+@pytest.fixture(scope="function")
+def enable_custom_metrics(request):
+    """
+    Enable custom metrics for the cluster.
+    """
+    original_config_yaml = None
+
+    def modify_cm_cfg():
+        """
+        Modify the cluster-monitoring-config configmap to enable custom metrics.
+        """
+        nonlocal original_config_yaml
+        ocp_obj = OCP(
+            kind=constants.CONFIGMAP,
+            namespace=constants.MONITORING_NAMESPACE,
+            resource_name=constants.CLUSTER_MONITORING_CONFIGMAP_NAME,
+        )
+        original_config_yaml = ocp_obj.get().get("data", {}).get("config.yaml", "")
+        new_config_yaml = templating.to_nice_yaml({"enableUserWorkload": True})
+        patch_params = json.dumps({"data": {"config.yaml": new_config_yaml}})
+        ocp_obj.patch(params=patch_params, format_type="merge")
+
+    def revert_cm_cfg_change():
+        """
+        Revert the change to the cluster-monitoring-config configmap.
+        """
+        nonlocal original_config_yaml
+        ocp_obj = OCP(
+            kind=constants.CONFIGMAP,
+            namespace=constants.MONITORING_NAMESPACE,
+            resource_name=constants.CLUSTER_MONITORING_CONFIGMAP_NAME,
+        )
+        patch_params = json.dumps({"data": {"config.yaml": original_config_yaml}})
+        ocp_obj.patch(params=patch_params, format_type="merge")
+
+    request.addfinalizer(revert_cm_cfg_change)
+    modify_cm_cfg()
+
+
+@pytest.fixture(scope="function")
+def pushgateway(request, project_factory, enable_custom_metrics):
+    """
+    TODO
+    """
+    return pushgateway_fixture(request, project_factory)
+
+
+def pushgateway_fixture(request, project_factory):
+    """
+    TODO
+    """
+    project_obj = project_factory(
+        project_name=create_unique_resource_name("pushgateway", "project")
+    )
+    pushgateway = Pushgateway(namespace=project_obj.namespace)
+    request.addfinalizer(pushgateway.cleanup)
+    pushgateway.install()
+    return pushgateway
