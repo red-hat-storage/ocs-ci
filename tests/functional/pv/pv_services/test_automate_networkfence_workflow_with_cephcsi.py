@@ -73,7 +73,8 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         4. Bring node online, and verify its "Ready" state.
         5. Remove the taint
         6. Verify can write new files to the PVC on the new node.
-        7. Deploy new pod on the same node which was recovered
+        7. Move workload back to recovered node and verify its working
+        8. Deploy new pod on the same node which was recovered
 
         """
 
@@ -169,6 +170,17 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 fio_filename="io_file2",
             )
         logger.info(f"IO started on all {len(new_pod_obj_list)} app pods")
+
+        # Delete the pod and verify pod running again
+        for pod_obj in new_pod_obj_list:
+            logger.info("Delete the pod")
+            pod_obj.delete()
+        logger.info("verify all the pods are running again")
+        new_pod_obj_list = get_all_pods(namespace=pod_obj_list[0].namespace, wait=True)
+        for pod_obj in new_pod_obj_list:
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=300
+            )
 
         # Deploy new workload on the node
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
