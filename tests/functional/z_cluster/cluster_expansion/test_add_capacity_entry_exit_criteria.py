@@ -5,7 +5,7 @@ import pytest
 from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, jira
 from ocs_ci.framework.testlib import (
     tier2,
     ignore_leftovers,
@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@jira("DFBUGS-5191")
 class TestAddCapacity(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
