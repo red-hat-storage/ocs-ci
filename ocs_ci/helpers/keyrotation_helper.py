@@ -665,6 +665,17 @@ class PVKeyrotation(KeyRotation):
         log.info("Completed key rotation state changes for all specified PVCs.")
         return True
 
+    def reset_keyrotation_baseline(self):
+        """
+        Resets the baseline key data for key rotation verification.
+        This should be called after re-enabling key rotation to ensure
+        the baseline is captured after re-enabling, not before.
+        """
+        self.all_pvc_key_data = None
+        log.info(
+            "Reset key rotation baseline - will capture new baseline on next verification."
+        )
+
     @retry(UnexpectedBehaviour, tries=10, delay=10)
     def wait_for_keyrotation_cronjobs_recreation(self, pvc_objs):
         """
