@@ -1647,9 +1647,7 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=(
-                    constants.DEPLOYMENTCONFIG if deployment else constants.DEPLOYMENT
-                ),
+                kind=constants.DEPLOYMENT,
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)
