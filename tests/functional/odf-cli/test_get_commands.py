@@ -92,7 +92,9 @@ class TestGetCommands:
         osd_pods = [
             line
             for line in output.stdout.decode().split("\n")
-            if "rook-ceph-osd-" in line and "prepare" not in line
+            if "rook-ceph-osd-" in line
+            and "prepare" not in line
+            and "key-rotation" not in line
         ]
         assert (
             len(osd_pods) >= 3
