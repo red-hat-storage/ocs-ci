@@ -7618,15 +7618,18 @@ def discovered_apps_dr_workload(request):
         recipe=0,
         pvc_interface=constants.CEPHBLOCKPOOL,
         multi_ns=False,
+        custom_sc=False,
         workloads=None,
     ):
         """
         Args:
-            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
-            recipe (int): Number if Discovered Apps workload with recipe protection to be created
+            kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+            recipe (int): Number of Discovered Apps workload with recipe protection to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             multi_ns (bool): True for Multi Namespace
+            custom_sc (bool): False by default, will create and use custom Pool and Storage Class
+                            when set to True for discovered apps workload
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7642,6 +7645,10 @@ def discovered_apps_dr_workload(request):
         if multi_ns and kubeobject <= 1:
             raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
+            if custom_sc:
+                workload_key = "dr_workload_discovered_apps_cephfs_custom_pool_and_sc"
+            else:
+                workload_key = "dr_workload_discovered_apps_cephfs"
             workload_key = "dr_workload_discovered_apps_cephfs"
         if workloads == "filebrowser":
             if pvc_interface == constants.CEPHFILESYSTEM:

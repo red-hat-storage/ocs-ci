@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.16")
 class TestFailoverAndRelocateWithDiscoveredApps:
     """
-    Test Failover and Relocate with Discovered Apps
+    Test Failover and Relocate with Discovered Apps and
+    custom CephFS SC and Pool
 
     """
 
@@ -37,6 +38,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             "kubeobject",
             "recipe",
             "iterations",
+            "custom_sc",
+            "replica",
+            "compression",
         ],
         argvalues=[
             pytest.param(
@@ -45,6 +49,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
+                False,
+                None,
+                None,
                 marks=[tier1, acceptance],
                 id="primary_up-rbd",
             ),
@@ -54,6 +61,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
+                False,
+                None,
+                None,
                 marks=tier4,
                 id="primary_down-rbd",
             ),
@@ -63,6 +73,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 3,
+                False,
+                None,
+                None,
                 marks=tier4,
                 id="primary_up-rbd-multiple-iterations",
             ),
@@ -72,6 +85,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 3,
+                False,
+                None,
+                None,
                 marks=tier4,
                 id="primary_down-rbd-multiple-iterations",
             ),
@@ -81,6 +97,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
+                False,
+                None,
+                None,
                 marks=[skipif_ocs_version("<4.19"), tier1, acceptance],
                 id="primary_up-cephfs",
             ),
@@ -90,6 +109,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 1,
+                False,
+                None,
+                None,
                 marks=[skipif_ocs_version("<4.19"), tier4],
                 id="primary_down-cephfs",
             ),
@@ -99,6 +121,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 3,
+                False,
+                None,
+                None,
                 marks=[skipif_ocs_version("<4.19"), tier4],
                 id="primary_up-cephfs-multiple-iterations",
             ),
@@ -108,8 +133,47 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 1,
                 1,
                 3,
+                False,
+                None,
+                None,
                 marks=[skipif_ocs_version("<4.19"), tier4],
                 id="primary_down-cephfs-multiple-iterations",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                1,
+                True,
+                2,
+                None,
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica2_without_compression_with_primary-down",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                1,
+                True,
+                3,
+                "aggressive",
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica3_with_compression_with_primary-down",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                1,
+                True,
+                2,
+                "aggressive",
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica2_with_compression_with_primary-down",
             ),
         ],
     )
@@ -122,6 +186,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         kubeobject,
         recipe,
         iterations,
+        custom_sc,
+        replica,
+        compression,
+        cephfs_custom_storage_class,
     ):
         """
         Tests to verify application failover and Relocate with Discovered Apps
@@ -129,9 +197,17 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             1) Failover to secondary cluster when primary cluster is UP
             2) Relocate back to primary
 
+        Test is parametrized to run with Custom CephFS Storage Class and Pool of Replica-2.
         """
+        if custom_sc:
+            logger.info("Calling fixture to create Custom Pool/SC..")
+            cephfs_custom_storage_class(replica=replica, compression=compression)
+
         rdr_workloads = discovered_apps_dr_workload(
-            pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
+            pvc_interface=pvc_interface,
+            kubeobject=kubeobject,
+            recipe=recipe,
+            custom_sc=custom_sc,
         )
         iteration = 1
         while iteration <= iterations:
