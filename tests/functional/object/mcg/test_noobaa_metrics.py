@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
 )
 
+from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
@@ -24,13 +25,20 @@ logger = logging.getLogger(__name__)
 def test_noobaa_space_available_using_cli(mcg_obj, awscli_pod_session, bucket_factory):
     """
     Test that 'bucket update' command with --max-size and --max-object parameters work as expected
+    1. Create bucket and check the initial quota status
+    2. Set the max quota size and verify that it works as expected
+    3. Update the max-objects parameter and then
+        a. Write number of objects almost reaching max-objects, verify correct quota status
+        b. Write number of objects exactly equal to max-objects, verify correct quota status
+        c. Try to write one object more, verify that the command fails as expected
+    4. Update the max-objects parameter to a bigger number, write another object and verify that this succeeds
     Args:
         mcg_obj (obj): An object representing the current state of the MCG in the cluster
         awscli_pod_session (pod): A pod running the AWSCLI tools
         bucket_factory: Calling this fixture creates a new bucket(s)
     """
 
-    # Create bucket and check original quota status
+    # 1. Create bucket and check original quota status
     bucket_name = bucket_factory(amount=1, interface="CLI")[0].name
 
     logger.info(f"Creating bucket {bucket_name}")
@@ -40,7 +48,7 @@ def test_noobaa_space_available_using_cli(mcg_obj, awscli_pod_session, bucket_fa
         quota_status == "QUOTA_NOT_SET"
     ), f"Original quota status should be QUOTA_NOT_SET, is {quota_status}"
 
-    # Set max quota size to 2GB and make sure that this worked as expected
+    # 2. Set max quota size to 2GB and make sure that this worked as expected
     new_data_space = 2
     mcg_obj.exec_mcg_cmd(
         cmd=f"bucket update --max-size={str(new_data_space)}Gi {bucket_name}",
@@ -86,7 +94,7 @@ def test_noobaa_space_available_using_cli(mcg_obj, awscli_pod_session, bucket_fa
         space_avail_after_write < space_avail_after_update
     ), f"Available space before write = {space_avail_after_update}, after write = {space_avail_after_write}"
 
-    # Update bucket with --max-objects quota and verify that it worked as expected
+    # 3. Update bucket with --max-objects quota and verify that it worked as expected
     max_objects = 10
     mcg_obj.exec_mcg_cmd(
         cmd=f"bucket update --max-objects={max_objects} {bucket_name}",
@@ -101,7 +109,7 @@ def test_noobaa_space_available_using_cli(mcg_obj, awscli_pod_session, bucket_fa
         int(num_objects_avail_after_update) == max_objects - 1
     ), f"Number of available objects is {int(num_objects_avail_after_update)}, expected {max_objects - 1}"
 
-    # copy (max-objects-2) files to the bucket
+    # 3 a. copy (max-objects-2) files to the bucket
     for file_name in standard_test_obj_list[1 : max_objects - 1]:
         logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
 
@@ -136,15 +144,73 @@ def test_noobaa_space_available_using_cli(mcg_obj, awscli_pod_session, bucket_fa
         quota_status_after_write == "APPROUCHING_QUOTA"
     ), f"Quota status is {quota_status_after_write}, expected APPROUCHING_QUOTA"
 
-    # Update again bucket with bigger --max-objects quota and verify that it worked as expected -- quota status is
-    # 'Optimal' again
-    max_objects = 20
+    # 3 b, Copy last file allowed with the existing quota
+    file_name = standard_test_obj_list[max_objects - 1]
+    logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
+
+    cp_command = f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}"
+
+    awscli_pod_session.exec_cmd_on_pod(
+        command=craft_s3_command(cp_command, mcg_obj=mcg_obj),
+        out_yaml_format=False,
+    )
+    time.sleep(180)
+
+    num_objects_after_write = get_bucket_status_value(
+        mcg_obj, bucket_name, "Num Objects"
+    )
+    assert (
+        int(num_objects_after_write) == max_objects
+    ), f"Number of written objects is {int(num_objects_after_write)}, expected {max_objects}"
+    num_objects_avail_after_write = get_bucket_status_value(
+        mcg_obj, bucket_name, "Num Objects Avail"
+    )
+    assert (
+        int(num_objects_avail_after_write) == 0
+    ), f"Number of available objects is {int(num_objects_avail_after_write)}, expected 0"
+    quota_status_after_write = get_bucket_status_value(
+        mcg_obj, bucket_name, "QuotaStatus"
+    )
+    assert (
+        quota_status_after_write == "EXCEEDING_QUOTA"
+    ), f"Quota status is {quota_status_after_write}, expected EXCEEDING_QUOTA"
+
+    # 3 c. Try to copy one more file and exceed the max_objects limit
+    file_name = standard_test_obj_list[max_objects]
+    logger.info(f"Going to copy file {file_name} to the bucket {bucket_name}")
+
+    cp_command = f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}"
+    try:
+        awscli_pod_session.exec_cmd_on_pod(
+            command=craft_s3_command(cp_command, mcg_obj=mcg_obj),
+            out_yaml_format=False,
+        )
+    except CommandFailed as e:
+        logger.info("Expected CommandFailed exception was caught")
+        logger.info(f"Message: {e}")
+
+    # 4. Update again bucket with bigger --max-objects quota and verify that it worked as expected -- it is possible to
+    # write a file and quota status is 'Optimal' again
+    max_objects_increased = 20
     mcg_obj.exec_mcg_cmd(
-        cmd=f"bucket update --max-objects={max_objects} {bucket_name}",
+        cmd=f"bucket update --max-objects={max_objects_increased} {bucket_name}",
         namespace=config.ENV_DATA["cluster_namespace"],
         use_yes=True,
     )
+    logger.info(f"Going to copy again file {file_name} to the bucket {bucket_name}")
+
+    cp_command = f"cp {AWSCLI_TEST_OBJ_DIR}{file_name} s3://{bucket_name}/{file_name}"
+    awscli_pod_session.exec_cmd_on_pod(
+        command=craft_s3_command(cp_command, mcg_obj=mcg_obj),
+        out_yaml_format=False,
+    )
     time.sleep(180)
+    num_objects_after_write = get_bucket_status_value(
+        mcg_obj, bucket_name, "Num Objects"
+    )
+    assert (
+        int(num_objects_after_write) == max_objects + 1
+    ), f"Number of written objects is {int(num_objects_after_write)}, expected {max_objects + 1}"
     quota_status = get_bucket_status_value(mcg_obj, bucket_name, "QuotaStatus")
     assert (
         quota_status == "OPTIMAL"
