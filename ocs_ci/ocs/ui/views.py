@@ -620,9 +620,16 @@ pvc = {
         'a[id="openshift-storage-link"]',
         By.CSS_SELECTOR,
     ),
-    "pvc_create_button": ('button[data-test="item-create"]', By.CSS_SELECTOR),
+    "pvc_create_button": (
+        'a[data-test="item-create"], button[id="item-create"]',
+        By.CSS_SELECTOR,
+    ),
     "pvc_storage_class_selector": (
         'button[data-test="storageclass-dropdown"]',
+        By.CSS_SELECTOR,
+    ),
+    "pvc_create_with_form": (
+        'button[id="0-link"]',
         By.CSS_SELECTOR,
     ),
     # works for ODF 4.14 and 4.15; OCP 4.14 and 4.15
@@ -774,7 +781,10 @@ pvc_4_14 = {
 }
 
 pvc_4_19 = {
-    "pvc_create_button": ('a[data-test="item-create"]', By.CSS_SELECTOR),
+    "pvc_create_button": (
+        'a[data-test="item-create"], button[id="item-create"]',
+        By.CSS_SELECTOR,
+    ),
     "pvc_actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
     "pvc_delete": (
         'li[data-test-action="Delete PersistentVolumeClaim"]',
