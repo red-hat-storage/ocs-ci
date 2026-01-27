@@ -104,6 +104,7 @@ class TestAddCapacity(ManageTest):
             expected_statuses=expected_statuses,
             exclude_pod_name_prefixes=["demo-pod", "storageclient"],
             timeout=500,
+            sleep=20,
         ), "Entry criteria FAILED: one or more OCS pods are not in running state"
         # Create the namespace under which this test will execute:
         project = project_factory()
