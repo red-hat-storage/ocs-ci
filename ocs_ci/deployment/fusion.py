@@ -36,11 +36,36 @@ class FusionDeployment:
         Install IBM Fusion Operator
         """
         logger.info("Installing IBM Fusion")
+        if self.pre_release:
+            self.create_or_update_isf_image_digest_mirror_set
         self.create_catalog_source()
         self.create_namespace_and_operator_group()
         self.create_subscription()
         self.verify()
         self.create_spectrum_fusion_cr()
+
+    def create_or_update_isf_image_digest_mirror_set(self):
+        """
+        Create or update ImageTagMirrorSet for Fusion pre-release
+        """
+        logger.info("Creating ISF operator ImageDigestMirrorSet")
+        render_data = {
+            "sds_version": config.DEPLOYMENT.get("fusion_pre_release_sds_version"),
+        }
+        isf_image_digest_mirror_set = constants.ISF_IMAGE_DIGEST_MIRROR_SET_FILENAME
+        _templating = templating.Templating(
+            base_path=constants.TEMPLATE_DEPLOYMENT_DIR_FUSION
+        )
+
+        template = _templating.render_template(
+            constants.ISF_IMAGE_DIGEST_MIRROR_SET_TEMPLATE_FILENAME, render_data
+        )
+        isf_image_digest_mirror_set = yaml.safe_load(template, Loader=yaml.Loader)
+
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} apply -f {isf_image_digest_mirror_set}",
+            silent=True,
+        )
 
     def create_catalog_source(self):
         """

@@ -1,0 +1,12 @@
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: isf-operator-index-sds
+spec:
+  imageDigestMirrors:
+  - mirrors:
+      - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/sds-{{ sds_version }}/cp
+    source: cp.icr.io/cp
+  - mirrors:
+      - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/sds-{{ sds_version }}/cpopen
+    source: icr.io/cpopen
