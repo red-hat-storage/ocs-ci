@@ -1577,6 +1577,7 @@ ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
 ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
 ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
 ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
+ALERT_ODFOPERATORNOTUPGRADABLE = "ODFOperatorNotUpgradeable"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
