@@ -15,6 +15,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
     ExternalClusterCephfsMissing,
     ExternalClusterCephSSHAuthDetailsMissing,
+    ExternalClusterDisableCertificateCheckFailed,
     ExternalClusterExporterRunFailed,
     ExternalClusterRBDNamespaceCreationFailed,
     ExternalClusterRGWEndPointMissing,
@@ -543,7 +544,7 @@ class ExternalCluster(object):
             namespace (str): Name of RBD namespace
 
         Returns:
-            str: RBD Namepsace name
+            str: RBD Namespace name
 
         Raises:
             ExternalClusterRBDNamespaceCreationFailed: In case fails to create RBD namespace
@@ -557,6 +558,20 @@ class ExternalCluster(object):
             logger.error(f"Failed to create RBD namespace in {rbd}. Error: {err}")
             raise ExternalClusterRBDNamespaceCreationFailed
         return namespace
+
+    def disable_certificate_check(self):
+        """
+        Disable certificate check
+
+        Raises:
+            ExternalClusterDisableCertificateCheckFailed: In case fails to disable certificate check
+
+        """
+        cmd = "ceph config set mgr mgr/cephadm/certificate_check_period 0"
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.error(f"Failed to disable certificate check. Error: {err}")
+            raise ExternalClusterDisableCertificateCheckFailed
 
 
 def get_exporter_script_from_configmap():

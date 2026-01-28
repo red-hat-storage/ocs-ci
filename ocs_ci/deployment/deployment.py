@@ -1671,6 +1671,7 @@ class Deployment(object):
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        external_cluster.disable_certificate_check()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
