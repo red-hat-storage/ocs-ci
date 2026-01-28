@@ -48,6 +48,343 @@ from ocs_ci.utility.utils import (
 
 logger = logging.getLogger(__name__)
 
+# Login timeout constants (seconds)
+LOGIN_ELEMENT_TIMEOUT = 60
+LOGIN_PAGE_WAIT_TIMEOUT = 15
+SIDEBAR_WAIT_TIMEOUT = 180
+TOUR_SKIP_RETRY_DELAY = 5
+W3ID_PAGE_WAIT_TIMEOUT = 10
+
+
+def _is_ibm_cloud_managed() -> bool:
+    """
+    Check if the current platform is IBM Cloud managed (ROKS).
+
+    Returns:
+        bool: True if IBM Cloud managed platform, False otherwise.
+
+    """
+    return (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+
+
+def _is_hci_platform() -> bool:
+    """
+    Check if the current platform is HCI (Provider/Client).
+
+    Returns:
+        bool: True if HCI platform, False otherwise.
+
+    """
+    return config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+
+
+def skip_tour(driver: WebDriver, skip_tour_locator: tuple) -> None:
+    """
+    Skip the guided tour popup if it appears after login.
+
+    Retries up to 3 times with delays, as the tour may appear with a delay.
+    If not found after retries, continues without error.
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        skip_tour_locator (tuple): Locator tuple for the skip tour button.
+
+    """
+    for _ in range(3):
+        elements = driver.find_elements(*skip_tour_locator[::-1])
+        if elements:
+            skip_tour_el = wait_for_element_to_be_clickable(
+                skip_tour_locator, SIDEBAR_WAIT_TIMEOUT
+            )
+            skip_tour_el.click()
+            return
+        time.sleep(TOUR_SKIP_RETRY_DELAY)
+
+    logger.info("Skip tour element not found. Continuing without clicking.")
+
+
+def _is_w3id_page(driver: WebDriver, login_loc: dict) -> bool:
+    """
+    Check if the current page is the W3ID login page.
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        login_loc (dict): Login locators dictionary.
+
+    Returns:
+        bool: True if W3ID page is displayed, False otherwise.
+
+    """
+    try:
+        WebDriverWait(driver, W3ID_PAGE_WAIT_TIMEOUT).until(
+            ec.title_contains(login_loc["w3id_page_title"])
+        )
+        return True
+    except TimeoutException:
+        return False
+
+
+def _handle_w3id_login(
+    driver: WebDriver,
+    login_loc: dict,
+    username: str,
+    password: str,
+) -> None:
+    """
+    Handle W3ID login page credential entry.
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        login_loc (dict): Login locators dictionary.
+        username (str): IBM Cloud username.
+        password (str): IBM Cloud password.
+
+    """
+    wait_for_element_to_be_clickable(
+        login_loc["w3id_credentials_signin"], LOGIN_ELEMENT_TIMEOUT
+    )
+    w3id_credentials_btn = driver.find_element(
+        by=login_loc["w3id_credentials_signin"][1],
+        value=login_loc["w3id_credentials_signin"][0],
+    )
+    w3id_credentials_btn.click()
+
+    username_el = wait_for_element_to_be_clickable(
+        login_loc["w3id_username"], LOGIN_ELEMENT_TIMEOUT
+    )
+    username_el.send_keys(username)
+
+    password_el = wait_for_element_to_be_clickable(
+        login_loc["w3id_password"], LOGIN_ELEMENT_TIMEOUT
+    )
+    password_el.send_keys(password)
+
+    w3id_signin_el = wait_for_element_to_be_clickable(
+        login_loc["w3id_singin"], LOGIN_ELEMENT_TIMEOUT
+    )
+    w3id_signin_el.click()
+
+
+def _handle_w3id_2fa_if_required(
+    driver: WebDriver,
+    login_loc: dict,
+    otp_secret: str,
+) -> None:
+    """
+    Handle W3ID 2FA if required.
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        login_loc (dict): Login locators dictionary.
+        otp_secret (str): OTP secret for 2FA token generation.
+
+    """
+    time.sleep(5)
+    if not _is_w3id_page(driver, login_loc):
+        return
+
+    w3id_2fa_otp_el = wait_for_element_to_be_clickable(
+        login_loc["w3id_2fa"], LOGIN_ELEMENT_TIMEOUT
+    )
+    w3id_2fa_otp_el.click()
+
+    w3id_2fa_otp_input_el = wait_for_element_to_be_clickable(
+        login_loc["w3id_2fa_otp_input"], LOGIN_ELEMENT_TIMEOUT
+    )
+    w3id_2fa_otp_input_el.send_keys(generate_otp_token(otp_secret))
+
+    w3id_2fa_otp_submit_btn = wait_for_element_to_be_clickable(
+        login_loc["w3id_2fa_otp_sumbit_btn"], LOGIN_ELEMENT_TIMEOUT
+    )
+    w3id_2fa_otp_submit_btn.click()
+
+
+def _handle_ibm_cloud_direct_login(
+    driver: WebDriver,
+    login_loc: dict,
+    password: str,
+    otp_secret: str,
+) -> None:
+    """
+    Handle direct IBM Cloud login (non-W3ID path).
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        login_loc (dict): Login locators dictionary.
+        password (str): IBM Cloud password.
+        otp_secret (str): OTP secret for 2FA token generation.
+
+    """
+    password_el = wait_for_element_to_be_clickable(
+        login_loc["password"], LOGIN_ELEMENT_TIMEOUT
+    )
+    password_el.send_keys(password)
+
+    click_login_el = wait_for_element_to_be_clickable(
+        login_loc["click_login"], LOGIN_ELEMENT_TIMEOUT
+    )
+    click_login_el.click()
+
+    login_2fa_input_el = wait_for_element_to_be_clickable(
+        login_loc["login_2fa_input"], LOGIN_ELEMENT_TIMEOUT
+    )
+    login_2fa_input_el.send_keys(generate_otp_token(otp_secret))
+
+    login_2fa_submit_btn = wait_for_element_to_be_clickable(
+        login_loc["w3id_2fa_otp_sumbit_btn"], LOGIN_ELEMENT_TIMEOUT
+    )
+    login_2fa_submit_btn.click()
+
+
+def _login_ibm_cloud_managed(
+    driver: WebDriver,
+    login_loc: dict,
+    username: str,
+    password: str,
+    otp_secret: str,
+) -> None:
+    """
+    Handle the complete IBM Cloud managed (ROKS) login flow.
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        login_loc (dict): Login locators dictionary.
+        username (str): IBM Cloud username.
+        password (str): IBM Cloud password.
+        otp_secret (str): OTP secret for 2FA token generation.
+
+    """
+    username_el = wait_for_element_to_be_clickable(
+        login_loc["username"], LOGIN_ELEMENT_TIMEOUT
+    )
+    username_el.send_keys(username)
+
+    continue_login_el = wait_for_element_to_be_clickable(
+        login_loc["continue_button"], LOGIN_ELEMENT_TIMEOUT
+    )
+    continue_login_el.click()
+
+    if _is_w3id_page(driver, login_loc):
+        _handle_w3id_login(driver, login_loc, username, password)
+        _handle_w3id_2fa_if_required(driver, login_loc, otp_secret)
+        return
+
+    _handle_ibm_cloud_direct_login(driver, login_loc, password, otp_secret)
+
+
+def _select_login_method(
+    driver: WebDriver, login_loc: dict, username: str | None
+) -> None:
+    """
+    Select the login method (kubeadmin or htpasswd) on the OCP login page.
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        login_loc (dict): Login locators dictionary.
+        username (str | None): Username to log in with. If None, uses kubeadmin.
+
+    """
+    try:
+        wait = WebDriverWait(driver, LOGIN_PAGE_WAIT_TIMEOUT)
+        if username is not None:
+            logger.info(f"Trying to log in as {username}")
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["username_my_htpasswd"][1],
+                        login_loc["username_my_htpasswd"][0],
+                    )
+                ),
+                message="Title element containing text 'Log in with my_htpasswd' is not present",
+            )
+        else:
+            logger.info("Trying to log in as kubeadmin")
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
+                ),
+                message="'Log in with kube:admin' text is not present",
+            )
+        element.click()
+    except TimeoutException:
+        take_screenshot("login")
+        copy_dom("login")
+        logger.warning(
+            "Login with my_htpasswd or kube:admin text not found, trying to login"
+        )
+
+
+def _enter_credentials(
+    login_loc: dict,
+    username: str,
+    password: str,
+) -> None:
+    """
+    Enter username and password on the OCP login form.
+
+    Args:
+        login_loc (dict): Login locators dictionary.
+        username (str): Username to enter.
+        password (str): Password to enter.
+
+    """
+    username_el = wait_for_element_to_be_clickable(
+        login_loc["username"], LOGIN_ELEMENT_TIMEOUT
+    )
+    username_el.send_keys(username)
+
+    password_el = wait_for_element_to_be_clickable(
+        login_loc["password"], LOGIN_ELEMENT_TIMEOUT
+    )
+    password_el.send_keys(password)
+
+    logger.info("Username and password filled in, clicking Log in")
+    confirm_login_el = wait_for_element_to_be_clickable(
+        login_loc["click_login"], LOGIN_ELEMENT_TIMEOUT
+    )
+    confirm_login_el.click()
+
+
+def _handle_hci_platform_navigation(
+    driver: WebDriver,
+    console_url: str,
+    login_loc: dict,
+) -> None:
+    """
+    Handle HCI platform post-login navigation to local cluster.
+
+    Args:
+        driver (WebDriver): Selenium WebDriver instance.
+        console_url (str): The console URL.
+        login_loc (dict): Login locators dictionary.
+
+    Raises:
+        NotImplementedError: If the current URL doesn't match expected dashboard URL.
+
+    """
+    dashboard_url = console_url + "/dashboards"
+    current_url = driver.current_url
+    logger.info(f"Current url: {current_url}")
+
+    if current_url == dashboard_url:
+        raise NotImplementedError(
+            f"Platform {config.ENV_DATA['platform']} is not supported"
+        )
+
+    logger.info("Navigate to 'Local Cluster' page")
+    skip_tour(driver, login_loc["skip_tour"])
+    navigate_to_local_cluster(
+        acm_page=locators_for_current_ocp_version()["acm_page"],
+        timeout=SIDEBAR_WAIT_TIMEOUT,
+    )
+    logger.info(f"'Local Cluster' page is loaded, current url: {driver.current_url}")
+
 
 def wait_for_element_to_be_clickable(locator, timeout=30):
     """
@@ -982,210 +1319,76 @@ def generate_otp_token(secret):
 
 
 @retry(
-    exception_to_check=(TimeoutException, WebDriverException, AttributeError),
+    exception_to_check=(TimeoutException, WebDriverException),
     tries=3,
     delay=3,
     backoff=2,
     func=garbage_collector_webdriver,
 )
-def login_ui(console_url=None, username=None, password=None, otp_secret=None, **kwargs):
+def login_ui(
+    console_url: str | None = None,
+    username: str | None = None,
+    password: str | None = None,
+    otp_secret: str | None = None,
+) -> WebDriver:
     """
-    Login to OpenShift Console
+    Login to OpenShift Console.
 
     Args:
-        console_url (str): ocp console url
-        username(str): User which is other than admin user,
-        password(str): Password of user other than admin user
-        otp_secret(str): Secret for OTP 2F authentication from which we generate token
+        console_url (str | None): OCP console URL. If None, uses default.
+        username (str | None): Username. If None, uses kubeadmin.
+        password (str | None): Password. If None, retrieves kubeadmin password.
+        otp_secret (str | None): OTP secret for 2FA token generation.
 
-    return:
-        driver (Selenium WebDriver)
+    Returns:
+        WebDriver: Selenium WebDriver instance after successful login.
 
     """
-    ibm_cloud_managed = (
-        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-        and config.ENV_DATA["deployment_type"] == "managed"
-    )
+    ibm_cloud_managed = _is_ibm_cloud_managed()
     if ibm_cloud_managed:
-        # Those data are required for UI testing for IBM Managed ROKS
         username = config.AUTH["ibmcloud"]["username"]
         password = config.AUTH["ibmcloud"]["password"]
         otp_secret = config.AUTH["ibmcloud"]["otp_secret"]
+
     default_console = False
     if not console_url:
         console_url = get_ocp_url()
         default_console = True
+
     logger.info("Get password of OCP console")
     if password is None:
         password = get_kubeadmin_password()
         password = password.rstrip()
+
     login_loc = locators_for_current_ocp_version()["login"]
     page_nav_loc = locators_for_current_ocp_version()["page"]
+
     driver = SeleniumDriver()
     driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
-    # Validate proceeding to the login console before taking any action:
-    proceed_to_login_console()
-    if ibm_cloud_managed:
-        username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
-        username_el.send_keys(username)
-        continue_login_el = wait_for_element_to_be_clickable(
-            login_loc["continue_button"], 60
-        )
-        continue_login_el.click()
-        try:
-            WebDriverWait(driver, 10).until(
-                ec.title_contains(login_loc["w3id_page_title"])
-            )
-            w3login_page = True
-        except TimeoutException:
-            w3login_page = False
-        if w3login_page:
-            wait_for_element_to_be_clickable(login_loc["w3id_credentials_signin"], 60)
-            w3id_credentials_btn = driver.find_element(
-                by=login_loc["w3id_credentials_signin"][1],
-                value=login_loc["w3id_credentials_signin"][0],
-            )
-            w3id_credentials_btn.click()
-            username_el = wait_for_element_to_be_clickable(
-                login_loc["w3id_username"], 60
-            )
-            username_el.send_keys(username)
-            password_el = wait_for_element_to_be_clickable(
-                login_loc["w3id_password"], 60
-            )
-            password_el.send_keys(password)
-            w3id_singin_el = wait_for_element_to_be_clickable(
-                login_loc["w3id_singin"], 60
-            )
-            w3id_singin_el.click()
-            time.sleep(5)
-            try:
-                WebDriverWait(driver, 10).until(
-                    ec.title_contains(login_loc["w3id_page_title"])
-                )
-                w3id_2fa_otp_el = wait_for_element_to_be_clickable(
-                    login_loc["w3id_2fa"], 60
-                )
-                w3id_2fa_otp_el.click()
-                w3id_2fa_otp_input_el = wait_for_element_to_be_clickable(
-                    login_loc["w3id_2fa_otp_input"], 60
-                )
-                w3id_2fa_otp_input_el.send_keys(generate_otp_token(otp_secret))
-                w3id_2fa_otp_sumbit_btn = wait_for_element_to_be_clickable(
-                    login_loc["w3id_2fa_otp_sumbit_btn"], 60
-                )
-                w3id_2fa_otp_sumbit_btn.click()
-            except TimeoutException:
-                # Sometimes the 2fa is not required, so we need to pass this
-                pass
 
-        else:
-            password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
-            password_el.send_keys(password)
-            click_login_el = wait_for_element_to_be_clickable(
-                login_loc["click_login"], 60
-            )
-            click_login_el.click()
-            login_2fa_input_el = wait_for_element_to_be_clickable(
-                login_loc["login_2fa_input"], 60
-            )
-            login_2fa_input_el.send_keys(generate_otp_token(otp_secret))
-            login_2fa_submit_btn = wait_for_element_to_be_clickable(
-                login_loc["w3id_2fa_otp_sumbit_btn"], 60
-            )
-            login_2fa_submit_btn.click()
+    proceed_to_login_console()
+
+    if ibm_cloud_managed:
+        _login_ibm_cloud_managed(driver, login_loc, username, password, otp_secret)
         return driver
 
-    try:
-        wait = WebDriverWait(driver, 15)
-        if username is not None:
-            logger.info(f"Trying to log in as {username}")
-            element = wait.until(
-                ec.element_to_be_clickable(
-                    (
-                        login_loc["username_my_htpasswd"][1],
-                        login_loc["username_my_htpasswd"][0],
-                    )
-                ),
-                message="Title element containing text 'Log in with my_htpasswd' is not present",
-            )
-        else:
-            logger.info("Trying to log in as kubeadmin")
-            element = wait.until(
-                ec.element_to_be_clickable(
-                    (
-                        login_loc["kubeadmin_login_approval"][1],
-                        login_loc["kubeadmin_login_approval"][0],
-                    )
-                ),
-                message="'Log in with kube:admin' text is not present",
-            )
-        element.click()
-    except TimeoutException:
-        take_screenshot("login")
-        copy_dom("login")
-        logger.warning(
-            "Login with my_htpasswd or kube:admin text not found, trying to login"
-        )
+    _select_login_method(driver, login_loc, username)
 
-    username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
     if username is None:
         username = config.RUN["username"]
-    username_el.send_keys(username)
+    _enter_credentials(login_loc, username, password)
 
-    password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
-    password_el.send_keys(password)
+    if _is_hci_platform():
+        _handle_hci_platform_navigation(driver, console_url, login_loc)
 
-    logger.info("Username and password filled in, clicking Log in")
-    confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
-    confirm_login_el.click()
+    if default_console:
+        wait_for_element_to_be_visible(
+            page_nav_loc["page_navigator_sidebar"], SIDEBAR_WAIT_TIMEOUT
+        )
 
-    hci_platform_conf = (
-        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
-    )
-
-    def _skip_tour():
-        # Skip tour if it appears, if not found, continue without clicking
-        # we don't want to wait for Tour Guide more than 15 sec, because in most cases it will not be present
-        if any(
-            (driver.find_elements(*login_loc["skip_tour"][::-1]) or time.sleep(5))
-            for _ in range(3)
-        ):
-            skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
-            skip_tour_el.click()
-        else:
-            logger.info("Skip tour element not found. Continuing without clicking.")
-
-    if hci_platform_conf:
-        dashboard_url = console_url + "/dashboards"
-        # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
-        # when the hci platform is confirmed and proceed to the client if needed from within the test
-        current_url = driver.current_url
-        logger.info(f"Current url: {current_url}")
-        if current_url != dashboard_url:
-            # timeout is unusually high for different scenarios when default page is not loaded immediately
-            logger.info("Navigate to 'Local Cluster' page")
-
-            _skip_tour()
-
-            navigate_to_local_cluster(
-                acm_page=locators_for_current_ocp_version()["acm_page"], timeout=180
-            )
-            logger.info(
-                f"'Local Cluster' page is loaded, current url: {driver.current_url}"
-            )
-        else:
-            NotImplementedError(
-                f"Platform {config.ENV_DATA['platform']} is not supported"
-            )
-
-    # Log in process needs to be retried if navigator sidebar is not visible
-    if default_console is True:
-        wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
-
-    _skip_tour()
+    skip_tour(driver, login_loc["skip_tour"])
 
     return driver
 
