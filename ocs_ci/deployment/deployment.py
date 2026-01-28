@@ -43,7 +43,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
-from ocs_ci.utility.iscsi_config import iscsi_setup, iscsi_teardown
+from ocs_ci.utility.iscsi_config import iscsi_setup
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
@@ -2268,18 +2268,6 @@ class Deployment(object):
         Args:
             log_level (str): log level for installer (default: DEBUG)
         """
-        # Teardown iSCSI if configured (before destroying cluster)
-        if config.ENV_DATA.get("iscsi_setup", False):
-            try:
-                logger.info(
-                    "Tearing down iSCSI configuration before cluster destruction..."
-                )
-                iscsi_teardown()
-            except Exception as err:
-                logger.warning(
-                    f"iSCSI teardown failed: {err}. Continuing with cluster destruction..."
-                )
-
         if config.DEPLOYMENT.get("skip_ocp_installer_destroy"):
             logger.info(
                 "OCP Destroy is skipped because skip_ocp_installer_destroy was enabled!"
