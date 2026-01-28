@@ -600,6 +600,5 @@ def fetch_nfs_server_details_on_client_cluster():
     nfs_sc = resources.ocs.OCS(
         kind=constants.STORAGECLASS, metadata={"name": constants.NFS_STORAGECLASS_NAME}
     )
-    nfs_sc.reload()
 
     return nfs_sc.data["parameters"]["server"]
