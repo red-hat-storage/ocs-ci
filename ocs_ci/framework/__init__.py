@@ -513,10 +513,17 @@ class MultiClusterConfig:
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            for cluster_index in range(self.nclusters):
-                self.switch_ctx(cluster_index)
-                logger.info(f"Running '{func.__name__}' for cluster {cluster_index}")
-                func(*args, **kwargs)
+            prev_ctx = self.cur_index
+            try:
+                for cluster_index in range(self.nclusters):
+                    self.switch_ctx(cluster_index)
+                    logger.info(
+                        f"Running '{func.__name__}' for cluster {cluster_index}"
+                    )
+                    func(*args, **kwargs)
+            finally:
+                self.switch_ctx(prev_ctx)
+                logger.info(f"Restored ctx back to {prev_ctx}")
 
         return wrapper
 
