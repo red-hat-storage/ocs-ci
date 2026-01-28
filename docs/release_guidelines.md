@@ -79,7 +79,7 @@ git push upstream release-4.12
 
 ### Post-Creation Steps
 
-Given the nature of our release cadence and testing, we will generally want to start preparing for testing the next release after we have prepared a release branch. For example once we create a release branch for 4.12 we will update the code to default to deploying and testing 4.13. This update will include bumping the version in several places in the [default configuration](https://github.com/red-hat-storage/ocs-ci/blob/master/ocs_ci/framework/conf/default_config.yaml) as well as updating the project version in our [setup.py](https://github.com/red-hat-storage/ocs-ci/blob/master/setup.py). You can see an example of one of these updates [here](https://github.com/red-hat-storage/ocs-ci/pull/7028/files).
+Given the nature of our release cadence and testing, we will generally want to start preparing for testing the next release after we have prepared a release branch. For example once we create a release branch for 4.12 we will update the code to default to deploying and testing 4.13. This update will include bumping the version in several places in the [default configuration](https://github.com/red-hat-storage/ocs-ci/blob/master/ocs_ci/framework/conf/default_config.yaml) as well as updating the project version in our [pyproject.toml](https://github.com/red-hat-storage/ocs-ci/blob/master/pyproject.toml). You can see an example of one of these updates [here](https://github.com/red-hat-storage/ocs-ci/pull/7028/files).
 
 
 ## Backporting Changes
