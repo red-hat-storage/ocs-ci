@@ -107,14 +107,14 @@ def get_worker_iqns(worker_node_names):
                 "true"
             )
             ocp_obj.exec_oc_debug_cmd(
-                node=node_name, cmd_list=[start_service_cmd], use_root=True, timeout=60
+                node=node_name, cmd_list=[start_service_cmd], use_root=True, timeout=120
             )
             log.debug(f"Started iSCSI service on {node_name}")
 
             # Now read the IQN from the initiatorname.iscsi file
             cmd = "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
             stdout = ocp_obj.exec_oc_debug_cmd(
-                node=node_name, cmd_list=[cmd], use_root=True, timeout=60
+                node=node_name, cmd_list=[cmd], use_root=True, timeout=120
             )
             iqn = stdout.strip()
             if iqn:
@@ -581,7 +581,7 @@ def verify_iscsi_sessions(worker_node_names, target_iqn):
             # Check if session exists
             session_cmd = f"iscsiadm -m session -P 3 | grep -i {target_iqn}"
             stdout = ocp_obj.exec_oc_debug_cmd(
-                node=node_name, cmd_list=[session_cmd], use_root=True, timeout=60
+                node=node_name, cmd_list=[session_cmd], use_root=True, timeout=120
             )
 
             if target_iqn.lower() in stdout.lower():
@@ -625,7 +625,7 @@ def verify_iscsi_devices(worker_node_names, target_iqn):
         try:
             lsblk_cmd = "lsblk -o NAME,TYPE,TRAN,SIZE,MODEL -n | grep -i iscsi"
             stdout = ocp_obj.exec_oc_debug_cmd(
-                node=node_name, cmd_list=[lsblk_cmd], use_root=True, timeout=60
+                node=node_name, cmd_list=[lsblk_cmd], use_root=True, timeout=120
             )
             if stdout:
                 lsblk_devices = [
@@ -698,7 +698,7 @@ def verify_iscsi_target_connectivity(worker_node_names, target_ip, target_port=3
                 f"-p {target_ip}:{target_port} 2>&1 | grep -q {target_ip} && echo 'Connected' || echo 'Failed'"
             )
             stdout = ocp_obj.exec_oc_debug_cmd(
-                node=node_name, cmd_list=[connectivity_cmd], use_root=True, timeout=60
+                node=node_name, cmd_list=[connectivity_cmd], use_root=True, timeout=120
             )
 
             if "Connected" in stdout:
