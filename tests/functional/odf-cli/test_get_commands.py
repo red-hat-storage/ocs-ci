@@ -22,6 +22,7 @@ class TestGetCommands:
     def setup(self, odf_cli_setup):
         self.odf_cli_runner = odf_cli_setup
 
+    @skipif_external_mode
     @polarion_id("OCS-6237")
     def test_get_health(self):
         output = self.odf_cli_runner.run_get_health()
