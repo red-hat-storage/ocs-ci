@@ -1213,6 +1213,9 @@ def _collect_ocs_logs(
             )
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
+        ocp_service_log_dir_path = os.path.join(
+            log_dir_path, "ocp_service_logs_must_gather"
+        )
         ocp_must_gather_image = cluster_config.REPORTING["ocp_must_gather_image"]
         if cluster_config.DEPLOYMENT.get("disconnected"):
             ocp_must_gather_image = mirror_image(ocp_must_gather_image)
@@ -1220,7 +1223,7 @@ def _collect_ocs_logs(
             ocp_log_dir_path, ocp_must_gather_image, cluster_config=cluster_config
         )
         run_must_gather(
-            ocp_log_dir_path,
+            ocp_service_log_dir_path,
             ocp_must_gather_image,
             "/usr/bin/gather_service_logs worker",
             cluster_config=cluster_config,
