@@ -539,6 +539,11 @@ external_mode_required = pytest.mark.skipif(
     reason="Test will run on External Mode cluster only",
 )
 
+iscsi_setup_required = pytest.mark.skipif(
+    not config.ENV_DATA.get("iscsi_setup", False),
+    reason="Test runs only when iscsi_setup is enabled in ENV_DATA",
+)
+
 skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "aws"
     and config.DEPLOYMENT.get("local_storage") is True,
