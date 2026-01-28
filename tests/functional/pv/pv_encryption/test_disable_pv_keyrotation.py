@@ -2,7 +2,7 @@ import logging
 import pytest
 from ocs_ci.framework.testlib import config, tier2
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
+from ocs_ci.helpers.keyrotation_helper import PVKeyRotation
 from ocs_ci.helpers.helpers import create_pods
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
@@ -105,7 +105,7 @@ class PVKeyrotationTestBase:
         log.info("Pods created and running.")
 
         # Initialize the PVKeyrotation helper
-        self.pv_keyrotation_obj = PVKeyrotation(self.sc_obj)
+        self.pv_keyrotation_obj = PVKeyRotation(self.sc_obj)
 
 
 @tier2
