@@ -597,8 +597,8 @@ def fetch_nfs_server_details_on_client_cluster():
     # switch to consumer
     config.switch_to_consumer()
 
-    nfs_sc = resources.ocs.OCS(
-        kind=constants.STORAGECLASS, metadata={"name": constants.NFS_STORAGECLASS_NAME}
+    nfs_sc = ocp.OCP(
+        kind=constants.STORAGECLASS, resource_name=constants.NFS_STORAGECLASS_NAME
     )
 
     return nfs_sc.data["parameters"]["server"]
