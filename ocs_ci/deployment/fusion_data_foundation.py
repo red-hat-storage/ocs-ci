@@ -217,7 +217,8 @@ class FusionDataFoundationDeployment:
             if self.lso_enabled:
                 add_disks_lso()
             clustersetup = StorageClusterSetup()
-            create_lvs_resource(self.storage_class, self.storage_class)
+            if self.lso_enabled:
+                create_lvs_resource(self.storage_class, self.storage_class)
             if config.ENV_DATA.get("mark_masters_schedulable", False):
                 node.mark_masters_schedulable()
             add_storage_label()
