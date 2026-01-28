@@ -25,7 +25,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     skipif_ocp_version,
     skipif_managed_service,
-    skip_for_provider_if_ocs_version,
+    skip_for_provider_or_client_if_ocs_version,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     polarion_id,
@@ -57,7 +57,7 @@ ERRMSG = "Error in command"
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @skipif_hci_client
-@skip_for_provider_if_ocs_version("<4.19")
+@skip_for_provider_or_client_if_ocs_version("<4.19")
 @skipif_lean_deployment
 @polarion_id("OCS-4270")
 class TestDefaultNfsDisabled(ManageTest):
@@ -118,7 +118,7 @@ class TestDefaultNfsDisabled(ManageTest):
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
-@skip_for_provider_if_ocs_version("<4.19")
+@skip_for_provider_or_client_if_ocs_version("<4.19")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @skipif_lean_deployment
