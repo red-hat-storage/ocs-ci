@@ -30,6 +30,7 @@ import time
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_running_ocp_version,
+    mute_mon_netsplit,
 )
 
 logger = logging.getLogger(__name__)
@@ -210,6 +211,10 @@ class FusionDataFoundationDeployment:
         # Storage configuration method changed in Fusion 2.11
         if fusion_version < version.VERSION_2_11:
             self.create_odfcluster()
+            # Mute MON_NETSPLIT for arbiter deployments to avoid:
+            # https://issues.redhat.com/browse/DFBUGS-4521
+            if config.DEPLOYMENT.get("arbiter_deployment"):
+                mute_mon_netsplit(namespace="ibm-spectrum-fusion-ns")
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
@@ -221,6 +226,13 @@ class FusionDataFoundationDeployment:
                 node.mark_masters_schedulable()
             add_storage_label()
             clustersetup.setup_storage_cluster()
+            # Mute MON_NETSPLIT for arbiter deployments to avoid:
+            # https://issues.redhat.com/browse/DFBUGS-4521
+            if config.DEPLOYMENT.get("arbiter_deployment"):
+                logger.info(
+                    "Arbiter deployment detected, muting MON_NETSPLIT health warning"
+                )
+                mute_mon_netsplit(namespace="ibm-spectrum-fusion-ns")
             storagecluster_health_check()
 
     def patch_catalogsource(self):
