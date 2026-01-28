@@ -2797,6 +2797,32 @@ def ceph_health_resolve_mon_slow_ops(health_status):
     restart_mon_pods(mon_ids)
 
 
+def mute_mon_netsplit(namespace=None):
+    """
+    Mute MON_NETSPLIT health warning in Ceph cluster.
+    This is useful for arbiter deployments where network splits are expected.
+
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+    """
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    log.info("Muting MON_NETSPLIT health warning for arbiter deployment")
+    try:
+        ct_pod = get_ceph_tools_pod(namespace=namespace)
+        ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph health mute MON_NETSPLIT",
+            format=None,
+            out_yaml_format=False,
+            timeout=120,
+        )
+        log.info("Successfully muted MON_NETSPLIT health warning")
+    except Exception as ex:
+        log.warning(f"Failed to mute MON_NETSPLIT: {ex}")
+
+
 def ceph_health_resolve_network_partition(health_status):
     """
     Fix Ceph health issue with mon network partition.
@@ -2819,6 +2845,10 @@ def ceph_health_resolve_network_partition(health_status):
         f"Detected problematic MON IDs with network partition detected: {mon_ids}"
     )
 
+    # Mute MON_NETSPLIT if arbiter deployment is configured
+    if config.DEPLOYMENT.get("arbiter_deployment"):
+        log.info("Arbiter deployment detected, muting MON_NETSPLIT")
+        mute_mon_netsplit()
     restart_mon_pods(mon_ids)
 
 
