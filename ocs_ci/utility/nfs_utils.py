@@ -146,7 +146,7 @@ def nfs_disable(
     if (
         version_module.get_semantic_ocs_version_from_config()
         >= version_module.VERSION_4_21
-    ):
+    ) and config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER:
         # remove externalendpoint details
         remove_nfs_endpoint_details()
 
