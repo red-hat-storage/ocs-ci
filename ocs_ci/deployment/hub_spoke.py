@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from ocs_ci import framework
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.hyperconverged import HyperConverged
-from ocs_ci.deployment.mce import MCEInstaller
+from ocs_ci.deployment.mce import MCEInstaller, set_mirror_registry_configmap
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
@@ -28,7 +28,11 @@ from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step, reset_current_module_log_steps
 from ocs_ci.framework import config as ocsci_config, Config, config
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
+from ocs_ci.helpers.helpers import (
+    get_cephfs_subvolumegroup_names,
+    create_project,
+    create_resource,
+)
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS, FUSION_CONF_DIR
 from ocs_ci.ocs.exceptions import (
@@ -88,6 +92,66 @@ from ocs_ci.utility.version import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _check_agents_approved(namespace):
+    """
+    Check if all agents are approved
+
+    Args:
+        namespace (str): Namespace to check agents in
+
+    Returns:
+        bool: True if all agents are approved, False otherwise
+    """
+    agent_obj = OCP(kind="Agent", namespace=namespace)
+    agents_list = agent_obj.get().get("items", [])
+
+    if not agents_list:
+        logger.warning(f"No agents found in namespace {namespace}")
+        return False
+
+    for agent in agents_list:
+        agent_name = agent["metadata"]["name"]
+        approved = agent.get("spec", {}).get("approved", False)
+        if not approved:
+            logger.debug(f"Agent {agent_name} is not yet approved")
+            return False
+
+    return True
+
+
+def _check_agents_available(namespace, expected_count):
+    """
+    Check if a specific number of agents are available
+
+    Args:
+        namespace (str): Namespace to check agents in
+        expected_count (int): Expected number of agents
+
+    Returns:
+        bool: True if the expected number of agents are available, False otherwise
+    """
+    agent_obj = OCP(kind="Agent", namespace=namespace)
+    try:
+        agents_list = agent_obj.get().get("items", [])
+        current_count = len(agents_list)
+
+        if current_count >= expected_count:
+            logger.info(
+                f"Found {current_count} agents in namespace {namespace} "
+                f"(expected: {expected_count})"
+            )
+            return True
+        else:
+            logger.warning(
+                f"Only {current_count} agents available in namespace {namespace}, "
+                f"waiting for {expected_count}"
+            )
+            return False
+    except Exception as e:
+        logger.debug(f"Error checking agents in namespace {namespace}: {e}")
+        return False
 
 
 @if_version(">4.17")
@@ -237,72 +301,33 @@ def enable_nested_virtualization():
     logger.info("All the nodes are upgraded")
 
 
+@config.run_with_provider_context_if_available
 def create_agent_service_config():
     """
-    Create AgentServiceConfig resource
+    Create AgentServiceConfig resource in case it does not exist
 
     """
-    template_yaml = os.path.join(
-        constants.TEMPLATE_DIR, "hosted-cluster", "agent_service_config.yaml"
-    )
-    agent_service_config_data = templating.load_yaml(template_yaml)
-    # TODO: Add custom OS image details
-    helpers.create_resource(**agent_service_config_data)
+    if not len(OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True)["items"]):
+        template_yaml = os.path.join(
+            constants.TEMPLATE_DIR, "hosted-cluster", "agent_service_config.yaml"
+        )
+        agent_service_config_data = templating.load_yaml(template_yaml)
+        # TODO: Add custom OS image details
+        helpers.create_resource(**agent_service_config_data)
 
-    # Verify new pods that should be created
-    wait_for_pods_to_be_in_statuses_concurrently(
-        app_selectors_to_resource_count_list=[
-            {"app=assisted-service": 1},
-            {"app=assisted-image-service": 1},
-        ],
-        namespace="multicluster-engine",
-        timeout=600,
-        status=constants.STATUS_RUNNING,
-    )
-    logger.info("Created AgentServiceConfig.")
-
-
-def create_host_inventory():
-    """
-    Create InfraEnv resource for host inventory
-
-    """
-    # Create InfraEnv
-    template_yaml = os.path.join(
-        constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
-    )
-    infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
-    ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
-    with open(ssh_pub_file_path, "r") as ssh_key:
-        ssh_pub_key = ssh_key.read().strip()
-    # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
-    #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
-    for data in infra_env_data:
-        if data["kind"] == constants.INFRA_ENV:
-            data["spec"]["sshAuthorizedKey"] = ssh_pub_key
-            infra_env_namespace = data["metadata"]["namespace"]
-            # Create project
-            helpers.create_project(project_name=infra_env_namespace)
-            # Create new secret in the namespace using the existing secret
-            secret_obj = OCP(
-                kind=constants.SECRET,
-                resource_name="pull-secret",
-                namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
-            )
-            secret_info = secret_obj.get()
-            secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
-            secret_data["data"][".dockerconfigjson"] = secret_info["data"][
-                ".dockerconfigjson"
-            ]
-            secret_data["metadata"]["namespace"] = infra_env_namespace
-            secret_data["metadata"]["name"] = "pull-secret"
-            secret_manifest = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="pull_secret", delete=False
-            )
-            templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
-            exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
-        helpers.create_resource(**data)
-    logger.info("Created InfraEnv.")
+        # Verify new pods that should be created
+        wait_for_pods_to_be_in_statuses_concurrently(
+            app_selectors_to_resource_count_list=[
+                {"app=assisted-service": 1},
+                {"app=assisted-image-service": 1},
+            ],
+            namespace="multicluster-engine",
+            timeout=600,
+            status=constants.STATUS_RUNNING,
+        )
+        logger.info("Created AgentServiceConfig.")
+    else:
+        logger.info("AgentServiceConfig already exists.")
 
 
 def get_onboarding_token_from_secret(secret_name):
@@ -638,7 +663,7 @@ class ExternalClients:
         6. Validate storage resources (SCs, consumer objects, backing Ceph entities)
 
         Returns:
-            list[ExternalODF]: ExternalODF objects successfully connected.
+            list(ExternalODF): ExternalODF objects successfully connected.
         Raises:
             FileNotFoundError: If kubeconfig file for any cluster is not found
             AssertionError: If any of the verification steps fail
@@ -1517,6 +1542,40 @@ def get_hosted_cluster_version_history(cluster_name: str):
         return history
 
 
+@config.run_with_provider_context_if_available
+def create_patch_provisioning():
+    """
+    Create or patch the provisioning resource to set watchAllNamespaces to true.
+    This is required for hosted cluster creation using agent platform.
+    """
+    provisioning_ocp = OCP(kind=constants.PROVISIONING)
+    provisioning_items = provisioning_ocp.get(dont_raise=True) or {}
+    provisioning_item_list = provisioning_items.get("items") or []
+    if not provisioning_item_list:
+        template_yaml = os.path.join(
+            constants.TEMPLATE_DIR, "hosted-cluster", "provisioning.yaml"
+        )
+        provisioning_data = templating.load_yaml(template_yaml)
+        helpers.create_resource(**provisioning_data)
+        for provisioning_items in TimeoutSampler(
+            300, 10, provisioning_ocp.get, dont_raise=True
+        ):
+            provisioning_item_list = provisioning_items.get("items") or []
+            if provisioning_item_list:
+                break
+
+    provisioning_obj = OCS(**provisioning_item_list[0])
+    if not provisioning_obj.data["spec"].get("watchAllNamespaces"):
+        provisioning_obj.ocp.patch(
+            resource_name=provisioning_obj.name,
+            params='{"spec":{"watchAllNamespaces": true }}',
+            format_type="merge",
+        )
+        assert provisioning_obj.get()["spec"].get(
+            "watchAllNamespaces"
+        ), "Cannot proceed with hosted cluster creation using agent."
+
+
 class HypershiftHostedOCP(
     SpokeOCP,
     HyperShiftBase,
@@ -1536,6 +1595,9 @@ class HypershiftHostedOCP(
         CNVInstaller.__init__(self)
         MCEInstaller.__init__(self)
         HyperConverged.__init__(self)
+        self.agent_workflow = AgentWorkflow(name)
+        # min image to boot worker machines for HCP Agent deployments
+        self.boot_image_path = None
 
     def deploy_ocp(self, **kwargs) -> str:
         """
@@ -1584,16 +1646,68 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("disable_default_sources", True)
         )
-        return self.create_kubevirt_ocp_cluster(
-            name=self.name,
-            nodepool_replicas=nodepool_replicas,
-            cpu_cores=cpu_cores_per_hosted_cluster,
-            memory=memory_per_hosted_cluster,
-            ocp_version=ocp_version,
-            cp_availability_policy=cp_availability_policy,
-            infra_availability_policy=infra_availability_policy,
-            disable_default_sources=disable_default_sources,
+
+        hosted_cluster_platform = (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("hosted_cluster_platform", "kubevirt")
         )
+        if hosted_cluster_platform == "agent":
+            # make agent machines pull images from quay.io/acm-d instead of registry.redhat.io/multicluster-engine
+            log_step(
+                f"Deploy HyperShift hosted OCP cluster '{self.name}' using Agent platform"
+            )
+            set_mirror_registry_configmap()
+
+            if self.name in get_hosted_cluster_names():
+                logger.info(f"HyperShift hosted cluster {self.name} already exists")
+                return self.name
+
+            log_step("Create host inventory and wait for min image creation")
+            self.agent_workflow.create_host_inventory()
+            self.agent_workflow.wait_for_image_created_in_infraenv()
+
+            log_step("Boot machines for Agent hosted cluster with min image")
+            if not self.boot_machines_for_agent():
+                # this cluster will not be added to the list of deployed clusters and ODF installation will be skipped
+                return ""
+
+            log_step("wait for agents to be available in the infraenv namespace")
+            with config.RunWithConfigContext(
+                config.get_cluster_index_by_name(self.name)
+            ):
+                worker_number = config.ENV_DATA["worker_replicas"]
+            if not worker_number:
+                logger.error(
+                    "worker_replicas is not set in the configuration for the cluster. "
+                    "Cannot proceed with Agent hosted cluster deployment."
+                )
+                return ""
+            if not self.agent_workflow.wait_agents_available(worker_number):
+                return ""
+
+            log_step("Approve agents for Agent hosted cluster")
+            self.agent_workflow.approve_agents()
+
+            return self.create_agent_ocp_cluster(
+                name=self.name,
+                nodepool_replicas=nodepool_replicas,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+            )
+        else:
+            return self.create_kubevirt_ocp_cluster(
+                name=self.name,
+                nodepool_replicas=nodepool_replicas,
+                cpu_cores=cpu_cores_per_hosted_cluster,
+                memory=memory_per_hosted_cluster,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+            )
 
     def deploy_dependencies(
         self,
@@ -1669,24 +1783,8 @@ class HypershiftHostedOCP(
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
             # create Provisioning resource if not present
 
-            provisioning_obj = OCS(
-                **OCP(kind=constants.PROVISIONING).get().get("items")[0]
-            )
-            if not provisioning_obj.data["spec"].get("watchAllNamespaces"):
-                provisioning_obj.ocp.patch(
-                    resource_name=provisioning_obj.name,
-                    params='{"spec":{"watchAllNamespaces": true }}',
-                    format_type="merge",
-                )
-                assert provisioning_obj.get()["spec"].get(
-                    "watchAllNamespaces"
-                ), "Cannot proceed with hosted cluster creation using agent."
-
-            if not len(
-                OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True)["items"]
-            ):
-                create_agent_service_config()
-                create_host_inventory()
+            create_patch_provisioning()
+            create_agent_service_config()
 
     def _compute_target_release_image(self):
         """
@@ -1954,6 +2052,29 @@ class HypershiftHostedOCP(
             # this is non-critical operation, it should not fail deployment or upgrade on multiple clusters,
             # thus exception is broad
             logger.error(f"Failed to apply IDMS mirrors to HostedClusters: {e}")
+
+    def boot_machines_for_agent(self):
+        """
+        Boot the bare metal machines and acks on successful boot
+        This method uses VSPHEREAgentAI deployer to boot the machines and is running within the Client context
+
+        Returns: bool: True if machines are booted successfully, False otherwise
+        """
+
+        from ocs_ci.deployment.vmware import VSPHEREAgentAI
+
+        with config.RunWithConfigContext(config.get_cluster_index_by_name(self.name)):
+            # assumption: within this multicluster context, config.DEPLOYMENT has parameters for the current cluster
+            deployer = VSPHEREAgentAI()
+            try:
+                deployer.deploy_cluster(log_cli_level="INFO")
+            except RuntimeError as e:
+                logger.error(f"Error during booting machines for Agent cluster: {e}")
+                return False
+            except FileNotFoundError as e:
+                logger.error(f"Required file not found during deployment: {e}")
+                return False
+            return True
 
 
 class SpokeODF(SpokeOCP, ABC):
@@ -2915,3 +3036,299 @@ def hypershift_cluster_factory(
                 f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
             )
             ocsci_config.insert_cluster_config(ocsci_config.nclusters, cluster_config)
+
+
+class AgentWorkflow:
+
+    def __init__(self, name: str):
+        self.name = name
+
+    @config.run_with_provider_context_if_available
+    def approve_agents(self):
+        """
+        Approve agents for the hosted cluster
+        Example: oc patch $a -n agents-ns --type=merge -p '{"spec":{"approved":true}}'
+
+        Returns:
+            bool: True if agents are approved successfully, False otherwise
+        """
+        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
+        infraenv_list = infraenv_obj.get().get("items", [])
+
+        if not infraenv_list:
+            return False
+
+        agent_obj = OCP(kind=constants.HOSTED_CLUSTER_AGENT, namespace=self.name)
+        agents_list = agent_obj.get().get("items", [])
+
+        if not agents_list:
+            logger.warning(f"No agents found in namespace {self.name}")
+            return False
+
+        logger.info(f"Found {len(agents_list)} agents in namespace {self.name}")
+
+        patch_data = json.dumps({"spec": {"approved": True}})
+        for agent in agents_list:
+            agent_name = agent["metadata"]["name"]
+            try:
+                logger.info(f"Approving agent: {agent_name}")
+                agent_obj.patch(
+                    resource_name=agent_name, params=patch_data, format_type="merge"
+                )
+            except Exception as e:
+                logger.error(f"Failed to approve agent {agent_name}: {e}")
+                return False
+
+        # Wait for agents to be approved
+        logger.info("Waiting for agents to be approved...")
+        try:
+            for agent_approved in TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=_check_agents_approved,
+                namespace=self.name,
+            ):
+                if agent_approved:
+                    logger.info("All agents are approved successfully")
+                    return True
+        except TimeoutExpiredError:
+            logger.error("Timeout waiting for agents to be approved")
+            return False
+
+    @config.run_with_provider_context_if_available
+    def wait_agents_available(self, expected_count, timeout=600):
+        """
+        Wait for a specific number of agents to be available in the namespace
+
+        Args:
+            expected_count (int): Expected number of agents to wait for
+            timeout (int): Timeout in seconds to wait for agents (default: 600 seconds / 10 minutes)
+
+        Returns:
+            bool: True if the expected number of agents are available within timeout, False otherwise
+        """
+        logger.info(
+            f"Waiting for {expected_count} agents to be available in namespace {self.name}. "
+            f"Timeout: {timeout} seconds"
+        )
+
+        try:
+            for agents_available in TimeoutSampler(
+                timeout=timeout,
+                sleep=10,
+                func=_check_agents_available,
+                namespace=self.name,
+                expected_count=expected_count,
+            ):
+                if agents_available:
+                    logger.info(
+                        f"Expected number of agents ({expected_count}) are available "
+                        f"in namespace {self.name}"
+                    )
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"Timeout waiting for {expected_count} agents to be available "
+                f"in namespace {self.name} after {timeout} seconds"
+            )
+            return False
+
+    @config.run_with_provider_context_if_available
+    def get_agents_external_ip_list(self):
+        """
+        Get the external IP address of the agent machines
+        Any network masks (CIDR, e.g. "/24") are stripped from the addresses.
+
+        Returns:
+            list: List of IPv4 addresses (possibly empty)
+        """
+        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
+        infraenv_list = infraenv_obj.get().get("items", [])
+
+        if not infraenv_list:
+            logger.warning(f"No InfraEnv found in namespace {self.name}")
+            return []
+
+        agent_obj = OCP(kind=constants.HOSTED_CLUSTER_AGENT, namespace=self.name)
+        agents_list = agent_obj.get().get("items", [])
+
+        if not agents_list:
+            logger.warning(f"No agents found in namespace {self.name}")
+            return []
+
+        ips = set()
+
+        # Collect IPv4 addresses from all agents' interfaces. Be flexible with key names
+        for agent in agents_list:
+            interfaces = (
+                agent.get("status", {}).get("inventory", {}).get("interfaces", [])
+            )
+            if not interfaces:
+                # Some agents may not have inventory/interfaces populated yet
+                continue
+
+            for iface in interfaces:
+                # Common key names used in different infra versions
+                for key in (
+                    "ipv4_addresses",
+                    "ipV4Addresses",
+                    "ipV4Address",
+                    "ipv4Address",
+                ):
+                    addrs = iface.get(key)
+                    if not addrs:
+                        continue
+
+                    # Ensure we iterate lists, but also accept single string
+                    if isinstance(addrs, str):
+                        addrs = [addrs]
+
+                    for addr in addrs:
+                        # addr may include CIDR mask (e.g., "192.168.1.10/24") - strip it
+                        if not isinstance(addr, str):
+                            continue
+                        ip = addr.split("/")[0].strip()
+                        if ip:
+                            ips.add(ip)
+
+        result = sorted(ips)
+        if result:
+            logger.info(f"External IP addresses of the agent machines: {result}")
+        else:
+            logger.warning(
+                f"No external IPv4 addresses discovered for agents in namespace {self.name}"
+            )
+
+        return result
+
+    @config.run_with_provider_context_if_available
+    def create_host_inventory(self):
+        """
+        Create InfraEnv resource for host inventory. For every new Agent cluster there must be specific InfraEnv
+        resource, which makes HostedClient attached to InfraEnv by design.
+
+        Returns:
+            An OCS instance of kind InfraEnv
+        """
+        # Create InfraEnv
+        template_yaml = os.path.join(
+            constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
+        )
+        infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
+        ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
+        with open(ssh_pub_file_path, "r") as ssh_key:
+            ssh_pub_key = ssh_key.read().strip()
+        # TODO: Add custom OS image details. Reference
+        # https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.10
+        # /html-single/clusters/index#create-host-inventory-cli-steps
+
+        infra_env_namespace = self.name
+
+        ocp_ns = OCP(kind="namespace")
+        if ocp_ns.check_resource_existence(
+            timeout=5, resource_name=infra_env_namespace, should_exist=True
+        ):
+            logger.warning(f"Project {infra_env_namespace} already exists")
+        else:
+            create_project(project_name=infra_env_namespace)
+
+        ocp_infra_env = OCP(kind=constants.INFRA_ENV, namespace=infra_env_namespace)
+        if ocp_infra_env.check_resource_existence(
+            timeout=5, resource_name=self.name, should_exist=True
+        ):
+            logger.warning(f"InfraEnv {self.name} already exists in namespace.")
+            return ocp_infra_env
+
+        infra_env = None
+        for data in infra_env_data:
+            if data["kind"] == constants.INFRA_ENV:
+                data["spec"]["sshAuthorizedKey"] = ssh_pub_key
+                data["metadata"]["name"] = self.name
+                # Create new secret in the namespace using the existing secret
+                secret_obj = OCP(
+                    kind=constants.SECRET,
+                    resource_name="pull-secret",
+                    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+                )
+                secret_info = secret_obj.get()
+                secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
+                secret_data["data"][".dockerconfigjson"] = secret_info["data"][
+                    ".dockerconfigjson"
+                ]
+                secret_data["metadata"]["namespace"] = infra_env_namespace
+                secret_data["metadata"]["name"] = "pull-secret"
+                secret_manifest = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="pull_secret", delete=False
+                )
+                templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
+                # Create secret like this to avoid printing in logs
+                exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
+            data["metadata"]["namespace"] = infra_env_namespace
+            resource_obj = create_resource(**data)
+            if data["kind"] == constants.INFRA_ENV:
+                infra_env = resource_obj
+        logger.info(f"Created InfraEnv {self.name}.")
+        return infra_env
+
+    @config.run_with_provider_context_if_available
+    def wait_for_image_created_in_infraenv(self, timeout=300):
+        """
+        Wait for the image to be created in the InfraEnv using TimeoutSampler
+
+        Args:
+            timeout (int): Timeout in seconds, default 5 minutes (300 seconds)
+
+        Returns:
+            bool: True if image is created within timeout, False otherwise
+        """
+        logger.info(
+            f"Waiting for image to be created in InfraEnv namespace '{self.name}'. "
+            f"Timeout: {timeout} seconds"
+        )
+
+        for sample in TimeoutSampler(
+            timeout=timeout, sleep=30, func=self._image_created_in_infraenv
+        ):
+            if sample:
+                logger.info(f"Image successfully created in InfraEnv '{self.name}'")
+                return True
+
+        logger.error(
+            f"Timeout waiting for image creation in InfraEnv '{self.name}' "
+            f"after {timeout} seconds"
+        )
+        return False
+
+    def _image_created_in_infraenv(self):
+        """
+        Check if the image is created in the InfraEnv
+
+        Returns:
+            bool: True if the image is created, False otherwise
+        """
+
+        infraenv_obj = OCP(kind=constants.INFRA_ENV, namespace=self.name)
+        infraenv_list = infraenv_obj.get().get("items", [])
+
+        if not infraenv_list:
+            logger.warning(f"No InfraEnv found in namespace {self.name}")
+            return False
+
+        # we assume only one infraenv is created withing clients namsepace
+        infraenv = infraenv_list[0]
+        conditions = infraenv.get("status", {}).get("conditions", [])
+
+        for condition in conditions:
+            if condition.get("type") == "ImageCreated":
+                status = condition.get("status", "")
+                if status.lower() == "true":
+                    logger.info(f"Image creation completed in InfraEnv {self.name}")
+                    return True
+                else:
+                    logger.info(
+                        f"ImageCreated condition status is {status} in InfraEnv {self.name}"
+                    )
+                    return False
+
+        logger.warning(f"ImageCreated condition not found in InfraEnv {self.name}")
+        return False
