@@ -1,8 +1,9 @@
 from ocs_ci.ocs.ui.base_ui import logger
+from ocs_ci.ocs.ui.page_objects.InfraHealth import InfraHealthModal
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 
-class DataFoundationOverview(PageNavigator):
+class DataFoundationOverview(InfraHealthModal, PageNavigator):
     """
     Class to represent the Data Foundation Overview page and its functionalities.
     Available starting from ODF 4.20.
