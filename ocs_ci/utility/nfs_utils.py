@@ -143,19 +143,6 @@ def nfs_disable(
     # Delete the nfs StorageClass
     sc_obj.delete(resource_name=constants.NFS_STORAGECLASS_NAME)
 
-    if (
-        version_module.get_semantic_ocs_version_from_config()
-        >= version_module.VERSION_4_21
-    ) and config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER:
-        # remove externalendpoint details
-        remove_nfs_endpoint_details()
-
-        # delete nfs non default storageclass if available
-        if ocp.OCP(kind=constants.STORAGECLASS).is_exist(
-            resource_name=constants.COPY_NFS_STORAGECLASS_NAME
-        ):
-            sc_obj.delete(resource_name=constants.COPY_NFS_STORAGECLASS_NAME)
-
 
 def create_nfs_load_balancer_service(
     storage_cluster_obj,
@@ -476,6 +463,13 @@ def disable_nfs_service_from_provider(nfs_sc_obj, nfs_ganesha_pod_name):
 
     # Delete load balancer service
     delete_nfs_load_balancer_service(provider_storage_cluster_obj)
+
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_21
+    ):
+        # remove externalendpoint details
+        remove_nfs_endpoint_details()
 
     # switch to consumer
     config.switch_to_consumer()
