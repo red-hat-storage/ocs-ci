@@ -13,9 +13,6 @@ from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilizat
 
 log = logging.getLogger(__name__)
 
-# @pytest.mark.polarion_id("OCS-XXXX")
-# Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
-
 
 @mcg
 @red_squad
@@ -30,36 +27,22 @@ class TestEndpointAutoScale(MCGTest):
     """
 
     # This will ensure the test will start
-    # with an autoscaling conifguration of 1-2
+    # with an autoscaling configuration of 1-2
     MIN_ENDPOINT_COUNT = 1
     MAX_ENDPOINT_COUNT = 2
     options = {
         "create": [
-            ("name", "job1"),
-            ("name", "job2"),
-            ("name", "job3"),
-            ("runtime", "1200"),
+            ("name", "job"),
         ],
-        "job1": [
-            ("iodepth", "4"),
+        "job": [
+            ("time_based", "1"),
+            ("runtime", f"{2 * 60}"),
+            ("size", "10G"),
+            ("iodepth", "64"),
             ("rw", "randrw"),
-            ("bs", "32k"),
-            ("size", "64m"),
-            ("numjobs", "4"),
-        ],
-        "job2": [
-            ("iodepth", "16"),
-            ("rw", "randrw"),
-            ("bs", "64k"),
-            ("size", "512m"),
-            ("numjobs", "4"),
-        ],
-        "job3": [
-            ("iodepth", "32"),
-            ("rw", "randrw"),
+            ("rwmixread", "50"),
             ("bs", "128k"),
-            ("size", "1024m"),
-            ("numjobs", "4"),
+            ("numjobs", "32"),
         ],
     }
 
@@ -67,26 +50,47 @@ class TestEndpointAutoScale(MCGTest):
         self._assert_endpoint_count(self.MIN_ENDPOINT_COUNT)
         endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
         get_hpa_utilization(config.ENV_DATA["cluster_namespace"])
+
+        max_wait_time = 600
+        start_time = time.time()
+        elapsed_time = 0
+
         job_cnt = 0
-        wait_time = 30
         job_list = list()
-        while endpoint_cnt < self.MAX_ENDPOINT_COUNT:
-            exec(f"job{job_cnt} = mcg_job_factory(custom_options=self.options)")
-            job_list.append(f"job{job_cnt}")
-            time.sleep(wait_time)
-            endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
-            hpa_cpu_utilization = get_hpa_utilization(
-                config.ENV_DATA["cluster_namespace"]
-            )
-            log.info(
-                f"HPA CPU utilization by noobaa-endpoint is {hpa_cpu_utilization}%"
-            )
-            if endpoint_cnt == self.MAX_ENDPOINT_COUNT:
-                break
-            job_cnt += 1
-        for i in job_list:
-            exec(f"{i}.delete()")
-            exec(f"{i}.ocp.wait_for_delete(resource_name={i}.name, timeout=60)")
+        max_utilization = 0
+
+        try:
+            while endpoint_cnt < self.MAX_ENDPOINT_COUNT:
+                exec(f"job{job_cnt} = mcg_job_factory(custom_options=self.options)")
+                job_list.append(f"job{job_cnt}")
+                job_cnt += 1
+
+                endpoint_cnt = get_endpoint_pod_count(
+                    config.ENV_DATA["cluster_namespace"]
+                )
+                hpa_cpu_utilization = get_hpa_utilization(
+                    config.ENV_DATA["cluster_namespace"]
+                )
+                log.info(
+                    f"HPA CPU utilization by noobaa-endpoint is {hpa_cpu_utilization}%"
+                )
+                max_utilization = max(max_utilization, hpa_cpu_utilization)
+                if endpoint_cnt == self.MAX_ENDPOINT_COUNT:
+                    break
+
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= max_wait_time:
+                    raise TimeoutError(
+                        (
+                            f"NooBaa endpoints did not scale up in {max_wait_time} seconds"
+                            f"Max utilization reached: {max_utilization}%"
+                        )
+                    )
+        finally:
+            for job in job_list:
+                exec(f"{job}.delete()")
+                exec(f"{job}.ocp.wait_for_delete(resource_name={job}.name, timeout=60)")
+
         self._assert_endpoint_count(self.MIN_ENDPOINT_COUNT)
 
     def _assert_endpoint_count(self, desired_count):
