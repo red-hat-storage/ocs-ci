@@ -2493,6 +2493,7 @@ def get_pod_restarts_count(namespace=None, label=None, list_of_pods=None):
             "rook-ceph-osd-prepare",
             "rook-ceph-drain-canary",
             "ceph-file-controller-detect-version",
+            "status-reporter",
         )
         if all(exclude_name not in p.name for exclude_name in exclude_names):
             pod_count = ocp_pod_obj.get_resource(p.name, "RESTARTS")
