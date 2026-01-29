@@ -2235,6 +2235,82 @@ validation_4_20 = {
     ),
 }
 
+validation_4_21 = {
+    "breadcrumbs": (
+        "//a[contains(@class, '-c-breadcrumb__link') and text()='Overview']",
+        By.XPATH,
+    ),
+    "silenced_alerts_btn": ("//span[contains(text(), 'Silenced Alerts')]/..", By.XPATH),
+    "last_24_hours_btn": ("//span[contains(text(), 'Last 24 hours')]/..", By.XPATH),
+    "severity_filter": (
+        "//button[contains(@class,'health-overview-filter-toolbox__check-type')]",
+        By.XPATH,
+    ),
+    "severity": (
+        "//button//span[contains(text(),'{}')]",
+        By.XPATH,
+    ),
+    "filter_by_details": (
+        "//input[@placeholder='Find by name or details']",
+        By.XPATH,
+    ),
+    "issue_table_checkbox": (
+        "//input[@name='check-all']",
+        By.XPATH,
+    ),
+    "silence_alerts": (
+        "//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "unsilence_alerts": (
+        "//button[normalize-space()='Unsilence']",
+        By.XPATH,
+    ),
+    "silence_popup": (
+        "//span[contains(text(),'Silence alert')]",
+        By.XPATH,
+    ),
+    "duration_input": (
+        "//input[@name='duration']",
+        By.XPATH,
+    ),
+    "duration_increase": (
+        "//button[@aria-label='Increase duration']",
+        By.XPATH,
+    ),
+    "duration_decrease": (
+        "//button[@aria-label='Decrease duration']",
+        By.XPATH,
+    ),
+    "silence_popup_button": (
+        "//footer//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "infra_health_checks": (
+        "//a[text()='View health checks']",
+        By.XPATH,
+    ),
+    # web element returns overall score with text like '66%'
+    "infra_health_score": (
+        "//div[@class='odf-infrastructure-health-card__score']//h2",
+        By.XPATH,
+    ),
+    # web element returns number of checks with text like '3'
+    "critical_issues_count": {
+        "//small[normalize-space(.)='Critical']/preceding-sibling::h4",
+        By.XPATH,
+    },
+    "moderate_issues_count": {
+        "//small[normalize-space(.)='Moderate']/preceding-sibling::h4",
+        By.XPATH,
+    },
+    "minor_issues_count": (
+        "//small[normalize-space(.)='Minor']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
@@ -2959,6 +3035,7 @@ locators = {
             **validation_4_17,
             **validation_4_18,
             **validation_4_20,
+            **validation_4_21,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
