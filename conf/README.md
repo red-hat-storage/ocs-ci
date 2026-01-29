@@ -423,6 +423,11 @@ higher priority).
 * `infra_availability_policy` - similar to clusters.<cluster name>.cp_availability_policy but applied to the infra nodes of Agent hosted cluster
 * `disable_default_sources` - similar to clusters.<cluster name>.disable_default_sources but applied to the Agent hosted cluster
 * `auto_repair` - similar to clusters.<cluster name>.auto_repair but applied to the Agent hosted cluster
+* `iscsi_target_ip` - The IP of iscsi server
+* `iscsi_target_username`- The username for authenticating with the iSCSI target.
+* `iscsi_target_password`- The password for the iSCSI target authentication.
+* `iscsi_target_iqn`- The iSCSI Qualified Name (IQN) identifying the iSCSI target.
+* `iscsi_setup` - Configure iscsi or not (Default: false). Necessory for FDF backed by SAN storage.
 
 #### UPGRADE
 
