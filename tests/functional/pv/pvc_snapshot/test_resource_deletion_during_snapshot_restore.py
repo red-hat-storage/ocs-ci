@@ -80,6 +80,7 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 runtime=30,
                 fio_filename=file_name,
                 end_fsync=1,
+                direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
 
         log.info("Wait for IO to complete on pods")
@@ -248,6 +249,7 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 runtime=20,
                 fio_filename=file_name,
                 end_fsync=1,
+                direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
 
         log.info("Wait for IO to complete on new pods")
