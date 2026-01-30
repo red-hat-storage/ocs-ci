@@ -1,4 +1,5 @@
 ENV_DATA:
+  deploy_via_cli: True
   cg_enabled: True
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
   dr_workload_repo_branch: "master"
@@ -25,27 +26,33 @@ ENV_DATA:
   dr_workload_appset_rbd: [
     { name: "appset-busybox-1", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-1.yaml",
       dr_workload_app_placement_name: "busybox-1-placement",
-      dr_workload_app_pvc_selector: {'appname': 'busybox_app1'}, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app1'}, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-1"
     },
     { name: "appset-busybox-2", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-2.yaml",
       dr_workload_app_placement_name: "busybox-2-placement",
-      dr_workload_app_pvc_selector: {'appname': 'busybox_app2'}, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app2'}, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-2"
     },
     { name: "appset-busybox-3", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-3.yaml",
       dr_workload_app_placement_name: "busybox-3-placement",
-      dr_workload_app_pvc_selector: {'appname': 'busybox_app3'}, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app3'}, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-3"
     },
     { name: "appset-busybox-4", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-4.yaml",
       dr_workload_app_placement_name: "busybox-4-placement",
-      dr_workload_app_pvc_selector: {'appname': 'busybox_app4'}, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app4'}, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-4"
     },
     { name: "appset-busybox-5", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-5.yaml",
       dr_workload_app_placement_name: "busybox-5-placement",
-      dr_workload_app_pvc_selector: {'appname': 'busybox_app5'}, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app5'}, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-5"
     },
     { name: "appset-busybox-6", workload_dir: "rdr/busybox/rbd/appset/appset-busybox-6.yaml",
       dr_workload_app_placement_name: "busybox-6-placement",
-      dr_workload_app_pvc_selector: { 'appname': 'busybox_app6' }, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app6' }, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-6"
     },
   ]
 
@@ -67,19 +74,23 @@ ENV_DATA:
   dr_workload_appset_cephfs: [
     { name: "appset-busybox-1", workload_dir: "rdr/busybox/cephfs/appset/appset-busybox-1-cephfs.yaml",
       dr_workload_app_placement_name: "busybox-1-placement-cephfs",
-      dr_workload_app_pvc_selector: { 'appname': 'busybox_app1_cephfs' }, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app1_cephfs' }, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-1"
     },
     { name: "appset-busybox-2", workload_dir: "rdr/busybox/cephfs/appset/appset-busybox-2-cephfs.yaml",
       dr_workload_app_placement_name: "busybox-2-placement-cephfs",
-      dr_workload_app_pvc_selector: { 'appname': 'busybox_app2_cephfs' }, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app2_cephfs' }, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-2"
     },
     { name: "appset-busybox-3", workload_dir: "rdr/busybox/cephfs/appset/appset-busybox-3-cephfs.yaml",
       dr_workload_app_placement_name: "busybox-3-placement-cephfs",
-      dr_workload_app_pvc_selector: { 'appname': 'busybox_app3_cephfs' }, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app3_cephfs' }, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-3"
     },
     { name: "appset-busybox-4", workload_dir: "rdr/busybox/cephfs/appset/appset-busybox-4-cephfs.yaml",
       dr_workload_app_placement_name: "busybox-4-placement-cephfs",
-      dr_workload_app_pvc_selector: { 'appname': 'busybox_app3_cephfs' }, pod_count: 10, pvc_count: 10
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app3_cephfs' }, pod_count: 10, pvc_count: 10,
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-4"
     },
   ]
 
@@ -209,45 +220,55 @@ ENV_DATA:
   dr_workload_subscription_placement_rbd: [
     { name: "busybox-1", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-1",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app1" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app1" },
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-1",
     },
     { name: "busybox-2", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-2",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app2" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app2" },
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-2",
     },
     { name: "busybox-3", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-3",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app3" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app3" },
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-3",
     },
     { name: "busybox-4", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-4",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app4" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app4" },
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-4",
     },
     { name: "busybox-5", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-5",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app5" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app5" },
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-5",
     },
     { name: "busybox-6", workload_dir: "rdr/busybox/rbd/subscription_with_placement/app-busybox-6",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app6" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app6" },
+      workload_path: "rdr/busybox/rbd/workloads/app-busybox-6",
     },
   ]
   dr_workload_subscription_placement_cephfs: [
     { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-1",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app1_cephfs" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app1_cephfs" },
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-1"
     },
     { name: "busybox-2", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-2",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app2_cephfs" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app2_cephfs" },
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-2"
     },
     { name: "busybox-3", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-3",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app3_cephfs" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app3_cephfs" },
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-3"
     },
     { name: "busybox-4", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-4",
       pod_count: 10, pvc_count: 10, is_placement: True,
-      dr_workload_app_pvc_selector: { "appname": "busybox_app4_cephfs" }
+      dr_workload_app_pvc_selector: { "appname": "busybox_app4_cephfs" },
+      workload_path: "rdr/busybox/cephfs/workloads/app-busybox-4"
     },
   ]
   dr_cnv_discovered_apps: [
