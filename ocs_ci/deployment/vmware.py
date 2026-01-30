@@ -1551,8 +1551,10 @@ class VSPHEREIPI(VSPHEREBASE):
             prerequisites for VSPHEREIPI here.
             """
             #  Assign IPs from IPAM server
-            ips = assign_ips(constants.NUM_OF_VIPS)
-            config.ENV_DATA["vips"] = ips
+            ips = config.ENV_DATA.get("vips")
+            if not ips:
+                ips = assign_ips(constants.NUM_OF_VIPS)
+                config.ENV_DATA["vips"] = ips
 
             super(VSPHEREIPI.OCPDeployment, self).deploy_prereq()
 
@@ -1696,12 +1698,13 @@ class VSPHEREIPI(VSPHEREBASE):
         self.cleanup_pgsql_db()
 
         # release the IP's
-        ipam = IPAM(appiapp="address")
-        hosts = [
-            f"{config.ENV_DATA.get('cluster_name')}-{i}"
-            for i in range(constants.NUM_OF_VIPS)
-        ]
-        ipam.release_ips(hosts)
+        if not config.ENV_DATA.get("vips"):
+            ipam = IPAM(appiapp="address")
+            hosts = [
+                f"{config.ENV_DATA.get('cluster_name')}-{i}"
+                for i in range(constants.NUM_OF_VIPS)
+            ]
+            ipam.release_ips(hosts)
 
         # post destroy checks
         if template_folder:
