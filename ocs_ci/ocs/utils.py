@@ -1005,8 +1005,13 @@ def create_tarball_and_upload_to_s3(
 
                 if result and result.get("success"):
                     log.info(f"Logs uploaded to S3 successfully for {log_type}")
-                    log.info(f"Download URL: {result.get('presigned_url')}")
-                    log.info(f"URL expires at: {result.get('url_expires_at')}")
+                    log.info(f"S3 URI: {result.get('s3_uri')}")
+                    log.info(
+                        f"Bucket: {result.get('bucket')}, Object Key: {result.get('object_key')}"
+                    )
+                    log.info(
+                        f"Retention expires at: {result.get('retention_expires_at')}"
+                    )
 
                     # Store S3 upload details in config for junit XML reporting
                     # Calculate relative path from logs folder
@@ -1029,10 +1034,10 @@ def create_tarball_and_upload_to_s3(
                     # Store metadata about this collection
                     log_metadata = {
                         "log_type": log_type or "unknown",
-                        "s3_url": result.get("presigned_url"),
+                        "s3_uri": result.get("s3_uri"),
                         "s3_object_key": result.get("object_key"),
                         "s3_bucket": result.get("bucket"),
-                        "url_expires_at": result.get("url_expires_at"),
+                        "s3_region": result.get("region"),
                         "retention_expires_at": result.get("retention_expires_at"),
                         "collection_timestamp": timestamp_str,
                         "relative_log_path": relative_log_path,
