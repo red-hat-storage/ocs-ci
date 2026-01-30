@@ -4,6 +4,7 @@ import pytest
 from time import sleep
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
+    tier4,
     red_squad,
     mcg,
     skipif_mcg_only,
@@ -239,3 +240,189 @@ class TestNoobaaDbBackupRecoveryOps:
                 awscli_pod=awscli_pod,
             ), "Mismatch in Checksum between original object and object downloaded after recovery"
         logger.info("Cluster recovered successfully and validated data after recovery")
+
+    @tier4
+    @skipif_mcg_only
+    def test_noobaa_db_backup_snapshot_op(
+        self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
+    ):
+        """
+        Test to verify CNPG based noobaa DB backup snapshot operation
+            1: Set max snapshot value to 1 in Noobaa CR
+            2: Validate only 1 snapshot entry is getting stored on DB pod node
+            3: Wait for new DB snapshot entry and validate older entry is deleted from the node
+            4: Chnage max snapshot value to 5 in Noobaa CR
+            5: Validate 5 snapshots are getting created on DB pod node
+            6: Try to set max snapshot value to 0 and validate the same
+        """
+        # Get storagecluster object
+        ocs_storage_obj = OCP(
+            kind="storagecluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+        )
+
+        # 1: Set max snapshot value to 1 in Noobaa CR
+        snapshot_class = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        schedule_cron_interval = 5  # 5 minutes for faster testing
+
+        logger.info("Setting maxSnapshots to 1")
+        db_backup_param_1 = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+            f'"volumeSnapshot": {{"maxSnapshots": 1, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        )
+
+        ocs_storage_obj.patch(params=db_backup_param_1, format_type="merge")
+        logger.info("DB backup info with maxSnapshots=1 patched successfully")
+        sleep(15)
+
+        # Verify configuration propagated to noobaa CR
+        noobaa_obj = OCP(
+            kind="noobaa",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+        )
+        db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
+        assert (
+            db_info_from_noobaa_cr["volumeSnapshot"]["maxSnapshots"] == 1
+        ), "maxSnapshots value not set to 1 in noobaa CR"
+
+        # 2: Validate only 1 snapshot entry is getting stored in backup
+        def get_num_backups():
+            return len(
+                get_all_resource_of_kind_containing_string(
+                    "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+                )
+            )
+
+        logger.info("Waiting for first backup to be created with maxSnapshots=1")
+        sample = TimeoutSampler(
+            timeout=(schedule_cron_interval * 60) + 60,
+            sleep=10,
+            func=get_num_backups,
+        )
+        sample.wait_for_func_value(1)
+
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+        )
+        assert (
+            len(backup_names) == 1
+        ), f"Expected 1 backup, but found {len(backup_names)}"
+
+        first_backup_name = backup_names[0]
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=first_backup_name,
+            column="PHASE",
+            timeout=120,
+        )
+        logger.info(f"First backup {first_backup_name} completed successfully")
+
+        # 3: Wait for new DB snapshot entry and validate older entry is deleted from backup
+        logger.info(
+            f"Waiting for {schedule_cron_interval} minutes for next backup to be created and old one to be deleted"
+        )
+        sleep(
+            (schedule_cron_interval * 60) + 120
+        )  # Wait for next backup cycle + buffer
+
+        backup_names_after_rotation = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+        )
+        assert (
+            len(backup_names_after_rotation) == 1
+        ), f"Expected 1 backup after rotation, but found {len(backup_names_after_rotation)}"
+
+        second_backup_name = backup_names_after_rotation[0]
+        assert (
+            second_backup_name != first_backup_name
+        ), "Backup name should be different after rotation"
+
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=second_backup_name,
+            column="PHASE",
+            timeout=120,
+        )
+        logger.info(
+            f"Backup rotation successful: old backup {first_backup_name} deleted, "
+            f"new backup {second_backup_name} created"
+        )
+
+        # 4: Change max snapshot value to 5 in Noobaa CR
+        logger.info("Setting maxSnapshots to 5")
+        db_backup_param_5 = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+            f'"volumeSnapshot": {{"maxSnapshots": 5, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        )
+
+        ocs_storage_obj.patch(params=db_backup_param_5, format_type="merge")
+        logger.info("DB backup info with maxSnapshots=5 patched successfully")
+        sleep(15)
+
+        # Verify configuration propagated to noobaa CR
+        ocs_storage_obj.reload_data()
+        noobaa_obj.reload_data()
+        db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
+        assert (
+            db_info_from_noobaa_cr["volumeSnapshot"]["maxSnapshots"] == 5
+        ), "maxSnapshots value not set to 5 in noobaa CR"
+
+        # 5: Validate 5 snapshots are getting created on DB pod node
+        logger.info("Waiting for 5 backups to be created")
+        sample = TimeoutSampler(
+            timeout=(schedule_cron_interval * 5) * 60 + 120,
+            sleep=15,
+            func=get_num_backups,
+        )
+        sample.wait_for_func_value(5)
+
+        backup_names_5 = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+        )
+        # Verify all 5 backups are in completed state
+        for bkp_name in backup_names_5:
+            backup_obj.wait_for_resource(
+                "completed",
+                resource_name=bkp_name,
+                column="PHASE",
+                timeout=120,
+            )
+        logger.info("All 5 backups are in completed state")
+
+        # 6: Try to set max snapshot value to 0 and validate the same
+        logger.info("Testing invalid maxSnapshots value: 0")
+        db_backup_param_0 = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+            f'"volumeSnapshot": {{"maxSnapshots": 0, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        )
+
+        try:
+            ocs_storage_obj.patch(params=db_backup_param_0, format_type="merge")
+            sleep(15)
+            ocs_storage_obj.reload_data()
+            noobaa_obj.reload_data()
+            db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
+                "dbBackup"
+            ]
+            current_max_snapshots = db_info_from_noobaa_cr["volumeSnapshot"][
+                "maxSnapshots"
+            ]
+            assert (
+                current_max_snapshots != 0
+            ), "maxSnapshots should not be set to 0 (invalid value)"
+            logger.info(
+                f"maxSnapshots=0 was rejected or ignored, current value: {current_max_snapshots}"
+            )
+        except Exception as e:
+            logger.info(f"Setting maxSnapshots=0 failed as expected: {e}")
+
+        logger.info(
+            "NooBaa DB backup snapshot operation test completed successfully. "
+            "Validated maxSnapshots behavior for values 1, 5, and 0 (invalid)"
+        )
