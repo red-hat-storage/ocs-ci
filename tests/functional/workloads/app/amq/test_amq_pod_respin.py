@@ -87,8 +87,8 @@ class TestAMQPodRespin(E2ETest):
         if pod_name == "amq":
             pod_pattern_list = [
                 "cluster-operator",
-                "my-cluster-kafka",
-                "my-cluster-zookeeper",
+                "my-cluster-broker",
+                "my-cluster-controller",
                 "my-connect-cluster-connect",
                 "my-bridge-bridge",
             ]
