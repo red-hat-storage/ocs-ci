@@ -523,6 +523,9 @@ def iscsi_setup():
     )
     configure_initiators(worker_node_names)
 
+    # Run validations to confirm setup succeeded
+    run_iscsi_setup_validations()
+
 
 def iscsi_teardown():
     """
@@ -817,3 +820,114 @@ def verify_iscsi_setup():
 
         traceback.print_exc()
         return {"error": str(e)}
+
+
+# --------------------------------------------------------
+# Validation functions (run after iscsi_setup or from tests)
+# --------------------------------------------------------
+def validate_iscsi_connectivity():
+    """
+    Validate network connectivity to iSCSI target from all worker nodes.
+    Raises AssertionError if any worker node cannot connect.
+    """
+    target_ip = config.ENV_DATA.get("iscsi_target_ip")
+    if not target_ip:
+        raise ValueError("iSCSI target IP not configured in ENV_DATA")
+
+    worker_node_names = get_worker_node_names()
+    if not worker_node_names:
+        raise ValueError("No worker nodes found")
+
+    log.info("Validating iSCSI connectivity...")
+    connectivity_results = verify_iscsi_target_connectivity(
+        worker_node_names, target_ip
+    )
+
+    failed_nodes = [
+        node_name
+        for node_name, result in connectivity_results.items()
+        if not result.get("connected", False)
+    ]
+    if failed_nodes:
+        raise AssertionError(
+            f"Connectivity check failed for worker nodes: {failed_nodes}. "
+            f"Full results: {connectivity_results}"
+        )
+    log.info(f"Connectivity validation passed for all {len(worker_node_names)} node(s)")
+
+
+def validate_iscsi_sessions():
+    """
+    Validate iSCSI sessions are established on all worker nodes.
+    Raises AssertionError if any worker node does not have an iSCSI session.
+    """
+    target_iqn = config.ENV_DATA.get("iscsi_target_iqn")
+    if not config.ENV_DATA.get("iscsi_target_ip") or not target_iqn:
+        raise ValueError("iSCSI target IP or IQN not configured in ENV_DATA")
+
+    worker_node_names = get_worker_node_names()
+    if not worker_node_names:
+        raise ValueError("No worker nodes found")
+
+    log.info("Validating iSCSI sessions...")
+    session_results = verify_iscsi_sessions(worker_node_names, target_iqn)
+
+    failed_nodes = [
+        node_name
+        for node_name, result in session_results.items()
+        if not result.get("session", False)
+    ]
+    if failed_nodes:
+        raise AssertionError(
+            f"iSCSI session check failed for worker nodes: {failed_nodes}. "
+            f"Full results: {session_results}"
+        )
+    log.info(f"Session validation passed for all {len(worker_node_names)} node(s)")
+
+
+def validate_iscsi_devices():
+    """
+    Validate iSCSI devices are visible on worker nodes.
+    Raises AssertionError if no iSCSI devices are found on any node.
+    """
+    target_iqn = config.ENV_DATA.get("iscsi_target_iqn")
+    if not config.ENV_DATA.get("iscsi_target_ip") or not target_iqn:
+        raise ValueError("iSCSI target IP or IQN not configured in ENV_DATA")
+
+    worker_node_names = get_worker_node_names()
+    if not worker_node_names:
+        raise ValueError("No worker nodes found")
+
+    log.info("Validating iSCSI devices...")
+    device_results = verify_iscsi_devices(worker_node_names, target_iqn)
+
+    total_devices = sum(result.get("count", 0) for result in device_results.values())
+    if total_devices <= 0:
+        raise AssertionError(
+            f"No iSCSI devices found on any worker node. Full results: {device_results}"
+        )
+    log.info(f"Device validation passed. Total devices found: {total_devices}")
+
+
+def run_iscsi_setup_validations():
+    """
+    Run all three iSCSI validations: connectivity, sessions, and devices.
+    Called at the end of iscsi_setup() and can be used by tests for post-deploy verification.
+    Raises AssertionError or ValueError on first validation failure.
+    """
+    if not config.ENV_DATA.get("iscsi_target_ip") or not config.ENV_DATA.get(
+        "iscsi_target_iqn"
+    ):
+        log.warning("iSCSI not configured in ENV_DATA, skipping validations")
+        return
+
+    worker_node_names = get_worker_node_names()
+    if not worker_node_names:
+        log.warning("No worker nodes found, skipping validations")
+        return
+
+    log.info("Running iSCSI setup validations (connectivity, sessions, devices)...")
+    validate_iscsi_connectivity()
+    validate_iscsi_sessions()
+    validate_iscsi_devices()
+    log.info("All iSCSI setup validations passed.")
