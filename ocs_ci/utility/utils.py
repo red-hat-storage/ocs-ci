@@ -2858,6 +2858,32 @@ def ceph_health_resolve_mon_slow_ops(health_status):
     restart_mon_pods(mon_ids)
 
 
+def mute_mon_netsplit(namespace=None):
+    """
+    Mute MON_NETSPLIT health warning in Ceph cluster.
+    This is useful for arbiter deployments where network splits are expected.
+
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+    """
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    log.info("Muting MON_NETSPLIT health warning for arbiter deployment")
+    try:
+        ct_pod = get_ceph_tools_pod(namespace=namespace)
+        ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph health mute MON_NETSPLIT",
+            format=None,
+            out_yaml_format=False,
+            timeout=120,
+        )
+        log.info("Successfully muted MON_NETSPLIT health warning")
+    except Exception as ex:
+        log.warning(f"Failed to mute MON_NETSPLIT: {ex}")
+
+
 def ceph_health_resolve_network_partition(health_status):
     """
     Fix Ceph health issue with mon network partition.
@@ -2880,7 +2906,8 @@ def ceph_health_resolve_network_partition(health_status):
         f"Detected problematic MON IDs with network partition detected: {mon_ids}"
     )
 
-    restart_mon_pods(mon_ids)
+    log.info("Arbiter deployment detected, muting MON_NETSPLIT")
+    mute_mon_netsplit()
 
 
 def restart_mon_pods(mon_ids):
@@ -2984,13 +3011,21 @@ def ceph_health_recover(
             )
             # Avoid circular dependencies, importing here
             from ocs_ci.ocs.utils import collect_ocs_logs
+            from ocs_ci.framework.pytest_customization import ocscilib
 
+            since_time_str = None
+            test_start_time = ocscilib.test_start_time
+            if test_start_time:
+                time_with_buffer = test_start_time - datetime.timedelta(minutes=5)
+                # RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
+                since_time_str = time_with_buffer.strftime("%Y-%m-%dT%H:%M:%SZ")
             # Collecting logs here before trying to fix issue
             timestamp = int(time.time())
             collect_ocs_logs(
                 f"ceph_health_recover_{timestamp}",
                 ocp=False,
                 timeout=defaults.MUST_GATHER_TIMEOUT,
+                since_time=since_time_str,
             )
             jenkins_build_url = config.RUN.get("jenkins_build_url", "")
             base_logs_url = config.RUN.get("logs_url", "")
