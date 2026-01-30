@@ -6449,6 +6449,15 @@ def create_kubeconfig(kubeconfig_path):
                 log.warning(f"stderr: {result.stderr}")
             else:
                 log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+
+            kubeadmin_password_file = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+            )
+            if not os.path.isfile(kubeadmin_password_file):
+                with open(kubeadmin_password_file, "w") as fd:
+                    fd.write(config.RUN.get("kubeadmin_password"))
+                log.info("Created kubeadmin-password file")
+
         else:
             raise ConfigurationError(
                 "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
