@@ -148,5 +148,3 @@ def verify_ols_connects_to_llm():
             raise ResourceWrongStatusException(
                 f"Resource type: {status['type']} is not in expected state: {status}. OLS is not configured correctly"
             )
-
-    # ToDo: Ask one question related to ODF and verify it returns accurate answer
