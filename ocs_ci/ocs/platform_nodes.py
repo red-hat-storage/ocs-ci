@@ -2072,7 +2072,7 @@ class VSPHEREUPINode(VMWareNodes):
 
         current_compute_suffix = int(compute_node_names[-1].split("-")[-1])
         return [
-            f"{prefix}{current_compute_suffix + node_count}"
+            f"{prefix}{self.cluster_name}-{current_compute_suffix + node_count}"
             for node_count in range(1, count + 1)
         ]
 
@@ -2111,7 +2111,7 @@ class VSPHEREUPINode(VMWareNodes):
             search_str = "control-plane-"
 
         # get the VM index
-        pattern = rf"{search_str}(\d+)"
+        pattern = rf"{search_str}(?:{self.cluster_name}-)?(\d+)"
         match = re.search(pattern, vm_name)
         if match:
             vm_index = match.group(1)
