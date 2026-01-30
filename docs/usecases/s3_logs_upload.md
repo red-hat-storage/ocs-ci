@@ -29,6 +29,14 @@ The S3 logs upload feature allows you to:
 
 ## Configuration
 
+### Configuration Methods
+
+The S3 logs uploader supports multiple configuration methods:
+
+1. **ocs-ci config files** - For integration with test runs
+2. **Home directory config** - `~/.ocs-ci-s3-logs.yaml` for standalone CLI usage
+3. **Command-line config** - Using `--ocsci-conf` flag with the CLI tool
+
 ### Automatic Upload During Test Runs
 
 To enable automatic upload of must-gather logs, configure your ocs-ci config file:
@@ -70,17 +78,52 @@ Once configured, run your tests normally:
 run-ci --ocsci-conf my-config.yaml --ocsci-conf s3-config.yaml <other-options>
 ```
 
-When must-gather logs are collected (on test failure or when configured), they will be automatically uploaded to S3, and the presigned download URL will be logged in the test output.
+When must-gather logs are collected (on test failure or when configured), they will be automatically uploaded to S3, and the object location information will be logged in the test output.
+
+### Home Directory Configuration (Optional)
+
+For convenient standalone CLI usage, you can create a configuration file in your home directory:
+
+**`~/.ocs-ci-s3-logs.yaml`:**
+```yaml
+# S3 endpoint details for IBM Cloud Object Storage
+cos_name: "my-cos-instance"
+bucket_name: "ocs-ci-logs"
+region: "us-south"
+
+# HMAC credentials
+cos_hmac_keys:
+  access_key_id: "your-access-key-id-here"
+  secret_access_key: "your-secret-access-key-here"
+
+# Optional: Retention policy
+retention_policy:
+  min: 30
+  max: 730
+  default: 90
+```
+
+With this file in place, you can use the CLI tool without specifying `--ocsci-conf`:
+
+```bash
+upload-logs-to-s3 -f must-gather.tar.gz
+```
 
 ## Standalone CLI Tool
 
-The `upload-logs-to-s3` command can be used to manually upload any log files to S3.
+The `upload-logs-to-s3` command can be used to manually upload log files or directories to S3.
 
 ### Basic Usage
 
 ```bash
-# Upload a must-gather tarball with default settings
+# Upload a file using ~/.ocs-ci-s3-logs.yaml (if it exists)
 upload-logs-to-s3 -f must-gather.tar.gz
+
+# Upload a directory (automatically creates tarball)
+upload-logs-to-s3 -f /path/to/logs-directory
+
+# Upload directory and delete the created tarball after upload
+upload-logs-to-s3 -f /path/to/logs-directory --delete
 
 # Upload with custom config file
 upload-logs-to-s3 -f must-gather.tar.gz --ocsci-conf my-s3-config.yaml
@@ -88,6 +131,11 @@ upload-logs-to-s3 -f must-gather.tar.gz --ocsci-conf my-s3-config.yaml
 # Upload with multiple config files (later ones override earlier)
 upload-logs-to-s3 -f must-gather.tar.gz --ocsci-conf base.yaml --ocsci-conf s3.yaml
 ```
+
+**Note:** The CLI tool checks for configuration in this order:
+1. If `--ocsci-conf` is provided, uses those config files
+2. Otherwise, tries `~/.ocs-ci-s3-logs.yaml` in your home directory
+3. Falls back to ocs-ci framework configuration (if available)
 
 ### Advanced Options
 
@@ -98,11 +146,11 @@ upload-logs-to-s3 -f must-gather.tar.gz -p "execution_123/test_case_456"
 # Upload with custom retention period (180 days)
 upload-logs-to-s3 -f must-gather.tar.gz -r 180
 
-# Upload with custom URL expiration (7 days instead of default 30)
-upload-logs-to-s3 -f must-gather.tar.gz -e 7
-
 # Upload with custom object name
 upload-logs-to-s3 -f must-gather.tar.gz -o custom-name.tar.gz
+
+# Upload a directory with custom options
+upload-logs-to-s3 -f /path/to/logs-dir -p "execution_123" -r 180 --delete
 
 # Verbose mode for debugging
 upload-logs-to-s3 -f must-gather.tar.gz -v
@@ -112,20 +160,46 @@ upload-logs-to-s3 -f must-gather.tar.gz \
   --ocsci-conf s3-config.yaml \
   -p "my-execution/failed-test" \
   -r 365 \
-  -e 14 \
   -v
+```
+
+### Directory Upload Behavior
+
+When you provide a directory path to the `-f` option:
+
+1. **Automatic Tarball Creation**: The tool automatically creates a `.tar.gz` tarball from the directory
+2. **Temporary Storage**: By default, the tarball is created in the system's temp directory
+3. **Automatic Cleanup**: The temporary tarball is automatically deleted after successful upload
+4. **Manual Cleanup**: Use the `--delete` flag to explicitly delete the tarball after upload (useful when you want to ensure cleanup even if the tarball is created in a custom location)
+
+**Example workflow:**
+```bash
+# Directory structure
+/path/to/logs-directory/
+├── test1.log
+├── test2.log
+└── subdir/
+    └── test3.log
+
+# Upload command
+upload-logs-to-s3 -f /path/to/logs-directory
+
+# What happens:
+# 1. Creates /tmp/logs-directory.tar.gz (temporary tarball)
+# 2. Uploads the tarball to S3
+# 3. Automatically deletes /tmp/logs-directory.tar.gz
 ```
 
 ### CLI Options Reference
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-f, --file` | Path to the file to upload (required) | - |
+| `-f, --file` | Path to the file or directory to upload (required). If a directory is provided, it will be automatically compressed to a .tar.gz file | - |
 | `--ocsci-conf` | Path to ocs-ci config file (can be used multiple times) | - |
 | `-p, --prefix` | Prefix for organizing files (e.g., "execution/test") | None |
-| `-o, --object-name` | Custom object name | File name |
-| `-e, --expiration` | URL expiration in days | 30 |
+| `-o, --object-name` | Custom object name | File/directory name |
 | `-r, --retention` | Object retention period in days | From config (90) |
+| `-d, --delete` | Delete the tarball after successful upload (only applies when uploading a directory) | False |
 | `-v, --verbose` | Enable verbose logging | False |
 
 ## File Organization
@@ -167,11 +241,11 @@ When uploading, you can specify a custom retention period using the `-r` option.
 
 Retention information is stored in object metadata and included in upload results.
 
-## Presigned URLs
+## Upload Results
 
-After a successful upload, a presigned URL is generated that allows anyone with the URL to download the file without authentication. The URL expires after the specified number of days (default: 30 days).
+After a successful upload, detailed information about the uploaded object is displayed, including the S3 URI and object location details needed for retrieval.
 
-Example output:
+### Example Output for File Upload
 
 ```
 ================================================================================
@@ -180,16 +254,46 @@ Example output:
 File:              must-gather.tar.gz
 Bucket:            ocs-ci-logs
 Object Key:        my-cluster/20260126_143022/must-gather.tar.gz
+S3 URI:            s3://ocs-ci-logs/my-cluster/20260126_143022/must-gather.tar.gz
 Region:            us-south
 Size:              45,678,901 bytes
 ETag:              abc123def456...
 Upload Time:       2026-01-26T14:30:22Z
 Retention:         90 days (expires: 2026-04-26T14:30:22Z)
-URL Expires:       2026-02-25T14:30:22Z (30 days)
 
-Presigned URL:
+Object Location Information:
 --------------------------------------------------------------------------------
-https://s3.us-south.cloud-object-storage.appdomain.cloud/ocs-ci-logs/...
+To retrieve this object later, use:
+  Bucket: ocs-ci-logs
+  Key:    my-cluster/20260126_143022/must-gather.tar.gz
+  Region: us-south
+================================================================================
+```
+
+### Example Output for Directory Upload
+
+```
+================================================================================
+✓ Upload Successful!
+================================================================================
+Directory:         /path/to/logs-directory
+Tarball Created:   /tmp/logs-directory.tar.gz
+Tarball Deleted:   Yes
+Bucket:            ocs-ci-logs
+Object Key:        execution_123/logs-directory.tar.gz
+S3 URI:            s3://ocs-ci-logs/execution_123/logs-directory.tar.gz
+Region:            us-south
+Size:              12,345,678 bytes
+ETag:              xyz789abc123...
+Upload Time:       2026-02-02T16:15:30Z
+Retention:         90 days (expires: 2026-05-03T16:15:30Z)
+
+Object Location Information:
+--------------------------------------------------------------------------------
+To retrieve this object later, use:
+  Bucket: ocs-ci-logs
+  Key:    execution_123/logs-directory.tar.gz
+  Region: us-south
 ================================================================================
 ```
 
@@ -267,9 +371,8 @@ else:
 ## Security Considerations
 
 1. **Credentials**: Store S3 credentials securely. Never commit them to version control.
-2. **Presigned URLs**: URLs are temporary and expire after the specified period.
-3. **Bucket Access**: Ensure your bucket has appropriate access policies.
-4. **Retention**: Configure retention policies according to your data retention requirements.
+2. **Bucket Access**: Ensure your bucket has appropriate access policies.
+3. **Retention**: Configure retention policies according to your data retention requirements.
 
 ## See Also
 
