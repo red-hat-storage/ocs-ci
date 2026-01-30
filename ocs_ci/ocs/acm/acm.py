@@ -278,7 +278,7 @@ class AcmAddClusters(AcmPageNavigator):
             for cluster_index in [primary_index, secondary_index]
             if config.clusters[cluster_index].ENV_DATA["platform"]
             == constants.AZURE_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "ipi"
+            and config.clusters[cluster_index].ENV_DATA.get("deployment_type") == "ipi"
         ]
 
         increase_gateway_number = 2
