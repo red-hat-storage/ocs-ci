@@ -104,7 +104,6 @@ rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
-iscsi_setup_required = pytest.mark.iscsi_setup_required
 
 tier_marks = [
     tier1,
@@ -540,11 +539,6 @@ external_mode_required = pytest.mark.skipif(
     reason="Test will run on External Mode cluster only",
 )
 
-iscsi_cluster_needed = pytest.mark.skipif(
-    not config.ENV_DATA.get("iscsi_setup"),
-    reason="Test runs only when iscsi_setup is enabled in ENV_DATA",
-)
-iscsi_setup_required = compose(iscsi_setup_required, iscsi_cluster_needed)
 
 skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "aws"
