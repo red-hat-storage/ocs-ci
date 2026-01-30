@@ -1159,6 +1159,9 @@ CNV_VM_DV_ROLE_BIND_YAML = os.path.join(
 )
 CNV_VM_TEMPLATE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm.yaml")
 CNV_VM_WORKLOADS = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "cnv_vm_workload.yaml")
+CNV_VM_WORKLOADS_FOR_OFFLINE_DISCONNECTED_CLUSTER = os.path.join(
+    TEMPLATE_CNV_VM_WORKLOAD_DIR, "cnv_vm_workload_for_disconnected_hci_rack.yaml"
+)
 
 METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
