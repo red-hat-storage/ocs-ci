@@ -3127,6 +3127,7 @@ OLS_OPERATOR_NAME = "lightspeed-operator.openshift-lightspeed"
 OLS_OPERATOR_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-operator.yaml")
 OLS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-secret.yaml")
 OLS_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-config.yaml")
+OLS_QA_EXPECTATIONS = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "qa-expectations.yaml")
 
 # Submariner constants
 SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"

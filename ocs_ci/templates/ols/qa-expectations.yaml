@@ -1,0 +1,429 @@
+# ------------------------------
+# VALID QUESTIONS - MUST ANSWER
+# ------------------------------
+
+- id: 1
+  type: valid
+  question: "What is ODF?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 2
+  type: valid
+  question: "What are the minimum hardware requirements for deploying an ODF internal cluster?"
+  expected_answer: >
+    According to the provided documentation, the minimum hardware requirements for deploying an OpenShift Data Foundation (ODF) internal cluster are:
+    24 CPU (logical)
+    72 GiB memory
+    3 storage devices
+    Additionally, for a 3-node cluster in an internal mode deployment with a single device set, a minimum of 3 x 10 = 30 units of CPU are required.
+    It's also important to note that the number of local storage devices that can run per node is a function of the node size and resource requirements, and expanding the cluster in multiples of three, one node in each failure domain, is an easy way to satisfy pod placement rules.
+  required_terms:
+    - 24 CPU
+    - 72 Gib memory
+    - 3 storage devices
+    - 3-node cluster
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 3
+  type: valid
+  question: "Which storage classes are created by default after a successful ODF deployment?"
+  expected_answer: >
+    After a successful OpenShift Data Foundation (ODF) deployment, the following storage classes are created by default:
+    ocs-storagecluster-ceph-rbd
+    ocs-storagecluster-ceph-rgw
+    ocs-storagecluster-cephfs
+    Additionally, a default bucket class is also created during deployment, which is set with a placement policy that uses the default backing store.
+  required_terms:
+    - ocs-storagecluster-ceph-rbd
+    - ocs-storagecluster-ceph-rgw
+    - ocs-storagecluster-cephfs
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 4
+  type: valid
+  question: "what are the requirement for Regional DR?"
+  expected_answer: >
+    According to the provided documentation, the requirements for Regional Disaster Recovery (Regional-DR) are as follows:
+    Two managed OpenShift Container Platform clusters
+    A third OpenShift Container Platform cluster to deploy Red Hat Advanced Cluster Management (RHACM)
+    Application traffic routing and redirection must be configured appropriately
+    Additionally, you need to follow the Regional-DR deployment workflow, which includes steps such as creating a cluster, importing a target managed cluster to the hub cluster, and configuring your infrastructure.
+    It's also mentioned that you can find instructions for these steps in the documentation, specifically in the sections "Creating a cluster" and "Importing a target managed cluster to the hub cluster".
+  required_terms:
+    - Regional Disaster Recovery (Regional-DR)
+    - Two managed OpenShift Container Platform clusters
+    - Red Hat Advanced Cluster Management (RHACM)
+    - hub
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 5
+  type: valid
+  question: "how to deploy Openshift data foundation on Baremetal?"
+  expected_answer: >
+    To deploy OpenShift Data Foundation on bare metal, you can follow these steps:
+    1. Install the Local Storage Operator: Install the Local Storage Operator on your OpenShift Container Platform cluster.
+    2. Install the Red Hat OpenShift Data Foundation Operator: Install the Red Hat OpenShift Data Foundation Operator on your OpenShift Container Platform cluster.
+    3. Create an OpenShift Data Foundation cluster on bare metal: Create an OpenShift Data Foundation cluster on your bare metal infrastructure.
+    Here are the detailed steps:
+    Step 1: Install the Local Storage Operator
+    Log in to the OpenShift Web Console.
+    Navigate to Operators > OperatorHub.
+    Search for Local Storage Operator and click on it.
+    Click Install to install the operator.
+    Step 2: Install the Red Hat OpenShift Data Foundation Operator
+    Log in to the OpenShift Web Console.
+    Navigate to Operators > OperatorHub.
+    Search for Red Hat OpenShift Data Foundation Operator and click on it.
+    Click Install to install the operator.
+    Step 3: Create an OpenShift Data Foundation cluster on bare metal
+    Log in to the OpenShift Web Console.
+    Navigate to Storage > OpenShift Data Foundation.
+    Click Create OpenShift Data Foundation Cluster.
+    Select Bare Metal as the infrastructure type.
+    Follow the prompts to configure the cluster, including selecting the nodes, storage devices, and network settings.
+    Click Create to create the cluster.
+  required_terms:
+    - Install the Local Storage Operator
+    - Install the Red Hat OpenShift Data Foundation Operator
+    - Create an OpenShift Data Foundation cluster
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 6
+  type: valid
+  question: "How can I enable volume encryption for PVCs in ODF?"
+  expected_answer: >
+    To enable volume encryption for PVCs in OpenShift Data Foundation (ODF), you need to create a storage class with encryption enabled. Here are the general steps:
+    1. Create a Key Management System (KMS): You need to have a KMS, such as HashiCorp Vault or Thales CipherTrust Manager, to store and manage the encryption keys.
+    2. Configure access to the KMS: You need to configure access to the KMS before creating the storage class.
+    3. Create a storage class with encryption enabled: You can create a storage class with encryption enabled using an external KMS. You need to specify the KMS details in the storage class configuration.
+    Note that persistent volume encryption is only available for RBD (RADOS Block Device) PVs. Also, you need to have a valid Red Hat OpenShift Data Foundation Advanced subscription to use this feature.
+    Once you have created a storage class with encryption enabled, you can use it to create PVCs with encrypted volumes.
+  required_terms:
+    - Create a Key Management System (KMS)
+    - Configure access to the KMS
+    - Create a storage class with encryption enabled
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 7
+  type: valid
+  question: "Can I resize a Persistent Volume Claim (PVC) in ODF, and if so, how?"
+  expected_answer: >
+    Yes, you can resize a Persistent Volume Claim (PVC) in OpenShift Data Foundation (ODF). To resize a PVC, follow these steps:
+    1. Log in to the OpenShift Web Console: Navigate to the OpenShift Web Console and log in with your credentials.
+    2. Navigate to the Storage section: Click on Storage > Persistent Volume Claims.
+    3. Find the PVC you want to resize: Search for the PVC you want to resize by using the Filter textbox or by filtering the list of PVCs by Name or Label.
+    4. Click on the PVC name: Click on the name of the PVC you want to resize to view its details.
+    5. Click on the Actions dropdown menu: Click on the Actions dropdown menu and select Edit Persistent Volume Claim.
+    6. Select the new size: Select the new size for the PVC and click Save.
+    7. Click on Expand: Click on Expand to resize the PVC.
+    Alternatively, you can also resize a PVC using the OpenShift CLI by running the command oc patch pvc <pvc-name> -p '{"spec":{"resources":{"requests":{"storage":"<new-size>"}}}}'
+    Note that PVC expansion is supported for RBD, OSD, and encrypted PVCs, but not for MON. Also, if the PVC is not already attached to a pod, the Condition type will be FileSystemResizePending in the PVC's details page, and the resize will succeed once the volume is mounted.
+  required_terms:
+    - PVC you want to resize
+    - Edit Persistent Volume Claim
+    - Select the new size
+    - Expand
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 8
+  type: valid
+  question: "what are the verification steps for successful installation of ODF?"
+  expected_answer: >
+    To verify a successful installation of OpenShift Data Foundation (ODF), you can follow these steps:
+    1. Check the ODF operator status:
+    Log in to the OpenShift Web Console.
+    Navigate to Operators > Installed Operators.
+    Verify that the OpenShift Data Foundation operator is installed and running.
+    2. Verify the ODF cluster creation:
+    Navigate to Storage > OpenShift Data Foundation.
+    Verify that the ODF cluster is created and the status is Healthy.
+    3. Check the Ceph cluster status:
+    Run the command ceph status to verify that the Ceph cluster is healthy.
+    4. Verify the storage classes:
+    Run the command oc get sc to verify that the ODF storage classes are created.
+    5. Check the PVCs and PVs:
+    Run the command oc get pvc and oc get pv to verify that the Persistent Volume Claims (PVCs) and Persistent Volumes (PVs) are created and bound.
+    6. Test data writes and reads:
+    Create a test pod and write data to a PVC.
+    Verify that the data is written successfully and can be read back.
+    7. Check the ODF logs:
+    Run the command oc logs -f <odf-pod-name> to verify that there are no errors in the ODF logs.
+    8. Verify the ODF dashboard:
+    Navigate to the ODF dashboard to verify that it is accessible and displaying the correct information.
+    By following these verification steps, you can ensure that OpenShift Data Foundation is installed and functioning correctly.
+  required_terms:
+    - ODF operator status
+    - Installed Operators
+    - Ceph cluster
+    - Persistent Volume Claims
+    - ODF logs
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 9
+  type: valid
+  question: "how to create pvc clone in ODF?"
+  expected_answer: >
+    To create a PVC clone in OpenShift Data Foundation (ODF), you can follow these steps:
+    Method 1: Using the OpenShift Web Console
+    1. Log in to the OpenShift Web Console.
+    2. Navigate to Storage > Persistent Volume Claims.
+    3. Find the PVC you want to clone and click on the three vertical dots (⋮) next to its name.
+    4. Click on Clone PVC.
+    5. Enter a name for the clone and click Clone.
+    Method 2: Using the OpenShift CLI
+    1. Log in to the OpenShift CLI.
+    2. Run the command oc get pvc <pvc-name> -o yaml to get the YAML definition of the PVC you want to clone.
+    3. Modify the YAML definition to change the name of the PVC and any other desired parameters.
+    4. Run the command oc create -f <modified-yaml-file> to create the clone.
+    Method 3: Using the odf command
+    1. Log in to the OpenShift CLI.
+    2. Run the command odf clone pvc <pvc-name> --name=<clone-name> to create a clone of the PVC.
+  required_terms:
+    - PVC clone in OpenShift Data Foundation (ODF)
+    - Using the OpenShift Web Console
+    - Using the OpenShift CLI
+    - Using the odf command
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 10
+  type: valid
+  question: "how do we replace a device in ODF?"
+  expected_answer: >
+    To replace a device in OpenShift Data Foundation (ODF), you can follow these steps:
+    1. Identify the device to be replaced: Identify the device that needs to be replaced, such as a disk or a node.
+    2. Drain the node: If the device is part of a node, drain the node to ensure that no new data is written to it.
+    3. Remove the device: Remove the device from the cluster, either by deleting the device or by removing it from the node.
+    4. Add a new device: Add a new device to the cluster, either by adding a new disk or by adding a new node.
+    5. Rebalance the data: Rebalance the data in the cluster to ensure that it is evenly distributed across all devices.
+    6. Verify the replacement: Verify that the replacement device is working correctly and that the data is accessible.
+    Here are the detailed steps to replace a device in ODF:
+    Replace a disk device
+    1. Identify the disk device to be replaced: oc get cephdisks
+    2. Drain the node: oc adm drain <node-name>
+    3. Remove the disk device: oc delete cephdisk <disk-device-name>
+    4. Add a new disk device: oc create -f <new-disk-device-yaml>
+    5. Rebalance the data: oc exec -it <ceph-pod-name> -- ceph osd rebalance
+    6. Verify the replacement: oc get cephdisks
+    Replace a node device
+    1. Identify the node device to be replaced: oc get nodes
+    2. Drain the node: oc adm drain <node-name>
+    3. Remove the node device: oc delete node <node-name>
+    4. Add a new node device: oc create -f <new-node-yaml>
+    5. Rebalance the data: oc exec -it <ceph-pod-name> -- ceph osd rebalance
+    6. Verify the replacement: oc get nodes
+    Note: These steps are general guidelines and may vary depending on your specific ODF configuration and requirements. It's recommended to consult the ODF documentation and seek guidance from Red Hat support or a qualified administrator before attempting to replace a device in your ODF cluster.
+  required_terms:
+    - Identify the device to be replaced
+    - Drain the node
+    - Remove the device
+    - Add a new device
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 11
+  type: valid
+  question: "Overview of the OpenShift Data Foundation update process?"
+  expected_answer: >
+    The OpenShift Data Foundation (ODF) update process involves several steps to ensure a smooth and successful upgrade of the ODF cluster. Here is an overview of the update process:
+    Pre-update checks
+    1. Backup your data: Before updating ODF, make sure to backup your data to prevent any potential losses.
+    2. Check the cluster health: Verify that the cluster is healthy and that all nodes are online.
+    3. Check the ODF version: Verify the current version of ODF and the target version for the update.
+    Update the ODF operator
+    1. Update the ODF operator subscription: Update the ODF operator subscription to the latest version.
+    2. Approve the ODF operator update: Approve the ODF operator update by clicking on the "Approve" button in the OpenShift web console.
+    3. Wait for the ODF operator update to complete: Wait for the ODF operator update to complete. This may take several minutes.
+    Update the Ceph storage cluster
+    1. Update the Ceph containers: Update the Ceph containers to the latest version.
+    2. Update the Ceph configuration: Update the Ceph configuration to the latest version.
+    3. Rebalance the Ceph cluster: Rebalance the Ceph cluster to ensure that the data is evenly distributed across all nodes.
+    Post-update checks
+    1. Verify the ODF version: Verify that the ODF version has been updated successfully.
+    2. Check the cluster health: Verify that the cluster is healthy and that all nodes are online.
+    3. Test the data access: Test the data access to ensure that the data is accessible and that the update was successful.
+    Types of updates
+    1. Minor updates: Minor updates are updates to the ODF operator and Ceph storage cluster that do not require any significant changes to the cluster configuration.
+    2. Major updates: Major updates are updates to the ODF operator and Ceph storage cluster that require significant changes to the cluster configuration.
+    3. Z-stream updates: Z-stream updates are updates to the ODF operator and Ceph storage cluster that are released between major updates and provide bug fixes and minor enhancements.
+    Update strategies
+    1. Automatic updates: Automatic updates allow the ODF operator to update the cluster automatically when a new version is available.
+    2. Manual updates: Manual updates require the administrator to manually update the cluster by approving the update in the OpenShift web console.
+    Note: The update process may vary depending on the specific ODF configuration and requirements. It's recommended to consult the ODF documentation and seek guidance from Red Hat support or a qualified administrator before attempting to update ODF.
+  required_terms:
+    - Pre-update checks
+    - Update the ODF operator
+    - Update the Ceph storage cluster
+    - Post-update checks
+    - Types of updates
+    - Update strategies
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 12
+  type: valid
+  question: "Describe the components of the Multi-Cloud Gateway (MCG)?"
+  expected_answer: >
+    The Multi-Cloud Gateway (MCG) is a component of OpenShift Data Foundation (ODF) that provides a unified interface for managing data across multiple clouds and on-premises storage systems. The MCG consists of the following components:
+    1. NooBaa Core: The NooBaa Core is the central component of the MCG that manages the data and provides a unified interface for accessing and managing data across multiple clouds and on-premises storage systems.
+    2. NooBaa Database: The NooBaa Database is a database that stores metadata about the data managed by the MCG, such as the location of the data, the type of data, and the access controls.
+    3. NooBaa Endpoint: The NooBaa Endpoint is a component that provides a RESTful API for accessing and managing data through the MCG.
+    4. Bucket Class: A Bucket Class is a logical grouping of buckets that defines the storage characteristics and behavior of the buckets, such as the storage location, access controls, and data replication.
+    5. Buckets: Buckets are the basic storage units in the MCG that store data, such as objects, files, or blocks.
+    6. Objects: Objects are the individual items of data stored in the buckets, such as files, images, or videos.
+    7. Multi-Cloud Object Gateway (MCG) Operator: The MCG Operator is a Kubernetes operator that manages the deployment and lifecycle of the MCG components.
+    The MCG provides the following features:
+    1. Unified Interface: A unified interface for managing data across multiple clouds and on-premises storage systems.
+    2. Data Mobility: The ability to move data between different clouds and on-premises storage systems.
+    3. Data Replication: The ability to replicate data across multiple clouds and on-premises storage systems for high availability and disaster recovery.
+    4. Access Controls: Fine-grained access controls for managing access to data stored in the MCG.
+    5. Data Encryption: Encryption of data at rest and in transit to ensure secure data storage and transfer.
+    The MCG supports a variety of storage systems, including:
+    1. Amazon S3
+    2. Google Cloud Storage
+    3. Microsoft Azure Blob Storage
+    4. IBM Cloud Object Storage
+    5. On-premises storage systems, such as Ceph, Gluster, and NFS.
+  required_terms:
+    - NooBaa Core
+    - NooBaa Database
+    - NooBaa Endpoint
+    - Bucket Class
+    - Objects
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 13
+  type: valid
+  question: "How do I delete an ODF cluster gracefully?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 14
+  type: valid
+  question: "What is ODF?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 15
+  type: valid
+  question: "What is ODF?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 16
+  type: valid
+  question: "What is ODF?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 17
+  type: valid
+  question: "What is ODF?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+- id: 18
+  type: valid
+  question: "What is ODF?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+  min_accuracy: 0.95
+  consistency_runs: 3
+  max_variance: 0.05
+# ---------------------------------------------
+# VALID QUESTIONS - NO ANSWER EXPECTED FROM OLS
+# ---------------------------------------------
+- id: 19
+  type: no_rag_answer
+  question: "What is the roadmap of Data Foundation in 2035?"
+  expected_answer: >
+    I'm unable to provide a definitive answer about the roadmap of OpenShift Data Foundation in 2035. The provided context and documents do not contain information about future roadmaps or plans beyond the current version and features of OpenShift Data Foundation.
+    As a friendly and authoritative technical expert, I can tell you about the current features, deployment options, and capabilities of OpenShift Data Foundation, but I don't have information about future plans or releases. If you're looking for information about upcoming features or releases, I recommend checking the official Red Hat documentation or contacting their support team for more information.
+    Is there anything else I can help you with regarding OpenShift Data Foundation or related topics?
+  required_terms:
+    - "unable to provide"
+    - "not contain information "
+    - "I don't have"
+# ---------------------------------------------
+# INVALID QUESTIONS
+# ---------------------------------------------
+- id: 20
+  type: invalid
+  question: "what is Mxxhxx?"
+  expected_answer: >
+    I couldn't find any information on what "Mxxhxx" refers to. It's possible that it's a typo, a code, or a term that is not widely used.
+    Could you please provide more context or information about where you encountered "Mxxhxx"? This will help me better understand what you are referring to and provide a more accurate response.
+  required_terms:
+    - "couldn't find"
+    - "typo"
+    - "more context or information"

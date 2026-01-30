@@ -1,0 +1,27 @@
+---
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  name: cluster
+spec:
+  llm:
+    providers:
+      - credentialsSecretRef:
+          name: watsonx-api-keys
+        models:
+          - contextWindowSize: 120000
+            name: meta-llama/llama-3-3-70b-instruct
+            parameters:
+              maxTokensForResponse: 512
+        name: myWatsonx
+        type: watsonx
+        url: 'https://us-south.ml.cloud.ibm.com'
+        projectID: xxxx
+  ols:
+    defaultModel: meta-llama/llama-3-3-70b-instruct
+    defaultProvider: myWatsonx
+    logLevel: DEBUG
+    rag:
+      - image: 'registry.redhat.io/odf4/odf-lightspeed-rag-content-rhel9@sha256:522adac7edda3577578127ad2c04dec3b1908ef0228190a0c06e52a6c50c0ef2'
+  olsDataCollector:
+    logLevel: DEBUG
