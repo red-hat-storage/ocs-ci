@@ -953,110 +953,149 @@ def create_tarball_and_upload_to_s3(
         log_type (str): Type of logs (e.g., 'external-ceph', 'noobaa-db', 'submariner')
 
     Returns:
-        str: Path to created tarball or None if tarball creation is disabled
+        str: Path to created tarball, or None if neither tarball creation nor S3 upload is enabled
     """
-    if not config.REPORTING.get("tarball_mg_logs"):
-        log.debug("Tarball creation is disabled in config")
-        return None
     log_type = log_type or "unknown_log_type"
     if not cluster_config:
         cluster_config = ocsci_config
 
-    tarball_path = f"{log_dir_path}.tar.gz"
-    try:
-        log.info(f"Creating tarball: {tarball_path}")
-        with tarfile.open(tarball_path, "w:gz") as tar:
-            tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+    # Check if we should create tarball locally
+    create_local_tarball = config.REPORTING.get("tarball_mg_logs", False)
 
-        if config.REPORTING.get("delete_packed_mg_logs"):
-            log.info(f"Deleting original directory: {log_dir_path}")
-            shutil.rmtree(log_dir_path)
+    # Check if S3 upload is configured
+    s3_upload_enabled = config.REPORTING.get("s3_logs_upload") and config.AUTH.get(
+        "logs_s3_endpoint_details"
+    )
 
-        # Upload tarball to S3 if configured
-        if config.REPORTING.get("s3_logs_upload") and config.AUTH.get(
-            "logs_s3_endpoint_details"
-        ):
-            try:
-                from ocs_ci.utility.s3_logs_uploader import (
-                    upload_logs_to_s3_if_configured,
-                )
-
-                # Create prefix from cluster name and timestamp
-                cluster_name = cluster_config.ENV_DATA.get(
-                    "cluster_name", "unknown_cluster"
-                )
-                run_id = config.RUN.get("run_id")
-                timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-                # Use test_case_name in prefix for better organization
-                prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/{timestamp_str}"
-
-                log.info(f"Uploading logs to S3: {tarball_path}")
-                result = upload_logs_to_s3_if_configured(
-                    file_path=tarball_path,
-                    prefix=prefix,
-                    metadata={
-                        "cluster-name": cluster_name,
-                        "test-case-name": test_case_name or "unknown",
-                        "collection-timestamp": timestamp_str,
-                        "log-type": log_type,
-                    },
-                )
-
-                if result and result.get("success"):
-                    log.info(f"Logs uploaded to S3 successfully for {log_type}")
-                    log.info(f"Download URL: {result.get('presigned_url')}")
-                    log.info(f"URL expires at: {result.get('url_expires_at')}")
-
-                    # Store S3 upload details in config for junit XML reporting
-                    # Calculate relative path from logs folder
-                    logs_dir = os.path.expanduser(config.RUN["log_dir"])
-                    try:
-                        relative_log_path = os.path.relpath(log_dir_path, logs_dir)
-                    except ValueError:
-                        # If paths are on different drives (Windows), use absolute path
-                        relative_log_path = log_dir_path
-
-                    # Initialize test_logs_details if not exists
-                    if "test_logs_details" not in config.REPORTING:
-                        config.REPORTING["test_logs_details"] = {}
-
-                    # Get or create list for this test case
-                    test_case_key = test_case_name or "session_logs"
-                    if test_case_key not in config.REPORTING["test_logs_details"]:
-                        config.REPORTING["test_logs_details"][test_case_key] = []
-
-                    # Store metadata about this collection
-                    log_metadata = {
-                        "log_type": log_type or "unknown",
-                        "s3_url": result.get("presigned_url"),
-                        "s3_object_key": result.get("object_key"),
-                        "s3_bucket": result.get("bucket"),
-                        "url_expires_at": result.get("url_expires_at"),
-                        "retention_expires_at": result.get("retention_expires_at"),
-                        "collection_timestamp": timestamp_str,
-                        "relative_log_path": relative_log_path,
-                        "tarball_path": tarball_path,
-                        "cluster_name": cluster_name,
-                        "size_bytes": result.get("size_bytes"),
-                    }
-
-                    config.REPORTING["test_logs_details"][test_case_key].append(
-                        log_metadata
-                    )
-                    log.info(f"Stored S3 upload details for test case: {test_case_key}")
-                else:
-                    log.warning(f"Failed to upload {log_type} logs to S3")
-            except ImportError:
-                log.warning("S3 logs uploader not available (boto3 not installed)")
-            except Exception as e:
-                log.error(f"Error uploading {log_type} logs to S3: {e}")
-
-    except Exception as err:
-        log.error(f"Failed during packing/uploading files! Error: {err}")
+    # If neither tarball creation nor S3 upload is enabled, return early
+    if not create_local_tarball and not s3_upload_enabled:
+        log.debug("Both tarball creation and S3 upload are disabled in config")
         return None
 
-    return tarball_path
+    tarball_path = None
+
+    # Create local tarball if enabled
+    if create_local_tarball:
+        tarball_path = f"{log_dir_path}.tar.gz"
+        try:
+            log.info(f"Creating tarball: {tarball_path}")
+            with tarfile.open(tarball_path, "w:gz") as tar:
+                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+
+            if config.REPORTING.get("delete_packed_mg_logs"):
+                log.info(f"Deleting original directory: {log_dir_path}")
+                shutil.rmtree(log_dir_path)
+        except Exception as err:
+            log.error(f"Failed to create tarball! Error: {err}")
+            return None
+
+    # Prepare common metadata
+    cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown_cluster")
+    run_id = config.RUN.get("run_id")
+    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Calculate relative path from logs folder
+    logs_dir = os.path.expanduser(config.RUN["log_dir"])
+    try:
+        relative_log_path = os.path.relpath(log_dir_path, logs_dir)
+    except ValueError:
+        # If paths are on different drives (Windows), use absolute path
+        relative_log_path = log_dir_path
+
+    # Determine the log path to store (tarball if created, otherwise directory)
+    log_path = tarball_path if tarball_path else log_dir_path
+
+    # Upload to S3 if configured
+    s3_metadata = {}
+    if s3_upload_enabled:
+        try:
+            from ocs_ci.utility.s3_logs_uploader import (
+                upload_logs_to_s3_if_configured,
+            )
+
+            # Use test_case_name in prefix for better organization
+            prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/{log_type}/{timestamp_str}"
+
+            # Use tarball if created, otherwise use directory (S3 uploader will create tarball)
+            upload_path = tarball_path if tarball_path else log_dir_path
+            log.info(f"Uploading logs to S3: {upload_path}")
+
+            result = upload_logs_to_s3_if_configured(
+                file_path=upload_path,
+                prefix=prefix,
+                metadata={
+                    "cluster-name": cluster_name,
+                    "test-case-name": test_case_name or "unknown",
+                    "collection-timestamp": timestamp_str,
+                    "log-type": log_type,
+                },
+            )
+
+            if result and result.get("success"):
+                log.info(f"Logs uploaded to S3 successfully for {log_type}")
+                log.info(f"S3 URI: {result.get('s3_uri')}")
+                log.info(
+                    f"Bucket: {result.get('bucket')}, Object Key: {result.get('object_key')}"
+                )
+                log.info(f"Retention expires at: {result.get('retention_expires_at')}")
+
+                # Store S3-specific metadata
+                s3_metadata = {
+                    "s3_uri": result.get("s3_uri"),
+                    "s3_object_key": result.get("object_key"),
+                    "s3_bucket": result.get("bucket"),
+                    "s3_region": result.get("region"),
+                    "retention_expires_at": result.get("retention_expires_at"),
+                    "size_bytes": result.get("size_bytes"),
+                }
+
+                # Delete directory after S3 upload if it was uploaded directly (no local tarball)
+                # and delete_packed_mg_logs is enabled
+                if not tarball_path and config.REPORTING.get("delete_packed_mg_logs"):
+                    if os.path.exists(log_dir_path):
+                        try:
+                            log.info(
+                                f"Deleting directory after S3 upload: {log_dir_path}"
+                            )
+                            shutil.rmtree(log_dir_path)
+                        except Exception as e:
+                            log.warning(
+                                f"Failed to delete directory {log_dir_path}: {e}"
+                            )
+            else:
+                log.warning(f"Failed to upload {log_type} logs to S3")
+        except ImportError:
+            log.warning("S3 logs uploader not available (boto3 not installed)")
+        except Exception as e:
+            log.error(f"Error uploading {log_type} logs to S3: {e}")
+
+    # Store metadata in config for junit XML reporting (always, not just for S3 uploads)
+    # Initialize test_logs_details if not exists
+    if "test_logs_details" not in config.REPORTING:
+        config.REPORTING["test_logs_details"] = {}
+
+    # Get or create list for this test case
+    test_case_key = test_case_name or "session_logs"
+    if test_case_key not in config.REPORTING["test_logs_details"]:
+        config.REPORTING["test_logs_details"][test_case_key] = []
+
+    # Store metadata about this collection
+    log_metadata = {
+        "log_type": log_type or "unknown",
+        "collection_timestamp": timestamp_str,
+        "relative_log_path": relative_log_path,
+        "log_path": log_path,  # Changed from tarball_path to log_path
+        "cluster_name": cluster_name,
+    }
+
+    # Add S3 metadata if available
+    log_metadata.update(s3_metadata)
+
+    config.REPORTING["test_logs_details"][test_case_key].append(log_metadata)
+    log.info(f"Stored log collection details for test case: {test_case_key}")
+
+    # Return tarball path if created, otherwise return directory path
+    return log_path
 
 
 def run_must_gather(
