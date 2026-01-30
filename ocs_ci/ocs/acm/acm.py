@@ -273,20 +273,21 @@ class AcmAddClusters(AcmPageNavigator):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
-        azure_clusters_indices = [
+        azure_ipi_clusters_indices = [
             cluster_index
             for cluster_index in [primary_index, secondary_index]
             if config.clusters[cluster_index].ENV_DATA["platform"]
             == constants.AZURE_PLATFORM
+            and config.clusters[cluster_index].ENV_DATA.get("deployment_type") == "ipi"
         ]
 
         increase_gateway_number = 2
-        if ibm_cloud_managed or azure_clusters_indices:
+        if ibm_cloud_managed or azure_ipi_clusters_indices:
             increase_gateway_number = 1
 
         found_azure_page = False
         for cluster_nr in range(1, 3):
-            if azure_clusters_indices:
+            if azure_ipi_clusters_indices:
                 try:
                     azure_page = self.driver.find_element(
                         self.page_nav["submariner_addon_azure_page"]
@@ -294,7 +295,7 @@ class AcmAddClusters(AcmPageNavigator):
                     found_azure_page = True
                     azure_index = [
                         cluster_index
-                        for cluster_index in azure_clusters_indices
+                        for cluster_index in azure_ipi_clusters_indices
                         if config.clusters[cluster_index].ENV_DATA["cluster_name"]
                         in azure_page.text
                     ][0]
