@@ -3,7 +3,7 @@
 S3 Logs Uploader for IBM Cloud Object Storage
 
 This module provides functionality to upload log files (especially must-gather tarballs)
-to IBM Cloud Object Storage (COS) and generate presigned URLs for easy access.
+to IBM Cloud Object Storage (COS) and return object location information for later retrieval.
 
 Can be used as a standalone script or imported as a module.
 Integrated with ocs-ci configuration system.
@@ -35,8 +35,7 @@ class S3LogsUploader:
 
     Supports:
     - Uploading files with optional prefix (for organizing files)
-    - Generating presigned URLs with configurable expiration
-    - Returning detailed upload information
+    - Returning detailed object location information (bucket, key, region)
     - Integration with ocs-ci config
     """
 
@@ -255,42 +254,7 @@ class S3LogsUploader:
                 "error": error_msg,
             }
 
-    def generate_presigned_url(
-        self, object_key: str, expiration_days: Optional[int] = None
-    ) -> Optional[str]:
-        """
-        Generate a presigned URL for downloading an object.
-
-        Args:
-            object_key: S3 object key (including any prefix)
-            expiration_days: Number of days until URL expires. If not specified, uses default from retention policy.
-
-        Returns:
-            Presigned URL string, or None if generation fails
-        """
-        # Use retention policy default if not specified
-        if expiration_days is None:
-            expiration_days = self.retention_policy["default"]
-
-        try:
-            expiration_seconds = expiration_days * 24 * 60 * 60
-
-            url = self.s3_client.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": self.bucket_name, "Key": object_key},
-                ExpiresIn=expiration_seconds,
-            )
-
-            logger.info(
-                f"Generated presigned URL for '{object_key}' (expires in {expiration_days} days)"
-            )
-            return url
-
-        except ClientError as e:
-            logger.error(f"Failed to generate presigned URL: {str(e)}")
-            return None
-
-    def upload_and_get_url(
+    def upload_and_get_info(
         self,
         file_path: str,
         prefix: Optional[str] = None,
@@ -299,7 +263,7 @@ class S3LogsUploader:
         retention_days: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Upload a file and generate a presigned URL in one operation.
+        Upload a file and return object location information.
 
         Args:
             file_path: Path to the file to upload
@@ -307,19 +271,12 @@ class S3LogsUploader:
             object_name: Optional custom object name
             metadata: Optional metadata to attach to the object
             retention_days: Optional retention period in days. If not specified, uses default from policy.
-                           This value is used for both file retention and URL expiration.
 
         Returns:
-            Dictionary containing upload details and presigned URL:
+            Dictionary containing upload details and object location:
                 - All fields from upload_file() (including retention info)
-                - presigned_url: URL for downloading the file
-                - url_expiration_days: Number of days until URL expires
-                - url_expires_at: ISO format timestamp of URL expiration
+                - s3_uri: S3 URI in format s3://bucket/key for easy reference
         """
-        # Use retention policy default if not specified
-        if retention_days is None:
-            retention_days = self.retention_policy["default"]
-
         # Upload the file
         upload_result = self.upload_file(
             file_path=file_path,
@@ -329,20 +286,38 @@ class S3LogsUploader:
             retention_days=retention_days,
         )
 
-        # If upload succeeded, generate presigned URL using same retention period
+        # Add S3 URI for convenience
         if upload_result["success"]:
-            presigned_url = self.generate_presigned_url(
-                object_key=upload_result["object_key"], expiration_days=retention_days
+            upload_result["s3_uri"] = (
+                f"s3://{upload_result['bucket']}/{upload_result['object_key']}"
             )
 
-            upload_result["presigned_url"] = presigned_url
-            upload_result["url_expiration_days"] = retention_days
-
-            # Calculate expiration timestamp
-            expiration_time = datetime.utcnow() + timedelta(days=retention_days)
-            upload_result["url_expires_at"] = expiration_time.isoformat() + "Z"
-
         return upload_result
+
+
+def load_config_from_home():
+    """
+    Load S3 configuration from ~/.ocs-ci-s3-logs.yaml if it exists.
+
+    Returns:
+        Dictionary containing S3 configuration, or None if file doesn't exist
+    """
+    import yaml
+    from pathlib import Path
+
+    home_config_path = Path.home() / ".ocs-ci-s3-logs.yaml"
+
+    if not home_config_path.exists():
+        return None
+
+    try:
+        with open(home_config_path, "r") as f:
+            config = yaml.safe_load(f)
+            logger.info(f"Loaded S3 config from {home_config_path}")
+            return config
+    except Exception as e:
+        logger.error(f"Failed to load config from {home_config_path}: {e}")
+        return None
 
 
 def get_s3_config_from_ocs_ci():
@@ -413,7 +388,7 @@ def upload_logs_to_s3_if_configured(
             return None
 
         uploader = S3LogsUploader(s3_config)
-        result = uploader.upload_and_get_url(
+        result = uploader.upload_and_get_info(
             file_path=file_path,
             prefix=prefix,
             object_name=object_name,
@@ -422,7 +397,10 @@ def upload_logs_to_s3_if_configured(
         )
 
         if result["success"]:
-            logger.info(f"Successfully uploaded logs to S3: {result['presigned_url']}")
+            logger.info(f"Successfully uploaded logs to S3: {result['s3_uri']}")
+            logger.info(
+                f"Bucket: {result['bucket']}, Object Key: {result['object_key']}"
+            )
         else:
             logger.error(f"Failed to upload logs to S3: {result.get('error')}")
 
@@ -450,7 +428,7 @@ Examples:
   # Upload with custom prefix for organization
   %(prog)s -f must-gather.tar.gz -p "execution_123/test_case_456"
 
-  # Upload with custom retention period (affects both file retention and URL expiration)
+  # Upload with custom retention period
   %(prog)s -f must-gather.tar.gz -r 180
 
   # Upload with custom object name
@@ -484,7 +462,6 @@ Examples:
         "--retention",
         type=int,
         help="Object retention period in days (default: from config retention policy). "
-        "Used for both file retention and URL expiration. "
         "Will be validated against min/max limits from retention policy.",
     )
 
@@ -508,21 +485,34 @@ Examples:
             load_config(args.ocsci_conf)
             logger.info(f"Loaded config files: {args.ocsci_conf}")
 
-        # Get configuration from ocs-ci
-        s3_config = get_s3_config_from_ocs_ci()
+        # Get configuration - try home config first, then ocs-ci config
+        s3_config = None
+
+        # Try loading from home directory config file
+        if not args.ocsci_conf:
+            s3_config = load_config_from_home()
+            if s3_config:
+                logger.info("Using S3 config from ~/.ocs-ci-s3-logs.yaml")
+
+        # If no home config, try ocs-ci config
+        if not s3_config:
+            s3_config = get_s3_config_from_ocs_ci()
+
         if not s3_config:
             print("\nError: S3 configuration not found or not enabled.")
-            print("Please ensure:")
-            print("  1. config.AUTH['logs_s3_endpoint_details'] is configured")
+            print("Please ensure one of the following:")
+            print("  1. Create ~/.ocs-ci-s3-logs.yaml with S3 credentials")
+            print("  2. Use --ocsci-conf to specify a config file")
+            print("  3. Configure config.AUTH['logs_s3_endpoint_details'] in ocs-ci")
             if args.ocsci_conf:
-                print(f"  2. Check your config file(s): {args.ocsci_conf}")
+                print(f"\nChecked config file(s): {args.ocsci_conf}")
             return 1
 
         # Initialize uploader
         uploader = S3LogsUploader(s3_config)
 
-        # Upload file and get URL
-        result = uploader.upload_and_get_url(
+        # Upload file and get object info
+        result = uploader.upload_and_get_info(
             file_path=args.file,
             prefix=args.prefix,
             object_name=args.object_name,
@@ -537,6 +527,7 @@ Examples:
             print(f"File:              {args.file}")
             print(f"Bucket:            {result['bucket']}")
             print(f"Object Key:        {result['object_key']}")
+            print(f"S3 URI:            {result['s3_uri']}")
             print(f"Region:            {result['region']}")
             print(f"Size:              {result['size_bytes']:,} bytes")
             print(f"ETag:              {result['etag']}")
@@ -544,12 +535,12 @@ Examples:
             print(
                 f"Retention:         {result['retention_days']} days (expires: {result['retention_expires_at']})"
             )
-            print(
-                f"URL Expires:       {result['url_expires_at']} ({result['url_expiration_days']} days)"
-            )
-            print("\nPresigned URL:")
+            print("\nObject Location Information:")
             print("-" * 80)
-            print(result["presigned_url"])
+            print("To retrieve this object later, use:")
+            print(f"  Bucket: {result['bucket']}")
+            print(f"  Key:    {result['object_key']}")
+            print(f"  Region: {result['region']}")
             print("=" * 80 + "\n")
             return 0
         else:

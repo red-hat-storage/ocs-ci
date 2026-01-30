@@ -129,6 +129,7 @@ setup(
             "deploy-fusion=ocs_ci.framework.fusion.main:main",
             "deploy-fdf=ocs_ci.framework.fusion_data_foundation.main:main",
             "upload-logs-to-s3=ocs_ci.utility.s3_logs_uploader:main",
+            "download-logs-from-s3=ocs_ci.utility.s3_logs_downloader:main",
         ],
     },
     zip_safe=True,
