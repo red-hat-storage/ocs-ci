@@ -114,7 +114,7 @@ class TestNoobaaDbBackupRecoveryOps:
         )
         # patch storagecluster object
         num_backups = 2
-        snapshot_class = "vpc-block-snapshot"
+        snapshot_class = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         schedule_cron_interval = 5
 
         # TO DO
