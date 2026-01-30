@@ -1326,22 +1326,75 @@ class Vault(KMS):
         if "Success" in out.decode():
             logger.info(f"Role {role_name} created successfully")
 
-    def get_pv_secret(self, device_handle):
+    def get_vault_backend_path_for_kms_id(self, kms_id):
+        """
+        Get the Vault backend path for a specific KMS ID from csi-kms-connection-details.
+
+        Args:
+            kms_id (str): The encryption KMS ID from PV volumeAttributes
+
+        Returns:
+            str: The VAULT_BACKEND_PATH for the given KMS ID, or None if not found
+        """
+        cm_obj = ocp.OCP(
+            kind="ConfigMap",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+
+        if not cm_obj.is_exist(constants.VAULT_KMS_CSI_CONNECTION_DETAILS):
+            logger.warning(
+                f"ConfigMap {constants.VAULT_KMS_CSI_CONNECTION_DETAILS} does not exist"
+            )
+            return None
+
+        cm_data = cm_obj.get(constants.VAULT_KMS_CSI_CONNECTION_DETAILS).get("data", {})
+
+        # Look for the specific KMS ID in the ConfigMap
+        if kms_id in cm_data:
+            json_out = json.loads(cm_data[kms_id])
+            backend_path = json_out.get("VAULT_BACKEND_PATH")
+            logger.info(
+                f"Found VAULT_BACKEND_PATH '{backend_path}' for KMS ID '{kms_id}'"
+            )
+            return backend_path
+
+        logger.warning(f"KMS ID '{kms_id}' not found in ConfigMap")
+        return None
+
+    def get_pv_secret(self, device_handle, kms_id=None):
         """
         Get secret stored in the vault KMS for the given device_handle
 
         Args:
             device_handle (str): PV device handle string
+            kms_id (str, optional): The encryption KMS ID from PV volumeAttributes.
+                                   If provided, uses the backend path specific to this KMS ID.
+                                   If not provided, falls back to the default backend path.
 
         Returns:
             secret (str): passphrase stored in the vault KMS for given device handle.
         """
-        if not self.csi_vault_backend_path:
-            self.get_vault_backend_path(
-                resource_configmap=constants.VAULT_KMS_CSI_CONNECTION_DETAILS
-            )
+        # Determine which backend path to use
+        if kms_id:
+            backend_path = self.get_vault_backend_path_for_kms_id(kms_id)
+            if not backend_path:
+                logger.warning(
+                    f"Could not find backend path for KMS ID '{kms_id}', "
+                    "falling back to default"
+                )
+                backend_path = None
+        else:
+            backend_path = None
 
-        cmd = f"vault kv get -format=json {self.csi_vault_backend_path}/{device_handle}"
+        # Fall back to default backend path if not found
+        if not backend_path:
+            if not self.csi_vault_backend_path:
+                self.get_vault_backend_path(
+                    resource_configmap=constants.VAULT_KMS_CSI_CONNECTION_DETAILS
+                )
+            backend_path = self.csi_vault_backend_path
+
+        cmd = f"vault kv get -format=json {backend_path}/{device_handle}"
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
 
