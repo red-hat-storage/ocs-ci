@@ -188,6 +188,7 @@ version.
 * `submariner_cli_deployment` - Enforce Submariner CLI deployment.
 * `hub_cluster_name` - Name of the Management cluster. Applicable for Agent deployments, where the hub cluster is pre-created.
 * `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
+* `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
 
 #### REPORTING
 
