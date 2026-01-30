@@ -252,7 +252,7 @@ ENV_DATA:
   ]
   dr_cnv_discovered_apps: [
     {
-      name: "vm-discovered-1", workload_dir: "rdr/cnv-workload/vm-resources/vm-workload-1",
+      name: "vm-discovered-1", workload_dir: "rdr/cnv-workload/vm-pvc/vm-resources/vm-workload-1",
       pod_count: 1, pvc_count: 1,
       dr_workload_app_pod_selector_key: "appname",
       dr_workload_app_pod_selector_value: "kubevirt",
