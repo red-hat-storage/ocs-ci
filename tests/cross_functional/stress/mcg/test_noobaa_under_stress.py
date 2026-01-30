@@ -3,7 +3,7 @@ import random
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, stress
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ocs_ci.helpers.mcg_stress_helper import (
@@ -23,6 +23,7 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
+@stress
 @magenta_squad
 class TestNoobaaUnderStress:
 
