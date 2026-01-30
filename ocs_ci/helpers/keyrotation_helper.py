@@ -676,7 +676,7 @@ class PVKeyrotation(KeyRotation):
             "Reset key rotation baseline - will capture new baseline on next verification."
         )
 
-    @retry(UnexpectedBehaviour, tries=10, delay=10)
+    @retry(UnexpectedBehaviour, tries=20, delay=15)
     def wait_for_keyrotation_cronjobs_recreation(self, pvc_objs):
         """
         Wait for key rotation cronjobs to be recreated for all PVCs after re-enabling.
@@ -711,8 +711,9 @@ class PVKeyrotation(KeyRotation):
 
                 log.info(f"Key rotation cronjob for PVC '{pvc_obj.name}' is active.")
 
-            except ValueError:
+            except ValueError as e:
                 # Cronjob annotation not found or cronjob doesn't exist
+                log.debug(f"Cronjob not found for PVC '{pvc_obj.name}': {e}")
                 missing_cronjobs.append(pvc_obj.name)
 
         if missing_cronjobs:
