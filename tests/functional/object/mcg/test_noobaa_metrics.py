@@ -34,6 +34,7 @@ class TestNoobaaMetrics:
     Test different Noobaa metrics
     """
 
+    @config.run_with_provider_context_if_available
     def test_noobaa_space_available_using_cli(
         self, mcg_obj, awscli_pod_session, bucket_factory, test_directory_setup
     ):
