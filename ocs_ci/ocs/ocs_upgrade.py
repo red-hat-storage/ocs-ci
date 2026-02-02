@@ -36,7 +36,6 @@ from ocs_ci.ocs.defaults import (
     OCS_OPERATOR_NAME,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.resources.csv import (
@@ -312,7 +311,8 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         version_before_upgrade (float): version of OCS before upgrade
 
     """
-    number_of_worker_nodes = len(get_nodes())
+    nodes = OCP().exec_oc_cmd(f"get node -l {constants.OPERATOR_NODE_LABEL} -o yaml")
+    number_of_worker_nodes = len(nodes.get("items"))
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     if not (
         config.ENV_DATA.get("mcg_only_deployment")
