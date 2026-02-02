@@ -3281,6 +3281,10 @@ GITOPS_SUBSCRIPTION_YAML = os.path.join(
 GITOPS_OPERATORGROUP_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "gitops_og.yaml"
 )
+GITOPS_PRIVATE_REPO_SECRET = "private-repo-git"
+GITOPS_PRIVATE_REPO_SECRET_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_private_repo_secret.yaml"
+)
 OADP_NAMESPACE = "openshift-adp"
 OADP_OPERATOR_NAME = "redhat-oadp-operator"
 OADP_SUBSCRIPTION_YAML = os.path.join(
