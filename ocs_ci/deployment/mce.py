@@ -8,6 +8,7 @@ import json
 import re
 from packaging.version import parse as parse_version
 
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -33,6 +34,22 @@ from ocs_ci.ocs.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def set_mirror_registry_configmap():
+    """
+    Set mirror registry config cm for mce/hypershift
+
+    Raises:
+        CommandFailed: If the 'oc create' command fails.
+    """
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        logger.info("Setting mirror registry cm for mce/hypershift")
+        mirror_registry_cm_yaml = templating.load_yaml(
+            constants.MIRROR_REGISTRY_CONFIG_CM_YAML
+        )
+        helpers.apply_resource(**mirror_registry_cm_yaml)
 
 
 class MCEInstaller(object):
@@ -239,6 +256,7 @@ class MCEInstaller(object):
         if sampler.wait_for_func_value(True):
             logger.info(f"Version {ocp_version} found in supported-versions configmap")
 
+    @config.run_with_provider_context_if_available
     def get_supported_versions(self):
         """
         Get supported versions from the supported-versions configmap.

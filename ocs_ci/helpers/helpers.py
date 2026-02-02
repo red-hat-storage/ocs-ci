@@ -113,6 +113,25 @@ def create_resource(do_reload=True, **kwargs):
     return ocs_obj
 
 
+def apply_resource(**kwargs):
+    """
+    Apply a resource. Safe for both create and update operations.
+
+    Args:
+        kwargs (dict): Dictionary of the OCS resource
+
+    Returns:
+        OCS: An OCS instance
+
+    Raises:
+        AssertionError: In case of any failure
+    """
+    ocs_obj = OCS(**kwargs)
+    kwargs.get("metadata").get("name")
+    ocs_obj.apply(**kwargs)
+    return ocs_obj
+
+
 def wait_for_resource_state(resource, state, timeout=60):
     """
     Wait for a resource to get to a given status

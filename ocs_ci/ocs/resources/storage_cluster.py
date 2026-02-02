@@ -272,9 +272,21 @@ def ocs_install_verification(
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
 
+    # From 4.21, new resource blackbox-exporter added as part of feature odf
+    # health overview
+    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    if (
+        not external
+        and not config.DEPLOYMENT.get("mcg_only_deployment", False)
+        and (odf_running_version >= version.VERSION_4_21)
+    ):
+        resources_dict.update(
+            {
+                constants.BLACKBOX_POD_LABEL: 1,
+            }
+        )
     # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
     # 4.19.0-59 is the stable build which contains ONLY noobaa-db-pg-0 pod
-    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[nb_db_label]
         resources_dict.update(

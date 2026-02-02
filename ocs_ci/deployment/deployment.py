@@ -887,7 +887,10 @@ class Deployment(object):
             from ocs_ci.deployment.hub_spoke import enable_nested_virtualization
 
             enable_nested_virtualization()
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+        if (
+            config.DEPLOYMENT.get("enable_data_replication_separation")
+            and config.ENV_DATA.get("cluster_type") == "provider"
+        ):
             annotate_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
@@ -925,6 +928,10 @@ class Deployment(object):
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.ocp_deployment = self.OCPDeployment()
+        # self.ocp_deployment.outer is a dependency injection,
+        # necessary to refer an outer instance methods from the inner OCPDeployment
+        # works for all classes inherited from Deployment
+        self.ocp_deployment.outer = self
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
         # logging the cluster UUID so that we can ask for it's telemetry data
@@ -954,6 +961,7 @@ class Deployment(object):
         if config.ENV_DATA["deployment_type"] not in (
             constants.MANAGED_DEPL_TYPE,
             constants.MANAGED_CP_DEPL_TYPE,
+            constants.AI_AGENT_DEPL_TYPE,
         ):
             add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
@@ -1642,6 +1650,49 @@ class Deployment(object):
         deployment_obj.install_ocs_ui()
         close_browser()
 
+    def set_noobaa_core_for_rgw_ssl(self):
+        """
+        Set env variables for noobaa-core StatefulSet to inject SSL environment variables
+        required for RGW SSL connections in external mode to W/A issue:
+        https://issues.redhat.com/browse/DFBUGS-3777#
+
+        This adds NODE_OPTIONS and SSL_CERT_FILE environment variables
+        to the noobaa-core container to enable SSL certificate validation.
+        """
+        logger.info(
+            "Setting env variables for noobaa-core StatefulSet for RGW SSL support"
+        )
+
+        # Wait for noobaa-core StatefulSet to exist
+        sts_obj = ocp.OCP(
+            kind="StatefulSet", namespace=self.namespace, resource_name="noobaa-core"
+        )
+
+        # Wait for StatefulSet for noobaa-core exists before patching
+        jsonpath: str = "'{.status.readyReplicas}'=1"
+        if not sts_obj.wait(
+            timeout=300,
+            condition=None,
+            jsonpath=jsonpath,
+        ):
+            raise ResourceNotFoundError("noobaa-core StatefulSet not found")
+
+        set_env_cmd = (
+            f"oc set env statefulset noobaa-core -n {self.namespace} "
+            f"NODE_OPTIONS='--use-openssl-ca' SSL_CERT_FILE='/etc/ocp-injected-ca-bundle/ca-bundle.crt'"
+        )
+
+        try:
+            run_cmd(set_env_cmd)
+            logger.info(
+                "Successfully set env variables for noobaa-core StatefulSet with SSL environment variables"
+            )
+        except CommandFailed as e:
+            logger.error(
+                f"Failed to set env variables for noobaa-core StatefulSet: {e}"
+            )
+            raise
+
     def deploy_with_external_mode(self):
         """
         This function handles the deployment of OCS on
@@ -1778,6 +1829,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
         external_cluster.disable_certificate_check()
+        self.set_noobaa_core_for_rgw_ssl()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
@@ -2290,6 +2342,9 @@ class Deployment(object):
             self.deploy_multicluster_hub()
         if config.ENV_DATA.get("configure_acm_to_import_mce"):
             self.configure_acm_to_import_mce_clusters()
+        from ocs_ci.ocs.acm.acm import verify_running_acm
+
+        verify_running_acm()
 
     def configure_acm_to_import_mce_clusters(self):
         """

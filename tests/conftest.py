@@ -1647,9 +1647,7 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=(
-                    constants.DEPLOYMENTCONFIG if deployment else constants.DEPLOYMENT
-                ),
+                kind=constants.DEPLOYMENT,
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)
@@ -7531,13 +7529,17 @@ def cnv_dr_workload(request):
     instances = []
 
     def factory(
-        num_of_vm_subscription=1, num_of_vm_appset_push=0, num_of_vm_appset_pull=0
+        num_of_vm_subscription=1,
+        num_of_vm_appset_push=0,
+        num_of_vm_appset_pull=0,
+        vm_type=constants.VM_VOLUME_PVC,
     ):
         """
         Args:
             num_of_vm_subscription (int): Number of Subscription type workload to be created
             num_of_vm_appset_push (int): Number of ApplicationSet Push type workload to be created
             num_of_vm_appset_pull (int): Number of ApplicationSet Pull type workload to be created
+            vm_type (str): Vm type that needs to be created
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7547,21 +7549,57 @@ def cnv_dr_workload(request):
 
         """
         total_pvc_count = 0
-        workload_types = [
-            (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
-            (
-                constants.APPLICATION_SET,
-                "dr_cnv_workload_appset_push",
-                num_of_vm_appset_push,
-            ),
-            (
-                constants.APPLICATION_SET,
-                "dr_cnv_workload_appset_pull",
-                num_of_vm_appset_pull,
-            ),
-        ]
+        workload_types = {
+            constants.VM_VOLUME_PVC: [
+                (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+            constants.VM_VOLUME_DV: [
+                (
+                    constants.SUBSCRIPTION,
+                    "dr_cnv_dv_workload_sub",
+                    num_of_vm_subscription,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dv_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dv_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+            constants.VM_VOLUME_DVT: [
+                (
+                    constants.SUBSCRIPTION,
+                    "dr_cnv_dvt_workload_sub",
+                    num_of_vm_subscription,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dvt_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dvt_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+        }
 
-        for workload_type, data_key, num_of_vm in workload_types:
+        for workload_type, data_key, num_of_vm in workload_types[vm_type]:
             for index in range(num_of_vm):
                 workload_details = ocsci_config.ENV_DATA[data_key][index]
                 workload = CnvWorkload(
