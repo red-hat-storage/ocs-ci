@@ -752,6 +752,45 @@ class BaseUI:
             return False
         return True
 
+    def clear_input_with_retry(self, locator, retries=3, wait_between=0.5):
+        """
+        Clears an input field reliably with retry handling.
+
+        Args:
+            locator (tuple): (By.XPATH, "//input[@placeholder='...']")
+            retries (int): number of attempts
+            wait_between (int): pause between attempts
+        """
+
+        for attempt in range(1, retries + 1):
+            try:
+                element = self.driver.find_element(*locator)
+                value = element.get_attribute("value")
+
+                if not value:
+                    logger.info(f"Attempt {attempt}: Field already empty")
+                    self.take_screenshot()
+                    return True
+
+                element.clear()
+                time.sleep(wait_between)
+
+                # Recheck
+                element = self.driver.find_element(*locator)
+                if not element.get_attribute("value"):
+                    logger.info(f"Attempt {attempt}: Field cleared successfully")
+                    self.take_screenshot()
+                    return True
+
+                logger.warning(f"Attempt {attempt}: Clear didn't stick, retrying...")
+                self.take_screenshot()
+
+            except StaleElementReferenceException:
+                logger.warning(f"Attempt {attempt}: Stale element, retrying...")
+                self.take_screenshot()
+        self.take_screenshot()
+        raise Exception(f"Failed to clear input after {retries} attempts")
+
 
 def screenshot_dom_location(type_loc="screenshot"):
     """
