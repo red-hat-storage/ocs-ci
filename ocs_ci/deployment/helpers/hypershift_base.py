@@ -710,7 +710,7 @@ class HyperShiftBase:
 
         if config.DEPLOYMENT.get("enable_data_replication_separation"):
             create_hcp_cluster_cmd += (
-                " --additional-network name:clusters-cl-421-b/storage"
+                f" --additional-network name:clusters-{name}/storage"
             )
 
         if disable_default_sources:
