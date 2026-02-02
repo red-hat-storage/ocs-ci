@@ -6485,10 +6485,10 @@ def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30
     return False  # Failure
 
 
-def skip_for_provider_if_ocs_version(expressions):
+def skip_for_provider_or_client_if_ocs_version(expressions):
     """
     This function evaluates the condition for test skip
-    for provider clusters based on expression
+    for provider/client clusters based on expression
 
     Args:
         expressions (str OR list): condition for which we need to check,
