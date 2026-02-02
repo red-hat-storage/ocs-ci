@@ -83,3 +83,29 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
 
         cluster_data["spec"]["network"]["addressRanges"]["public"] = [str_network]
     return cluster_data
+
+
+def get_network_interface_by_ip(node, ip):
+    """
+    Get interface name from a node that has provided ip address liste.
+
+    Args:
+        node (str): node name
+        ip (str): IP address
+
+    Returns:
+        str: name of the interface
+    """
+    oc_obj = OCP(kind="node")
+    network_info = oc_obj.exec_oc_debug_cmd(node, cmd_list=["ip -br -4 a sh"])
+    interface_info = [line for line in network_info.split('\n') if ip in line][0].split()
+    interface_name = interface_info[0]
+    return interface_name
+
+
+def create_drs_machine_config()
+    """
+    Create Machine Config that moves the second physical network to a bridge.
+    This is done for HCP configuraion of data replication separation.
+    """
+    pass
