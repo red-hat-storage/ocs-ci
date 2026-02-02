@@ -1250,27 +1250,6 @@ def storageclass_factory_fixture(
 
         instances.append(sc_obj)
         return sc_obj
-    
-    def wait_for_pvc_cleanup(ocp, sc_name, timeout=300):
-        """
-        Wait until no PVCs are using the given StorageClass
-        """
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            pvc_output = ocp.exec_oc_cmd(
-                "get pvc -A -o jsonpath='{range .items[*]}{.spec.storageClassName}{\"\\n\"}{end}'"
-            )
-
-            if sc_name not in pvc_output.splitlines():
-                log.info(f"No PVCs using storageclass {sc_name}")
-                return
-
-            log.info(
-                f"Waiting for PVC cleanup before deleting storageclass {sc_name}"
-            )
-            time.sleep(5)
-
-        raise TimeoutError(f"PVCs still exist for storageclass {sc_name}")
 
     def finalizer():
         """
@@ -1279,7 +1258,7 @@ def storageclass_factory_fixture(
         for instance in instances:
             wait_for_pvc_cleanup(instance.ocp, instance.name)
             instance.delete()
-            instance.ocp.wait_for_delete(instance.name, timeout=300)
+            instance.ocp.wait_for_delete(instance.name, timeout=120)
 
     request.addfinalizer(finalizer)
     return factory
