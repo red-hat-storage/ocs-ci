@@ -2047,8 +2047,8 @@ def session_s3_logs_testsuite_properties(request, record_testsuite_property):
                 prefix = f"session_log_{log_type}"
 
                 # Add key properties to junit XML at testsuite level
-                if log_info.get("s3_url"):
-                    record_testsuite_property(f"{prefix}_url", log_info["s3_url"])
+                if log_info.get("s3_uri"):
+                    record_testsuite_property(f"{prefix}_url", log_info["s3_uri"])
 
                 if log_info.get("s3_object_key"):
                     record_testsuite_property(
