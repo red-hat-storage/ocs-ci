@@ -371,6 +371,20 @@ class ODFCliRunner:
             CommandFailed: If the CLI command fails.
         """
         return self.run_command(f" maintenance stop {deployment_name}")
+    
+    def list_stale_cephfs_subvolumes(self) -> str:
+        """
+        List stale CephFS subvolumes.
+        """
+        return self.run_command("subvolume ls --stale")
+
+    def delete_cephfs_subvolume(self, filesystem, subvol, group) -> str:
+        """
+        Delete a CephFS subvolume.
+        """
+        return self.run_command(
+            f"subvolume delete {filesystem} {subvol} {group}"
+        )
 
 
 def odf_cli_setup_helper():
