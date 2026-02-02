@@ -1256,7 +1256,6 @@ def storageclass_factory_fixture(
         Delete the storageclass
         """
         for instance in instances:
-            wait_for_pvc_cleanup(instance.ocp, instance.name)
             instance.delete()
             instance.ocp.wait_for_delete(instance.name, timeout=120)
 
