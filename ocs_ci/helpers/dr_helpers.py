@@ -2707,7 +2707,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
     Validates Volume Group Snapshot resource creation from odf external snapshotter
 
     Args:
-        namespace (str): the namespace of the Volume Group snapshot resources
+        vgs_namespace (str): the namespace of the Volume Group snapshot resources
 
     """
     namespace = config.ENV_DATA["cluster_namespace"]
