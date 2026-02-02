@@ -8,6 +8,7 @@ import json
 import re
 from packaging.version import parse as parse_version
 
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -33,6 +34,22 @@ from ocs_ci.ocs.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def set_mirror_registry_configmap():
+    """
+    Set mirror registry config cm for mce/hypershift
+
+    Raises:
+        CommandFailed: If the 'oc create' command fails.
+    """
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        logger.info("Setting mirror registry cm for mce/hypershift")
+        mirror_registry_cm_yaml = templating.load_yaml(
+            constants.MIRROR_REGISTRY_CONFIG_CM_YAML
+        )
+        helpers.apply_resource(**mirror_registry_cm_yaml)
 
 
 class MCEInstaller(object):
@@ -206,11 +223,18 @@ class MCEInstaller(object):
             namespace=constants.HYPERSHIFT_NAMESPACE,
         )
 
+        check_resources_timeout = 600
+        if config.ENV_DATA["platform"] in constants.CLOUD_PLATFORMS:
+            logger.info(
+                "Cloud platform detected; wait for hypershift supported-versions configmap twice longer"
+            )
+            check_resources_timeout = check_resources_timeout * 2
+
         # configMap is created during hypershift installation in around 5 min.
         # Increasing this timeout to 10 min for safer deployment.
         if not configmaps_obj.check_resource_existence(
             should_exist=True,
-            timeout=600,
+            timeout=check_resources_timeout,
             resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP,
         ):
             raise UnavailableResourceException(
@@ -232,6 +256,7 @@ class MCEInstaller(object):
         if sampler.wait_for_func_value(True):
             logger.info(f"Version {ocp_version} found in supported-versions configmap")
 
+    @config.run_with_provider_context_if_available
     def get_supported_versions(self):
         """
         Get supported versions from the supported-versions configmap.

@@ -7,13 +7,15 @@ import os
 import logging
 import tempfile
 import platform
+from subprocess import TimeoutExpired
+
 import requests
 import zipfile
 import tarfile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -217,6 +219,7 @@ class CNVInstaller(object):
             resource_name=catalogsource_name,
         )
 
+    @retry((TimeoutExpiredError, TimeoutExpired), tries=2, delay=30, backoff=1)
     @catch_exceptions((CommandFailed))
     def deploy_hyper_converged(self):
         """
@@ -225,10 +228,18 @@ class CNVInstaller(object):
         Raises:
             TimeoutExpiredError: If the HyperConverged resource does not become available within the specified time.
         """
-        logger.info("Deploying the HyperConverged CR")
-        hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
-        hyperconverged_yaml = OCS(**hyperconverged_yaml_file)
-        hyperconverged_yaml.create()
+
+        try:
+            logger.info(f"Checking if {constants.HYPERCONVERGED} exists")
+            OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace).get()["items"][
+                0
+            ]
+            logger.info(f"Found {constants.HYPERCONVERGED} skipping creation")
+        except IndexError:
+            logger.info("Deploying the HyperConverged CR")
+            hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
+            hyperconverged_yaml = OCS(**hyperconverged_yaml_file)
+            hyperconverged_yaml.create()
 
         # Verify the installation was completed successfully by checking the HyperConverged CR
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
@@ -237,7 +248,7 @@ class CNVInstaller(object):
         result = ocp.wait(
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             condition="Available",
-            timeout=600,
+            timeout=1000,
         )
         if not result:
             err_str = (
@@ -249,6 +260,7 @@ class CNVInstaller(object):
             f"{constants.HYPERCONVERGED} {constants.KUBEVIRT_HYPERCONVERGED} met condition: Available"
         )
 
+    @retry(CommandFailed, tries=3, delay=30, backoff=2)
     def enable_software_emulation(self):
         """
         Enable software emulation. This is needed on a cluster where the nodes do not support hardware emulation.
@@ -266,15 +278,20 @@ class CNVInstaller(object):
             logger.info("Skipping enabling software emulation")
         else:
             logger.info("Enabling software emulation on the cluster")
-            ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
-            annonation = (
-                'kubevirt.kubevirt.io/jsonpatch=\'[{ "op": "add", "path": "/spec/configuration/developerConfiguration",'
-                ' "value": { "useEmulation": true } }]\''
-            )
-            ocp.annotate(
-                annotation=annonation, resource_name=constants.KUBEVIRT_HYPERCONVERGED
-            )
-            logger.info("successfully enabled software emulation on the cluster")
+            try:
+                ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
+                annonation = (
+                    'kubevirt.kubevirt.io/jsonpatch=\'[{ "op": "add", "path": "/spec/configuration/'
+                    'developerConfiguration",'
+                    ' "value": { "useEmulation": true } }]\''
+                )
+                ocp.annotate(
+                    annotation=annonation,
+                    resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+                )
+                logger.info("successfully enabled software emulation on the cluster")
+            except CommandFailed as e:
+                logger.error(e)
 
     def cnv_hyperconverged_installed(self):
         """

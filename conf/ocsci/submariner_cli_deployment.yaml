@@ -1,0 +1,4 @@
+# Use this file to enforce CLI Submariner deployment
+---
+DEPLOYMENT:
+  submariner_cli_deployment: true

@@ -1,5 +1,6 @@
 import random
 import logging
+import os
 
 from ocs_ci.framework import config
 from ocs_ci.utility import version
@@ -119,8 +120,9 @@ def osd_device_replacement(nodes, cli_tool=False):
 
     if cli_tool:
         retrieve_cli_binary(cli_type="odf")
+        odf_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
         run_cmd_interactive(
-            cmd=f"odf-cli purge-osd {osd_id}",
+            cmd=f"{odf_cli_path} purge-osd {osd_id}",
             prompts_answers={
                 "yes-force-destroy-osd": "yes-force-destroy-osd",
                 "completed removal of OSD": "",

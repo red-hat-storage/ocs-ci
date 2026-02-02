@@ -21,6 +21,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.operators import MetalLBOperator
 from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
@@ -98,14 +99,9 @@ class MetalLBInstaller:
         )
 
     @retry(CommandFailed, tries=3, delay=15)
-    def create_catalog_source(
-        self, metallb_version=config.default_cluster_ctx.ENV_DATA.get("metallb_version")
-    ):
+    def create_catalog_source(self):
         """
         Create catalog source for MetalLB
-
-        Arg:
-            metallb_version (str): MetalLB version
 
         Returns:
             bool: True if catalog source is created, False otherwise, error if not get Ready state
@@ -527,12 +523,10 @@ class MetalLBInstaller:
         )
         if self.create_metallb_namespace():
             logger.info(f"Namespace {self.namespace_lb} created successfully")
-        if self.create_catalog_source():
-            logger.info("MetalLB catalog source created successfully")
-        if self.create_metallb_operator_group():
-            logger.info("MetalLB operator group created successfully")
-        if self.create_metallb_subscription():
-            logger.info("MetalLB subscription created successfully")
+
+        metallb_operator = MetalLBOperator(create_catalog=True)
+        metallb_operator.deploy()
+
         if self.create_metallb_instance():
             logger.info("MetalLB instance created successfully")
         if self.create_ip_address_pool():

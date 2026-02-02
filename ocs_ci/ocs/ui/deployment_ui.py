@@ -357,6 +357,9 @@ class DeploymentUI(PageNavigator):
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
+        if ocs_version >= version.VERSION_4_21:
+            self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+
         self.configure_osd_size()
 
         self.configure_performance()

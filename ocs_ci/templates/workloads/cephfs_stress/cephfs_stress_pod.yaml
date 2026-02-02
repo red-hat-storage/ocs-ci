@@ -6,7 +6,7 @@ metadata:
 spec:
   containers:
   - name: cephfs-stress
-    image: quay.io/ocsci/stress-smallfile:latest
+    image: quay.io/ocsci/cephfs-stress-pod:latest
     imagePullPolicy: Always
     command: ["python3", "/script/smallfile.py"]
     env:

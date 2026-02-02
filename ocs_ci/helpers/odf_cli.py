@@ -344,8 +344,6 @@ class ODFCliRunner:
         else:
             output = exec_cmd(full_command, ignore_error=ignore_error, **kwargs)
 
-        log.info(f"output type: {type(output)}")
-        log.info(f"*Command output*: {output}")
         return output
 
     def run_maintenance_start(self, deployment_name):

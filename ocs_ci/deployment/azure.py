@@ -78,6 +78,7 @@ class AZUREIPI(AZUREBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(AZUREIPI, self).__init__()
+        # Set custom storage class path for Azure Performance Plus feature
 
     class OCPDeployment(IPIOCPDeployment):
         def deploy_prereq(self):

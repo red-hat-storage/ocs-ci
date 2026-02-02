@@ -8,6 +8,7 @@ import logging
 import re
 import tempfile
 import uuid
+import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
@@ -72,11 +73,20 @@ class ExternalCluster(object):
                 "No SSH Auth to connect to external RHCS cluster provided! "
                 "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
             )
+        # adding jump host configuration to connect to external RHCS cluster on ibmcloud via jump host
+        self.jump_host = config.DEPLOYMENT.get("ssh_jump_host", None)
+
+        if self.jump_host and not self.jump_host.get("private_key"):
+            self.jump_host["private_key"] = os.path.expanduser(
+                config.DEPLOYMENT["ssh_key_private"]
+            )
+
         self.rhcs_conn = Connection(
             host=self.host,
             user=self.user,
             password=self.password,
             private_key=self.ssh_key,
+            jump_host=self.jump_host,
         )
 
     def get_external_cluster_details(self):
@@ -180,7 +190,13 @@ class ExternalCluster(object):
             use_configmap = False
         script_path = generate_exporter_script(use_configmap=use_configmap)
         upload_file(
-            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+            self.host,
+            script_path,
+            script_path,
+            self.user,
+            self.password,
+            self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
         return script_path
 
@@ -192,7 +208,7 @@ class ExternalCluster(object):
             str: absolute path to the CA Cert
 
         """
-        rgw_cert_ca_path = get_and_apply_rgw_cert_ca()
+        rgw_cert_ca_path = get_and_apply_rgw_cert_ca(apply=False)
         remote_rgw_cert_ca_path = "/tmp/rgw-cert-ca.pem"
         upload_file(
             self.host,
@@ -201,6 +217,7 @@ class ExternalCluster(object):
             self.user,
             self.password,
             self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else self.ssh_key,
         )
         return remote_rgw_cert_ca_path
 
@@ -330,7 +347,13 @@ class ExternalCluster(object):
         """
         script_path = create_config_ini_file(params=params)
         upload_file(
-            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+            self.host,
+            script_path,
+            script_path,
+            self.user,
+            self.password,
+            self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
         return script_path
 
@@ -687,10 +710,13 @@ def generate_exporter_script(use_configmap=False):
     return external_cluster_details_exporter.name
 
 
-def get_and_apply_rgw_cert_ca():
+def get_and_apply_rgw_cert_ca(apply=True):
     """
     Downloads CA Certificate of RGW if SSL is used and apply it to be trusted
     by the OCP cluster
+
+    Args:
+        apply (bool): if True, the certificate is applied as trusted CA by the OCP cluster
 
     Returns:
         str: path to the downloaded RGW Cert CA
@@ -707,8 +733,9 @@ def get_and_apply_rgw_cert_ca():
         rgw_cert_ca_path,
     )
     # configure the CA cert to be trusted by the OCP cluster
-    ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
-    wait_for_machineconfigpool_status("all", timeout=1800)
+    if apply:
+        ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
+        wait_for_machineconfigpool_status("all", timeout=1800)
     return rgw_cert_ca_path
 
 

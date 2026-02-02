@@ -430,21 +430,19 @@ class VdbenchWorkload:
             # Check if verification patterns are present in the configuration
             enable_verification = self._has_verification_patterns()
 
-            # Get workload_loop from KrKn config if available
+            # Get workload_loop from config (resiliency_config or krkn_config)
             # Default to 1 (single run) to avoid affecting existing tests
             workload_runs = 1
-            try:
-                from ocs_ci.krkn_chaos.krkn_workload_config import KrknWorkloadConfig
 
-                krkn_config = KrknWorkloadConfig()
-                # Only override default if KrKn config is actually loaded
-                if krkn_config.config.ENV_DATA.get("krkn_config"):
-                    vdbench_config = krkn_config.get_vdbench_config()
-                    # Only override if workload_loop is explicitly set in config
-                    if "workload_loop" in vdbench_config:
-                        workload_runs = vdbench_config.get("workload_loop")
-            except Exception:
-                pass  # Use default of 1 if KrKn config not available
+            # Check resiliency_config first, then krkn_config
+            for config_key in ["resiliency_config", "krkn_config"]:
+                vdbench_config = config.ENV_DATA.get(config_key, {}).get(
+                    "vdbench_config", {}
+                )
+                if "workload_loop" in vdbench_config:
+                    workload_runs = vdbench_config["workload_loop"]
+                    log.info(f"Using workload_loop from {config_key}: {workload_runs}")
+                    break
 
             # Prepare template data for Jinja2 templates
             template_data = {

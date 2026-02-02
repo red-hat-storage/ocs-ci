@@ -185,6 +185,10 @@ version.
 * `enable_nested_virtualization` - Enable nested virtualization for vSphere platform primarily. Used for kubevirt on HCP Clusters. It sets options kvm_intel nested=1 options kvm_amd nested=1 in MachineConfig
 * `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
 * `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
+* `submariner_cli_deployment` - Enforce Submariner CLI deployment.
+* `hub_cluster_name` - Name of the Management cluster. Applicable for Agent deployments, where the hub cluster is pre-created.
+* `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
+* `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
 
 #### REPORTING
 
@@ -213,6 +217,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
   spending time on MG which is timeouting.
 * `rp_additional_info` - any additional information placed to Report Portal launch description
+* `tarball_mg_logs` - pack MG files to tarball
+* `delete_packed_mg_logs` - applicable only if `tarball_mg_logs` is True, delete the individual MG files in case they were successfully packed
 
 #### ENV_DATA
 
@@ -370,6 +376,10 @@ higher priority).
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
       * `storage_quota` - storage quota for the hosted cluster
       * `provider_cluster_name` - Name of the provider cluster if storageclient is required/present in the hosted cluster. This is optional and useful when there are more than one provider cluster in the config, provider mode RDR for example
+      * `hosted_cluster_platform` - Platform of the hosted cluster, e.g. kubevirt, agent. kubevirt is default.
+      * `infra_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "HighlyAvailable"
+      * `disable_default_sources` - If set to true, default sources will be disabled on the hosted cluster
+      * `auto_repair` - If set to true, auto repair of the nodes will be enabled on the hosted cluster
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
@@ -378,6 +388,14 @@ higher priority).
 * `custom_vpc` - Applicable only for IMB Cloud IPI deployment where we want to create custom VPC and networking
   with specific Address prefixes to prevent /18 CIDR to be used.
 * `ip_prefix` - Applicable only for IMB Cloud IPI deployment when custom_vpc, if not specified: 27 prefix will be used.
+* `existing_vpc` - Set to true to use existing VPC, resource group, and subnets for IBM Cloud IPI deployment.
+* `resource_group_name` - Name of existing resource group for IBM Cloud IPI deployment when using existing VPC.
+* `network_resource_group_name` - Name of existing network resource group for IBM Cloud IPI deployment when using existing VPC (can be same as resource_group_name).
+* `vpc_name` - Name of existing VPC for IBM Cloud IPI deployment when using existing VPC.
+* `control_plane_subnets` - List of existing control plane subnet names for IBM Cloud IPI deployment when using existing VPC.
+* `compute_subnets` - List of existing compute subnet names for IBM Cloud IPI deployment when using existing VPC.
+* `worker_instance_type` - Worker instance type in ibmcloud; example: 'bx2-16x64'
+* `master_instance_type` - Worker instance type in ibmcloud; example: 'bx2-4x16'
 * `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
@@ -394,6 +412,18 @@ higher priority).
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
 * `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
+* `enable_infrastructure_management_for_agent` - To enable central infrastructure management service while installing dependencies for hosted cluster. This is used to create agent based hosted cluster.
+* `early_testing` - set to True if it's early testing of RHCOS and provide  release_img
+    e.g. registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2
+* `release_img` - release image for early testing of RHCOS or multi arch setup
+* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
+* `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
+    proper OCP release image for OCP deployment or you can set custom via
+    release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.
+* `cp_availability_policy` - similar to clusters.<cluster name>.cp_availability_policy but applied to the Agent hosted cluster
+* `infra_availability_policy` - similar to clusters.<cluster name>.cp_availability_policy but applied to the infra nodes of Agent hosted cluster
+* `disable_default_sources` - similar to clusters.<cluster name>.disable_default_sources but applied to the Agent hosted cluster
+* `auto_repair` - similar to clusters.<cluster name>.auto_repair but applied to the Agent hosted cluster
 
 #### UPGRADE
 

@@ -83,11 +83,19 @@ def test_deployment(pvc_factory, pod_factory):
                     in constants.HCI_PC_OR_MS_PLATFORM
                 ):
                     try:
-                        sanity_helpers.health_check()
+                        sanity_helpers.health_check(
+                            fix_ceph_health=True,
+                            update_jira=True,
+                            no_exception_if_jira_issue_updated=True,
+                        )
                     except exceptions.ResourceWrongStatusException as err_msg:
                         log.warning(err_msg)
                 else:
-                    sanity_helpers.health_check()
+                    sanity_helpers.health_check(
+                        fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
+                    )
                 sanity_helpers.delete_resources()
                 # Verify ceph health
                 log.info("Verifying ceph health after deployment")
@@ -96,7 +104,13 @@ def test_deployment(pvc_factory, pod_factory):
                     config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
                     and config.ENV_DATA["cluster_type"].lower() == "consumer"
                 ):
-                    assert ceph_health_check(tries=10, delay=30)
+                    assert ceph_health_check(
+                        tries=10,
+                        delay=30,
+                        fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
+                    )
 
     if teardown:
         log.info("Cluster will be destroyed during teardown part of this test.")

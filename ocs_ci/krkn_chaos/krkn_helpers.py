@@ -759,18 +759,40 @@ class NetworkScenarioHelper(BaseScenarioHelper):
         )
 
     def create_pod_network_chaos(
-        self, label_selector, instance_count=1, test_duration=None
+        self,
+        label_selector,
+        instance_count=1,
+        duration=None,
+        interfaces=None,
+        execution="serial",
+        egress=None,
+        image=None,
+        node_name=None,
     ):
-        """Create pod network chaos scenario."""
-        test_duration = test_duration or self.DEFAULT_TEST_DURATION
+        """Create pod network chaos scenario.
+
+        Args:
+            label_selector (str): Node label selector string.
+            instance_count (int): Number of matching nodes to act on (default: 1).
+            duration (int): Duration in seconds for network chaos (default: 300).
+            interfaces (list, optional): List of host network interface names.
+            execution (str): Execution mode, 'serial' or 'parallel' (default: "serial").
+            egress (dict, optional): Egress impairment parameters.
+            image (str, optional): Container image to use.
+            node_name (str, optional): Specific node name to target.
+        """
+        duration = duration or self.DEFAULT_TEST_DURATION
 
         return NetworkOutageScenarios.pod_network_chaos(
-            self.scenario_dir,
-            namespace=self.namespace,
+            scenario_dir=self.scenario_dir,
+            duration=duration,
             label_selector=label_selector,
             instance_count=instance_count,
-            wait_duration=self.DEFAULT_WAIT_DURATION,
-            test_duration=test_duration,
+            interfaces=interfaces,
+            execution=execution,
+            egress=egress,
+            image=image,
+            node_name=node_name,
         )
 
     def create_network_chaos_ingress(

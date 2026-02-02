@@ -43,6 +43,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NoRunningCephToolBoxException,
     ResourceNotFoundError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
@@ -54,8 +55,10 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.vsphere import VSPHERE
+from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    ceph_health_check,
     TimeoutSampler,
     ocsci_log_path,
     run_cmd,
@@ -107,6 +110,25 @@ def create_resource(do_reload=True, **kwargs):
     resource_name = kwargs.get("metadata").get("name")
     created_resource = ocs_obj.create(do_reload=do_reload)
     assert created_resource, f"Failed to create resource {resource_name}"
+    return ocs_obj
+
+
+def apply_resource(**kwargs):
+    """
+    Apply a resource. Safe for both create and update operations.
+
+    Args:
+        kwargs (dict): Dictionary of the OCS resource
+
+    Returns:
+        OCS: An OCS instance
+
+    Raises:
+        AssertionError: In case of any failure
+    """
+    ocs_obj = OCS(**kwargs)
+    kwargs.get("metadata").get("name")
+    ocs_obj.apply(**kwargs)
     return ocs_obj
 
 
@@ -2875,6 +2897,60 @@ def wait_for_ct_pod_recovery():
     return True
 
 
+def ceph_health_check_with_toolbox_recovery(
+    namespace: str,
+    tries: int = 20,
+    delay: int = 30,
+    fix_ceph_health: bool = True,
+    update_jira: bool = True,
+    no_exception_if_jira_issue_updated: bool = False,
+) -> bool:
+    """
+    Perform ceph health check with automatic toolbox pod recovery.
+
+    If the ceph toolbox pod is not running (e.g., after node disruption tests),
+    this function will wait for the toolbox pod to recover before retrying.
+
+    Args:
+        namespace (str): Kubernetes namespace for ceph cluster.
+        tries (int): Number of retries for health check.
+        delay (int): Delay between retries in seconds.
+        fix_ceph_health (bool): Whether to attempt fixing ceph health issues.
+        update_jira (bool): Whether to update Jira on health issues.
+        no_exception_if_jira_issue_updated (bool): Skip exception if Jira was updated.
+
+    Returns:
+        bool: True if ceph health check passes.
+
+    Raises:
+        NoRunningCephToolBoxException: If toolbox pod doesn't recover.
+        CephHealthException: If ceph health check fails after retries.
+    """
+    try:
+        return ceph_health_check(
+            namespace=namespace,
+            tries=tries,
+            delay=delay,
+            fix_ceph_health=fix_ceph_health,
+            update_jira=update_jira,
+            no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+        )
+    except NoRunningCephToolBoxException:
+        logger.warning(
+            "Ceph toolbox pod not running. Waiting for recovery before retry..."
+        )
+        if wait_for_ct_pod_recovery():
+            return ceph_health_check(
+                namespace=namespace,
+                tries=tries,
+                delay=delay,
+                fix_ceph_health=fix_ceph_health,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
+        raise
+
+
 def label_worker_node(node_list, label_key, label_value):
     """
     Function to label worker node for running app pods on specific worker nodes.
@@ -4674,6 +4750,92 @@ def verify_quota_resource_exist(quota_name):
     ]
 
 
+def verify_substrings_in_string(output_string, expected_strings):
+    """
+    Verify all expected substrings are present in the output string
+
+    Args:
+        output_string (str): String to check
+        expected_strings (list): Expected substrings
+
+    Returns:
+        bool: True if all expected strings found, False otherwise
+
+    """
+    for expected_string in expected_strings:
+        if expected_string not in output_string:
+            logger.error(f"Expected string: {expected_string} not in {output_string}")
+            return False
+    return True
+
+
+def wait_for_quota_usage_update(
+    clusterresourcequota_obj,
+    quota_name,
+    quota_key,
+    expected_strings,
+    operation_description,
+    timeout=120,
+):
+    """
+    Wait for ClusterResourceQuota usage to update and verify expected strings
+
+    Args:
+        clusterresourcequota_obj (obj): ClusterResourceQuota OCP object
+        quota_name (str): Name of the quota resource
+        quota_key (str): Quota key to check (e.g., 'requests.storage')
+        expected_strings (list): Strings to verify (e.g., ['8Gi', '7Gi'])
+        operation_description (str): Operation description for logging
+        timeout (int): Timeout in seconds (default: 120)
+
+    Raises:
+        TimeoutExpiredError: If quota usage doesn't update within timeout
+
+    """
+    logger.info(f"Waiting for quota usage to reflect {operation_description}")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=clusterresourcequota_obj.get,
+        resource_name=quota_name,
+    )
+    for quota_resource in sample:
+        # Extract used and hard quota values from the resource
+        try:
+            used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+            hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+
+            # Get storage request values using the specified quota key
+            used_storage = used.get(quota_key, "0")
+            hard_storage = hard.get(quota_key, "0")
+
+            logger.info(
+                f"Quota usage for {quota_name}: "
+                f"used={used_storage}, hard={hard_storage}"
+            )
+
+            # Check if the expected values are present
+            quota_info = f"{used_storage} {hard_storage}"
+            if verify_substrings_in_string(
+                output_string=quota_info,
+                expected_strings=expected_strings,
+            ):
+                logger.info(
+                    f"Quota usage updated successfully after {operation_description}"
+                )
+                return
+        except (KeyError, AttributeError) as e:
+            logger.warning(f"Failed to parse quota resource: {e}")
+            continue
+    else:
+        err_str = (
+            f"Quota usage did not update to show {expected_strings} after {timeout} seconds "
+            f"for {operation_description}."
+        )
+        logger.error(err_str)
+        raise TimeoutExpiredError(err_str)
+
+
 def check_cluster_is_compact():
     existing_num_nodes = len(node.get_all_nodes())
     worker_n = node.get_worker_nodes()
@@ -5086,13 +5248,13 @@ def odf_cli_set_log_level(service, log_level, subsystem):
     """
     from pathlib import Path
 
-    if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
+    if not (Path(config.RUN["bin_dir"]) / "odf").exists():
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(
         f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
     )
-    cmd = f"odf-cli set ceph log-level {service} {subsystem} {log_level}"
+    cmd = f"odf set ceph log-level {service} {subsystem} {log_level}"
 
     logger.info(cmd)
     return exec_cmd(cmd, shell=True)
@@ -5502,11 +5664,10 @@ def upgrade_multus_holder_design():
         return
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
-        from ocs_ci.deployment.nmstate import NMStateInstaller
-
-        logger.info("Install NMState operator and create an instance")
-        nmstate_obj = NMStateInstaller()
-        nmstate_obj.running_nmstate()
+        nmstate_operator = NMStateOperator(
+            create_catalog=True,
+        )
+        nmstate_operator.deploy()
         configure_node_network_configuration_policy_on_all_worker_nodes()
     reset_all_osd_pods()
     enable_csi_disable_holder_pods()
@@ -6041,10 +6202,31 @@ def remove_toleration():
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
-    params = '[{"op": "remove", "path": "/spec/placement"}]'
-    result = storagecluster_obj.patch(params=params, format_type="json")
-    if not result:
-        logger.error("Failed to remove toleration from storagecluster")
+    try:
+        # Check if placement exists before trying to remove it
+        storagecluster_data = storagecluster_obj.get()
+        if "placement" in storagecluster_data.get("spec", {}):
+            params = '[{"op": "remove", "path": "/spec/placement"}]'
+            result = storagecluster_obj.patch(params=params, format_type="json")
+            if not result:
+                logger.error("Failed to remove toleration from storagecluster")
+                success = False
+            else:
+                logger.info(
+                    "Successfully removed placement section from storagecluster"
+                )
+        else:
+            logger.info(
+                "No placement section found in storagecluster, skipping removal"
+            )
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to remove placement from storagecluster: {e}. "
+            "This may be expected if placement was not previously set."
+        )
+        # Avoided to mark as failure since this might be expected
+    except Exception as e:
+        logger.error(f"Unexpected error removing placement from storagecluster: {e}")
         success = False
     logger.info("Remove tolerations from subscriptions")
 
@@ -6070,20 +6252,56 @@ def remove_toleration():
         )
         driver_list = ocp.get_all_resource_names_of_a_kind(kind=constants.DRIVER)
         for driver_name in driver_list:
-            params = (
-                '[{"op": "remove", "path": "/spec/controllerPlugin/tolerations"},'
-                '{"op": "remove", "path": "/spec/nodePlugin/tolerations"}]'
-            )
-            result = driver_obj.patch(
-                resource_name=driver_name, params=params, format_type="json"
-            )
-            if result:
-                logger.info(
-                    f"Successfully removed tolerations from CSI driver {driver_name}"
+            try:
+                # Check if tolerations exist before attempt to remove toleration
+                driver_data = driver_obj.get(resource_name=driver_name)
+                spec = driver_data.get("spec", {})
+                controller_plugin = spec.get("controllerPlugin") or {}
+                node_plugin = spec.get("nodePlugin") or {}
+
+                # Build patch command if paths exist
+                params = []
+                if (
+                    isinstance(controller_plugin, dict)
+                    and "tolerations" in controller_plugin
+                ):
+                    params.append(
+                        {"op": "remove", "path": "/spec/controllerPlugin/tolerations"}
+                    )
+                if isinstance(node_plugin, dict) and "tolerations" in node_plugin:
+                    params.append(
+                        {"op": "remove", "path": "/spec/nodePlugin/tolerations"}
+                    )
+
+                if params:
+                    result = driver_obj.patch(
+                        resource_name=driver_name,
+                        params=json.dumps(params),
+                        format_type="json",
+                    )
+                    if result:
+                        logger.info(
+                            f"Successfully removed tolerations from CSI driver {driver_name}"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to remove tolerations from CSI driver {driver_name}"
+                        )
+                        success = False
+                else:
+                    logger.info(
+                        f"No tolerations found in CSI driver {driver_name}, skipping removal"
+                    )
+            except CommandFailed as e:
+                # Handle case where patch fails (e.g., path doesn't exist)
+                logger.warning(
+                    f"Failed to remove tolerations from CSI driver {driver_name}: {e}. "
+                    "This may be expected if tolerations were not previously added."
                 )
-            else:
+                # Don't mark as failure since this might be expected in negative test cases
+            except Exception as e:
                 logger.error(
-                    f"Failed to remove tolerations from CSI driver {driver_name}"
+                    f"Unexpected error while removing tolerations from CSI driver {driver_name}: {e}"
                 )
                 success = False
 

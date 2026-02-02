@@ -19,6 +19,7 @@ from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.version import VERSION_2_12, get_semantic_version
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 class FusionDeployment:
     def __init__(self):
         self.pre_release = config.DEPLOYMENT.get("fusion_pre_release", False)
+        self.sds_version = config.DEPLOYMENT.get("fusion_pre_release_sds_version")
+        self.image_tag = config.DEPLOYMENT.get("fusion_pre_release_image")
         self.operator_name = defaults.FUSION_OPERATOR_NAME
         self.namespace = defaults.FUSION_NAMESPACE
         self.kubeconfig = config.RUN["kubeconfig"]
@@ -46,12 +49,14 @@ class FusionDeployment:
         """
         Create Fusion CatalogSource
         """
-        logger.info("Adding CatalogSource")
 
         if self.pre_release:
+            if get_semantic_version(self.sds_version, True) >= VERSION_2_12:
+                self.create_image_digest_mirror_set()
+            logger.info("Adding pre-release CatalogSource")
             render_data = {
-                "sds_version": config.DEPLOYMENT.get("fusion_pre_release_sds_version"),
-                "image_tag": config.DEPLOYMENT.get("fusion_pre_release_image"),
+                "sds_version": self.sds_version,
+                "image_tag": self.image_tag,
             }
             catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
             _templating = templating.Templating(
@@ -62,6 +67,7 @@ class FusionDeployment:
             )
             fusion_catalog_source_data = yaml.load(template, Loader=yaml.Loader)
         else:
+            logger.info("Adding GA CatalogSource")
             catalog_source_name = constants.IBM_OPERATOR_CATALOG_SOURCE_NAME
             fusion_catalog_source_data = templating.load_yaml(
                 constants.FUSION_CATALOG_SOURCE_YAML
@@ -86,6 +92,31 @@ class FusionDeployment:
 
         logger.info("Waiting for CatalogSource to be READY")
         ibm_catalog_source.wait_for_state("READY")
+
+    def create_image_digest_mirror_set(self):
+        """
+        Create or update ImageDigestMirrorSet.
+        """
+        logger.info("Creating Fusion ImageDigestMirrorSet")
+        render_data = {
+            "sds_version": self.sds_version,
+        }
+        _templating = templating.Templating(
+            base_path=constants.TEMPLATE_DEPLOYMENT_DIR_FUSION
+        )
+        template = _templating.render_template(
+            constants.ISF_OPERATOR_IDMS_YAML, render_data
+        )
+        fusion_idms_data = yaml.load(template, Loader=yaml.Loader)
+
+        fusion_idms = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fusion_idms", delete=False
+        )
+        templating.dump_data_to_temp_yaml(fusion_idms_data, fusion_idms.name)
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} apply -f {fusion_idms.name}",
+            silent=True,
+        )
 
     def create_subscription(self):
         """

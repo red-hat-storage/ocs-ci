@@ -1,10 +1,12 @@
 import logging
+import os
 import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.ocp import OCP
 
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,11 @@ def get_storageclass() -> str:
 
     """
     logger.info("Getting storageclass")
+    if config.DEPLOYMENT.get("local_storage", False):
+        storage_class = constants.DEFAULT_STORAGECLASS_LSO
+        logger.info(f"LSO is enabled, using {storage_class}")
+        return storage_class
+
     platform = config.ENV_DATA.get("platform")
     customized_deployment_storage_class = config.DEPLOYMENT.get(
         "customized_deployment_storage_class"
@@ -58,11 +65,57 @@ def create_custom_storageclass(storage_class_path: str) -> str:
         str: Name of the storageclass
 
     """
+
     with open(storage_class_path, "r") as custom_sc_fo:
         custom_sc = yaml.load(custom_sc_fo, Loader=yaml.SafeLoader)
 
     storage_class_name = custom_sc["metadata"]["name"]
+
+    # Check if storage class already exists
+    sc_obj = OCP(kind=constants.STORAGECLASS)
+    if sc_obj.is_exist(resource_name=storage_class_name):
+        logger.info(
+            f"Storage class {storage_class_name} already exists, skipping creation"
+        )
+        return storage_class_name
+
     log_step(f"Creating custom storage class {storage_class_name}")
     run_cmd(f"oc create -f {storage_class_path}")
 
     return storage_class_name
+
+
+def get_custom_storage_class_path() -> str:
+    """
+    Get the custom storage class path for the given platform
+    """
+    custom_sc_path = None
+    platform = config.ENV_DATA.get("platform")
+    if platform == constants.AZURE_PLATFORM:
+        if config.ENV_DATA.get("azure_performance_plus") or config.DEPLOYMENT.get(
+            "azure_performance_plus"
+        ):
+            custom_sc_path = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "azure_storageclass_perfplus.yaml"
+            )
+    elif platform == constants.VSPHERE_PLATFORM:
+        if config.ENV_DATA.get("use_custom_sc_in_deployment"):
+            custom_sc_path = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
+            )
+    elif platform == constants.GCP_PLATFORM:
+        custom_sc_path = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass.gcp.yaml"
+        )
+
+    logger.info(
+        f"For platform: {platform} we will use custom storage class path: {custom_sc_path}"
+    )
+    return custom_sc_path
+
+
+def set_custom_storage_class_path():
+    """
+    Set the custom storage class path for the given platform
+    """
+    config.ENV_DATA["custom_storage_class_path"] = get_custom_storage_class_path()
