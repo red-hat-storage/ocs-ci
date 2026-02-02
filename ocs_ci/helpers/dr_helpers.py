@@ -25,6 +25,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
     get_pods_having_label,
+    wait_for_matching_pattern_in_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import (
@@ -2709,23 +2710,28 @@ def validate_volumegroupsnapshot(vgs_namespace):
         namespace (str): the namespace of the Volume Group snapshot resources
 
     """
-    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = config.ENV_DATA["cluster_namespace"]
     odf_external_snapshotter_pod = get_pods_having_label(
         constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
     )[0]["metadata"]["name"]
     vgs_name = get_vgs_name(vgs_namespace)
-    sample = TimeoutSampler(
-        timeout=300,
-        sleep=5,
-        func=run_cmd_verify_cli_output,
-        cmd=f"oc logs {odf_external_snapshotter_pod} -n {namespace}",
-        expected_output_lst=(
-            f"{vgs_name} was successfully created by the CSI driver",
-            f"{vgs_name} is ready to use",
-        ),
+    expected_output_lst = (
+        f"{vgs_name} was successfully created by the CSI driver",
+        f"{vgs_name} is ready to use",
     )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("VolumeGroupSnapshot has not been created..")
+    try:
+        for expected_val in expected_output_lst:
+            wait_for_matching_pattern_in_pod_logs(
+                pod_name=odf_external_snapshotter_pod,
+                pattern=expected_val,
+                namespace=namespace,
+                timeout=300,
+                sleep=5,
+            )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+        )
 
 
 def is_cg_cephfs_enabled():
