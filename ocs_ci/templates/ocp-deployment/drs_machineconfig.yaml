@@ -1,0 +1,21 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-br-storage-keyfiles-worker
+  labels:
+    machineconfiguration.openshift.io/role: worker
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+      - path: /etc/NetworkManager/system-connections/br-storage.nmconnection
+        mode: 0600
+        contents:
+          source: PLACEHOLDER
+      - path: /etc/NetworkManager/system-connections/eno1-slave.nmconnection
+        mode: 0600
+        contents:
+          source: PLACEHOLDER
+
