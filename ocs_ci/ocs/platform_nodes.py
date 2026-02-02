@@ -142,6 +142,9 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ai":
                 platform += "_ai"
+        if config.ENV_DATA["platform"] == constants.IBM_HCI_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
 
         return self.cls_map[platform]()
 
