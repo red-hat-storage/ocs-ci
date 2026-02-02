@@ -8022,7 +8022,8 @@ def discovered_apps_dr_workload_cnv(request):
     instances = []
 
     def factory(
-        pvc_vm=1, custom_sc=False, dr_protect=True, shared_drpc_protection=False
+        pvc_vm=1, custom_sc=False, dr_protect=True, shared_drpc_protection=False,
+        vm_type=constants.VM_VOLUME_PVC,
     ):
         """
         Args:
@@ -8033,6 +8034,7 @@ def discovered_apps_dr_workload_cnv(request):
                             else test case should handle it (via UI)
             shared_drpc_protection (bool): False by default, True will use Shared Protection type to DR Protect
                                         a workload using the existing DRPC in the same namespace
+            vm_type (str): VM deployment type
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -8042,10 +8044,17 @@ def discovered_apps_dr_workload_cnv(request):
         """
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
-        if shared_drpc_protection:
+
+        if vm_type == constants.VM_VOLUME_DVT:
+            workload_key = "dr_cnv_discovered_apps_dvt_standalone"
+        elif vm_type == constants.VM_VOLUME_DVT and shared_drpc_protection:
+            workload_key = "dr_cnv_discovered_apps_dvt_shared"
+
+        if shared_drpc_protection and vm_type == constants.VM_VOLUME_PVC:
             workload_key = "dr_cnv_discovered_apps_shared"
         if custom_sc:
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
+
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
