@@ -1,7 +1,6 @@
 from ocs_ci.ocs.cluster import logger, get_percent_used_capacity
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
-import time
 
 
 def wait_for_percent_used_capacity_reached(
@@ -45,16 +44,22 @@ def wait_for_percent_used_capacity_reached(
     
 def cleanup_stale_cephfs_subvolumes(odf_cli_runner, log):
     """
-    Runbook-aligned mitigation:
-    1. List stale subvolumes
-    2. Delete each stale subvolume
-    3. Verify cleanup
+    Runbook-aligned mitigation to clean up stale CephFS subvolumes using ODF CLI.
+
+    Steps:
+        1. List stale subvolumes
+        2. Delete each stale subvolume
+        3. Verify cleanup
+
+    Args:
+        odf_cli_runner: ODF CLI runner instance used to execute CephFS subvolume commands.
+        log: Logger instance used to log cleanup progress and results.
     """
     log.info("Running cleanup of stale CephFS subvolumes using ODF CLI")
 
     try:
-        result = odf_cli_runner.run_command("subvolume ls --stale")
-        out = result.stdout.decode().strip() if hasattr(result, "stdout") else str(result)
+        result = odf_cli_runner.list_stale_cephfs_subvolumes()
+        out = result.stdout.decode().strip()
 
         log.info(f"Raw output of 'odf subvolume ls --stale': {out}")
 
@@ -69,9 +74,7 @@ def cleanup_stale_cephfs_subvolumes(odf_cli_runner, log):
             log.info("No stale subvolumes found after header parsing")
             return
 
-        lines = lines[1:]
-
-        for line in lines:
+        for line in lines[1:]:
             parts = line.split()
 
             # Safety guard
@@ -96,8 +99,8 @@ def cleanup_stale_cephfs_subvolumes(odf_cli_runner, log):
             log.info(f"Delete output for {subvol}: {delete_out}")
 
         # Verify cleanup
-        result = odf_cli_runner.run_command("subvolume ls --stale")
-        remaining = result.stdout.decode().strip()
+        verify_result = odf_cli_runner.list_stale_cephfs_subvolumes()
+        remaining = verify_result.stdout.decode().strip()
         log.info(f"Post-cleanup stale list: {remaining}")
 
         if remaining and "stale" in remaining.lower():
