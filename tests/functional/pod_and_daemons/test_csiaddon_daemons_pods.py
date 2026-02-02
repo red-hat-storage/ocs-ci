@@ -1,6 +1,7 @@
 import logging
 import random
 import time
+import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -31,32 +32,47 @@ class TestCSIADDonDaemonset(ManageTest):
     Test class for CSI addon daemonset verification
     """
 
-    @tier1
-    @green_squad
-    @polarion_id("OCS-7386")
-    def test_csi_addon_daemonset_exists(self):
+    @pytest.mark.parametrize(
+        argnames=["daemonset_name", "pod_label"],
+        argvalues=[
+            pytest.param(
+                constants.DAEMONSET_CSI_RBD_CSI_ADDONS,
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7386")],
+            ),
+            pytest.param(
+                constants.DAEMONSET_CSI_CEPHFS_CSI_ADDONS,
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-xxx-CEPHFS")],
+            ),
+        ],
+    )
+    def test_csi_addon_daemonset_exists(self, daemonset_name, pod_label):
         """
         Verify that the CSI addon daemonset exists and is properly configured
+
+        Args:
+            daemonset_name (str): Name of the CSI addon daemonset to verify
+            pod_label (str): Expected pod label for the daemonset
+
         steps:
         1. Check if CSI addon Daemonset exists
         2. Verify daemonset configuration
+
         """
         daemonsets = DaemonSet(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info("Validating existence of CSI Addon daemonset")
 
         # Verify Daemonset exists
         assert daemonsets.check_resource_existence(
-            should_exist=True, resource_name=constants.DAEMONSET_CSI_RBD_CSI_ADDONS
-        ), f"CSI addon daemonset '{constants.DAEMONSET_CSI_RBD_CSI_ADDONS}' does not exist"
-        logger.info(
-            f"CSIaddon daemonset '{constants.DAEMONSET_CSI_RBD_CSI_ADDONS}' exists"
-        )
+            should_exist=True, resource_name=daemonset_name
+        ), f"CSI addon daemonset '{daemonset_name}' does not exist"
+        logger.info(f"CSIaddon daemonset '{daemonset_name}' exists")
 
         # Verify daemonset configuration
         logger.info("Validating configuration of CSI Addon daemonset")
-        daemonset_info = daemonsets.get(
-            resource_name=constants.DAEMONSET_CSI_RBD_CSI_ADDONS
-        )
+        daemonset_info = daemonsets.get(resource_name=daemonset_name)
+
         actual_labels = (
             daemonset_info.get("spec", {})
             .get("template", {})
@@ -65,13 +81,13 @@ class TestCSIADDonDaemonset(ManageTest):
         )
         assert (
             actual_labels
-        ), f" The Daemonset {constants.DAEMONSET_CSI_RBD_CSI_ADDONS} has label {actual_labels} "
-        expected_label = constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420.split("=")
+        ), f" The Daemonset {daemonset_name} has label {actual_labels} "
+        expected_label = pod_label.split("=")
         for key, value in actual_labels.items():
             assert expected_label == [
                 key,
                 value,
-            ], f"expected label {constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420} not found in daemonset labels"
+            ], f"expected label {pod_label} not found in daemonset labels"
         logger.info("CSI addon daemonset has correct labels")
 
     @acceptance
