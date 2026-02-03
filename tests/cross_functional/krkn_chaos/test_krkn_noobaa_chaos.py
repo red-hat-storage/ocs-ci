@@ -150,7 +150,7 @@ class TestKrKnNooBaaChaos:
 
         # Configure Krkn with iterations for repeated chaos
         config = KrknConfigGenerator()
-        config.add_scenario("pod_scenarios", scenario_file)
+        config.add_scenario("pod_disruption_scenarios", scenario_file)
 
         # Set tunings for repeated pod kills
         # wait_duration is the time between iterations
@@ -316,7 +316,7 @@ class TestKrKnNooBaaChaos:
         # Configure and execute all scenarios
         config = KrknConfigGenerator()
         for scenario in scenarios:
-            config.add_scenario("pod_scenarios", scenario)
+            config.add_scenario("pod_disruption_scenarios", scenario)
 
         num_iterations = max(1, total_duration // kill_interval)
         config.set_tunings(
