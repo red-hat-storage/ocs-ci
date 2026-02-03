@@ -2027,7 +2027,9 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def session_s3_logs_testsuite_properties(request, record_testsuite_property):
+def session_s3_logs_testsuite_properties(
+    request, record_testsuite_property, collect_logs_fixture
+):
     """
     Add session-level S3 logs details to testsuite properties in junit XML.
     This runs at the end of the session to capture session_end_logs.
