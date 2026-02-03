@@ -101,6 +101,7 @@ class TestAcceptance(ManageTest):
                     storage_type=storage_type,
                     size="1GB",
                     verify=True,
+                    direct=int(mode[2] == constants.VOLUME_MODE_BLOCK),
                 )
                 self.pod_objs.append(pod_obj)
 
