@@ -1,0 +1,30 @@
+# NooBaa pod-disruption + MCG S3 workload. Run: pytest --ocsci-conf conf/ocsci/krkn_noobaa_chaos_config.yaml tests/cross_functional/krkn_chaos/test_krkn_noobaa_chaos.py
+
+ENV_DATA:
+  krkn_config:
+    workloads:
+      - "MCG_WORKLOAD"  # S3 on MCG/NooBaa
+    run_workload: true
+
+    mcg_config:
+      num_buckets: 3
+      iteration_count: 20
+      operation_types:
+        - upload
+        - download
+        - list
+        - delete
+      upload_multiplier: 2
+      metadata_ops_enabled: true  # stress metadata path
+      delay_between_iterations: 20  # seconds
+      delete_bucket_on_cleanup: true
+
+    enable_verification: true  # S3 integrity after chaos
+
+    background_cluster_operations:
+      enabled: true
+      operation_interval: 60  # seconds
+      max_concurrent_operations: 2
+      enabled_operations:
+        - snapshot_lifecycle
+        - clone_lifecycle  # skip OSD/MDS for NooBaa-focused runs

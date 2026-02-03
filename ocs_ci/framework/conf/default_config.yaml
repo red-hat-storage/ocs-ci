@@ -117,6 +117,10 @@ DEPLOYMENT:
   #api_ssl_cert: "data/api-cert.crt"
   #api_ssl_key: "data/api-cert.key"
   #api_ssl_ca_cert: "data/ca.crt"
+  # Boto3 S3 (MCG): skip TLS verification when true (e.g. ad-hoc clusters).
+  disable_s3_ssl_verify: false
+  # When true, do not apply IBM Cloud qe.rh-ocs.com S3 TLS workaround (use normal verify path).
+  force_s3_ssl_verify: false
   install_lvmo: False
   # AWS profile ( profile must exist in ~/.aws/credentials )
   aws_profile: "ocs_ci"

@@ -28,7 +28,13 @@ from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
 log = logging.getLogger(__name__)
 
+# DFBUGS-6519: exclude only the plan node service-disruption-scenarios_* (name
+# service-disruption-scenarios, LABEL_SELECTOR ""). Do not use the broad
+# exclude list for that name — it would also drop service-disruption-scenarios-rook_*.
 DEFAULT_EXCLUDE_SCENARIOS = []
+DEFAULT_EXCLUDE_SCENARIO_BASES_EXACT = [
+    "service-disruption-scenarios",
+]
 
 
 @green_squad
@@ -84,10 +90,15 @@ class TestKrKnctlRandomChaos:
         )
 
         # Generate random plan file (before workload)
-        log.info("Generating random plan file (exclude=%s)", DEFAULT_EXCLUDE_SCENARIOS)
+        log.info(
+            "Generating random plan file (exclude=%s, exclude_bases_exact=%s)",
+            DEFAULT_EXCLUDE_SCENARIOS,
+            DEFAULT_EXCLUDE_SCENARIO_BASES_EXACT,
+        )
         generator = PlanGenerator(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             exclude_scenarios=DEFAULT_EXCLUDE_SCENARIOS,
+            exclude_scenario_bases_exact=DEFAULT_EXCLUDE_SCENARIO_BASES_EXACT,
             use_random_selectors=True,
         )
         generator.generate()
