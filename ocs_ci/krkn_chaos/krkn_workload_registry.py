@@ -143,6 +143,17 @@ KrknWorkloadRegistry.register(
     )
 )
 
+# MCG/NooBaa Workload (S3 workload on MCG/NooBaa buckets)
+KrknWorkloadRegistry.register(
+    WorkloadTypeConfig(
+        name="MCG_WORKLOAD",
+        required_fixtures=["awscli_pod"],
+        factory_method="_create_mcg_workloads_for_project",
+        fixture_params=["awscli_pod"],
+        description="MCG/NooBaa S3 workload for NooBaa chaos testing",
+    )
+)
+
 # ============================================================================
 # TO ADD A NEW WORKLOAD TYPE:
 # ============================================================================
