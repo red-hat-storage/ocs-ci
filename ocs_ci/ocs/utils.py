@@ -1084,7 +1084,7 @@ def create_tarball_and_upload_to_s3(
         "log_type": log_type or "unknown",
         "collection_timestamp": timestamp_str,
         "relative_log_path": relative_log_path,
-        "log_path": log_path,  # Changed from tarball_path to log_path
+        "log_path": log_path,
         "cluster_name": cluster_name,
     }
 
@@ -2215,13 +2215,14 @@ def label_pod_security_admission(namespace=None, upgrade_version=None):
         ocp_obj.add_label(resource_name=namespace, label=label)
 
 
-def collect_pod_container_rpm_package(dir_name):
+def collect_pod_container_rpm_package(dir_name, test_case_name=None):
     """
     Collect information about rpm packages from all containers + go version
 
     Args:
         dir_name(str): directory to store container rpm package info (if REPORTING["tarball_mg_logs"] is set, this
             directory will be packed to the parent directory with extension .tar.gz)
+        test_case_name (str): Test case name for organizing S3 uploads
 
     """
     # Import pod here to avoid circular dependency issue
@@ -2288,6 +2289,12 @@ def collect_pod_container_rpm_package(dir_name):
                     with open(go_log_file_name, "w") as f:
                         f.write(go_output)
 
+    # Check if S3 upload is enabled
+    s3_upload_enabled = config.REPORTING.get("s3_logs_upload") and config.AUTH.get(
+        "logs_s3_endpoint_details"
+    )
+    tarball_path = None
+
     if config.REPORTING.get("tarball_mg_logs"):
         tarball_path = f"{package_log_dir_path}.tar.gz"
         try:
@@ -2297,6 +2304,54 @@ def collect_pod_container_rpm_package(dir_name):
                 shutil.rmtree(log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
+
+    # Upload to S3 if configured
+    if s3_upload_enabled:
+        try:
+            from ocs_ci.utility.s3_logs_uploader import (
+                upload_logs_to_s3_if_configured,
+            )
+
+            # Get cluster and run information
+            cluster_name = ocsci_config.ENV_DATA.get("cluster_name", "unknown")
+            run_id = ocsci_config.RUN.get("run_id", "unknown")
+            timestamp_str = datetime.datetime.fromtimestamp(timestamp).strftime(
+                "%Y%m%d_%H%M%S"
+            )
+
+            # Use tarball if created, otherwise use directory (S3 uploader will create tarball)
+            upload_path = tarball_path if tarball_path else package_log_dir_path
+            log.info(f"Uploading RPM and Go version logs to S3: {upload_path}")
+
+            # Create prefix for better organization
+            prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/rpm_go_versions/{timestamp_str}"
+
+            result = upload_logs_to_s3_if_configured(
+                file_path=upload_path,
+                prefix=prefix,
+                metadata={
+                    "cluster-name": cluster_name,
+                    "test-case-name": test_case_name or "unknown",
+                    "collection-type": "rpm_go_versions",
+                    "collection-timestamp": timestamp_str,
+                    "log-type": "rpm_go_versions",
+                },
+            )
+
+            if result and result.get("success"):
+                log.info("RPM and Go version logs uploaded to S3 successfully")
+                log.info(f"S3 URI: {result.get('s3_uri')}")
+                log.info(
+                    f"Bucket: {result.get('bucket')}, Object Key: {result.get('object_key')}"
+                )
+                log.info(f"Retention expires at: {result.get('retention_expires_at')}")
+            else:
+                log.warning(
+                    "Failed to upload RPM and Go version logs to S3: "
+                    f"{result.get('error') if result else 'Unknown error'}"
+                )
+        except Exception as ex:
+            log.error(f"Error during S3 upload of RPM and Go version logs: {ex}")
 
 
 def is_dr_scenario():

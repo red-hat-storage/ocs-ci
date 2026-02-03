@@ -727,21 +727,14 @@ def pytest_runtest_makereport(item, call):
                 if log_info.get("s3_url"):
                     report.user_properties.append((f"{prefix}_uri", log_info["s3_uri"]))
 
-                if log_info.get("relative_mg_path"):
+                if log_info.get("relative_log_path"):
                     report.user_properties.append(
-                        (f"{prefix}_mg_path", log_info["relative_mg_path"])
+                        (f"{prefix}_relative_path", log_info["relative_log_path"])
                     )
-
-                if log_info.get("url_expires_at"):
+                if log_info.get("log_path"):
                     report.user_properties.append(
-                        (f"{prefix}_url_expires", log_info["url_expires_at"])
+                        (f"{prefix}_path", log_info["log_path"])
                     )
-
-                if log_info.get("collection_timestamp"):
-                    report.user_properties.append(
-                        (f"{prefix}_timestamp", log_info["collection_timestamp"])
-                    )
-
             log.info(
                 f"Added {len(logs_list)} S3 log entries to junit XML for test: {test_name}"
             )
@@ -2044,10 +2037,12 @@ def session_s3_logs_testsuite_properties(request, record_testsuite_property):
             # Add key properties to junit XML at testsuite level
             if log_info.get("s3_uri"):
                 record_testsuite_property(f"{prefix}_uri", log_info["s3_uri"])
-            if log_info.get("relative_mg_path"):
+            if log_info.get("relative_log_path"):
                 record_testsuite_property(
-                    f"{prefix}_log_path", log_info["relative_mg_path"]
+                    f"{prefix}_relative_path", log_info["relative_log_path"]
                 )
+            if log_info.get("log_path"):
+                record_testsuite_property(f"{prefix}_path", log_info["log_path"])
 
         log.info(
             f"Added {len(logs_list)} session-level S3 log entries to junit XML testsuite properties"
@@ -5327,7 +5322,9 @@ def collect_logs_fixture(request, session_s3_logs_testsuite_properties):
                         )
             try:
                 if not skip_rpm_go_version_collection:
-                    utils.collect_pod_container_rpm_package("testcases")
+                    utils.collect_pod_container_rpm_package(
+                        "testcases", test_case_name="session_end_logs"
+                    )
             except Exception as ex:
                 # If pod is killed/restarted during this operation, skip if pod not found error is shown
                 if "Error is Error from server (NotFound)" in str(ex):
