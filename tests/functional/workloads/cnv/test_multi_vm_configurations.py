@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.pytest_customization.marks import workloads, magenta_squad
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.performance_lib import run_oc_command
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
+from ocs_ci.helpers.keyrotation_helper import PVKeyRotation
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
 
@@ -49,7 +49,7 @@ class TestCNVVM(E2ETest):
         """
         for vm in vm_objs:
             if vm.volume_interface == constants.VM_VOLUME_PVC:
-                pvk_obj = PVKeyrotation(sc_obj)
+                pvk_obj = PVKeyRotation(sc_obj)
                 volume_name = vm.pvc_obj.get().get("spec", {}).get("volumeName")
                 volume_handle = None
                 for line in run_oc_command(

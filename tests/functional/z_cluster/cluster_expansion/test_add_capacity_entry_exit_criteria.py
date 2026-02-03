@@ -26,7 +26,7 @@ from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
-from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
+from ocs_ci.helpers.keyrotation_helper import OSDKeyRotation
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class TestAddCapacity(ManageTest):
         """
 
         def finalizer():
-            kr_obj = OSDKeyrotation()
+            kr_obj = OSDKeyRotation()
             kr_obj.set_keyrotation_schedule("@weekly")
             kr_obj.enable_keyrotation()
             cluster_helpers.check_ceph_health_after_add_capacity()
@@ -417,7 +417,7 @@ class TestAddCapacity(ManageTest):
             and (not config.DEPLOYMENT.get("kms_deployment"))
         ):
             logger.info("Verifying Keyrotation for OSD")
-            osd_keyrotation = OSDKeyrotation()
+            osd_keyrotation = OSDKeyRotation()
 
             # Recored existing OSD keys before rotation is happen.
             osd_keys_before_rotation = {}

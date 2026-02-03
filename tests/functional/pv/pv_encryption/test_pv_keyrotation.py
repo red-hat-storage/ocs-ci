@@ -16,7 +16,7 @@ from ocs_ci.framework.testlib import (
     vault_kms_deployment_required,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
+from ocs_ci.helpers.keyrotation_helper import PVKeyRotation
 
 
 log = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
             self.kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
 
         # Annotate Storageclass for keyrotation.
-        pvk_obj = PVKeyrotation(sc_obj)
+        pvk_obj = PVKeyRotation(sc_obj)
         pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
         # Create RBD PVCs with volume mode Block

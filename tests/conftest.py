@@ -234,7 +234,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
+from ocs_ci.helpers.keyrotation_helper import PVKeyRotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 from ocs_ci.helpers.cnv_helpers import run_fio
@@ -8144,7 +8144,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
             kms.create_vault_csi_kms_token(namespace=namespace)
 
             for sc_obj in storage_classes:
-                pvk_obj = PVKeyrotation(sc_obj)
+                pvk_obj = PVKeyRotation(sc_obj)
                 pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
         # Load VM configs from cnv_vm_workload yaml
@@ -11089,8 +11089,8 @@ class BaseStorageClassPrecedenceTest(ABC):
         # Use appropriate CronJob function based on annotation key
         annotation_key = self.get_annotation_key()
         if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
-            # For KeyRotation tests, use PVKeyrotation helper
-            keyrotation_helper = PVKeyrotation(pvc_obj.storageclass)
+            # For KeyRotation tests, use PVKeyRotation helper
+            keyrotation_helper = PVKeyRotation(pvc_obj.storageclass)
             cronjob = keyrotation_helper.get_keyrotation_cronjob_for_pvc(pvc_obj)
         else:
             # For ReclaimSpace tests, use the existing helper
