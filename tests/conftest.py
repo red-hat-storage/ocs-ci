@@ -725,12 +725,7 @@ def pytest_runtest_makereport(item, call):
 
                 # Add key properties to junit XML
                 if log_info.get("s3_url"):
-                    report.user_properties.append((f"{prefix}_url", log_info["s3_url"]))
-
-                if log_info.get("s3_object_key"):
-                    report.user_properties.append(
-                        (f"{prefix}_object_key", log_info["s3_object_key"])
-                    )
+                    report.user_properties.append((f"{prefix}_uri", log_info["s3_uri"]))
 
                 if log_info.get("relative_mg_path"):
                     report.user_properties.append(
@@ -2044,30 +2039,14 @@ def session_s3_logs_testsuite_properties(request, record_testsuite_property):
         # Add properties for each log collection (OCS MG, OCP MG, etc.)
         for log_info in logs_list:
             log_type = log_info.get("log_type", "unknown")
-            prefix = f"session_log_{log_type}"
+            prefix = f"log_{log_type}"
 
             # Add key properties to junit XML at testsuite level
             if log_info.get("s3_uri"):
-                record_testsuite_property(f"{prefix}_url", log_info["s3_uri"])
-
-            if log_info.get("s3_object_key"):
+                record_testsuite_property(f"{prefix}_uri", log_info["s3_uri"])
+            if log_info.get("relative_mg_path"):
                 record_testsuite_property(
-                    f"{prefix}_object_key", log_info["s3_object_key"]
-                )
-
-            if log_info.get("url_expires_at"):
-                record_testsuite_property(
-                    f"{prefix}_url_expires", log_info["url_expires_at"]
-                )
-
-            if log_info.get("collection_timestamp"):
-                record_testsuite_property(
-                    f"{prefix}_timestamp", log_info["collection_timestamp"]
-                )
-
-            if log_info.get("retention_expires_at"):
-                record_testsuite_property(
-                    f"{prefix}_retention_expires", log_info["retention_expires_at"]
+                    f"{prefix}_log_path", log_info["relative_mg_path"]
                 )
 
         log.info(
@@ -5297,7 +5276,7 @@ def collect_logs_fixture(request, session_s3_logs_testsuite_properties):
     to see the cluster's status after the execution on all execution status options.
     """
     dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
-    skip_rpm_go_version_collection = ocsci_config.RUN["cli_params"].get(
+    skip_rpm_go_version_collection = ocsci_config.RUN.get(
         "skip_rpm_go_version_collection"
     )
     if dev_mode:

@@ -842,7 +842,8 @@ def process_cluster_cli_params(config):
     skip_rpm_go_version_collection = get_cli_param(
         config, "skip_rpm_go_version_collection"
     )
-    ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
+    if skip_rpm_go_version_collection:
+        ocsci_config.RUN["skip_rpm_go_version_collection"] = True
     ocsci_config.ENV_DATA["product_type"] = get_cli_param(config, "product_type")
 
 
