@@ -3566,3 +3566,24 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
         raise Exception(
             f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
         )
+
+
+def get_bucket_status_value(mcg_obj, bucket_name, key):
+    """
+    Helper function returning specific bucket status value by key
+    Args:
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        bucket_name (str): Name of the bucket on which ls should be run
+        key (str): Key to bucket status value to be returned
+    Returns:
+        str: value of the status property
+    """
+    bucket_status = mcg_obj.exec_mcg_cmd(
+        cmd=f"bucket status {bucket_name}",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        use_yes=True,
+    ).stdout
+    logger.info(f"Status = {bucket_status}")
+    op = bucket_status.split("\n")
+    value = next(item.split(":")[1].strip() for item in op if key in item)
+    return value
