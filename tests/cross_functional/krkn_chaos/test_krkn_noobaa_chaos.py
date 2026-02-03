@@ -53,10 +53,11 @@ class TestKrKnNooBaaChaos:
     @pytest.mark.parametrize(
         "target_pod,duration_seconds,kill_interval_seconds",
         [
-            # NooBaa DB primary pod - most critical
-            ("noobaa-db-pg-0", 1200, 180),  # 20 min test, kill every 3 min
-            ("noobaa-db-pg-0", 1800, 240),  # 30 min test, kill every 4 min
-            ("noobaa-db-pg-0", 3600, 300),  # 60 min test, kill every 5 min
+            # NooBaa DB PRIMARY pod - most critical for testing failover
+            # Specifically targets the primary pod by exact name
+            ("noobaa-db-pg-cluster-1", 1200, 180),  # 20 min test, kill every 3 min
+            ("noobaa-db-pg-cluster-1", 1800, 240),  # 30 min test, kill every 4 min
+            ("noobaa-db-pg-cluster-1", 3600, 300),  # 60 min test, kill every 5 min
             # NooBaa core pod - critical for S3 operations
             ("noobaa-core-0", 1200, 180),  # 20 min test, kill every 3 min
             ("noobaa-core-0", 1800, 240),  # 30 min test, kill every 4 min
@@ -64,9 +65,9 @@ class TestKrKnNooBaaChaos:
             ("noobaa-operator.*", 1200, 180),  # 20 min test, kill every 3 min
         ],
         ids=[
-            "noobaa-db-20min-180s-interval",
-            "noobaa-db-30min-240s-interval",
-            "noobaa-db-60min-300s-interval",
+            "noobaa-db-primary-20min-180s-interval",
+            "noobaa-db-primary-30min-240s-interval",
+            "noobaa-db-primary-60min-300s-interval",
             "noobaa-core-20min-180s-interval",
             "noobaa-core-30min-240s-interval",
             "noobaa-operator-20min-180s-interval",
@@ -133,15 +134,11 @@ class TestKrKnNooBaaChaos:
         )
 
         # Create pod kill scenario using PodScenarios
-        # Use name_pattern to match the target pod
+        # Use name_pattern to match the target pod (regex patterns work directly)
         scenario_file = PodScenarios.regex_openshift_pod_kill(
             scenario_dir=krkn_scenario_directory,
             namespace_pattern="^openshift-storage$",
-            name_pattern=(
-                f"^{target_pod}$"
-                if not target_pod.endswith(".*")
-                else target_pod.replace(".*", ".*")
-            ),
+            name_pattern=target_pod,  # Use the regex pattern directly
             kill=1,  # Kill 1 pod at a time
             krkn_pod_recovery_time=kill_interval_seconds,  # Recovery time = kill interval
         )
@@ -286,8 +283,12 @@ class TestKrKnNooBaaChaos:
         scenarios = []
 
         # Target multiple NooBaa components for strength testing
+        # Specifically targeting primary DB pod for realistic failover testing
         target_pods = [
-            ("noobaa-db-pg-0", "NooBaa Database"),
+            (
+                "noobaa-db-pg-cluster-1",
+                "NooBaa Database Primary",
+            ),  # Targets primary pod specifically
             ("noobaa-core-0", "NooBaa Core"),
             ("noobaa-operator.*", "NooBaa Operator"),
         ]
@@ -300,11 +301,7 @@ class TestKrKnNooBaaChaos:
             scenario_file = PodScenarios.regex_openshift_pod_kill(
                 scenario_dir=krkn_scenario_directory,
                 namespace_pattern="^openshift-storage$",
-                name_pattern=(
-                    f"^{pod_pattern}$"
-                    if not pod_pattern.endswith(".*")
-                    else pod_pattern.replace(".*", ".*")
-                ),
+                name_pattern=pod_pattern,  # Use the regex pattern directly
                 kill=1,
                 krkn_pod_recovery_time=kill_interval,
             )
