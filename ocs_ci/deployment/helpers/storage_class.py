@@ -95,8 +95,17 @@ def get_custom_storage_class_path() -> str:
         if config.ENV_DATA.get("azure_performance_plus") or config.DEPLOYMENT.get(
             "azure_performance_plus"
         ):
+            # Select template by disk type: Standard SSD or Premium SSD (default)
+            disk_type = config.DEPLOYMENT.get(
+                "azure_performance_plus_disk_type",
+                constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_PREMIUM_SSD,
+            )
+            if disk_type == constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_STANDARD_SSD:
+                template_name = "azure_storageclass_perfplus_standard_ssd.yaml"
+            else:
+                template_name = "azure_storageclass_perfplus_premium_ssd.yaml"
             custom_sc_path = os.path.join(
-                constants.TEMPLATE_DEPLOYMENT_DIR, "azure_storageclass_perfplus.yaml"
+                constants.TEMPLATE_DEPLOYMENT_DIR, template_name
             )
     elif platform == constants.VSPHERE_PLATFORM:
         if config.ENV_DATA.get("use_custom_sc_in_deployment"):
