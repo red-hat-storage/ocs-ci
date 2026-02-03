@@ -1754,14 +1754,8 @@ def get_non_acm_cluster_and_non_provider_cluster_index():
     Returns:
         list: of cluster config objects
     """
-    non_acm_cluster_and_non_provider_cluster_indexes = []
-    for cluster in get_non_acm_cluster_config():
-        if not cluster.ENV_DATA["cluster_type"] == "provider":
-            non_acm_cluster_and_non_provider_cluster_indexes.append(
-                cluster.MULTICLUSTER["multicluster_index"]
-            )
 
-    return non_acm_cluster_and_non_provider_cluster_indexes
+    return config.get_provider_cluster_indexes()
 
 
 def get_non_acm_and_non_recovery_cluster_config():
