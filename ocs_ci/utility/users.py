@@ -4,7 +4,7 @@ import random
 import shlex
 import string
 import time
-
+from dataclasses import dataclass
 from tempfile import NamedTemporaryFile
 from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.framework import config
@@ -17,8 +17,36 @@ from ocs_ci.utility.rosa import (
     rosa_list_idps,
 )
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_random_str
+from ocs_ci.utility import templating
+from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.ocs.resources.ocs import OCS
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class DevUser:
+    """
+    Data class representing a dev user with OpenShift and S3 credentials.
+
+    Fields:
+        username: OpenShift username for console login.
+        password: OpenShift password for console login.
+        secret_namespace: Namespace containing the S3 credentials secret.
+        secret_name: Name of the secret containing S3 credentials.
+        clusterrole_binding_name: Computed name of the ClusterRoleBinding (property).
+
+    """
+
+    username: str
+    password: str
+    secret_namespace: str
+    secret_name: str
+
+    @property
+    def clusterrole_binding_name(self) -> str:
+        """Return the ClusterRoleBinding name derived from username."""
+        return f"noobaa-odf-ui-binding-{self.username}"
 
 
 def add_htpasswd_user(username, password, htpasswd_path):
@@ -233,3 +261,71 @@ def logout():
     """
     exec_cmd("oc logout")
     log.info("Logged out")
+
+
+def create_noobaa_ui_clusterrole() -> OCS:
+    """
+    Create or update the noobaa-odf-ui ClusterRole for dev users.
+
+    This ClusterRole grants minimal read permissions to NooBaa resources,
+    namespaces, and secrets, allowing users to access the Object Browser UI
+    without full admin rights.
+
+    Uses 'oc apply' semantics to ensure the ClusterRole is always up-to-date.
+
+    Returns:
+        OCS: The ClusterRole resource.
+
+    Raises:
+        CommandFailed: If resource apply fails.
+
+    """
+    log.info("Applying noobaa-odf-ui ClusterRole")
+    clusterrole_data = templating.load_yaml(constants.NOOBAA_ODF_UI_CLUSTERROLE_YAML)
+
+    exec_cmd(f"oc apply -f {constants.NOOBAA_ODF_UI_CLUSTERROLE_YAML}")
+    log.info("noobaa-odf-ui ClusterRole applied successfully")
+
+    return OCS(**clusterrole_data)
+
+
+def bind_user_to_noobaa_ui_role(username: str) -> OCS:
+    """
+    Bind a user to the noobaa-odf-ui ClusterRole.
+
+    Args:
+        username (str): The OpenShift username to bind.
+
+    Returns:
+        OCS: The created ClusterRoleBinding resource.
+
+    Raises:
+        CommandFailed: If resource creation fails.
+
+    """
+    log.info(f"Binding user {username} to noobaa-odf-ui ClusterRole")
+    binding_data = templating.load_yaml(constants.NOOBAA_ODF_UI_CLUSTERROLEBINDING_YAML)
+
+    binding_name = f"noobaa-odf-ui-binding-{username}"
+    binding_data["metadata"]["name"] = binding_name
+    binding_data["subjects"][0]["name"] = username
+
+    create_resource(**binding_data)
+    return OCS(**binding_data)
+
+
+def delete_user_noobaa_ui_binding(username: str) -> None:
+    """
+    Delete the ClusterRoleBinding for a user.
+
+    Args:
+        username (str): The OpenShift username.
+
+    """
+    binding_name = f"noobaa-odf-ui-binding-{username}"
+    ocp_obj = OCP(kind="ClusterRoleBinding")
+    try:
+        ocp_obj.delete(resource_name=binding_name)
+        log.info(f"Deleted ClusterRoleBinding {binding_name}")
+    except CommandFailed as e:
+        log.warning(f"Failed to delete binding {binding_name}: {e}")
