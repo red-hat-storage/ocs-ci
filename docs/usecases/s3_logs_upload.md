@@ -111,13 +111,19 @@ upload-logs-to-s3 -f must-gather.tar.gz
 
 ## Standalone CLI Tool
 
-The `upload-logs-to-s3` command can be used to manually upload any log files to S3.
+The `upload-logs-to-s3` command can be used to manually upload log files or directories to S3.
 
 ### Basic Usage
 
 ```bash
-# Upload using ~/.ocs-ci-s3-logs.yaml (if it exists)
+# Upload a file using ~/.ocs-ci-s3-logs.yaml (if it exists)
 upload-logs-to-s3 -f must-gather.tar.gz
+
+# Upload a directory (automatically creates tarball)
+upload-logs-to-s3 -f /path/to/logs-directory
+
+# Upload directory and delete the created tarball after upload
+upload-logs-to-s3 -f /path/to/logs-directory --delete
 
 # Upload with custom config file
 upload-logs-to-s3 -f must-gather.tar.gz --ocsci-conf my-s3-config.yaml
@@ -143,6 +149,9 @@ upload-logs-to-s3 -f must-gather.tar.gz -r 180
 # Upload with custom object name
 upload-logs-to-s3 -f must-gather.tar.gz -o custom-name.tar.gz
 
+# Upload a directory with custom options
+upload-logs-to-s3 -f /path/to/logs-dir -p "execution_123" -r 180 --delete
+
 # Verbose mode for debugging
 upload-logs-to-s3 -f must-gather.tar.gz -v
 
@@ -154,15 +163,43 @@ upload-logs-to-s3 -f must-gather.tar.gz \
   -v
 ```
 
+### Directory Upload Behavior
+
+When you provide a directory path to the `-f` option:
+
+1. **Automatic Tarball Creation**: The tool automatically creates a `.tar.gz` tarball from the directory
+2. **Temporary Storage**: By default, the tarball is created in the system's temp directory
+3. **Automatic Cleanup**: The temporary tarball is automatically deleted after successful upload
+4. **Manual Cleanup**: Use the `--delete` flag to explicitly delete the tarball after upload (useful when you want to ensure cleanup even if the tarball is created in a custom location)
+
+**Example workflow:**
+```bash
+# Directory structure
+/path/to/logs-directory/
+├── test1.log
+├── test2.log
+└── subdir/
+    └── test3.log
+
+# Upload command
+upload-logs-to-s3 -f /path/to/logs-directory
+
+# What happens:
+# 1. Creates /tmp/logs-directory.tar.gz (temporary tarball)
+# 2. Uploads the tarball to S3
+# 3. Automatically deletes /tmp/logs-directory.tar.gz
+```
+
 ### CLI Options Reference
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-f, --file` | Path to the file to upload (required) | - |
+| `-f, --file` | Path to the file or directory to upload (required). If a directory is provided, it will be automatically compressed to a .tar.gz file | - |
 | `--ocsci-conf` | Path to ocs-ci config file (can be used multiple times) | - |
 | `-p, --prefix` | Prefix for organizing files (e.g., "execution/test") | None |
-| `-o, --object-name` | Custom object name | File name |
+| `-o, --object-name` | Custom object name | File/directory name |
 | `-r, --retention` | Object retention period in days | From config (90) |
+| `-d, --delete` | Delete the tarball after successful upload (only applies when uploading a directory) | False |
 | `-v, --verbose` | Enable verbose logging | False |
 
 ## File Organization
@@ -208,7 +245,7 @@ Retention information is stored in object metadata and included in upload result
 
 After a successful upload, detailed information about the uploaded object is displayed, including the S3 URI and object location details needed for retrieval.
 
-Example output:
+### Example Output for File Upload
 
 ```
 ================================================================================
@@ -229,6 +266,33 @@ Object Location Information:
 To retrieve this object later, use:
   Bucket: ocs-ci-logs
   Key:    my-cluster/20260126_143022/must-gather.tar.gz
+  Region: us-south
+================================================================================
+```
+
+### Example Output for Directory Upload
+
+```
+================================================================================
+✓ Upload Successful!
+================================================================================
+Directory:         /path/to/logs-directory
+Tarball Created:   /tmp/logs-directory.tar.gz
+Tarball Deleted:   Yes
+Bucket:            ocs-ci-logs
+Object Key:        execution_123/logs-directory.tar.gz
+S3 URI:            s3://ocs-ci-logs/execution_123/logs-directory.tar.gz
+Region:            us-south
+Size:              12,345,678 bytes
+ETag:              xyz789abc123...
+Upload Time:       2026-02-02T16:15:30Z
+Retention:         90 days (expires: 2026-05-03T16:15:30Z)
+
+Object Location Information:
+--------------------------------------------------------------------------------
+To retrieve this object later, use:
+  Bucket: ocs-ci-logs
+  Key:    execution_123/logs-directory.tar.gz
   Region: us-south
 ================================================================================
 ```

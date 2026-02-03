@@ -12,9 +12,12 @@ Integrated with ocs-ci configuration system.
 import sys
 import argparse
 import logging
+import tarfile
+import tempfile
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 
 try:
     import boto3
@@ -295,6 +298,65 @@ class S3LogsUploader:
         return upload_result
 
 
+def create_tarball_from_directory(
+    directory_path: str, output_path: Optional[str] = None
+) -> Tuple[str, bool]:
+    """
+    Create a tarball from a directory.
+
+    Args:
+        directory_path: Path to the directory to compress
+        output_path: Optional path for the output tarball. If not provided,
+                    creates {dirname}.tar.gz in a temp directory
+
+    Returns:
+        Tuple of (tarball_path, is_temp_file)
+        - tarball_path: Path to the created tarball
+        - is_temp_file: True if tarball was created in temp directory
+
+    Raises:
+        FileNotFoundError: If the directory doesn't exist
+        NotADirectoryError: If the path is not a directory
+    """
+    dir_path = Path(directory_path)
+
+    if not dir_path.exists():
+        raise FileNotFoundError(f"Directory not found: {directory_path}")
+
+    if not dir_path.is_dir():
+        raise NotADirectoryError(f"Path is not a directory: {directory_path}")
+
+    # Determine output path
+    is_temp = False
+    if output_path is None:
+        # Create in temp directory
+        temp_dir = tempfile.gettempdir()
+        tarball_name = f"{dir_path.name}.tar.gz"
+        output_path = os.path.join(temp_dir, tarball_name)
+        is_temp = True
+        logger.info(f"Creating temporary tarball: {output_path}")
+    else:
+        logger.info(f"Creating tarball: {output_path}")
+
+    # Create tarball
+    try:
+        with tarfile.open(output_path, "w:gz") as tar:
+            tar.add(directory_path, arcname=dir_path.name)
+
+        file_size = Path(output_path).stat().st_size
+        logger.info(f"Created tarball: {output_path} ({file_size:,} bytes)")
+
+        return output_path, is_temp
+    except Exception as e:
+        # Clean up temp file if creation failed
+        if is_temp and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+        raise RuntimeError(f"Failed to create tarball: {e}") from e
+
+
 def load_config_from_home():
     """
     Load S3 configuration from ~/.ocs-ci-s3-logs.yaml if it exists.
@@ -364,6 +426,7 @@ def upload_logs_to_s3_if_configured(
     object_name: Optional[str] = None,
     metadata: Optional[Dict[str, str]] = None,
     retention_days: Optional[int] = None,
+    delete_uploaded_tarball: Optional[bool] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Upload logs to S3 if configured in ocs-ci config.
@@ -371,25 +434,68 @@ def upload_logs_to_s3_if_configured(
     This is a convenience function that checks if S3 upload is enabled
     and credentials are available before attempting upload.
 
+    If a directory is provided, it will be automatically compressed to a tarball
+    and uploaded. The tarball can be deleted after successful upload based on
+    the delete_uploaded_tarball parameter or delete_s3_uploaded_logs config option.
+
     Args:
-        file_path: Path to the file to upload
+        file_path: Path to the file or directory to upload
         prefix: Optional prefix to organize files
         object_name: Optional custom object name
         metadata: Optional metadata to attach to the object
         retention_days: Optional retention period in days
+        delete_uploaded_tarball: Optional flag to delete tarball after upload.
+                                 If None, uses delete_s3_uploaded_logs from config.
 
     Returns:
         Upload result dictionary if successful, None if S3 not configured or upload failed
     """
     try:
+        from ocs_ci.framework import config as ocsci_config
+
         s3_config = get_s3_config_from_ocs_ci()
         if not s3_config:
             logger.debug("S3 upload not configured, skipping")
             return None
 
+        # Determine if we should delete tarball after upload
+        # Priority: explicit parameter > config option > False (default)
+        should_delete_tarball = delete_uploaded_tarball
+        if should_delete_tarball is None:
+            should_delete_tarball = ocsci_config.REPORTING.get(
+                "delete_s3_uploaded_logs", False
+            )
+
+        # Check if input is a directory
+        input_path = Path(file_path)
+        is_directory = input_path.is_dir()
+        tarball_to_delete = None
+        actual_file_path = file_path
+
+        # If it's a directory, create a tarball
+        if is_directory:
+            logger.info(f"Input is a directory, creating tarball: {file_path}")
+            try:
+                tarball_path, is_temp = create_tarball_from_directory(file_path)
+                actual_file_path = tarball_path
+
+                # Mark for deletion if configured
+                if should_delete_tarball:
+                    tarball_to_delete = tarball_path
+                    logger.debug(
+                        f"Tarball will be deleted after upload: {tarball_path}"
+                    )
+
+            except Exception as e:
+                logger.error(f"Failed to create tarball from directory: {e}")
+                return None
+        # If it's a file and we should delete it after upload
+        elif should_delete_tarball and file_path.endswith(".tar.gz"):
+            tarball_to_delete = file_path
+
         uploader = S3LogsUploader(s3_config)
         result = uploader.upload_and_get_info(
-            file_path=file_path,
+            file_path=actual_file_path,
             prefix=prefix,
             object_name=object_name,
             metadata=metadata,
@@ -401,8 +507,27 @@ def upload_logs_to_s3_if_configured(
             logger.info(
                 f"Bucket: {result['bucket']}, Object Key: {result['object_key']}"
             )
+
+            # Delete tarball after successful upload if configured
+            if tarball_to_delete and os.path.exists(tarball_to_delete):
+                try:
+                    logger.info(
+                        f"Deleting tarball after S3 upload: {tarball_to_delete}"
+                    )
+                    os.remove(tarball_to_delete)
+                except Exception as e:
+                    logger.warning(f"Failed to delete tarball {tarball_to_delete}: {e}")
         else:
             logger.error(f"Failed to upload logs to S3: {result.get('error')}")
+            # Clean up tarball if upload failed and it was created from directory
+            if is_directory and tarball_to_delete and os.path.exists(tarball_to_delete):
+                try:
+                    logger.debug(
+                        f"Cleaning up tarball after failed upload: {tarball_to_delete}"
+                    )
+                    os.remove(tarball_to_delete)
+                except Exception:
+                    pass
 
         return result
     except Exception as e:
@@ -415,12 +540,18 @@ def main():
     Main function for standalone CLI usage.
     """
     parser = argparse.ArgumentParser(
-        description="Upload log files to IBM Cloud Object Storage (S3)",
+        description="Upload log files or directories to IBM Cloud Object Storage (S3)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Upload a file with default settings (uses ocs-ci config)
   %(prog)s -f must-gather.tar.gz
+
+  # Upload a directory (automatically creates tarball)
+  %(prog)s -f /path/to/logs-directory
+
+  # Upload directory and delete the created tarball after upload
+  %(prog)s -f /path/to/logs-directory --delete
 
   # Upload with custom config file
   %(prog)s -f must-gather.tar.gz --ocsci-conf my-config.yaml
@@ -437,7 +568,11 @@ Examples:
     )
 
     parser.add_argument(
-        "-f", "--file", required=True, help="Path to the file to upload"
+        "-f",
+        "--file",
+        required=True,
+        help="Path to the file or directory to upload. "
+        "If a directory is provided, it will be automatically compressed to a .tar.gz file",
     )
 
     parser.add_argument(
@@ -463,6 +598,13 @@ Examples:
         type=int,
         help="Object retention period in days (default: from config retention policy). "
         "Will be validated against min/max limits from retention policy.",
+    )
+
+    parser.add_argument(
+        "-d",
+        "--delete",
+        action="store_true",
+        help="Delete the tarball after successful upload (only applies when uploading a directory)",
     )
 
     parser.add_argument(
@@ -508,10 +650,20 @@ Examples:
                 print(f"\nChecked config file(s): {args.ocsci_conf}")
             return 1
 
+        # Check if input path exists
+        input_path = Path(args.file)
+        if not input_path.exists():
+            print(f"\nError: Path not found: {args.file}\n")
+            return 1
+
+        is_directory = input_path.is_dir()
+
         # Initialize uploader
         uploader = S3LogsUploader(s3_config)
 
-        # Upload file and get object info
+        # Upload file/directory and get object info
+        # The upload_and_get_info will handle directory->tarball conversion internally
+        # but we're calling it directly here for the CLI to have more control over output
         result = uploader.upload_and_get_info(
             file_path=args.file,
             prefix=args.prefix,
@@ -519,12 +671,32 @@ Examples:
             retention_days=args.retention,
         )
 
+        # Handle tarball deletion for directories if --delete flag is set
+        if is_directory and args.delete and result["success"]:
+            # The tarball was created with name: {dirname}.tar.gz in temp directory
+            tarball_name = f"{input_path.name}.tar.gz"
+            tarball_path = os.path.join(tempfile.gettempdir(), tarball_name)
+            if os.path.exists(tarball_path):
+                try:
+                    os.remove(tarball_path)
+                    logger.info(f"Deleted tarball: {tarball_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete tarball {tarball_path}: {e}")
+
         # Print results
         if result["success"]:
             print("\n" + "=" * 80)
             print("✓ Upload Successful!")
             print("=" * 80)
-            print(f"File:              {args.file}")
+            if is_directory:
+                print(f"Directory:         {args.file}")
+                tarball_name = f"{input_path.name}.tar.gz"
+                tarball_path = os.path.join(tempfile.gettempdir(), tarball_name)
+                print(f"Tarball Created:   {tarball_path}")
+                if args.delete:
+                    print("Tarball Deleted:   Yes")
+            else:
+                print(f"File:              {args.file}")
             print(f"Bucket:            {result['bucket']}")
             print(f"Object Key:        {result['object_key']}")
             print(f"S3 URI:            {result['s3_uri']}")
