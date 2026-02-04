@@ -2516,9 +2516,12 @@ def get_cluster_set_name(switch_ctx=None):
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
         current_managed_clusters_list = [
-            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                if is_hosted_cluster(cluster_name=item)
+                else item
+            )
             for item in dr_cluster_relations[0]
-            if is_hosted_cluster(cluster_name=item)
         ]
 
     # ignore local-cluster here
