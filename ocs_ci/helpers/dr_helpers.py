@@ -2,6 +2,7 @@
 Helper functions specific for DR
 """
 
+import base64
 import json
 import logging
 import tempfile
@@ -2745,3 +2746,54 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+
+def create_gitops_private_repo_secret():
+    """
+    Create Gitops Secret that are required to pull workloads from Private Git repo
+    """
+
+    gitops_private_repo_secret = templating.load_yaml(
+        constants.GITOPS_PRIVATE_REPO_SECRET_YAML
+    )
+    gitops_private_repo_secret["metadata"][
+        "name"
+    ] = constants.GITOPS_PRIVATE_REPO_SECRET
+
+    gitops_private_repo_secret["stringData"]["url"] = config.ENV_DATA.get(
+        "dr_workload_repo_url"
+    )
+    gitops_private_repo_secret["stringData"]["password"] = config.clusters[
+        get_active_acm_index()
+    ].AUTH["github_ibm_odf_qe_ocs_workloads"]["gh_token"]
+    gitops_private_repo_secret_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="gitops_private", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        gitops_private_repo_secret, gitops_private_repo_secret_yaml.name
+    )
+    run_cmd(f"oc create -f {gitops_private_repo_secret_yaml.name}")
+
+
+def create_sub_app_private_repo_secret():
+    """
+    Create Sub app Secret that are required to pull workloads from Private Git repo
+    """
+
+    sub_app_private_repo_secret = templating.load_yaml(
+        constants.PRIVATE_REPO_SUB_SECRET_YAML
+    )
+    sub_app_private_repo_secret["metadata"]["name"] = constants.PRIVATE_REPO_SUB_SECRET
+
+    sub_app_private_repo_secret["data"]["accessToken"] = base64.b64encode(
+        config.clusters[get_active_acm_index()]
+        .AUTH["github_ibm_odf_qe_ocs_workloads"]["gh_token"]
+        .encode()
+    ).decode()
+    sub_app_private_repo_secret_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="sub_app_private", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        sub_app_private_repo_secret, sub_app_private_repo_secret_yaml.name
+    )
+    run_cmd(f"oc create -f {sub_app_private_repo_secret_yaml.name}")
