@@ -2766,9 +2766,31 @@ def create_gitops_private_repo_secret():
         get_active_acm_index()
     ].AUTH["github_ibm_odf_qe_ocs_workloads"]["gh_token"]
     gitops_private_repo_secret_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="restore", delete=False
+        mode="w+", prefix="gitops_private", delete=False
     )
     templating.dump_data_to_temp_yaml(
         gitops_private_repo_secret, gitops_private_repo_secret_yaml.name
     )
     run_cmd(f"oc create -f {gitops_private_repo_secret_yaml.name}")
+
+
+def create_sub_app_private_repo_secret():
+    """
+    Create Sub app Secret that are required to pull workloads from Private Git repo
+    """
+
+    sub_app_private_repo_secret = templating.load_yaml(
+        constants.PRIVATE_REPO_SUB_SECRET_YAML
+    )
+    sub_app_private_repo_secret["metadata"]["name"] = constants.PRIVATE_REPO_SUB_SECRET
+
+    sub_app_private_repo_secret["data"]["accessToken"] = config.clusters[
+        get_active_acm_index()
+    ].AUTH["github_ibm_odf_qe_ocs_workloads"]["gh_token"]
+    sub_app_private_repo_secret_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="sub_app_private", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        sub_app_private_repo_secret, sub_app_private_repo_secret_yaml.name
+    )
+    run_cmd(f"oc create -f {sub_app_private_repo_secret_yaml.name}")
