@@ -583,6 +583,8 @@ AZURE_PERFORMANCE_PLUS_STORAGECLASS = "ocs-disk-perfplus-sc"
 # Azure Performance Plus disk types (CSI skuName)
 AZURE_PERFORMANCE_PLUS_DISK_TYPE_STANDARD_SSD = "StandardSSD_LRS"
 AZURE_PERFORMANCE_PLUS_DISK_TYPE_PREMIUM_SSD = "Premium_LRS"
+# Minimum OSD size (GiB) for Azure Performance Plus; 512 GiB is rounded up to this
+AZURE_PERFORMANCE_PLUS_MIN_OSD_SIZE_GIB = 513
 
 # Independent mode default StorageClasses
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw"
