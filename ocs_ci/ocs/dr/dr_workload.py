@@ -272,14 +272,13 @@ class BusyBox(DRWorkload):
         if config.ENV_DATA.get("deploy_via_cli"):
             channel_yaml_data["metadata"]["namespace"] = self.workload_namespace
             if config.ENV_DATA.get("dr_workload_repo_login"):
-                channel_yaml_data["spec"].setdefault("secretRef", []).append(
-                    {
-                        {
-                            "name": constants.PRIVATE_REPO_SUB_SECRET,
-                            "namespace": constants.DEFAULT_NAMESPACE,
-                        }
-                    }
-                )
+                channel_yaml_data["spec"].setdefault("secretRef", {})
+                channel_yaml_data["spec"]["secretRef"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
+                channel_yaml_data["spec"]["secretRef"][
+                    "namespace"
+                ] = constants.DEFAULT_NAMESPACE
 
         if config.ENV_DATA.get("deploy_via_cli"):
             subscription_app_yaml_data = templating.load_yaml(
@@ -1123,14 +1122,13 @@ class CnvWorkload(DRWorkload):
                     channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
                     channel_yaml_data["metadata"]["namespace"] = self.channel_namespace
                     if config.ENV_DATA.get("dr_workload_repo_login"):
-                        channel_yaml_data["spec"].setdefault("secretRef", []).append(
-                            {
-                                {
-                                    "name": constants.PRIVATE_REPO_SUB_SECRET,
-                                    "namespace": constants.DEFAULT_NAMESPACE,
-                                }
-                            }
-                        )
+                        channel_yaml_data["spec"].setdefault("secretRef", {})
+                        channel_yaml_data["spec"]["secretRef"][
+                            "name"
+                        ] = constants.PRIVATE_REPO_SUB_SECRET
+                        channel_yaml_data["spec"]["secretRef"][
+                            "namespace"
+                        ] = constants.DEFAULT_NAMESPACE
                 templating.dump_data_to_temp_yaml(
                     channel_yaml_data_load, self.channel_yaml_file
                 )
