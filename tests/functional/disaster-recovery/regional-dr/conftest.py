@@ -3,7 +3,10 @@ import pytest
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.dr_helpers import create_gitops_private_repo_secret
+from ocs_ci.helpers.dr_helpers import (
+    create_gitops_private_repo_secret,
+    create_sub_app_private_repo_secret,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.deployment import acm
 from ocs_ci.ocs.ocp import OCP
@@ -62,6 +65,24 @@ def check_gitops_secret_offline_mode():
             except (CommandFailed, FileNotFoundError):
                 log.info("Secret not found creating New one")
                 create_gitops_private_repo_secret()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def check_subscription_app_secret_offline_mode():
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    if config.ENV_DATA.get("dr_workload_repo_login"):
+        for cluster_index in range(config.nclusters):
+            config.switch_ctx(cluster_index)
+            try:
+                OCP(
+                    kind=constants.SECRET,
+                    namespace=constants.DELETE,
+                    resource_name=constants.PRIVATE_REPO_SUB_SECRET,
+                ).get()
+            except (CommandFailed, FileNotFoundError):
+                log.info("Secret not found creating New one")
+                create_sub_app_private_repo_secret()
 
 
 @pytest.fixture()
