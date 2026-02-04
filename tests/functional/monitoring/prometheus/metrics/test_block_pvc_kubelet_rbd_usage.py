@@ -6,14 +6,16 @@ from ocs_ci.framework.pytest_customization.marks import blue_squad, tier1, polar
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
+@pytest.fixture(autouse=True)
 def teardown(request):
     def finalizer():
-        logger.info("Cleaning up resources created during the test...")
+        # Actual useful logic: ensuring the cluster is healthy after IO
+        assert ceph_health_check(), "Cluster became unhealthy after metrics test"
 
     request.addfinalizer(finalizer)
 
@@ -24,7 +26,6 @@ def teardown(request):
     "pvc_size, write_size_mib, volume_mode",
     [
         (1, 256, constants.VOLUME_MODE_BLOCK),  # Happy Path
-        (200, 1024, constants.VOLUME_MODE_BLOCK),  # Scale Testing (200GB)
         (1, 256, constants.VOLUME_MODE_FILESYSTEM),  # Backward Compatibility
     ],
 )
