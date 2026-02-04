@@ -318,7 +318,7 @@ ENV_DATA:
 
   dr_cnv_discovered_apps_dvt_standalone: [
     {
-      name: "vm-discovered-2", workload_dir: "rdr/cnv-workload/vm-dvt/vm-resources/vm-workload-2",
+      name: "vm-discovered-1", workload_dir: "rdr/cnv-workload/vm-dvt/vm-resources/vm-workload-1",
       pod_count: 1, pvc_count: 1,
       dr_workload_app_pod_selector_key: "appname",
       dr_workload_app_pod_selector_value: "kubevirt",
@@ -326,7 +326,7 @@ ENV_DATA:
       dr_workload_app_pvc_selector_value: "kubevirt",
       workload_namespace: "cnv-dict-1",
       dr_workload_app_placement_name: "cnv-dict-1",
-      vm_name: "vm-workload-2",
+      vm_name: "vm-dvt-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
     }
   ]
@@ -341,7 +341,7 @@ ENV_DATA:
       dr_workload_app_pvc_selector_value: "kubevirt",
       workload_namespace: "cnv-dict-1",
       dr_workload_app_placement_name: "cnv-dict-1",
-      vm_name: "vm-workload-2",
+      vm_name: "vm-dvt-workload-2",
       vm_secret: "vm-secret-1", vm_username: "cirros",
     }
   ]
