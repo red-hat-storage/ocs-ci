@@ -10,18 +10,18 @@ spec:
           name: watsonx-api-keys
         models:
           - contextWindowSize: 120000
-            name: meta-llama/llama-3-3-70b-instruct
+            name: model-name
             parameters:
               maxTokensForResponse: 512
         name: myWatsonx
         type: watsonx
-        url: 'https://us-south.ml.cloud.ibm.com'
-        projectID: xxxx
+        url: url
+        projectID: project-id
   ols:
-    defaultModel: meta-llama/llama-3-3-70b-instruct
+    defaultModel: model-name
     defaultProvider: myWatsonx
     logLevel: DEBUG
     rag:
-      - image: 'registry.redhat.io/odf4/odf-lightspeed-rag-content-rhel9@sha256:522adac7edda3577578127ad2c04dec3b1908ef0228190a0c06e52a6c50c0ef2'
+      - image: 'registry.redhat.io/odf4/odf-lightspeed-rag-content-rhel9@sha256:93c3f3792cbf9a348c90d0bc37bb92c0f78c1b48cd74c9ea94f9b3a4e7463902'
   olsDataCollector:
     logLevel: DEBUG

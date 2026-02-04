@@ -1,7 +1,9 @@
 import logging
 import tempfile
 
-from ocs_ci.ocs import constants
+
+from ocs_ci.framework import config as ocsci_config
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -83,7 +85,14 @@ def create_ols_secret():
     """
     log.info("Create credential secret for LLM provider")
     try:
-        exec_cmd(f"oc create -f {constants.OLS_SECRET_YAML}")
+        ols_secret_obj = templating.load_yaml(constants.OLS_SECRET_YAML)
+        api_token = ocsci_config.AUTH["ibm_watsonx_llm_for_ols"]["api_token"]
+        ols_secret_obj["stringData"]["apitoken"] = api_token
+        ols_secret_obj = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="ols_secret_obj", delete=False
+        )
+        templating.dump_data_to_temp_yaml(ols_secret_obj, ols_secret_obj.name)
+        run_cmd(f"oc create -f {ols_secret_obj.name}")
         return True
     except Exception as ex:
         log.error(
@@ -106,9 +115,17 @@ def create_ols_config():
         "Create custom resource ols-config file that contains the yaml content for the LLM provider"
     )
     try:
-        openshift_lightspeed_image = ""
+        # ToDo: when we get konflux build the code need to be modified to get lightspeed-image
+        openshift_lightspeed_image = get_openshift_lightspeed_image()
+        project_id = ocsci_config.AUTH["ibm_watsonx_llm_for_ols"]["projectID"]
+        url = ocsci_config.AUTH["ibm_watsonx_llm_for_ols"]["url"]
+        model_name = ocsci_config.AUTH["ibm_watsonx_llm_for_ols"]["model"]
         ols_config_obj = templating.load_yaml(constants.OLS_CONFIG_YAML)
         ols_config_obj["spec"]["ols"]["rag"][0]["image"] = openshift_lightspeed_image
+        ols_config_obj["spec"]["llm"]["providers"][0]["projectID"] = project_id
+        ols_config_obj["spec"]["llm"]["providers"][0]["url"] = url
+        ols_config_obj["spec"]["llm"]["providers"][0]["models"][0]["name"] = model_name
+        ols_config_obj["spec"]["ols"]["defaultModel"] = model_name
         ols_config_obj = tempfile.NamedTemporaryFile(
             mode="w+", prefix="ols_config_obj", delete=False
         )
@@ -125,7 +142,6 @@ def verify_ols_connects_to_llm():
     """
 
     Verifies ols pods are up and running, and successfully connected to LLM provider
-
 
     """
 
@@ -148,3 +164,22 @@ def verify_ols_connects_to_llm():
             raise ResourceWrongStatusException(
                 f"Resource type: {status['type']} is not in expected state: {status}. OLS is not configured correctly"
             )
+
+
+def get_openshift_lightspeed_image():
+    """
+
+    Get openshift lightspeed rag image
+
+    Returns:
+        image (str) : openshift lightspeed rag image
+
+    """
+    csv_obj = CSV(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+    for item in csv_obj.get()["items"]:
+        if item["metadata"]["name"].startswith(defaults.OCS_OPERATOR_NAME) or item[
+            "metadata"
+        ]["name"].startswith(constants.OCS_CLIENT_OPERATOR):
+            for i in item["spec"]["relatedImages"]:
+                if i["name"].startswith("odf-lightspeed-rag-content"):
+                    return i["image"]
