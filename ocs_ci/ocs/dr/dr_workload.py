@@ -3,6 +3,7 @@ This module will have all DR related workload classes
 
 """
 
+import base64
 import logging
 import os
 import tempfile
@@ -276,11 +277,32 @@ class BusyBox(DRWorkload):
                 channel_yaml_data["spec"]["secretRef"][
                     "name"
                 ] = constants.PRIVATE_REPO_SUB_SECRET
-                channel_yaml_data["spec"]["secretRef"][
-                    "namespace"
-                ] = constants.DEFAULT_NAMESPACE
 
         if config.ENV_DATA.get("deploy_via_cli"):
+
+            if config.ENV_DATA.get("dr_workload_repo_login"):
+                sub_app_private_repo_secret = templating.load_yaml(
+                    constants.PRIVATE_REPO_SUB_SECRET_YAML
+                )
+                sub_app_private_repo_secret["metadata"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
+                sub_app_private_repo_secret["metadata"].setdefault("annotations", {})
+                sub_app_private_repo_secret["metadata"].setdefault("labels", {})
+                sub_app_private_repo_secret["metadata"]["annotations"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = f"{self.workload_namespace}/ramen-gitops"
+                sub_app_private_repo_secret["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
+                sub_app_private_repo_secret["metadata"]["labels"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = "true"
+                sub_app_private_repo_secret["data"]["accessToken"] = base64.b64encode(
+                    config.clusters[get_active_acm_index()]
+                    .AUTH["github_ibm_odf_qe_ocs_workloads"]["gh_token"]
+                    .encode()
+                ).decode()
             subscription_app_yaml_data = templating.load_yaml(
                 self.subscription_app_file
             )
@@ -334,6 +356,11 @@ class BusyBox(DRWorkload):
                     placement_yaml_data,
                     managed_clusterset_binding_yaml_data,
                 ]
+                + (
+                    [sub_app_private_repo_secret]
+                    if config.ENV_DATA.get("dr_workload_repo_login")
+                    else []
+                )
             )
 
             self.deploy_subscription_workload_yaml_file = tempfile.NamedTemporaryFile(
