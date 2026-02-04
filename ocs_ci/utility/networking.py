@@ -103,7 +103,7 @@ def get_network_interface_by_ip(node, ip):
     return interface_name
 
 
-def create_drs_machine_config()
+def create_drs_machine_config():
     """
     Create Machine Config that moves the second physical network to a bridge.
     This is done for HCP configuraion of data replication separation.
