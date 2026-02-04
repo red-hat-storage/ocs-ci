@@ -2750,3 +2750,39 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+
+def validate_protection_label(kind, namespace, protection_name=None):
+    """
+    Gets the yaml file for specified resource kind in the given namespace
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VM, constants.PVC, etc.)
+        namespace (str): the namespace of the specified resource
+        protection_name (str) : name of protection in UI
+
+    Raises:
+        AssertionError: If the protection label is not found on any of the resources of the
+        specified kind in the given namespace
+
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+    resource_items = resource_obj.get().get("items", [])
+
+    label_to_validate = constants.RDR_VM_PROTECTION_LABEL
+    label_validation_failed = False
+    for item in resource_items:
+        protection_name_in_yaml = item.get("metadata", {}).get("labels", " ")[
+            label_to_validate
+        ]
+
+        if protection_name_in_yaml != protection_name:
+            logger.info(f"Label is not added to {kind} {item}")
+            label_validation_failed = True
+
+    assert not label_validation_failed, f"Label is not added to one or more {kind}"
+
+    logger.info(
+        f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
+    )

@@ -8022,7 +8022,10 @@ def discovered_apps_dr_workload_cnv(request):
     instances = []
 
     def factory(
-        pvc_vm=1, custom_sc=False, dr_protect=True, shared_drpc_protection=False,
+        pvc_vm=1,
+        custom_sc=False,
+        dr_protect=True,
+        shared_drpc_protection=False,
         vm_type=constants.VM_VOLUME_PVC,
     ):
         """
@@ -8045,10 +8048,10 @@ def discovered_apps_dr_workload_cnv(request):
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
 
-        if vm_type == constants.VM_VOLUME_DVT:
-            workload_key = "dr_cnv_discovered_apps_dvt_standalone"
-        elif vm_type == constants.VM_VOLUME_DVT and shared_drpc_protection:
+        if vm_type == constants.VM_VOLUME_DVT and shared_drpc_protection:
             workload_key = "dr_cnv_discovered_apps_dvt_shared"
+        elif vm_type == constants.VM_VOLUME_DVT:
+            workload_key = "dr_cnv_discovered_apps_dvt_standalone"
 
         if shared_drpc_protection and vm_type == constants.VM_VOLUME_PVC:
             workload_key = "dr_cnv_discovered_apps_shared"
@@ -8095,7 +8098,7 @@ def discovered_apps_dr_workload_cnv(request):
         return instances
 
     def teardown():
-        if "[shared]" in request.node.nodeid:
+        if "shared" in request.node.nodeid:
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
         else:
