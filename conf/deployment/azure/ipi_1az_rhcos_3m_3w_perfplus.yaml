@@ -8,6 +8,8 @@ ENV_DATA:
   region: 'eastus'
   azure_base_domain_resource_group_name: 'odfqe'
   azure_performance_plus: true
+  # Premium SSD with Performance Plus (default; 513 GiB+ disks)
+  azure_performance_plus_disk_type: 'Premium_LRS'
   worker_availability_zones:
     - '1'
   master_availability_zones:
