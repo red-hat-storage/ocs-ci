@@ -145,7 +145,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             should_exist=False,
                         )
 
-                    # Verify the deletion of Replication Group Destination resources
+                    # Verify the creation of Replication Group Destination resources
                     # on the current secondary cluster
                     config.switch_to_cluster_by_name(
                         primary_cluster_name_before_failover
@@ -157,7 +157,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         dr_helpers.wait_for_resource_existence(
                             kind=constants.REPLICATION_GROUP_DESTINATION,
                             namespace=wl.workload_namespace,
-                            should_exist=False,
+                            should_exist=True,
                         )
 
                         # Verify the creation of Volume Snapshot
