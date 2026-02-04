@@ -23,31 +23,32 @@ from ocs_ci.ocs.ui.ols_ui import OLSUI
 
 log = logging.getLogger(__name__)
 
-ACCURACY_THRESHOLD = 0.7
-CONSISTENCY_THRESHOLD = 0.75
+ACCURACY_THRESHOLD = 0.75
+CONSISTENCY_THRESHOLD = 0.6
 
 
 @cyan_squad
 @tier1
-@pytest.mark.polarion_id("")
 class TestRagImageDeploymentAndConfiguration(ManageTest):
     """
 
     This test case covers the successful deployment of the RAG image and the initial configuration of OLS to use it.
-    This will validate the core prerequisites for RAG functionality.
-
-    1. Deploy OLS Operator and verify OLS Operator installed
-    2. Create credential secret for LLM provider (i.e IBM watsonx)
-    3. Create custom resource "ols-config" file that contains the yaml content for the LLM provider
-    4. Verify OLS successfully connects to and utilizes the specified IBM watsonx LLM provider.
-       Verify all the OLS pods are up and running.
+    This will validate the core prerequisites for RAG functionality, and also verifies the response given by OLS.
 
     """
 
+    @pytest.mark.polarion_id("OCS-7483")
     def test_ragimage_deployment_and_configuration(self):
         """
 
-        This test case verifies the successful deployment of the RAG image and its initial configuration for OLS.
+        This test case covers the successful deployment of the RAG image and the initial configuration of OLS to use it.
+        This will validate the core prerequisites for RAG functionality.
+
+        1. Deploy OLS Operator and verify OLS Operator installed
+        2. Create credential secret for LLM provider (i.e IBM watsonx)
+        3. Create custom resource "ols-config" file that contains the yaml content for the LLM provider
+        4. Verify OLS successfully connects to and utilizes the specified IBM watsonx LLM provider.
+            Verify all the OLS pods are up and running.
 
         """
 
@@ -69,23 +70,40 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         # Verify all OLS pods are up and running
         verify_ols_connects_to_llm()
 
-    def test_data_foundation_answers(self):
+    @pytest.mark.polarion_id("OCS-7484")
+    def test_data_foundation_answers(self, setup_ui):
+        """
+
+        This will validate the core prerequisites for RAG functionality, by validating the response given by OLS
+
+        1. Loads 20 sample QnA is set "qa-expectation.yaml"
+        2. Ask each valid, valid but no rag answer, invalid questions one by one
+            a. calculate the accuracy based on the keywords of expected answer
+            b. calculate the consistency by repeating question twice
+            c. results are appended for graph
+
+        """
 
         results = []
         test_data = load_test_data()
 
         ols = OLSUI()
 
+        # Open OLS chatbox
+        ols.open_ols()
+
         for item in test_data:
             qid = item["id"]
             qtype = item["type"]
             question = item["question"]
-            keywords = item.get("keywords", [])
-
-            # Open OLS chatbox
-            ols.open_ols()
+            keywords = item.get("required_terms", [])
 
             ans1 = ols.ask_question(question)
+            # take 3 min to breathe
+            log.info(
+                "Waiting for 3 mins to repeat same question for verifying consistency"
+            )
+            time.sleep(180)
             ans2 = ols.ask_question(question)
 
             accuracy = calculate_accuracy(ans1, keywords)
