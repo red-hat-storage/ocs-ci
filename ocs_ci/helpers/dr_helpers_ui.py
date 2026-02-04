@@ -944,6 +944,7 @@ def navigate_using_fleet_virtulization(acm_obj):
     acm_obj.do_click(acm_loc["fleet-virtual"])
     acm_obj.page_has_loaded(retries=10, sleep_time=5)
     log.info("From side nav bar, navigate to VirtualMachines page")
+    time.sleep(5)
     acm_obj.do_click(acm_loc["nav-bar-vms-page"])
     log.info(
         "Successfully navigate to the VirtualMachines page under Fleet Virtualization"
