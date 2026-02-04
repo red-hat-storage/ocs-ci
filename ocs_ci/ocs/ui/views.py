@@ -792,6 +792,18 @@ pvc_4_19 = {
     ),
 }
 
+pvc_4_21 = {
+    "search_pvc": ("input[placeholder='Filter by name']", By.CSS_SELECTOR),
+    "pvc_filter_dropdown_status": (
+        "//div[contains(@class, 'pf-m-filter-group')]//button[.//span[normalize-space()='Status']]",
+        By.XPATH,
+    ),
+    "pvc_filter_name_option": (
+        "//li[.//span[normalize-space()='Name']]",
+        By.XPATH,
+    ),
+}
+
 storage_clients = {
     "generate_client_onboarding_ticket": (
         "//button[normalize-space()='Generate client onboarding token']",
@@ -3008,6 +3020,7 @@ locators = {
             **pvc_4_12,
             **pvc_4_14,
             **pvc_4_19,
+            **pvc_4_21,
         },
         "acm_page": {
             **acm_page_nav,

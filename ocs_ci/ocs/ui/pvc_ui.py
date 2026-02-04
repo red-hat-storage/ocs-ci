@@ -21,6 +21,24 @@ class PvcUI(PageNavigator):
         super().__init__()
         self.driver.implicitly_wait(5)
 
+    def select_name_filter_if_needed(self):
+        """
+        Select Name filter before searching by name
+
+        In OCP 4.21+, the filter dropdown defaults to 'Status'. This method switches it to 'Name' filter.
+        For older OCP versions where the Name was default, this is a no-op.
+        """
+        status_loc = self.pvc_loc.get("pvc_filter_dropdown_status")
+        name_loc = self.pvc_loc.get("pvc_filter_name_option")
+        if status_loc and name_loc and self.get_elements(status_loc):
+            logger.info("Switching filter dropdown from 'Status' to 'Name'")
+            self.do_click(status_loc)
+            self.do_click(name_loc)
+        else:
+            logger.debug(
+                "Name filter selection skipped (older UI or Name already selected)"
+            )
+
     def create_pvc_ui(
         self, project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
     ):
@@ -107,6 +125,7 @@ class PvcUI(PageNavigator):
         self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.select_name_filter_if_needed()
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         time.sleep(2)
@@ -155,6 +174,7 @@ class PvcUI(PageNavigator):
         self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.select_name_filter_if_needed()
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
@@ -189,6 +209,7 @@ class PvcUI(PageNavigator):
         self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.select_name_filter_if_needed()
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
@@ -230,6 +251,7 @@ class PvcUI(PageNavigator):
         self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
+        self.select_name_filter_if_needed()
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} Page")
@@ -268,6 +290,7 @@ class PvcUI(PageNavigator):
         self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for PVC {pvc_name}")
+        self.select_name_filter_if_needed()
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
         logger.info(f"Go to PVC {pvc_name} page")
