@@ -28,6 +28,9 @@ login = {
         By.CSS_SELECTOR,
     ),
     "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),
+    # Console logout locators
+    "user_dropdown": ("//button[contains(@class, 'co-user-menu')]", By.XPATH),
+    "logout_button": ("//span[text()='Log out']/ancestor::button", By.XPATH),
 }
 
 ibm_cloud_managed = (
@@ -2970,6 +2973,46 @@ bucket_tab = {
     "expired_markers_checkbox": (
         "#expired-delete-marker",
         By.CSS_SELECTOR,
+    ),
+    # S3 Login Form - Project/Namespace dropdown (first dropdown)
+    "s3_login_project_dropdown": (
+        "(//div[contains(@class, 'odf-s3-secret__dropdown')])[1]//button",
+        By.XPATH,
+    ),
+    # S3 Login Form - Secret dropdown (second dropdown)
+    "s3_login_secret_dropdown": (
+        "(//div[contains(@class, 'odf-s3-secret__dropdown')])[2]//button",
+        By.XPATH,
+    ),
+    # S3 Login Form - Search input inside dropdown menu
+    "s3_login_dropdown_search": (
+        "search-bar",
+        By.ID,
+    ),
+    # S3 Login Form - Dropdown item by text (use with format_locator)
+    "s3_login_dropdown_item": (
+        "//span[@class='odf-resource-item' and contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    # S3 Login Form - Sign in button
+    "s3_login_sign_in_button": (
+        "//button[text()='Sign in']",
+        By.XPATH,
+    ),
+    # S3 Login Form - Success indicator label
+    "s3_login_success_label": (
+        "//*[contains(text(), 'Signed in with credentials')]",
+        By.XPATH,
+    ),
+    # S3 Login Form - Selected project value display
+    "s3_login_selected_project": (
+        "(//div[contains(@class, 'odf-s3-secret__dropdown')])[1]//span[@class='odf-resource-item']",
+        By.XPATH,
+    ),
+    # S3 Login Form - Selected secret value display
+    "s3_login_selected_secret": (
+        "(//div[contains(@class, 'odf-s3-secret__dropdown')])[2]//span[@class='odf-resource-item']",
+        By.XPATH,
     ),
 }
 locate_aws_regions = {
