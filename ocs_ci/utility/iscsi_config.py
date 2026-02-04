@@ -2,7 +2,6 @@
 This module is used for configuring iscsi.
 """
 
-import sys
 import logging
 import re
 
@@ -42,25 +41,6 @@ def setup_target_environment(target_node_ssh):
             log.debug(f"Output: {stdout.strip()}")
 
 
-def get_worker_node_ips():
-    """
-    Collects worker node IPs from the Kubernetes cluster using oc command.
-
-    Parameters:
-        kubeconfig_path (str): Path to the kubeconfig file.
-
-    Returns:
-        list: A list of IP addresses of worker nodes or an empty list on failure.
-    """
-    try:
-        # Use ocs_ci.utils.node.get_node_ips to get worker node IPs
-        worker_ips = node.get_node_ips()
-        return worker_ips
-    except Exception as e:
-        log.error("Error getting worker node IPs:", e)
-        return []
-
-
 def get_worker_node_names():
     """
     Get worker node names using ocs-ci node utilities.
@@ -69,6 +49,7 @@ def get_worker_node_names():
     Returns:
         list: A list of worker node names (strings).
     """
+
     try:
         worker_node_names = node.get_worker_nodes()
         return worker_node_names
@@ -96,23 +77,22 @@ def get_worker_iqns(worker_node_names):
 
     ocp_obj = ocp.OCP()
 
+    start_service_cmd = (
+        "systemctl start iscsid 2>/dev/null || "
+        "systemctl enable --now iscsid 2>/dev/null || "
+        "true"
+    )
+    cmd = "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
     for node_name in worker_node_names:
         log.info(f"Getting IQN from worker node {node_name}...")
 
         try:
             # First, ensure iSCSI service is started
-            start_service_cmd = (
-                "systemctl start iscsid 2>/dev/null || "
-                "systemctl enable --now iscsid 2>/dev/null || "
-                "true"
-            )
             ocp_obj.exec_oc_debug_cmd(
                 node=node_name, cmd_list=[start_service_cmd], use_root=True, timeout=120
             )
             log.debug(f"Started iSCSI service on {node_name}")
-
             # Now read the IQN from the initiatorname.iscsi file
-            cmd = "grep InitiatorName /etc/iscsi/initiatorname.iscsi | cut -d= -f2"
             stdout = ocp_obj.exec_oc_debug_cmd(
                 node=node_name, cmd_list=[cmd], use_root=True, timeout=120
             )
@@ -172,6 +152,7 @@ def configure_target(target_node_ssh, target_iqn, worker_iqns):
         target_node_ssh (object): An established SSH connection to the target VM.
         target_iqn (str): Target iSCSI IQN.
         worker_iqns (list): List of IQNs of worker nodes.
+
     """
 
     # Setup environment first
@@ -257,6 +238,16 @@ def configure_initiators(worker_node_names):
 
     Parameters:
         worker_node_names (list): List of worker node names (strings).
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If there is an error while configuring the initiator.
+        Exception: If there is an error while SSH fallback fails.
+        Exception: If there is an error while getting the node IP.
+        Exception: If there is an error while deleting the StorageClasses or LocalDisks.
+
     """
 
     log.info("\n=== Configuring Worker Nodes as Initiators ===")
@@ -304,6 +295,9 @@ def configure_initiators(worker_node_names):
                             log.warning(f"Command failed on {node_ip}: {stderr}")
                         else:
                             log.debug(f"Command output: {stdout}")
+                else:
+                    log.error(f"Node IP is none or empty for {node_name}")
+                    raise Exception(f"Node IP is none or empty for {node_name}")
             except Exception as fallback_error:
                 log.error(f"SSH fallback also failed for {node_name}: {fallback_error}")
 
@@ -311,7 +305,15 @@ def configure_initiators(worker_node_names):
 def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
     """
     Remove ACLs and LUN mappings from target using targetcli.
+
+    Parameters:
+        target_node_ssh (object): An established SSH connection to the target VM.
+        target_iqn (str): Target iSCSI IQN.
+        worker_iqns (list): List of IQNs of worker nodes.
+        username (str): Username for the target VM.
+
     """
+
     log.info("\n" + "=" * 70)
     log.info("STEP 3: Removing ACLs from target")
     log.info("=" * 70)
@@ -341,10 +343,25 @@ def wipe_luns_on_target(target_node_ssh, target_iqn, username):
     Wipe LUN data on target VM.
     Also deletes IBM Spectrum Scale related resources.
     Only wipes devices that are referenced in LocalDisks resources.
+
+    Parameters:
+        target_node_ssh (object): An established SSH connection to the target VM.
+        target_iqn (str): Target iSCSI IQN.
+        username (str): Username for the target VM.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If there is an error while deleting StorageClasses or LocalDisks.
+        Exception: If there is an error while wiping the devices.
+        Exception: If there is an error while removing signatures from the devices.
+        Exception: If there is an error while verifying the cleanup.
+        Exception: If there is an error while deleting the StorageClasses or LocalDisks.
+
     """
-    log.info("\n" + "=" * 70)
+
     log.info("STEP 4: Wiping LUN data on target")
-    log.info("=" * 70)
 
     # Collect device paths from LocalDisks before deletion
     devices_to_wipe = set()
@@ -425,10 +442,17 @@ def wipe_luns_on_target(target_node_ssh, target_iqn, username):
 def verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns):
     """
     Verify cleanup was successful.
+
+    Parameters:
+        target_node_ssh (object): An established SSH connection to the target VM.
+        target_iqn (str): Target iSCSI IQN.
+        username_target (str): Username for the target VM.
+        worker_iqns (list): List of IQNs of worker nodes.
+
+    Raises:
+        Exception: If there is an error while verifying the cleanup.
     """
-    log.info("\n" + "=" * 70)
     log.info("STEP 5: Verifying cleanup")
-    log.info("=" * 70)
 
     # Check ACLs on target
     log.info("\nChecking target ACLs...")
@@ -454,16 +478,15 @@ def cleanup_iscsi_target(
     Complete cleanup of iSCSI target.
 
     Parameters:
-        target_vm_ip: Target VM IP address
-        target_iqn: Target IQN
-        worker_iqns: List of worker IQNs to remove
-        worker_ips: List of worker IP addresses
-        wipe_data: Whether to wipe data (default: True)
-        username_target: SSH user for target VM
+        target_node_ssh (object): An established SSH connection to the target VM.
+        target_iqn (str): Target IQN
+        worker_iqns (list): List of worker IQNs to remove
+        wipe_data (bool): Whether to wipe data (default: True)
+        username_target (str): SSH user for target VM
+
     """
-    log.info("\n" + "=" * 70)
+
     log.info("iSCSI TARGET CLEANUP - START")
-    log.info("=" * 70)
     log.info(f"Target IQN: {target_iqn}")
     log.info(f"Wipe data: {wipe_data}")
 
@@ -503,13 +526,13 @@ def iscsi_setup():
     worker_node_names = get_worker_node_names()
     if not worker_node_names:
         log.error("No worker nodes found!")
-        sys.exit(1)
+        raise ValueError("No worker nodes found!")
 
     log.info(f"Current available worker nodes: {worker_node_names}")
     worker_iqns = get_worker_iqns(worker_node_names)
     if not worker_iqns:
         log.info("No IQNs found! Exiting...")
-        sys.exit(1)
+        raise ValueError("No IQNs found!")
 
     target_node_ssh = Connection(
         host=config.ENV_DATA.get("iscsi_target_ip"),
@@ -533,20 +556,21 @@ def iscsi_teardown():
     """
     log.info("Tearing down iSCSI target...")
     target_iqn = config.ENV_DATA.get("iscsi_target_iqn")
+    target_ip = config.ENV_DATA.get("iscsi_target_ip")
     # Get worker nodes
     worker_node_names = get_worker_node_names()
     if not worker_node_names:
         log.error("No worker nodes found!")
-        sys.exit(1)
+        raise ValueError("No worker nodes found!")
 
     log.info(f"Current available worker nodes: {worker_node_names}")
     worker_iqns = get_worker_iqns(worker_node_names)
     if not worker_iqns:
         log.info("No IQNs found! Exiting...")
-        sys.exit(1)
+        raise ValueError("No IQNs found!")
 
     target_node_ssh = Connection(
-        host=config.ENV_DATA.get("iscsi_target_ip"),
+        host=target_ip,
         user=config.ENV_DATA.get("iscsi_target_username"),
         password=config.ENV_DATA.get("iscsi_target_password"),
         stdout=True,
@@ -712,7 +736,8 @@ def verify_iscsi_target_connectivity(worker_node_names, target_ip, target_port=3
             else:
                 # Fallback to TCP connectivity test
                 tcp_cmd = (
-                    f"timeout 5 bash -c 'cat < /dev/null > /dev/tcp/{target_ip}/{target_port}' 2>/dev/null "
+                    f"timeout 5 bash -c "
+                    f"'cat < /dev/null > /dev/tcp/{target_ip}/{target_port}' 2>/dev/null "
                     f"&& echo 'TCP_Connected' || echo 'TCP_Failed'"
                 )
                 stdout2 = ocp_obj.exec_oc_debug_cmd(
@@ -741,14 +766,12 @@ def verify_iscsi_setup():
 
     Returns:
         dict: Dictionary containing all verification results.
-    """
-    log.info("\n" + "=" * 70)
-    log.info("iSCSI SETUP VERIFICATION - START")
-    log.info("=" * 70)
 
-    if not config.ENV_DATA.get("iscsi_target_ip") or not config.ENV_DATA.get(
-        "iscsi_target_iqn"
-    ):
+    """
+
+    log.info("iSCSI SETUP VERIFICATION - START")
+
+    if not config.ENV_DATA.get("iscsi_setup"):
         log.warning("iSCSI configuration not found in ENV_DATA, skipping verification")
         return {"skipped": True, "reason": "iSCSI not configured"}
 
@@ -801,9 +824,7 @@ def verify_iscsi_setup():
             "overall_status": all_sessions_ok and all_connectivity_ok and has_devices,
         }
 
-        log.info("\n" + "=" * 70)
         log.info("iSCSI SETUP VERIFICATION - SUMMARY")
-        log.info("=" * 70)
         log.info(f"Sessions established: {all_sessions_ok}")
         log.info(f"Connectivity verified: {all_connectivity_ok}")
         log.info(f"Devices found: {has_devices}")
@@ -828,7 +849,12 @@ def verify_iscsi_setup():
 def validate_iscsi_connectivity():
     """
     Validate network connectivity to iSCSI target from all worker nodes.
-    Raises AssertionError if any worker node cannot connect.
+
+    Raises:
+        AssertionError: If any worker node cannot connect.
+        ValueError: If iSCSI target IP is not configured in ENV_DATA.
+        ValueError: If no worker nodes are found.
+
     """
     target_ip = config.ENV_DATA.get("iscsi_target_ip")
     if not target_ip:
@@ -859,7 +885,10 @@ def validate_iscsi_connectivity():
 def validate_iscsi_sessions():
     """
     Validate iSCSI sessions are established on all worker nodes.
-    Raises AssertionError if any worker node does not have an iSCSI session.
+
+    Raises:
+        AssertionError: If any worker node does not have an iSCSI session.
+
     """
     target_iqn = config.ENV_DATA.get("iscsi_target_iqn")
     if not config.ENV_DATA.get("iscsi_target_ip") or not target_iqn:
@@ -888,7 +917,12 @@ def validate_iscsi_sessions():
 def validate_iscsi_devices():
     """
     Validate iSCSI devices are visible on worker nodes.
-    Raises AssertionError if no iSCSI devices are found on any node.
+
+    Raises:
+        AssertionError: If no iSCSI devices are found on any node.
+        ValueError: If iSCSI target IP or IQN is not configured in ENV_DATA.
+        ValueError: If no worker nodes are found.
+
     """
     target_iqn = config.ENV_DATA.get("iscsi_target_iqn")
     if not config.ENV_DATA.get("iscsi_target_ip") or not target_iqn:
@@ -913,11 +947,14 @@ def run_iscsi_setup_validations():
     """
     Run all three iSCSI validations: connectivity, sessions, and devices.
     Called at the end of iscsi_setup() and can be used by tests for post-deploy verification.
-    Raises AssertionError or ValueError on first validation failure.
+
+    Raises:
+        AssertionError: If any validation fails.
+        ValueError: If iSCSI not configured in ENV_DATA.
+        ValueError: If no worker nodes are found.
+
     """
-    if not config.ENV_DATA.get("iscsi_target_ip") or not config.ENV_DATA.get(
-        "iscsi_target_iqn"
-    ):
+    if not config.ENV_DATA.get("iscsi_setup"):
         log.warning("iSCSI not configured in ENV_DATA, skipping validations")
         return
 
