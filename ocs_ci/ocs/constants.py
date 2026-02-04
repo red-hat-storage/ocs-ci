@@ -1809,6 +1809,7 @@ DEFAULT_AWS_REGION = "us-east-2"
 HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_BAREMETAL,
     HCI_VSPHERE,
+    IBM_HCI_PLATFORM,
 ]
 
 IBM_REGIONS = ["us-east", "us-south", "us"]
