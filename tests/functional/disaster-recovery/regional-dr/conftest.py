@@ -77,7 +77,7 @@ def check_subscription_app_secret_offline_mode():
             try:
                 OCP(
                     kind=constants.SECRET,
-                    namespace=constants.DELETE,
+                    namespace=constants.DEFAULT_NAMESPACE,
                     resource_name=constants.PRIVATE_REPO_SUB_SECRET,
                 ).get()
             except (CommandFailed, FileNotFoundError):
