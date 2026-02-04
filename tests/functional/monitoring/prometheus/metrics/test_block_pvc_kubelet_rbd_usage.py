@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(autouse=True)
 def teardown(request):
     def finalizer():
-        # Actual useful logic: ensuring the cluster is healthy after IO
         assert ceph_health_check(), "Cluster became unhealthy after metrics test"
 
     request.addfinalizer(finalizer)
