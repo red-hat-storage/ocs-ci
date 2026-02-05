@@ -5322,7 +5322,9 @@ def collect_logs_fixture(request, session_s3_logs_testsuite_properties):
                         )
             try:
                 if not skip_rpm_go_version_collection:
-                    utils.collect_pod_container_rpm_package("testcases")
+                    utils.collect_pod_container_rpm_package(
+                        "testcases", test_case_name="session_end_logs"
+                    )
             except Exception as ex:
                 # If pod is killed/restarted during this operation, skip if pod not found error is shown
                 if "Error is Error from server (NotFound)" in str(ex):
