@@ -1164,6 +1164,7 @@ def get_cephfs_data_pool_name():
     out = ct_pod.exec_ceph_cmd("ceph fs ls")
     return out[0]["data_pools"][0]
 
+
 def create_cephfs_data_pool(
     pool_name,
     replica=2,
@@ -1189,7 +1190,7 @@ def create_cephfs_data_pool(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
     storage_cluster_obj = ocp.OCP(
-            kind=constants.STORAGECLUSTER, namespace=namespace,resource_name=constants.DEFAULT_CLUSTERNAME
+            kind=constants.STORAGECLUSTER, namespace=namespace, resource_name=constants.DEFAULT_CLUSTERNAME
     )
 
     # Normalize + default compression
@@ -1252,6 +1253,50 @@ def create_cephfs_data_pool(
         return None
 
 
+def delete_cephfs_data_pool(
+    pool_name,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Delete a CephFS additional data pool by patching StorageCluster
+
+    Args:
+        pool_name (str): Name of the CephFS additional data pool to delete
+        namespace (str): Namespace where the StorageCluster exists
+
+    Returns:
+        bool: True if the pool was found and removed, False if the pool
+        does not exist in the StorageCluster
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    storage_cluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER, namespace=namespace, resource_name=constants.DEFAULT_CLUSTERNAME
+    )
+
+    pools = (
+        storage_cluster_obj.data
+        .get("spec", {})
+        .get("managedResources", {})
+        .get("cephFilesystems", {})
+        .get("additionalDataPools", [])
+    )
+
+    for idx, pool in enumerate(pools):
+        if pool.get("name") == pool_name:
+            patch = [
+                {
+                    "op": "remove",
+                    "path": f"/spec/managedResources/cephFilesystems/additionalDataPools/{idx}",
+                }
+            ]
+            storage_cluster_obj.patch(params=patch, format_type="json")
+            logger.info(f"CephFS data pool '{pool_name}' deleted")
+            return True
+
+    logger.info(f"CephFS data pool '{pool_name}' not found")
+    return False
+
+    
 def validate_cephfilesystem(fs_name, namespace=None):
     """
     Verify CephFileSystem exists at Ceph and OCP
