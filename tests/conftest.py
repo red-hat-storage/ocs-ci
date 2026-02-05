@@ -1235,6 +1235,7 @@ def storageclass_factory_fixture(
                         replica=ocsci_config.ENV_DATA.get("replica") or replica,
                     )
                     interface_name = f"ocs-storagecluster-cephfilesystem-{new_data_pool_name}"
+                    instances.append(new_data_pool_name)
                 else:
                     if pool_name is None:
                         interface_name = helpers.get_cephfs_data_pool_name()
