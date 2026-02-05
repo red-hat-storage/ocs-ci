@@ -184,7 +184,7 @@ class WorkloadOps:
 
 
 @pytest.fixture
-def workload_ops(request, project_factory, multi_pvc_factory):
+def workload_ops(request, project_factory, multi_pvc_factory, storageclass_factory):
     """
     Simplified workload ops fixture with conditional fixture loading.
 
@@ -266,6 +266,7 @@ def workload_ops(request, project_factory, multi_pvc_factory):
         project_factory,
         multi_pvc_factory,
         loaded_fixtures=fixtures,  # Pass all loaded fixtures
+        storageclass_factory=storageclass_factory,  # Pass storageclass factory for encrypted PVCs
     )
 
     try:

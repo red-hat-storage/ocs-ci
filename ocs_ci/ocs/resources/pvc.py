@@ -240,13 +240,14 @@ class PVC(OCS):
                 attached_pods.append(pod_obj)
         return attached_pods
 
-    def create_snapshot(self, snapshot_name=None, wait=False):
+    def create_snapshot(self, snapshot_name=None, wait=False, timeout=60):
         """
         Take snapshot of the PVC
 
         Args:
             snapshot_name (str): Name to be provided for snapshot
             wait (bool): True to wait for snapshot to be ready, False otherwise
+            timeout (int): Timeout in seconds to wait for snapshot to be ready (default: 60)
 
         Returns:
             OCS: Kind Snapshot
@@ -285,6 +286,7 @@ class PVC(OCS):
             namespace=self.namespace,
             sc_name=snapshotclass,
             wait=wait,
+            timeout=timeout,
         )
         snapshot_obj.parent_access_mode = self.get_pvc_access_mode
         snapshot_obj.parent_sc = self.backed_sc
@@ -450,7 +452,7 @@ def get_deviceset_pvs():
 
 
 def create_pvc_snapshot(
-    pvc_name, snap_yaml, snap_name, namespace, sc_name=None, wait=False
+    pvc_name, snap_yaml, snap_name, namespace, sc_name=None, wait=False, timeout=60
 ):
     """
     Create snapshot of a PVC
@@ -462,6 +464,7 @@ def create_pvc_snapshot(
         namespace (str): The namespace for the snapshot creation
         sc_name (str): The name of the snapshot class
         wait (bool): True to wait for snapshot to be ready, False otherwise
+        timeout (int): Timeout in seconds to wait for snapshot to be ready (default: 60)
 
     Returns:
         OCS object
@@ -483,7 +486,7 @@ def create_pvc_snapshot(
             condition="true",
             resource_name=ocs_obj.name,
             column=constants.STATUS_READYTOUSE,
-            timeout=60,
+            timeout=timeout,
         )
     return ocs_obj
 
