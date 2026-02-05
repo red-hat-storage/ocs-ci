@@ -1173,6 +1173,7 @@ def storageclass_factory_fixture(
         annotations=None,
         mapOptions=None,
         mounter=None,
+        new_cephfs_pool=False,
     ):
         """
         Args:
@@ -1201,6 +1202,7 @@ def storageclass_factory_fixture(
             annotations (dict): dict of annotation to be added to the storageclass.
             mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
             mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
+            new_cephfs_pool (bool): True if user wants to create new cephfs pool for SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -1226,7 +1228,18 @@ def storageclass_factory_fixture(
                     else:
                         interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
-                interface_name = helpers.get_cephfs_data_pool_name()
+                if ocsci_config.ENV_DATA.get("new_cephfs_pool") or new_cephfs_pool:
+                    new_data_pool_name = helpers.create_cephfs_data_pool(
+                        pool_name=constants.RDR_CUSTOM_CEPHFS_POOL,
+                        compression=ocsci_config.ENV_DATA.get("compression") or compression,
+                        replica=ocsci_config.ENV_DATA.get("replica") or replica,
+                    )
+                    interface_name = new_data_pool_name
+                else:
+                    if pool_name is None:
+                        interface_name = helpers.get_cephfs_data_pool_name()
+                    else:
+                        interface_name = pool_name
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
