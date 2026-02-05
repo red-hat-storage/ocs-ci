@@ -1164,6 +1164,89 @@ def get_cephfs_data_pool_name():
     out = ct_pod.exec_ceph_cmd("ceph fs ls")
     return out[0]["data_pools"][0]
 
+def create_cephfs_data_pool(
+    pool_name,
+    replica=2,
+    compression="none",
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Create a new CephFS data pool or return the existing one.
+    Includes all mandatory fields required by OCS.
+    
+    Args:
+        cephfs_name (str): Name of the CephFilesystem
+        pool_name (str): Name of the pool to create
+        replica_size (int): Number of replicas
+        compression_mode (str): Compression mode
+        device_class (str): Device class for pool
+        failure_domain (str): Failure domain (e.g., zone)
+        namespace (str): Namespace of the CephFilesystem
+
+    Returns:
+        str: New datapool if created or existing, None on failure
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    storage_cluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER, namespace=namespace,resource_name=constants.DEFAULT_CLUSTERNAME
+    )
+
+    # Check if additionalDataPools exists
+    data_pools_available = storage_cluster_obj.data["spec"]["managedResources"]["cephFilesystems"]["additionalDataPools"]
+    pool_names = {p.get("name") for p in data_pools_available}
+    if data_pools_available:
+        # Check if the pool name already exists
+        if pool_name in pool_names:
+            logger.info(f"data pool '{pool_name}' already exists to CephFilesystem")
+            return pool_name
+        else:
+            # Field exists → append to the list
+            data_pool_patch = f"""
+            [
+                {{
+                    "op": "add",
+                    "path": "/spec/managedResources/cephFilesystems/additionalDataPools/-",
+                    "value": {{
+                        "name": "{pool_name}",
+                        "compressionMode": "{compression}",
+                        "replicated": {{
+                            "size": {replica}
+                        }}
+                    }}
+                }}
+            ]
+            """
+
+    # Construct JSON Patch
+    if not data_pools_available or data_pools_available in ["", "null", "[]"]:
+        # Field does not exist → create it as a list
+        data_pool_patch = f"""
+        [
+            {{
+                "op": "add",
+                "path": "/spec/managedResources/cephFilesystems/additionalDataPools",
+                "value": [
+                    {{
+                        "name": "{pool_name}",
+                        "compressionMode": "{compression}",
+                        "replicated": {{
+                            "size": {replica}
+                        }}
+                    }}
+                ]
+            }}
+        ]
+        """
+
+    try:
+        storage_cluster_obj.patch(params=data_pool_patch, format_type="json")
+        logger.info(f"additional data pool '{pool_name}' added to CephFilesystem")
+        return pool_name
+    except Exception as e:
+        logger.error(f"Failed to create data pool '{pool_name}': {e}")
+        return None
+
 
 def validate_cephfilesystem(fs_name, namespace=None):
     """
