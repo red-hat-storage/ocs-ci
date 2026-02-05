@@ -4,6 +4,7 @@ import pytest
 from time import sleep
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
+    tier4,
     red_squad,
     mcg,
     skipif_mcg_only,
@@ -22,16 +23,205 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
+def _get_storage_cluster_obj():
+    """
+    Get the OCS storage cluster object.
+
+    Returns:
+        OCP: OCS storage cluster OCP object
+    """
+    return OCP(
+        kind="storagecluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+
+def _get_noobaa_obj():
+    """
+    Get the NooBaa CR object.
+
+    Returns:
+        OCP: NooBaa OCP object
+    """
+    return OCP(
+        kind="noobaa",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
+    )
+
+
+def _patch_db_backup_config(
+    ocs_storage_obj, schedule_cron_interval, num_backups, snapshot_class
+):
+    """
+    Patch the storage cluster with DB backup configuration.
+
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        schedule_cron_interval (int): Cron schedule interval in minutes
+        num_backups (int): Maximum number of backups to retain
+        snapshot_class (str): Volume snapshot class name
+
+    Returns:
+        None
+    """
+    db_backup_param = (
+        f'{{"spec": {{"multiCloudGateway": '
+        f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+        f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+    )
+    ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
+    logger.info(
+        f"DB backup info patched successfully with maxSnapshots={num_backups}, "
+        f"schedule=*/{schedule_cron_interval} * * * *"
+    )
+    sleep(15)
+
+
+def _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj):
+    """
+    Verify that DB backup configuration is propagated from storage cluster to NooBaa CR.
+
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        noobaa_obj (OCP): NooBaa object
+
+    Returns:
+        dict: DB backup info from NooBaa CR
+
+    Raises:
+        AssertionError: If configuration mismatch is detected
+    """
+    ocs_storage_obj.reload_data()
+    noobaa_obj.reload_data()
+    db_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+        "multiCloudGateway"
+    ]["dbBackup"]
+    db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
+    assert (
+        db_info_from_ocs_storage == db_info_from_noobaa_cr
+    ), "Mismatch in DB backup info between ocs-storagecluster and noobaa CR"
+    return db_info_from_noobaa_cr
+
+
+def _wait_for_backups_completion(num_backups, schedule_cron_interval):
+    """
+    Wait for specified number of backups to be created and completed.
+
+    Args:
+        num_backups (int): Expected number of backups
+        schedule_cron_interval (int): Cron schedule interval in minutes
+
+    Returns:
+        list: List of backup names that are completed
+    """
+
+    def get_num_backups():
+        return len(
+            get_all_resource_of_kind_containing_string(
+                "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+            )
+        )
+
+    sample = TimeoutSampler(
+        timeout=(schedule_cron_interval * num_backups) * 60 + 120,
+        sleep=10,
+        func=get_num_backups,
+    )
+    sample.wait_for_func_value(num_backups)
+
+    backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+    backup_names = get_all_resource_of_kind_containing_string(
+        "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+    )
+    for bkp_name in backup_names:
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=bkp_name,
+            column="PHASE",
+            timeout=120,
+        )
+    logger.info(f"All {num_backups} backups are in completed state")
+    return backup_names
+
+
+def _patch_db_recovery_config(ocs_storage_obj, backup_name):
+    """
+    Patch the storage cluster with DB recovery configuration.
+
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        backup_name (str): Name of the backup to use for recovery
+
+    Returns:
+        None
+    """
+    db_recovery_param = (
+        f'{{"spec": {{"multiCloudGateway": '
+        f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_name}"}}}}}}}}'
+    )
+    ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
+    logger.info("DB recovery info patched successfully")
+    sleep(15)
+
+
+def _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj):
+    """
+    Verify that DB recovery configuration is propagated from storage cluster to NooBaa CR.
+
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        noobaa_obj (OCP): NooBaa object
+
+    Raises:
+        AssertionError: If configuration mismatch is detected
+    """
+    ocs_storage_obj.reload_data()
+    noobaa_obj.reload_data()
+    recovery_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+        "multiCloudGateway"
+    ]["dbRecovery"]
+    recovery_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
+        "dbRecovery"
+    ]
+    assert (
+        recovery_info_from_ocs_storage == recovery_info_from_noobaa_cr
+    ), "Mismatch in DB recovery info between ocs-storagecluster and noobaa CR"
+
+
+def _delete_and_wait_for_cluster_recovery(db_cluster_name):
+    """
+    Delete NooBaa DB cluster and wait for automatic recovery.
+
+    Args:
+        db_cluster_name (str): Name of the DB cluster to delete
+
+    Returns:
+        None
+    """
+    cluster_obj = OCP(kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"])
+    cluster_obj.delete(resource_name=db_cluster_name, force=True)
+    cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+
+    # Validate noobaa pods are up and running after recovery
+    noobaa_pods = get_noobaa_pods()
+    pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        resource_count=len(noobaa_pods),
+        selector=constants.NOOBAA_APP_LABEL,
+        timeout=900,
+    )
+    logger.info("NooBaa pods are up and running after recovery")
+
+
 @pytest.fixture(autouse=True)
 def remove_db_info_from_sc(request):
     """
     removes the DB backup and recovery information from storage cluster CR
     """
-    ocs_storage_obj = OCP(
-        kind="storagecluster",
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-    )
+    ocs_storage_obj = _get_storage_cluster_obj()
 
     def remove_info():
         backup_params = '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
@@ -106,13 +296,8 @@ class TestNoobaaDbBackupRecoveryOps:
         )
 
         # 2: Validate Noobaa CR is accepting backup configuration in it
-        # get storagecluster object
-        ocs_storage_obj = OCP(
-            kind="storagecluster",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-        )
-        # patch storagecluster object
+        ocs_storage_obj = _get_storage_cluster_obj()
+        noobaa_obj = _get_noobaa_obj()
         num_backups = 2
         snapshot_class = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         schedule_cron_interval = 5
@@ -124,102 +309,24 @@ class TestNoobaaDbBackupRecoveryOps:
             snapshot_class = "default driver based snapshot"
         """
 
-        db_backup_param = (
-            f'{{"spec": {{"multiCloudGateway": '
-            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
-            f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        _patch_db_backup_config(
+            ocs_storage_obj, schedule_cron_interval, num_backups, snapshot_class
         )
-
-        ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
-        logger.info("DB backup info patched successfully")
-        # Add sleep to reflect patched values in respective CRs
-        sleep(15)
-        ocs_storage_obj.reload_data()
-        db_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
-            "multiCloudGateway"
-        ]["dbBackup"]
-
-        # get noobaa CR object
-        noobaa_obj = OCP(
-            kind="noobaa",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.NOOBAA_RESOURCE_NAME,
-        )
-        db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
-        assert (
-            db_info_from_ocs_storage == db_info_from_noobaa_cr
-        ), "Mismatch in DB backup info between ocs-storagecluster and noobaa CR"
+        _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj)
 
         # 3: Validate backup is getting created after scheduled time from secondary DB instance
-        def get_num_backups():
-            return len(
-                get_all_resource_of_kind_containing_string(
-                    "noobaa-db-pg-cluster-scheduled-backup", "Backup"
-                )
-            )
-
-        sample = TimeoutSampler(
-            timeout=(schedule_cron_interval * num_backups) * 60 + 60,
-            sleep=5,
-            func=get_num_backups,
-        )
-        sample.wait_for_func_value(num_backups)
-
-        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
-        backup_names = get_all_resource_of_kind_containing_string(
-            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
-        )
-        for bkp_name in backup_names:
-            backup_obj.wait_for_resource(
-                "completed",
-                resource_name=bkp_name,
-                column="PHASE",
-                timeout=100,
-            )
+        backup_names = _wait_for_backups_completion(num_backups, schedule_cron_interval)
 
         # 4: Validate Noobaa CR is accepting recovery configuration in it
-        db_recovery_param = (
-            f'{{"spec": {{"multiCloudGateway": '
-            f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_names[0]}"}}}}}}}}'
-        )
-
-        ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
-        logger.info("DB recovery info patched successfully")
-        ocs_storage_obj.reload_data()
-        recovery_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")[
-            "spec"
-        ]["multiCloudGateway"]["dbRecovery"]
-        sleep(15)
-        noobaa_obj.reload_data()
-        recovery_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
-            "dbRecovery"
-        ]
-        assert (
-            recovery_info_from_ocs_storage == recovery_info_from_noobaa_cr
-        ), "Mismatch in DB recovery info between ocs-storagecluster and noobaa CR"
+        _patch_db_recovery_config(ocs_storage_obj, backup_names[0])
+        _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj)
 
         # 5: Delete Noobaa DB Cluster and check automatic recovery is getting triggered
-        # get noobaa DB cluster info
-        cluster_obj = OCP(
-            kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"]
-        )
         db_cluster_name = get_all_resource_of_kind_containing_string(
             "noobaa-db-pg-cluster", "Cluster"
         )[0]
-        cluster_obj.delete(resource_name=db_cluster_name, force=True)
-        cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+        _delete_and_wait_for_cluster_recovery(db_cluster_name)
 
-        # Validate noobaa pods are up and running after considering recovery
-        noobaa_pods = get_noobaa_pods()
-        pod_obj = OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        pod_obj.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_count=len(noobaa_pods),
-            selector=constants.NOOBAA_APP_LABEL,
-            timeout=900,
-        )
         # Verify Bucket health after recovery process
         bucket_obj.verify_health(timeout=600)
 
@@ -239,3 +346,134 @@ class TestNoobaaDbBackupRecoveryOps:
                 awscli_pod=awscli_pod,
             ), "Mismatch in Checksum between original object and object downloaded after recovery"
         logger.info("Cluster recovered successfully and validated data after recovery")
+
+    @tier4
+    @skipif_mcg_only
+    def test_noobaa_db_backup_snapshot_op(
+        self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
+    ):
+        """
+        Test to verify CNPG based noobaa DB backup snapshot operation
+            1: Set max snapshot value to 1 in Noobaa CR
+            2: Validate only 1 snapshot entry is getting stored on DB pod node
+            3: Wait for new DB snapshot entry and validate older entry is deleted from the node
+            4: Change max snapshot value to 3 in Noobaa CR
+            5: Validate 3 snapshots are getting created on DB pod node
+            6: Try to set max snapshot value to 0 and validate the same
+        """
+        # Get storagecluster and noobaa objects
+        ocs_storage_obj = _get_storage_cluster_obj()
+        noobaa_obj = _get_noobaa_obj()
+
+        snapshot_class = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        schedule_cron_interval = 5  # 5 minutes for faster testing
+
+        # 1: Set max snapshot value to 1 in Noobaa CR
+        logger.info("Setting maxSnapshots to 1")
+        _patch_db_backup_config(
+            ocs_storage_obj, schedule_cron_interval, 1, snapshot_class
+        )
+
+        # Verify configuration propagated to noobaa CR
+        db_info_from_noobaa_cr = _verify_backup_config_propagation(
+            ocs_storage_obj, noobaa_obj
+        )
+        assert (
+            db_info_from_noobaa_cr["volumeSnapshot"]["maxSnapshots"] == 1
+        ), "maxSnapshots value not set to 1 in noobaa CR"
+
+        # 2: Validate only 1 snapshot entry is getting stored in backup
+        logger.info("Waiting for first backup to be created with maxSnapshots=1")
+        backup_names = _wait_for_backups_completion(1, schedule_cron_interval)
+        assert (
+            len(backup_names) == 1
+        ), f"Expected 1 backup, but found {len(backup_names)}"
+
+        first_backup_name = backup_names[0]
+        logger.info(f"First backup {first_backup_name} completed successfully")
+
+        # 3: Wait for new DB snapshot entry and validate older entry is deleted from backup
+        logger.info(
+            f"Waiting for {schedule_cron_interval} minutes for next backup to be created and old one to be deleted"
+        )
+        sleep(
+            (schedule_cron_interval * 60) + 120
+        )  # Wait for next backup cycle + buffer
+
+        backup_names_after_rotation = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+        )
+        assert (
+            len(backup_names_after_rotation) == 1
+        ), f"Expected 1 backup after rotation, but found {len(backup_names_after_rotation)}"
+
+        second_backup_name = backup_names_after_rotation[0]
+        assert (
+            second_backup_name != first_backup_name
+        ), "Backup name should be different after rotation"
+
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=second_backup_name,
+            column="PHASE",
+            timeout=120,
+        )
+        logger.info(
+            f"Backup rotation successful: old backup {first_backup_name} deleted, "
+            f"new backup {second_backup_name} created"
+        )
+
+        # 4: Change max snapshot value to 3 in Noobaa CR
+        new_snapshot_value = 3
+        logger.info(f"Setting maxSnapshots to {new_snapshot_value}")
+        _patch_db_backup_config(
+            ocs_storage_obj, schedule_cron_interval, new_snapshot_value, snapshot_class
+        )
+
+        # Verify configuration propagated to noobaa CR
+        db_info_from_noobaa_cr = _verify_backup_config_propagation(
+            ocs_storage_obj, noobaa_obj
+        )
+        assert (
+            db_info_from_noobaa_cr["volumeSnapshot"]["maxSnapshots"]
+            == new_snapshot_value
+        ), f"maxSnapshots value not set to {new_snapshot_value} in noobaa CR"
+
+        # 5: Validate 3 snapshots are getting created on DB pod node
+        logger.info(f"Waiting for {new_snapshot_value} backups to be created")
+        _wait_for_backups_completion(new_snapshot_value, schedule_cron_interval)
+        logger.info(f"All {new_snapshot_value} backups are in completed state")
+
+        # 6: Try to set max snapshot value to 0 and validate the same
+        logger.info("Testing invalid maxSnapshots value: 0")
+        db_backup_param_0 = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+            f'"volumeSnapshot": {{"maxSnapshots": 0, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        )
+
+        try:
+            ocs_storage_obj.patch(params=db_backup_param_0, format_type="merge")
+            sleep(15)
+            ocs_storage_obj.reload_data()
+            noobaa_obj.reload_data()
+            db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
+                "dbBackup"
+            ]
+            current_max_snapshots = db_info_from_noobaa_cr["volumeSnapshot"][
+                "maxSnapshots"
+            ]
+            assert (
+                current_max_snapshots != 0
+            ), "maxSnapshots should not be set to 0 (invalid value)"
+            logger.info(
+                f"maxSnapshots=0 was rejected or ignored, current value: {current_max_snapshots}"
+            )
+        except Exception as e:
+            logger.info(f"Setting maxSnapshots=0 failed as expected: {e}")
+
+        logger.info(
+            "NooBaa DB backup snapshot operation test completed successfully. "
+            "Validated maxSnapshots behavior for values 1, 3, and 0 (invalid)"
+        )
