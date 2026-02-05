@@ -2583,8 +2583,8 @@ def create_service_exporter(annotate=True):
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         if (
-            get_provider_service_type() != "NodePort"
-            and cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
+            get_provider_service_type() == "NodePort"
+            or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
         ):
             logger.info("Skipping ServiceExport creation for multiclient cluster")
             continue
