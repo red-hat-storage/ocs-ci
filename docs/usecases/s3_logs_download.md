@@ -2,22 +2,6 @@
 
 This guide explains how to download log files (especially must-gather tarballs) from IBM Cloud Object Storage (COS) using the `download-logs-from-s3` command-line tool.
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Prerequisites](#prerequisites)
-- [Configuration](#configuration)
-- [Usage](#usage)
-  - [Single File Download](#single-file-download)
-  - [Batch Download by Prefix](#batch-download-by-prefix)
-  - [Extract Tarballs](#extract-tarballs)
-  - [Delete Archives After Extraction](#delete-archives-after-extraction)
-  - [Skip Existing Files](#skip-existing-files)
-  - [Force Re-download](#force-re-download)
-- [Examples](#examples)
-- [Configuration File Format](#configuration-file-format)
-- [Troubleshooting](#troubleshooting)
-
 ## Overview
 
 The `download-logs-from-s3` tool provides an easy way to:
