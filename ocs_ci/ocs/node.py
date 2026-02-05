@@ -11,7 +11,6 @@ import json
 from subprocess import TimeoutExpired
 from semantic_version import Version
 
-from ocs_ci.helpers.helpers import check_cluster_is_compact
 from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
@@ -34,6 +33,7 @@ from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_cou
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
+from ocs_ci.helpers.helpers import check_cluster_is_compact
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     get_pv_size,
