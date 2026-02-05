@@ -2,12 +2,15 @@
 Module that contains network related functions
 """
 
+import base64
 import ipaddress
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.utility.templating import load_yaml
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
     UnavailableResourceException,
@@ -98,7 +101,9 @@ def get_network_interface_by_ip(node, ip):
     """
     oc_obj = OCP(kind="node")
     network_info = oc_obj.exec_oc_debug_cmd(node, cmd_list=["ip -br -4 a sh"])
-    interface_info = [line for line in network_info.split('\n') if ip in line][0].split()
+    interface_info = [line for line in network_info.split("\n") if ip in line][
+        0
+    ].split()
     interface_name = interface_info[0]
     return interface_name
 
@@ -108,4 +113,33 @@ def create_drs_machine_config():
     Create Machine Config that moves the second physical network to a bridge.
     This is done for HCP configuraion of data replication separation.
     """
-    pass
+    interfaces_path = os.path.join(
+        constants.TEMPLATE_DEPLOYMENT_DIR, "drs_interfaces.yaml"
+    )
+    with open(interfaces_path, "r") as file:
+        interfaces_yaml_string = file.read()
+    base64_interfaces = base64.b64encode(interfaces_yaml_string)
+    machineconfigurations_path = os.path.join(
+        constants.TEMPLATE_DEPLOYMENT_DIR, "drs_machineconfig.yaml"
+    )
+    machineconfigurations_yaml = load_yaml(machineconfigurations_path)
+    machineconfigurations_yaml["spec"]["storage"]["files"][0]["contents"][
+        "source"
+    ] = f"data:text/plain;base64,{base64_interfaces}"
+    machineconfigurations_obj = OCS(**machineconfigurations_yaml)
+    machineconfigurations_obj.apply()
+
+
+def create_drs_nad(namespace):
+    """
+    Create NetworkAttachmentDefinition in namespace where the virt-launcher pods exist.
+    This is done for HCP configuraion of data replication separation.
+
+    Args:
+        namespace (str): namespace on provider cluster where virt-launcher pods exist
+    """
+    nad_path = os.path.join(constants.TEMPLATE_DEPLOYMENT_DIR, "drs_nad.yaml")
+    nad_yaml = load_yaml(nad_path)
+    nad_yaml["metadata"]["namespace"] = namespace
+    nad_obj = OCS(**nad_yaml)
+    nad_obj.apply()
