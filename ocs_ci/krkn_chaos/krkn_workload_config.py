@@ -105,6 +105,22 @@ class KrknWorkloadConfig:
         krkn_config = self.config.ENV_DATA.get("krkn_config", {})
         return krkn_config.get("mcg_config", {})
 
+    def get_warp_config(self) -> Dict[str, Any]:
+        """
+        Get Warp MCG stress workload configuration.
+
+        Returns:
+            dict: Warp configuration
+        """
+        krkn_config = self.config.ENV_DATA.get("krkn_config", {})
+        warp_config = krkn_config.get("warp_config", {})
+
+        # Set default namespace to 'default' if not specified
+        if "namespace" not in warp_config:
+            warp_config["namespace"] = "default"
+
+        return warp_config
+
     def get_background_cluster_operations_config(self) -> Dict[str, Any]:
         """
         Get background cluster operations configuration.
@@ -387,3 +403,4 @@ class KrknWorkloadConfig:
     CNV_WORKLOAD = "CNV_WORKLOAD"
     RGW_WORKLOAD = "RGW_WORKLOAD"
     MCG_WORKLOAD = "MCG_WORKLOAD"  # NooBaa/MCG S3 workload
+    WARP_WORKLOAD = "WARP_WORKLOAD"  # Warp MCG stress workload

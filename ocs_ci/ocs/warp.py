@@ -30,24 +30,41 @@ class Warp(object):
 
     """
 
-    def __init__(self):
+    def __init__(self, pod_name_suffix=None, namespace=None, s3_host=None):
         """
         Initializer to create warp pod to running warp benchmark
 
+        Args:
+            pod_name_suffix (str): Optional suffix for pod name to make it unique
+            namespace (str): Namespace to deploy Warp pods (default: cluster_namespace from config)
+            s3_host (str): S3 endpoint host (default: s3.{cluster_namespace}.svc)
         """
         self.pod_dic_path = constants.WARP_YAML
-        self.namespace = config.ENV_DATA["cluster_namespace"]
+        # Use provided namespace or fall back to cluster_namespace
+        self.namespace = namespace or config.ENV_DATA.get(
+            "cluster_namespace", "openshift-storage"
+        )
         self.ocp_obj = OCP(namespace=self.namespace)
         self.bucket_name = None
         self.warp_cr = templating.load_yaml(constants.WARP_OBJ_YAML)
-        # avoid failing DNS server to resolve hostname, when running on cluster with custom storage namespace
-        self.host = f"s3.{config.ENV_DATA['cluster_namespace']}.svc"
+        # Use provided S3 host or construct from cluster namespace
+        if s3_host:
+            self.host = s3_host
+        else:
+            # For default namespace, use openshift-storage for S3 endpoint
+            storage_namespace = config.ENV_DATA.get(
+                "cluster_namespace", "openshift-storage"
+            )
+            self.host = f"s3.{storage_namespace}.svc"
         self.duration = self.warp_cr["duration"]
         self.concurrent = self.warp_cr["concurrent"]
         self.obj_size = self.warp_cr["obj.size"]
         self.warp_bin_dir = self.warp_cr["warp_bin_dir"]
         self.output_file = "output.csv"
         self.warp_dir = mkdtemp(prefix="warp-")
+        self.pod_name_suffix = pod_name_suffix
+
+        log.info(f"Warp initialized: namespace={self.namespace}, s3_host={self.host}")
 
     def create_resource_warp(self, multi_client=False, replicas=1):
         """
@@ -74,7 +91,11 @@ class Warp(object):
         # Create test pvc+pod
         log.info(f"Create Warp pod to generate S3 workload in {self.namespace}")
         pvc_size = "50Gi"
-        self.pod_name = "warppod"
+        # Use unique pod name if suffix provided
+        if self.pod_name_suffix:
+            self.pod_name = f"warppod-{self.pod_name_suffix}"
+        else:
+            self.pod_name = "warppod"
         self.pvc_obj = helpers.create_pvc(
             sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
             namespace=self.namespace,
@@ -197,7 +218,17 @@ class Warp(object):
             + base_options
             + multi_client_options
         )
-        self.pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
+        # Redirect output to a log file for monitoring
+        # Use sh -c to properly handle shell redirection
+        cmd_with_logging = f"sh -c '{cmd} > /tmp/warp.log 2>&1 &'"
+        # Specify container name explicitly to avoid "container not found" errors
+        self.pod_obj.exec_cmd_on_pod(
+            cmd_with_logging, out_yaml_format=False, timeout=10, container_name="warp"
+        )
+        log.info(
+            f"Warp benchmark started in background. Check logs with: "
+            f"oc exec {self.pod_obj.name} -n {self.namespace} -c warp -- tail -f /tmp/warp.log"
+        )
 
         if validate:
             self.validate_warp_workload()
@@ -225,6 +256,43 @@ class Warp(object):
                 f"Output file {self.output_file} is empty, "
                 "Warp workload doesn't run as expected..."
             )
+
+    def get_warp_logs(self, lines=50):
+        """
+        Get Warp workload logs from the pod.
+
+        Args:
+            lines (int): Number of log lines to retrieve
+
+        Returns:
+            str: Warp log output
+        """
+        try:
+            cmd = f"tail -n {lines} /tmp/warp.log 2>/dev/null || echo 'Warp log not available yet'"
+            result = self.pod_obj.exec_cmd_on_pod(
+                cmd, out_yaml_format=False, container_name="warp"
+            )
+            return result
+        except Exception as e:
+            log.warning(f"Could not retrieve Warp logs: {e}")
+            return None
+
+    def is_warp_running(self):
+        """
+        Check if Warp process is currently running in the pod.
+
+        Returns:
+            bool: True if Warp is running, False otherwise
+        """
+        try:
+            cmd = "ps aux | grep '[w]arp mixed\\|[w]arp get\\|[w]arp put\\|[w]arp delete\\|[w]arp stat'"
+            result = self.pod_obj.exec_cmd_on_pod(
+                cmd, out_yaml_format=False, container_name="warp"
+            )
+            return bool(result and "warp" in result)
+        except Exception as e:
+            log.warning(f"Could not check Warp status: {e}")
+            return False
 
     def cleanup(self, multi_client=False):
         """

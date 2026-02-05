@@ -154,6 +154,17 @@ KrknWorkloadRegistry.register(
     )
 )
 
+# WARP Workload (High-performance MCG/NooBaa stress testing with Warp)
+KrknWorkloadRegistry.register(
+    WorkloadTypeConfig(
+        name="WARP_WORKLOAD",
+        required_fixtures=["mcg_obj_session"],
+        factory_method="_create_warp_workloads_for_project",
+        fixture_params=["mcg_obj_session"],
+        description="Warp S3 benchmark for high-intensity MCG/NooBaa stress testing",
+    )
+)
+
 # ============================================================================
 # TO ADD A NEW WORKLOAD TYPE:
 # ============================================================================
