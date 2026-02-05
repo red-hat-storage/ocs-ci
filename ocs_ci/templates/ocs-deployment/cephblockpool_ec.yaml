@@ -1,0 +1,13 @@
+apiVersion: ceph.rook.io/v1
+kind: CephBlockPool
+metadata:
+  name: ecpool
+  namespace: openshift-storage
+spec:
+  failureDomain: host
+  erasureCoded:
+    dataChunks: 4
+    codingChunks: 2
+  deviceClass: ssd
+  parameters:
+    allow_ec_optimizations: "true"
