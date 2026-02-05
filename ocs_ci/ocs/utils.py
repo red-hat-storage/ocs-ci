@@ -2266,6 +2266,64 @@ def store_log_collection_metadata(
     return log_metadata
 
 
+def collect_and_upload_ui_logs(test_case_name):
+    """
+    Collect UI logs (screenshots and DOM files) for a specific test and upload to S3.
+
+    This function looks for UI logs in the test-specific directory and creates a single
+    tarball containing both screenshots and DOM files, then uploads it to S3 if configured.
+
+    Args:
+        test_case_name (str): Test case name for organizing S3 uploads
+
+    Returns:
+        str: Path to created tarball, or None if no UI logs found or upload disabled
+    """
+    base_ui_logs_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"ui_logs_dir_{config.RUN['run_id']}",
+    )
+
+    if not os.path.exists(base_ui_logs_dir):
+        log.debug(f"No UI logs directory found at {base_ui_logs_dir}")
+        return None
+
+    # Get the test-specific UI logs directory
+    test_ui_dir = os.path.join(base_ui_logs_dir, test_case_name)
+
+    if not os.path.exists(test_ui_dir):
+        log.debug(f"No UI logs found for test case: {test_case_name}")
+        return None
+
+    # Check if there are any files in screenshots_ui or dom subdirectories
+    screenshots_dir = os.path.join(test_ui_dir, "screenshots_ui")
+    dom_dir = os.path.join(test_ui_dir, "dom")
+
+    has_screenshots = os.path.exists(screenshots_dir) and os.listdir(screenshots_dir)
+    has_dom = os.path.exists(dom_dir) and os.listdir(dom_dir)
+
+    if not has_screenshots and not has_dom:
+        log.debug(f"No UI artifacts found for test case: {test_case_name}")
+        return None
+
+    log.info(f"Collecting UI logs for test case: {test_case_name}")
+    log.info(
+        f"  Screenshots: {len(os.listdir(screenshots_dir)) if has_screenshots else 0}"
+    )
+    log.info(f"  DOM files: {len(os.listdir(dom_dir)) if has_dom else 0}")
+
+    # Create tarball and upload to S3 using the existing infrastructure
+    # This will handle both local tarball creation and S3 upload based on config
+    tarball_path = create_tarball_and_upload_to_s3(
+        log_dir_path=test_ui_dir,
+        cluster_config=config,
+        test_case_name=test_case_name,
+        log_type="ui-logs",
+    )
+
+    return tarball_path
+
+
 def collect_pod_container_rpm_package(dir_name, test_case_name=None):
     """
     Collect information about rpm packages from all containers + go version
