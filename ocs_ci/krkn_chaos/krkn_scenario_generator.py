@@ -901,3 +901,494 @@ class ContainerScenarios:
             config,
             "container_pause.yaml",
         )
+
+
+class NodeScenarios:
+    """Generates configuration for node chaos scenarios.
+
+    Supported cloud types:
+        - aws: Amazon Web Services
+        - azure: Microsoft Azure
+        - ibm: IBM Cloud
+        - bm: BareMetal
+        - vmware: VMware vSphere
+
+    Supported actions:
+        - node_start_scenario: Start a stopped/powered-off node
+        - node_stop_scenario: Stop/power-off a node (without start)
+        - node_stop_start_scenario: Stop and start a node
+        - node_termination_scenario: Terminate/delete the node instance
+        - node_reboot_scenario: Reboot a node
+        - node_disk_detach_attach_scenario: Detach and attach disk from node
+        - stop_kubelet_scenario: Stop the kubelet service on the node
+        - stop_start_kubelet_scenario: Stop and start the kubelet service
+        - restart_kubelet_scenario: Restart the kubelet service
+        - node_crash_scenario: Crash the node using kernel panic
+    """
+
+    # Cloud type constants
+    CLOUD_AWS = "aws"
+    CLOUD_AZURE = "azure"
+    CLOUD_IBM = "ibm"
+    CLOUD_BAREMETAL = "bm"
+    CLOUD_VMWARE = "vmware"
+
+    # Action constants
+    ACTION_NODE_START = "node_start_scenario"
+    ACTION_NODE_STOP = "node_stop_scenario"
+    ACTION_NODE_STOP_START = "node_stop_start_scenario"
+    ACTION_NODE_TERMINATION = "node_termination_scenario"
+    ACTION_NODE_REBOOT = "node_reboot_scenario"
+    ACTION_NODE_DISK_DETACH_ATTACH = "node_disk_detach_attach_scenario"
+    ACTION_STOP_KUBELET = "stop_kubelet_scenario"
+    ACTION_STOP_START_KUBELET = "stop_start_kubelet_scenario"
+    ACTION_RESTART_KUBELET = "restart_kubelet_scenario"
+    ACTION_NODE_CRASH = "node_crash_scenario"
+
+    @staticmethod
+    def _create_node_scenario(scenario_dir, template_name, config, filename):
+        """Internal method to create node scenario YAML files.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            template_name (str): Name of the Jinja2 template file.
+            config (dict): Configuration data for the template.
+            filename (str): Name of the output YAML file.
+
+        Returns:
+            str: Path to the written YAML file.
+        """
+        template_path = os.path.join(KRKN_SCENARIO_TEMPLATE, template_name)
+        writer = TemplateWriter(template_path)
+        writer.config = config
+        return writer.write_to_file(os.path.join(scenario_dir, filename))
+
+    @staticmethod
+    def node_scenarios(
+        scenario_dir,
+        cloud_type,
+        scenarios=None,
+        actions=None,
+        label_selector="node-role.kubernetes.io/worker",
+        node_name=None,
+        instance_count=1,
+        runs=None,
+        timeout=360,
+        duration=None,
+        parallel=None,
+        kube_check=None,
+        poll_interval=None,
+        skip_openshift_checks=None,
+        verify_nodes_ready=None,
+        disable_ssl_verification=None,
+        bmc_user=None,
+        bmc_password=None,
+        bmc_info=None,
+        ssh_private_key=None,
+        ssh_user=None,
+        service=None,
+    ):
+        """Generates node scenarios YAML for any supported cloud platform.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            cloud_type (str): Cloud provider type (aws, azure, ibm, bm, vmware).
+            scenarios (list, optional): List of scenario dicts for multiple scenarios.
+                Each dict can have all the parameters below.
+            actions (list, optional): List of actions for single scenario mode
+                (e.g., ["node_stop_start_scenario", "node_reboot_scenario"]).
+            label_selector (str): Label selector for target nodes
+                (default: "node-role.kubernetes.io/worker").
+            node_name (str, optional): Specific node name to target.
+            instance_count (int): Number of nodes to target (default: 1).
+            runs (int, optional): Number of times to run the scenario.
+            timeout (int): Timeout in seconds (default: 360).
+            duration (int, optional): Duration in seconds (for stop_start scenarios).
+            parallel (bool, optional): Run action on nodes in parallel or sequential.
+            kube_check (bool, optional): Run kubernetes api calls to check node state.
+            poll_interval (int, optional): Time interval to check node status.
+            skip_openshift_checks (bool, optional): Skip OpenShift-specific checks.
+            verify_nodes_ready (bool, optional): Verify nodes are ready after scenario.
+            disable_ssl_verification (bool, optional): Disable SSL verification
+                (useful for CI environments with certificate issues).
+            bmc_user (str, optional): Default IPMI username (for baremetal).
+            bmc_password (str, optional): Default IPMI password (for baremetal).
+            bmc_info (dict, optional): Per-machine BMC info (for baremetal).
+            ssh_private_key (str, optional): Path to SSH private key (for baremetal).
+            ssh_user (str, optional): SSH user (for baremetal).
+            service (str, optional): Service name for kubelet scenarios.
+
+        Returns:
+            str: Path to the generated YAML file.
+
+        Note:
+            - For baremetal (bm), bmc_user, bmc_password, or bmc_info may be required
+            - For cloud platforms, appropriate cloud credentials must be configured
+        """
+        if scenarios is None:
+            if actions is None:
+                # Default actions based on cloud type
+                actions = [
+                    NodeScenarios.ACTION_NODE_STOP_START,
+                    NodeScenarios.ACTION_NODE_REBOOT,
+                ]
+
+            # Build single scenario from parameters
+            scenario = {
+                "actions": actions if isinstance(actions, list) else [actions],
+                "cloud_type": cloud_type,
+                "label_selector": label_selector,
+                "instance_count": instance_count,
+                "timeout": timeout,
+            }
+
+            if node_name:
+                scenario["node_name"] = node_name
+            if runs is not None:
+                scenario["runs"] = runs
+            if duration is not None:
+                scenario["duration"] = duration
+            if parallel is not None:
+                scenario["parallel"] = parallel
+            if kube_check is not None:
+                scenario["kube_check"] = kube_check
+            if poll_interval is not None:
+                scenario["poll_interval"] = poll_interval
+            if skip_openshift_checks is not None:
+                scenario["skip_openshift_checks"] = skip_openshift_checks
+            if verify_nodes_ready is not None:
+                scenario["verify_nodes_ready"] = verify_nodes_ready
+            if disable_ssl_verification is not None:
+                scenario["disable_ssl_verification"] = disable_ssl_verification
+            if bmc_user is not None:
+                scenario["bmc_user"] = bmc_user
+            if bmc_password is not None:
+                scenario["bmc_password"] = bmc_password
+            if bmc_info is not None:
+                scenario["bmc_info"] = bmc_info
+            if ssh_private_key is not None:
+                scenario["ssh_private_key"] = ssh_private_key
+            if ssh_user is not None:
+                scenario["ssh_user"] = ssh_user
+            if service is not None:
+                scenario["service"] = service
+
+            scenarios = [scenario]
+
+        config = {"scenarios": scenarios}
+        filename = f"node_scenarios_{cloud_type}.yaml"
+        return NodeScenarios._create_node_scenario(
+            scenario_dir,
+            "openshift/node_scenarios.yml.j2",
+            config,
+            filename,
+        )
+
+    @staticmethod
+    def aws_node_scenarios(
+        scenario_dir,
+        scenarios=None,
+        label_selector="node-role.kubernetes.io/worker",
+        instance_count=2,
+        runs=1,
+        timeout=360,
+        duration=20,
+        parallel=True,
+        kube_check=True,
+        poll_interval=15,
+    ):
+        """Generates AWS node scenarios YAML.
+
+        Based on krkn aws_node_scenarios.yml configuration.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            scenarios (list, optional): List of scenario dicts.
+            label_selector (str): Label selector (default: "node-role.kubernetes.io/worker").
+            instance_count (int): Number of nodes to target (default: 2).
+            runs (int): Number of times to run scenarios (default: 1).
+            timeout (int): Timeout in seconds (default: 360).
+            duration (int): Duration to stop node before start (default: 20).
+            parallel (bool): Run actions in parallel (default: True).
+            kube_check (bool): Run kubernetes api checks (default: True).
+            poll_interval (int): Poll interval in seconds (default: 15).
+
+        Returns:
+            str: Path to the generated YAML file.
+        """
+        if scenarios is None:
+            scenarios = [
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_STOP_START],
+                    "cloud_type": NodeScenarios.CLOUD_AWS,
+                    "label_selector": label_selector,
+                    "instance_count": instance_count,
+                    "runs": runs,
+                    "timeout": timeout,
+                    "duration": duration,
+                    "parallel": parallel,
+                    "kube_check": kube_check,
+                    "poll_interval": poll_interval,
+                },
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_REBOOT],
+                    "cloud_type": NodeScenarios.CLOUD_AWS,
+                    "label_selector": "node-role.kubernetes.io/infra",
+                    "instance_count": 1,
+                    "timeout": 120,
+                },
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_DISK_DETACH_ATTACH],
+                    "cloud_type": NodeScenarios.CLOUD_AWS,
+                    "label_selector": label_selector,
+                    "instance_count": 1,
+                    "timeout": 120,
+                },
+            ]
+
+        config = {"scenarios": scenarios}
+        return NodeScenarios._create_node_scenario(
+            scenario_dir,
+            "openshift/node_scenarios.yml.j2",
+            config,
+            "node_scenarios_aws.yaml",
+        )
+
+    @staticmethod
+    def azure_node_scenarios(
+        scenario_dir,
+        scenarios=None,
+        label_selector="node-role.kubernetes.io/infra",
+        instance_count=1,
+        timeout=360,
+        duration=120,
+        parallel=True,
+        kube_check=True,
+    ):
+        """Generates Azure node scenarios YAML.
+
+        Based on krkn azure_node_scenarios.yml configuration.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            scenarios (list, optional): List of scenario dicts.
+            label_selector (str): Label selector (default: "node-role.kubernetes.io/infra").
+            instance_count (int): Number of nodes to target (default: 1).
+            timeout (int): Timeout in seconds (default: 360).
+            duration (int): Duration for stop_start scenarios (default: 120).
+            parallel (bool): Run actions in parallel (default: True).
+            kube_check (bool): Run kubernetes api checks (default: True).
+
+        Returns:
+            str: Path to the generated YAML file.
+        """
+        if scenarios is None:
+            scenarios = [
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_REBOOT],
+                    "cloud_type": NodeScenarios.CLOUD_AZURE,
+                    "label_selector": label_selector,
+                    "instance_count": instance_count,
+                    "timeout": 120,
+                    "parallel": parallel,
+                    "kube_check": kube_check,
+                },
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_STOP_START],
+                    "cloud_type": NodeScenarios.CLOUD_AZURE,
+                    "label_selector": label_selector,
+                    "instance_count": instance_count,
+                    "timeout": timeout,
+                    "duration": duration,
+                },
+            ]
+
+        config = {"scenarios": scenarios}
+        return NodeScenarios._create_node_scenario(
+            scenario_dir,
+            "openshift/node_scenarios.yml.j2",
+            config,
+            "node_scenarios_azure.yaml",
+        )
+
+    @staticmethod
+    def ibmcloud_node_scenarios(
+        scenario_dir,
+        scenarios=None,
+        label_selector="node-role.kubernetes.io/worker",
+        instance_count=1,
+        timeout=360,
+        duration=120,
+        disable_ssl_verification=True,
+    ):
+        """Generates IBM Cloud node scenarios YAML.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            scenarios (list, optional): List of scenario dicts.
+            label_selector (str): Label selector (default: "node-role.kubernetes.io/worker").
+            instance_count (int): Number of nodes to target (default: 1).
+            timeout (int): Timeout in seconds (default: 360).
+            duration (int): Duration in seconds for stop_start scenarios (default: 120).
+            disable_ssl_verification (bool): Disable SSL verification (default: True).
+
+        Returns:
+            str: Path to the generated YAML file.
+        """
+        if scenarios is None:
+            scenarios = [
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_STOP_START],
+                    "cloud_type": NodeScenarios.CLOUD_IBM,
+                    "label_selector": label_selector,
+                    "instance_count": instance_count,
+                    "timeout": timeout,
+                    "duration": duration,
+                    "disable_ssl_verification": disable_ssl_verification,
+                },
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_REBOOT],
+                    "cloud_type": NodeScenarios.CLOUD_IBM,
+                    "label_selector": label_selector,
+                    "instance_count": instance_count,
+                    "timeout": 120,
+                    "disable_ssl_verification": disable_ssl_verification,
+                },
+            ]
+
+        config = {"scenarios": scenarios}
+        return NodeScenarios._create_node_scenario(
+            scenario_dir,
+            "openshift/node_scenarios.yml.j2",
+            config,
+            "node_scenarios_ibm.yaml",
+        )
+
+    @staticmethod
+    def vmware_node_scenarios(
+        scenario_dir,
+        scenarios=None,
+        label_selector="node-role.kubernetes.io/worker",
+        instance_count=1,
+        timeout=360,
+        duration=10,
+        parallel=False,
+    ):
+        """Generates VMware node scenarios YAML.
+
+        Based on krkn vmware_node_scenarios.yml configuration.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            scenarios (list, optional): List of scenario dicts.
+            label_selector (str): Label selector (default: "node-role.kubernetes.io/worker").
+            instance_count (int): Number of nodes to target (default: 1).
+            timeout (int): Timeout in seconds (default: 360).
+            duration (int): Duration for stop_start scenarios (default: 10).
+            parallel (bool): Run actions in parallel (default: False).
+
+        Returns:
+            str: Path to the generated YAML file.
+        """
+        if scenarios is None:
+            scenarios = [
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_REBOOT],
+                    "cloud_type": NodeScenarios.CLOUD_VMWARE,
+                    "label_selector": label_selector,
+                    "instance_count": instance_count,
+                    "timeout": 120,
+                },
+                {
+                    "actions": [NodeScenarios.ACTION_NODE_STOP_START],
+                    "cloud_type": NodeScenarios.CLOUD_VMWARE,
+                    "label_selector": label_selector,
+                    "instance_count": instance_count,
+                    "timeout": timeout,
+                    "duration": duration,
+                    "parallel": parallel,
+                },
+            ]
+
+        config = {"scenarios": scenarios}
+        return NodeScenarios._create_node_scenario(
+            scenario_dir,
+            "openshift/node_scenarios.yml.j2",
+            config,
+            "node_scenarios_vmware.yaml",
+        )
+
+    @staticmethod
+    def baremetal_node_scenarios(
+        scenario_dir,
+        scenarios=None,
+        label_selector="node-role.kubernetes.io/worker",
+        instance_count=1,
+        runs=1,
+        timeout=360,
+        duration=120,
+        parallel=False,
+        kube_check=True,
+        bmc_user=None,
+        bmc_password=None,
+        bmc_info=None,
+    ):
+        """Generates BareMetal node scenarios YAML.
+
+        Based on krkn baremetal_node_scenarios.yml configuration.
+
+        Args:
+            scenario_dir (str): Directory to write the YAML file.
+            scenarios (list, optional): List of scenario dicts.
+            label_selector (str): Label selector (default: "node-role.kubernetes.io/worker").
+            instance_count (int): Number of nodes to target (default: 1).
+            runs (int): Number of times to run scenarios (default: 1).
+            timeout (int): Timeout in seconds (default: 360).
+            duration (int): Duration to stop node before start (default: 120).
+            parallel (bool): Run actions in parallel (default: False).
+            kube_check (bool): Run kubernetes api checks (default: True).
+            bmc_user (str, optional): Default IPMI username.
+            bmc_password (str, optional): Default IPMI password.
+            bmc_info (dict, optional): Per-machine BMC info with bmc_addr, user, password.
+
+        Returns:
+            str: Path to the generated YAML file.
+
+        Example bmc_info:
+            {
+                "node-1": {"bmc_addr": "mgmt-machine1.example.com"},
+                "node-2": {
+                    "bmc_addr": "mgmt-machine2.example.com",
+                    "bmc_user": "user",
+                    "bmc_password": "pass"
+                }
+            }
+        """
+        if scenarios is None:
+            base_scenario = {
+                "actions": [NodeScenarios.ACTION_NODE_STOP_START],
+                "cloud_type": NodeScenarios.CLOUD_BAREMETAL,
+                "label_selector": label_selector,
+                "instance_count": instance_count,
+                "runs": runs,
+                "timeout": timeout,
+                "duration": duration,
+                "parallel": parallel,
+                "kube_check": kube_check,
+            }
+            if bmc_user:
+                base_scenario["bmc_user"] = bmc_user
+            if bmc_password:
+                base_scenario["bmc_password"] = bmc_password
+            if bmc_info:
+                base_scenario["bmc_info"] = bmc_info
+
+            scenarios = [base_scenario]
+
+        config = {"scenarios": scenarios}
+        return NodeScenarios._create_node_scenario(
+            scenario_dir,
+            "openshift/node_scenarios.yml.j2",
+            config,
+            "node_scenarios_baremetal.yaml",
+        )

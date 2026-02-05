@@ -45,6 +45,22 @@ chaos_scenarios:
           jinja_template: scenarios/openshift/regex_openshift_pod_kill.yml.j2
           description: "Kills random pods in openshift-storage namespace using regex patterns"
 
+  - node_scenarios:
+      - node-scenarios:
+          jinja_template: scenarios/openshift/node_scenarios.yml.j2
+          description: "Simulates node failures (stop/start, reboot, terminate) on various cloud platforms"
+      # Supported cloud_types: aws, azure, openstack, ibm, alibaba, bm (baremetal), vmware
+      # Supported actions:
+      #   - node_start_scenario: Start a stopped/powered-off node
+      #   - node_stop_scenario: Stop/power-off a node (without start)
+      #   - node_stop_start_scenario: Stop and start a node (not supported on vmware)
+      #   - node_termination_scenario: Terminate/delete the node instance
+      #   - node_reboot_scenario: Reboot a node
+      #   - stop_kubelet_scenario: Stop the kubelet service on the node
+      #   - stop_start_kubelet_scenario: Stop and start the kubelet service
+      #   - restart_kubelet_scenario: Restart the kubelet service
+      #   - node_crash_scenario: Crash the node using kernel panic (requires SYS_BOOT capability)
+
   # - pod_disruption_scenarios:
   #     - etcd:
   #         jinja_template: scenarios/openshift/etcd.yml

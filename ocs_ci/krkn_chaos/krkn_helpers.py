@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import pytest
 from ocs_ci.ocs.constants import (
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
@@ -17,6 +18,27 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
     # Container chaos specific labels
     NOOBAA_APP_LABEL,
+    # Platform constants
+    AWS_PLATFORM,
+    ROSA_PLATFORM,
+    ROSA_HCP_PLATFORM,
+    AZURE_PLATFORM,
+    AZURE_WITH_LOGS_PLATFORM,
+    IBMCLOUD_PLATFORM,
+    IBM_PLATFORM,
+    IBM_POWER_PLATFORM,
+    IBM_CLOUD_BAREMETAL_PLATFORM,
+    VSPHERE_PLATFORM,
+    HCI_VSPHERE,
+    BAREMETAL_PLATFORM,
+    BAREMETALPSI_PLATFORM,
+    HCI_BAREMETAL,
+    # Krkn cloud type constants
+    KRKN_CLOUD_AWS,
+    KRKN_CLOUD_AZURE,
+    KRKN_CLOUD_IBM,
+    KRKN_CLOUD_VMWARE,
+    KRKN_CLOUD_BAREMETAL,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
@@ -25,10 +47,95 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     NetworkOutageScenarios,
     HogScenarios,
     PodScenarios,
+    NodeScenarios,
 )
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
+
+# ============================================================================
+# PLATFORM DETECTION HELPER CLASS
+# ============================================================================
+
+
+# Platform to Krkn cloud type mapping
+PLATFORM_TO_KRKN_CLOUD_TYPE = {
+    # AWS platforms
+    AWS_PLATFORM: KRKN_CLOUD_AWS,
+    ROSA_PLATFORM: KRKN_CLOUD_AWS,
+    ROSA_HCP_PLATFORM: KRKN_CLOUD_AWS,
+    # Azure platforms
+    AZURE_PLATFORM: KRKN_CLOUD_AZURE,
+    AZURE_WITH_LOGS_PLATFORM: KRKN_CLOUD_AZURE,
+    # IBM platforms
+    IBMCLOUD_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_POWER_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_CLOUD_BAREMETAL_PLATFORM: KRKN_CLOUD_IBM,
+    # VMware/vSphere platforms
+    VSPHERE_PLATFORM: KRKN_CLOUD_VMWARE,
+    HCI_VSPHERE: KRKN_CLOUD_VMWARE,
+    # BareMetal platforms
+    BAREMETAL_PLATFORM: KRKN_CLOUD_BAREMETAL,
+    BAREMETALPSI_PLATFORM: KRKN_CLOUD_BAREMETAL,
+    HCI_BAREMETAL: KRKN_CLOUD_BAREMETAL,
+}
+
+
+def get_krkn_cloud_type():
+    """
+    Get the Krkn cloud type based on the current platform.
+
+    Returns:
+        str: Krkn cloud type (aws, azure, ibm, vmware, bm)
+
+    Raises:
+        pytest.skip: If platform is not supported for node chaos testing
+    """
+    platform = config.ENV_DATA.get("platform", "").lower()
+
+    if not platform:
+        pytest.skip("Platform not configured in ENV_DATA")
+
+    cloud_type = PLATFORM_TO_KRKN_CLOUD_TYPE.get(platform)
+
+    if not cloud_type:
+        pytest.skip(
+            f"Platform '{platform}' is not supported for Krkn node chaos testing. "
+            f"Supported platforms: {list(PLATFORM_TO_KRKN_CLOUD_TYPE.keys())}"
+        )
+
+    return cloud_type
+
+
+def get_node_scenario_generator():
+    """
+    Get the appropriate NodeScenarios generator method based on the platform.
+
+    Returns:
+        tuple: (generator_method, cloud_type, platform)
+    """
+    platform = config.ENV_DATA.get("platform", "").lower()
+    cloud_type = get_krkn_cloud_type()
+
+    # Map cloud types to their specific generator methods
+    generator_map = {
+        KRKN_CLOUD_AWS: NodeScenarios.aws_node_scenarios,
+        KRKN_CLOUD_AZURE: NodeScenarios.azure_node_scenarios,
+        KRKN_CLOUD_IBM: NodeScenarios.ibmcloud_node_scenarios,
+        KRKN_CLOUD_VMWARE: NodeScenarios.vmware_node_scenarios,
+        KRKN_CLOUD_BAREMETAL: NodeScenarios.baremetal_node_scenarios,
+    }
+
+    generator = generator_map.get(cloud_type)
+    if not generator:
+        pytest.skip(
+            f"No node scenario generator available for cloud type '{cloud_type}'"
+        )
+
+    return generator, cloud_type, platform
+
 
 # ============================================================================
 # BASE SCENARIO HELPER CLASS
@@ -1566,18 +1673,60 @@ class KrknResultAnalyzer(BaseScenarioHelper):
             # Variable names and code references
             r".*\w+_error\w*.*",  # Variable names like "last_error", "error_code"
             r".*error_\w+.*",  # Variable names like "error_message", "error_handler"
+            # Network cleanup errors (non-critical - interface may disappear during chaos)
+            r".*Cannot find device.*",  # Network interface disappeared during cleanup
+            r".*RTNETLINK answers: No such device.*",  # Network device not found
+            r".*tc qdisc del.*Cannot find device.*",  # Traffic control cleanup on missing interface
+            r".*Deleting.*virtual interfaces.*",  # Virtual interface cleanup (may fail gracefully)
         ]
 
         filtered_errors = []
+        cleanup_errors = []
+
+        # Network cleanup error patterns (tracked separately for informational purposes)
+        cleanup_error_patterns = [
+            r".*Cannot find device.*",
+            r".*RTNETLINK answers: No such device.*",
+            r".*tc qdisc del.*Cannot find device.*",
+            r".*Deleting.*virtual interfaces.*",
+        ]
+
         for error in detected_errors:
             is_false_positive = False
-            for fp_pattern in false_positive_patterns:
-                if re.search(fp_pattern, error["context"], re.IGNORECASE):
-                    is_false_positive = True
+            is_cleanup_error = False
+
+            # Check if this is a cleanup-related error
+            for cleanup_pattern in cleanup_error_patterns:
+                if re.search(cleanup_pattern, error["context"], re.IGNORECASE):
+                    is_cleanup_error = True
+                    cleanup_errors.append(error)
                     break
 
-            if not is_false_positive:
+            # Check if this is a false positive
+            if not is_cleanup_error:
+                for fp_pattern in false_positive_patterns:
+                    if re.search(fp_pattern, error["context"], re.IGNORECASE):
+                        is_false_positive = True
+                        break
+
+            if not is_false_positive and not is_cleanup_error:
                 filtered_errors.append(error)
+
+        # Log cleanup errors as warnings (non-critical)
+        if cleanup_errors:
+            self.log.warning(
+                f"Detected {len(cleanup_errors)} cleanup error(s) for {component_name} {test_type} (non-critical)"
+            )
+            self.log.warning(
+                "These errors occur during cleanup phase when network interfaces "
+                "may have already been removed by pod restarts/deletions during chaos."
+            )
+            for i, error in enumerate(cleanup_errors[:3], 1):  # Show first 3
+                self.log.debug(f"   Cleanup error {i}: {error['match']}")
+            if len(cleanup_errors) > 3:
+                self.log.debug(
+                    f"   ... and {len(cleanup_errors) - 3} more cleanup errors"
+                )
 
         # Log and assert if errors are found
         if filtered_errors:
@@ -1604,7 +1753,13 @@ class KrknResultAnalyzer(BaseScenarioHelper):
 
             raise AssertionError(error_summary)
         else:
-            success_msg = f"✅ No error messages detected in Krkn output for {component_name} {test_type}"
+            if cleanup_errors:
+                success_msg = (
+                    f"No critical errors detected in Krkn output for {component_name} {test_type} "
+                    f"({len(cleanup_errors)} non-critical cleanup errors filtered)"
+                )
+            else:
+                success_msg = f"No error messages detected in Krkn output for {component_name} {test_type}"
             self.log.info(success_msg)
 
     def validate_krkn_execution_with_error_check(

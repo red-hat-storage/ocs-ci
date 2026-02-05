@@ -25,6 +25,11 @@ ENV_DATA:
       num_pvcs_per_interface: 5  # Number of PVCs to create per storage interface (CephFS, CephBlockPool)
       pvc_size: 50  # PVC size in GiB
 
+      # Encryption configuration (requires KMS to be configured)
+      # NOTE: Only RBD (Ceph Block) PVCs support encryption via storage class
+      #       CephFS PVCs do NOT support per-PVC encryption (cluster-wide only)
+      use_encrypted_pvc: false  # Set to true to use encrypted RBD PVCs with encrypted storage class
+
       # Common workload parameters
       threads: 16
       elapsed: 1200
