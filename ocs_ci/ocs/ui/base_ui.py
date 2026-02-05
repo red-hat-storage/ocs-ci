@@ -110,15 +110,19 @@ class BaseUI:
             f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
         )
         logger.info(f"UI logs directory class {base_ui_logs_dir}")
-        self.screenshots_folder = os.path.join(
+
+        # Organize UI logs by test case name first, then by type
+        test_ui_logs_dir = os.path.join(
             base_ui_logs_dir,
-            "screenshots_ui",
             get_current_test_name(),
         )
+        self.screenshots_folder = os.path.join(
+            test_ui_logs_dir,
+            "screenshots_ui",
+        )
         self.dom_folder = os.path.join(
-            base_ui_logs_dir,
+            test_ui_logs_dir,
             "dom",
-            get_current_test_name(),
         )
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
@@ -766,17 +770,21 @@ def screenshot_dom_location(type_loc="screenshot"):
         f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
     )
     logger.info(f"UI logs directory function {base_ui_logs_dir}")
+
+    # Organize UI logs by test case name first, then by type
+    test_ui_logs_dir = os.path.join(
+        base_ui_logs_dir,
+        get_current_test_name(),
+    )
     if type_loc == "screenshot":
         return os.path.join(
-            base_ui_logs_dir,
+            test_ui_logs_dir,
             "screenshots_ui",
-            get_current_test_name(),
         )
     else:
         return os.path.join(
-            base_ui_logs_dir,
+            test_ui_logs_dir,
             "dom",
-            get_current_test_name(),
         )
 
 
