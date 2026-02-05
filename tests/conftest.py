@@ -712,19 +712,27 @@ def pytest_runtest_makereport(item, call):
     if report.when == "teardown":
         test_name = item.name
 
-        # Get logs details for this test case from config
+        # Collect UI logs for this test FIRST, before adding properties
+        try:
+            from ocs_ci.ocs import utils
+
+            utils.collect_and_upload_ui_logs(test_case_name=test_name)
+        except Exception as ex:
+            log.warning(f"Failed to collect UI logs for test {test_name}: {ex}")
+
+        # Get logs details for this test case from config (now includes UI logs)
         test_logs_details = ocsci_config.REPORTING.get("test_logs_details", {})
 
         if test_name in test_logs_details:
             logs_list = test_logs_details[test_name]
 
-            # Add properties for each log collection (OCS MG, OCP MG, etc.)
+            # Add properties for each log collection (OCS MG, OCP MG, UI logs, etc.)
             for log_info in logs_list:
                 log_type = log_info.get("log_type", "unknown")
                 prefix = f"log_{log_type}"
 
                 # Add key properties to junit XML
-                if log_info.get("s3_url"):
+                if log_info.get("s3_uri"):
                     report.user_properties.append((f"{prefix}_uri", log_info["s3_uri"]))
 
                 if log_info.get("relative_log_path"):
@@ -2018,16 +2026,16 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
 def session_s3_logs_testsuite_properties(request, record_testsuite_property):
     """
     Add session-level S3 logs details to testsuite properties in junit XML.
-    This runs at the end of the session to capture session_end_logs.
+    This runs at the end of the session to capture session_logs.
     """
 
     yield
     # Get session-level logs details from config
     test_logs_details = ocsci_config.REPORTING.get("test_logs_details", {})
 
-    # Look for session_end_logs
-    if "session_end_logs" in test_logs_details:
-        logs_list = test_logs_details["session_end_logs"]
+    # Look for session_logs
+    if "session_logs" in test_logs_details:
+        logs_list = test_logs_details["session_logs"]
 
         # Add properties for each log collection (OCS MG, OCP MG, etc.)
         for log_info in logs_list:
@@ -5313,7 +5321,7 @@ def collect_logs_fixture(request, session_s3_logs_testsuite_properties):
                                 silent=True,
                                 output_file=True,
                                 timeout=timeout,
-                                test_case_name="session_end_logs",
+                                test_case_name="session_logs",
                             )
                     except Exception as ex:
                         failure_in_mg.append((mg_target, ex))
@@ -5323,7 +5331,7 @@ def collect_logs_fixture(request, session_s3_logs_testsuite_properties):
             try:
                 if not skip_rpm_go_version_collection:
                     utils.collect_pod_container_rpm_package(
-                        "testcases", test_case_name="session_end_logs"
+                        "testcases", test_case_name="session_logs"
                     )
             except Exception as ex:
                 # If pod is killed/restarted during this operation, skip if pod not found error is shown
@@ -5336,6 +5344,15 @@ def collect_logs_fixture(request, session_s3_logs_testsuite_properties):
                     log.error(
                         f"Failure in collecting RPM package info! Exception: {ex}"
                     )
+
+            # Collect UI logs from session
+            try:
+                log.info("Collecting UI logs from session")
+                utils.collect_and_upload_ui_logs(test_case_name="session_logs")
+            except Exception as ex:
+                failure_in_mg.append(("ui_logs", ex))
+                log.error(f"Failure in collecting UI logs! Exception: {ex}")
+
             if failure_in_mg:
                 if config.REPORTING.get("dont_fail_on_collect_logs"):
                     exception_errors = [str(ex) for ex in failure_in_mg]

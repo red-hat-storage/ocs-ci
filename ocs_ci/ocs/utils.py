@@ -1042,9 +1042,9 @@ def create_tarball_and_upload_to_s3(
                 # Store S3-specific metadata
                 s3_metadata = {
                     "s3_uri": result.get("s3_uri"),
-                    "s3_object_key": result.get("object_key"),
-                    "s3_bucket": result.get("bucket"),
-                    "s3_region": result.get("region"),
+                    "object_key": result.get("object_key"),
+                    "bucket": result.get("bucket"),
+                    "region": result.get("region"),
                     "retention_expires_at": result.get("retention_expires_at"),
                     "size_bytes": result.get("size_bytes"),
                 }
@@ -2223,7 +2223,7 @@ def store_log_collection_metadata(
         relative_log_path (str): Relative path for organizing logs
         cluster_name (str): Name of the cluster
         collection_timestamp (str): Timestamp of collection in string format
-        test_case_name (str): Test case name or 'session_end_logs' for session-level logs
+        test_case_name (str): Test case name or 'session_logs' for session-level logs
         s3_result (dict): Optional S3 upload result containing s3_uri, bucket, object_key, etc.
 
     Returns:
@@ -2248,7 +2248,7 @@ def store_log_collection_metadata(
     }
 
     # Add S3 metadata if available
-    if s3_result and s3_result.get("success"):
+    if s3_result and s3_result.get("s3_uri"):
         log_metadata.update(
             {
                 "s3_uri": s3_result.get("s3_uri"),
@@ -2408,9 +2408,11 @@ def collect_pod_container_rpm_package(dir_name, test_case_name=None):
         tarball_path = f"{package_log_dir_path}.tar.gz"
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
-                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+                tar.add(
+                    package_log_dir_path, arcname=os.path.basename(package_log_dir_path)
+                )
             if config.REPORTING.get("delete_packed_mg_logs"):
-                shutil.rmtree(log_dir_path)
+                shutil.rmtree(package_log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
 
