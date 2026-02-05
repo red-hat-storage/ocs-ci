@@ -1070,29 +1070,16 @@ def create_tarball_and_upload_to_s3(
             log.error(f"Error uploading {log_type} logs to S3: {e}")
 
     # Store metadata in config for junit XML reporting (always, not just for S3 uploads)
-    # Initialize test_logs_details if not exists
-    if "test_logs_details" not in config.REPORTING:
-        config.REPORTING["test_logs_details"] = {}
-
-    # Get or create list for this test case
-    test_case_key = test_case_name or "session_logs"
-    if test_case_key not in config.REPORTING["test_logs_details"]:
-        config.REPORTING["test_logs_details"][test_case_key] = []
-
-    # Store metadata about this collection
-    log_metadata = {
-        "log_type": log_type or "unknown",
-        "collection_timestamp": timestamp_str,
-        "relative_log_path": relative_log_path,
-        "log_path": log_path,
-        "cluster_name": cluster_name,
-    }
-
-    # Add S3 metadata if available
-    log_metadata.update(s3_metadata)
-
-    config.REPORTING["test_logs_details"][test_case_key].append(log_metadata)
-    log.info(f"Stored log collection details for test case: {test_case_key}")
+    # Use the centralized helper function
+    store_log_collection_metadata(
+        log_type=log_type or "unknown",
+        log_path=log_path,
+        relative_log_path=relative_log_path,
+        cluster_name=cluster_name,
+        collection_timestamp=timestamp_str,
+        test_case_name=test_case_name,
+        s3_result=s3_metadata if s3_metadata else None,
+    )
 
     # Return tarball path if created, otherwise return directory path
     return log_path
@@ -2215,6 +2202,70 @@ def label_pod_security_admission(namespace=None, upgrade_version=None):
         ocp_obj.add_label(resource_name=namespace, label=label)
 
 
+def store_log_collection_metadata(
+    log_type,
+    log_path,
+    relative_log_path,
+    cluster_name,
+    collection_timestamp,
+    test_case_name=None,
+    s3_result=None,
+):
+    """
+    Store log collection metadata in config for junit XML reporting.
+
+    This function centralizes the storage of log metadata, making it reusable
+    across different log collection functions (must-gather, RPM collection, etc.).
+
+    Args:
+        log_type (str): Type of logs (e.g., 'ocs-must-gather', 'rpm-go-versions')
+        log_path (str): Local path to the log file or directory
+        relative_log_path (str): Relative path for organizing logs
+        cluster_name (str): Name of the cluster
+        collection_timestamp (str): Timestamp of collection in string format
+        test_case_name (str): Test case name or 'session_end_logs' for session-level logs
+        s3_result (dict): Optional S3 upload result containing s3_uri, bucket, object_key, etc.
+
+    Returns:
+        dict: The stored metadata dictionary
+    """
+    # Initialize test_logs_details if not exists
+    if "test_logs_details" not in config.REPORTING:
+        config.REPORTING["test_logs_details"] = {}
+
+    # Get or create list for this test case
+    test_case_key = test_case_name or "session_logs"
+    if test_case_key not in config.REPORTING["test_logs_details"]:
+        config.REPORTING["test_logs_details"][test_case_key] = []
+
+    # Store metadata about this collection
+    log_metadata = {
+        "log_type": log_type,
+        "collection_timestamp": collection_timestamp,
+        "relative_log_path": relative_log_path,
+        "log_path": log_path,
+        "cluster_name": cluster_name,
+    }
+
+    # Add S3 metadata if available
+    if s3_result and s3_result.get("success"):
+        log_metadata.update(
+            {
+                "s3_uri": s3_result.get("s3_uri"),
+                "bucket": s3_result.get("bucket"),
+                "object_key": s3_result.get("object_key"),
+                "region": s3_result.get("region"),
+            }
+        )
+
+    config.REPORTING["test_logs_details"][test_case_key].append(log_metadata)
+    log.info(
+        f"Stored {log_type} log collection metadata for test case: {test_case_key}"
+    )
+
+    return log_metadata
+
+
 def collect_pod_container_rpm_package(dir_name, test_case_name=None):
     """
     Collect information about rpm packages from all containers + go version
@@ -2305,18 +2356,27 @@ def collect_pod_container_rpm_package(dir_name, test_case_name=None):
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
 
+    # Get cluster and run information for metadata
+    cluster_name = ocsci_config.ENV_DATA.get("cluster_name", "unknown")
+    run_id = ocsci_config.RUN.get("run_id", "unknown")
+    timestamp_str = datetime.datetime.fromtimestamp(timestamp).strftime("%Y%m%d_%H%M%S")
+
+    # Determine relative path for RPM logs
+    relative_rpm_path = os.path.join(
+        f"{dir_name}_{config.RUN['run_id']}",
+        cluster_name,
+        "rpm_go_versions",
+    )
+
+    # Determine the final log path (tarball or directory)
+    final_log_path = tarball_path if tarball_path else package_log_dir_path
+
     # Upload to S3 if configured
+    s3_result = None
     if s3_upload_enabled:
         try:
             from ocs_ci.utility.s3_logs_uploader import (
                 upload_logs_to_s3_if_configured,
-            )
-
-            # Get cluster and run information
-            cluster_name = ocsci_config.ENV_DATA.get("cluster_name", "unknown")
-            run_id = ocsci_config.RUN.get("run_id", "unknown")
-            timestamp_str = datetime.datetime.fromtimestamp(timestamp).strftime(
-                "%Y%m%d_%H%M%S"
             )
 
             # Use tarball if created, otherwise use directory (S3 uploader will create tarball)
@@ -2326,7 +2386,7 @@ def collect_pod_container_rpm_package(dir_name, test_case_name=None):
             # Create prefix for better organization
             prefix = f"{cluster_name}/{run_id}/{test_case_name or 'unknown'}/rpm_go_versions/{timestamp_str}"
 
-            result = upload_logs_to_s3_if_configured(
+            s3_result = upload_logs_to_s3_if_configured(
                 file_path=upload_path,
                 prefix=prefix,
                 metadata={
@@ -2338,20 +2398,33 @@ def collect_pod_container_rpm_package(dir_name, test_case_name=None):
                 },
             )
 
-            if result and result.get("success"):
+            if s3_result and s3_result.get("success"):
                 log.info("RPM and Go version logs uploaded to S3 successfully")
-                log.info(f"S3 URI: {result.get('s3_uri')}")
+                log.info(f"S3 URI: {s3_result.get('s3_uri')}")
                 log.info(
-                    f"Bucket: {result.get('bucket')}, Object Key: {result.get('object_key')}"
+                    f"Bucket: {s3_result.get('bucket')}, Object Key: {s3_result.get('object_key')}"
                 )
-                log.info(f"Retention expires at: {result.get('retention_expires_at')}")
+                log.info(
+                    f"Retention expires at: {s3_result.get('retention_expires_at')}"
+                )
             else:
                 log.warning(
                     "Failed to upload RPM and Go version logs to S3: "
-                    f"{result.get('error') if result else 'Unknown error'}"
+                    f"{s3_result.get('error') if s3_result else 'Unknown error'}"
                 )
         except Exception as ex:
             log.error(f"Error during S3 upload of RPM and Go version logs: {ex}")
+
+    # Store metadata in config for junit XML reporting (always, regardless of S3 upload)
+    store_log_collection_metadata(
+        log_type="rpm-go-versions",
+        log_path=final_log_path,
+        relative_log_path=relative_rpm_path,
+        cluster_name=cluster_name,
+        collection_timestamp=timestamp_str,
+        test_case_name=test_case_name,
+        s3_result=s3_result,
+    )
 
 
 def is_dr_scenario():
