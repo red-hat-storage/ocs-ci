@@ -11,6 +11,7 @@ import json
 from subprocess import TimeoutExpired
 from semantic_version import Version
 
+from ocs_ci.helpers.helpers import check_cluster_is_compact
 from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
@@ -1348,7 +1349,7 @@ def get_worker_nodes():
             if node.get("metadata").get("name") not in infra_node_ids
         ]
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
-    if is_hci_provider_cluster():
+    if is_hci_provider_cluster() and not check_cluster_is_compact():
         master_node_list = get_master_nodes()
         worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
     return worker_nodes_list
