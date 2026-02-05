@@ -131,7 +131,7 @@ def cephfs_custom_storage_class(request, storageclass_factory):
                         replica=replica,
                         compression=compression,
                         new_cephfs_pool=True,
-                        pool_name=cephfs_pool_name,
+                        pool_name=f"ocs-storagecluster-cephfilesystem-{cephfs_pool_name}",
                     )
                     if sc_obj is None or sc_obj.name != cephfs_sc_name:
                         log.error(
