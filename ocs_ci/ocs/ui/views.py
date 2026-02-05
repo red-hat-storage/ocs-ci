@@ -1487,6 +1487,27 @@ acm_configuration_4_20 = {
     ),
 }
 
+acm_configuration_4_21 = {
+    "vm-actions": ('//button[@data-test="actions-dropdown"]', By.XPATH),
+    "vm-page-next-btn": (
+        "button[type='button'][aria-disabled='false']",
+        By.CSS_SELECTOR,
+    ),
+    "assign": ("button[type='button']", By.CSS_SELECTOR),
+    "selected-protection-type-2": (
+        "//dd[@class='pf-v5-c-description-list__description']//div[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "select-policy": (
+        "(//span[contains(@class, 'c-menu__item-main')])[1]",
+        By.XPATH,
+    ),
+    "dr-policy": (
+        "(//span[contains(@class, 'c-menu__item-main')])[1]",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -3035,6 +3056,7 @@ locators = {
             **acm_configuration_4_19,
             **acm_page_nav_420,
             **acm_configuration_4_20,
+            **acm_configuration_4_21,
         },
         "validation": {
             **validation,
