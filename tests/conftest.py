@@ -1405,7 +1405,8 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the storageclass by deregistering from StorageConsumer first
+        Delete the storageclass by deregistering from StorageConsumer first.
+        Removes any CephFS additional data pools if available.
         """
         from ocs_ci.ocs.resources.storage_cluster import (
             delete_storageclass_and_deregister,
@@ -1421,6 +1422,8 @@ def storageclass_factory_fixture(
             except Exception as e:
                 log.error(f"Failed to delete storageclass {instance.name}: {e}")
                 teardown_errors.append((instance.name, e))
+        for cfs_data_pool in additional_cephfs_data_pools:
+            assert helpers.delete_cephfs_data_pool(cfs_data_pool)
         if teardown_errors:
             parts = [f"{name}: {exc}" for name, exc in teardown_errors]
             raise RuntimeError(
