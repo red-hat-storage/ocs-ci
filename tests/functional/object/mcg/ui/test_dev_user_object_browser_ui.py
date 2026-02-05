@@ -11,7 +11,6 @@ import pytest
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.pytest_customization.marks import (
-    black_squad,
     mcg,
     polarion_id,
     tier1,
@@ -31,7 +30,6 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @ui
-@black_squad
 @mcg
 class TestDevUserObjectBrowserUI:
     """
