@@ -34,7 +34,6 @@ class DevUser:
         password: OpenShift password for console login.
         secret_namespace: Namespace containing the S3 credentials secret.
         secret_name: Name of the secret containing S3 credentials.
-        clusterrole_binding_name: Computed name of the ClusterRoleBinding (property).
 
     """
 
@@ -42,11 +41,6 @@ class DevUser:
     password: str
     secret_namespace: str
     secret_name: str
-
-    @property
-    def clusterrole_binding_name(self) -> str:
-        """Return the ClusterRoleBinding name derived from username."""
-        return f"noobaa-odf-ui-binding-{self.username}"
 
 
 def add_htpasswd_user(username, password, htpasswd_path):
