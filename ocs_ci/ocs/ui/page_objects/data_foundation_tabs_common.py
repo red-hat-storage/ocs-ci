@@ -70,12 +70,7 @@ class CreateResourceForm(PageNavigator):
         Function retries to get all error message rule texts during 120 seconds.
         """
         # verify that all rules exist when input rules popup is visible
-        for sample in TimeoutSampler(
-            120,
-            3,
-            self._check_all_rules_exist,
-            self.generic_locators["text_input_popup_rules"],
-        ):
+        for sample in TimeoutSampler(120, 3, self._check_all_rules_exist):
             if sample:
                 self.test_results.loc[len(self.test_results)] = [
                     None,
