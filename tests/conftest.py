@@ -1268,11 +1268,15 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the storageclass
+        - Delete the storageclass
+        - Removes any CephFS additional data pools if available
+        
         """
         for instance in instances:
             instance.delete()
             instance.ocp.wait_for_delete(instance.name, timeout=120)
+        for cfs_data_pool in additional_cephfs_data_pools:
+            assert helpers.delete_cephfs_data_pool(cfs_data_pool)    
 
     request.addfinalizer(finalizer)
     return factory
