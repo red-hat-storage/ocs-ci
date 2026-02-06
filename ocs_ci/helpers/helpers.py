@@ -1252,6 +1252,43 @@ def create_cephfs_data_pool(
         logger.error(f"Failed to create data pool '{pool_name}': {e}")
         return None
 
+def check_additional_cephfs_data_pool_exists(
+    pool_name,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    Check if a CephFS additional data pool exists
+
+    Args:
+        pool_name (str): Name of the data pool to check
+        namespace (str): Namespace where the StorageCluster exists
+
+    Returns:
+        bool: True if data pool exists, False otherwise
+
+    """
+    if not pool_name:
+        return False
+    try:
+        storage_cluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER, namespace=namespace,resource_name=constants.DEFAULT_CLUSTERNAME
+        )
+
+        additional_pools = (
+            storage_cluster_obj.data
+            .get("spec", {})
+            .get("managedResources", {})
+            .get("cephFilesystems", {})
+            .get("additionalDataPools", [])
+        )
+        return any(
+            pool.get("name") == pool_name
+            for pool in additional_pools
+        )
+    except Exception as e:
+        logger(f"Failed to check if data pool exists: {e}")
+        return False
+
 
 def delete_cephfs_data_pool(
     pool_name,
