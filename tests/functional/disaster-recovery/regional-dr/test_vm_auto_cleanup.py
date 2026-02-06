@@ -174,6 +174,10 @@ class TestVMAutoCleanUp:
             resource_name=resource_name,
         )
 
+        wait_time = 2 * scheduling_interval  # Time in minutes
+        logger.info(f"Waiting for {wait_time} minutes to run IOs")
+        sleep(wait_time * 60)
+
         logger.info("Checking for lastGroupSyncTime")
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
         logger.info(f"Primary cluster name before failover is {primary_cluster_name}")
