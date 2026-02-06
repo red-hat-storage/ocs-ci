@@ -891,7 +891,6 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
                 log.info("Expected 1 radio button found, select existing DRPC")
                 acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
             log.info("Click next")
-            # Add version check here also
             acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
             if standalone:
                 log.info("Select policy")
