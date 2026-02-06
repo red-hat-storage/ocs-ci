@@ -1350,7 +1350,11 @@ def get_worker_nodes():
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
     if is_hci_provider_cluster():
         master_node_list = get_master_nodes()
-        worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
+        if not (
+            len(get_all_nodes()) == 3
+            and set(worker_nodes_list) == set(master_node_list)
+        ):
+            worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
     return worker_nodes_list
 
 
