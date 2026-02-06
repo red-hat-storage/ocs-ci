@@ -36,6 +36,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
 )
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 from ocs_ci.krkn_chaos.krkn_scenario_generator import PodScenarios
+from ocs_ci.krkn_chaos.noobaa_chaos_helper import validate_noobaa_health
 
 log = logging.getLogger(__name__)
 
@@ -205,7 +206,7 @@ class TestKrKnNooBaaChaos:
 
         # Final NooBaa health check
         log.info("🔍 Performing final NooBaa health validation")
-        self._validate_noobaa_health(target_pod)
+        validate_noobaa_health(target_pod)
 
         log.info(
             f"🎉 NooBaa pod disruption test for {target_pod} completed successfully"
@@ -375,70 +376,9 @@ class TestKrKnNooBaaChaos:
 
         # Final NooBaa health check
         log.info("🔍 Performing final NooBaa health validation")
-        self._validate_noobaa_health("noobaa-all-pods")
+        validate_noobaa_health("noobaa-all-pods")
 
         log.info(
             f"🎉 STRENGTH TEST PASSED: NooBaa achieved {strength_score:.1f}% "
             f"resilience under {stress_level} stress!"
         )
-
-    def _validate_noobaa_health(self, component_name):
-        """
-        Validate NooBaa health after chaos testing.
-
-        This method checks:
-        1. NooBaa pods are running
-        2. NooBaa database is accessible
-        3. No permanent errors in NooBaa logs
-        4. S3 endpoints are responsive
-
-        Args:
-            component_name: Component name for logging purposes
-
-        Raises:
-            AssertionError: If critical NooBaa health checks fail
-        """
-        from ocs_ci.ocs.resources.pod import get_pods_having_label
-        from ocs_ci.ocs import ocp
-
-        log.info(f"Validating NooBaa health for {component_name}")
-
-        # Check NooBaa pods are running
-        log.info("   Checking NooBaa pod status...")
-        noobaa_pods = [
-            (constants.NOOBAA_DB_LABEL_419_AND_ABOVE, "NooBaa DB"),
-            (constants.NOOBAA_CORE_POD_LABEL, "NooBaa Core"),
-            (constants.NOOBAA_OPERATOR_POD_LABEL, "NooBaa Operator"),
-        ]
-
-        for label, name in noobaa_pods:
-            pods = get_pods_having_label(
-                label=label,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            )
-            assert len(pods) > 0, f"No {name} pods found after chaos"
-
-            # Check pod status
-            for pod in pods:
-                pod_name = pod["metadata"]["name"]
-                pod_obj = ocp.OCP(
-                    kind=constants.POD,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-                    resource_name=pod_name,
-                )
-                status = pod_obj.get()["status"]["phase"]
-                log.info(f"      {pod_name}: {status}")
-                # Allow pods to be in Running or ContainerCreating state
-                # (they may still be recovering from the last kill)
-                assert status in [
-                    "Running",
-                    "ContainerCreating",
-                    "Pending",
-                ], f"{pod_name} is in unexpected state: {status}"
-
-        log.info("   ✅ NooBaa pods are healthy")
-
-        # Note: We don't fail on temporary service disruptions
-        # Pod restarts and temporary S3 failures are expected during chaos testing
-        log.info("   ℹ️  Temporary service disruptions during chaos are expected")
-        log.info("✅ NooBaa health validation completed")
