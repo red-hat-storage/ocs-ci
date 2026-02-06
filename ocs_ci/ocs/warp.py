@@ -219,8 +219,8 @@ class Warp(object):
             + multi_client_options
         )
         # Redirect output to a log file for monitoring
-        # Use sh -c to properly handle shell redirection
-        cmd_with_logging = f"sh -c '{cmd} > /tmp/warp.log 2>&1 &'"
+        # Use /bin/bash directly to avoid setns issues with sh -c
+        cmd_with_logging = f"/bin/bash -c '{cmd} > /tmp/warp.log 2>&1 &'"
         # Specify container name explicitly to avoid "container not found" errors
         self.pod_obj.exec_cmd_on_pod(
             cmd_with_logging, out_yaml_format=False, timeout=10, container_name="warp"
