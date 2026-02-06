@@ -1153,7 +1153,6 @@ def storageclass_factory_fixture(
 
     """
     instances = []
-    additional_cephfs_data_pools = []
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
@@ -1236,7 +1235,6 @@ def storageclass_factory_fixture(
                         replica=ocsci_config.ENV_DATA.get("replica") or replica,
                     )
                     interface_name = f"ocs-storagecluster-cephfilesystem-{new_data_pool_name}"
-                    additional_cephfs_data_pools.append(new_data_pool_name)
                 else:
                     if pool_name is None:
                         interface_name = helpers.get_cephfs_data_pool_name()
@@ -1275,8 +1273,9 @@ def storageclass_factory_fixture(
         for instance in instances:
             instance.delete()
             instance.ocp.wait_for_delete(instance.name, timeout=120)
-        for cfs_data_pool in additional_cephfs_data_pools:
-            assert helpers.delete_cephfs_data_pool(cfs_data_pool)    
+        # delete additional cephfs datapool if available
+        if helpers.check_additional_cephfs_data_pool_exists(constants.RDR_CUSTOM_CEPHFS_POOL):
+            assert helpers.delete_cephfs_data_pool(constants.RDR_CUSTOM_CEPHFS_POOL)  
 
     request.addfinalizer(finalizer)
     return factory
