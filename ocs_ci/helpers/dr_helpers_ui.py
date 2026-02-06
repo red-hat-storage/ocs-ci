@@ -7,6 +7,7 @@ import time
 
 from typing import List
 
+from ocs_ci.utility.version import compare_versions
 from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
@@ -22,6 +23,7 @@ from ocs_ci.ocs.ui.base_ui import (
 from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility.utils import get_running_acm_version
 
 log = logging.getLogger(__name__)
 
@@ -889,6 +891,7 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
                 log.info("Expected 1 radio button found, select existing DRPC")
                 acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
             log.info("Click next")
+            # Add version check here also
             acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
             if standalone:
                 log.info("Select policy")
@@ -938,32 +941,36 @@ def navigate_using_fleet_virtulization(acm_obj):
     Returns:
         True if VM is found on the selected managed cluster and function executes successfully, False otherwise
     """
+    acm_version_str = ".".join(get_running_acm_version().split(".")[:2])
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Navigate to VMs console using Fleet Virtulization dropdown")
     acm_obj.do_click(acm_loc["switch-perspective"])
     acm_obj.do_click(acm_loc["fleet-virtual"])
     acm_obj.page_has_loaded(retries=10, sleep_time=5)
-    if acm_obj.check_element_presence(
-        (
-            acm_loc["modal_dialog_close_button"][1],
-            acm_loc["modal_dialog_close_button"][0],
-        ),
-        timeout=10,
-    ):
-        log.info("Modal dialog box found, closing it..")
-        acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+    if compare_versions(f"{acm_version_str} >= 2.16"):
+        if acm_obj.check_element_presence(
+            (
+                acm_loc["modal_dialog_close_button"][1],
+                acm_loc["modal_dialog_close_button"][0],
+            ),
+            timeout=10,
+        ):
+            log.info("Modal dialog box found, closing it..")
+            acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
     log.info("From side nav bar, navigate to VirtualMachines page")
     acm_obj.do_click(acm_loc["nav-bar-vms-page"])
     log.info(
         "Successfully navigate to the VirtualMachines page under Fleet Virtualization"
     )
-    # if acm_obj.check_element_presence(
-    #     (
-    #         acm_loc["modal_dialog_close_button"][1],
-    #         acm_loc["modal_dialog_close_button"][0],
-    #     ),
-    #     timeout=10,
-    # ):
-    #     log.info("Modal dialog box found, closing it..")
-    #     acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+    if compare_versions(f"{acm_version_str} < 2.16"):
+        if acm_obj.check_element_presence(
+            (
+                acm_loc["modal_dialog_close_button"][1],
+                acm_loc["modal_dialog_close_button"][0],
+            ),
+            timeout=10,
+        ):
+            log.info("Modal dialog box found, closing it..")
+            acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+
     return True
