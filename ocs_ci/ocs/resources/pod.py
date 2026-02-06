@@ -552,13 +552,38 @@ class Pod(OCS):
         Install packages in a Pod
 
         Args:
-            packages (list): List of packages to install
-
+            packages (list or str): List of packages to install
         """
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        cmd = f"yum install {packages} -y"
+        # Detect OS inside pod
+        os_release = self.exec_cmd_on_pod(
+            "cat /etc/os-release || true", out_yaml_format=False
+        )
+
+        os_release_lower = os_release.lower() if os_release else ""
+
+        if "alpine" in os_release_lower:
+            # Alpine uses apk
+            cmd = f"apk add --no-cache {packages}"
+        elif any(
+            x in os_release_lower
+            for x in ["rhel", "centos", "fedora", "ubi", "red hat"]
+        ):
+            # RHEL-based uses yum
+            cmd = f"yum install -y {packages}"
+        elif any(x in os_release_lower for x in ["debian", "ubuntu"]):
+            # Debian-based uses apt
+            cmd = (
+                "apt-get update && "
+                f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}"
+            )
+        else:
+            raise RuntimeError(
+                f"Unsupported OS for package install. /etc/os-release:\n{os_release}"
+            )
+
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
