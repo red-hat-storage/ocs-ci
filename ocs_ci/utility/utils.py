@@ -2984,13 +2984,21 @@ def ceph_health_recover(
             )
             # Avoid circular dependencies, importing here
             from ocs_ci.ocs.utils import collect_ocs_logs
+            from ocs_ci.framework.pytest_customization import ocscilib
 
+            since_time_str = None
+            test_start_time = ocscilib.test_start_time
+            if test_start_time:
+                time_with_buffer = test_start_time - datetime.timedelta(minutes=5)
+                # RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
+                since_time_str = time_with_buffer.strftime("%Y-%m-%dT%H:%M:%SZ")
             # Collecting logs here before trying to fix issue
             timestamp = int(time.time())
             collect_ocs_logs(
                 f"ceph_health_recover_{timestamp}",
                 ocp=False,
                 timeout=defaults.MUST_GATHER_TIMEOUT,
+                since_time=since_time_str,
             )
             jenkins_build_url = config.RUN.get("jenkins_build_url", "")
             base_logs_url = config.RUN.get("logs_url", "")
