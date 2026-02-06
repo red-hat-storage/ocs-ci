@@ -26,7 +26,10 @@ MTU_RE = re.compile(r"MTU\s+(\d+)")
 DURATION_RE = re.compile(
     r"((?:\d+\s*d)?\s*(?:\d+\s*h)?\s*(?:\d+\s*(?:m|min))?)", re.IGNORECASE
 )
-DATETIME_RE = re.compile(r"(\w+\s+\d{1,2},\s+\d{4},\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)")
+DATETIME_RE = re.compile(
+    r"((?:\d{1,2}\s+\w+|\w+\s+\d{1,2}),?\s+\d{4},\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)",
+    re.IGNORECASE,
+)
 CHECK_RE = re.compile(r"\b(ODF[A-Za-z0-9]+)\b")
 
 
@@ -331,6 +334,19 @@ class InfraHealthOverview(PageNavigator):
         # self.print_checks()
         self.select_all_alerts()
         self.take_screenshot("unsilence_all_alerts")
+        self.unsilence_alerts()
+
+    def unsilence_alert_by_name(self, alert_name):
+        """
+        Unsilence alert based on name
+        Args:
+            alert_name (str): Name of the alert to unsilence
+        """
+        logger.info("Unsilencing alert by name")
+        self.click_silenced_alerts()
+        self.do_send_keys(self.validation_loc["filter_by_details"], alert_name)
+        self.select_all_alerts()
+        self.take_screenshot(f"unsilence alert {alert_name}")
         self.unsilence_alerts()
 
     def silence_all_alerts(self, silent_duration: int):

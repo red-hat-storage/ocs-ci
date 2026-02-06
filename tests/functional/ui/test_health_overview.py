@@ -1,10 +1,12 @@
 import logging
-
+import os
+import time
 import pytest
 import requests
 from selenium.common import WebDriverException
 from timeout_sampler import TimeoutSampler
-
+from ocs_ci.ocs.ui.page_objects.InfraHealth import SEVERITY_BY_CHECK
+from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     runs_on_provider,
@@ -17,13 +19,30 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     tier1,
 )
+from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import create_resource
 from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.utility.templating import load_yaml
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.testlib import skipif_ocs_version
 
 
 logger = logging.getLogger(__name__)
+
+ALERT_MAP = {
+    "ODFNodeLatencyHighOnOSDNodes": 0,
+    "ODFNodeLatencyHighOnNonOSDNodes": 0,
+    "ODFNodeMTULessThan9000": 0,
+    "ODFDiskUtilizationHigh": 0,
+    "ODFCorePodRestarted": 0,
+    "ODFNodeNICBandwidthSaturation": 0,
+}
+
+SEVERITY_DROP_MAP = {
+    "Minor": 2,
+    "Medium": 10,
+}
 
 
 @ui
@@ -139,6 +158,92 @@ class TestHealthOverview(ManageTest):
         except Exception as e:
             logger.error(f"Failed to un-silence alerts during teardown: {e}")
 
+    def update_alert_map(self, threading_lock, alert_name=None):
+        """
+        Update alert map according to current alerts in firing state.
+        If alert_name is provided, update only that alert.
+        """
+        prom_api = PrometheusAPI(threading_lock=threading_lock)
+        alert_names = [alert_name] if alert_name else ALERT_MAP.keys()
+        for name in alert_names:
+            alerts = prom_api.wait_for_alert(
+                name=name,
+                state="firing",
+                timeout=10,
+                sleep=5,
+            )
+            logger.info(f"Alerts {alerts}")
+            ALERT_MAP[name] = len(alerts)
+        logger.info(f"Updated alert map: {ALERT_MAP}")
+
+    def wait_for_health_score_change(self, expected_delta, baseline, timeout=300):
+        """Wait for health score to decrease by expected_delta"""
+
+        delta = baseline - expected_delta
+        if delta < 0:
+            delta = 0
+        for score in TimeoutSampler(timeout, 60, self.get_health_score_ui):
+            current = int(score)
+            if current <= delta:
+                logger.info(
+                    f"Health score dropped as expected. "
+                    f"Baseline={baseline}, Current={current}"
+                )
+                return current
+            else:
+                logger.info(
+                    "Health score not updated yet, refreshing Infra Health page"
+                )
+                PageNavigator().refresh_page()
+                time.sleep(30)
+
+        raise TimeoutError(
+            f"Health score did not drop by {expected_delta}% from baseline {baseline}"
+        )
+
+    def wait_for_health_score_recovery(self, baseline, timeout=300):
+        """Wait for health score to recover to original baseline score"""
+
+        for score in TimeoutSampler(
+            timeout,
+            15,
+            self.get_health_score_ui,
+        ):
+            current = int(score)
+            if current >= baseline:
+                logger.info(
+                    f"Health score recovered to baseline. "
+                    f"Baseline={baseline}, Current={current}"
+                )
+                return current
+            else:
+                logger.info(
+                    "Health score not updated yet, refreshing Infra Health page"
+                )
+                PageNavigator().refresh_page()
+                time.sleep(15)
+
+        raise TimeoutError(f"Health score did not recover to baseline {baseline}")
+
+    def restart_pod(self):
+        """Pod restart function"""
+
+        resource_list = get_all_resource_names_of_a_kind("Pod")
+        pod_name = next(
+            (resource for resource in resource_list if "rook-ceph-mgr" in resource),
+            None,
+        )
+        if not pod_name:
+            raise RuntimeError(
+                "rook-ceph-mgr pod not found in openshift-storage namespace"
+            )
+        logger.info(f"Restarting pod: {pod_name}")
+
+        oc_cmd = f"exec {pod_name} -n openshift-storage -- /bin/sh -c 'kill 1'"
+        ocp = OCP()
+        ocp.exec_oc_cmd(command=oc_cmd, out_yaml_format=False, timeout=180)
+        time.sleep(60)
+
     @tier1
     @polarion_id("OCS-7475")
     def test_health_overview_modal(
@@ -212,3 +317,104 @@ class TestHealthOverview(ManageTest):
 
         logger.info("Verifying health overview after silencing alerts")
         verify_health_overview_modal()
+
+    @tier2
+    @polarion_id("OCS-XXXXX")  # to be added
+    @pytest.mark.parametrize(
+        "alert_name, alert_yaml",
+        [
+            ("ODFNodeMTULessThan9000", "custom-odf-mtu-less-than-9000.yaml"),
+            (
+                "ODFNodeNICBandwidthSaturation",
+                "custom-odf-nic-bandwidth-saturation.yaml",
+            ),
+            ("ODFDiskUtilizationHigh", "custom-odf-disk-utilization-high.yaml"),
+            ("ODFNodeLatencyHighOnOSDNodes", "custom-odf-latency-rule.yaml"),
+            ("ODFCorePodRestarted", "custom-odf-core-pod-restarted.yaml"),
+        ],
+    )
+    def test_health_score_changes_based_on_alert_severity(
+        self,
+        setup_ui_class,
+        alert_name,
+        alert_yaml,
+        threading_lock,
+        unsilence_alerts_teardown,
+    ):
+        """
+        Test to decrease health score based on alert severity and recover after alert is reversed.
+        1. Silence all pre-existing alerts for 1 hour
+        2. Map expected drop in health score based on alert severity
+        3. Create mock up alert
+        4. Wait till alert is in firing state
+        5. Verify health score is dropped as expected
+        6. Resolve alert by deleting mock up alert rule
+        7. Verify health score is recovered
+        """
+        rule = None
+        if alert_name == "ODFCorePodRestarted":
+            self.restart_pod()
+            time.sleep(120)
+        self.update_alert_map(threading_lock)
+        # 1. Silence alerts
+        df_overview = PageNavigator().nav_storage_data_foundation_overview_page()
+        infra_health_overview = df_overview.nav_health_view_checks()
+        infra_health_overview.silence_all_alerts(silent_duration=1)
+        time.sleep(90)
+        baseline_score = 100
+
+        # 2. Get severity & expected drop
+        severity = SEVERITY_BY_CHECK.get(alert_name)
+        assert severity, f"Severity not defined for alert {alert_name}"
+        expected_drop = SEVERITY_DROP_MAP[severity]
+        logger.info(
+            f"Alert {alert_name} severity={severity}, "
+            f"expected drop={expected_drop}%"
+        )
+        try:
+            # 3. Apply alert PrometheusRule YAML
+            if ALERT_MAP[alert_name] == 0 and alert_name != "ODFCorePodRestarted":
+                logger.info(f"Applying alert rule YAML: {alert_yaml}")
+                alert_yaml_load = load_yaml(
+                    os.path.join(constants.HEALTHALERTS_DIR, alert_yaml)
+                )
+                rule = create_resource(**alert_yaml_load)
+                time.sleep(120)
+
+                # 4. Check alert in firing state
+                api = PrometheusAPI(threading_lock=threading_lock)
+                api.refresh_connection()
+                alerts = api.wait_for_alert(name=alert_name, state="firing", sleep=60)
+                logger.info(f"Alert {alerts} triggered")
+                time.sleep(120)
+
+                # 5. Check health score is decreased
+                self.wait_for_health_score_change(
+                    len(alerts) * expected_drop, baseline_score
+                )
+
+                # 6. Resolve alert by deleting rule
+                logger.info("Deleting alert rule to resolve alert")
+                rule.delete()
+                rule = None
+                logger.info("Waiting for alert to be resolved...")
+                api.refresh_connection()
+                alerts = api.wait_for_alert(name=alert_name, timeout=180, sleep=60)
+                assert len(alerts) == 0, f"Unexpected unresolved alerts: {alerts}. "
+
+                # 7. Check health score is recovered
+                time.sleep(300)
+                self.wait_for_health_score_recovery(baseline_score)
+            else:
+                logger.info("Alert already present no need to trigger again")
+                infra_health_overview.unsilence_alert_by_name(alert_name)
+                self.wait_for_health_score_change(
+                    ALERT_MAP[alert_name] * expected_drop, baseline_score
+                )
+        finally:
+            if rule:
+                logger.info(f"[CLEANUP] Ensuring alert rule {alert_yaml} is deleted")
+                try:
+                    rule.delete()
+                except Exception as ex:
+                    logger.warning(f"Failed to delete alert rule during cleanup: {ex}")
