@@ -1489,21 +1489,20 @@ acm_configuration_4_20 = {
 
 acm_configuration_4_21 = {
     "vm-actions": ('//button[@data-test="actions-dropdown"]', By.XPATH),
-    "vm-page-next-btn": (
-        "button[type='button'][aria-disabled='false']",
-        By.CSS_SELECTOR,
-    ),
-    "assign": ("button[type='button']", By.CSS_SELECTOR),
-    "selected-protection-type-2": (
-        "//dd[@class='pf-v5-c-description-list__description']//div[normalize-space()='{}']",
+    "dr-policy": (
+        "//button[@aria-label='Typeahead single select']",
         By.XPATH,
     ),
     "select-policy": (
-        "(//span[contains(@class, 'c-menu__item-main')])[1]",
+        "//div[@id='dr-policy-dropdown']",
         By.XPATH,
     ),
-    "dr-policy": (
-        "(//span[contains(@class, 'c-menu__item-main')])[1]",
+    "vm-page-next-btn": (
+        "//button[@class='pf-v5-c-button pf-m-primary pf-m-progress']",
+        By.XPATH,
+    ),
+    "assign": (
+        "//button[@class='pf-v5-c-button pf-m-primary pf-m-progress']",
         By.XPATH,
     ),
 }
