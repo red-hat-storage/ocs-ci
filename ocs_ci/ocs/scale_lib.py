@@ -1103,7 +1103,7 @@ def check_and_add_enough_worker(worker_count):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
         elif config.ENV_DATA["deployment_type"] == "upi" and config.ENV_DATA[
             "platform"
-        ].lower() in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
+        ].lower() in [constants.BAREMETAL_PLATFORM, constants.IBM_BAREMETAL]:
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
         else:
             raise UnavailableResourceException(

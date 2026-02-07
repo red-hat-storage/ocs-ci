@@ -5,7 +5,7 @@ DEPLOYMENT:
   enable_nested_virtualization: true
   host_network: true
 ENV_DATA:
-  platform: 'hci_baremetal'
+  platform: 'ibm_baremetal'
   cluster_type: 'provider'
   cluster_namespace: "openshift-storage"
   deployment_type: 'upi'
