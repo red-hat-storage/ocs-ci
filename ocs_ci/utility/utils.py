@@ -2454,6 +2454,7 @@ def get_csi_versions():
     csi_versions = {}
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
+
     from ocs_ci.helpers.helpers import get_provisioner_label
 
     for provisioner in [
@@ -3148,7 +3149,13 @@ def ceph_health_check_base(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     health = run_ceph_health_cmd(namespace, detail=True)
 
-    if health.strip() == "HEALTH_OK":
+    # New check for network partition warnings
+    if "HEALTH_WARN" in health and "network" in health and "partition" in health:
+        log.warning("Ceph cluster health WARNING: Network partitions detected.")
+        mute_mon_netsplit_ceph_warning()
+        health = run_ceph_health_cmd(namespace)
+
+    if health.split()[0] == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
@@ -3165,6 +3172,26 @@ def ceph_health_check_base(
             raise CephHealthException(
                 f"Ceph cluster health is not OK. Health: {health}"
             )
+
+
+def mute_mon_netsplit_ceph_warning():
+    """
+    Asper discussion, muting network partitioning warning
+    ceph health mute MON_NETSPLIT
+    """
+    from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+
+    log.info("Muting the mon netsplit warning")
+    assert run_cmd_verify_cli_output(
+        cmd="ceph health mute MON_NETSPLIT",
+        cephtool_cmd=True,
+    ), "mon_netplit warnings are not muted successfully"
+
+    assert run_cmd_verify_cli_output(
+        cmd="ceph health",
+        expected_output_lst={"HEALTH_OK", "(muted: MON_NETSPLIT)"},
+        cephtool_cmd=True,
+    ), "ceph health not okay and mon_netsplit warnings are not muted"
 
 
 def create_ceph_health_cmd(namespace):
