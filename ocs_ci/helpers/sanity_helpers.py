@@ -583,3 +583,86 @@ class SanityProviderMode(Sanity):
         self.health_check(cluster_check=cluster_check, tries=tries)
         if run_client_clusters_health_check and is_hci_provider_cluster():
             client_clusters_health_check()
+
+
+def check_pending_osd_jobs() -> list:
+    """
+    Check for pending OSD-related jobs in the cluster.
+
+    Returns:
+        list: List of pending job names found. Empty if none.
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+
+    try:
+        job_ocp = OCP(kind="Job", namespace=namespace)
+        jobs = job_ocp.get().get("items", [])
+    except CommandFailed as e:
+        logger.warning(f"Could not check for pending jobs: {e}")
+        return []
+
+    issues = []
+    osd_job_names = ["ocs-osd-removal-job"]
+    for job in jobs:
+        job_name = job.get("metadata", {}).get("name", "")
+        if job_name not in osd_job_names:
+            continue
+
+        status = job.get("status", {})
+        if status.get("succeeded", 0) == 0 and status.get("failed", 0) == 0:
+            issues.append(f"Pending OSD job found: {job_name}")
+
+    return issues
+
+
+def check_unexpected_device_classes(expected_classes: list = None) -> list:
+    """
+    Check for unexpected Ceph device classes.
+
+    Args:
+        expected_classes (list): Expected device classes. Defaults to ["ssd"].
+
+    Returns:
+        list: List of unexpected device class issues. Empty if clean.
+
+    """
+    from ocs_ci.ocs.replica_one import get_device_class_from_ceph
+
+    if expected_classes is None:
+        expected_classes = ["ssd"]
+
+    try:
+        device_classes = get_device_class_from_ceph()
+    except CommandFailed as e:
+        logger.warning(f"Could not check device classes: {e}")
+        return []
+
+    actual_classes = set(device_classes.values())
+    unexpected = actual_classes - set(expected_classes) - {"unknown"}
+
+    if not unexpected:
+        return []
+
+    return [f"Unexpected device classes: {unexpected}"]
+
+
+def check_osd_cleanup_state(expected_device_classes: list = None) -> list:
+    """
+    Check if OSD-related resources are clean.
+
+    Combines checks for pending OSD jobs and unexpected device classes.
+
+    Args:
+        expected_device_classes (list): Expected device classes. Defaults to ["ssd"].
+
+    Returns:
+        list: List of issues found. Empty if cluster is clean.
+
+    """
+    issues = []
+    issues.extend(check_pending_osd_jobs())
+    issues.extend(check_unexpected_device_classes(expected_device_classes))
+    return issues
