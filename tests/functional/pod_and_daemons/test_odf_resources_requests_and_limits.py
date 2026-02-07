@@ -43,7 +43,8 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
         """
         pod_name_exclude_patterns = [
             "storageclient-",
-            "rook-ceph-osd-prepare-ocs-deviceset-",
+            "rook-ceph-tools-external-",
+            "rook-ceph-osd-prepare-",
             "pod-test-",
             "test",
             "session",
