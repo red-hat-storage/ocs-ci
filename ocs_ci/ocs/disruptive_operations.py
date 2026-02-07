@@ -86,7 +86,7 @@ def osd_node_reboot():
     nodes.restart_nodes(osd_node_to_reboot)
 
     log.info("Sleeping 5 minutes")
-    time.sleep(320)
+    time.sleep(600)
     assert (
         wait_for_ct_pod_recovery()
     ), "Ceph tools pod failed to come up on another node"
