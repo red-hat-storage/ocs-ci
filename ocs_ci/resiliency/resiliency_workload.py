@@ -414,6 +414,230 @@ class RGWWorkload(Workload):
         return self.workload_impl.get_workload_status()
 
 
+class WarpWorkload(Workload):
+    """
+    Warp workload wrapper for MCG/NooBaa stress testing.
+
+    This class provides Warp S3 benchmark operations for high-intensity
+    MCG/NooBaa chaos and stress testing.
+
+    Warp is MinIO's S3 benchmarking tool that provides:
+    - High-performance S3 operations (GET, PUT, DELETE, LIST)
+    - Mixed workload support
+    - Continuous stress testing capabilities
+    - Detailed performance metrics
+
+    Args:
+        mcg_obj: MCG object for NooBaa access
+        bucket_name (str): Name of the bucket to use for testing
+        namespace (str): Kubernetes namespace
+        workload_config (dict): Configuration for Warp operations
+    """
+
+    def __init__(
+        self,
+        mcg_obj,
+        bucket_name,
+        namespace=None,
+        workload_config=None,
+    ):
+        super().__init__(namespace=namespace or constants.OPENSHIFT_STORAGE_NAMESPACE)
+        self.mcg_obj = mcg_obj
+        self.bucket_name = bucket_name
+        self.workload_config = workload_config or {}
+        self.warp_pod = None
+        self.is_workload_running = False
+        self.workload_thread = None
+        self.stop_event = None
+
+        log.info(
+            f"Initialized Warp workload for MCG stress testing: bucket={bucket_name}"
+        )
+
+    def start_workload(self):
+        """Start the Warp workload in a background thread."""
+        import threading
+        from ocs_ci.ocs.warp import Warp
+
+        log.info(f"Starting Warp workload for bucket: {self.bucket_name}")
+
+        # Create Warp instance with unique pod name suffix (use last part of bucket name)
+        # Extract suffix from bucket name (e.g., "warp-test-abc" -> "abc")
+        pod_suffix = (
+            self.bucket_name.split("-")[-1]
+            if "-" in self.bucket_name
+            else self.bucket_name[:8]
+        )
+
+        # Pass namespace and S3 host to Warp
+        # S3 endpoint is always in openshift-storage regardless of where Warp pods are deployed
+        storage_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        s3_host = f"s3.{storage_namespace}.svc"
+
+        self.warp = Warp(
+            pod_name_suffix=pod_suffix, namespace=self.namespace, s3_host=s3_host
+        )
+        self.warp.create_resource_warp()
+
+        # Get workload configuration
+        workload_type = self.workload_config.get("workload_type", "mixed")
+        duration = self.workload_config.get("duration", "10m")
+        concurrent = self.workload_config.get("concurrent", 1)
+        objects = self.workload_config.get("objects", 1000)
+        obj_size = self.workload_config.get("obj_size", "1MiB")
+
+        # Get NooBaa credentials
+        access_key = self.mcg_obj.access_key_id
+        secret_key = self.mcg_obj.access_key
+
+        # Set up stop event
+        self.stop_event = threading.Event()
+
+        def run_warp_continuous():
+            """Run Warp benchmark continuously until stopped."""
+            while not self.stop_event.is_set():
+                try:
+                    log.info(f"Running Warp {workload_type} workload iteration")
+                    self.warp.run_benchmark(
+                        workload_type=workload_type,
+                        bucket_name=self.bucket_name,
+                        access_key=access_key,
+                        secret_key=secret_key,
+                        duration=duration,
+                        concurrent=concurrent,
+                        objects=objects,
+                        obj_size=obj_size,
+                        tls=True,
+                        insecure=True,
+                        validate=False,
+                        multi_client=False,
+                    )
+                except Exception as e:
+                    log.warning(f"Warp workload iteration failed: {e}")
+                    if self.stop_event.is_set():
+                        break
+                    # Brief pause before retry
+                    self.stop_event.wait(10)
+
+        # Start workload thread
+        self.workload_thread = threading.Thread(target=run_warp_continuous)
+        self.workload_thread.daemon = True
+        self.workload_thread.start()
+        self.is_workload_running = True
+
+        log.info("Warp workload started in background thread")
+
+    def scale_up_pods(self, desired_count):
+        """Warp workload doesn't support pod scaling."""
+        log.warning("Warp workload does not support pod scaling")
+
+    def scale_down_pods(self, desired_count):
+        """Warp workload doesn't support pod scaling."""
+        log.warning("Warp workload does not support pod scaling")
+
+    def stop_workload(self):
+        """Stop the Warp workload."""
+        log.info("Stopping Warp workload")
+        if self.stop_event:
+            self.stop_event.set()
+
+        if self.workload_thread and self.workload_thread.is_alive():
+            self.workload_thread.join(timeout=120)
+            if self.workload_thread.is_alive():
+                log.warning("Warp workload thread did not stop gracefully")
+
+        self.is_workload_running = False
+        log.info("Warp workload stopped")
+
+    def cleanup_workload(self):
+        """Cleanup Warp workload resources."""
+        log.info(f"Cleaning up Warp workload for bucket: {self.bucket_name}")
+
+        # Stop the workload thread first
+        try:
+            self.stop_workload()
+        except Exception as e:
+            log.warning(f"Error stopping workload: {e}")
+
+        # Cleanup Warp pod and resources
+        if hasattr(self, "warp") and self.warp:
+            try:
+                log.info(
+                    f"Cleaning up Warp pod: {self.warp.pod_name if hasattr(self.warp, 'pod_name') else 'unknown'}"
+                )
+                self.warp.cleanup(multi_client=False)
+                log.info("✓ Warp pod, PVC, and ServiceAccount cleaned up")
+            except Exception as e:
+                log.warning(f"Error cleaning up Warp resources: {e}")
+
+        # Delete the bucket
+        if self.bucket_name and self.mcg_obj:
+            try:
+                log.info(f"Deleting Warp test bucket: {self.bucket_name}")
+                from ocs_ci.ocs.bucket_utils import s3_delete_bucket
+
+                # First, try to empty the bucket (delete all objects)
+                try:
+                    log.info(f"Emptying bucket {self.bucket_name} before deletion...")
+                    from ocs_ci.ocs.bucket_utils import rm_object_recursive
+                    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+                    # Get awscli pod if available
+                    awscli_pods = get_pods_having_label(
+                        label="app=awscli-pod", namespace=self.namespace
+                    )
+                    if awscli_pods:
+                        awscli_pod = awscli_pods[0]
+                        from ocs_ci.ocs.resources.pod import Pod
+
+                        pod_obj = Pod(**awscli_pod)
+                        rm_object_recursive(
+                            pod_obj,
+                            self.bucket_name,
+                            self.mcg_obj,
+                            option="",
+                        )
+                        log.info(f"✓ Bucket {self.bucket_name} emptied")
+                except Exception as e:
+                    log.warning(f"Could not empty bucket (will try force delete): {e}")
+
+                # Delete the bucket
+                s3_delete_bucket(
+                    s3_obj=self.mcg_obj,
+                    bucket_name=self.bucket_name,
+                )
+                log.info(f"✓ Bucket {self.bucket_name} deleted successfully")
+            except Exception as e:
+                log.warning(f"Error deleting bucket {self.bucket_name}: {e}")
+                log.info("Bucket may need manual cleanup if it still exists")
+
+        log.info(f"✓ Warp workload cleanup completed for bucket: {self.bucket_name}")
+
+    def pause_workload(self):
+        """Pause the Warp workload."""
+        log.info("Pausing Warp workload (stopping)")
+        self.stop_workload()
+
+    def resume_workload(self):
+        """Resume the Warp workload."""
+        log.info("Resuming Warp workload (restarting)")
+        self.start_workload()
+
+    def is_running(self):
+        """Check if workload is running."""
+        return self.is_workload_running and (
+            self.workload_thread and self.workload_thread.is_alive()
+        )
+
+    def get_workload_status(self):
+        """Get workload status."""
+        return {
+            "is_running": self.is_running(),
+            "bucket_name": self.bucket_name,
+            "workload_type": self.workload_config.get("workload_type", "mixed"),
+        }
+
+
 def workload_object(workload_type, namespace):
     """
     Factory method to create a workload object based on type.

@@ -1,0 +1,75 @@
+# Configuration for running Warp MCG/NooBaa stress workload
+# This demonstrates the Warp workload configuration for intensive MCG testing
+
+ENV_DATA:
+  krkn_config:
+    # Use WARP_WORKLOAD for high-intensity MCG/NooBaa stress testing
+    workloads:
+      - WARP_WORKLOAD
+
+    # Run workloads during chaos testing
+    run_workload: true
+
+    # Enable data verification after chaos
+    enable_verification: false  # Warp handles its own validation
+
+    # Warp Workload configuration
+    # Warp is MinIO's S3 benchmarking tool optimized for intensive stress testing
+    # Reference: https://github.com/minio/warp
+    warp_config:
+      # Namespace where Warp pods will be deployed
+      # Default: 'default' namespace for isolation from storage namespace
+      # You can also use: 'openshift-storage', or any custom namespace
+      namespace: "default"
+
+      # Number of concurrent Warp workloads (each creates its own bucket)
+      num_workloads: 1
+
+      # Workload type:
+      # - "mixed": Mixed operations (GET/PUT/DELETE/STAT) - recommended for chaos testing
+      # - "put": Pure upload/write operations
+      # - "get": Pure download/read operations
+      # - "delete": Delete operations
+      # - "stat": Metadata operations (HeadObject)
+      workload_type: "mixed"
+
+      # Duration for each Warp iteration
+      # Format: <number><unit> where unit = s (seconds), m (minutes), h (hours)
+      # Examples: "30s", "10m", "1h"
+      duration: "10m"
+
+      # Number of concurrent operations per workload
+      # Higher values = more stress, but may overwhelm NooBaa
+      # Recommended range: 1-10 for chaos testing
+      concurrent: 1
+
+      # Number of objects to create/operate on
+      # Total objects = objects * concurrent
+      objects: 1000
+
+      # Object size
+      # Format: <number><unit> where unit = B, KiB, MiB, GiB
+      # Examples: "1KiB", "1MiB", "10MiB", "100MiB"
+      # Smaller objects = more metadata stress
+      # Larger objects = more data throughput stress
+      obj_size: "1MiB"
+
+    # Background Cluster Operations Configuration
+    # Disable for pure Warp stress testing, enable for comprehensive chaos
+    background_cluster_operations:
+      enabled: false
+
+# Example: High-intensity NooBaa stress configuration
+# Uncomment and adjust values as needed:
+#
+# ENV_DATA:
+#   krkn_config:
+#     workloads:
+#       - WARP_WORKLOAD
+#     warp_config:
+#       num_workloads: 3        # Multiple concurrent Warp instances
+#       workload_type: "mixed"
+#       duration: "30m"         # Longer duration for sustained stress
+#       concurrent: 10          # High concurrency
+#       objects: 5000           # More objects
+#       obj_size: "1MiB"        # Standard object size
