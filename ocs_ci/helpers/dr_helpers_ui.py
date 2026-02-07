@@ -958,3 +958,345 @@ def navigate_using_fleet_virtulization(acm_obj):
         log.info("Modal dialog box found, closing it..")
         acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
     return True
+
+
+def navigate_to_protected_applications_page(acm_obj, timeout=120):
+    """
+    Navigate to Protected Applications page under Data Services -> Disaster Recovery on ACM UI.
+
+    This page displays both managed (AppSet) and discovered applications that are DR protected.
+    Feature applicable from ODF 4.21+.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        timeout (int): Timeout to wait for page elements
+
+    Returns:
+        bool: True if successfully navigated to Protected Applications page
+
+    Raises:
+        NoSuchElementException: If Protected Applications tab is not found
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    # First navigate to Data Services -> Disaster Recovery
+    log.info("Navigating to Data Services -> Disaster Recovery page")
+    acm_obj.navigate_data_services()
+
+    # Take screenshot after navigating to DR page
+    acm_obj.take_screenshot("dr_overview_page")
+
+    # Click on Protected Applications tab
+    log.info("Clicking on 'Protected applications' tab")
+    protected_app_tab = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["protected-applications-tab"],
+        expected_text="Protected applications",
+        timeout=timeout,
+    )
+    if protected_app_tab:
+        acm_obj.do_click(
+            acm_loc["protected-applications-tab"],
+            avoid_stale=True,
+            enable_screenshot=True,
+        )
+        # Wait for page to load
+        acm_obj.wait_for_element_to_be_visible(
+            acm_loc["protected-app-list-table"], timeout=30
+        )
+        acm_obj.take_screenshot("protected_applications_page")
+        log.info("Successfully navigated to Protected Applications page")
+        return True
+    else:
+        log.error("Protected Applications tab not found on Disaster Recovery page")
+        acm_obj.take_screenshot("protected_app_tab_not_found")
+        raise NoSuchElementException("Protected Applications tab not found")
+
+
+def verify_app_in_protected_applications_list(
+    acm_obj, app_name, timeout=60, expected_present=True
+):
+    """
+    Verify if an application is present in the Protected Applications list view.
+
+    This function searches for a specific application on the Protected Applications page
+    which lists both managed (AppSet) and discovered applications.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        app_name (str): Name of the application to search for
+        timeout (int): Timeout to wait for search results
+        expected_present (bool): If True, expects app to be present; if False, expects app to be absent
+
+    Returns:
+        bool: True if verification passes (app found when expected_present=True,
+              or app not found when expected_present=False)
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    log.info(f"Searching for application '{app_name}' in Protected Applications list")
+
+    # Click on search bar
+    log.info("Clicking on search bar")
+    acm_obj.do_click(acm_loc["protected-app-search-bar"], timeout=timeout)
+
+    # Clear existing text and enter app name
+    log.info("Clearing existing text from search bar")
+    acm_obj.do_clear(acm_loc["protected-app-search-bar"])
+
+    log.info(f"Entering application name: {app_name}")
+    acm_obj.do_send_keys(acm_loc["protected-app-search-bar"], text=app_name)
+
+    # Wait for search results to load
+    app_locator = format_locator(acm_loc["protected-app-name-in-list"], app_name)
+    acm_obj.wait_for_element_to_be_visible(app_locator, timeout=30)
+
+    # Take screenshot after search
+    acm_obj.take_screenshot(f"search_result_{app_name}")
+    app_found = acm_obj.check_element_presence(
+        (app_locator[1], app_locator[0]), timeout=timeout
+    )
+
+    if expected_present and app_found:
+        log.info(f"Application '{app_name}' found in Protected Applications list")
+        return True
+    elif expected_present and not app_found:
+        log.error(
+            f"Application '{app_name}' NOT found in Protected Applications list"
+        )
+        return False
+    elif not expected_present and not app_found:
+        log.info(
+            f"Application '{app_name}' correctly not present in Protected Applications list"
+        )
+        return True
+    else:
+        log.error(
+            f"Application '{app_name}' unexpectedly found in Protected Applications list"
+        )
+        return False
+
+
+def verify_protected_applications_list_view(
+    acm_obj,
+    appset_workloads=None,
+    discovered_workloads=None,
+    appset_app_names=None,
+    discovered_app_names=None,
+    timeout=60,
+):
+    """
+    Verify that both managed (AppSet) and discovered applications appear
+    on the Protected Applications list view page.
+
+    This is the main verification function for the Protected Applications list view feature
+    which enhances the page to display both managed and discovered applications.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        appset_workloads (list): List of AppSet workload objects (used to derive namespace-based names)
+        discovered_workloads (list): List of Discovered Apps workload objects with
+                                     discovered_apps_placement_name attribute
+        appset_app_names (list): Optional list of explicit AppSet application names to verify.
+                                 If provided, these are used instead of deriving from workloads.
+        discovered_app_names (list): Optional list of explicit Discovered app names to verify.
+                                     If provided, these are used instead of deriving from workloads.
+        timeout (int): Timeout for UI operations
+
+    Returns:
+        bool: True if all applications are verified on the Protected Applications page
+
+    Raises:
+        AssertionError: If any application is not found on the Protected Applications page
+
+    """
+    log.info("Starting verification of Protected Applications list view")
+
+    # Navigate to Protected Applications page
+    navigate_to_protected_applications_page(acm_obj, timeout=timeout)
+
+    all_verified = True
+    apps_to_verify = []
+
+    # Collect AppSet workload names
+    if appset_app_names:
+        # Use explicitly provided names
+        for app_name in appset_app_names:
+            apps_to_verify.append(("AppSet/Managed", app_name))
+            log.info(f"Will verify AppSet workload (explicit): {app_name}")
+    elif appset_workloads:
+        # Derive name from workload namespace (remove 'appset-' prefix if present)
+        for workload in appset_workloads:
+            # The ApplicationSet name is typically the namespace without 'appset-' prefix
+            # e.g., namespace 'appset-busybox-1-cephfs' -> app name 'busybox-1-cephfs'
+            namespace = workload.workload_namespace
+            if namespace.startswith("appset-"):
+                app_name = namespace[len("appset-") :]
+            else:
+                app_name = namespace
+            apps_to_verify.append(("AppSet/Managed", app_name))
+            log.info(f"Will verify AppSet workload (derived from namespace): {app_name}")
+
+    # Collect Discovered Apps workload names
+    if discovered_app_names:
+        # Use explicitly provided names
+        for app_name in discovered_app_names:
+            apps_to_verify.append(("Discovered", app_name))
+            log.info(f"Will verify Discovered Apps workload (explicit): {app_name}")
+    elif discovered_workloads:
+        for workload in discovered_workloads:
+            app_name = workload.discovered_apps_placement_name
+            apps_to_verify.append(("Discovered", app_name))
+            log.info(f"Will verify Discovered Apps workload: {app_name}")
+
+    # Verify each application
+    for app_type, app_name in apps_to_verify:
+        log.info(f"Verifying {app_type} application: {app_name}")
+        app_found = verify_app_in_protected_applications_list(
+            acm_obj, app_name, timeout=timeout, expected_present=True
+        )
+        if app_found:
+            log.info(
+                f"{app_type} application '{app_name}' successfully verified on Protected Applications page"
+            )
+        else:
+            log.error(
+                f"{app_type} application '{app_name}' NOT found on Protected Applications page"
+            )
+            all_verified = False
+
+        # Clear search for next application using existing pattern
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
+        clear_filter = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["clear-filter"],
+            expected_text="Clear all filters",
+            timeout=10,
+        )
+        if clear_filter:
+            log.info("Clear existing filters")
+            acm_obj.do_click(acm_loc["clear-filter"])
+
+    if all_verified:
+        log.info(
+            "Successfully verified all applications on Protected Applications list view page"
+        )
+    else:
+        raise AssertionError(
+            "Not all applications found on Protected Applications page"
+        )
+
+    return all_verified
+
+
+def verify_protected_app_kebab_menu_actions(
+    acm_obj,
+    app_name,
+    expected_actions=None,
+    timeout=60,
+):
+    """
+    Verify the kebab menu actions available for a protected application.
+
+    This function clicks on the kebab menu for a specific application and verifies
+    that the expected action items are present.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        app_name (str): Name of the application to verify kebab menu for
+        expected_actions (list): List of expected action names. Defaults to
+                                 ["Edit configuration", "Failover", "Relocate",
+                                  "Remove disaster recovery"] for managed apps.
+        timeout (int): Timeout for UI operations
+
+    Returns:
+        bool: True if all expected actions are present
+
+    Raises:
+        AssertionError: If any expected action is not found in the kebab menu
+
+    """
+    if expected_actions is None:
+        expected_actions = [
+            "Edit configuration",
+            "Failover",
+            "Relocate",
+            "Manage disaster recovery",
+        ]
+
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    log.info(f"Verifying kebab menu actions for app: {app_name}")
+
+    # First, clear the search bar and search for the application
+    log.info(f"Searching for application: {app_name}")
+    
+    clear_filter = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["clear-filter"],
+        expected_text="Clear all filters",
+        timeout=10,
+    )
+    if clear_filter:
+        log.info("Clear existing filters")
+        acm_obj.do_click(acm_loc["clear-filter"])
+
+    # Click on search bar and enter the app name
+    acm_obj.do_click(acm_loc["protected-app-search-bar"], timeout=timeout)
+    acm_obj.do_clear(acm_loc["protected-app-search-bar"])
+    acm_obj.do_send_keys(acm_loc["protected-app-search-bar"], text=app_name)
+    app_locator = format_locator(acm_loc["protected-app-name-in-list"], app_name)
+    acm_obj.wait_for_element_to_be_visible(app_locator, timeout=30)
+
+    # Click on the kebab menu for this application
+    log.info(f"Clicking kebab menu for app: {app_name}")
+    kebab_locator = format_locator(acm_loc["protected-app-kebab-menu"], app_name)
+    acm_obj.do_click(kebab_locator, timeout=timeout, enable_screenshot=True)
+
+    # Wait for dropdown menu to appear
+    first_action_locator = format_locator(
+        acm_loc["protected-app-action-menu-item"], expected_actions[0]
+    )
+    acm_obj.wait_for_element_to_be_visible(first_action_locator, timeout=10)
+    acm_obj.take_screenshot(f"kebab_menu_{app_name}")
+
+    # Verify each expected action is present
+    all_actions_found = True
+    for action in expected_actions:
+        log.info(f"Checking for action: {action}")
+
+        # Use the parameterized locator for menu item
+        action_locator = format_locator(
+            acm_loc["protected-app-action-menu-item"], action
+        )
+
+        action_found = acm_obj.check_element_presence(
+            (action_locator[1], action_locator[0]), timeout=10
+        )
+
+        if action_found:
+            log.info(f"Action '{action}' found in kebab menu")
+        else:
+            log.error(f"Action '{action}' NOT found in kebab menu")
+            all_actions_found = False
+
+    # Close the kebab menu by pressing Escape
+    try:
+        from selenium.webdriver.common.keys import Keys
+
+        acm_obj.driver.find_element("tag name", "body").send_keys(Keys.ESCAPE)
+        time.sleep(1)
+    except Exception as e:
+        log.debug(f"Could not close kebab menu: {e}")
+
+    if all_actions_found:
+        log.info(
+            f"All expected actions verified for app '{app_name}': {expected_actions}"
+        )
+    else:
+        acm_obj.take_screenshot(f"kebab_menu_actions_missing_{app_name}")
+        raise AssertionError(
+            f"Not all expected actions found in kebab menu for app '{app_name}'. "
+            f"Expected: {expected_actions}"
+        )
+
+    return all_actions_found
