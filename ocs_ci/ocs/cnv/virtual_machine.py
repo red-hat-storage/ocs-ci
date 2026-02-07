@@ -329,7 +329,11 @@ class VirtualMachine(Virtctl):
             if cloud_init_data:
                 user_data = cloud_init_data.get("userData", {})
                 user_data_dict = yaml.safe_load(user_data)
+                print("####Amrita####")
+                print(f"user data {user_data_dict}")
                 username = user_data_dict.get("user")
+                print("####Amrita####")
+                print(f"username {username}")
                 if username is not None:
                     return username
                 else:
