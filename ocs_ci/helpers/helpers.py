@@ -715,6 +715,120 @@ def create_ceph_file_system(cephfs_name=None, label=None, namespace=None):
     ), f"File system {cephfs_data.name} does not exist"
     return cephfs_data
 
+def create_ceph_ec_block_pool(
+    ec_pool_name=None,
+    metadata_pool_name=None,
+    data_chunks=4,
+    coding_chunks=2,
+    failure_domain=None,
+    device_class=None,
+    metadata_replica=3,
+    metadata_failure_domain=None,
+    verify=True,
+    namespace=None,
+):
+    """
+    Create Ceph erasure-coded (EC) block pool with metadata pool.
+
+    EC pools require two pools:
+    1. Data pool (erasure coded) - for actual data storage
+    2. Metadata pool (replicated) - for RBD metadata
+
+    Args:
+        ec_pool_name (str): The EC data pool name (optional,
+            auto-generated if not provided)
+        metadata_pool_name (str): The metadata pool name (optional,
+            auto-generated if not provided)
+        data_chunks (int): Number of data chunks for erasure coding
+            (default: 4)
+        coding_chunks (int): Number of coding chunks for erasure coding
+            (default: 2)
+        failure_domain (str): Failure domain for EC pool (optional,
+            defaults to cluster default)
+        device_class (str): Device class for EC pool
+            (e.g., 'ssd', 'hdd') (optional)
+        metadata_replica (int): Replica size for metadata pool
+            (default: 3)
+        metadata_failure_domain (str): Failure domain for metadata pool
+            (optional)
+        verify (bool): Verify pools exist after creation (default: True)
+        namespace (str): Namespace for the pools (optional,
+            defaults to cluster_namespace)
+
+    Returns:
+        OCS: The OCS instance for the EC data pool
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    # Generate pool names if not provided
+    if not ec_pool_name:
+        ec_pool_name = create_unique_resource_name("test", "ec-data")
+    if not metadata_pool_name:
+        metadata_pool_name = create_unique_resource_name(
+            "test", "ec-metadata"
+        )
+
+    # Create metadata pool (replicated) first
+    logger.info(f"Creating EC metadata pool: {metadata_pool_name}")
+    metadata_pool_data = templating.load_yaml(
+        constants.CEPHBLOCKPOOL_EC_METADATA_YAML
+    )
+    metadata_pool_data["metadata"]["name"] = metadata_pool_name
+    metadata_pool_data["metadata"]["namespace"] = namespace
+    metadata_pool_data["spec"]["replicated"]["size"] = metadata_replica
+
+    if metadata_failure_domain:
+        metadata_pool_data["spec"]["failureDomain"] = (
+            metadata_failure_domain
+        )
+    else:
+        metadata_pool_data["spec"]["failureDomain"] = get_failure_domin()
+
+    metadata_pool_obj = create_resource(**metadata_pool_data)
+    metadata_pool_obj.reload()
+
+    if verify:
+        assert verify_block_pool_exists(
+            metadata_pool_obj.name
+        ), f"Metadata pool {metadata_pool_obj.name} does not exist"
+
+    # Create EC data pool
+    logger.info(f"Creating EC data pool: {ec_pool_name}")
+    ec_pool_data = templating.load_yaml(constants.CEPHBLOCKPOOL_EC_YAML)
+    ec_pool_data["metadata"]["name"] = ec_pool_name
+    ec_pool_data["metadata"]["namespace"] = namespace
+    ec_pool_data["spec"]["erasureCoded"]["dataChunks"] = data_chunks
+    ec_pool_data["spec"]["erasureCoded"]["codingChunks"] = coding_chunks
+
+    if failure_domain:
+        ec_pool_data["spec"]["failureDomain"] = failure_domain
+    else:
+        ec_pool_data["spec"]["failureDomain"] = get_failure_domin()
+
+    if device_class:
+        ec_pool_data["spec"]["deviceClass"] = device_class
+
+    ec_pool_obj = create_resource(**ec_pool_data)
+    ec_pool_obj.reload()
+
+    if verify:
+        assert verify_block_pool_exists(
+            ec_pool_obj.name
+        ), f"EC pool {ec_pool_obj.name} does not exist"
+
+    # Store metadata pool reference on EC pool object for cleanup
+    ec_pool_obj.metadata_pool_name = metadata_pool_name
+    ec_pool_obj.metadata_pool_obj = metadata_pool_obj
+
+    logger.info(
+        f"Successfully created EC pool {ec_pool_name} "
+        f"with metadata pool {metadata_pool_name}"
+    )
+
+    return ec_pool_obj
+
+
 
 @retry(
     (CommandFailed, IndexError),
@@ -6610,6 +6724,53 @@ def create_rbd_deviceclass_storageclass(
     sc_data["parameters"]["imageFeatures"] = image_features
     sc_data["parameters"]["clusterID"] = cluster_id
     sc_data["parameters"]["encrypted"] = encrypted
+
+    sc_obj = create_resource(**sc_data)
+    sc_obj.reload()
+    return sc_obj
+
+def create_ec_storage_class(
+    ec_pool_name,
+    metadata_pool_name,
+    sc_name=None,
+    reclaim_policy="Delete",
+    volume_binding_mode="Immediate",
+    allow_volume_expansion=True,
+):
+    """
+    Create an EC (Erasure Coded) StorageClass resource backed by an EC pool.
+
+    Args:
+        ec_pool_name (str): Name of the EC data pool
+        metadata_pool_name (str): Name of the metadata pool
+        sc_name (str): Name of the StorageClass. If not provided, a unique name will be generated
+        reclaim_policy (str): Reclaim policy (e.g., "Delete" or "Retain")
+        volume_binding_mode (str): Volume binding mode (e.g., "Immediate", "WaitForFirstConsumer")
+        allow_volume_expansion (bool): Allow volume expansion (True/False)
+
+    Returns:
+        OCS: The OCS instance for the StorageClass resource
+
+    """
+    if not sc_name:
+        sc_name = create_unique_resource_name("ec", "storageclass")
+
+    sc_data = templating.load_yaml(constants.STORAGECLASS_EC_YAML)
+
+    # Update the YAML with the provided parameters
+    sc_data["metadata"]["name"] = sc_name
+    sc_data["parameters"]["pool"] = metadata_pool_name
+    sc_data["parameters"]["dataPool"] = ec_pool_name
+    sc_data["allowVolumeExpansion"] = allow_volume_expansion
+    sc_data["reclaimPolicy"] = reclaim_policy
+    sc_data["volumeBindingMode"] = volume_binding_mode
+    sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
+
+    # Update secret namespaces
+    for key in ["node-stage", "provisioner", "controller-expand"]:
+        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-namespace"] = (
+            config.ENV_DATA["cluster_namespace"]
+        )
 
     sc_obj = create_resource(**sc_data)
     sc_obj.reload()
