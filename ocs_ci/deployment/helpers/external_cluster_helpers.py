@@ -17,9 +17,12 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
     ExternalClusterCephfsMissing,
     ExternalClusterCephSSHAuthDetailsMissing,
+    ExternalClusterCrushRuleCreationFailed,
     ExternalClusterDisableCertificateCheckFailed,
     ExternalClusterExporterRunFailed,
+    ExternalClusterPoolCreationFailed,
     ExternalClusterRBDNamespaceCreationFailed,
+    ExternalClusterReplica1ConfigurationFailed,
     ExternalClusterRGWEndPointMissing,
     ExternalClusterRGWEndPointPortMissing,
     ExternalClusterNodeRoleNotFound,
@@ -671,6 +674,305 @@ class ExternalCluster(object):
         if retcode != 0:
             logger.error(f"Failed to disable certificate check. Error: {err}")
             raise ExternalClusterDisableCertificateCheckFailed
+
+    def enable_replica_one_pools(self) -> bool:
+        """
+        Enable replica-1 pool support on the external Ceph cluster.
+
+        Executes: ceph config set mon mon_allow_pool_size_one true
+
+        Returns:
+            bool: True if configuration was successful.
+
+        Raises:
+            ExternalClusterReplica1ConfigurationFailed: If configuration fails.
+
+        """
+        logger.info("Enabling replica-1 pool support on external Ceph cluster")
+        self.exec_external_ceph_cmd(
+            cmd="ceph config set mon mon_allow_pool_size_one true",
+            error_msg="Failed to enable replica-1 pools",
+            exception_class=ExternalClusterReplica1ConfigurationFailed,
+        )
+        logger.info("Replica-1 pool support enabled successfully")
+        return True
+
+    def create_zone_crush_rules(
+        self, topology_config: TopologyReplica1Config
+    ) -> list[str]:
+        """
+        Create CRUSH rules for each zone in the topology configuration.
+
+        Executes: ceph osd crush rule create-simple <rule-name> <host> osd
+
+        Args:
+            topology_config (TopologyReplica1Config): Topology configuration.
+
+        Returns:
+            list[str]: List of created rule names.
+
+        Raises:
+            ExternalClusterCrushRuleCreationFailed: If rule creation fails.
+
+        """
+        if not topology_config.zones:
+            raise ValueError("topology_config.zones cannot be empty")
+
+        # Get existing CRUSH rules for idempotency check
+        retcode, out, _ = self.rhcs_conn.exec_cmd("ceph osd crush rule ls")
+        existing_rules = out.strip().split("\n") if retcode == 0 else []
+
+        created_rules = []
+        for zone in topology_config.zones:
+            rule_name = f"{zone.zone_name}-rule"
+
+            # Skip if rule already exists (idempotency)
+            if rule_name in existing_rules:
+                logger.info(f"CRUSH rule {rule_name} already exists, skipping creation")
+                created_rules.append(rule_name)
+                continue
+
+            logger.info(f"Creating CRUSH rule: {rule_name} for host: {zone.host_name}")
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd crush rule create-simple {rule_name} {zone.host_name} osd",
+                error_msg=f"Failed to create CRUSH rule {rule_name}",
+                exception_class=ExternalClusterCrushRuleCreationFailed,
+            )
+            logger.info(f"Created CRUSH rule: {rule_name}")
+            created_rules.append(rule_name)
+
+        return created_rules
+
+    def create_replica_one_pools(
+        self, topology_config: TopologyReplica1Config
+    ) -> list[str]:
+        """
+        Create replica-1 RBD pools for each zone in the topology configuration.
+
+        For each zone executes:
+        - ceph osd pool create <pool-name> <pg_num> <pg_num> replicated <rule-name>
+        - ceph osd pool set <pool-name> size 1 --yes-i-really-mean-it
+        - ceph osd pool set <pool-name> min_size 1
+        - ceph osd pool application enable <pool-name> rbd
+
+        Args:
+            topology_config (TopologyReplica1Config): Topology configuration.
+
+        Returns:
+            list[str]: List of created pool names.
+
+        Raises:
+            ExternalClusterPoolCreationFailed: If pool creation fails.
+
+        """
+        if not topology_config.zones:
+            raise ValueError("topology_config.zones cannot be empty")
+
+        # Get existing pools for idempotency check
+        retcode, out, _ = self.rhcs_conn.exec_cmd("ceph osd pool ls")
+        existing_pools = out.strip().split("\n") if retcode == 0 else []
+
+        created_pools = []
+        for zone in topology_config.zones:
+            pool_name = (
+                zone.pool_name or f"{topology_config.pool_prefix}-{zone.zone_name}"
+            )
+            rule_name = f"{zone.zone_name}-rule"
+            pg_num = topology_config.pg_num
+
+            # Skip if pool already exists (idempotency)
+            if pool_name in existing_pools:
+                logger.info(f"Pool {pool_name} already exists, skipping creation")
+                created_pools.append(pool_name)
+                continue
+
+            logger.info(f"Creating replica-1 pool: {pool_name} with rule: {rule_name}")
+
+            # Create pool with CRUSH rule (pg_num appears twice for pg_num and pgp_num)
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool create {pool_name} {pg_num} {pg_num} replicated {rule_name}",
+                error_msg=f"Failed to create pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+            # Set pool size to 1
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool set {pool_name} size 1 --yes-i-really-mean-it",
+                error_msg=f"Failed to set size 1 for pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+            # Set pool min_size to 1
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool set {pool_name} min_size 1",
+                error_msg=f"Failed to set min_size 1 for pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+            # Enable RBD application
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool application enable {pool_name} rbd",
+                error_msg=f"Failed to enable rbd for pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+            logger.info(f"Created replica-1 pool: {pool_name}")
+            created_pools.append(pool_name)
+
+        return created_pools
+
+    def verify_replica_one_setup(
+        self, expected_pools: list[str], expected_rules: list[str]
+    ) -> bool:
+        """
+        Verify that replica-1 pools and CRUSH rules are properly configured.
+
+        Args:
+            expected_pools (list[str]): List of expected pool names.
+            expected_rules (list[str]): List of expected CRUSH rule names.
+
+        Returns:
+            bool: True if all pools and rules exist with correct configuration.
+
+        Raises:
+            ExternalClusterReplica1ConfigurationFailed: If verification fails.
+
+        """
+        logger.info("Verifying replica-1 setup")
+
+        # Verify CRUSH rules exist
+        _, out, _ = self.exec_external_ceph_cmd(
+            cmd="ceph osd crush rule ls",
+            error_msg="Failed to list CRUSH rules",
+            exception_class=ExternalClusterReplica1ConfigurationFailed,
+        )
+
+        existing_rules = out.strip().split("\n")
+        for rule in expected_rules:
+            if rule not in existing_rules:
+                raise ExternalClusterReplica1ConfigurationFailed(
+                    f"CRUSH rule {rule} not found. Existing rules: {existing_rules}"
+                )
+        logger.debug(f"All expected CRUSH rules exist: {expected_rules}")
+
+        # Verify pools exist with correct configuration
+        for pool in expected_pools:
+            _, out, _ = self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool get {pool} size",
+                error_msg=f"Pool {pool} not found or cannot get size",
+                exception_class=ExternalClusterReplica1ConfigurationFailed,
+            )
+
+            if "size: 1" not in out:
+                raise ExternalClusterReplica1ConfigurationFailed(
+                    f"Pool {pool} does not have size 1. Got: {out}"
+                )
+        logger.debug(f"All expected pools have size 1: {expected_pools}")
+
+        logger.info("Replica-1 setup verification passed")
+        return True
+
+    def setup_topology_replica_one(
+        self, topology_config: TopologyReplica1Config
+    ) -> dict[str, list[str]]:
+        """
+        Complete setup of topology-based replica-1 provisioning.
+
+        This is the main entry point that orchestrates:
+        1. Enable replica-1 pools (mon_allow_pool_size_one)
+        2. Create CRUSH rules for each zone
+        3. Create replica-1 pools for each zone
+        4. Verify the setup
+
+        Args:
+            topology_config (TopologyReplica1Config): Topology configuration.
+
+        Returns:
+            dict[str, list[str]]: Dictionary with keys 'pools' and 'rules',
+                each containing list of created resource names.
+
+        Raises:
+            ExternalClusterReplica1ConfigurationFailed: If setup fails.
+            ValueError: If topology_config.zones is empty.
+
+        """
+        if not topology_config.zones:
+            raise ValueError("topology_config.zones cannot be empty")
+
+        logger.info(
+            f"Starting topology-based replica-1 setup with {len(topology_config.zones)} zones"
+        )
+
+        # Step 1: Enable replica-1 pools
+        self.enable_replica_one_pools()
+
+        # Step 2: Create CRUSH rules
+        created_rules = self.create_zone_crush_rules(topology_config)
+
+        # Step 3: Create pools
+        created_pools = self.create_replica_one_pools(topology_config)
+
+        # Step 4: Verify setup
+        self.verify_replica_one_setup(created_pools, created_rules)
+
+        result = {"pools": created_pools, "rules": created_rules}
+        logger.info(
+            f"Topology-based replica-1 setup completed. "
+            f"Pools: {created_pools}, Rules: {created_rules}"
+        )
+        return result
+
+    def cleanup_replica_one_pools(self, pool_names: list[str]) -> None:
+        """
+        Remove replica-1 pools from external cluster.
+
+        Note:
+            This method logs warnings for failed deletions but does not raise
+            exceptions to allow cleanup of remaining resources.
+
+        Args:
+            pool_names (list[str]): List of pool names to remove.
+
+        """
+        logger.info(f"Cleaning up replica-1 pools: {pool_names}")
+
+        # Enable pool deletion
+        cmd = "ceph config set mon mon_allow_pool_delete true"
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.warning(f"Failed to enable pool deletion: {err}")
+
+        for pool_name in pool_names:
+            cmd = f"ceph osd pool delete {pool_name} {pool_name} --yes-i-really-really-mean-it"
+            logger.info(f"Deleting pool: {pool_name}")
+            retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+            if retcode != 0:
+                logger.warning(f"Failed to delete pool {pool_name}: {err}")
+
+        # Disable pool deletion
+        cmd = "ceph config set mon mon_allow_pool_delete false"
+        self.rhcs_conn.exec_cmd(cmd)
+
+        logger.info("Cleanup of replica-1 pools completed")
+
+    def cleanup_zone_crush_rules(self, rule_names: list[str]) -> None:
+        """
+        Remove CRUSH rules from external cluster.
+
+        Args:
+            rule_names (list[str]): List of rule names to remove.
+
+        """
+        logger.info(f"Cleaning up CRUSH rules: {rule_names}")
+
+        for rule_name in rule_names:
+            cmd = f"ceph osd crush rule rm {rule_name}"
+            logger.info(f"Deleting CRUSH rule: {rule_name}")
+            retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+            if retcode != 0:
+                logger.warning(f"Failed to delete CRUSH rule {rule_name}: {err}")
+
+        logger.info("Cleanup of CRUSH rules completed")
 
 
 def get_exporter_script_from_configmap():
