@@ -3791,3 +3791,6 @@ MON_STATUS_DOWN = "down"
 
 # ODF 4.21 health overview resources
 BLACKBOX_POD_LABEL = "app.kubernetes.io/name=odf-blackbox-exporter"
+
+# ODF 4.21 health overview mock alerts dir
+HEALTHALERTS_DIR = os.path.join(TEMPLATE_DIR, "health_overview_alerts")
