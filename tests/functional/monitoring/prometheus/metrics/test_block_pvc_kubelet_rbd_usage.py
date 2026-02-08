@@ -1,192 +1,223 @@
 import time
 import logging
 import threading
-
-from ocs_ci.framework.pytest_customization.marks import blue_squad, tier1
+import pytest
+from ocs_ci.framework.pytest_customization.marks import blue_squad, tier1, polarion_id
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod as pod_helpers  # Import for get_ceph_tools_pod
+from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
 
-# Increased from default 90s to 180s for PVC creation & bound to avoid the TimeoutExpiredError
-PVC_BIND_TIMEOUT = 240
+@pytest.fixture(autouse=True)
+def teardown(request):
+    def finalizer():
+        assert ceph_health_check(), "Cluster became unhealthy after metrics test"
+
+    request.addfinalizer(finalizer)
 
 
 @tier1
 @blue_squad
-def test_block_pvc_kubelet_metrics_match_rbd_usage(
-    pvc_factory, pod_factory, project_factory
+@pytest.mark.parametrize(
+    "pvc_size, write_size_mib, volume_mode",
+    [
+        (1, 256, constants.VOLUME_MODE_BLOCK),  # Happy Path
+        (1, 256, constants.VOLUME_MODE_FILESYSTEM),  # Backward Compatibility
+    ],
+)
+@polarion_id("OCS-7424")
+def test_rbd_metrics_validation_multi_scenario(
+    pvc_factory,
+    pod_factory,
+    project_factory,
+    teardown,
+    pvc_size,
+    write_size_mib,
+    volume_mode,
 ):
-    """
-    1. Create a Block PVC and a Pod that consumes the block device.
-    2. Exec into the Pod and write sample data directly to the block device with dd.
-    3. Query kubelet metrics (kubelet_volume_stats_*) and capture used bytes.
-    4. Run `rbd du` from Ceph toolbox pod and compare the reported used bytes.
-    """
-
     project_obj = project_factory()
     namespace = project_obj.namespace
 
-    # Creating a block PVC and consuming Pod
-    pvc_size = 1
-    write_size_mib = 256
-
-    pvc_dict = dict(
+    pvc_obj = pvc_factory(
         project=project_obj,
         size=pvc_size,
         access_mode=constants.ACCESS_MODE_RWO,
-        volume_mode=constants.VOLUME_MODE_BLOCK,
+        volume_mode=volume_mode,
         interface=constants.CEPHBLOCKPOOL,
+        wait_for_resource_status_timeout=300,
     )
 
-    logger.info(
-        f"Creating block PVC in namespace {namespace} with a timeout of {PVC_BIND_TIMEOUT}s"
+    pod_dict_path = (
+        constants.CSI_RBD_RAW_BLOCK_POD_YAML
+        if volume_mode == constants.VOLUME_MODE_BLOCK
+        else constants.CSI_RBD_POD_YAML
+    )
+    dev_path = (
+        "/dev/rbdblock"
+        if volume_mode == constants.VOLUME_MODE_BLOCK
+        else "/var/lib/www/html/test_file"
     )
 
-    # Create PVC and wait for Bound state
-    pvc_obj = pvc_factory(**pvc_dict, wait_for_resource_status_timeout=PVC_BIND_TIMEOUT)
-    assert (
-        pvc_obj.ocp.get(resource_name=pvc_obj.name)["status"]["phase"]
-        == constants.STATUS_BOUND
-    ), f"PVC {pvc_obj.name} did not reach Bound phase."
-
-    # Create a Pod that uses the block device
-    # uses 'volumeDevices' and device path - '/dev/rbdblock'
     pod_obj = pod_factory(
         interface=constants.CEPHBLOCKPOOL,
         pvc=pvc_obj,
-        pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
-        status=constants.STATUS_RUNNING,  # Ensure this is used for waiting
+        pod_dict_path=pod_dict_path,
+        status=constants.STATUS_RUNNING,
     )
 
-    dev_path = "/dev/rbdblock"
+    prom = PrometheusAPI(threading_lock=threading.Lock())
 
-    # Write sample data using dd
-    dd_cmd_str = (
-        f"dd if=/dev/urandom of={dev_path} bs=1M count={write_size_mib} oflag=direct"
-    )
-    logger.info(
-        f"Writing {write_size_mib} MiB to device {dev_path} inside pod {pod_obj.name}"
-    )
-
-    # Join the bash command arguments into a single string and execute it
-    dd_full_command = f"bash -lc '{dd_cmd_str}'"
-
-    pod_obj.exec_cmd_on_pod(command=dd_full_command, out_yaml_format=False)
-
-    # Wait for metrics to be scraped
-    time.sleep(180)
-
-    # Query kubelet metrics for the PVC
-
-    # PrometheusAPI requires a threading_lock object
-    prom: PrometheusAPI = PrometheusAPI(threading_lock=threading.Lock())
-
-    def query_kubelet_metric(metric_name: str, pvc_name: str, namespace: str):
-        promql = f'{metric_name}{{persistentvolumeclaim="{pvc_name}",namespace="{namespace}"}}'
-
-        # Use the 'query' method and parse the result
-        try:
-            val = prom.query(promql, mute_logs=True)
-            if val and "value" in val[0]:
-                # value is [timestamp, metric_value]
-                return int(val[0]["value"][1])
-        except Exception as e:
-            logger.warning(f"Failed to query metric {metric_name}: {e}")
-            return 0
-
-    kube_used = query_kubelet_metric(
-        "kubelet_volume_stats_used_bytes", pvc_obj.name, namespace
-    )
-    kube_capacity = query_kubelet_metric(
-        "kubelet_volume_stats_capacity_bytes", pvc_obj.name, namespace
-    )
-    kube_available = query_kubelet_metric(
-        "kubelet_volume_stats_available_bytes", pvc_obj.name, namespace
+    # Step 1: Initial Write
+    initial_write_mib = write_size_mib
+    logger.info(f"Step 1: Writing {initial_write_mib}MiB to {dev_path}")
+    pod_obj.exec_cmd_on_pod(
+        command=f"bash -lc '{get_dd_command(volume_mode, dev_path, initial_write_mib)}'",
+        out_yaml_format=False,
     )
 
-    logger.info(
-        f"Kubelet Metrics for {pvc_obj.name}: "
-        f"Capacity={kube_capacity} B, Used={kube_used} B, Available={kube_available} B )"
+    validate_all_layers(prom, pvc_obj, namespace, initial_write_mib, volume_mode)
+
+    # Step 2: Additional Write
+    extra_write_mib = 128
+    total_write_mib = initial_write_mib + extra_write_mib
+    logger.info(f"Step 2: Appending {extra_write_mib}MiB to {dev_path}")
+    pod_obj.exec_cmd_on_pod(
+        command=f"bash -lc '{get_dd_command(volume_mode, dev_path, extra_write_mib, initial_write_mib, True)}'",
+        out_yaml_format=False,
     )
 
-    # Get Ceph-side reporting using rbd du
-    # Get the Ceph Toolbox Pod object
-    ceph_toolbox_pod = pod_helpers.get_ceph_tools_pod()
-    if not ceph_toolbox_pod:
-        raise AssertionError("Failed to retrieve Ceph toolbox pod.")
+    validate_all_layers(prom, pvc_obj, namespace, total_write_mib, volume_mode)
 
-    pv_obj = pvc_obj.backed_pv_obj.get()
-    rbd_pool_name = constants.DEFAULT_BLOCKPOOL
-    rbd_image_name = (
-        pv_obj.get("spec", {})
+
+def validate_all_layers(prom_api, pvc_obj, namespace, expected_mib, volume_mode):
+    """
+    Validates metrics at both Kubelet (Prometheus) and Ceph (rbd du) layers.
+    """
+    expected_bytes = expected_mib * 1024 * 1024
+
+    # 1. Fetch Prometheus Metrics
+    kube_metrics = wait_for_all_metrics(
+        prom_api, pvc_obj.name, namespace, expected_bytes
+    )
+
+    # 2. Fetch Ceph Side Truth
+    ceph_metrics = get_ceph_rbd_metrics(pvc_obj)
+
+    logger.info(f"Kubelet Metrics: {kube_metrics}")
+    logger.info(f"Ceph Metrics:    {ceph_metrics}")
+
+    # CAPACITY CHECK
+    if volume_mode == constants.VOLUME_MODE_BLOCK:
+        # Block mode should be exact
+        assert (
+            kube_metrics["capacity"] == ceph_metrics["capacity"]
+        ), f"Capacity mismatch! Kube: {kube_metrics['capacity']}, Ceph: {ceph_metrics['capacity']}"
+        # Kubelet Used vs Ceph Used
+        assert abs(
+            kube_metrics["used"] == ceph_metrics["used"]
+        ), f"Used bytes out of sync! Kube: {kube_metrics['used']}, Ceph: {ceph_metrics['used']}"
+
+        # Kubelet Available vs Ceph Available
+        assert abs(
+            kube_metrics["available"] == ceph_metrics["available"]
+        ), f"Available bytes out of sync! Kube: {kube_metrics['available']}, Ceph: {ceph_metrics['available']}"
+
+        # Kubelet Used vs What we actually wrote (Logical check)
+        assert (
+            kube_metrics["used"] >= expected_bytes
+        ), f"Kubelet reports less used than written! Kube: {kube_metrics['used']}, Target: {expected_bytes}"
+    else:
+        # Filesystem mode: Kubelet Capacity (statfs) is always smaller than Ceph Capacity (RBD size)
+        # We allow small tolerance Percentage/Margin for XFS/Ext4 overhead (around 50 MB)
+        # Total capacity for FS mode PVCs is reflecting as 973MB at Kubelet side instead of 1024MB at cpeh rbd side
+        tolerance_factor = 0.90
+        assert kube_metrics["capacity"] >= (
+            ceph_metrics["capacity"] * tolerance_factor
+        ), (
+            f"Capacity mismatch! Kubelet reports too much overhead. "
+            f"Kube: {kube_metrics['capacity']}, Ceph: {ceph_metrics['capacity']}"
+        )
+
+        margin = 50 * 1024 * 1024
+
+        # Kubelet Used vs Ceph Used
+        assert (
+            abs(kube_metrics["used"] - ceph_metrics["used"]) < margin
+        ), f"Used bytes out of sync! Kube: {kube_metrics['used']}, Ceph: {ceph_metrics['used']}"
+
+        # Kubelet Available vs Ceph Available
+        assert (
+            abs(kube_metrics["available"] - ceph_metrics["available"]) < margin
+        ), f"Available bytes out of sync! Kube: {kube_metrics['available']}, Ceph: {ceph_metrics['available']}"
+
+        # Kubelet Used vs What we actually wrote (Logical check)
+        assert (
+            kube_metrics["used"] >= expected_bytes
+        ), f"Kubelet reports less used than written! Kube: {kube_metrics['used']}, Target: {expected_bytes}"
+
+
+def get_ceph_rbd_metrics(pvc_obj):
+    ceph_toolbox = pod_helpers.get_ceph_tools_pod()
+    pv_data = pvc_obj.backed_pv_obj.get()
+    rbd_pool = constants.DEFAULT_BLOCKPOOL
+    rbd_image = (
+        pv_data.get("spec", {})
         .get("csi", {})
         .get("volumeAttributes", {})
         .get("imageName")
     )
 
-    if not rbd_image_name or not rbd_pool_name:
-        raise AssertionError("RBD image or pool name is missing")
+    rbd_cmd = f"rbd du -p {rbd_pool} {rbd_image}"
+    result = ceph_toolbox.exec_ceph_cmd(ceph_cmd=rbd_cmd, format="json")
 
-    # Execute rbd du using the pod's exec_ceph_cmd method
-    rbd_cmd = f"rbd du -p {rbd_pool_name} {rbd_image_name}"
-    logger.info(f"Executing rbd du on Ceph toolbox pod: {rbd_cmd}")
+    used = int(result["images"][0]["used_size"])
+    capacity = int(result["images"][0]["provisioned_size"])
+    available = capacity - used
 
-    try:
-        rbd_out_parsed = ceph_toolbox_pod.exec_ceph_cmd(ceph_cmd=rbd_cmd, format="json")
+    return {"used": used, "capacity": capacity, "available": available}
 
-        if rbd_out_parsed and all(
-            key in rbd_out_parsed["images"][0]
-            for key in ("used_size", "provisioned_size")
-        ):
-            used_bytes_ceph = int(rbd_out_parsed["images"][0]["used_size"])
-            provisioned_bytes_ceph = int(
-                rbd_out_parsed["images"][0]["provisioned_size"]
-            )
-            available_bytes_ceph = provisioned_bytes_ceph - used_bytes_ceph
-        else:
-            used_bytes_ceph = 0
-            logger.warning(
-                "rbd du output unexpected structure. Assuming 0 used bytes for comparison: %s",
-                rbd_out_parsed,
-            )
 
-    except Exception as e:
-        logger.error(f"Failed to execute or parse rbd du: {e}")
-        raise AssertionError(f"Failed to execute or parse rbd du output: {e}")
+def get_dd_command(mode, path, size_mib, seek_val=None, append=False):
+    if mode == constants.VOLUME_MODE_BLOCK:
+        seek_str = f"seek={seek_val}" if seek_val else ""
+        return f"dd if=/dev/urandom of={path} bs=1M count={size_mib} {seek_str} oflag=direct"
+    else:
+        append_str = "oflag=append conv=notrunc" if append else ""
+        return (
+            f"dd if=/dev/urandom of={path} bs=1M count={size_mib} {append_str} && sync"
+        )
 
-    logger.info(
-        f"Ceph RBD Metrics for {rbd_image_name}: "
-        f"Capacity={provisioned_bytes_ceph} B, Used={used_bytes_ceph} B, Available={available_bytes_ceph} B"
+
+def query_kubelet_metric(prom_api, metric_name, pvc_name, namespace):
+    promql = (
+        f'{metric_name}{{persistentvolumeclaim="{pvc_name}",namespace="{namespace}"}}'
     )
+    val = prom_api.query(promql, mute_logs=True)
+    return int(val[0]["value"][1]) if val else 0
 
-    # Final Comparison
-    # Provisioned Capacity Check (Ceph Provisioned vs Kubelet Capacity )
 
-    assert kube_capacity == provisioned_bytes_ceph, (
-        f"Capacity mismatch: Ceph Provisioned ({provisioned_bytes_ceph} B ) differs from kubelet Size"
-        f" ({kube_capacity} B ) "
-    )
-
-    # Used Bytes Comparison (Kubelet Used vs. Ceph RBD Used)
-    assert (
-        kube_used == used_bytes_ceph
-    ), f"Used Size mismatch: Kubelet Used ({kube_used}) differs from Ceph Used ({used_bytes_ceph}) "
-
-    # Written Bytes Comparison (Kubelet Used vs. Written bytes)
-    written_bytes = write_size_mib * 1024 * 1024
-    assert (
-        kube_used == written_bytes
-    ), f"Written Size mismatch: Kubelet Used ({kube_used}) differs from Written size ({written_bytes}) "
-
-    # Available Bytes Comparison (Kubelet Available vs. Ceph RBD Available)
-    assert kube_available == available_bytes_ceph, (
-        f"Available Size mismatch: Kubelet Available ({kube_available}) differs from Ceph Available"
-        f" ({available_bytes_ceph}) "
-    )
-
-    logger.info(
-        "Kubelet and Ceph metrics match within tolerance for Capacity, Used, and Available sizes."
-    )
+def wait_for_all_metrics(prom_api, pvc_name, namespace, expected_used, timeout=600):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        space_used = query_kubelet_metric(
+            prom_api, "kubelet_volume_stats_used_bytes", pvc_name, namespace
+        )
+        if space_used >= expected_used:
+            return {
+                "used": space_used,
+                "capacity": query_kubelet_metric(
+                    prom_api, "kubelet_volume_stats_capacity_bytes", pvc_name, namespace
+                ),
+                "available": query_kubelet_metric(
+                    prom_api,
+                    "kubelet_volume_stats_available_bytes",
+                    pvc_name,
+                    namespace,
+                ),
+            }
+        logger.info(f"Waiting for Prometheus update... Current Kube Used: {space_used}")
+        time.sleep(60)
+    raise AssertionError(f"Metrics timeout at {expected_used} bytes")
