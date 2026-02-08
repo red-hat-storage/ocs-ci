@@ -304,6 +304,18 @@ class ExternalClusterDisableCertificateCheckFailed(Exception):
     pass
 
 
+class ExternalClusterReplica1ConfigurationFailed(Exception):
+    pass
+
+
+class ExternalClusterCrushRuleCreationFailed(Exception):
+    pass
+
+
+class ExternalClusterPoolCreationFailed(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
