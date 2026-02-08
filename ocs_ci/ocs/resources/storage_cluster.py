@@ -1468,6 +1468,9 @@ def verify_mcg_only_pods():
         constants.OPERATOR_LABEL: 1,
     }
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    # DFBUGS-5211 ocs-metrics-exporter disabled from ODF 4.21
+    if odf_running_version >= version.VERSION_4_21:
+        del resources_dict[constants.OCS_METRICS_EXPORTER]
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
