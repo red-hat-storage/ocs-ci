@@ -569,7 +569,7 @@ def pytest_collection_modifyitems(session, config, items):
                         # Lower the sum, higher the rank hence it gets prioritized early
                         # in the test execution sequence
                         if (
-                            ocsci_config["MULTICLUSTER"].get("multicluster_mode", "")
+                            ocsci_config.MULTICLUSTER.get("multicluster_mode", "")
                             == "regional-dr"
                         ):
                             upgrade_parametrizer = (
@@ -580,6 +580,7 @@ def pytest_collection_modifyitems(session, config, items):
                             )
                         else:
                             newval = val + zone_rank + role_rank
+                        log.info(f"Remarked the test {item.name} with order {newval}")
                         log.info(f"ORIGINAL = {val}, NEW={newval}")
                         markers_update.append((pytest.mark.order, newval))
                         if item.own_markers:
