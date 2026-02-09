@@ -85,10 +85,36 @@ download-logs-from-s3 s3://bucket-name/path/to/file.tar.gz /tmp/my-logs.tar.gz
 Download all files matching a prefix (e.g., all logs from a test run):
 
 ```bash
-download-logs-from-s3 --prefix j231vu1cs33t1/1769470481959
+download-logs-from-s3 --prefix lr5026aikv23fc3t1/1770332469850/my_test_name
+```
+
+**Important: Prefix Requirements**
+
+To prevent accidentally downloading excessive amounts of data, the prefix **must contain at least 3 path components** in the format:
+```
+cluster_name/run_id/test_name
+```
+
+**Valid prefix examples:**
+- ✓ `lr5026aikv23fc3t1/1770332469850/my_test_name`
+- ✓ `lr5026aikv23fc3t1/1770332469850/session_logs/rpm_go_versions`
+- ✓ `j231vu1cs33t1/1769470481959/test_create_namespace_store_ui`
+
+**Invalid prefix examples:**
+- ✗ `lr5026aikv23fc3t1` (only 1 component)
+- ✗ `lr5026aikv23fc3t1/1770332469850` (only 2 components)
+- ✗ `lr5026aikv23fc3t1/1770332469850/` (trailing slash with empty component)
+
+If you provide an invalid prefix, you'll see an error message like:
+```
+⚠ WARNING: Invalid Prefix
+Prefix must contain at least cluster_name/run_id/test_name (3 path components).
+Got: 'lr5026aikv23fc3t1/1770332469850' with 2 component(s).
+Example: 'lr5026aikv23fc3t1/1770332469850/my_test_name'
 ```
 
 **What happens:**
+- Validates prefix has minimum 3 path components
 - Lists all objects in the bucket starting with the prefix
 - Downloads each file maintaining directory structure
 - Shows progress: "Downloading 2/5: path/to/file"
@@ -196,29 +222,29 @@ Your logs are available in: logs/bucket/path
 ### Example 3: Download All Logs from Test Run
 
 ```bash
-download-logs-from-s3 --prefix j231vu1cs33t1/1769470481959 --extract --delete-archive
+download-logs-from-s3 --prefix lr5026aikv23fc3t1/1770332469850/my_test_name --extract --delete-archive
 ```
 
 **Output:**
 ```
-INFO:__main__:Listing objects in bucket 'my-bucket' with prefix 'j231vu1cs33t1/1769470481959'
-INFO:__main__:Found 3 objects matching prefix 'j231vu1cs33t1/1769470481959'
-INFO:__main__:Processing 1/3: j231vu1cs33t1/1769470481959/test1/logs.tar.gz
-INFO:__main__:Successfully downloaded 45,678,901 bytes to logs/my-bucket/j231vu1cs33t1/1769470481959/test1/logs.tar.gz
-INFO:__main__:Extracted to: logs/my-bucket/j231vu1cs33t1/1769470481959/test1
-INFO:__main__:Deleted archive: logs/my-bucket/j231vu1cs33t1/1769470481959/test1/logs.tar.gz
-INFO:__main__:Processing 2/3: j231vu1cs33t1/1769470481959/test2/logs.tar.gz
-INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/j231vu1cs33t1/1769470481959/test2
-INFO:__main__:Processing 3/3: j231vu1cs33t1/1769470481959/test3/logs.tar.gz
-INFO:__main__:Successfully downloaded 38,456,789 bytes to logs/my-bucket/j231vu1cs33t1/1769470481959/test3/logs.tar.gz
-INFO:__main__:Extracted to: logs/my-bucket/j231vu1cs33t1/1769470481959/test3
-INFO:__main__:Deleted archive: logs/my-bucket/j231vu1cs33t1/1769470481959/test3/logs.tar.gz
+INFO:__main__:Listing objects in bucket 'my-bucket' with prefix 'lr5026aikv23fc3t1/1770332469850/my_test_name'
+INFO:__main__:Found 3 objects matching prefix 'lr5026aikv23fc3t1/1770332469850/my_test_name'
+INFO:__main__:Processing 1/3: lr5026aikv23fc3t1/1770332469850/my_test_name/test1/logs.tar.gz
+INFO:__main__:Successfully downloaded 45,678,901 bytes to logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test1/logs.tar.gz
+INFO:__main__:Extracted to: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test1
+INFO:__main__:Deleted archive: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test1/logs.tar.gz
+INFO:__main__:Processing 2/3: lr5026aikv23fc3t1/1770332469850/my_test_name/test2/logs.tar.gz
+INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test2
+INFO:__main__:Processing 3/3: lr5026aikv23fc3t1/1770332469850/my_test_name/test3/logs.tar.gz
+INFO:__main__:Successfully downloaded 38,456,789 bytes to logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test3/logs.tar.gz
+INFO:__main__:Extracted to: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test3
+INFO:__main__:Deleted archive: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test3/logs.tar.gz
 INFO:__main__:Download summary: 2 downloaded, 1 skipped, 0 failed out of 3 total
 
 ================================================================================
 ✓ Prefix Download Successful!
 ================================================================================
-Prefix:            j231vu1cs33t1/1769470481959
+Prefix:            lr5026aikv23fc3t1/1770332469850/my_test_name
 Bucket:            my-bucket
 Total Objects:     3
 Downloaded:        2
@@ -227,7 +253,7 @@ Failed:            0
 Base Path:         logs
 
 --------------------------------------------------------------------------------
-Your logs are available in: logs/my-bucket/j231vu1cs33t1/1769470481959
+Your logs are available in: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name
 ================================================================================
 ```
 
@@ -235,27 +261,27 @@ Your logs are available in: logs/my-bucket/j231vu1cs33t1/1769470481959
 
 ```bash
 # First run downloads everything
-download-logs-from-s3 -p j231vu1cs33t1/1769470481959 -e -d
+download-logs-from-s3 -p lr5026aikv23fc3t1/1770332469850/my_test_name -e -d
 
 # Second run skips already downloaded files
-download-logs-from-s3 -p j231vu1cs33t1/1769470481959 -e -d
+download-logs-from-s3 -p lr5026aikv23fc3t1/1770332469850/my_test_name -e -d
 ```
 
 **Output:**
 ```
-INFO:__main__:Found 3 objects matching prefix 'j231vu1cs33t1/1769470481959'
-INFO:__main__:Processing 1/3: j231vu1cs33t1/1769470481959/test1/logs.tar.gz
-INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/j231vu1cs33t1/1769470481959/test1
-INFO:__main__:Processing 2/3: j231vu1cs33t1/1769470481959/test2/logs.tar.gz
-INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/j231vu1cs33t1/1769470481959/test2
-INFO:__main__:Processing 3/3: j231vu1cs33t1/1769470481959/test3/logs.tar.gz
-INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/j231vu1cs33t1/1769470481959/test3
+INFO:__main__:Found 3 objects matching prefix 'lr5026aikv23fc3t1/1770332469850/my_test_name'
+INFO:__main__:Processing 1/3: lr5026aikv23fc3t1/1770332469850/my_test_name/test1/logs.tar.gz
+INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test1
+INFO:__main__:Processing 2/3: lr5026aikv23fc3t1/1770332469850/my_test_name/test2/logs.tar.gz
+INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test2
+INFO:__main__:Processing 3/3: lr5026aikv23fc3t1/1770332469850/my_test_name/test3/logs.tar.gz
+INFO:__main__:Skipping download - extracted content already exists at: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name/test3
 INFO:__main__:Download summary: 0 downloaded, 3 skipped, 0 failed out of 3 total
 
 ================================================================================
 ✓ Prefix Download Successful!
 ================================================================================
-Prefix:            j231vu1cs33t1/1769470481959
+Prefix:            lr5026aikv23fc3t1/1770332469850/my_test_name
 Bucket:            my-bucket
 Total Objects:     3
 Downloaded:        0
@@ -264,7 +290,7 @@ Failed:            0
 Base Path:         logs
 
 --------------------------------------------------------------------------------
-Your logs are available in: logs/my-bucket/j231vu1cs33t1/1769470481959
+Your logs are available in: logs/my-bucket/lr5026aikv23fc3t1/1770332469850/my_test_name
 ================================================================================
 ```
 
@@ -272,7 +298,7 @@ Your logs are available in: logs/my-bucket/j231vu1cs33t1/1769470481959
 
 ```bash
 # Force re-download even if files exist
-download-logs-from-s3 -p j231vu1cs33t1/1769470481959 -e -d --redownload
+download-logs-from-s3 -p lr5026aikv23fc3t1/1770332469850/my_test_name -e -d --redownload
 ```
 
 ### Example 8: Using Custom Config
@@ -285,10 +311,10 @@ download-logs-from-s3 --ocsci-conf my-s3-config.yaml s3://bucket/path/file.tar.g
 
 ```bash
 # Long options
-download-logs-from-s3 --prefix j231vu1cs33t1/1769470481959 --extract --verbose
+download-logs-from-s3 --prefix lr5026aikv23fc3t1/1770332469850/my_test_name --extract --verbose
 
 # Short options
-download-logs-from-s3 -p j231vu1cs33t1/1769470481959 -e -v
+download-logs-from-s3 -p lr5026aikv23fc3t1/1770332469850/my_test_name -e -v
 ```
 
 ## Configuration File Format
@@ -337,7 +363,9 @@ positional arguments:
 
 options:
   -h, --help            Show help message and exit
-  --prefix, -p PREFIX   Download all objects with this prefix
+  --prefix, -p PREFIX   Download all objects with this prefix.
+                        Must include at least cluster_name/run_id/test_name (3 path components).
+                        Example: 'lr5026aikv23fc3t1/1770332469850/my_test_name'
   --ocsci-conf OCSCI_CONF
                         Path to ocs-ci config file (can be used multiple times)
   -e, --extract         Extract tarball after download
@@ -421,6 +449,20 @@ ClientError: An error occurred (NoSuchKey) when calling the GetObject operation
 - Verify the prefix is correct (case-sensitive)
 - Check that files with that prefix exist in the bucket
 - Try listing objects in the bucket to verify the prefix format
+
+### Invalid Prefix Error
+
+**Problem:**
+```
+⚠ WARNING: Invalid Prefix
+Prefix must contain at least cluster_name/run_id/test_name (3 path components).
+```
+
+**Solution:**
+- Ensure your prefix has at least 3 path components separated by `/`
+- Valid format: `cluster_name/run_id/test_name`
+- Example: `lr5026aikv23fc3t1/1770332469850/my_test_name`
+- Invalid examples: `lr5026aikv23fc3t1` or `lr5026aikv23fc3t1/1770332469850`
 
 ## Tips and Best Practices
 
