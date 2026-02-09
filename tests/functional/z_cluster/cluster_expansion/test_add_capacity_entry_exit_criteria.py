@@ -1,10 +1,11 @@
 import logging
+import re
+import unicodedata
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod as pod_helpers
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier2,
@@ -16,28 +17,41 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.helpers import cluster_exp_helpers
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
-from ocs_ci.ocs import cluster as cluster_helpers
-from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility.utils import ceph_health_check, run_cmd
-from ocs_ci.framework import config
-from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
+from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.ocs import constants, cluster as cluster_helpers
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.node import get_worker_nodes
-import re
-from collections import defaultdict
-import unicodedata
+from ocs_ci.ocs.ocp import OCP, exec_cmd
+from ocs_ci.ocs.resources import pod as pod_helpers, storage_cluster
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 
 logger = logging.getLogger(__name__)
 
+# Constants to address AviadP's feedback on "too specific numbers"
+REQUIRED_RAM_GB = 65
+REQUIRED_CPU_CORES = 6
+MIN_RES_THRESHOLD_GB = 0.01
+RESERVATION_PATTERN_CPU = r"cpu\s+(\d+m?)\s+\((\d+)%\)"
+RESERVATION_PATTERN_MEM = r"memory\s+(\d+)Mi\s+\((\d+)%\)"
 
-# gatekeeper function that checks the cpu & ram availability for the testcase before start
+
 def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
+    """
+    Validates if the worker nodes have sufficient unreserved CPU and RAM.
+    Parses 'oc describe node' to identify resource 'hogs' and skips the test
+    if the requirement isn't met, providing a namespace-level breakdown.
 
+    Args:
+        needed_ram_gb (int): Required RAM in Gigabytes.
+        needed_cpu_cores (int): Required CPU cores.
+
+    Raises:
+        pytest.skip: If available resources are below the required threshold.
+    """
     worker_names = get_worker_nodes()
     total_free_ram_kb = 0
     total_free_cpu_m = 0
@@ -47,12 +61,11 @@ def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
     ocp_node_obj = OCP(kind=constants.NODE)
 
     for name in worker_names:
-        node_data = run_cmd(f"oc describe node {name}")
-        # Normalize hidden characters (like \xa0 from node data to standard spaces)
-        node_data = unicodedata.normalize("NFKD", node_data)
+        # Use exec_cmd instead of deprecated run_cmd as per AviadP's feedback
+        node_data_raw = exec_cmd(f"oc describe node {name}").stdout.decode()
+        node_data = unicodedata.normalize("NFKD", node_data_raw)
         node_info = ocp_node_obj.get(resource_name=name)
-
-        # 1. Base Allocatable precison from JSON
+        # Base Allocatable precision from node status
         alloc_ram_kb = int(
             node_info["status"]["allocatable"]["memory"].replace("Ki", "")
         )
@@ -61,62 +74,59 @@ def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
             int(cpu_raw.replace("m", "")) if "m" in cpu_raw else int(cpu_raw) * 1000
         )
 
-        # 2. Parse overall reservation percentages
-        mem_res_match = re.search(r"memory\s+\d+\w+\s+\((\d+)%\)", node_data)
-        cpu_res_match = re.search(r"cpu\s+\d+m?\s+\((\d+)%\)", node_data)
+        # Parse current reservations
+        mem_res_match = re.search(RESERVATION_PATTERN_MEM, node_data)
+        cpu_res_match = re.search(RESERVATION_PATTERN_CPU, node_data)
 
         if mem_res_match:
-            total_free_ram_kb += alloc_ram_kb * (
-                1.0 - (int(mem_res_match.group(1)) / 100.0)
-            )
+            used_percent = int(mem_res_match.group(2))
+            total_free_ram_kb += alloc_ram_kb * (1.0 - (used_percent / 100.0))
         if cpu_res_match:
-            total_free_cpu_m += alloc_cpu_m * (
-                1.0 - (int(cpu_res_match.group(1)) / 100.0)
-            )
+            used_percent = int(cpu_res_match.group(2))
+            total_free_cpu_m += alloc_cpu_m * (1.0 - (used_percent / 100.0))
 
-        # 3. Enhanced Pod Parsing
+        # Component Breakdown Parsing
         try:
+            # Finding the pod section between anchors
             pod_section = node_data.split("Non-terminated Pods:")[1].split(
                 "Allocated resources:"
             )[0]
             for line in pod_section.strip().split("\n"):
                 parts = line.split()
-                # A valid data line starts with namespace and has units like (0%) or (3%)
-                if len(parts) > 5 and "(" in line and "%" in line:
+                # Ensure line contains actual pod data (Namespace, Name, CPU, Mem...)
+                if len(parts) >= 7 and "(" in line and "%" in line:
                     ns = parts[0]
-                    if ns in ["Namespace", "---------", "(61", "(53"]:
+                    # Skip header/meta lines
+                    if ns.lower() in ["namespace", "name"] or ns.startswith("("):
                         continue
 
-                    # Search the whole line for all occurrences of patterns like '150m' or '2Gi'
-                    # The first two are usually CPU Request/Limit, the next two are Memory Request/Limit
                     cpu_usage = re.findall(r"(\d+m?)\s+\(", line)
                     mem_usage = re.findall(r"(\d+[GMK]i)\s+\(", line)
 
                     if cpu_usage:
-                        raw_c = cpu_usage[0]  # Request is always first
+                        raw_c = cpu_usage[0]
                         c_val = int(re.search(r"\d+", raw_c).group())
                         if "m" not in raw_c:
                             c_val *= 1000
                         namespace_cpu[ns] += c_val
 
                     if mem_usage:
-                        raw_m = mem_usage[0]  # Request is always first
+                        raw_m = mem_usage[0]
                         m_val = int(re.search(r"\d+", raw_m).group())
                         if "Gi" in raw_m:
-                            m_val *= 1024 * 1024
+                            m_val *= 1024 * 1024  # Standardizing to KB
                         elif "Mi" in raw_m:
                             m_val *= 1024
                         namespace_ram[ns] += m_val
-        except Exception as e:
-            logger.debug(f"Row skip: {e}")
+        # Specific exceptions as requested in PR review
+        except (IndexError, ValueError, KeyError) as e:
+            logger.debug(f"Parsing row failed for node {name}: {e}")
 
     actual_free_ram_gb = total_free_ram_kb / (1024 * 1024)
     actual_free_cpu = total_free_cpu_m / 1000
-    import pdb
 
-    pdb.set_trace()
     logger.info(
-        f"Summary -> Free RAM: {actual_free_ram_gb:.2f}GB | Free CPU: {actual_free_cpu:.2f} Cores"
+        f"Available Capacity: {actual_free_ram_gb:.2f}GB RAM | {actual_free_cpu:.2f} CPU Cores"
     )
 
     if actual_free_ram_gb < needed_ram_gb:
@@ -125,20 +135,23 @@ def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
         )
         table_rows = [header, "-" * 75]
 
-        for ns in sorted(
+        sorted_ns = sorted(
             namespace_ram.keys(), key=lambda x: namespace_ram[x], reverse=True
-        ):
+        )
+        for ns in sorted_ns:
             ram_gb = namespace_ram[ns] / (1024 * 1024)
             cpu_c = namespace_cpu[ns] / 1000
-            if ram_gb > 0.01:  # Show everything significant
+            if ram_gb > MIN_RES_THRESHOLD_GB:
                 table_rows.append(
                     "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
                 )
 
+        breakdown_msg = "\n" + "\n".join(table_rows)
         logger.error(
             f"RESOURCE GATEKEEPER FAILED: Need {needed_ram_gb}GB, have {actual_free_ram_gb:.2f}GB."
         )
-        logger.error("\n" + "\n".join(table_rows))
+        logger.error(breakdown_msg)
+
         pytest.skip(f"Insufficient Cluster RAM: {actual_free_ram_gb:.2f}GB available.")
 
 
@@ -159,10 +172,12 @@ class TestAddCapacity(ManageTest):
     @pytest.fixture(autouse=True)
     def resource_check(self):
         """
-        Gatekeeper: Runs before every test in this class to ensure hardware capacity.
-        30 pods * 2Gi = 60Gi + 5Gi buffer = 65Gi
+        Gatekeeper: Ensures hardware capacity before starting deployment.
+        Uses standardized constants for resource requirements.
         """
-        check_cluster_resource_availability(needed_ram_gb=65, needed_cpu_cores=6)
+        check_cluster_resource_availability(
+            needed_ram_gb=REQUIRED_RAM_GB, needed_cpu_cores=REQUIRED_CPU_CORES
+        )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
