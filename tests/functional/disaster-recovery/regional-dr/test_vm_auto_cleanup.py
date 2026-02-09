@@ -343,6 +343,9 @@ class TestVMAutoCleanUp:
         config.switch_acm_ctx()
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
+        logger.info(f"Waiting for {wait_time} minutes to run IOs")
+        sleep(wait_time * 60)
+
         logger.info("Checking for lastGroupSyncTime")
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
