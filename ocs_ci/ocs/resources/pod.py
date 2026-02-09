@@ -4691,3 +4691,20 @@ def get_deviceclass_osd_pods(deviceclass_name, namespace=None):
     deviceclass_osd_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
 
     return deviceclass_osd_pods
+def is_pod_terminating(pod):
+    """
+    Return True if pod is in terminating state.
+    """
+    return pod.get("metadata", {}).get("deletionTimestamp") is not None
+
+
+def is_pod_in_crashloopbackoff(pod):
+    """
+    Return True if any container in pod is in CrashLoopBackOff state.
+    """
+    statuses = pod.get("status", {}).get("containerStatuses", [])
+    for status in statuses:
+        waiting = status.get("state", {}).get("waiting", {})
+        if waiting.get("reason") == "CrashLoopBackOff":
+            return True
+    return False
