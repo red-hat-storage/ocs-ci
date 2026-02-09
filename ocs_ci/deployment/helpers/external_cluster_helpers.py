@@ -720,7 +720,8 @@ class ExternalCluster(object):
 
         # Get existing CRUSH rules for idempotency check
         retcode, out, _ = self.rhcs_conn.exec_cmd("ceph osd crush rule ls")
-        existing_rules = out.strip().split("\n") if retcode == 0 else []
+        existing_rules = out.strip().split("\n") if retcode == 0 and out.strip() else []
+        logger.debug(f"Existing CRUSH rules: {existing_rules}")
 
         created_rules = []
         for zone in topology_config.zones:
@@ -770,7 +771,8 @@ class ExternalCluster(object):
 
         # Get existing pools for idempotency check
         retcode, out, _ = self.rhcs_conn.exec_cmd("ceph osd pool ls")
-        existing_pools = out.strip().split("\n") if retcode == 0 else []
+        existing_pools = out.strip().split("\n") if retcode == 0 and out.strip() else []
+        logger.debug(f"Existing pools: {existing_pools}")
 
         created_pools = []
         for zone in topology_config.zones:
@@ -848,6 +850,7 @@ class ExternalCluster(object):
         )
 
         existing_rules = out.strip().split("\n")
+        logger.debug(f"Existing CRUSH rules for verification: {existing_rules}")
         for rule in expected_rules:
             if rule not in existing_rules:
                 raise ExternalClusterReplica1ConfigurationFailed(
