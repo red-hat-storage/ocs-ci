@@ -13,17 +13,9 @@ The `download-logs-from-s3` tool provides an easy way to:
 
 ## Prerequisites
 
-1. **Python 3.6+** with boto3 installed:
-   ```bash
-   pip install boto3
-   ```
+1. **S3 Credentials**: You need IBM Cloud Object Storage HMAC credentials with read access to the bucket.
 
-2. **S3 Credentials**: You need IBM Cloud Object Storage HMAC credentials with read access to the bucket.
-
-3. **Installation**: Install ocs-ci with the entrypoint:
-   ```bash
-   pip install -e .
-   ```
+2. **Installation**: Install ocs-ci with the entrypoint. See the Installing section in [Getting Started](../getting_started.md) for detailed installation instructions.
 
 ## Configuration
 
