@@ -6,6 +6,7 @@ import logging
 import re
 
 from ocs_ci.ocs import node, ocp, constants
+from ocs_ci.ocs.exceptions import NodeNotFoundError
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 
@@ -243,10 +244,7 @@ def configure_initiators(worker_node_names):
         None
 
     Raises:
-        Exception: If there is an error while configuring the initiator.
-        Exception: If there is an error while SSH fallback fails.
-        Exception: If there is an error while getting the node IP.
-        Exception: If there is an error while deleting the StorageClasses or LocalDisks.
+        NodeNotFoundError: If the node IP cannot be retrieved (none or empty).
 
     """
 
@@ -297,7 +295,7 @@ def configure_initiators(worker_node_names):
                             log.debug(f"Command output: {stdout}")
                 else:
                     log.error(f"Node IP is none or empty for {node_name}")
-                    raise Exception(f"Node IP is none or empty for {node_name}")
+                    raise NodeNotFoundError(f"Node IP is none or empty for {node_name}")
             except Exception as fallback_error:
                 log.error(f"SSH fallback also failed for {node_name}: {fallback_error}")
 
@@ -314,9 +312,7 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
 
     """
 
-    log.info("\n" + "=" * 70)
     log.info("STEP 3: Removing ACLs from target")
-    log.info("=" * 70)
 
     for worker_iqn in worker_iqns:
         log.info(f"\nRemoving ACL: {worker_iqn}")
