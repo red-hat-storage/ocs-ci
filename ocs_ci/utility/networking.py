@@ -5,10 +5,13 @@ Module that contains network related functions
 import base64
 import ipaddress
 import logging
+import os
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.utility.templating import load_yaml
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import (
@@ -116,9 +119,16 @@ def create_drs_machine_config():
     interfaces_path = os.path.join(
         constants.TEMPLATE_DEPLOYMENT_DIR, "drs_interfaces.yaml"
     )
-    with open(interfaces_path, "r") as file:
-        interfaces_yaml_string = file.read()
-    base64_interfaces = base64.b64encode(interfaces_yaml_string)
+    interfaces_yaml = load_yaml(interfaces_path)
+    worker = get_worker_nodes()[0]
+    network_data = (
+        config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
+    )
+    interface_name = get_network_interface_by_ip(worker, network_data['private_ip'])
+    interfaces_yaml["interfaces"][0]["bridge"]["port"][0]["name"] = interface_name
+    interfaces_yaml["interfaces"][1]["name"] = interface_name
+    interfaces_yaml_string = yaml.dump(interfaces_yaml)
+    base64_interfaces = base64.b64encode(interfaces_yaml_string.encode()).decode()
     machineconfigurations_path = os.path.join(
         constants.TEMPLATE_DEPLOYMENT_DIR, "drs_machineconfig.yaml"
     )
