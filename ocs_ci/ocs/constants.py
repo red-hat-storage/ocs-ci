@@ -1765,6 +1765,7 @@ ROSA_HCP_PLATFORM = "rosa_hcp"
 ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
 HCI_BAREMETAL = "hci_baremetal"
 HCI_VSPHERE = "hci_vsphere"
+HCP_AWS = "hcp_aws"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
@@ -1810,10 +1811,7 @@ DEPLOYMENT_TYPES = [IPI_DEPL_TYPE, UPI_DEPL_TYPE, MANAGED_DEPL_TYPE, LOCAL_DEPL_
 
 DEFAULT_AWS_REGION = "us-east-2"
 
-HCI_PROVIDER_CLIENT_PLATFORMS = [
-    HCI_BAREMETAL,
-    HCI_VSPHERE,
-]
+HCI_PROVIDER_CLIENT_PLATFORMS = [HCI_BAREMETAL, HCI_VSPHERE]
 
 IBM_REGIONS = ["us-east", "us-south", "us"]
 IBM_CLOUD_SUBNETS = {
@@ -2695,6 +2693,12 @@ AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
 # aws prefixes
 ACCOUNT_ROLE_PREFIX_ROSA_HCP = "accroleshcp"
 OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
+
+# aws hcp constants
+HCP_DEPLOYER_POLICY = os.path.join(
+    TEMPLATE_DIR, "ocs-deployment", "provider-mode", "aws-hcp", "iam_role_policy.json"
+)
+
 
 # aws volume constants
 AWS_VOL_PVC_NAME_TAG = "kubernetes.io/created-for/pvc/name"

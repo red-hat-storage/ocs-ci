@@ -2055,7 +2055,7 @@ class AWS(object):
 
     def create_iam_role(self, role_name, description, document):
         """
-        Create IAM role.
+        Create IAM role if it doesn't exist, or return existing role.
 
         Args:
             role_name (str): Name of the role
@@ -2063,9 +2063,17 @@ class AWS(object):
             document (str): JSON string representing the role policy to assume
 
         Returns:
-            dict: Created role data
+            dict: Created or existing role data
 
         """
+        # Check if role already exists
+        try:
+            existing_role = self.iam_client.get_role(RoleName=role_name)
+            logger.info("IAM role '%s' already exists, reusing it", role_name)
+            return existing_role
+        except self.iam_client.exceptions.NoSuchEntityException:
+            pass
+
         logger.info("Creating IAM role: %s", role_name)
         return self.iam_client.create_role(
             RoleName=role_name,
@@ -2245,6 +2253,105 @@ class AWS(object):
         logger.info("Retrieving STS Caller Identity")
         resp = self.sts_client.get_caller_identity()
         return resp["Account"]
+
+    def get_caller_identity_arn(self):
+        """
+        Get STS Caller Identity ARN.
+
+        Equivalent to: aws sts get-caller-identity --query "Arn" --output text
+
+        Returns:
+            str: The ARN of the caller identity
+
+        """
+        logger.info("Retrieving STS Caller Identity ARN")
+        resp = self.sts_client.get_caller_identity()
+        arn = resp["Arn"]
+        logger.info(f"Caller Identity ARN: {arn}")
+        return arn
+
+    def get_session_token(self, duration_seconds=7200, output_file=None):
+        """
+        Retrieve AWS STS session token and save it to a file.
+
+        Equivalent to::
+
+            aws sts get-session-token --duration-seconds 7200 > sts-creds.json
+
+        Args:
+            duration_seconds (int): Duration of the session token in seconds.
+                Default is 7200 (2 hours). Valid range: 900 (15 min) to 129600 (36 hours).
+            output_file (str): Path to the file where credentials will be saved.
+                If not provided, creates a temp file in the system temp directory.
+
+        Returns:
+            dict: Dictionary containing:
+
+                - ``credentials`` (dict): AWS credentials with keys:
+
+                  - ``AccessKeyId`` (str): AWS access key ID
+                  - ``SecretAccessKey`` (str): AWS secret access key
+                  - ``SessionToken`` (str): AWS session token
+                  - ``Expiration`` (str): Expiration time in ISO format
+
+                - ``credentials_file`` (str): Path to the saved file
+
+        Raises:
+            ClientError: If the STS call fails
+
+        """
+        logger.info(
+            f"Retrieving STS session token with duration {duration_seconds} seconds"
+        )
+
+        try:
+            response = self.sts_client.get_session_token(
+                DurationSeconds=duration_seconds
+            )
+        except ClientError as e:
+            logger.error(f"Failed to get session token: {e}")
+            raise
+
+        credentials = response["Credentials"]
+
+        creds_dict = {
+            "Credentials": {
+                "AccessKeyId": credentials["AccessKeyId"],
+                "SecretAccessKey": credentials["SecretAccessKey"],
+                "SessionToken": credentials["SessionToken"],
+                "Expiration": credentials["Expiration"].isoformat(),
+            }
+        }
+
+        if not output_file:
+            output_file = NamedTemporaryFile(
+                mode="w",
+                prefix="sts-creds-",
+                suffix=".json",
+                delete=False,
+            ).name
+
+        logger.info(f"Saving session token to file: {output_file}")
+
+        # Create file with restrictive permissions (owner read/write only)
+        # Use os.open with explicit mode to set permissions atomically
+        fd = os.open(output_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(creds_dict, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write credentials to file: {e}")
+            raise
+
+        logger.info(
+            f"Session token saved successfully. "
+            f"Expires at: {creds_dict['Credentials']['Expiration']}"
+        )
+
+        return {
+            "credentials": creds_dict["Credentials"],
+            "credentials_file": output_file,
+        }
 
     def get_cloudfront_origin_access_identies(self):
         """
@@ -2870,3 +2977,183 @@ def wait_for_distribution_status_deployed(dist_id):
         raise exceptions.DistributionStatusError(
             f"Distribution Status is {status}, waiting for `Deployed`"
         )
+
+
+def create_s3_bucket_for_hypershift_oidc(
+    bucket_name, region, aws_credentials_path=None, namespace="local-cluster"
+):
+    """
+    Create an S3 bucket for HyperShift OIDC provider with public read policy
+    and create Kubernetes secret with bucket credentials.
+
+    This function:
+
+    1. Creates an S3 bucket in the specified region
+    2. Disables Block Public Access settings
+    3. Applies a public read policy to allow OIDC discovery
+    4. Creates a Kubernetes secret with AWS credentials and bucket info
+
+    Args:
+        bucket_name (str): Name of the S3 bucket to create
+        region (str): AWS region where the bucket should be created
+        aws_credentials_path (str): Path to AWS credentials file
+        namespace (str): Kubernetes namespace for the secret
+            (default: "local-cluster")
+
+    Returns:
+        dict: Dictionary with bucket details:
+
+            - ``bucket_name`` (str): Name of the bucket
+            - ``region`` (str): AWS region of the bucket
+            - ``bucket_arn`` (str): ARN of the bucket
+            - ``location`` (str): URL location of the bucket
+            - ``secret_name`` (str): Name of the Kubernetes secret
+            - ``namespace`` (str): Kubernetes namespace of the secret
+
+    Raises:
+        ClientError: If bucket creation or policy application fails
+
+    """
+    logger.info(
+        f"Creating S3 bucket '{bucket_name}' for HyperShift OIDC provider in region '{region}'"
+    )
+
+    # Initialize AWS client for the specified region
+    aws = AWS(region_name=region)
+
+    if aws_credentials_path and not os.path.exists(aws_credentials_path):
+        logger.warning(
+            f"AWS credentials file not found at {aws_credentials_path}. "
+            "Assuming credentials are available via environment or IAM role."
+        )
+        aws_credentials_path = None
+
+    # Check if bucket already exists
+    try:
+        existing_buckets = aws.list_buckets()
+        if any(bucket["Name"] == bucket_name for bucket in existing_buckets):
+            logger.info(f"Bucket '{bucket_name}' already exists, skipping creation")
+            bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
+            bucket_arn = f"arn:aws:s3:::{bucket_name}"
+        else:
+            # Create the S3 bucket
+            logger.info(f"Creating S3 bucket '{bucket_name}' in region '{region}'")
+            try:
+                if region == "us-east-1":
+                    # us-east-1 doesn't require LocationConstraint
+                    create_response = aws.s3_client.create_bucket(Bucket=bucket_name)
+                else:
+                    create_response = aws.s3_client.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={"LocationConstraint": region},
+                    )
+
+                bucket_location = create_response.get("Location")
+                bucket_arn = f"arn:aws:s3:::{bucket_name}"
+                logger.info(
+                    f"Bucket created successfully. Location: {bucket_location}, ARN: {bucket_arn}"
+                )
+
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code == "BucketAlreadyOwnedByYou":
+                    logger.info(f"Bucket '{bucket_name}' already owned by you")
+                    bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
+                    bucket_arn = f"arn:aws:s3:::{bucket_name}"
+                else:
+                    logger.error(f"Failed to create bucket: {e}")
+                    raise
+
+    except ClientError as e:
+        logger.error(f"Error checking/creating bucket: {e}")
+        raise
+
+    # Define the public read policy for the bucket
+    bucket_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": "s3:GetObject",
+                "Resource": f"{bucket_arn}/*",
+            }
+        ],
+    }
+
+    # Disable Block Public Access settings to allow public policy
+    try:
+        logger.info(
+            f"Disabling Block Public Access settings for bucket '{bucket_name}' "
+            "to allow public OIDC discovery"
+        )
+        aws.s3_client.put_public_access_block(
+            Bucket=bucket_name,
+            PublicAccessBlockConfiguration={
+                "BlockPublicAcls": False,
+                "IgnorePublicAcls": False,
+                "BlockPublicPolicy": False,
+                "RestrictPublicBuckets": False,
+            },
+        )
+        logger.info("Block Public Access settings disabled successfully")
+    except ClientError as e:
+        logger.warning(f"Could not disable Block Public Access settings: {e}")
+
+    # Apply the bucket policy
+    try:
+        logger.info(f"Applying public read policy to bucket '{bucket_name}'")
+        aws.s3_client.put_bucket_policy(
+            Bucket=bucket_name, Policy=json.dumps(bucket_policy)
+        )
+        logger.info("Bucket policy applied successfully")
+    except ClientError as e:
+        logger.error(f"Failed to apply bucket policy: {e}")
+        raise
+
+    # Create the Kubernetes secret
+    secret_name = "hypershift-operator-oidc-provider-s3-credentials"
+    logger.info(
+        f"Creating Kubernetes secret '{secret_name}' in namespace '{namespace}'"
+    )
+
+    try:
+        if aws_credentials_path:
+            cmd = (
+                f"oc create secret generic {secret_name} "
+                f"--from-file=credentials={aws_credentials_path} "
+                f"--from-literal=bucket={bucket_name} "
+                f"--from-literal=region={region} "
+                f"-n {namespace}"
+            )
+        else:
+            cmd = (
+                f"oc create secret generic {secret_name} "
+                f"--from-literal=bucket={bucket_name} "
+                f"--from-literal=region={region} "
+                f"-n {namespace}"
+            )
+
+        exec_cmd(cmd, shell=True)
+        logger.info(f"Kubernetes secret '{secret_name}' created successfully")
+
+    except exceptions.CommandFailed as e:
+        if "already exists" in str(e).lower():
+            logger.info(f"Secret '{secret_name}' already exists, skipping creation")
+        else:
+            logger.error(f"Failed to create Kubernetes secret: {e}")
+            raise
+
+    result = {
+        "bucket_name": bucket_name,
+        "region": region,
+        "bucket_arn": bucket_arn,
+        "location": bucket_location,
+        "secret_name": secret_name,
+        "namespace": namespace,
+    }
+
+    logger.info(
+        f"HyperShift OIDC S3 bucket setup completed successfully:\n{json.dumps(result, indent=2)}"
+    )
+    return result
