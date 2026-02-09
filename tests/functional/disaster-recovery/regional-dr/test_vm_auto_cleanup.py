@@ -367,6 +367,7 @@ class TestVMAutoCleanUp:
             preferred_cluster=primary_cluster_name,
             namespace=cnv_workloads[0].workload_namespace,
             workload_placement_name=resource_name,
+            discovered_apps=True,
             old_primary=secondary_cluster_name,
             workload_instance=cnv_workloads[0],
             workload_instances_shared=cnv_workloads,
