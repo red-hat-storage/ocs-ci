@@ -29,7 +29,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     turquoise_squad,
     stretchcluster_required,
-    jira,
 )
 from ocs_ci.utility.retry import retry
 
@@ -255,7 +254,7 @@ class TestZoneShutdownsAndCrashes:
         log.info("All old CephFS logreader pods are deleted")
         verify_data_corruption(sc_obj, logreader_workload_factory)
 
-    @jira("DFBUGS-3636")
+    # @jira("DFBUGS-3636")
     @pytest.mark.parametrize(
         argnames="iteration, delay",
         argvalues=[
