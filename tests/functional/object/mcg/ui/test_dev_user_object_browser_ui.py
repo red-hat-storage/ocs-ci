@@ -83,7 +83,7 @@ class TestDevUserObjectBrowserUI:
             "secret_name": secret_name,
         }
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-7500")
     def test_dev_user_login_logout_admin_login(self, request, dev_user_setup):
         """
         Test dev user login, console logout, and admin re-login flow.
