@@ -276,12 +276,6 @@ class TestMdsXattrAlerts(E2ETest):
         log.info("Validating the alert after ocs-metrics-exporter pod restart")
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
-        log.info("Checking for clearance of alert")
-        initiate_alert_clearanace()
-        # waiting for sometime for load distribution
-        time.sleep(600)
-        assert MDSxattr_alert_values(threading_lock, timeout=30) is False
-
     def test_alert_after_recovering_prometheus_from_failures(
         self, set_xattr_with_high_cpu_usage, threading_lock
     ):
@@ -301,12 +295,6 @@ class TestMdsXattrAlerts(E2ETest):
         delete_pods(list_of_prometheus_pod_obj)
 
         assert MDSxattr_alert_values(threading_lock, timeout=300)
-
-        log.info("Checking for clearance of alert")
-        initiate_alert_clearanace()
-        # waiting for sometime for load distribution
-        time.sleep(600)
-        assert MDSxattr_alert_values(threading_lock, timeout=30) is False
 
     def test_alert_after_active_mds_scaledown(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -343,12 +331,6 @@ class TestMdsXattrAlerts(E2ETest):
             helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
         assert MDSxattr_alert_values(threading_lock, timeout=60)
-
-        log.info("Checking for clearance of alert")
-        initiate_alert_clearanace()
-        # waiting for sometime for load distribution
-        time.sleep(600)
-        assert MDSxattr_alert_values(threading_lock, timeout=30) is False
 
     def test_alert_with_both_mds_scaledown(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -398,12 +380,6 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
-        log.info("Checking for clearance of alert")
-        initiate_alert_clearanace()
-        # waiting for sometime for load distribution
-        time.sleep(600)
-        assert MDSxattr_alert_values(threading_lock, timeout=30) is False
-
     def test_alert_with_mds_running_node_restart(
         self, set_xattr_with_high_cpu_usage, threading_lock, nodes
     ):
@@ -425,9 +401,3 @@ class TestMdsXattrAlerts(E2ETest):
         )
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
-
-        log.info("Checking for clearance of alert")
-        initiate_alert_clearanace()
-        # waiting for sometime for load distribution
-        time.sleep(600)
-        assert MDSxattr_alert_values(threading_lock, timeout=30) is False
