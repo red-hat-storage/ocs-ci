@@ -31,6 +31,7 @@ from ocs_ci.ocs.cluster import (
     CephClusterMultiCluster,
     CephHealthMonitor,
     MulticlusterCephHealthMonitor,
+    DummyCephHealthMonitor,
 )
 from ocs_ci.ocs.utils import (
     get_primary_cluster_config,
@@ -136,6 +137,9 @@ class TestUpgradeOCP(ManageTest):
                 local_zone_odf = get_primary_cluster_config()
             ceph_cluster = CephClusterMultiCluster(local_zone_odf)
             health_monitor = MulticlusterCephHealthMonitor
+        elif config.DEPLOYMENT.get("ocp_only_upgrade"):
+            ceph_cluster = None
+            health_monitor = DummyCephHealthMonitor
         else:
             ceph_cluster = CephCluster()
             health_monitor = CephHealthMonitor
@@ -313,7 +317,11 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
-        if not config.ENV_DATA["mcg_only_deployment"] and not config.multicluster:
+        if (
+            not config.ENV_DATA["mcg_only_deployment"]
+            and not config.multicluster
+            and not config.DEPLOYMENT.get("ocp_only_upgrade")
+        ):
             new_ceph_cluster = CephCluster()
             # Increased timeout because of this bug:
             # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
