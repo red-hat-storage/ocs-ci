@@ -17,7 +17,7 @@ The S3 logs upload feature allows you to:
    - A bucket created for storing logs
    - HMAC credentials (access key ID and secret access key)
 
-2. **boto3 library** (included in ocs-ci requirements)
+2. **Installation**: Install ocs-ci with the entrypoint. See the Installing section in [Getting Started](../getting_started.md) for detailed installation instructions.
 
 ## Creating HMAC Credentials in IBM Cloud
 
