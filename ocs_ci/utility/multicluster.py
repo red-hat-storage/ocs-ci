@@ -242,6 +242,15 @@ class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
 
     """
 
+    # RDR upgrade specific order according to the doc
+    UPGRADE_TEST_ORDER = {
+        constants.ORDER_OCP_UPGRADE: 1,
+        constants.ORDER_AFTER_OCS_UPGRADE: 2,
+        constants.ORDER_MCO_UPGRADE: 3,
+        constants.ORDER_DR_HUB_UPGRADE: 4,
+        constants.ORDER_ACM_UPGRADE: 5,
+    }
+
     def __init__(self):
         self.dr_type = "rdr"
         super().__init__()
@@ -253,6 +262,25 @@ class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
 
     def config_init(self):
         super().config_init()
+
+    def reeval_upgrade_order(self, phase_order, zrank, role_rank):
+        """
+        Args:
+            phase_order: The component order which is under upgrade for ex: ORDER_OCP_UPGRADE etc
+            zrank: zone in which the cluster is present
+            role_rank: Rank of the cluster based on role
+
+        Returns:
+            neworder (int): New value with which the test need to be order marked so that RDR specific
+                upgrade test order is preserved
+
+        """
+        # We will take a simple approach of scaling the order number for the test
+        # add number of zeros based on its ranking from UPGRADE_TEST_ORDER
+        neworder = phase_order + zrank + role_rank
+        scaling = self.UPGRADE_TEST_ORDER[phase_order]
+        neworder = neworder * (10**scaling)
+        return neworder
 
 
 multicluster_upgrade_parametrizer = {
