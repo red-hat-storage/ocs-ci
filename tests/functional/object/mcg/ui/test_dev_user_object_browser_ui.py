@@ -137,11 +137,8 @@ class TestDevUserObjectBrowserUI:
         bucket_ui_admin.nav_object_storage_page()
         time.sleep(2)
 
-        s3_login_check = S3LoginForm()
         s3_login_form_visible = bool(
-            s3_login_check.get_elements(
-                s3_login_check.bucket_tab["s3_login_project_dropdown"]
-            )
+            s3_login.get_elements(s3_login.bucket_tab["s3_login_project_dropdown"])
         )
         assert (
             not s3_login_form_visible
