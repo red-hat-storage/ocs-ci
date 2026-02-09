@@ -371,6 +371,7 @@ class TestVMAutoCleanUp:
             old_primary=secondary_cluster_name,
             workload_instance=cnv_workloads[0],
             workload_instances_shared=cnv_workloads,
+            vm_auto_cleanup=True,
         )
 
         # Verify resources creation on primary managed cluster

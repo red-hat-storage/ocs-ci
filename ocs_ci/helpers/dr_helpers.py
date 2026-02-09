@@ -282,6 +282,7 @@ def relocate(
     workload_instance=None,
     multi_ns=False,
     workload_instances_shared=None,
+    vm_auto_cleanup=False,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -339,7 +340,12 @@ def relocate(
             old_primary=old_primary, workload_instance=workload_instance
         )
     else:
-        if discovered_apps and workload_instance and not workload_instances_shared:
+        if (
+            discovered_apps
+            and workload_instance
+            and not workload_instances_shared
+            and not vm_auto_cleanup
+        ):
             logger.info("Doing Cleanup Operations")
             do_discovered_apps_cleanup(
                 drpc_name=workload_placement_name,
@@ -348,7 +354,12 @@ def relocate(
                 workload_dir=workload_instance.workload_dir,
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
-        elif discovered_apps and workload_instance and workload_instances_shared:
+        elif (
+            discovered_apps
+            and workload_instance
+            and workload_instances_shared
+            and not vm_auto_cleanup
+        ):
             logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
             for cnv_wl in workload_instances_shared:
                 do_discovered_apps_cleanup(
