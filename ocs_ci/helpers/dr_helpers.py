@@ -455,8 +455,13 @@ def check_mirroring_status_ok(
             if current_stopped_value in expected_value:
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
                 return True
-            else:
-                return False
+            # Fail fast if count exceeds expected range - indicates leftover resources
+            if current_value > max(expected_value):
+                raise UnexpectedBehaviour(
+                    f"Replaying count ({current_value}) exceeds expected ({max(expected_value)}). "
+                    f"Clean up leftover DRPCs and namespaces before retrying."
+                )
+            return False
 
     return True
 
