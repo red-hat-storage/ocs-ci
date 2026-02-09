@@ -67,7 +67,7 @@ class TestVMAutoCleanUp:
             ),
         ],
     )
-    def test_vm_auto_cleanup_standalone_shared(
+    def test_vm_auto_cleanup(
         self,
         setup_acm_ui,
         protection_type,
