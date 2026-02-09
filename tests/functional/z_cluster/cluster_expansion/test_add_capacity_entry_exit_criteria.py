@@ -28,6 +28,7 @@ from ocs_ci.ocs.resources import pod as pod_helpers, storage_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
+from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
 
 logger = logging.getLogger(__name__)
 
