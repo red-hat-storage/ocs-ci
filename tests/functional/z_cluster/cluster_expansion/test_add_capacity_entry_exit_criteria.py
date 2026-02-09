@@ -20,18 +20,126 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
 from ocs_ci.ocs import cluster as cluster_helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, run_cmd
 from ocs_ci.framework import config
 from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
+from ocs_ci.ocs.node import get_worker_nodes
+import re
+from collections import defaultdict
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
-# TO DO: replace/remove this with actual workloads like couchbase, amq and
-# pgsql later
+
+# gatekeeper function that checks the cpu & ram availability for the testcase before start
+def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
+
+    worker_names = get_worker_nodes()
+    total_free_ram_kb = 0
+    total_free_cpu_m = 0
+
+    namespace_ram = defaultdict(int)
+    namespace_cpu = defaultdict(int)
+    ocp_node_obj = OCP(kind=constants.NODE)
+
+    for name in worker_names:
+        node_data = run_cmd(f"oc describe node {name}")
+        # Normalize hidden characters (like \xa0 from node data to standard spaces)
+        node_data = unicodedata.normalize("NFKD", node_data)
+        node_info = ocp_node_obj.get(resource_name=name)
+
+        # 1. Base Allocatable precison from JSON
+        alloc_ram_kb = int(
+            node_info["status"]["allocatable"]["memory"].replace("Ki", "")
+        )
+        cpu_raw = node_info["status"]["allocatable"]["cpu"]
+        alloc_cpu_m = (
+            int(cpu_raw.replace("m", "")) if "m" in cpu_raw else int(cpu_raw) * 1000
+        )
+
+        # 2. Parse overall reservation percentages
+        mem_res_match = re.search(r"memory\s+\d+\w+\s+\((\d+)%\)", node_data)
+        cpu_res_match = re.search(r"cpu\s+\d+m?\s+\((\d+)%\)", node_data)
+
+        if mem_res_match:
+            total_free_ram_kb += alloc_ram_kb * (
+                1.0 - (int(mem_res_match.group(1)) / 100.0)
+            )
+        if cpu_res_match:
+            total_free_cpu_m += alloc_cpu_m * (
+                1.0 - (int(cpu_res_match.group(1)) / 100.0)
+            )
+
+        # 3. Enhanced Pod Parsing
+        try:
+            pod_section = node_data.split("Non-terminated Pods:")[1].split(
+                "Allocated resources:"
+            )[0]
+            for line in pod_section.strip().split("\n"):
+                parts = line.split()
+                # A valid data line starts with namespace and has units like (0%) or (3%)
+                if len(parts) > 5 and "(" in line and "%" in line:
+                    ns = parts[0]
+                    if ns in ["Namespace", "---------", "(61", "(53"]:
+                        continue
+
+                    # Search the whole line for all occurrences of patterns like '150m' or '2Gi'
+                    # The first two are usually CPU Request/Limit, the next two are Memory Request/Limit
+                    cpu_usage = re.findall(r"(\d+m?)\s+\(", line)
+                    mem_usage = re.findall(r"(\d+[GMK]i)\s+\(", line)
+
+                    if cpu_usage:
+                        raw_c = cpu_usage[0]  # Request is always first
+                        c_val = int(re.search(r"\d+", raw_c).group())
+                        if "m" not in raw_c:
+                            c_val *= 1000
+                        namespace_cpu[ns] += c_val
+
+                    if mem_usage:
+                        raw_m = mem_usage[0]  # Request is always first
+                        m_val = int(re.search(r"\d+", raw_m).group())
+                        if "Gi" in raw_m:
+                            m_val *= 1024 * 1024
+                        elif "Mi" in raw_m:
+                            m_val *= 1024
+                        namespace_ram[ns] += m_val
+        except Exception as e:
+            logger.debug(f"Row skip: {e}")
+
+    actual_free_ram_gb = total_free_ram_kb / (1024 * 1024)
+    actual_free_cpu = total_free_cpu_m / 1000
+    import pdb
+
+    pdb.set_trace()
+    logger.info(
+        f"Summary -> Free RAM: {actual_free_ram_gb:.2f}GB | Free CPU: {actual_free_cpu:.2f} Cores"
+    )
+
+    if actual_free_ram_gb < needed_ram_gb:
+        header = "{:<45} | {:<12} | {:<12}".format(
+            "Namespace", "RAM Req(GB)", "CPU Req(Cores)"
+        )
+        table_rows = [header, "-" * 75]
+
+        for ns in sorted(
+            namespace_ram.keys(), key=lambda x: namespace_ram[x], reverse=True
+        ):
+            ram_gb = namespace_ram[ns] / (1024 * 1024)
+            cpu_c = namespace_cpu[ns] / 1000
+            if ram_gb > 0.01:  # Show everything significant
+                table_rows.append(
+                    "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
+                )
+
+        logger.error(
+            f"RESOURCE GATEKEEPER FAILED: Need {needed_ram_gb}GB, have {actual_free_ram_gb:.2f}GB."
+        )
+        logger.error("\n" + "\n".join(table_rows))
+        pytest.skip(f"Insufficient Cluster RAM: {actual_free_ram_gb:.2f}GB available.")
 
 
 @brown_squad
@@ -48,6 +156,14 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 class TestAddCapacity(ManageTest):
+    @pytest.fixture(autouse=True)
+    def resource_check(self):
+        """
+        Gatekeeper: Runs before every test in this class to ensure hardware capacity.
+        30 pods * 2Gi = 60Gi + 5Gi buffer = 65Gi
+        """
+        check_cluster_resource_availability(needed_ram_gb=65, needed_cpu_cores=6)
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
