@@ -539,6 +539,11 @@ external_mode_required = pytest.mark.skipif(
     reason="Test will run on External Mode cluster only",
 )
 
+fusion_access_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("fusion_access") is not True,
+    reason="Test will run on Fusion Access cluster only",
+)
+
 skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "aws"
     and config.DEPLOYMENT.get("local_storage") is True,
