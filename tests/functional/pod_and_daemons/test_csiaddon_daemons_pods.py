@@ -168,22 +168,34 @@ class TestCSIADDonDaemonset(ManageTest):
             "CSI-addon DaemonSet pods using pod network instead of host-network"
         )
 
-    @tier1
-    @green_squad
-    @polarion_id("OCS-7375")
-    def test_csi_addon_daemonset_desired_vs_ready(self):
+    @pytest.mark.parametrize(
+        argnames=["daemonset_name"],
+        argvalues=[
+            pytest.param(
+                constants.DAEMONSET_CSI_RBD_CSI_ADDONS,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7375")],
+            ),
+            pytest.param(
+                constants.DAEMONSET_CSI_CEPHFS_CSI_ADDONS,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7504")],
+            ),
+        ],
+    )
+    def test_csi_addon_daemonset_desired_vs_ready(self, daemonset_name):
         """
         Verify that CSI addon DaemonSet has desired number of ready and available pods
         Step:
         1. Get CSI-addon DaemonSet status
         2. Compare desired Vs ready pod counts
         3. Verify all pods are available
+        OCS-7504 is part verification of DFBUGS_5082 automation
+
         """
         logger.info(
             "Validating CSI-addon DaemonSet has correct number of Desired, ready and available pods"
         )
         csi_addon_daemonset = DaemonSet(
-            resource_name=constants.DAEMONSET_CSI_RBD_CSI_ADDONS,
+            resource_name=daemonset_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         csi_addon_daemonset_status = csi_addon_daemonset.get_status()
