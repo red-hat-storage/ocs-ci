@@ -218,13 +218,28 @@ class TestCSIADDonDaemonset(ManageTest):
     @tier1
     @green_squad
     @polarion_id("OCS-7305")
-    def test_csi_addon_pods_on_worker_nodes(self):
+    @pytest.mark.parametrize(
+        argnames=["pod_label"],
+        argvalues=[
+            pytest.param(
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7305")],
+            ),
+            pytest.param(
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7505")],
+            ),
+        ],
+    )
+    def test_csi_addon_pods_on_worker_nodes(self, pod_label):
         """
         Verify that the CSI addon pods are running on each worker node
         step:
         1. Get all worker nodes (including master nodes that also have worker role)
         2. Get CSI addon daemonset pods
         3. Verify each worker node has a CSI addon pod
+        OCS-7505 is part verification of DFBUGS_5082 automation
+
         """
         logger.info("Validating csi addon pods on each worker node")
         namespace = config.ENV_DATA["cluster_namespace"]
@@ -239,9 +254,7 @@ class TestCSIADDonDaemonset(ManageTest):
             f"Current available worker nodes (including master nodes with worker role) are {worker_nodes_names}"
         )
 
-        csi_addon_pods = get_pods_having_label(
-            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
-        )
+        csi_addon_pods = get_pods_having_label(pod_label, namespace)
         assert len(csi_addon_pods) > 0, "csi addon pods not found"
         logger.info(f"Found {len(csi_addon_pods)} csi addon pods")
 
