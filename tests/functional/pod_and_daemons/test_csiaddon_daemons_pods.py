@@ -90,25 +90,42 @@ class TestCSIADDonDaemonset(ManageTest):
             ], f"expected label {pod_label} not found in daemonset labels"
         logger.info("CSI addon daemonset has correct labels")
 
-    @acceptance
-    @tier1
-    @green_squad
-    @polarion_id("OCS-7374")
-    def test_csi_addon_pods_containers_ready(self):
+    @pytest.mark.parametrize(
+        argnames=["pod_label"],
+        argvalues=[
+            pytest.param(
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[
+                    acceptance,
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7374"),
+                ],
+            ),
+            pytest.param(
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[
+                    acceptance,
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7503"),
+                ],
+            ),
+        ],
+    )
+    def test_csi_addon_pods_containers_ready(self, pod_label):
         """
         Verify that all containers in CSI-addon pods are in ready status
         Steps:
         1. Get all CSI Addons Pods
         2. Check each container in each pod
         3. Verify Container readiness status of each pod
-        OCS-7501 is part verification of DFBUGS_5082 automation
+        OCS-7503 is part verification of DFBUGS_5082 automation
 
         """
         logger.info("Validating containers in csi addon pods having ready status")
         namespace = config.ENV_DATA["cluster_namespace"]
-        csi_addon_pods = get_pods_having_label(
-            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
-        )
+        csi_addon_pods = get_pods_having_label(pod_label, namespace)
         for pod in csi_addon_pods:
             container_status_list = pod.get("status").get("containerStatuses")
             for container_status in container_status_list:
@@ -133,6 +150,7 @@ class TestCSIADDonDaemonset(ManageTest):
     def test_csi_addon_pods_uses_pod_network(self, pod_label):
         """
         Verify that CSI-addon used pod network instead of host network
+        OCS-7502 is part verification of DFBUGS_5082 automation
 
         """
 
