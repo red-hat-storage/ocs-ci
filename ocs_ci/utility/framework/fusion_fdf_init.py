@@ -216,8 +216,10 @@ class Initializer(object):
         props["rp_launch_description"] = reporting.get_rp_launch_description()
         props["rp_launch_url"] = config.REPORTING.get("rp_launch_url")
         attributes = reporting.get_rp_launch_attributes()
+        ignored_keys = ["ocs_version"]
         for key, value in attributes.items():
-            props[f"rp_{key}"] = value
+            if key not in ignored_keys:
+                props[f"rp_{key}"] = value
 
         # Fusion Pre-Release properties
         if config.DEPLOYMENT.get("fusion_pre_release"):
@@ -378,6 +380,7 @@ def add_post_deployment_props(test_suite: TestSuite):
         value = config.ENV_DATA.get(key)
         if value:
             test_suite.add_property(key, value)
+            test_suite.add_property(f"rp_{key}", value)
 
     # config.DEPLOYMENT values
     for key in ["fdf_pre_release_image_digest"]:
