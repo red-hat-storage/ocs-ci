@@ -425,6 +425,7 @@ higher priority).
 * `disable_default_sources` - similar to clusters.<cluster name>.disable_default_sources but applied to the Agent hosted cluster
 * `auto_repair` - similar to clusters.<cluster name>.auto_repair but applied to the Agent hosted cluster
 * * `ntp_server` - NTP server to use in compute nodes in case of mon skew detected in ceph health during deployment
+* `sno` - explicitly mark single node cluster
 
 #### UPGRADE
 

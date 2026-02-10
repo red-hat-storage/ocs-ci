@@ -7,13 +7,14 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'us-east'
   base_domain: 'ibmcloud2.qe.rh-ocs.com'
-  master_instance_type: 'bx2-8x32'
-  # master_instance_type: 'bx2-16x64'
+  # master_instance_type: 'bx2-8x32'
+  master_instance_type: 'bx2-16x64'
   worker_instance_type: 'bx2-8x32'
   master_availability_zones:
     - 'us-east-1'
   master_replicas: 1
   worker_replicas: 0
+  sno: true
 
 # The following values need to be set in a separate config and passed to ocs-ci in
 # order to deploy OCP/OCS cluster on IBM Cloud using IPI.
