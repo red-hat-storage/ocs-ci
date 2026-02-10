@@ -24,7 +24,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_size
 
 log = logging.getLogger(__name__)
 
@@ -135,4 +135,41 @@ class TestAzurePerformancePlusCSIParameters(ManageTest):
         log.info(
             f"Successfully verified all {len(osd_pvc_objs)} OSD PVCs have "
             f"Performance Plus CSI parameters configured correctly"
+        )
+
+    @polarion_id("OCS-7486")
+    @runs_on_provider
+    def test_osd_size_rounded_to_513_gib_when_performance_plus_enabled(self):
+        """
+        Verify that when Azure Performance Plus is enabled, OSD PVCs have size >= 513 GiB.
+
+        If deployment is done with OSD size 512 GiB, it is rounded up to 513 GiB by OCP
+        because Azure Performance Plus requires disks of 513 GiB or larger.
+        """
+        log.info(
+            "Verifying OSD PVC sizes are >= %s GiB when Azure Performance Plus is enabled",
+            constants.AZURE_PERFORMANCE_PLUS_MIN_OSD_SIZE_GIB,
+        )
+        osd_pvc_objs = get_all_pvc_objs(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=constants.OSD_PVC_GENERIC_LABEL,
+        )
+        assert osd_pvc_objs, "No OSD PVCs found in the cluster"
+        for osd_pvc_obj in osd_pvc_objs:
+            pvc_size_gib = get_pvc_size(osd_pvc_obj, convert_size=1024)
+            log.info(
+                "OSD PVC %s requested size: %s GiB (min required: %s GiB)",
+                osd_pvc_obj.name,
+                pvc_size_gib,
+                constants.AZURE_PERFORMANCE_PLUS_MIN_OSD_SIZE_GIB,
+            )
+            assert pvc_size_gib >= constants.AZURE_PERFORMANCE_PLUS_MIN_OSD_SIZE_GIB, (
+                f"OSD PVC {osd_pvc_obj.name} size {pvc_size_gib} GiB is less than "
+                f"minimum {constants.AZURE_PERFORMANCE_PLUS_MIN_OSD_SIZE_GIB} GiB required for Azure Performance Plus. "
+                "When azure_performance_plus is true, OSD size 512 GiB must be rounded to 513 GiB."
+            )
+        log.info(
+            "All %s OSD PVCs have size >= %s GiB as required for Azure Performance Plus",
+            len(osd_pvc_objs),
+            constants.AZURE_PERFORMANCE_PLUS_MIN_OSD_SIZE_GIB,
         )
