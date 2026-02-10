@@ -209,6 +209,7 @@ def is_hosted_cluster(cluster_name=None):
     """
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
     config.switch_to_provider()
     ocp_obj = OCP(
         kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
