@@ -3,6 +3,7 @@ import time
 
 import pytest
 import logging
+import subprocess
 
 from datetime import datetime, timezone
 
@@ -12,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier2,
 )
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.helpers.stretchcluster_helper import (
@@ -20,17 +22,24 @@ from ocs_ci.helpers.stretchcluster_helper import (
     verify_data_corruption,
     verify_vm_workload,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    CephHealthException,
+    NoRunningCephToolBoxException,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.resources.pod import (
     get_not_running_pods,
     get_deployment_name,
     wait_for_pods_by_label_count,
     get_all_pods,
     get_pod_node,
+    restart_pods_having_label,
 )
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
+
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +167,34 @@ class TestMonAndOSDFailures:
 
     """
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        If ceph health warnning is observed due to partitioning restart mon pods.
+        And validate ceph health.
+        """
+
+        def finalizer():
+            logger.info("-----test teardown-----")
+            network_partition_warning = "network partition detected"
+            try:
+                ceph_health_check(fix_ceph_health=True)
+            except (
+                CephHealthException,
+                CommandFailed,
+                subprocess.TimeoutExpired,
+                NoRunningCephToolBoxException,
+            ) as e:
+                logger.error(f"Ceph health check failed after failure injection. : {e}")
+                if network_partition_warning in str(e).lower():
+                    logger.info("Network partition detected — restarting mon pods")
+                    restart_pods_having_label(label=constants.MON_APP_LABEL)
+            logger.info("Checking for Ceph Health OK")
+            ceph_health_check()
+
+        request.addfinalizer(finalizer)
+
+    # @pytest.mark.usefixtures("mute_mon_netsplit_ceph_warning")
     @polarion_id("OCS-5059")
     def test_single_mon_failures(self):
         """
@@ -193,6 +230,7 @@ class TestMonAndOSDFailures:
             label=constants.MON_APP_LABEL, expected_count=5, timeout=300
         )
 
+    # @pytest.mark.usefixtures("mute_mon_netsplit_ceph_warning")
     @polarion_id("OCS-5060")
     def test_both_mon_failure(self):
         """
@@ -233,6 +271,7 @@ class TestMonAndOSDFailures:
             label=constants.MON_APP_LABEL, expected_count=5, timeout=300
         )
 
+    # @pytest.mark.usefixtures("mute_mon_netsplit_ceph_warning")
     @polarion_id("OCS-5061")
     def test_single_osd_failure(self):
         """
