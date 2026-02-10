@@ -43,7 +43,7 @@ class TestCSIADDonDaemonset(ManageTest):
             pytest.param(
                 constants.DAEMONSET_CSI_CEPHFS_CSI_ADDONS,
                 constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
-                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-xxx-CEPHFS")],
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7501")],
             ),
         ],
     )
@@ -101,6 +101,7 @@ class TestCSIADDonDaemonset(ManageTest):
         1. Get all CSI Addons Pods
         2. Check each container in each pod
         3. Verify Container readiness status of each pod
+        OCS-7501 is part verification of DFBUGS_5082 automation
 
         """
         logger.info("Validating containers in csi addon pods having ready status")
@@ -116,21 +117,30 @@ class TestCSIADDonDaemonset(ManageTest):
                 ], f"container {container_status['name']} in pod {pod.name} is not ready"
         logger.info("All containers in CSI-addon DaemonSet pods are ready")
 
-    @tier1
-    @green_squad
-    @polarion_id("OCS-7373")
-    def test_csi_addon_pods_uses_pod_network(self):
+    @pytest.mark.parametrize(
+        argnames=["pod_label"],
+        argvalues=[
+            pytest.param(
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7373")],
+            ),
+            pytest.param(
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7502")],
+            ),
+        ],
+    )
+    def test_csi_addon_pods_uses_pod_network(self, pod_label):
         """
         Verify that CSI-addon used pod network instead of host network
+
         """
 
         logger.info(
             "Validating csi addon pod using pod-network instead of host network"
         )
         namespace = config.ENV_DATA["cluster_namespace"]
-        csi_addon_pods = get_pods_having_label(
-            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
-        )
+        csi_addon_pods = get_pods_having_label(pod_label, namespace)
         for pod in csi_addon_pods:
             host_network = pod.get("spec").get("hostNetwork", False)
             assert (
