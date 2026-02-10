@@ -298,6 +298,7 @@ def relocate(
         workload_instance (object): Discovered App instance to get namespace and dir location
         multi_ns (bool): Multi Namespace
         workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
+        vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
 
     """
     restore_index = config.cur_index
@@ -2406,7 +2407,7 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
             "There is no lastKubeObjectProtectionTime. "
             "Verify that certificates are included correctly in the Ramen Hub configuration map."
         )
-    # Verify lastGroupSyncTime
+    # Verify lastKubeObjectProtectionTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
     last_kubeobject_protection_time_formatted = datetime.strptime(
         last_kubeobject_protection_time, time_format

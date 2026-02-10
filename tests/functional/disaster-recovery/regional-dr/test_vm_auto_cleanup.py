@@ -168,6 +168,25 @@ class TestVMAutoCleanUp:
             f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
         )
 
+        # Download and extract the virtctl binary to bin_dir. Skips if already present.
+        CNVInstaller().download_and_extract_virtctl_binary()
+
+        # Creating a file (file1) on VM and calculating its MD5sum
+        for cnv_wl in cnv_workloads:
+            md5sum_original.append(
+                run_dd_io(
+                    vm_obj=cnv_wl.vm_obj,
+                    file_path=vm_filepaths[0],
+                    username=cnv_wl.vm_username,
+                    verify=True,
+                )
+            )
+
+        for cnv_wl, md5sum in zip(cnv_workloads, md5sum_original):
+            logger.info(
+                f"Original checksum of file {vm_filepaths[0]} on VM {cnv_wl.workload_name}: {md5sum}"
+            )
+
         scheduling_interval = dr_helpers.get_scheduling_interval(
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
@@ -181,6 +200,11 @@ class TestVMAutoCleanUp:
         logger.info("Checking for lastGroupSyncTime")
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
         logger.info(f"Primary cluster name before failover is {primary_cluster_name}")
+
+        logger.info("Checking for lastKubeObjectProtectionTime")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
+        )
 
         config.switch_to_cluster_by_name(primary_cluster_name)
 
@@ -211,29 +235,6 @@ class TestVMAutoCleanUp:
             discovered_apps=True,
             resource_name=resource_name,
         )
-
-        # Download and extract the virtctl binary to bin_dir. Skips if already present.
-        CNVInstaller().download_and_extract_virtctl_binary()
-
-        # Creating a file (file1) on VM and calculating its MD5sum
-        for cnv_wl in cnv_workloads:
-            md5sum_original.append(
-                run_dd_io(
-                    vm_obj=cnv_wl.vm_obj,
-                    file_path=vm_filepaths[0],
-                    username=cnv_wl.vm_username,
-                    verify=True,
-                )
-            )
-
-        for cnv_wl, md5sum in zip(cnv_workloads, md5sum_original):
-            logger.info(
-                f"Original checksum of file {vm_filepaths[0]} on VM {cnv_wl.workload_name}: {md5sum}"
-            )
-
-        wait_time = 2 * scheduling_interval  # Time in minutes
-        logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
 
         if primary_cluster_down:
             # Shutdown primary managed cluster nodes
@@ -335,7 +336,7 @@ class TestVMAutoCleanUp:
                 should_exist=False,
             )
             dr_helpers.wait_for_resource_existence(
-                kind=constants.VM_DATAVOLUME,
+                kind=constants.VM_VOLUME_DV,
                 namespace=cnv_wl.workload_namespace,
                 should_exist=False,
             )
@@ -348,6 +349,11 @@ class TestVMAutoCleanUp:
 
         logger.info("Checking for lastGroupSyncTime")
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+
+        logger.info("Checking for lastKubeObjectProtectionTime")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
+        )
 
         logger.info(f"Primary cluster name before failover is {primary_cluster_name}")
 
@@ -423,7 +429,7 @@ class TestVMAutoCleanUp:
                 should_exist=False,
             )
             dr_helpers.wait_for_resource_existence(
-                kind=constants.VM_DATAVOLUME,
+                kind=constants.VM_VOLUME_DV,
                 namespace=cnv_wl.workload_namespace,
                 should_exist=False,
             )
@@ -435,6 +441,11 @@ class TestVMAutoCleanUp:
 
         logger.info("Checking for lastGroupSyncTime")
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+
+        logger.info("Checking for lastKubeObjectProtectionTime")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
+        )
 
         logger.info(f"Primary cluster name before failover is {primary_cluster_name}")
 
@@ -472,3 +483,8 @@ class TestVMAutoCleanUp:
 
         logger.info("Checking for lastGroupSyncTime post relocate...")
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+
+        logger.info("Checking for lastKubeObjectProtectionTime")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
+        )
