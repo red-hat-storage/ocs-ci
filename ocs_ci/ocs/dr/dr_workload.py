@@ -2090,7 +2090,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 log.info("DRPC deleted")
             log.info("Deleting Placement")
             run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-plmnt-1"
+                f"oc delete placement -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-placement-1"
             )
 
         for cluster in get_non_acm_cluster_config():
