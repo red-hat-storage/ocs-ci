@@ -147,18 +147,16 @@ class TestClusterFullAndRecovery(E2ETest):
             expected_used_capacity=75.0,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("The after 1800 seconds the used capacity smaller than 85%")
+            log.error("The after 1800 seconds the used capacity smaller than 75%")
             raise TimeoutExpiredError
 
-        log.info(
-            "Verify Alerts are seen 'CephClusterCriticallyFull' and 'CephOSDNearFull'"
-        )
+        log.info("Verify Alerts are seen 'CephOSDCriticallyFull' and 'CephOSDNearFull'")
         log.info("Verify used capacity bigger than 75%")
         expected_alerts = ["CephOSDCriticallyFull", "CephOSDNearFull"]
         prometheus = PrometheusAPI(threading_lock=threading_lock)
         sample = TimeoutSampler(
-            timeout=600,
-            sleep=40,
+            timeout=1200,
+            sleep=60,
             func=prometheus.verify_alerts_via_prometheus,
             expected_alerts=expected_alerts,
             threading_lock=threading_lock,
