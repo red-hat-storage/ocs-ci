@@ -2784,9 +2784,9 @@ def validate_protection_label(kind, namespace, protection_name=None):
     label_to_validate = constants.RDR_VM_PROTECTION_LABEL
     label_validation_failed = False
     for item in resource_items:
-        protection_name_in_yaml = item.get("metadata", {}).get("labels", " ")[
-            label_to_validate
-        ]
+        protection_name_in_yaml = (
+            item.get("metadata", {}).get("labels", {}).get(label_to_validate, " ")
+        )
 
         if protection_name_in_yaml != protection_name:
             logger.info(f"Label is not added to {kind} {item}")
