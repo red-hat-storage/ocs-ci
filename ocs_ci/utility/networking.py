@@ -121,10 +121,8 @@ def create_drs_machine_config():
     )
     interfaces_yaml = load_yaml(interfaces_path)
     worker = get_worker_nodes()[0]
-    network_data = (
-        config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
-    )
-    interface_name = get_network_interface_by_ip(worker, network_data['private_ip'])
+    network_data = config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
+    interface_name = get_network_interface_by_ip(worker, network_data["private_ip"])
     interfaces_yaml["interfaces"][0]["bridge"]["port"][0]["name"] = interface_name
     interfaces_yaml["interfaces"][1]["name"] = interface_name
     interfaces_yaml_string = yaml.dump(interfaces_yaml)
