@@ -278,26 +278,34 @@ class TestCSIADDonDaemonset(ManageTest):
         ), f"worker node {pod_missed_node} do not have CSI addon pods"
         logger.info("CSI addon pods running on each worker node")
 
-    @tier1
-    @green_squad
-    @polarion_id("OCS-7387")
-    def test_csi_addon_pod_restart(self):
+    @pytest.mark.parametrize(
+        argnames=["pod_label"],
+        argvalues=[
+            pytest.param(
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7387")],
+            ),
+            pytest.param(
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7506")],
+            ),
+        ],
+    )
+    def test_csi_addon_pod_restart(self, pod_label):
         """
         Restart a CSI-addons pod and validate it restored to running state.
+        OCS-7506 is part verification of DFBUGS_5082 automation
+
         """
         namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         pod_obj = ocp.OCP(kind="Pod", namespace=namespace)
 
-        csi_addons_pod_objs = get_pods_having_label(
-            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
-        )
+        csi_addons_pod_objs = get_pods_having_label(pod_label, namespace)
         pod_data = random.choice(csi_addons_pod_objs)
         pod_obj.delete(resource_name=pod_data["metadata"]["name"])
         time.sleep(5)
 
-        csi_addon_pod_new = get_pods_having_label(
-            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
-        )
+        csi_addon_pod_new = get_pods_having_label(pod_label, namespace)
         csi_addon_pod_names_list = [
             pod_data["metadata"]["name"] for pod_data in csi_addon_pod_new
         ]
