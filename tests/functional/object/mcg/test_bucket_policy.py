@@ -47,6 +47,7 @@ from ocs_ci.ocs.bucket_utils import (
     list_uploaded_parts,
     complete_multipart_upload,
     craft_s3_command,
+    get_bucket_policy_user_list,
 )
 from ocs_ci.ocs.defaults import website_config, index, error
 from ocs_ci.ocs.constants import (
@@ -293,7 +294,7 @@ class TestS3BucketPolicy(MCGTest):
         obc_obj = OBC(obc_name)
 
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["GetObject"],
             resources_list=[obc_obj.bucket_name],
         )
@@ -323,7 +324,7 @@ class TestS3BucketPolicy(MCGTest):
         actions = list(map(lambda action: "s3:%s" % action, actions_list))
 
         modified_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=actions_list,
             resources_list=[obc_obj.bucket_name],
         )
@@ -398,7 +399,7 @@ class TestS3BucketPolicy(MCGTest):
         obc_obj = OBC(obc_name)
 
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["PutBucketPolicy"],
             resources_list=[obc_obj.bucket_name],
         )
@@ -411,7 +412,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Verifying Put bucket policy by user by changing the actions to GetBucketPolicy & DeleteBucketPolicy
         user_generated_policy = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["GetBucketPolicy", "DeleteBucketPolicy"],
             resources_list=[obc_obj.bucket_name],
         )
@@ -465,7 +466,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
-            user_list=[obc_obj.obc_account],
+            user_list=[get_bucket_policy_user_list(obc_obj)],
             actions_list=(
                 ["PutObject"]
                 if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
@@ -635,7 +636,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets policy with Put/Get bucket website actions
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=bucket_website_action_list,
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
             effect="Allow",
@@ -699,7 +700,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin modifies policy to allow DeleteBucketWebsite action
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["DeleteBucketWebsite"],
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
             effect="Allow",
@@ -737,7 +738,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets a policy on OBC bucket to allow versioning related actions
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=bucket_version_action_list,
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
         )
@@ -769,7 +770,7 @@ class TestS3BucketPolicy(MCGTest):
         ), "Failed: GetBucketVersioning"
 
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["PutBucketVersioning"],
             resources_list=[obc_obj.bucket_name],
         )
@@ -829,7 +830,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets policy with Effect: Deny on obc bucket with obc-account principal
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["GetObject"],
             resources_list=[f"{obc_obj.bucket_name}/{object_key}"],
             effect="Deny",
@@ -866,7 +867,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets a new policy on same obc bucket with same account but with different action and resource
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["DeleteObject"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
             effect="Deny",
@@ -1032,7 +1033,7 @@ class TestS3BucketPolicy(MCGTest):
         # Policy tests invalid/non-existent S3 Action. ie: GetContent
         elif policy_name == "invalid_action":
             bucket_policy_generated = gen_bucket_policy(
-                user_list=obc_obj.obc_account,
+                user_list=get_bucket_policy_user_list(obc_obj),
                 actions_list=[policy_param],
                 resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
                 effect="Allow",
@@ -1042,7 +1043,7 @@ class TestS3BucketPolicy(MCGTest):
         # Policy tests invalid/non-existent resource/bucket. ie: new_bucket
         elif policy_name == "invalid_resource":
             bucket_policy_generated = gen_bucket_policy(
-                user_list=obc_obj.obc_account,
+                user_list=get_bucket_policy_user_list(obc_obj),
                 actions_list=["GetObject"],
                 resources_list=[policy_param],
                 effect="Allow",
@@ -1082,7 +1083,7 @@ class TestS3BucketPolicy(MCGTest):
         # Set bucket policy for obc_bucket
         bucket_policy_generated = gen_bucket_policy(
             principal_property="NotPrincipal",
-            user_list=[obc_obj.obc_account],
+            user_list=[get_bucket_policy_user_list(obc_obj)],
             actions_list=["PutObject"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
             effect="Deny",
@@ -1131,7 +1132,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Set bucket policy for user
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj1.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj1),
             action_property="NotAction",
             actions_list=["DeleteBucket"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
@@ -1232,7 +1233,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Set bucket policy for user
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["*"],
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
             resource_property="NotResource",
@@ -1367,7 +1368,7 @@ class TestS3BucketPolicy(MCGTest):
         object_key = "MpuObjKey"
 
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=[
                 "ListBucketMultipartUploads",
                 "ListMultipartUploadParts",
@@ -1683,7 +1684,7 @@ class TestNoobaaUpgradeWithBucketPolicy:
 
         # Generate bucket policy
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=get_bucket_policy_user_list(obc_obj),
             actions_list=["PutBucketPolicy", "GetBucketPolicy", "DeleteBucketPolicy"],
             resources_list=[obc_obj.bucket_name],
         )

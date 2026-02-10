@@ -78,6 +78,8 @@ class OBC(object):
             namespace=self.namespace, kind="ObjectBucket", resource_name=self.ob_name
         ).get()
         self.obc_account = ob_obj.get("spec").get("additionalState").get("account")
+        self.obc_arn = ob_obj.get("spec").get("additionalState").get("arn")
+
         secret_obc_obj = OCP(
             kind="secret", namespace=self.namespace, resource_name=self.obc_name
         ).get()
