@@ -922,7 +922,7 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
     return True
 
 
-def navigate_using_fleet_virtulization(acm_obj):
+def navigate_using_fleet_virtualization(acm_obj):
     """
     Starting ACM 2.15, VMs page from the ACM console has been removed and is integrated
     with the Virtulization Operator which is required to be installed on the ACM hub cluster and

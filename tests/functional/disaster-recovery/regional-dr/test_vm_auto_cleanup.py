@@ -20,7 +20,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
     check_or_assign_drpolicy_for_discovered_vms_via_ui,
-    navigate_using_fleet_virtulization,
+    navigate_using_fleet_virtualization,
 )
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
@@ -89,10 +89,10 @@ class TestVMAutoCleanUp:
         5. Validate the lastGroupSyncTime
         6. Perform Failover
         7. Validate the DR resource creation on Secondary
-        7. Validate automated resource clean up on the failed cluster
-        8. Perform relocate
-        9. Validate the DR resource creation on Primary
-        10. Validate automated resource clean up on the secondary cluster
+        8. Validate automated resource clean up on the failed cluster
+        9. Perform relocate
+        10. Validate the DR resource creation on Primary
+        11. Validate automated resource clean up on the secondary cluster
 
         Test has been parametrized to run with standalone and shared protection type.
 
@@ -139,7 +139,7 @@ class TestVMAutoCleanUp:
             f"Primary managed cluster name is {cnv_workloads[0].preferred_primary_cluster}"
         )
 
-        assert navigate_using_fleet_virtulization(acm_obj)
+        assert navigate_using_fleet_virtualization(acm_obj)
         for i, vm in enumerate(cnv_workloads):
             standalone_flag = (not protection_type == "shared") or (i == 0)
             assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
