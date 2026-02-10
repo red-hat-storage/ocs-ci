@@ -315,6 +315,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         ],
     )
     @skipif_external_mode
+    @skipif_ibm_cloud
     def test_automated_recovery_from_stopped_node_and_start(
         self, nodes, additional_node
     ):
