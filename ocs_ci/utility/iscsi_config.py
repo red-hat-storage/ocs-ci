@@ -6,7 +6,7 @@ import logging
 import re
 
 from ocs_ci.ocs import node, ocp, constants
-from ocs_ci.ocs.exceptions import NodeNotFoundError
+from ocs_ci.ocs.exceptions import NodeNotFoundError, UnexpectedBehaviour
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 
@@ -248,7 +248,7 @@ def configure_initiators(worker_node_names):
 
     """
 
-    log.info("\n=== Configuring Worker Nodes as Initiators ===")
+    log.info("=== Configuring Worker Nodes as Initiators ===")
 
     ocp_obj = ocp.OCP()
     target_ip = config.ENV_DATA["iscsi_target_ip"]
@@ -315,7 +315,7 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
     log.info("STEP 3: Removing ACLs from target")
 
     for worker_iqn in worker_iqns:
-        log.info(f"\nRemoving ACL: {worker_iqn}")
+        log.info(f"Removing ACL: {worker_iqn}")
 
         # Delete ACL (this also removes all LUN mappings)
         delete_acl_cmd = (
@@ -331,7 +331,7 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
     # Save configuration
     save_cmd = "targetcli saveconfig 2>&1"
     target_node_ssh.exec_cmd(save_cmd)
-    log.info("\n Configuration saved")
+    log.info("Configuration saved")
 
 
 def wipe_luns_on_target(target_node_ssh, target_iqn, username):
@@ -416,7 +416,7 @@ def wipe_luns_on_target(target_node_ssh, target_iqn, username):
     )
     # Wipe only the devices collected from LocalDisks
     for device in devices_to_wipe:
-        log.info(f"\n  Device: {device}")
+        log.info(f" Device: {device}")
 
         # Wipe device
         wipe_cmd = f"dd if=/dev/zero of={device} bs=1M count=100 2>&1"
@@ -446,12 +446,12 @@ def verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns):
         worker_iqns (list): List of IQNs of worker nodes.
 
     Raises:
-        Exception: If there is an error while verifying the cleanup.
+        UnexpectedBehaviour: If an ACL still exists after cleanup (verification failed).
     """
     log.info("STEP 5: Verifying cleanup")
 
     # Check ACLs on target
-    log.info("\nChecking target ACLs...")
+    log.info("Checking target ACLs...")
     for iqn in worker_iqns:
         check_cmd = f"targetcli /iscsi/{target_iqn}/tpg1/acls/{iqn} ls 2>&1"
         success, stdout, stderr = target_node_ssh.exec_cmd(check_cmd)
@@ -459,7 +459,7 @@ def verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns):
         if "No such path" in stdout:
             log.info(f" ACL for {iqn} successfully removed")
         else:
-            raise Exception(f"ACL for {iqn} still exists:\n{stdout}")
+            raise UnexpectedBehaviour(f"ACL for {iqn} still exists:{stdout}")
     log.info(" All ACLs verified as removed.")
 
 
@@ -500,12 +500,10 @@ def cleanup_iscsi_target(
         # Step 3: Verify cleanup
         verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns)
 
-        log.info("\n" + "=" * 70)
         log.info("CLEANUP COMPLETED SUCCESSFULLY")
-        log.info("=" * 70)
 
     except Exception as e:
-        log.error(f"\n Cleanup failed: {e}")
+        log.error(f"Cleanup failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -593,7 +591,7 @@ def verify_iscsi_sessions(worker_node_names, target_iqn):
         dict: Dictionary with node name as key and verification result as value.
     """
     results = {}
-    log.info("\n=== Verifying iSCSI Sessions ===")
+    log.info("=== Verifying iSCSI Sessions ===")
 
     ocp_obj = ocp.OCP()
 
@@ -635,7 +633,7 @@ def verify_iscsi_devices(worker_node_names, target_iqn):
         dict: Dictionary with node name as key and device information as value.
     """
     results = {}
-    log.info("\n=== Verifying iSCSI Devices ===")
+    log.info("=== Verifying iSCSI Devices ===")
 
     ocp_obj = ocp.OCP()
 
@@ -705,7 +703,7 @@ def verify_iscsi_target_connectivity(worker_node_names, target_ip, target_port=3
         dict: Dictionary with node name as key and connectivity result as value.
     """
     results = {}
-    log.info("\n=== Verifying iSCSI Target Connectivity ===")
+    log.info("=== Verifying iSCSI Target Connectivity ===")
 
     ocp_obj = ocp.OCP()
 
