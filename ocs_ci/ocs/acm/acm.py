@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     get_running_acm_version,
     string_chunkify,
     run_cmd,
+    exec_cmd,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
@@ -972,7 +973,10 @@ def discover_hosted_clusters():
         resource_name="hypershift-addon-deploy-config"
     )["spec"]["customizedVariables"]
 
-    discovery_prefix_data_to_add = {"name": "discoveryPrefix", "value": "dr"}
+    discovery_prefix_data_to_add = {
+        "name": "discoveryPrefix",
+        "value": constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX,
+    }
     spec_data.append(discovery_prefix_data_to_add)
     addondeploymentconfig.patch(
         resource_name="hypershift-addon-deploy-config",
@@ -1027,9 +1031,10 @@ def install_clusteradm():
         run_cmd("clusteradm")
     except (CommandFailed, FileNotFoundError):
         # Install/reinstall clusteradm
-        run_cmd(
+        exec_cmd(
             "bash -c 'curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh "
-            "| bash'"
+            "| bash'",
+            shell=True,
         )
 
 
