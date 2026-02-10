@@ -5774,7 +5774,13 @@ def setup_ui_fixture(request):
 
 @pytest.fixture(scope="session")
 def setup_acm_ui(request):
-    return setup_acm_ui_fixture(request)
+    marker = request.node.get_closest_marker("via_ui")
+    # Check if marker exists and has True value
+    via_ui = marker.args[0] if (marker and marker.args) else False
+    if via_ui is True:
+        return setup_acm_ui_fixture(request)
+    log.info("Skipping Setting Up ACM UI")
+    return None
 
 
 def setup_acm_ui_fixture(request):
