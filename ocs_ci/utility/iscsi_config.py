@@ -136,6 +136,9 @@ def get_worker_iqns(worker_node_names):
                         log.info(
                             f"Worker {node_ip} IQN: {stdout.strip()} (via SSH fallback)"
                         )
+                else:
+                    log.error(f"Node IP is none or empty for {node_name}")
+                    raise NodeNotFoundError(f"Node IP is none or empty for {node_name}")
             except Exception as fallback_error:
                 log.error(f"SSH fallback also failed for {node_name}: {fallback_error}")
 
