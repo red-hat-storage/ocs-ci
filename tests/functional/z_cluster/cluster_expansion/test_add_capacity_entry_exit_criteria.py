@@ -1,7 +1,4 @@
 import logging
-import re
-import unicodedata
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
@@ -22,138 +19,20 @@ from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants, cluster as cluster_helpers
 from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
-from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.ocs.ocp import OCP, exec_cmd
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers, storage_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
+from ocs_ci.ocs.node import check_cluster_resource_availability
 
 logger = logging.getLogger(__name__)
 
-# Constants to address AviadP's feedback on "too specific numbers"
+
+# Constants for the Gatekeeper (Easily adjustable for future changes)
 REQUIRED_RAM_GB = 65
 REQUIRED_CPU_CORES = 6
-MIN_RES_THRESHOLD_GB = 0.01
-RESERVATION_PATTERN_CPU = r"cpu\s+(\d+m?)\s+\((\d+)%\)"
-RESERVATION_PATTERN_MEM = r"memory\s+(\d+)Mi\s+\((\d+)%\)"
-
-
-def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
-    """
-    Validates if the worker nodes have sufficient unreserved CPU and RAM.
-    Parses 'oc describe node' to identify resource 'hogs' and skips the test
-    if the requirement isn't met, providing a namespace-level breakdown.
-
-    Args:
-        needed_ram_gb (int): Required RAM in Gigabytes.
-        needed_cpu_cores (int): Required CPU cores.
-
-    Raises:
-        pytest.skip: If available resources are below the required threshold.
-    """
-    worker_names = get_worker_nodes()
-    total_free_ram_kb = 0
-    total_free_cpu_m = 0
-
-    namespace_ram = defaultdict(int)
-    namespace_cpu = defaultdict(int)
-    ocp_node_obj = OCP(kind=constants.NODE)
-
-    for name in worker_names:
-        # Use exec_cmd instead of deprecated run_cmd as per AviadP's feedback
-        node_data_raw = exec_cmd(f"oc describe node {name}").stdout.decode()
-        node_data = unicodedata.normalize("NFKD", node_data_raw)
-        node_info = ocp_node_obj.get(resource_name=name)
-        # Base Allocatable precision from node status
-        alloc_ram_kb = int(
-            node_info["status"]["allocatable"]["memory"].replace("Ki", "")
-        )
-        cpu_raw = node_info["status"]["allocatable"]["cpu"]
-        alloc_cpu_m = (
-            int(cpu_raw.replace("m", "")) if "m" in cpu_raw else int(cpu_raw) * 1000
-        )
-
-        # Parse current reservations
-        mem_res_match = re.search(RESERVATION_PATTERN_MEM, node_data)
-        cpu_res_match = re.search(RESERVATION_PATTERN_CPU, node_data)
-
-        if mem_res_match:
-            used_percent = int(mem_res_match.group(2))
-            total_free_ram_kb += alloc_ram_kb * (1.0 - (used_percent / 100.0))
-        if cpu_res_match:
-            used_percent = int(cpu_res_match.group(2))
-            total_free_cpu_m += alloc_cpu_m * (1.0 - (used_percent / 100.0))
-
-        # Component Breakdown Parsing
-        try:
-            # Finding the pod section between anchors
-            pod_section = node_data.split("Non-terminated Pods:")[1].split(
-                "Allocated resources:"
-            )[0]
-            for line in pod_section.strip().split("\n"):
-                parts = line.split()
-                # Ensure line contains actual pod data (Namespace, Name, CPU, Mem...)
-                if len(parts) >= 7 and "(" in line and "%" in line:
-                    ns = parts[0]
-                    # Skip header/meta lines
-                    if ns.lower() in ["namespace", "name"] or ns.startswith("("):
-                        continue
-
-                    cpu_usage = re.findall(r"(\d+m?)\s+\(", line)
-                    mem_usage = re.findall(r"(\d+[GMK]i)\s+\(", line)
-
-                    if cpu_usage:
-                        raw_c = cpu_usage[0]
-                        c_val = int(re.search(r"\d+", raw_c).group())
-                        if "m" not in raw_c:
-                            c_val *= 1000
-                        namespace_cpu[ns] += c_val
-
-                    if mem_usage:
-                        raw_m = mem_usage[0]
-                        m_val = int(re.search(r"\d+", raw_m).group())
-                        if "Gi" in raw_m:
-                            m_val *= 1024 * 1024  # Standardizing to KB
-                        elif "Mi" in raw_m:
-                            m_val *= 1024
-                        namespace_ram[ns] += m_val
-        # Specific exceptions as requested in PR review
-        except (IndexError, ValueError, KeyError) as e:
-            logger.debug(f"Parsing row failed for node {name}: {e}")
-
-    actual_free_ram_gb = total_free_ram_kb / (1024 * 1024)
-    actual_free_cpu = total_free_cpu_m / 1000
-
-    logger.info(
-        f"Available Capacity: {actual_free_ram_gb:.2f}GB RAM | {actual_free_cpu:.2f} CPU Cores"
-    )
-
-    if actual_free_ram_gb < needed_ram_gb:
-        header = "{:<45} | {:<12} | {:<12}".format(
-            "Namespace", "RAM Req(GB)", "CPU Req(Cores)"
-        )
-        table_rows = [header, "-" * 75]
-
-        sorted_ns = sorted(
-            namespace_ram.keys(), key=lambda x: namespace_ram[x], reverse=True
-        )
-        for ns in sorted_ns:
-            ram_gb = namespace_ram[ns] / (1024 * 1024)
-            cpu_c = namespace_cpu[ns] / 1000
-            if ram_gb > MIN_RES_THRESHOLD_GB:
-                table_rows.append(
-                    "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
-                )
-
-        breakdown_msg = "\n" + "\n".join(table_rows)
-        logger.error(
-            f"RESOURCE GATEKEEPER FAILED: Need {needed_ram_gb}GB, have {actual_free_ram_gb:.2f}GB."
-        )
-        logger.error(breakdown_msg)
-
-        pytest.skip(f"Insufficient Cluster RAM: {actual_free_ram_gb:.2f}GB available.")
 
 
 @brown_squad
@@ -174,7 +53,7 @@ class TestAddCapacity(ManageTest):
     def resource_check(self):
         """
         Gatekeeper: Ensures hardware capacity before starting deployment.
-        Uses standardized constants for resource requirements.
+        calls the centralized utility from node.py.
         """
         check_cluster_resource_availability(
             needed_ram_gb=REQUIRED_RAM_GB, needed_cpu_cores=REQUIRED_CPU_CORES
