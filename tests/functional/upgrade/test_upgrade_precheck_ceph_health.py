@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_mcg_only,
     tier2,
+    runs_on_provider,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.utility.utils import run_ceph_health_cmd
@@ -77,6 +78,7 @@ def verify_odf_not_upgradeable(threading_lock):
 @brown_squad
 @skipif_mcg_only
 @tier2
+@runs_on_provider
 class TestODFUpgradePrecheckConditions(ManageTest):
     """
     Test class for ODF upgrade pre-check conditions like
