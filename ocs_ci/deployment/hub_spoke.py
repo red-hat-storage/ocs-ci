@@ -81,7 +81,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_server_version,
 )
-from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr
 from botocore.exceptions import ClientError
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.ssl_certs import (
@@ -654,21 +654,20 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
             create_deployer_iam_role=create_deployer_iam_role,
         )
 
-    # TODO: uncomment when AGENT deployment is ready
-    #     cluster_name = hosted_ocp_cluster.deploy_ocp()
-    #     if cluster_name:
-    #         cluster_names.append(cluster_name)
-    #
-    # cluster_names_existing = get_hosted_cluster_names()
-    # cluster_names_desired_left = [
-    #     cluster_name
-    #     for cluster_name in cluster_names_desired
-    #     if cluster_name not in cluster_names_existing
-    # ]
-    # if cluster_names_desired_left:
-    #     logger.error("Some of the desired hosted OCP clusters were not created")
-    # else:
-    #     logger.info("All desired hosted OCP clusters exist")
+        cluster_name = hosted_ocp_cluster.deploy_ocp()
+        if cluster_name:
+            cluster_names.append(cluster_name)
+
+    cluster_names_existing = get_hosted_cluster_names()
+    cluster_names_desired_left = [
+        cluster_name
+        for cluster_name in cluster_names_desired
+        if cluster_name not in cluster_names_existing
+    ]
+    if cluster_names_desired_left:
+        logger.error("Some of the desired hosted OCP clusters were not created")
+    else:
+        logger.info("All desired hosted OCP clusters exist")
 
     return cluster_names
 
@@ -1470,6 +1469,114 @@ class SpokeOCP(ABC):
 
         return self.network_policy_exists(namespace=namespace)
 
+    def get_hosted_cluster_ocp_version(self):
+        """
+        Get hosted cluster OCP version from version history.
+
+        Returns:
+            Optional[str]: Version string (e.g. 4.18.9) if available, otherwise None.
+        """
+        try:
+            history = get_hosted_cluster_version_history(self.name)
+            if not history:
+                logger.warning(
+                    f"No version history found for HostedCluster '{self.name}'"
+                )
+                return None
+
+            def _parse_ts(ts):
+                if not ts:
+                    return datetime.min.replace(tzinfo=timezone.utc)
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+            completed = [e for e in history if e.get("state") == "Completed"]
+            candidates = completed or history
+            candidates.sort(
+                key=lambda e: _parse_ts(
+                    e.get("completionTime") or e.get("startedTime")
+                ),
+                reverse=True,
+            )
+            hosted_ocp_version_history = candidates[0].get("version")
+            if not hosted_ocp_version_history:
+                logger.warning(
+                    f"Latest version entry missing 'version' for HostedCluster '{self.name}'"
+                )
+                return None
+            return hosted_ocp_version_history
+        except Exception as e:
+            logger.error(
+                f"Failed to determine hosted cluster OCP version for '{self.name}': {e}"
+            )
+            return None
+
+    def compute_target_release_image(self, upgrade_scenario=False):
+        """
+        Compute the target release image for OCP upgrade based on:
+
+        - Configured ocp_version in config.ENV_DATA["clusters"][cluster_name] and configured
+          version is lower than provider version
+        - If configured version is matching to existing hosted ocp version,
+          use the provider OCP version from get_server_version()
+
+        Args:
+            upgrade_scenario (bool): If True, the method is being called in the context of OCP upgrade,
+            and additional checks may be applied to determine the target release image.
+
+        Returns:
+            str: Full release image reference, or None if it cannot be determined.
+
+        """
+        ocp_version = (
+            config.ENV_DATA.get("clusters", {}).get(self.name, {}).get("ocp_version")
+        )
+        ocp_version = str(ocp_version).strip() if ocp_version is not None else None
+        provider_version = get_server_version()
+
+        if (
+            ocp_version
+            and "nightly" not in ocp_version
+            and len(ocp_version.split(".")) == 2
+        ):
+            try:
+                ocp_version = get_ocp_ga_version(ocp_version)
+            except Exception as e:
+                # since hypershift client can be not the only one in upgrade scenario, proceed with warning
+                logger.warning(
+                    f"Bad configuration. Failed to resolve GA version for '{ocp_version}': {e}"
+                )
+
+        if not ocp_version:
+            logger.info(
+                f"No ocp_version configured for cluster '{self.name}'; will use provider version"
+            )
+        elif upgrade_scenario:
+            desired_sem = get_semantic_version(ocp_version)
+            provider_sem = get_semantic_version(provider_version)
+            if desired_sem >= provider_sem:
+                logger.warning(
+                    "desired ocp_version from configuration is higher or equal to provider version"
+                )
+                return None
+
+            # TODO: improve code - ensure get_hosted_cluster_ocp_version is called only in upgrade scenario
+            running_hosted_ocp_version = self.get_hosted_cluster_ocp_version()
+            if get_semantic_version(running_hosted_ocp_version) >= desired_sem:
+                logger.warning(
+                    f"Hosted cluster '{self.name}' is at version '{running_hosted_ocp_version}' "
+                    f"which matches or higher than desired ocp_version '{ocp_version}', proceed with provider version"
+                )
+                ocp_version = None
+        else:
+            logger.info(
+                f"Using configured ocp_version '{ocp_version}' for cluster '{self.name}'"
+            )
+
+        target_version = ocp_version or provider_version
+        if "nightly" in target_version:
+            return f"{constants.REGISTRY_SVC}:{target_version}"
+        return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
+
     @abstractmethod
     def deploy_dependencies(
         self,
@@ -1881,62 +1988,6 @@ class HypershiftHostedOCP(
             create_patch_provisioning()
             create_agent_service_config()
 
-    def _compute_target_release_image(self):
-        """
-        Compute the target release image for OCP upgrade based on:
-        - Configured ocp_version in config.ENV_DATA["clusters"][cluster_name] and configured version is
-          lower than provider version
-        - If configured version is matching to existing hosted ocp version,
-          use the provider OCP version from get_server_version()
-
-        Returns:
-            str: Full release image reference, or None if it cannot be determined.
-        """
-        ocp_version = (
-            config.ENV_DATA.get("clusters", {}).get(self.name, {}).get("ocp_version")
-        )
-        ocp_version = str(ocp_version).strip() if ocp_version is not None else None
-        provider_version = get_server_version()
-
-        if (
-            ocp_version
-            and "nightly" not in ocp_version
-            and len(ocp_version.split(".")) == 2
-        ):
-            try:
-                ocp_version = get_ocp_ga_version(ocp_version)
-            except Exception as e:
-                # since hypershift client can be not the only one in upgrade scenario, proceed with warning
-                logger.warning(
-                    f"Bad configuration. Failed to resolve GA version for '{ocp_version}': {e}"
-                )
-
-        if not ocp_version:
-            logger.info(
-                f"No ocp_version configured for cluster '{self.name}'; will use provider version"
-            )
-        else:
-            desired_sem = get_semantic_version(ocp_version)
-            provider_sem = get_semantic_version(provider_version)
-            if desired_sem >= provider_sem:
-                logger.warning(
-                    "desired ocp_version from configuration is higher or equal to provider version"
-                )
-                return None
-
-            running_hosted_ocp_version = self.get_hosted_cluster_ocp_version()
-            if get_semantic_version(running_hosted_ocp_version) >= desired_sem:
-                logger.warning(
-                    f"Hosted cluster '{self.name}' is at version '{running_hosted_ocp_version}' "
-                    f"which matches or higher than desired ocp_version '{ocp_version}', proceed with provider version"
-                )
-                ocp_version = None
-
-        target_version = ocp_version or provider_version
-        if "nightly" in target_version:
-            return f"{constants.REGISTRY_SVC}:{target_version}"
-        return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
-
     @if_version("<4.20")
     def apply_admin_acks_to_hosted_cluster(self):
         """
@@ -1955,7 +2006,7 @@ class HypershiftHostedOCP(
             bool: True if patch is applied, False otherwise
 
         """
-        image = self._compute_target_release_image()
+        image = self.compute_target_release_image(upgrade_scenario=True)
         if not image:
             return False
         try:
@@ -1990,7 +2041,7 @@ class HypershiftHostedOCP(
             bool: True if patch is applied, False otherwise
 
         """
-        image = self._compute_target_release_image()
+        image = self.compute_target_release_image(upgrade_scenario=True)
         if not image:
             return False
         try:
@@ -2011,47 +2062,6 @@ class HypershiftHostedOCP(
         except Exception as e:
             logger.error(f"Failed to patch NodePool '{self.name}' for OCP upgrade: {e}")
             return False
-
-    def get_hosted_cluster_ocp_version(self):
-        """
-        Get hosted cluster OCP version from version history.
-
-        Returns:
-            Optional[str]: Version string (e.g. 4.18.9) if available, otherwise None.
-        """
-        try:
-            history = get_hosted_cluster_version_history(self.name)
-            if not history:
-                logger.warning(
-                    f"No version history found for HostedCluster '{self.name}'"
-                )
-                return None
-
-            def _parse_ts(ts):
-                if not ts:
-                    return datetime.min.replace(tzinfo=timezone.utc)
-                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-            completed = [e for e in history if e.get("state") == "Completed"]
-            candidates = completed or history
-            candidates.sort(
-                key=lambda e: _parse_ts(
-                    e.get("completionTime") or e.get("startedTime")
-                ),
-                reverse=True,
-            )
-            hosted_ocp_version_history = candidates[0].get("version")
-            if not hosted_ocp_version_history:
-                logger.warning(
-                    f"Latest version entry missing 'version' for HostedCluster '{self.name}'"
-                )
-                return None
-            return hosted_ocp_version_history
-        except Exception as e:
-            logger.error(
-                f"Failed to determine hosted cluster OCP version for '{self.name}': {e}"
-            )
-            return None
 
     def wait_hosted_cluster_upgrade_completed(self, timeout=3600):
         """
@@ -2204,6 +2214,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         AWS.__init__(self)
 
         # Load AWS-specific configuration
+        self.vpc_cidr = None
         self.oidc_secret_name = None
         self.oidc_bucket_arn = None
         self.oidc_bucket_name = None
@@ -2216,10 +2227,22 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         self.output_infra_file = None
 
         # Infrastructure ID for AWS resources
-        self.infra_id = None
+        self.infra_id = f"{self.name}-infra"
 
         # Role ARN for deployer
         self.role_arn = None
+
+        # Infrastructure zone IDs and machine CIDR
+        self.public_zone_id = None
+        self.private_zone_id = None
+        self.local_zone_id = None
+        self.infra_machine_cidr = None
+
+        # Path to IAM output file
+        self.output_iam_file = None
+
+        # OIDC bucket region
+        self.oidc_bucket_region = None
 
         self._load_aws_config()
 
@@ -2347,6 +2370,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         Executes 'hypershift create infra aws' command to create the necessary
         AWS infrastructure (VPC, subnets, security groups, etc.) for the hosted cluster.
+        Automatically selects an unused VPC CIDR to avoid conflicts with existing VPCs.
 
         Equivalent to:
             hypershift create infra aws --name $NAME \\
@@ -2355,7 +2379,8 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 --infra-id $INFRA_ID \\
                 --region $REGION \\
                 --role-arn $ROLE_ARN \\
-                --output-file $OUTPUT_INFRA_FILE
+                --output-file $OUTPUT_INFRA_FILE \\
+                --vpc-cidr $VPC_CIDR
 
         Args:
             timeout (int): Timeout in seconds for the infra creation command.
@@ -2383,16 +2408,51 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         if not self.aws_hcp_files_dir:
             self._create_aws_hcp_files_dir()
 
-        if not self.infra_id:
-            self.infra_id = f"{self.name}-infra"
-            logger.info(f"Generated infra_id: {self.infra_id}")
-
-        # Set output infra file path
         self.output_infra_file = os.path.join(
             self.aws_hcp_files_dir, f"{self.name}-infra-output.json"
         )
 
-        # Build the hypershift create infra aws command
+        # Check if infrastructure already exists
+        logger.info(f"Checking if infrastructure '{self.infra_id}' already exists")
+        try:
+            existing_vpcs = self.get_vpc_from_existing_infra()
+
+            if existing_vpcs:
+                logger.info(
+                    f"Infrastructure '{self.infra_id}' already exists. "
+                    f"Found {len(existing_vpcs)} VPC(s) with matching tag. Skipping creation."
+                )
+
+                if os.path.exists(self.output_infra_file):
+                    logger.info(
+                        f"Using existing infrastructure output file: {self.output_infra_file}, "
+                        f"reloading infra to class attributes"
+                    )
+                    self.read_infra_output()
+                    return self.output_infra_file
+                else:
+                    logger.warning(
+                        f"Infrastructure exists but output file not found: {self.output_infra_file}. "
+                        "Infrastructure may have been created outside this tool."
+                    )
+                    return self.output_infra_file
+        except ClientError as e:
+            logger.error(
+                f"AWS API error while checking for existing infrastructure: {e}"
+            )
+            raise
+
+        logger.info(f"Finding unused VPC CIDR in region {self.aws_region}")
+        try:
+            self.vpc_cidr = get_unused_vpc_cidr(region_name=self.aws_region)
+            logger.info(f"Selected unused VPC CIDR: {self.vpc_cidr}")
+        except ClientError as e:
+            logger.error(f"AWS API error while finding unused VPC CIDR: {e}")
+            raise
+        except RuntimeError as e:
+            logger.error(f"Failed to find unused VPC CIDR: {e}")
+            raise
+
         cmd = (
             f"{self.hypershift_binary_path} create infra aws "
             f"--name {self.name} "
@@ -2402,6 +2462,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             f"--region {self.aws_region} "
             f"--role-arn {self.role_arn} "
             f"--output-file {self.output_infra_file} "
+            f"--vpc-cidr {self.vpc_cidr} "
         )
 
         logger.debug(f"Executing hypershift create infra aws command: {cmd}")
@@ -2439,6 +2500,209 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         return self.output_infra_file
 
+    def get_vpc_from_existing_infra(self, infra_id=None):
+        """
+        Check for existing VPCs with the tag corresponding to the infrastructure ID.
+
+        Args:
+            infra_id (str): Optional infrastructure ID to check for. If not provided, uses self.infra_id.
+
+        Returns:
+            list: List of existing VPCs matching the infrastructure tag. Empty if none found.
+        """
+
+        if not infra_id:
+            infra_id = self.infra_id
+
+        vpcs = self.ec2_client.describe_vpcs(
+            Filters=[
+                {
+                    "Name": "tag:kubernetes.io/cluster/" + infra_id,
+                    "Values": ["owned"],
+                }
+            ]
+        )
+        existing_vpcs = vpcs.get("Vpcs", [])
+        return existing_vpcs
+
+    def read_infra_output(self):
+        """
+        Read the infrastructure output file and extract zone IDs and machine CIDR.
+
+        Reads the JSON output file created by 'hypershift create infra aws' and
+        assigns the relevant values to instance attributes:
+        - self.infra_id from 'infraID'
+        - self.public_zone_id from 'publicZoneID'
+        - self.private_zone_id from 'privateZoneID'
+        - self.local_zone_id from 'localZoneID'
+        - self.infra_machine_cidr from 'machineCIDR'
+
+        Returns:
+            dict: The parsed infrastructure output data
+
+        Raises:
+            FileNotFoundError: If output_infra_file does not exist
+            ValueError: If output_infra_file is not set
+            json.JSONDecodeError: If the file is not valid JSON
+        """
+        if not self.output_infra_file:
+            raise ValueError(
+                "output_infra_file not set. Call create_aws_infra() first."
+            )
+
+        if not os.path.exists(self.output_infra_file):
+            raise FileNotFoundError(
+                f"Infrastructure output file not found: {self.output_infra_file}"
+            )
+
+        logger.info(f"Reading infrastructure output from: {self.output_infra_file}")
+
+        try:
+            with open(self.output_infra_file, "r") as f:
+                infra_data = json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse infrastructure output file: {e}")
+            raise
+
+        # Extract and assign zone IDs, machine CIDR, and infra ID
+        self.infra_id = infra_data.get("infraID")
+        self.public_zone_id = infra_data.get("publicZoneID")
+        self.private_zone_id = infra_data.get("privateZoneID")
+        self.local_zone_id = infra_data.get("localZoneID")
+        self.infra_machine_cidr = infra_data.get("machineCIDR")
+
+        logger.info(
+            f"Extracted infrastructure configuration:\n"
+            f"  Infra ID: {self.infra_id}\n"
+            f"  Public Zone ID: {self.public_zone_id}\n"
+            f"  Private Zone ID: {self.private_zone_id}\n"
+            f"  Local Zone ID: {self.local_zone_id}\n"
+            f"  Machine CIDR: {self.infra_machine_cidr}"
+        )
+
+        return infra_data
+
+    def create_aws_iam(self, timeout=1800):
+        """
+        Create AWS IAM resources for HyperShift hosted cluster.
+
+        Executes 'hypershift create iam aws' command to create the necessary
+        IAM resources (roles, policies, etc.) for the hosted cluster.
+
+        Equivalent to:
+            hypershift create iam aws --infra-id $INFRA_ID \\
+                --sts-creds $STS_CREDENTIALS \\
+                --role-arn $ROLE_ARN \\
+                --oidc-storage-provider-s3-bucket-name $OIDC_BUCKET_NAME \\
+                --oidc-storage-provider-s3-region $OIDC_BUCKET_REGION \\
+                --region $REGION \\
+                --public-zone-id $PUBLIC_ZONE_ID \\
+                --private-zone-id $PRIVATE_ZONE_ID \\
+                --local-zone-id $LOCAL_ZONE_ID \\
+                --output-file $OUTPUT_IAM_FILE
+
+        Args:
+            timeout (int): Timeout in seconds for the IAM creation command.
+                Default is 1800 (30 minutes).
+
+        Returns:
+            str: Path to the output IAM file if successful
+
+        Raises:
+            ValueError: If required parameters are missing
+            CommandFailed: If the IAM creation fails
+        """
+        logger.info(f"Creating AWS IAM resources for cluster '{self.name}'")
+
+        # Validate required parameters
+        if not self.infra_id:
+            raise ValueError("infra_id not set. Call create_aws_infra() first.")
+
+        if not self.sts_credentials_file:
+            raise ValueError(
+                "STS credentials file not set. Call retrieve_sts_session_token() first."
+            )
+
+        if not self.role_arn:
+            raise ValueError("Role ARN not set. Call create_deployer_iam_role() first.")
+
+        if not self.oidc_bucket_name:
+            raise ValueError(
+                "OIDC bucket name not set. Ensure self.oidc_bucket_name is configured."
+            )
+
+        if not self.oidc_bucket_region:
+            raise ValueError(
+                "OIDC bucket region not set. Ensure self.oidc_bucket_region is configured."
+            )
+
+        if (
+            not self.public_zone_id
+            or not self.private_zone_id
+            or not self.local_zone_id
+        ):
+            raise ValueError(
+                "Zone IDs not set. Call read_infra_output() first to extract zone IDs."
+            )
+
+        if not self.aws_hcp_files_dir:
+            self._create_aws_hcp_files_dir()
+
+        # Set output IAM file path
+        self.output_iam_file = os.path.join(
+            self.aws_hcp_files_dir, f"{self.name}-iam-output.json"
+        )
+
+        # Build the hypershift create iam aws command
+        cmd = (
+            f"{self.hypershift_binary_path} create iam aws "
+            f"--infra-id {self.infra_id} "
+            f"--sts-creds {self.sts_credentials_file} "
+            f"--role-arn {self.role_arn} "
+            f"--oidc-storage-provider-s3-bucket-name {self.oidc_bucket_name} "
+            f"--oidc-storage-provider-s3-region {self.oidc_bucket_region} "
+            f"--region {self.aws_region} "
+            f"--public-zone-id {self.public_zone_id} "
+            f"--private-zone-id {self.private_zone_id} "
+            f"--local-zone-id {self.local_zone_id} "
+            f"--output-file {self.output_iam_file}"
+        )
+
+        logger.debug(f"Executing hypershift create iam aws command: {cmd}")
+
+        try:
+            result = exec_cmd(cmd, timeout=timeout)
+            logger.info("AWS IAM creation command completed successfully")
+            logger.debug(
+                f"Output: {result.stdout.decode('utf-8') if result.stdout else ''}"
+            )
+        except CommandFailed as e:
+            logger.error(f"Failed to create AWS IAM resources: {e}")
+            raise
+
+        # Verify output file was created
+        if not os.path.exists(self.output_iam_file):
+            raise CommandFailed(
+                f"IAM output file was not created: {self.output_iam_file}"
+            )
+
+        logger.info(f"AWS IAM output file created: {self.output_iam_file}")
+
+        # Verify IAM resources exist by checking the output file content
+        try:
+            with open(self.output_iam_file, "r") as f:
+                iam_data = json.load(f)
+                logger.info(
+                    f"AWS IAM resources created successfully:\n"
+                    f"  Infra ID: {self.infra_id}\n"
+                    f"  Output file: {self.output_iam_file}\n"
+                    f"  IAM details: {json.dumps(iam_data, indent=2)[:500]}..."
+                )
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Could not read/parse IAM output file: {e}")
+
+        return self.output_iam_file
+
     def deploy_ocp(self, **kwargs) -> str:
         """
         Deploy AWS HCP cluster with EC2 workers.
@@ -2454,12 +2718,8 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         Returns:
             str: Name of the hosted cluster if successful, empty string if failed
+
         """
-        # Get OCP version from configuration
-        ocp_version = self._get_ocp_version()
-        if not ocp_version:
-            logger.error(f"OCP version not configured for cluster '{self.name}'")
-            return ""
 
         # Get node pool configuration
         nodepool_replicas = self._get_nodepool_replicas()
@@ -2471,6 +2731,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         # Get disable default sources setting
         disable_default_sources = self._get_disable_default_sources()
 
+        # Get generate SSH setting
+        generate_ssh = self._get_generate_ssh()
+
         # Check if cluster already exists
         if self.name in get_hosted_cluster_names():
             logger.info(f"AWS HCP cluster '{self.name}' already exists")
@@ -2481,31 +2744,24 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.error("AWS prerequisites validation failed")
             return ""
 
+        release_image = self.compute_target_release_image(upgrade_scenario=False)
+
         log_step(
             f"Creating AWS HCP cluster '{self.name}' with {nodepool_replicas} workers"
         )
         cluster_name = self.create_aws_hcp_cluster(
-            name=self.name,
             nodepool_replicas=nodepool_replicas,
-            ocp_version=ocp_version,
+            release_image=release_image,
             worker_instance_type=self.worker_instance_type,
             cp_availability_policy=cp_availability_policy,
             infra_availability_policy=infra_availability_policy,
             disable_default_sources=disable_default_sources,
+            generate_ssh=generate_ssh,
         )
 
         if not cluster_name:
             logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
             return ""
-
-        log_step(
-            f"Waiting for AWS EC2 workers to become ready for cluster '{self.name}'"
-        )
-        if not self.wait_for_aws_workers_ready():
-            logger.warning(
-                f"AWS workers may not be fully ready for cluster '{self.name}'. "
-                "Proceeding with deployment."
-            )
 
         logger.info(f"Successfully deployed AWS HCP cluster '{self.name}'")
         return cluster_name
@@ -2518,8 +2774,8 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         deploy_cnv=False,
         deploy_metallb=False,
         deploy_hyperconverged=False,
-        deploy_hypershift_oidc=False,
-        create_deployer_iam_role=False,
+        deploy_hypershift_oidc=True,
+        create_deployer_iam_role=True,
     ):
         """
         Deploy dependencies for AWS HCP cluster.
@@ -2535,9 +2791,10 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             deploy_metallb (bool): Ignored for AWS (not needed)
             deploy_hyperconverged (bool): Ignored for AWS (not needed)
             deploy_hypershift_oidc (bool): Setup S3 bucket for HyperShift OIDC provider and
-                create secret with bucket info
-            create_deployer_iam_role (bool): Create IAM role for deployer. Can be done once for multiple clusters
-                if the same role can be reused.
+                create secret with bucket info. Default True (required for create_aws_iam).
+            create_deployer_iam_role (bool): Create IAM role for deployer. Default True
+                (required for create_aws_infra and create_aws_iam). Set to False only if
+                role_arn is pre-configured.
         """
         logger.info(
             f"Deploying dependencies for AWS HCP cluster '{self.name}': "
@@ -2545,20 +2802,17 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             f"download_hcp_binary={download_hcp_binary}"
         )
 
-        # Log if CNV/MetalLB/HyperConverged were requested (they're not needed for AWS)
         if deploy_cnv or deploy_metallb or deploy_hyperconverged:
             logger.warning(
                 "CNV, MetalLB, and HyperConverged are not required for AWS HCP clusters "
                 "(workers run as EC2 instances). Skipping these installations."
             )
 
-        # Validate conflicting deployments
         if deploy_acm_hub and deploy_mce:
             raise UnexpectedDeploymentConfiguration(
                 "Conflict: Both 'deploy_acm_hub' and 'deploy_mce' are enabled. Choose one."
             )
 
-        # Ensure default StorageClass is appropriate
         initial_default_sc = helpers.get_default_storage_class()
         logger.info(f"Initial default StorageClass: {initial_default_sc}")
         if initial_default_sc != constants.CEPHBLOCKPOOL_SC:
@@ -2570,16 +2824,17 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             except CommandFailed as e:
                 logger.error(f"Failed to change default StorageClass: {e}")
 
-        # Deploy ACM or MCE
         if deploy_acm_hub:
             self.deploy_acm_hub()
         elif deploy_mce:
             self.deploy_mce()
             self.enable_hypershift_preview()
 
-        # Download HCP binary
         if download_hcp_binary:
             self.update_hcp_binary()
+
+        log_step("Saving IDMS mirrors list to file for image-content-sources")
+        self.save_mirrors_list_to_file()
 
         if deploy_hypershift_oidc:
             log_step("Setting up S3 bucket for HyperShift OIDC provider")
@@ -2596,8 +2851,24 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             self.role_arn = role_result["role_arn"]
 
         log_step("Creating AWS infrastructure for the hosted cluster")
+
+        if not self.role_arn:
+            raise ValueError(
+                "role_arn is not set. Either call with create_deployer_iam_role=True "
+                "or pre-configure self.role_arn before calling deploy_dependencies()."
+            )
+
+        if not self.oidc_bucket_name or not self.oidc_bucket_region:
+            raise ValueError(
+                "OIDC bucket configuration is missing. Either call with "
+                "deploy_hypershift_oidc=True or pre-configure self.oidc_bucket_name "
+                "and self.oidc_bucket_region before calling deploy_dependencies()."
+            )
+
         self.retrieve_sts_session_token()
         self.create_aws_infra()
+        self.read_infra_output()
+        self.create_aws_iam()
 
     def validate_aws_prerequisites(self):
         """
@@ -2615,7 +2886,6 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         """
         logger.info(f"Validating AWS prerequisites for cluster '{self.name}'")
 
-        # Check base domain
         if not self.base_domain:
             logger.error(
                 f"Base domain not configured for cluster '{self.name}'. "
@@ -2623,156 +2893,202 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             )
             return False
 
-        # Check AWS region
         if not self.aws_region:
             logger.error(f"AWS region not configured for cluster '{self.name}'")
             return False
-
-        # TODO: Validate AWS credentials exist and are valid
-        # This could check for AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-        # or validate that the credentials secret exists on the management cluster
 
         logger.info("AWS prerequisites validation passed")
         return True
 
     def create_aws_hcp_cluster(
         self,
-        name,
         nodepool_replicas,
-        ocp_version,
+        release_image,
         worker_instance_type,
-        cp_availability_policy=constants.AVAILABILITY_POLICY_HA,
-        infra_availability_policy=constants.AVAILABILITY_POLICY_HA,
+        cp_availability_policy=constants.AVAILABILITY_POLICY_SINGLE,
+        infra_availability_policy=constants.AVAILABILITY_POLICY_SINGLE,
         disable_default_sources=True,
+        generate_ssh=True,
     ):
         """
-        Create AWS HCP cluster using the hcp CLI.
+        Create AWS HCP cluster using the hypershift CLI.
 
-        Executes the 'hcp create cluster aws' command with appropriate parameters
+        Executes the 'hypershift create cluster aws' command with appropriate parameters
         to create a hosted control plane cluster with EC2 worker nodes.
 
+        This method assumes the following functions have already been called:
+        - retrieve_sts_session_token() - creates self.sts_credentials_file
+        - create_aws_infra() - creates self.output_infra_file and self.vpc_cidr
+        - read_infra_output() - populates zone IDs and infra_id
+        - create_aws_iam() - creates self.output_iam_file
+
         Args:
-            name (str): Cluster name
             nodepool_replicas (int): Number of worker nodes
-            ocp_version (str): OCP version to deploy (e.g., "4.18.5")
+            release_image (str): The OCP release image for the cluster. If none, command will run without
+            --release-image flag and default will be used.
             worker_instance_type (str): AWS EC2 instance type (e.g., "m5.xlarge")
             cp_availability_policy (str): Control plane availability policy
+                (default: constants.AVAILABILITY_POLICY_HA)
             infra_availability_policy (str): Infrastructure availability policy
-            disable_default_sources (bool): Disable default operator sources
+                (default: constants.AVAILABILITY_POLICY_HA)
+            disable_default_sources (bool): Disable default operator sources (default: True)
+            generate_ssh (bool): Generate SSH key for node access (default: True)
 
         Returns:
             str: Cluster name if successful, empty string if failed
         """
+
         logger.info(
-            f"Creating AWS HCP cluster '{name}' with version {ocp_version}, "
-            f"{nodepool_replicas} workers of type {worker_instance_type}"
+            f"Creating AWS HCP cluster '{self.name}' with release image: {release_image}"
         )
 
-        # Get release image
-        if "nightly" in ocp_version:
-            release_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
-        else:
-            release_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+        # Validate required parameters that should have been set by prerequisite functions
+        if not self.sts_credentials_file:
+            raise ValueError(
+                "STS credentials file not set. Call retrieve_sts_session_token() first."
+            )
 
-        logger.info(f"Using release image: {release_image}")
+        if not self.output_infra_file:
+            raise ValueError(
+                "Infrastructure output file not set. Call create_aws_infra() first."
+            )
+
+        if not self.output_iam_file:
+            raise ValueError("IAM output file not set. Call create_aws_iam() first.")
+
+        if not self.role_arn:
+            raise ValueError("Role ARN not set. Call create_deployer_iam_role() first.")
+
+        if not self.infra_id:
+            raise ValueError("Infra ID not set. Call read_infra_output() first.")
+
+        if not self.vpc_cidr:
+            raise ValueError(
+                "VPC CIDR not set. Should be set during create_aws_infra()."
+            )
 
         cmd_parts = [
-            f"{self.hcp_binary_path} create cluster aws",
-            f"--name {name}",
+            f"{self.hypershift_binary_path} create cluster aws",
             f"--region {self.aws_region}",
-            f"--release-image {release_image}",
-            f"--node-pool-replicas {nodepool_replicas}",
+            f"--infra-id {self.infra_id}",
+            f"--name {self.name}",
+            f"--sts-creds {self.sts_credentials_file}",
+            f"--role-arn {self.role_arn}",
+            f"--infra-json {self.output_infra_file}",
+            f"--iam-json {self.output_iam_file}",
             f"--instance-type {worker_instance_type}",
-            f"--base-domain {self.base_domain}",
-            f"--namespace {constants.CLUSTERS_NAMESPACE}",
-            f"--control-plane-availability-policy {cp_availability_policy}",
-            f"--infra-availability-policy {infra_availability_policy}",
+            f"--node-pool-replicas {nodepool_replicas}",
+            f"--vpc-cidr {self.vpc_cidr}",
         ]
 
-        # Add pull secret
+        if not release_image:
+            logger.warning(
+                "Release image not set. Call retrieve_sts_session_token() first."
+            )
+        else:
+            cmd_parts.append(f"--release-image {release_image}")
+
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         if os.path.exists(pull_secret_path):
             cmd_parts.append(f"--pull-secret {pull_secret_path}")
+        else:
+            raise FileNotFoundError(
+                f"Pull secret file not found at expected path: {pull_secret_path}"
+            )
 
-        # Disable default sources if requested
+        if (
+            cp_availability_policy
+            and cp_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            cmd_parts.append(
+                f"--control-plane-availability-policy {cp_availability_policy}"
+            )
+            logger.info(f"Control plane availability policy: {cp_availability_policy}")
+        else:
+            logger.warning(
+                f"Control plane availability policy '{cp_availability_policy}' is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}. Skipping flag."
+            )
+
+        # Add infrastructure availability policy
+        if (
+            infra_availability_policy
+            and infra_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            cmd_parts.append(f"--infra-availability-policy {infra_availability_policy}")
+            logger.info(
+                f"Infrastructure availability policy: {infra_availability_policy}"
+            )
+        else:
+            logger.warning(
+                f"Infrastructure availability policy '{infra_availability_policy}' is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}. Skipping flag."
+            )
+
         if disable_default_sources:
-            cmd_parts.append("--disable-default-sources")
+            cmd_parts.append("--olm-disable-default-sources")
+            logger.info("OLM default sources will be disabled")
+
+        if generate_ssh:
+            cmd_parts.append("--generate-ssh")
+            logger.info("SSH key generation enabled for cluster nodes")
+
+        if hasattr(self, "idms_mirrors_path") and os.path.exists(
+            self.idms_mirrors_path
+        ):
+            if os.path.getsize(self.idms_mirrors_path) > 0:
+                cmd_parts.append(f"--image-content-sources {self.idms_mirrors_path}")
+                logger.info(
+                    f"Using image content sources from: {self.idms_mirrors_path}"
+                )
+
+        # Add --wait flag as the last parameter to wait for cluster to be ready
+        cmd_parts.append("--wait")
+        # set command timeout to just under 45 minutes to allow for cluster creation
+        # to complete without hitting the timeout
+        cmd_parts.append(f"--timeout {44}m")
 
         cmd = " ".join(cmd_parts)
 
-        logger.info(f"Executing HCP create command for AWS cluster '{name}'")
+        logger.info(
+            f"Executing hypershift create cluster aws command for cluster '{self.name}'"
+        )
         logger.debug(f"Command: {cmd}")
 
         try:
-            # TODO: Execute the command
-            # result = exec_cmd(cmd, timeout=600)
-            # logger.info(f"HCP cluster creation output: {result}")
-
-            # Placeholder: Log that command would be executed
-            logger.warning(
-                "HCP cluster creation command constructed but not yet executed. "
-                "Full implementation pending."
+            # Execute with exec timeout 45 minutes timeout (2700 seconds) to allow cluster creation to complete
+            result = exec_cmd(cmd, timeout=2700)
+            logger.info("Cluster creation command completed successfully")
+            logger.debug(
+                f"Output: {result.stdout.decode('utf-8') if result.stdout else ''}"
             )
-            logger.info(f"Would execute: {cmd}")
 
-            # TODO: Verify cluster was created
-            # Wait for HostedCluster resource to appear
-            # for sample in TimeoutSampler(timeout=300, sleep=10, func=get_hosted_cluster_names):
-            #     if name in sample:
-            #         logger.info(f"HostedCluster '{name}' created successfully")
-            #         return name
+            logger.info(f"Verifying HostedCluster '{self.name}' was created...")
+            for sample in TimeoutSampler(
+                timeout=300, sleep=10, func=get_hosted_cluster_names
+            ):
+                if self.name in sample:
+                    logger.info(f"HostedCluster '{self.name}' created successfully")
+                    return self.name
 
-            # Placeholder return
-            return name
-
-        except Exception as e:
-            logger.error(f"Failed to create AWS HCP cluster '{name}': {e}")
+            logger.error(
+                f"HostedCluster '{self.name}' was not found after cluster creation"
+            )
             return ""
 
-    def wait_for_aws_workers_ready(self, timeout=1800):
-        """
-        Wait for AWS EC2 worker nodes to become ready.
-
-        Monitors the NodePool status and waits for all worker nodes to reach
-        the Ready state.
-
-        Args:
-            timeout (int): Timeout in seconds (default: 1800 = 30 minutes)
-
-        Returns:
-            bool: True if workers are ready, False if timeout or error
-        """
-        logger.info(
-            f"Waiting for AWS EC2 workers to become ready for cluster '{self.name}' "
-            f"(timeout={timeout}s)"
-        )
-
-        # TODO: Implement worker readiness check
-        # This should:
-        # 1. Monitor NodePool status
-        # 2. Check that all replicas are ready
-        # 3. Verify EC2 instances are running and healthy
-        # 4. Wait for nodes to join the cluster
-
-        # Example implementation:
-        # try:
-        #     ocp_np = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE)
-        #     for sample in TimeoutSampler(timeout=timeout, sleep=30, func=self._check_nodepool_ready):
-        #         if sample:
-        #             logger.info(f"All workers ready for cluster '{self.name}'")
-        #             return True
-        # except TimeoutExpiredError:
-        #     logger.error(f"Timeout waiting for workers to become ready for cluster '{self.name}'")
-        #     return False
-        # except Exception as e:
-        #     logger.error(f"Error waiting for workers: {e}")
-        #     return False
-
-        logger.warning(
-            "Worker readiness check not yet fully implemented. "
-            "Assuming workers will become ready."
-        )
-        return True
+        except CommandFailed as e:
+            logger.error(f"Failed to create AWS HCP cluster '{self.name}': {e}")
+            raise
+        except TimeoutExpiredError as e:
+            logger.error(
+                f"Timeout waiting for AWS HCP cluster '{self.name}' creation: {e}"
+            )
+            return ""
+        except Exception as e:
+            logger.error(
+                f"Unexpected error creating AWS HCP cluster '{self.name}': {e}"
+            )
+            return ""
 
     def setup_hypershift_oidc(self):
         """
@@ -2816,6 +3132,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
             self.oidc_bucket_name = result["bucket_name"]
             self.oidc_bucket_arn = result["bucket_arn"]
+            self.oidc_bucket_region = result["region"]
             self.oidc_secret_name = result["secret_name"]
 
             return True
@@ -3057,21 +3374,6 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         logger.warning("AWS resource cleanup not yet fully implemented")
         return True
 
-    # Helper methods for configuration retrieval
-    def _get_ocp_version(self):
-        """
-        Get OCP version from configuration.
-
-        Returns:
-            str: OCP version string (e.g., "4.18.5")
-        """
-        ocp_version = (
-            config.ENV_DATA.get("clusters", {}).get(self.name, {}).get("ocp_version")
-        )
-        if ocp_version and len(str(ocp_version).split(".")) == 2:
-            ocp_version = get_ocp_ga_version(ocp_version)
-        return str(ocp_version) if ocp_version else None
-
     def _get_nodepool_replicas(self):
         """
         Get nodepool replicas from configuration.
@@ -3095,7 +3397,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         return (
             config.ENV_DATA["clusters"]
             .get(self.name)
-            .get("cp_availability_policy", constants.AVAILABILITY_POLICY_HA)
+            .get("cp_availability_policy", constants.AVAILABILITY_POLICY_SINGLE)
         )
 
     def _get_infra_availability_policy(self):
@@ -3108,7 +3410,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         return (
             config.ENV_DATA["clusters"]
             .get(self.name)
-            .get("infra_availability_policy", constants.AVAILABILITY_POLICY_HA)
+            .get("infra_availability_policy", constants.AVAILABILITY_POLICY_SINGLE)
         )
 
     def _get_disable_default_sources(self):
@@ -3123,6 +3425,15 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             .get(self.name)
             .get("disable_default_sources", True)
         )
+
+    def _get_generate_ssh(self):
+        """
+        Get generate_ssh setting from configuration.
+
+        Returns:
+            bool: True if SSH key should be generated, False otherwise
+        """
+        return config.ENV_DATA["clusters"].get(self.name).get("generate_ssh", True)
 
     def create_deployer_iam_role(
         self,

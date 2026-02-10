@@ -20,8 +20,8 @@ ENV_DATA:
 
       # Control plane and infrastructure configuration
       nodepool_replicas: 3  # Number of worker nodes (EC2 instances)
-      cp_availability_policy: "HighlyAvailable"  # or "SingleReplica" for testing. Default is "HighlyAvailable"
-      infra_availability_policy: "HighlyAvailable"  # or "SingleReplica" for testing. Default is "HighlyAvailable"
+      cp_availability_policy: "SingleReplica"  # or "HighlyAvailable". Default is "SingleReplica". HighlyAvailable requires nodes on multiple zones.
+      infra_availability_policy: "SingleReplica"  # or "HighlyAvailable". Default is "SingleReplica". HighlyAvailable requires nodes on multiple zones.
       disable_default_sources: true  # Disable default operator sources
 
       # AWS-specific configuration

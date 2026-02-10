@@ -2485,6 +2485,10 @@ class AWS(object):
         except Exception as e:
             logger.error(f"Error deleting CloudFront Distribution: {e}")
 
+    @property
+    def region_name(self):
+        return self._region_name
+
 
 def get_instances_ids_and_names(instances):
     """
@@ -3157,3 +3161,144 @@ def create_s3_bucket_for_hypershift_oidc(
         f"HyperShift OIDC S3 bucket setup completed successfully:\n{json.dumps(result, indent=2)}"
     )
     return result
+
+
+def get_cluster_vpc_cidr(region_name=None):
+    """
+    Get VPC CIDR block for the current OpenShift cluster.
+
+    This function retrieves the VPC CIDR block by:
+    1. Getting the infrastructure name from OpenShift cluster (oc get infrastructure cluster)
+    2. Querying AWS EC2 to find the VPC with the kubernetes.io/cluster/<infra-name> tag
+    3. Returning the VPC CIDR block
+
+    Args:
+        region_name (str): AWS region name. If not provided, uses the region from config.ENV_DATA
+
+    Returns:
+        str: VPC CIDR block (e.g., "10.0.0.0/16") or None if not found
+
+    Raises:
+        Exception: If unable to get infrastructure name from OpenShift or AWS query fails
+
+    """
+
+    from ocs_ci.ocs.ocp import OCP
+
+    try:
+        logger.info("Retrieving infrastructure name from OpenShift cluster")
+        ocp_obj = OCP()
+        infrastructure_name = ocp_obj.exec_oc_cmd(
+            "get -o jsonpath='{.status.infrastructureName}' infrastructure cluster"
+        )
+        logger.info(f"Infrastructure name: {infrastructure_name}")
+    except exceptions.CommandFailed as e:
+        logger.error(f"Failed to execute oc command to get infrastructure name: {e}")
+        raise
+
+    if not infrastructure_name:
+        logger.error("Infrastructure name is empty")
+        return None
+
+    aws = AWS(region_name=region_name)
+    logger.info(
+        f"Querying AWS for VPC with tag kubernetes.io/cluster/{infrastructure_name}=owned"
+    )
+
+    try:
+        response = aws.ec2_client.describe_vpcs(
+            Filters=[
+                {
+                    "Name": f"tag:kubernetes.io/cluster/{infrastructure_name}",
+                    "Values": ["owned"],
+                }
+            ]
+        )
+    except ClientError as e:
+        logger.error(f"AWS API error while querying VPC: {e}")
+        raise
+    except NoCredentialsError as e:
+        logger.error(f"AWS credentials not found: {e}")
+        raise
+    except EndpointConnectionError as e:
+        logger.error(f"Failed to connect to AWS endpoint: {e}")
+        raise
+
+    vpcs = response.get("Vpcs", [])
+
+    if not vpcs:
+        logger.warning(
+            f"No VPC found with tag kubernetes.io/cluster/{infrastructure_name}=owned"
+        )
+        return None
+
+    if len(vpcs) > 1:
+        logger.warning(
+            f"Multiple VPCs found with tag kubernetes.io/cluster/{infrastructure_name}=owned. "
+            f"Using the first one."
+        )
+
+    vpc_cidr = vpcs[0].get("CidrBlock")
+    logger.info(f"Retrieved VPC CIDR: {vpc_cidr}")
+
+    return vpc_cidr
+
+
+def get_unused_vpc_cidr(region_name=None, base_cidr="10.0.0.0", prefix_length=16):
+    """
+    Find an unused VPC CIDR block in the specified AWS region.
+
+    Args:
+        region_name (str): AWS region name. If not provided, uses the region from config.ENV_DATA
+        base_cidr (str): Base CIDR to start searching from. Default is "10.0.0.0"
+        prefix_length (int): CIDR prefix length. Default is 16
+
+    Returns:
+        str: An unused VPC CIDR block
+
+    Raises:
+        ClientError: If AWS API returns an error
+        NoCredentialsError: If AWS credentials are not configured
+        EndpointConnectionError: If cannot connect to AWS endpoint
+        RuntimeError: If cannot find an unused CIDR after checking 254 candidates
+
+    """
+    aws = AWS(region_name=region_name)
+    logger.info(f"Finding unused VPC CIDR in region {aws.region_name}")
+
+    try:
+        response = aws.ec2_client.describe_vpcs()
+    except ClientError as e:
+        logger.error(f"AWS API error while querying VPCs: {e}")
+        raise
+    except NoCredentialsError as e:
+        logger.error(f"AWS credentials not found: {e}")
+        raise
+    except EndpointConnectionError as e:
+        logger.error(f"Failed to connect to AWS endpoint: {e}")
+        raise
+
+    existing_cidrs = set()
+    for vpc in response.get("Vpcs", []):
+        vpc_cidr = vpc.get("CidrBlock")
+        if vpc_cidr:
+            existing_cidrs.add(vpc_cidr)
+            logger.debug(f"Found existing VPC CIDR: {vpc_cidr}")
+
+    logger.info(f"Found {len(existing_cidrs)} existing VPC CIDRs in the region")
+
+    base_octets = list(map(int, base_cidr.split(".")))
+
+    for second_octet in range(1, 255):
+        candidate_cidr = f"{base_octets[0]}.{second_octet}.0.0/{prefix_length}"
+
+        if candidate_cidr not in existing_cidrs:
+            logger.info(f"Found unused VPC CIDR: {candidate_cidr}")
+            return candidate_cidr
+
+    error_msg = (
+        f"Could not find an unused VPC CIDR in region {aws.region_name}. "
+        f"Checked 254 candidates starting from {base_cidr}/{prefix_length}"
+    )
+    logger.error(error_msg)
+    raise RuntimeError(error_msg)
