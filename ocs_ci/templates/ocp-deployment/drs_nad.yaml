@@ -2,7 +2,7 @@ apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: storage
-  namespace: clusters-cl-421-b
+  namespace: placeholder
 spec:
   config: |
     {
