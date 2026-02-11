@@ -1730,6 +1730,8 @@ class TimeoutSampler(object):
         # Timestamps of the first and most recent samples
         self.start_time = None
         self.last_sample_time = None
+        # Timestamp of the last INFO-level exception log (for rate limiting)
+        self.last_exception_info_log_time = None
         # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
         # Arguments that will be passed to the exception
@@ -1766,10 +1768,17 @@ class TimeoutSampler(object):
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
             except Exception:
-                log.info(
-                    f"TimeoutSampler attempt {attempt} for function '{self.func.__name__}' failed, "
-                    "see debug level logs for details"
-                )
+                # Rate-limit INFO logging to once per minute to reduce log noise
+                current_time = time.time()
+                if (
+                    self.last_exception_info_log_time is None
+                    or (current_time - self.last_exception_info_log_time) >= 60
+                ):
+                    log.info(
+                        f"TimeoutSampler attempt {attempt} for function '{self.func.__name__}' failed, "
+                        "see debug level logs for details"
+                    )
+                    self.last_exception_info_log_time = current_time
                 log.debug(
                     f"Exception raised during iteration attempt {attempt}:",
                     exc_info=True,
