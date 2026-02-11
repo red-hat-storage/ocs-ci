@@ -69,6 +69,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
+from ocs_ci.utility.networking import create_drs_machine_config, create_drs_nad
 from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -594,6 +595,9 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
         )
 
         cluster_name = hosted_ocp_cluster.deploy_ocp()
+        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+            create_drs_machine_config()
+            create_drs_nad(cluster_name)
         if cluster_name:
             cluster_names.append(cluster_name)
 
