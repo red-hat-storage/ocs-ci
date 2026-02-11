@@ -105,6 +105,7 @@ def test_ts_one_iteration_big_func_runtime():
 def test_ts_func_exception(caplog):
     """
     Check that TimeoutSampler handles exception raised during iteration.
+    INFO-level logs are rate-limited, but DEBUG-level logs capture all exceptions.
     """
     timeout = 2
     sleep_time = 1
@@ -113,19 +114,31 @@ def test_ts_func_exception(caplog):
         raise Exception("oh no")
 
     results = []
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
     with pytest.raises(TimeoutExpiredError):
         for result in TimeoutSampler(timeout, sleep_time, func):
             results.append(result)
     assert results == []
-    # check that exception was logged properly in each iteration
-    # Filter records to only include exception-related messages
-    exception_records = [
-        rec for rec in caplog.records if "TimeoutSampler attempt" in rec.getMessage()
+    # Check that exceptions were logged at DEBUG level for each iteration
+    # Filter records to only include DEBUG-level exception messages
+    debug_exception_records = [
+        rec
+        for rec in caplog.records
+        if rec.levelno == logging.DEBUG
+        and "Exception raised during iteration attempt" in rec.getMessage()
     ]
-    for rec in exception_records:
+    # Each failed attempt should have a DEBUG log entry
+    assert len(debug_exception_records) == timeout
+
+    # Also verify that INFO-level rate-limited message was logged at least once
+    info_exception_records = [
+        rec
+        for rec in caplog.records
+        if rec.levelno == logging.INFO and "TimeoutSampler attempt" in rec.getMessage()
+    ]
+    assert len(info_exception_records) >= 1
+    for rec in info_exception_records:
         assert "for function 'func' failed" in rec.getMessage()
-    assert len(exception_records) == timeout
 
 
 def test_ti_func_values():
