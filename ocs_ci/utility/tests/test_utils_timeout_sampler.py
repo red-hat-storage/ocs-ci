@@ -113,15 +113,19 @@ def test_ts_func_exception(caplog):
         raise Exception("oh no")
 
     results = []
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.INFO)
     with pytest.raises(TimeoutExpiredError):
         for result in TimeoutSampler(timeout, sleep_time, func):
             results.append(result)
     assert results == []
     # check that exception was logged properly in each iteration
-    for rec in caplog.records:
-        assert rec.getMessage() == "Exception raised during iteration: oh no"
-    assert len(caplog.records) == timeout
+    # Filter records to only include exception-related messages
+    exception_records = [
+        rec for rec in caplog.records if "TimeoutSampler attempt" in rec.getMessage()
+    ]
+    for rec in exception_records:
+        assert "for function 'func' failed" in rec.getMessage()
+    assert len(exception_records) == timeout
 
 
 def test_ti_func_values():
