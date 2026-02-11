@@ -10,6 +10,6 @@ def test_create_nad_and_mc(project_factory):
     Create NAD and MachineConfig required to bridge network interface
     for data replication separation.
     """
-    test_namespace = project_factory().name()
+    test_namespace = project_factory().resource_name
     create_drs_machine_config()
     create_drs_nad(test_namespace)
