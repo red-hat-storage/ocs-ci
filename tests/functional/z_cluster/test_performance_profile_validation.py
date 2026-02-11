@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     ignore_leftovers,
     brown_squad,
+    runs_on_provider,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -30,6 +31,7 @@ log = logging.getLogger(__name__)
 
 @brown_squad
 @tier4a
+@runs_on_provider
 @skipif_external_mode
 @skipif_managed_service
 @skipif_ocs_version("<4.15")
