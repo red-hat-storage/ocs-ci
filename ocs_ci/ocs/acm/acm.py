@@ -346,8 +346,9 @@ class AcmAddClusters(AcmPageNavigator):
             for dr_cluster in [primary_index, secondary_index]:
                 cluster_name = config.get_cluster_name_by_index(dr_cluster)
                 if get_client_type_by_name(cluster_name) == "kubevirt":
-                    # "dr-" is discoveryprefix value
-                    cluster_name = f"dr-{cluster_name}"
+                    cluster_name = (
+                        f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                    )
                     submariner_config = OCP(
                         kind=constants.SUBMARINERCONFIG,
                         namespace=cluster_name,
