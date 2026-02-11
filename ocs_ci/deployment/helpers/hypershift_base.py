@@ -171,6 +171,38 @@ def get_binary_hcp_version():
         return exec_cmd("hcp --version").stdout.decode("utf-8").strip()
 
 
+def get_binary_hcp_ocp_version():
+    """
+    Extract the OCP version from hypershift version output.
+
+    Example output:
+        Client Version: openshift/hypershift: 4be85900d761c04ab69fdf79408ced718cef5628. Latest supported OCP: 4.21.0
+        Server Version: c20bbad4d528bfb51687f02684ef5eb79669b850
+        Server Supports OCP Versions: 4.21, 4.20, 4.19, 4.18, 4.17, 4.16, 4.15, 4.14
+
+    Returns:
+        str: OCP version in 'major.minor' format (e.g., '4.21') or None if not found
+
+    """
+    try:
+        version_output = exec_cmd("hypershift version").stdout.decode("utf-8").strip()
+        # Parse "Latest supported OCP: 4.21.0" from the output
+        for line in version_output.split("\n"):
+            if "Latest supported OCP:" in line:
+                # Extract version like "4.21.0"
+                version_str = line.split("Latest supported OCP:")[1].strip()
+                # Parse to get major.minor (e.g., "4.21")
+                v = parse_version(version_str)
+                return f"{v.major}.{v.minor}"
+        logger.warning(
+            "Could not find 'Latest supported OCP' in hypershift version output"
+        )
+        return None
+    except CommandFailed as e:
+        logger.warning(f"Failed to get hypershift version: {e}")
+        return None
+
+
 @switch_to_orig_index_at_last
 def get_cluster_vm_namespace(cluster_name=None):
     """
@@ -594,7 +626,11 @@ class HyperShiftBase:
 
     def update_hcp_binary(self, install_latest=False):
         """
-        Update hcp binary
+        Update hcp binary only if a newer version is available.
+
+        Compares the current installed hypershift binary version with the latest
+        supported version from the hub cluster. Only performs update if the hub
+        version is higher than the current binary version.
 
         Args:
             install_latest (bool): If True, install the latest Hypershift version from git.
@@ -604,6 +640,42 @@ class HyperShiftBase:
         if not config.ENV_DATA.get("hcp_version"):
             logger.error("hcp_version is not set in config.ENV_DATA")
             install_latest = True
+
+        # Get current binary version
+        current_version = None
+        if self.hcp_binary_exists() and self.hypershift_binary_exists():
+            current_version = get_binary_hcp_ocp_version()
+            if current_version:
+                logger.info(f"Current hypershift binary version: {current_version}")
+
+        # Get latest supported version from hub
+        latest_version = get_latest_supported_hypershift_version()
+
+        if current_version and latest_version:
+            # Compare versions
+            current_parsed = parse_version(current_version)
+            latest_parsed = parse_version(latest_version)
+
+            if current_parsed >= latest_parsed:
+                logger.info(
+                    f"Current hypershift binary version {current_version} is already "
+                    f"up to date (>= {latest_version}). Skipping update."
+                )
+                return
+            else:
+                logger.info(
+                    f"Newer hypershift version available: {latest_version} "
+                    f"(current: {current_version}). Updating binary..."
+                )
+        elif current_version:
+            logger.info(
+                f"Could not determine latest version from hub. "
+                f"Current version: {current_version}. Proceeding with update..."
+            )
+        else:
+            logger.info(
+                "Hypershift binary not found or version could not be determined. Installing..."
+            )
 
         self.delete_hcp_and_hypershift_bin()
         self.install_hcp_and_hypershift_from_git(install_latest)

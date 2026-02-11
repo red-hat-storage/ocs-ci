@@ -2326,6 +2326,61 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         return self.sts_credentials_file
 
+    def validate_sts_credentials_not_expired(self):
+        """
+        Validate that STS credentials file exists and credentials are not expired.
+
+        Returns:
+            bool: True if credentials are valid and not expired, False otherwise
+
+        Raises:
+            FileNotFoundError: If credentials file doesn't exist
+        """
+        if not self.sts_credentials_file:
+            logger.error("STS credentials file path is not set")
+            return False
+
+        if not os.path.exists(self.sts_credentials_file):
+            raise FileNotFoundError(
+                f"STS credentials file not found: {self.sts_credentials_file}"
+            )
+
+        try:
+            with open(self.sts_credentials_file, "r") as f:
+                creds_data = json.load(f)
+
+            expiration_str = creds_data.get("Credentials", {}).get("Expiration")
+            if not expiration_str:
+                logger.warning("No expiration time found in STS credentials file")
+                return True  # Assume valid if no expiration
+
+            # Parse expiration time
+            from dateutil import parser as date_parser
+
+            expiration_time = date_parser.parse(expiration_str)
+
+            # Make timezone-aware comparison
+            import datetime
+
+            current_time = datetime.datetime.now(expiration_time.tzinfo)
+
+            if current_time >= expiration_time:
+                logger.error(
+                    f"STS credentials have EXPIRED!\n"
+                    f"  Expiration: {expiration_str}\n"
+                    f"  Current time: {current_time.isoformat()}\n"
+                    f"  Call retrieve_sts_session_token() to get new credentials."
+                )
+                return False
+
+            time_remaining = expiration_time - current_time
+            logger.info(f"STS credentials are valid. Time remaining: {time_remaining}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error validating STS credentials: {e}")
+            return False
+
     def _create_aws_hcp_files_dir(self):
         """
         Create a directory for AWS HCP files inside the hosted_cluster_path.
@@ -2623,6 +2678,12 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 "STS credentials file not set. Call retrieve_sts_session_token() first."
             )
 
+        if not self.validate_sts_credentials_not_expired():
+            raise ValueError(
+                "STS credentials are expired or invalid. "
+                "Call retrieve_sts_session_token() to get new credentials."
+            )
+
         if not self.role_arn:
             raise ValueError("Role ARN not set. Call create_deployer_iam_role() first.")
 
@@ -2653,6 +2714,21 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             self.aws_hcp_files_dir, f"{self.name}-iam-output.json"
         )
 
+        # CRITICAL: Create OIDC documents BEFORE running hypershift create iam
+        # This ensures documents exist when AWS IAM OIDC provider is registered
+        issuer_url = f"https://{self.oidc_bucket_name}.s3.{self.oidc_bucket_region}.amazonaws.com/{self.infra_id}"
+        logger.info(
+            "Pre-creating OIDC discovery documents before IAM creation "
+            "(required for OIDC provider registration)"
+        )
+        if not self._create_oidc_discovery_documents(issuer_url):
+            logger.warning(
+                "Failed to pre-create OIDC documents. "
+                "Will retry validation after IAM creation."
+            )
+        else:
+            logger.info("✅ OIDC documents pre-created successfully")
+
         # Build the hypershift create iam aws command
         cmd = (
             f"{self.hypershift_binary_path} create iam aws "
@@ -2673,9 +2749,16 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             result = exec_cmd(cmd, timeout=timeout)
             logger.info("AWS IAM creation command completed successfully")
-            logger.debug(
-                f"Output: {result.stdout.decode('utf-8') if result.stdout else ''}"
-            )
+
+            # Log the full output for debugging
+            stdout = result.stdout.decode("utf-8") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8") if result.stderr else ""
+
+            if stdout:
+                logger.info(f"hypershift create iam stdout:\n{stdout}")
+            if stderr:
+                logger.warning(f"hypershift create iam stderr:\n{stderr}")
+
         except CommandFailed as e:
             logger.error(f"Failed to create AWS IAM resources: {e}")
             raise
@@ -2692,16 +2775,162 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             with open(self.output_iam_file, "r") as f:
                 iam_data = json.load(f)
+                issuer_url = iam_data.get("issuerURL", "")
                 logger.info(
                     f"AWS IAM resources created successfully:\n"
                     f"  Infra ID: {self.infra_id}\n"
+                    f"  Issuer URL: {issuer_url}\n"
                     f"  Output file: {self.output_iam_file}\n"
                     f"  IAM details: {json.dumps(iam_data, indent=2)[:500]}..."
                 )
+
+                # Validate OIDC discovery document is accessible
+                if issuer_url:
+                    logger.info("Validating OIDC discovery document accessibility...")
+                    if not self._validate_and_create_oidc_docs(issuer_url):
+                        logger.warning(
+                            "OIDC discovery document validation failed. "
+                            "Cluster may fail to authenticate."
+                        )
+
         except (json.JSONDecodeError, IOError) as e:
             logger.warning(f"Could not read/parse IAM output file: {e}")
 
         return self.output_iam_file
+
+    def _create_oidc_discovery_documents(self, issuer_url):
+        """
+        Manually create and upload OIDC discovery documents to S3.
+
+        This is a fallback for when hypershift create iam doesn't upload them.
+
+        Args:
+            issuer_url (str): The OIDC issuer URL
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        logger.info(f"Manually creating OIDC discovery documents for: {issuer_url}")
+
+        # Extract bucket and path from issuer URL
+        # Format: https://bucket-name.s3.region.amazonaws.com/infra-id
+        import re
+
+        match = re.match(
+            r"https://([^.]+)\.s3\.([^.]+)\.amazonaws\.com/(.+)", issuer_url
+        )
+        if not match:
+            logger.error(f"Could not parse issuer URL: {issuer_url}")
+            return False
+
+        bucket_name = match.group(1)
+        region = match.group(2)
+        infra_id = match.group(3)
+
+        logger.info(
+            f"Parsed: bucket={bucket_name}, region={region}, infra_id={infra_id}"
+        )
+
+        # Create OIDC configuration
+        oidc_config = {
+            "issuer": issuer_url,
+            "jwks_uri": f"{issuer_url}/.well-known/jwks.json",
+            "response_types_supported": ["id_token"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+        }
+
+        # Create JWKS (empty - will be populated by hypershift operator)
+        jwks = {"keys": []}
+
+        try:
+            # Upload openid-configuration
+            config_key = f"{infra_id}/.well-known/openid-configuration"
+            logger.info(
+                f"Uploading openid-configuration to s3://{bucket_name}/{config_key}"
+            )
+            self.s3_client.put_object(
+                Bucket=bucket_name,
+                Key=config_key,
+                Body=json.dumps(oidc_config, indent=2).encode("utf-8"),
+                ContentType="application/json",
+            )
+            logger.info("✅ Uploaded openid-configuration")
+
+            # Upload jwks.json
+            jwks_key = f"{infra_id}/.well-known/jwks.json"
+            logger.info(f"Uploading jwks.json to s3://{bucket_name}/{jwks_key}")
+            self.s3_client.put_object(
+                Bucket=bucket_name,
+                Key=jwks_key,
+                Body=json.dumps(jwks, indent=2).encode("utf-8"),
+                ContentType="application/json",
+            )
+            logger.info("✅ Uploaded jwks.json")
+            logger.info("✅ Successfully created and uploaded OIDC discovery documents")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to upload OIDC discovery documents: {e}")
+            return False
+
+    def _validate_and_create_oidc_docs(self, issuer_url, max_retries=5, retry_delay=10):
+        """
+        Validate that OIDC discovery document is accessible, create if missing.
+
+        Args:
+            issuer_url (str): The OIDC issuer URL
+            max_retries (int): Maximum number of retry attempts
+            retry_delay (int): Seconds to wait between retries
+
+        Returns:
+            bool: True if accessible or successfully created, False otherwise
+        """
+        from urllib.request import urlopen
+        from urllib.error import HTTPError
+
+        discovery_url = f"{issuer_url}/.well-known/openid-configuration"
+        logger.info(f"Checking OIDC discovery document: {discovery_url}")
+
+        # Try to access the document
+        for attempt in range(1, max_retries + 1):
+            try:
+                with urlopen(discovery_url, timeout=10) as response:
+                    if response.status == 200:
+                        content = response.read().decode("utf-8")
+                        discovery_doc = json.loads(content)
+                        if "issuer" in discovery_doc:
+                            logger.info(
+                                f"✅ OIDC discovery document is accessible (attempt {attempt}/{max_retries})"
+                            )
+                            logger.info(f"   Issuer: {discovery_doc['issuer']}")
+                            return True
+            except HTTPError as e:
+                if e.code == 403 or e.code == 404:
+                    logger.warning(
+                        f"   OIDC discovery document not found (HTTP {e.code}) "
+                        f"(attempt {attempt}/{max_retries})"
+                    )
+                    if attempt == 1:
+                        # On first 403/404, try to create the documents
+                        logger.info("Attempting to create OIDC documents manually...")
+                        if self._create_oidc_discovery_documents(issuer_url):
+                            logger.info("Waiting 5 seconds for S3 propagation...")
+                            time.sleep(5)
+                            continue  # Retry immediately after creation
+                else:
+                    logger.warning(f"   HTTP Error {e.code}: {e.reason}")
+            except Exception as e:
+                logger.warning(f"   Error: {e}")
+
+            if attempt < max_retries:
+                logger.info(f"   Waiting {retry_delay} seconds before retry...")
+                time.sleep(retry_delay)
+
+        logger.error("❌ OIDC discovery document is NOT accessible after all attempts!")
+        logger.error(f"   URL: {discovery_url}")
+        logger.error("   This will cause ValidAWSIdentityProvider: WebIdentityErr")
+        return False
 
     def deploy_ocp(self, **kwargs) -> str:
         """
@@ -2838,7 +3067,27 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         if deploy_hypershift_oidc:
             log_step("Setting up S3 bucket for HyperShift OIDC provider")
-            self.setup_hypershift_oidc()
+            # Check if a shared OIDC bucket is configured
+            cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+            shared_bucket = cluster_config.get("oidc_bucket_name")
+            if shared_bucket:
+                logger.info(f"Using shared OIDC bucket: {shared_bucket}")
+                self.setup_hypershift_oidc(bucket_name=shared_bucket)
+            else:
+                logger.info("Creating cluster-specific OIDC bucket")
+                self.setup_hypershift_oidc()
+        else:
+            # If not deploying OIDC, check if configuration is pre-set
+            cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+            self.oidc_bucket_name = cluster_config.get("oidc_bucket_name")
+            self.oidc_bucket_region = cluster_config.get(
+                "oidc_bucket_region", self.aws_region
+            )
+            if self.oidc_bucket_name:
+                logger.info(
+                    f"Using pre-configured OIDC bucket: {self.oidc_bucket_name} "
+                    f"in region {self.oidc_bucket_region}"
+                )
 
         if create_deployer_iam_role:
             log_step(
@@ -2864,6 +3113,12 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 "deploy_hypershift_oidc=True or pre-configure self.oidc_bucket_name "
                 "and self.oidc_bucket_region before calling deploy_dependencies()."
             )
+
+        logger.info(
+            f"OIDC Configuration validated:\n"
+            f"  Bucket Name: {self.oidc_bucket_name}\n"
+            f"  Bucket Region: {self.oidc_bucket_region}"
+        )
 
         self.retrieve_sts_session_token()
         self.create_aws_infra()
@@ -3090,7 +3345,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             )
             return ""
 
-    def setup_hypershift_oidc(self):
+    def setup_hypershift_oidc(self, bucket_name=None):
         """
         Setup S3 bucket for HyperShift OIDC provider.
 
@@ -3098,17 +3353,28 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         containing AWS credentials and bucket information needed for HyperShift
         OIDC provider functionality.
 
+        Args:
+            bucket_name (str, optional): Name of the S3 bucket to create.
+                If not provided, defaults to "{cluster_name}-oidc-bucket".
+                To reuse an existing shared bucket across clusters, pass the bucket name.
+
         Returns:
             bool: True if setup successful, False otherwise
         """
-        bucket_name = f"{self.name}-oidc-bucket"
+        # Allow configuration override for shared OIDC bucket
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+        configured_bucket_name = cluster_config.get("oidc_bucket_name")
+
+        if not bucket_name:
+            if configured_bucket_name:
+                bucket_name = configured_bucket_name
+                logger.info(f"Using configured OIDC bucket name: {bucket_name}")
+            else:
+                bucket_name = f"{self.name}-oidc-bucket"
+                logger.info(f"Using default OIDC bucket naming: {bucket_name}")
 
         # Get namespace for the secret from config or use default
-        secret_namespace = (
-            config.ENV_DATA.get("clusters", {})
-            .get(self.name, {})
-            .get("oidc_secret_namespace", "local-cluster")
-        )
+        secret_namespace = cluster_config.get("oidc_secret_namespace", "local-cluster")
 
         logger.info(
             f"Setting up S3 bucket '{bucket_name}' for HyperShift OIDC provider "
@@ -3286,6 +3552,13 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             f"Creating Kubernetes secret '{secret_name}' in namespace '{namespace}'"
         )
 
+        # Delete existing secret if it exists (might be from previous cluster)
+        secret_obj = OCP(kind="secret", namespace=namespace, resource_name=secret_name)
+        if secret_obj.is_exist():
+            logger.info(f"Found existing secret '{secret_name}', deleting it")
+            secret_obj.delete(resource_name=secret_name)
+            logger.info(f"Deleted old secret '{secret_name}'")
+
         try:
             if aws_credentials_path:
                 cmd = (
@@ -3308,11 +3581,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 )
 
             logger.debug(f"Executing command: {cmd}")
-            result = exec_cmd(cmd, shell=True)
-            if result.exit_code != 0:
-                raise CommandFailed(
-                    f"Failed to create Kubernetes secret: {result.stderr}"
-                )
+            exec_cmd(cmd, shell=True)
             logger.info(
                 f"Kubernetes secret '{secret_name}' created successfully in namespace '{namespace}'"
             )
