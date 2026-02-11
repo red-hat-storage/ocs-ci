@@ -722,6 +722,14 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
+# Map performance profile component name to pod label selector for Ceph daemons
+CEPH_DAEMON_LABEL_BY_COMPONENT = {
+    "mgr": MGR_APP_LABEL,
+    "mon": MON_APP_LABEL,
+    "osd": OSD_APP_LABEL,
+    "mds": MDS_APP_LABEL,
+    "rgw": RGW_APP_LABEL,
+}
 EXPORTER_APP_LABEL = "app=rook-ceph-exporter"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 ODF_CONSOLE = "app=odf-console"
