@@ -25,7 +25,7 @@ from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
-from ocs_ci.ocs.node import check_cluster_resource_availability
+from ocs_ci.ocs.node import get_cluster_resource_capacity
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +53,41 @@ class TestAddCapacity(ManageTest):
     def resource_check(self):
         """
         Gatekeeper: Ensures hardware capacity before starting deployment.
-        calls the centralized utility from node.py.
+        Calculates availability and skips if requirements are not met.
         """
-        check_cluster_resource_availability(
-            needed_ram_gb=REQUIRED_RAM_GB, needed_cpu_cores=REQUIRED_CPU_CORES
+        free_ram, free_cpu, breakdown = get_cluster_resource_capacity()
+
+        logger.info(
+            f"Available Capacity: {free_ram:.2f}GB RAM | {free_cpu:.2f} CPU Cores"
         )
+
+        if free_ram < REQUIRED_RAM_GB or free_cpu < REQUIRED_CPU_CORES:
+            # Prepare Breakdown Table
+            header = "{:<45} | {:<12} | {:<12}".format(
+                "Namespace", "RAM Req(GB)", "CPU Req(Cores)"
+            )
+            table_rows = [header, "-" * 75]
+
+            sorted_ns = sorted(
+                breakdown["ram"].keys(),
+                key=lambda x: breakdown["ram"][x],
+                reverse=True
+            )
+
+            for ns in sorted_ns:
+                ram_gb = breakdown["ram"][ns] / (1024 * 1024)
+                cpu_c = breakdown["cpu"][ns] / 1000
+                if ram_gb > 0.1 or cpu_c > 0.1:
+                    table_rows.append(
+                        "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
+                    )
+
+            logger.error(f"RESOURCE GATEKEEPER FAILED. Breakdown: \n" + "\n".join(table_rows))
+
+            pytest.skip(
+                f"Insufficient Resources: {free_ram:.2f}GB RAM / {free_cpu:.2f} CPU cores available. "
+                f"Required: {REQUIRED_RAM_GB}GB / {REQUIRED_CPU_CORES} Cores."
+            )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):

@@ -3440,36 +3440,34 @@ def mark_masters_schedulable():
         params=params, format_type="json"
     ), "Failed to run patch command to update control nodes as scheduleable"
 
-
-def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
+def get_cluster_resource_capacity():
     """
-    Validates if the worker nodes have sufficient unreserved CPU and RAM.
-    Parses 'oc describe node' to identify resource usage and skips the test
-    if the requirement isn't met, providing a namespace-level breakdown.
+    Parses 'oc describe node' for all worker nodes to calculate actual
+    unreserved CPU and RAM capacity.
 
-    Args:
-        needed_ram_gb (int): Required RAM in Gigabytes.
-        needed_cpu_cores (int): Required CPU cores.
-
-    Raises:
-        pytest.skip: If available resources are below the required threshold.
+    Returns:
+        tuple: (free_ram_gb, free_cpu_cores, namespace_breakdown_dict)
+            - free_ram_gb (float): Total unreserved RAM in GB.
+            - free_cpu_cores (float): Total unreserved CPU cores.
+            - breakdown (dict): Dictionary containing 'ram' and 'cpu' usage per namespace.
     """
     worker_names = get_worker_nodes()
     total_free_ram_kb = 0
     total_free_cpu_m = 0
 
-    namespace_ram = defaultdict(int)
-    namespace_cpu = defaultdict(int)
+    breakdown = {
+        "ram": defaultdict(int),
+        "cpu": defaultdict(int)
+    }
     ocp_node_obj = OCP(kind=constants.NODE)
 
     for name in worker_names:
         # Use exec_cmd instead of deprecated run_cmd
         node_data_raw = exec_cmd(f"oc describe node {name}").stdout.decode()
-        # Normalize hidden characters (like \xa0) to standard spaces
         node_data = unicodedata.normalize("NFKD", node_data_raw)
         node_info = ocp_node_obj.get(resource_name=name)
 
-        # 1. Base Allocatable precision from node status
+        # 1. Base Allocatable precision
         alloc_ram_kb = int(
             node_info["status"]["allocatable"]["memory"].replace("Ki", "")
         )
@@ -3478,7 +3476,7 @@ def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
             int(cpu_raw.replace("m", "")) if "m" in cpu_raw else int(cpu_raw) * 1000
         )
 
-        # 2. Parse overall reservation percentages
+        # 2. Parse overall reservation
         mem_res_match = re.search(r"memory\s+(\d+)Mi\s+\((\d+)%\)", node_data)
         cpu_res_match = re.search(r"cpu\s+(\d+)m\s+\((\d+)%\)", node_data)
 
@@ -3489,9 +3487,8 @@ def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
             used_percent = int(cpu_res_match.group(2))
             total_free_cpu_m += alloc_cpu_m * (1.0 - (used_percent / 100.0))
 
-        # 3. Component Breakdown Parsing
+        # 3. Component Breakdown
         try:
-            # Finding the pod section between anchors
             pod_section = node_data.split("Non-terminated Pods:")[1].split(
                 "Allocated resources:"
             )[0]
@@ -3510,7 +3507,7 @@ def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
                         c_val = int(re.search(r"\d+", raw_c).group())
                         if "m" not in raw_c:
                             c_val *= 1000
-                        namespace_cpu[ns] += c_val
+                        breakdown["cpu"][ns] += c_val
 
                     if mem_usage:
                         raw_m = mem_usage[0]
@@ -3519,55 +3516,11 @@ def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
                             m_val *= 1024 * 1024
                         elif "Mi" in raw_m:
                             m_val *= 1024
-                        namespace_ram[ns] += m_val
+                        breakdown["ram"][ns] += m_val
         except (IndexError, ValueError, KeyError) as e:
             log.debug(f"Parsing row failed for node {name}: {e}")
 
-    actual_free_ram_gb = total_free_ram_kb / (1024 * 1024)
-    actual_free_cpu = total_free_cpu_m / 1000
+    free_ram_gb = total_free_ram_kb / (1024 * 1024)
+    free_cpu_cores = total_free_cpu_m / 1000
 
-    log.info(
-        f"Available Capacity: {actual_free_ram_gb:.2f}GB RAM | {actual_free_cpu:.2f} CPU Cores"
-    )
-
-    # UPDATED: Now checking both RAM and CPU cores
-    if actual_free_ram_gb < needed_ram_gb or actual_free_cpu < needed_cpu_cores:
-        header = "{:<45} | {:<12} | {:<12}".format(
-            "Namespace", "RAM Req(GB)", "CPU Req(Cores)"
-        )
-        table_rows = [header, "-" * 75]
-
-        # Sort by the resource that is lacking (defaulting to RAM for sorting)
-        sorted_ns = sorted(
-            namespace_ram.keys(), key=lambda x: namespace_ram[x], reverse=True
-        )
-
-        for ns in sorted_ns:
-            ram_gb = namespace_ram[ns] / (1024 * 1024)
-            cpu_c = namespace_cpu[ns] / 1000
-            # Show namespaces that use significant amounts of either resource
-            if ram_gb > 0.1 or cpu_c > 0.1:
-                table_rows.append(
-                    "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
-                )
-
-        breakdown_msg = "\n" + "\n".join(table_rows)
-
-        # Determine specific failure reason for the error log
-        failure_reasons = []
-        if actual_free_ram_gb < needed_ram_gb:
-            failure_reasons.append(
-                f"RAM (Need {needed_ram_gb}GB, Have {actual_free_ram_gb:.2f}GB)"
-            )
-        if actual_free_cpu < needed_cpu_cores:
-            failure_reasons.append(
-                f"CPU (Need {needed_cpu_cores}, Have {actual_free_cpu:.2f} cores)"
-            )
-
-        log.error(f"RESOURCE GATEKEEPER FAILED: {' and '.join(failure_reasons)}")
-        log.error(breakdown_msg)
-
-        # Trigger the skip
-        pytest.skip(
-            f"Insufficient Resources: {actual_free_ram_gb:.2f}GB RAM / {actual_free_cpu:.2f} CPU cores available."
-        )
+    return free_ram_gb, free_cpu_cores, breakdown
