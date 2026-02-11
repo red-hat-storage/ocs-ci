@@ -336,7 +336,7 @@ class TestVMAutoCleanUp:
                 should_exist=False,
             )
             dr_helpers.wait_for_resource_existence(
-                kind=constants.VM_VOLUME_DV,
+                kind=constants.VM_DATAVOLUME,
                 namespace=cnv_wl.workload_namespace,
                 should_exist=False,
             )
@@ -429,7 +429,7 @@ class TestVMAutoCleanUp:
                 should_exist=False,
             )
             dr_helpers.wait_for_resource_existence(
-                kind=constants.VM_VOLUME_DV,
+                kind=constants.VM_DATAVOLUME,
                 namespace=cnv_wl.workload_namespace,
                 should_exist=False,
             )
