@@ -188,6 +188,7 @@ from ocs_ci.utility.utils import (
     get_acm_version,
     get_acm_mce_build_tag,
     apply_oadp_workaround,
+    mute_mon_netsplit,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2061,6 +2062,10 @@ class Deployment(object):
                     f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
                 )
 
+        # Mute MON_NETSPLIT for arbiter deployments to avoid:
+        # https://issues.redhat.com/browse/DFBUGS-4521
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            mute_mon_netsplit(namespace=self.namespace)
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
