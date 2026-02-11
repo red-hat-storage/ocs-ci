@@ -842,7 +842,8 @@ def process_cluster_cli_params(config):
     skip_rpm_go_version_collection = get_cli_param(
         config, "skip_rpm_go_version_collection"
     )
-    ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
+    if skip_rpm_go_version_collection:
+        ocsci_config.RUN["skip_rpm_go_version_collection"] = True
     ocsci_config.ENV_DATA["product_type"] = get_cli_param(config, "product_type")
 
 
@@ -953,6 +954,7 @@ def pytest_runtest_makereport(item, call):
                     skip_after_max_fail=True,
                     timeout=timeout,
                     since_time=since_time_str,
+                    test_case_name=test_case_name,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")
