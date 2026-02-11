@@ -172,7 +172,7 @@ class MCEInstaller(object):
                 mce_subscription_yaml_data, mce_subscription_manifest.name
             )
             logger.info("Creating subscription for the mce operator")
-            exec_cmd(f"oc create -f {mce_subscription_manifest.name}")
+            exec_cmd(f"oc apply -f {mce_subscription_manifest.name}")
             OCP(
                 kind=constants.SUBSCRIPTION_COREOS,
                 namespace=self.mce_namespace,

@@ -105,7 +105,7 @@ class FusionDeployment:
             subscription_fusion_yaml_data, subscription_fusion_manifest.name
         )
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} create -f {subscription_fusion_manifest.name}"
+            f"oc --kubeconfig {self.kubeconfig} apply -f {subscription_fusion_manifest.name}"
         )
 
     def create_namespace_and_operator_group(self):

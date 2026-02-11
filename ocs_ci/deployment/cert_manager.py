@@ -36,4 +36,4 @@ def deploy_cert_manager():
     templating.dump_data_to_temp_yaml(
         subscription_cert_manager_yaml_data, subscription_cert_manager_manifest.name
     )
-    run_cmd(f"oc create -f {subscription_cert_manager_manifest.name}")
+    run_cmd(f"oc apply -f {subscription_cert_manager_manifest.name}")

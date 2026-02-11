@@ -1116,7 +1116,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             subscription_yaml_data, subscription_manifest.name
         )
-        run_cmd(f"oc create -f {subscription_manifest.name}")
+        run_cmd(f"oc apply -f {subscription_manifest.name}")
         self.wait_for_subscription(ocs_operator_name)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
@@ -2544,7 +2544,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -2630,7 +2630,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)
