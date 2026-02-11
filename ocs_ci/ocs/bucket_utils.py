@@ -3587,20 +3587,3 @@ def get_bucket_status_value(mcg_obj, bucket_name, key):
     op = bucket_status.split("\n")
     value = next(item.split(":")[1].strip() for item in op if key in item)
     return value
-
-
-def get_bucket_policy_user_list(obc_obj):
-    """
-    Helper function returning user list used to construct bucket policy depending on oc version
-    Args:
-        obc_obj (obj): Obc object
-    Returns:
-        str: user list to be used in policy
-    """
-    ocs_version = version.get_semantic_ocs_version_from_config()
-
-    user_list = (
-        obc_obj.obc_arn if ocs_version >= version.VERSION_4_21 else obc_obj.obc_account
-    )
-
-    return user_list

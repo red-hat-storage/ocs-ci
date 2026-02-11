@@ -139,6 +139,18 @@ class OBC(object):
         )
         self.s3_client = self.s3_resource.meta.client
 
+    @property
+    def id_for_policy_principal(self):
+        """
+        Returns the ID for the OBC account to be used in bucket policies,
+        based on the OCS version.
+
+        Returns:
+            str: The ID for the OBC account to be used in bucket policies.
+        """
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        return self.obc_arn if ocs_version >= version.VERSION_4_21 else self.obc_account
+
 
 class ObjectBucket(ABC):
     """
