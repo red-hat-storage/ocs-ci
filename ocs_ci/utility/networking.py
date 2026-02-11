@@ -131,7 +131,7 @@ def create_drs_machine_config():
         constants.TEMPLATE_DEPLOYMENT_DIR, "drs_machineconfig.yaml"
     )
     machineconfigurations_yaml = load_yaml(machineconfigurations_path)
-    machineconfigurations_yaml["spec"]["storage"]["files"][0]["contents"][
+    machineconfigurations_yaml["spec"]["config"]["storage"]["files"][0]["contents"][
         "source"
     ] = f"data:text/plain;base64,{base64_interfaces}"
     machineconfigurations_obj = OCS(**machineconfigurations_yaml)
