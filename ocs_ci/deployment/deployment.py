@@ -1626,8 +1626,9 @@ class Deployment(object):
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
-        self.set_noobaa_core_for_rgw_ssl()
+        run_cmd(f"oc apply -f {cluster_data_yaml.name}", timeout=2400)
+        if config.EXTERNAL_MODE.get("rgw_secure"):
+            self.set_noobaa_core_for_rgw_ssl()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
