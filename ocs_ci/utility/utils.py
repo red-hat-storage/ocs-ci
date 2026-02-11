@@ -1,5 +1,5 @@
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import reduce
 import base64
 import io
@@ -3015,7 +3015,7 @@ def ceph_health_recover(
             since_time_str = None
             test_start_time = ocscilib.test_start_time
             if test_start_time:
-                time_with_buffer = test_start_time - datetime.timedelta(minutes=5)
+                time_with_buffer = test_start_time - timedelta(minutes=5)
                 # RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
                 since_time_str = time_with_buffer.strftime("%Y-%m-%dT%H:%M:%SZ")
             # Collecting logs here before trying to fix issue
