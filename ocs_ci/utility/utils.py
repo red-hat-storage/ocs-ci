@@ -1757,15 +1757,23 @@ class TimeoutSampler(object):
     def __iter__(self):
         if self.start_time is None:
             self.start_time = time.time()
+        attempt = 0
         while True:
             self.last_sample_time = time.time()
             if self.timeout <= (self.last_sample_time - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
+            attempt += 1
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
-            except Exception as ex:
-                msg = f"Exception raised during iteration: {ex}"
-                log.exception(msg)
+            except Exception:
+                log.info(
+                    f"TimeoutSampler attempt {attempt} for function '{self.func.__name__}' failed, "
+                    "see debug level logs for details"
+                )
+                log.debug(
+                    f"Exception raised during iteration attempt {attempt}:",
+                    exc_info=True,
+                )
             if self.timeout <= (time.time() - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
             log.info("Going to sleep for %d seconds before next iteration", self.sleep)
