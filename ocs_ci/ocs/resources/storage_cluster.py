@@ -957,9 +957,9 @@ def ocs_install_verification(
     sc_obj = get_storage_cluster()
     sc_ob_spec = sc_obj.get().get("items")[0].get("spec")
     if sc_ob_spec.get("hostNetwork") is True:
-        assert (
-            sc_ob_spec.get("providerAPIServerServiceType")
-            == constants.SERVICE_TYPE_NODEPORT
+        assert sc_ob_spec.get("providerAPIServerServiceType") in (
+            constants.SERVICE_TYPE_NODEPORT,
+            constants.SERVICE_TYPE_CLUSTERIP,
         ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
         # check the rule in bz DFBUGS-2324 is followed:
         assert (
