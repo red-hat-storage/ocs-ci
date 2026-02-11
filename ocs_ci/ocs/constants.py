@@ -3769,7 +3769,12 @@ CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
 RBD_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
 )
+CEPHFS_CSI_ADDONS_PLUGIN_DIR = (
+    "/var/lib/kubelet/plugins/openshift-storage.cephfs.csi.ceph.com"
+)
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+
 HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
 
 # Fill pool job and PVC Yaml files
