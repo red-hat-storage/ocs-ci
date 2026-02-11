@@ -1760,7 +1760,7 @@ class Deployment(object):
             cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
         # Create secret for external cluster
-        create_external_secret()
+        create_external_secret(apply=True)
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
@@ -1827,7 +1827,7 @@ class Deployment(object):
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        run_cmd(f"oc apply -f {cluster_data_yaml.name}", timeout=2400)
         external_cluster.disable_certificate_check()
         self.set_noobaa_core_for_rgw_ssl()
         self.external_post_deploy_validation()
