@@ -2227,7 +2227,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         self.output_infra_file = None
 
         # Infrastructure ID for AWS resources
-        self.infra_id = config.ENV_DATA["cluster_name"]
+        self.infra_id = f"{self.name}-infra"
 
         # Role ARN for deployer
         self.role_arn = None
@@ -2622,7 +2622,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                     f"AWS infrastructure created successfully:\n"
                     f"  Infra ID: {self.infra_id}\n"
                     f"  Output file: {self.output_infra_file}\n"
-                    f"  Infrastructure details: {json.dumps(infra_data, indent=2)[:500]}..."
+                    f"  Infrastructure details: {json.dumps(infra_data, indent=2)}"
                 )
         except (json.JSONDecodeError, IOError) as e:
             logger.warning(f"Could not read/parse infra output file: {e}")
@@ -2788,20 +2788,23 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             self.aws_hcp_files_dir, f"{self.name}-iam-output.json"
         )
 
-        # CRITICAL: Create OIDC documents BEFORE running hypershift create iam
-        # This ensures documents exist when AWS IAM OIDC provider is registered
-        issuer_url = f"https://{self.oidc_bucket_name}.s3.{self.oidc_bucket_region}.amazonaws.com/{self.infra_id}"
-        logger.info(
-            "Pre-creating OIDC discovery documents before IAM creation "
-            "(required for OIDC provider registration)"
-        )
-        if not self._create_oidc_discovery_documents(issuer_url):
-            logger.warning(
-                "Failed to pre-create OIDC documents. "
-                "Will retry validation after IAM creation."
-            )
-        else:
-            logger.info("✅ OIDC documents pre-created successfully")
+        # TODO: remove this workaround once hypershift create iam properly creates
+        #  the OIDC discovery documents in the S3 bucket
+        #
+        # # CRITICAL: Create OIDC documents BEFORE running hypershift create iam
+        # # This ensures documents exist when AWS IAM OIDC provider is registered
+        # issuer_url = f"https://{self.oidc_bucket_name}.s3.{self.oidc_bucket_region}.amazonaws.com/{self.infra_id}"
+        # logger.info(
+        #     "Pre-creating OIDC discovery documents before IAM creation "
+        #     "(required for OIDC provider registration)"
+        # )
+        # if not self._create_oidc_discovery_documents(issuer_url):
+        #     logger.warning(
+        #         "Failed to pre-create OIDC documents. "
+        #         "Will retry validation after IAM creation."
+        #     )
+        # else:
+        #     logger.info("✅ OIDC documents pre-created successfully")
 
         # Build the hypershift create iam aws command
         cmd = (
@@ -3196,8 +3199,17 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         # TODO: remove back if does not help
         # self.retrieve_sts_session_token()
         self.retrieve_sts_session_token_via_cli()
+        logger.info(
+            "Waiting 30 seconds to ensure STS credentials are available before proceeding..."
+        )
+        time.sleep(30)
         self.create_aws_infra()
         self.read_infra_output()
+        logger.info(
+            "Waiting 30 seconds to ensure AWS infrastructure is fully available before proceeding "
+            "to IAM creation..."
+        )
+        time.sleep(30)
         self.create_aws_iam()
 
     def validate_aws_prerequisites(self):
