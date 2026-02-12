@@ -484,7 +484,7 @@ class TestVMAutoCleanUp:
         logger.info("Checking for lastGroupSyncTime post relocate...")
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
-        logger.info("Checking for lastKubeObjectProtectionTime")
+        logger.info("Checking for lastKubeObjectProtectionTime...")
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
         )
