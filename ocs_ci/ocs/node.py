@@ -3455,10 +3455,7 @@ def get_cluster_resource_capacity():
     total_free_ram_kb = 0
     total_free_cpu_m = 0
 
-    breakdown = {
-        "ram": defaultdict(int),
-        "cpu": defaultdict(int)
-    }
+    breakdown = {"ram": defaultdict(int), "cpu": defaultdict(int)}
     ocp_node_obj = OCP(kind=constants.NODE)
 
     for name in worker_names:

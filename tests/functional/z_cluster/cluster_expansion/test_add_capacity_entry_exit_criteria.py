@@ -71,9 +71,7 @@ class TestAddCapacity(ManageTest):
             table_rows = [header, "-" * 75]
 
             sorted_ns = sorted(
-                breakdown["ram"].keys(),
-                key=lambda x: breakdown["ram"][x],
-                reverse=True
+                breakdown["ram"].keys(), key=lambda x: breakdown["ram"][x], reverse=True
             )
 
             for ns in sorted_ns:
@@ -84,7 +82,9 @@ class TestAddCapacity(ManageTest):
                         "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
                     )
 
-            logger.error("RESOURCE GATEKEEPER FAILED. Breakdown: \n" + "\n".join(table_rows))
+            logger.error(
+                "RESOURCE GATEKEEPER FAILED. Breakdown: \n" + "\n".join(table_rows)
+            )
 
             pytest.skip(
                 f"Insufficient Resources: {free_ram:.2f}GB RAM / {free_cpu:.2f} CPU cores available. "
@@ -287,7 +287,9 @@ class TestAddCapacity(ManageTest):
         )
         ceph_cluster = CephCluster()
         logger.info("Waiting for rebalance in the TEST BODY (not finalizer)...")
-        assert ceph_cluster.wait_for_rebalance(timeout=3600, repeat=3), "Rebalance too slow!"
+        assert ceph_cluster.wait_for_rebalance(
+            timeout=3600, repeat=3
+        ), "Rebalance too slow!"
 
         #################################
         # Exit criteria verification:   #
