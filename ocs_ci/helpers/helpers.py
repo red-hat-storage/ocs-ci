@@ -5543,6 +5543,7 @@ def update_volsync_channel():
             )
 
 
+@retry(CommandFailed, tries=30, delay=10, backoff=1)
 def verify_nb_db_psql_version(check_image_name_version=True):
     """
     Verify that the NooBaa DB PostgreSQL version matches the expectation
