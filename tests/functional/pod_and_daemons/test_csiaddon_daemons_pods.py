@@ -6,7 +6,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
-    tier4c,
     acceptance,
     polarion_id,
     green_squad,
@@ -360,16 +359,36 @@ class TestCSIADDonDaemonset(ManageTest):
                 socket_name=socket_name,
             ), f"csi-addons Socket not found on node {csi_pod_running_node_name}"
 
-    @green_squad
-    @tier4c
-    @polarion_id("OCS-7376")
-    def test_csi_addons_pod_crash_recovery(self):
+    @pytest.mark.parametrize(
+        argnames=["pod_label"],
+        argvalues=[
+            pytest.param(
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[
+                    green_squad,
+                    pytest.mark.tier4c,
+                    pytest.mark.polarion_id("OCS-7376"),
+                ],
+            ),
+            pytest.param(
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+                marks=[
+                    green_squad,
+                    pytest.mark.tier4c,
+                    pytest.mark.polarion_id("OCS-7511"),
+                ],
+            ),
+        ],
+    )
+    def test_csi_addons_pod_crash_recovery(self, pod_label):
         """
         Test csi-addons pod recovery after pod crash and ensure the restart count.
         1. Get all csi-addons pods
         2. Pick a random csi-addons pod
         3. Crash the csi-addons pod
         4. Wait for pod to be Running and check restart count
+        OCS-7511 is part verification of DFBUGS_5082 automation
+
         """
         logger.info(
             "Validating csi-addons pod recovery after pod crash with increase in restart count."
@@ -377,9 +396,7 @@ class TestCSIADDonDaemonset(ManageTest):
         namespace = config.ENV_DATA["cluster_namespace"]
 
         # 1. Get all csi-addons pods
-        csi_addons_pod_objs = get_pods_having_label(
-            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
-        )
+        csi_addons_pod_objs = get_pods_having_label(pod_label)
         # 2. Pick a random csi-addons pod
         pod_data = random.choice(csi_addons_pod_objs)
         pod_name = pod_data["metadata"]["name"]
@@ -399,7 +416,7 @@ class TestCSIADDonDaemonset(ManageTest):
         # 4. Wait for pod to be Running and check restart count
         assert wait_for_pods_to_be_running(
             namespace=namespace, pod_names=[pod_name]
-        ), f"CSI-addons pod {pod_name} didn't came up is running status "
+        ), f"CSI-addons pod {pod_name} didn't come up to running status"
 
         pod_obj = ocp_pod.get(resource_name=pod_name)
         restart_count_after = (
