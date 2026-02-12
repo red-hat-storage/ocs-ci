@@ -1143,6 +1143,21 @@ class CephHealthMonitor(threading.Thread):
         )
 
 
+class DummyCephHealthMonitor(object):
+    """
+    Dummy ceph health monitor usable for OCP upgrade without installed ODF
+    """
+
+    def __init__(self, ceph_cluster=None):
+        pass
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exception_type, value, traceback):
+        pass
+
+
 def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
     """
     Validate if ocs pod has PVC. This validation checking if there is the pvc
