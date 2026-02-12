@@ -32,6 +32,7 @@ from ocs_ci.ocs.exceptions import (
     PVNotSufficientException,
     ResourceWrongStatusException,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
@@ -863,10 +864,11 @@ def ocs_install_verification(
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
     # RDR with globalnet submariner
-    if config.MULTICLUSTER.get(
-        "multicluster_mode"
-    ) == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
-        "enable_globalnet", True
+    if (
+        config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        and get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+        and get_provider_service_type() != "NodePort"
+        and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
     ):
         validate_serviceexport()
 
