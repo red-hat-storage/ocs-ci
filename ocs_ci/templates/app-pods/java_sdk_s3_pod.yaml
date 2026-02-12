@@ -9,3 +9,13 @@ spec:
   containers:
   - name: java-s3
     image: quay.io/ocsci/javasdk-s3:latest
+    volumeMounts:
+    - name: app-data
+      mountPath: /app/s3test/
+    - name: m2
+      mountPath: /app/.m2
+  volumes:
+  - name: app-data
+    emptyDir: {}
+  - name: m2
+    emptyDir: {}
