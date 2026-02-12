@@ -10,6 +10,7 @@ import re
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
+    jira,
     skipif_ocs_version,
     ignore_leftovers,
     skipif_openshift_dedicated,
@@ -111,6 +112,10 @@ class TestMonitorRecovery(E2ETest):
             data=self.object_data,
         ), "Failed: PutObject"
 
+    @jira("DFBUGS-4322")
+    @pytest.mark.skip(
+        reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/14384"
+    )
     def test_monitor_recovery(
         self,
         deployment_pod_factory,
