@@ -135,7 +135,7 @@ def create_drs_machine_config():
         "source"
     ] = f"data:text/plain;base64,{base64_interfaces}"
     machineconfigurations_obj = OCS(**machineconfigurations_yaml)
-    machineconfigurations_obj.create()
+    machineconfigurations_obj.apply(**machineconfigurations_yaml)
 
 
 def create_drs_nad(namespace):
@@ -150,4 +150,4 @@ def create_drs_nad(namespace):
     nad_yaml = load_yaml(nad_path)
     nad_yaml["metadata"]["namespace"] = namespace
     nad_obj = OCS(**nad_yaml)
-    nad_obj.create()
+    nad_obj.apply(**nad_yaml)
