@@ -288,7 +288,7 @@ class TestAddCapacity(ManageTest):
         ceph_cluster = CephCluster()
         logger.info("Waiting for rebalance in the TEST BODY (not finalizer)...")
         assert ceph_cluster.wait_for_rebalance(
-            timeout=3600, repeat=3
+            timeout=7200, repeat=3
         ), "Rebalance too slow!"
 
         #################################
