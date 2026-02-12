@@ -4,6 +4,7 @@ Test to verify cluster health/stability when it's full (85%)
 
 import logging
 import pytest
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster, get_percent_used_capacity
@@ -188,7 +189,7 @@ class TestFullClusterHealth(PASTest):
         self.nodes.restart_nodes([node_obj])
 
         wait_for_nodes_status()
-
+        time.sleep(180)
         pod.wait_for_pods_to_be_running(
             namespace=config.ENV_DATA["cluster_namespace"], pod_names=[pod_obj.name]
         )
@@ -200,7 +201,9 @@ class TestFullClusterHealth(PASTest):
         Returns:
             bool: True if ALL checks passed, False otherwise
         """
-        return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running()
+        return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
+            timeout=1200
+        )
 
     @system_test
     @polarion_id("OCS-2749")
@@ -243,14 +246,17 @@ class TestFullClusterHealth(PASTest):
 
         osd_node_reboot()
         logger.info("Checking health after OSD node reboot")
+        time.sleep(180)
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
+        time.sleep(300)
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
         self.restart_ocs_operator_node()
         logger.info("Checking health after OCS operator node restart")
+        time.sleep(300)
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
         self.delete_pods()

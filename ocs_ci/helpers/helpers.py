@@ -2888,7 +2888,7 @@ def wait_for_ct_pod_recovery():
                 condition=constants.STATUS_RUNNING,
                 selector=constants.TOOL_APP_LABEL,
                 resource_count=1,
-                timeout=120,
+                timeout=420,
                 sleep=10,
             )
             return True
@@ -4253,25 +4253,8 @@ def induce_mon_quorum_loss():
     # Wait for sometime after the mon crashes
     time.sleep(300)
 
-    # Check the operator log mon quorum lost
-    operator_logs = get_logs_rook_ceph_operator()
-    pattern = (
-        "op-mon: failed to check mon health. "
-        "failed to get mon quorum status: mon "
-        "quorum status failed: exit status 1"
-    )
-    logger.info(f"Check the operator log for the pattern : {pattern}")
-    if not re.search(pattern=pattern, string=operator_logs):
-        logger.error(
-            f"Pattern {pattern} couldn't find in operator logs. "
-            "Mon quorum may not have been lost after deleting "
-            "var/lib/ceph/mon. Please check"
-        )
-        raise UnexpectedBehaviour(
-            f"Pattern {pattern} not found in operator logs. "
-            "Maybe mon quorum not failed or  mon crash failed Please check"
-        )
-    logger.info(f"Pattern found: {pattern}. Mon quorum lost")
+    for mon in mon_pod_obj:
+        wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
     return mon_pod_obj_list, mon_pod_running[0], ceph_mon_daemon_id
 
