@@ -142,7 +142,7 @@ class AMQ(object):
         run(
             f"for i in `(ls strimzi-kafka-operator/packaging/install/cluster-operator/)`;"
             f"do sed 's/{namespace}/myproject/g' "
-            f"strimzi-kafka-operator/packaging/install/cluster-operator/$i;done",
+            f"strimzi-kafka-operator/packaging/install/cluster-operator/$i;done > /dev/null",
             shell=True,
             check=True,
             cwd=self.dir,
