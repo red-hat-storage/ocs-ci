@@ -11425,7 +11425,7 @@ def fill_job_factory(request):
 
     def factory(
         name=None,
-        block_size="1M",
+        block_size="4M",
         cpu_request="100m",
         mem_request="128Mi",
         cpu_limit="500m",
