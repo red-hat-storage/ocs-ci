@@ -26,6 +26,8 @@ from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
 from ocs_ci.ocs.node import get_cluster_resource_capacity
+from ocs_ci.ocs.cluster import CephCluster
+
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +84,7 @@ class TestAddCapacity(ManageTest):
                         "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
                     )
 
-            logger.error(f"RESOURCE GATEKEEPER FAILED. Breakdown: \n" + "\n".join(table_rows))
+            logger.error("RESOURCE GATEKEEPER FAILED. Breakdown: \n" + "\n".join(table_rows))
 
             pytest.skip(
                 f"Insufficient Resources: {free_ram:.2f}GB RAM / {free_cpu:.2f} CPU cores available. "
@@ -283,6 +285,9 @@ class TestAddCapacity(ManageTest):
             selector="app=rook-ceph-osd",
             resource_count=result * replica_count,
         )
+        ceph_cluster = CephCluster()
+        logger.info("Waiting for rebalance in the TEST BODY (not finalizer)...")
+        assert ceph_cluster.wait_for_rebalance(timeout=3600, repeat=3), "Rebalance too slow!"
 
         #################################
         # Exit criteria verification:   #

@@ -7,7 +7,6 @@ from collections import defaultdict
 from operator import itemgetter
 import random
 import json
-import pytest
 import unicodedata
 from ocs_ci.ocs.ocp import exec_cmd
 
@@ -3439,6 +3438,7 @@ def mark_masters_schedulable():
     assert scheduler_obj.patch(
         params=params, format_type="json"
     ), "Failed to run patch command to update control nodes as scheduleable"
+
 
 def get_cluster_resource_capacity():
     """
