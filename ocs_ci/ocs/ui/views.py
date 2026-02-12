@@ -1498,11 +1498,11 @@ acm_configuration_4_21 = {
         By.XPATH,
     ),
     "vm-page-next-btn": (
-        "//button[@class='pf-v5-c-button pf-m-primary pf-m-progress']",
+        "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Next')]",
         By.XPATH,
     ),
     "assign": (
-        "//button[@class='pf-v5-c-button pf-m-primary pf-m-progress']",
+        "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Assign')]",
         By.XPATH,
     ),
 }
