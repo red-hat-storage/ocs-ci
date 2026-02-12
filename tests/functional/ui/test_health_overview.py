@@ -386,7 +386,7 @@ class TestHealthOverview(ManageTest):
         self.rule = None
         if alert_name == constants.ALERT_ODF_CORE_POD_RESTART:
             self.restart_pod()
-            logger.info("Waiting for 120 sec for pod restart")
+            logger.info("Waiting for 120 sec for pod to restart")
             time.sleep(120)
         self.update_alert_map(threading_lock)
         logger.info("Silence all pre-existing alerts")
