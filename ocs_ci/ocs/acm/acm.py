@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
 )
 
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.helpers.dr_helpers import get_cluster_set_name
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -200,6 +201,15 @@ class AcmAddClusters(AcmPageNavigator):
 
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
         cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
+        if dr_cluster_relations:
+            if is_hosted_cluster(cluster_name_a):
+                cluster_name_a = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_a}"
+                )
+            if is_hosted_cluster(cluster_name_b):
+                cluster_name_b = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_b}"
+                )
         self.navigate_clusters_page()
         self.page_has_loaded(retries=15, sleep_time=5)
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
@@ -499,6 +509,13 @@ class AcmAddClusters(AcmPageNavigator):
                     if config.ENV_DATA.get("submariner_channel")
                     else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
                 )
+
+                if (
+                    submariner_channel == "0.22"
+                    and config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM
+                ):
+                    log.info("Temp Fix Until we have 0.22.1")
+                    submariner_channel = "0.21"
                 channel_name = "stable-" + submariner_channel
                 subscription_config = {
                     "source": "submariner-catalogsource",

@@ -242,6 +242,15 @@ class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
 
     """
 
+    # RDR upgrade specific order according to the doc
+    UPGRADE_TEST_ORDER = {
+        constants.ORDER_OCP_UPGRADE: 1,
+        constants.ORDER_OCS_UPGRADE: 2,
+        constants.ORDER_MCO_UPGRADE: 3,
+        constants.ORDER_DR_HUB_UPGRADE: 4,
+        constants.ORDER_ACM_UPGRADE: 5,
+    }
+
     def __init__(self):
         self.dr_type = "rdr"
         super().__init__()
@@ -253,6 +262,45 @@ class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
 
     def config_init(self):
         super().config_init()
+
+    def reeval_upgrade_order(self, phase_order, zrank, role_rank):
+        """
+        Args:
+            phase_order: The component order which is under upgrade for ex: ORDER_OCP_UPGRADE etc
+            zrank: zone in which the cluster is present
+            role_rank: Rank of the cluster based on role
+
+        Returns:
+            neworder (int): New value with which the test need to be order marked so that RDR specific
+                upgrade test order is preserved
+
+        """
+        # We will take a simple approach of scaling the order number for the test
+        # based on its ranking from UPGRADE_TEST_ORDER, higher the scale value
+        # later the test gets scheduled
+        # For example: consider the following tests with zonerank+role_rank+phase_order values
+        # 1.[ACM ocp upgrade test] test_ocp_upgrade(100,1,30),
+        # 2.[Primary managed cluster OCP upgrade] test_ocp_upgrade(200,2,30)
+        # 3.[Secondary managed cluster OCP upgrade] test_ocp_upgrade(300,2,30)
+        # 4.[primary mc ODF upgrade ] test_ocs_upgrade(200,2,60)
+        # 5.[secondary mc ODF upgrade] test_ocs_upgrade(300,2,60)
+        # 6.[ACM cluster's MCO upgrade] test_mco_upgrade(100,1,42)
+        # if we run the tests with above values where order marker gets sum of the values mentioned in the
+        # tuple then we can't follow the RDR upgrade sequence hence it needs resequencing.
+        # RDR Upgrade tests order:
+        # 1. ACM OCP upgrade
+        # 2. Primary cluster OCP upgrade
+        # 3. Secondary cluster OCP upgrade
+        # 4. Primary ODF upgrade
+        # 5. Secondary ODF upgrade
+        # 6. ACM MCO operator upgrade
+        # 7. ACM DR Hub operator upgrade
+        # 8. Primary/Secondary DR cluster operator upgrade (automatic once hub is upgraded)
+        # 9. ACM upgrade (if test is selected)
+        neworder = phase_order + zrank + role_rank
+        scaling = self.UPGRADE_TEST_ORDER.get(phase_order, 10)
+        neworder = neworder * (10**scaling)
+        return neworder
 
 
 multicluster_upgrade_parametrizer = {

@@ -957,9 +957,9 @@ def ocs_install_verification(
     sc_obj = get_storage_cluster()
     sc_ob_spec = sc_obj.get().get("items")[0].get("spec")
     if sc_ob_spec.get("hostNetwork") is True:
-        assert (
-            sc_ob_spec.get("providerAPIServerServiceType")
-            == constants.SERVICE_TYPE_NODEPORT
+        assert sc_ob_spec.get("providerAPIServerServiceType") in (
+            constants.SERVICE_TYPE_NODEPORT,
+            constants.SERVICE_TYPE_CLUSTERIP,
         ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
         # check the rule in bz DFBUGS-2324 is followed:
         assert (
@@ -1468,6 +1468,9 @@ def verify_mcg_only_pods():
         constants.OPERATOR_LABEL: 1,
     }
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    # DFBUGS-5211 ocs-metrics-exporter disabled from ODF 4.21
+    if odf_running_version >= version.VERSION_4_21:
+        del resources_dict[constants.OCS_METRICS_EXPORTER]
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]

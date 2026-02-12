@@ -307,6 +307,7 @@ CRD_KIND = "CustomResourceDefinition"
 CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
+SERVICE_TYPE_CLUSTERIP = "ClusterIP"
 CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
 NETWORK_FENCE_CLASS = "NetworkFenceClass"
 NETWORK_FENCE = "NetworkFence"
@@ -721,6 +722,14 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
+# Map performance profile component name to pod label selector for Ceph daemons
+CEPH_DAEMON_LABEL_BY_COMPONENT = {
+    "mgr": MGR_APP_LABEL,
+    "mon": MON_APP_LABEL,
+    "osd": OSD_APP_LABEL,
+    "mds": MDS_APP_LABEL,
+    "rgw": RGW_APP_LABEL,
+}
 EXPORTER_APP_LABEL = "app=rook-ceph-exporter"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 ODF_CONSOLE = "app=odf-console"
@@ -3774,7 +3783,13 @@ CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
 RBD_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
 )
+CEPHFS_CSI_ADDONS_PLUGIN_DIR = (
+    "/var/lib/kubelet/plugins/openshift-storage.cephfs.csi.ceph.com"
+)
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+
+HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
 
 # Fill pool job and PVC Yaml files
 FILL_POOL_JOB_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_job.yaml")
