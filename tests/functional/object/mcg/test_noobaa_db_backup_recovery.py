@@ -1,4 +1,5 @@
 import logging
+from ocs_ci.helpers.helpers import create_unique_resource_name
 import pytest
 
 from time import sleep
@@ -346,6 +347,109 @@ class TestNoobaaDbBackupRecoveryOps:
                 awscli_pod=awscli_pod,
             ), "Mismatch in Checksum between original object and object downloaded after recovery"
         logger.info("Cluster recovered successfully and validated data after recovery")
+
+    @tier2
+    @skipif_mcg_only
+    def test_noobaa_db_backup_recovery_op_using_cli(
+        self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
+    ):
+        """
+        Test to verify CNPG based noobaa DB backup operation using CLI
+            1: Create OBC and write data
+            2: Add backup info in OCS Storage cluster CR
+            3: Run noobaa cli command to create on demand backup and validate backup is getting created or not
+            4: Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
+            5: Delete CNPG Cluster CR and check automatic recovery is getting triggered
+            6: Validate data is present in OBC after recovery
+        """
+
+        # 1: Create OBC and write data
+        obj_download_path = test_directory_setup.result_dir
+        bucket_obj = bucket_factory(1)[0]
+        bucket_name = bucket_obj.name
+        full_object_path = f"s3://{bucket_name}"
+
+        sync_object_directory(
+            awscli_pod, constants.AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+        )
+        # Adding hard coded sleep to trigger async backup from primary to Secondary DB
+        sleep(60)
+
+        objs_in_bucket = list_objects_from_bucket(
+            pod_obj=awscli_pod,
+            target=bucket_name,
+            s3_obj=mcg_obj,
+            recursive=True,
+        )
+
+        # 2: Add backup info in OCS Storage cluster CR
+        ocs_storage_obj = _get_storage_cluster_obj()
+        noobaa_obj = _get_noobaa_obj()
+
+        _patch_db_backup_config(
+            ocs_storage_obj=ocs_storage_obj,
+            schedule_cron_interval=15,
+            num_backups=1,
+            snapshot_class=constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
+        )
+        _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj)
+        logger.info("DB backup configuration added to OCS Storage cluster CR")
+
+        # 3: Run noobaa cli command to create on demand backup and validate backup is getting created or not
+        logger.info("Creating on-demand backup using NooBaa CLI")
+        backup_name = create_unique_resource_name("noobaa-cli", "backup")
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"system db-backup --name {backup_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
+            ignore_error=False,
+        )
+        logger.info("On-demand backup command executed")
+
+        # Get on-demand backup
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+
+        # Wait for on-demand backup to complete
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=backup_name,
+            column="PHASE",
+            timeout=300,
+        )
+        logger.info(f"On-demand backup {backup_name} completed successfully")
+
+        # 4: Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
+        _patch_db_recovery_config(ocs_storage_obj, backup_name)
+        _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj)
+        logger.info("DB recovery configuration added to OCS Storage cluster CR")
+
+        # 5: Delete Cluster CR and check automatic recovery is getting triggered
+        db_cluster_name = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster", "Cluster"
+        )[0]
+        _delete_and_wait_for_cluster_recovery(db_cluster_name)
+
+        # Verify Bucket health after recovery process
+        bucket_obj.verify_health(timeout=600)
+
+        # 6: Validate data is present in OBC after recovery
+        sync_object_directory(
+            podobj=awscli_pod,
+            src=full_object_path,
+            target=obj_download_path,
+            s3_obj=mcg_obj,
+        )
+        logger.info(f"Objects are downloaded to the dir {obj_download_path}")
+
+        for obj in objs_in_bucket:
+            assert verify_s3_object_integrity(
+                original_object_path=f"{constants.AWSCLI_TEST_OBJ_DIR}/{obj}",
+                result_object_path=f"{obj_download_path}/{obj}",
+                awscli_pod=awscli_pod,
+            ), "Mismatch in Checksum between original object and object downloaded after recovery"
+        logger.info(
+            "Cluster recovered successfully using CLI-created backup and validated data after recovery"
+        )
 
     @tier4
     @skipif_mcg_only
