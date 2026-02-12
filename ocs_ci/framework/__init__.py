@@ -504,9 +504,7 @@ class MultiClusterConfig:
 
     class RunWithAcmConfigContext(RunWithConfigContext):
         def __init__(self):
-            from ocs_ci.ocs.utils import get_all_acm_indexes
-
-            acm_index = get_all_acm_indexes()[0]
+            acm_index = config.get_active_acm_index()
             super().__init__(acm_index)
 
     class RunWithPrimaryConfigContext(RunWithConfigContext):
