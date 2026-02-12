@@ -477,6 +477,40 @@ class StorageClusterSetup(object):
             cluster_data["spec"]["multiCloudGateway"] = {
                 "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
             }
+        # Add NooBaa DB backup configuration if enabled
+        if config.ENV_DATA.get("noobaa_db_backup_enabled"):
+            log_step("Adding NooBaa DB backup configuration to StorageCluster")
+            db_schedule_map = {
+                "daily": "0 0 * * *",
+                "Weekly": "0 0 * * 0",
+                "Monthly": "0 0 1 * *",
+            }
+            schedule_cron_interval = db_schedule_map[
+                config.ENV_DATA.get("noobaa_db_backup_schedule", "daily")
+            ]
+            max_snapshots = config.ENV_DATA.get("noobaa_db_backup_max_snapshots", 5)
+            snapshot_class = config.ENV_DATA.get(
+                "noobaa_db_backup_snapshot_class",
+                constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
+            )
+            if config.ENV_DATA.get("mcg_only_deployment"):
+                snapshot_class = helpers.get_default_cluster_volumesnapshotclass()
+
+            cluster_data["spec"]["multiCloudGateway"] = {
+                "dbBackup": {
+                    "schedule": schedule_cron_interval,
+                    "volumeSnapshot": {
+                        "maxSnapshots": max_snapshots,
+                        "volumeSnapshotClass": snapshot_class,
+                    },
+                },
+            }
+            logger.info(
+                f"NooBaa DB backup configuration added to StorageCluster: "
+                f"schedule={schedule_cron_interval}, "
+                f"maxSnapshots={max_snapshots}, "
+                f"volumeSnapshotClass={snapshot_class}"
+            )
         # To be able to verify: https://bugzilla.redhat.com/show_bug.cgi?id=2276694
         wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
             "wait_timeout_for_healthy_osd_in_minutes"

@@ -233,6 +233,7 @@ ENV_DATA:
   enable_console_plugin: true
   # MCG only deployment
   mcg_only_deployment: false
+  noobaa_db_backup_enabled: false
   # RHEL VERSIONS:
   # Once we will change this version to something which will not be supported on different
   # OCP version, we need to make sure to put rhel_version to the all ocp related version config files

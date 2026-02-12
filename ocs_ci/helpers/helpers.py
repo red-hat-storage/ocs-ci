@@ -3432,6 +3432,54 @@ def default_volumesnapshotclass(interface_type):
     return OCS(**base_snapshot_class.data)
 
 
+def get_default_cluster_volumesnapshotclass():
+    """
+    Get the default VolumeSnapshotClass available in the OCS cluster.
+
+    This helper function retrieves the VolumeSnapshotClass that is marked as default
+    using the annotation 'snapshot.storage.kubernetes.io/is-default-class: "true"'.
+    If a driver is specified, it will return the default snapshot class for that driver.
+
+    Returns:
+        str: The name of the default VolumeSnapshotClass, or None if not found
+
+    Raises:
+        ResourceNotFoundError: If no default VolumeSnapshotClass is found
+
+    Examples:
+        >>> # Get the default volume snapshot class
+        >>> default_snapclass = get_default_volumesnapshotclass()
+        >>> print(default_snapclass)
+        'vpc-block-snapshot'
+    """
+    vsc_obj = ocp.OCP(kind=constants.VOLUMESNAPSHOTCLASS)
+
+    try:
+        volumesnapshotclasses = vsc_obj.get()
+    except Exception as e:
+        logger.error(f"Failed to get VolumeSnapshotClasses: {e}")
+        raise ResourceNotFoundError(
+            "Unable to retrieve VolumeSnapshotClasses from the cluster"
+        )
+
+    for vsc in volumesnapshotclasses.get("items", []):
+        annotations = vsc.get("metadata", {}).get("annotations", {})
+        is_default = (
+            annotations.get("snapshot.storage.kubernetes.io/is-default-class") == "true"
+        )
+
+        if is_default:
+            vsc_name = vsc["metadata"]["name"]
+            return vsc_name
+    else:
+        logger.error("No default VolumeSnapshotClass found in the cluster")
+        raise ResourceNotFoundError(
+            "No default VolumeSnapshotClass found in the cluster. "
+            "Please ensure at least one VolumeSnapshotClass has the annotation "
+            "'snapshot.storage.kubernetes.io/is-default-class: \"true\"'"
+        )
+
+
 def get_snapshot_content_obj(snap_obj):
     """
     Get volume snapshot content of a volume snapshot
