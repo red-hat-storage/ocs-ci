@@ -379,7 +379,7 @@ class Deployment(object):
                 # Run ocs_install_verification here only in case of multicluster.
                 # For single cluster, test_deployment will take care.
                 if config.multicluster:
-                    for i in range(config.multicluster):
+                    for i in range(config.nclusters):
                         if i in get_all_acm_indexes():
                             continue
                         else:
