@@ -2227,7 +2227,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         self.output_infra_file = None
 
         # Infrastructure ID for AWS resources
-        self.infra_id = f"{self.name}-infra"
+        self.infra_id = config.ENV_DATA["cluster_name"]
 
         # Role ARN for deployer
         self.role_arn = None
@@ -2306,11 +2306,6 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 delete=False,
             ).name
 
-        logger.info(
-            f"Retrieving STS session token for cluster '{self.name}' "
-            f"(duration: {duration_seconds}s)"
-        )
-
         result = self.get_session_token(
             duration_seconds=duration_seconds,
             output_file=output_file,
@@ -2325,6 +2320,85 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         )
 
         return self.sts_credentials_file
+
+    def retrieve_sts_session_token_via_cli(
+        self, duration_seconds=7200, output_file=None
+    ):
+        """
+        Alternative method to retrieve AWS STS session token using AWS CLI directly.
+
+        Executes: aws sts get-session-token --duration-seconds <duration> > <output_file>
+
+        This is an alternative to retrieve_sts_session_token() that uses the AWS CLI
+        command directly instead of using boto3. Useful when boto3 has issues or when
+        you need to match exact CLI behavior.
+
+        Args:
+            duration_seconds (int): Duration of the session token in seconds.
+                Default is 7200 (2 hours). Valid range: 900 (15 min) to 129600 (36 hours).
+            output_file (str): Path to the file where credentials will be saved.
+                If not provided, saves to cluster_path/sts-creds-{cluster_name}.json
+
+        Returns:
+            str: Path to the credentials file
+
+        Raises:
+            CommandFailed: If AWS CLI command fails
+
+        """
+        logger.info(
+            f"Retrieving STS session token via AWS CLI for cluster '{self.name}' "
+            f"(duration: {duration_seconds}s)"
+        )
+
+        if not output_file:
+            output_file = tempfile.NamedTemporaryFile(
+                mode="w",
+                prefix=f"sts-creds-{self.name}-",
+                suffix=".json",
+                delete=False,
+            ).name
+
+        # Build AWS CLI command
+        cmd = f"aws sts get-session-token --duration-seconds {duration_seconds}"
+
+        try:
+            # Execute AWS CLI command and capture output
+            result = exec_cmd(cmd, shell=True)
+
+            # Write output to file
+            with open(output_file, "w") as f:
+                f.write(result.stdout.decode("utf-8"))
+
+            # Parse the output to get expiration time for logging
+            try:
+                creds_data = json.loads(result.stdout.decode("utf-8"))
+                expiration = creds_data.get("Credentials", {}).get(
+                    "Expiration", "Unknown"
+                )
+                logger.info(f"AWS CLI: Session token saved to file: {output_file}")
+                logger.info(f"AWS CLI: Session token expires at: {expiration}")
+            except json.JSONDecodeError:
+                logger.warning("Could not parse AWS CLI output for expiration time")
+                expiration = "Unknown"
+
+            # Store the credentials file path
+            self.sts_credentials_file = output_file
+
+            logger.info(
+                f"STS credentials saved to: {self.sts_credentials_file}\n"
+                f"  Command used: {cmd}\n"
+                f"  Expires at: {expiration}"
+            )
+
+            return self.sts_credentials_file
+
+        except CommandFailed as e:
+            logger.error(f"Failed to retrieve STS session token via AWS CLI: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving STS session token: {e}")
+            raise
 
     def validate_sts_credentials_not_expired(self):
         """
@@ -3119,8 +3193,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             f"  Bucket Name: {self.oidc_bucket_name}\n"
             f"  Bucket Region: {self.oidc_bucket_region}"
         )
-
-        self.retrieve_sts_session_token()
+        # TODO: remove back if does not help
+        # self.retrieve_sts_session_token()
+        self.retrieve_sts_session_token_via_cli()
         self.create_aws_infra()
         self.read_infra_output()
         self.create_aws_iam()
@@ -3808,6 +3883,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                         PolicyDocument=assume_role_policy_str,
                     )
                     logger.info("Assume role policy updated successfully")
+                    # Wait for IAM role trust policy update to propagate
+                    # AWS IAM eventual consistency can take up to 30 seconds
+                    propagation_delay = 30
+                    logger.info(
+                        f"Waiting {propagation_delay} seconds for IAM role trust policy update to propagate..."
+                    )
+                    time.sleep(propagation_delay)
+                    logger.info("IAM role trust policy propagation wait completed")
                 except ClientError as update_error:
                     logger.error(f"Failed to update assume role policy: {update_error}")
                     raise
@@ -3863,6 +3946,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                     )
                     role_arn = create_response["Role"]["Arn"]
                     logger.info(f"IAM role created successfully. ARN: {role_arn}")
+                    # Wait for IAM role trust policy to propagate before it can be assumed
+                    # AWS IAM eventual consistency can take up to 30 seconds
+                    propagation_delay = 30
+                    logger.info(
+                        f"Waiting {propagation_delay} seconds for IAM role trust policy to propagate..."
+                    )
+                    time.sleep(propagation_delay)
+                    logger.info("IAM role trust policy propagation wait completed")
                 except ClientError as create_error:
                     logger.error(
                         f"Failed to create IAM role '{role_name}': {create_error}"
