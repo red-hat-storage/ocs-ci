@@ -5,7 +5,7 @@ import pytest
 import requests
 from selenium.common import WebDriverException
 from timeout_sampler import TimeoutSampler
-from ocs_ci.ocs.ui.page_objects.InfraHealth import SEVERITY_BY_CHECK
+from ocs_ci.ocs.ui.page_objects.infra_health import SEVERITY_BY_CHECK
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
@@ -31,17 +31,18 @@ from ocs_ci.framework.testlib import skipif_ocs_version
 logger = logging.getLogger(__name__)
 
 ALERT_MAP = {
-    "ODFNodeLatencyHighOnOSDNodes": 0,
-    "ODFNodeLatencyHighOnNonOSDNodes": 0,
-    "ODFNodeMTULessThan9000": 0,
-    "ODFDiskUtilizationHigh": 0,
-    "ODFCorePodRestarted": 0,
-    "ODFNodeNICBandwidthSaturation": 0,
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES: 0,
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES: 0,
+    constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000: 0,
+    constants.ALERT_ODF_CORE_POD_RESTART: 0,
+    constants.ALERT_ODF_DISK_UTILIZATION_HIGH: 0,
+    constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: 0,
 }
 
 SEVERITY_DROP_MAP = {
     "Minor": 2,
     "Medium": 10,
+    "Critical": 20,
 }
 
 
@@ -242,7 +243,25 @@ class TestHealthOverview(ManageTest):
         oc_cmd = f"exec {pod_name} -n openshift-storage -- /bin/sh -c 'kill 1'"
         ocp = OCP()
         ocp.exec_oc_cmd(command=oc_cmd, out_yaml_format=False, timeout=180)
-        time.sleep(60)
+
+    @pytest.fixture
+    def alert_rule_teardown(self, request):
+        """
+        Teardown fixture to delete mock alert rule after the test completes.
+        """
+
+        def finalizer():
+            rule = getattr(self, "rule", None)
+            if rule:
+                logger.info("[CLEANUP] Ensuring alert rule is deleted")
+                try:
+                    rule.delete()
+                except Exception as ex:
+                    logger.warning(f"Failed to delete alert rule during cleanup: {ex}")
+                finally:
+                    self.rule = None
+
+        request.addfinalizer(finalizer)
 
     @tier1
     @polarion_id("OCS-7475")
@@ -319,18 +338,30 @@ class TestHealthOverview(ManageTest):
         verify_health_overview_modal()
 
     @tier2
-    @polarion_id("OCS-XXXXX")  # to be added
+    @polarion_id("OCS-7509")
     @pytest.mark.parametrize(
         "alert_name, alert_yaml",
         [
-            ("ODFNodeMTULessThan9000", "custom-odf-mtu-less-than-9000.yaml"),
             (
-                "ODFNodeNICBandwidthSaturation",
+                constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
+                "custom-odf-mtu-less-than-9000.yaml",
+            ),
+            (
+                constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
                 "custom-odf-nic-bandwidth-saturation.yaml",
             ),
-            ("ODFDiskUtilizationHigh", "custom-odf-disk-utilization-high.yaml"),
-            ("ODFNodeLatencyHighOnOSDNodes", "custom-odf-latency-rule.yaml"),
-            ("ODFCorePodRestarted", "custom-odf-core-pod-restarted.yaml"),
+            (
+                constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
+                "custom-odf-disk-utilization-high.yaml",
+            ),
+            (
+                constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
+                "custom-odf-latency-rule.yaml",
+            ),
+            (
+                constants.ALERT_ODF_CORE_POD_RESTART,
+                "custom-odf-core-pod-restarted.yaml",
+            ),
         ],
     )
     def test_health_score_changes_based_on_alert_severity(
@@ -340,6 +371,7 @@ class TestHealthOverview(ManageTest):
         alert_yaml,
         threading_lock,
         unsilence_alerts_teardown,
+        alert_rule_teardown,
     ):
         """
         Test to decrease health score based on alert severity and recover after alert is reversed.
@@ -351,70 +383,67 @@ class TestHealthOverview(ManageTest):
         6. Resolve alert by deleting mock up alert rule
         7. Verify health score is recovered
         """
-        rule = None
-        if alert_name == "ODFCorePodRestarted":
+        self.rule = None
+        if alert_name == constants.ALERT_ODF_CORE_POD_RESTART:
             self.restart_pod()
+            logger.info("Waiting for 120 sec for pod restart")
             time.sleep(120)
         self.update_alert_map(threading_lock)
-        # 1. Silence alerts
+        logger.info("Silence all pre-existing alerts")
         df_overview = PageNavigator().nav_storage_data_foundation_overview_page()
         infra_health_overview = df_overview.nav_health_view_checks()
         infra_health_overview.silence_all_alerts(silent_duration=1)
+        logger.info(
+            "Waiting for 90 sec for healthscore to update after silencing alerts"
+        )
         time.sleep(90)
         baseline_score = 100
 
-        # 2. Get severity & expected drop
         severity = SEVERITY_BY_CHECK.get(alert_name)
+        PageNavigator().take_screenshot(f"severity_of_alert_{alert_name}")
         assert severity, f"Severity not defined for alert {alert_name}"
         expected_drop = SEVERITY_DROP_MAP[severity]
         logger.info(
             f"Alert {alert_name} severity={severity}, "
             f"expected drop={expected_drop}%"
         )
-        try:
-            # 3. Apply alert PrometheusRule YAML
-            if ALERT_MAP[alert_name] == 0 and alert_name != "ODFCorePodRestarted":
-                logger.info(f"Applying alert rule YAML: {alert_yaml}")
-                alert_yaml_load = load_yaml(
-                    os.path.join(constants.HEALTHALERTS_DIR, alert_yaml)
-                )
-                rule = create_resource(**alert_yaml_load)
-                time.sleep(120)
+        if ALERT_MAP[alert_name] == 0 and alert_name != "ODFCorePodRestarted":
+            logger.info(f"Applying alert rule YAML: {alert_yaml}")
+            alert_yaml_load = load_yaml(
+                os.path.join(constants.HEALTHALERTS_DIR, alert_yaml)
+            )
+            self.rule = create_resource(**alert_yaml_load)
+            logger.info("Waiting for 120 sec to trigger alert")
+            time.sleep(120)
+            api = PrometheusAPI(threading_lock=threading_lock)
+            api.refresh_connection()
+            alerts = api.wait_for_alert(name=alert_name, state="firing", sleep=60)
+            logger.info(f"Alert {alerts} triggered")
+            PageNavigator().take_screenshot(f"triggered_alert_{alert_name}")
+            logger.info(
+                "Waiting for 120 sec to update health score after alert is triggered"
+            )
+            time.sleep(120)
+            self.wait_for_health_score_change(
+                len(alerts) * expected_drop, baseline_score
+            )
 
-                # 4. Check alert in firing state
-                api = PrometheusAPI(threading_lock=threading_lock)
-                api.refresh_connection()
-                alerts = api.wait_for_alert(name=alert_name, state="firing", sleep=60)
-                logger.info(f"Alert {alerts} triggered")
-                time.sleep(120)
-
-                # 5. Check health score is decreased
-                self.wait_for_health_score_change(
-                    len(alerts) * expected_drop, baseline_score
-                )
-
-                # 6. Resolve alert by deleting rule
-                logger.info("Deleting alert rule to resolve alert")
-                rule.delete()
-                rule = None
-                logger.info("Waiting for alert to be resolved...")
-                api.refresh_connection()
-                alerts = api.wait_for_alert(name=alert_name, timeout=180, sleep=60)
-                assert len(alerts) == 0, f"Unexpected unresolved alerts: {alerts}. "
-
-                # 7. Check health score is recovered
-                time.sleep(300)
-                self.wait_for_health_score_recovery(baseline_score)
-            else:
-                logger.info("Alert already present no need to trigger again")
-                infra_health_overview.unsilence_alert_by_name(alert_name)
-                self.wait_for_health_score_change(
-                    ALERT_MAP[alert_name] * expected_drop, baseline_score
-                )
-        finally:
-            if rule:
-                logger.info(f"[CLEANUP] Ensuring alert rule {alert_yaml} is deleted")
-                try:
-                    rule.delete()
-                except Exception as ex:
-                    logger.warning(f"Failed to delete alert rule during cleanup: {ex}")
+            logger.info("Deleting alert rule to resolve alert")
+            self.rule.delete()
+            self.rule = None
+            logger.info("Waiting for alert to be resolved...")
+            api.refresh_connection()
+            alerts = api.wait_for_alert(name=alert_name, timeout=180, sleep=60)
+            PageNavigator().take_screenshot(f"resolved_alert_{alert_name}")
+            assert len(alerts) == 0, f"Unexpected unresolved alerts: {alerts}."
+            logger.info(
+                "Waiting for 5min to recover health score after alert is resolved"
+            )
+            time.sleep(300)
+            self.wait_for_health_score_recovery(baseline_score)
+        else:
+            logger.info("Alert already present no need to trigger again")
+            infra_health_overview.unsilence_alert_by_name(alert_name)
+            self.wait_for_health_score_change(
+                ALERT_MAP[alert_name] * expected_drop, baseline_score
+            )

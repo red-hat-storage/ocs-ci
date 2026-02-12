@@ -8,14 +8,15 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import DataFoundationTabBar
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs import constants
 
 SEVERITY_BY_CHECK = {
-    "ODFNodeLatencyHighOnOSDNodes": "Medium",
-    "ODFNodeLatencyHighOnNonOSDNodes": "Medium",
-    "ODFNodeMTULessThan9000": "Minor",
-    "ODFDiskUtilizationHigh": "Medium",
-    "ODFCorePodRestarted": "Medium",
-    "ODFNodeNICBandwidthSaturation": "Medium",
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES: "Medium",
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES: "Medium",
+    constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000: "Minor",
+    constants.ALERT_ODF_DISK_UTILIZATION_HIGH: "Medium",
+    constants.ALERT_ODF_CORE_POD_RESTART: "Medium",
+    constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: "Medium",
 }
 
 logger = logging.getLogger(__name__)
@@ -346,7 +347,7 @@ class InfraHealthOverview(PageNavigator):
         self.click_silenced_alerts()
         self.do_send_keys(self.validation_loc["filter_by_details"], alert_name)
         self.select_all_alerts()
-        self.take_screenshot(f"unsilence alert {alert_name}")
+        self.take_screenshot(f"unsilence_alert_{alert_name}")
         self.unsilence_alerts()
 
     def silence_all_alerts(self, silent_duration: int):
