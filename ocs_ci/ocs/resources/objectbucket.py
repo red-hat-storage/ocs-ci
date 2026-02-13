@@ -130,12 +130,18 @@ class OBC(object):
                 constants.CEPH_OBJECTSTOREUSER_SECRET
             )
 
+        retry_cfg = botocore.config.Config(
+            retries={
+                "max_attempts": 8,
+            }
+        )
         self.s3_resource = boto3.resource(
             "s3",
             verify=retrieve_verification_mode(),
             endpoint_url=self.s3_external_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key,
+            config=retry_cfg,
         )
         self.s3_client = self.s3_resource.meta.client
 
