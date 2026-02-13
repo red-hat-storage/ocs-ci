@@ -282,6 +282,7 @@ def relocate(
     workload_instance=None,
     multi_ns=False,
     workload_instances_shared=None,
+    vm_auto_cleanup=False,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -297,6 +298,7 @@ def relocate(
         workload_instance (object): Discovered App instance to get namespace and dir location
         multi_ns (bool): Multi Namespace
         workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
+        vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
 
     """
     restore_index = config.cur_index
@@ -339,7 +341,12 @@ def relocate(
             old_primary=old_primary, workload_instance=workload_instance
         )
     else:
-        if discovered_apps and workload_instance and not workload_instances_shared:
+        if (
+            discovered_apps
+            and workload_instance
+            and not workload_instances_shared
+            and not vm_auto_cleanup
+        ):
             logger.info("Doing Cleanup Operations")
             do_discovered_apps_cleanup(
                 drpc_name=workload_placement_name,
@@ -348,7 +355,12 @@ def relocate(
                 workload_dir=workload_instance.workload_dir,
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
-        elif discovered_apps and workload_instance and workload_instances_shared:
+        elif (
+            discovered_apps
+            and workload_instance
+            and workload_instances_shared
+            and not vm_auto_cleanup
+        ):
             logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
             for cnv_wl in workload_instances_shared:
                 do_discovered_apps_cleanup(
@@ -2395,7 +2407,7 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
             "There is no lastKubeObjectProtectionTime. "
             "Verify that certificates are included correctly in the Ramen Hub configuration map."
         )
-    # Verify lastGroupSyncTime
+    # Verify lastKubeObjectProtectionTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
     last_kubeobject_protection_time_formatted = datetime.strptime(
         last_kubeobject_protection_time, time_format
@@ -2750,3 +2762,39 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+
+def validate_protection_label(kind, namespace, protection_name=None):
+    """
+    Gets the yaml file for specified resource kind in the given namespace
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VM, constants.PVC, etc.)
+        namespace (str): the namespace of the specified resource
+        protection_name (str) : name of protection in UI
+
+    Raises:
+        AssertionError: If the protection label is not found on any of the resources of the
+        specified kind in the given namespace
+
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+    resource_items = resource_obj.get().get("items", [])
+
+    label_to_validate = constants.RDR_VM_PROTECTION_LABEL
+    label_validation_failed = False
+    for item in resource_items:
+        protection_name_in_yaml = (
+            item.get("metadata", {}).get("labels", {}).get(label_to_validate, " ")
+        )
+
+        if protection_name_in_yaml != protection_name:
+            logger.info(f"Label is not added to {kind} {item}")
+            label_validation_failed = True
+
+    assert not label_validation_failed, f"Label is not added to one or more {kind}"
+
+    logger.info(
+        f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
+    )

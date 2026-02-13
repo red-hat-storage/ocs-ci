@@ -1850,6 +1850,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.discovered_apps_pod_selector_value = kwargs.get(
             "discovered_apps_pod_selector_value"
         )
+        self.kubeobject_capture_interval_int = generate_kubeobject_capture_interval()
 
     def deploy_workload(self, shared_drpc_protection=False, dr_protect=True):
         """
@@ -2089,9 +2090,18 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 )
                 log.info("DRPC deleted")
             log.info("Deleting Placement")
-            run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-plmnt-1"
-            )
+            try:
+                run_cmd(
+                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-plmnt-1"
+                )
+            except CommandFailed:
+                # When the VMs are protected from UI, placement created does not contain suffix "-plmnt-1",
+                # hence this is needed for deletion
+                placement_name = f"{self.discovered_apps_placement_name}-placement-1"
+                run_cmd(
+                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
+                    f"{placement_name}"
+                )
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
