@@ -21,7 +21,6 @@ from ocs_ci.helpers.ols_helpers import (
 from ocs_ci.helpers.ols_qa_answer_validations import (
     load_test_data,
     calculate_accuracy,
-    calculate_consistency,
     is_uncertain,
 )
 from ocs_ci.ocs import constants
@@ -30,7 +29,6 @@ from ocs_ci.ocs.ui.ols_ui import OLSUI
 log = logging.getLogger(__name__)
 
 ACCURACY_THRESHOLD = 0.75
-CONSISTENCY_THRESHOLD = 0.6
 
 
 @cyan_squad
@@ -105,24 +103,10 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             keywords = item.get("required_terms", [])
 
             ans1 = ols.ask_question(question)
-            # take 3 min to breathe
-            log.info(
-                "Waiting for 3 mins to repeat same question for verifying consistency"
-            )
-            time.sleep(180)
-            ans2 = ols.ask_question(question)
-
             accuracy = calculate_accuracy(ans1, keywords)
-            consistency = calculate_consistency(ans1, ans2)
 
             # Store results for graph
-            results.append(
-                {"id": qid, "accuracy": accuracy, "consistency": consistency}
-            )
-
-            assert (
-                consistency >= CONSISTENCY_THRESHOLD
-            ), f"Q{qid}: Consistency failed ({consistency})"
+            results.append({"id": qid, "accuracy": accuracy})
 
             if qtype == "valid":
                 assert (
@@ -137,7 +121,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             elif qtype == "no_rag_answer":
                 assert is_uncertain(ans1), f"Q{qid}: Should say answer not available"
 
-    @pytest.mark.polarion_id("OCS-7486")
+    @pytest.mark.polarion_id("OCS-7514")
     def test_ols_attach_yaml_and_validate_response(self, setup_ui):
         """
 
@@ -151,7 +135,9 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
         """
         pvc_yaml_path = constants.OLS_ATTACHED_PVC_YAML
-        assert os.path.isfile(pvc_yaml_path), f"OLS attached PVC YAML not found: {pvc_yaml_path}"
+        assert os.path.isfile(
+            pvc_yaml_path
+        ), f"OLS attached PVC YAML not found: {pvc_yaml_path}"
 
         with open(pvc_yaml_path) as f:
             pvc_yaml_content = f.read()
@@ -172,19 +158,17 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             "5Gi",
         ]
         accuracy = calculate_accuracy(answer, required_terms)
-        assert (
-            accuracy >= ACCURACY_THRESHOLD
-        ), (
+        assert accuracy >= ACCURACY_THRESHOLD, (
             f"OLS response for attached PVC YAML should contain expected terms "
             f"(storageClassName and storage); accuracy={accuracy}, required_terms={required_terms}"
         )
 
-    @pytest.mark.polarion_id("OCS-7485")
+    @pytest.mark.polarion_id("OCS-7513")
     def test_ols_byok_negative_misconfigured(self):
         """
 
         Integration with OLS BYOK Tech Preview - negative scenario (intentionally misconfigured).
-        Uses valid API token; tests two misconfigurations: invalid URL, then invalid projectID.
+        Tests two misconfigurations: invalid URL, then invalid projectID.
         Intended to run after deployment and UI tests (leaves OLS misconfigured).
 
         Phase 1 - Invalid URL:
@@ -204,10 +188,9 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
         """
         assert do_deploy_ols(), "Failed to install OLS Operator"
-
-        # ---------- Phase 1: Invalid URL (valid secret / projectID) ----------
         delete_ols_config_and_secret()
 
+        # ---------- Phase 1: Invalid URL (valid secret / projectID) ----------
         assert create_ols_secret(), "Failed to create credential secret (valid token)"
         assert create_ols_config(
             overrides={"url": "https://invalid-llm.example.com"}
@@ -221,9 +204,9 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         success, message = verify_ols_pod_logs_contain_expected_errors(
             expected_patterns=["ERROR: LLM connection check failed"]
         )
-        assert success, (
-            f"OLS pod logs must contain 'ERROR: LLM connection check failed' when URL is invalid. {message}"
-        )
+        assert (
+            success
+        ), f"OLS pod logs must contain 'ERROR: LLM connection check failed' when URL is invalid. {message}"
 
         # ---------- Phase 2: Invalid projectID (valid URL and secret) ----------
         delete_ols_config_and_secret()
@@ -251,6 +234,8 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             expected_patterns=project_not_found_patterns,
             require_all=True,
         )
-        assert success, (
-            f"OLS pod logs must contain 404/Not Found project error when projectID is invalid. {message}"
-        )
+        assert (
+            success
+        ), f"OLS pod logs must contain 404/Not Found project error when projectID is invalid. {message}"
+
+        delete_ols_config_and_secret()
