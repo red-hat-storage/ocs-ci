@@ -608,6 +608,7 @@ class OCP(object):
                     resource_name=resource_name,
                     out_yaml_format=False,
                     selector=selector,
+                    silent=True,
                 ):
                     if sample:
                         resource_exists = True

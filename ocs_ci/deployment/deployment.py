@@ -1557,7 +1557,7 @@ class Deployment(object):
         # Wait for StatefulSet for noobaa-core exists before patching
         jsonpath: str = "'{.status.readyReplicas}'=1"
         if not sts_obj.wait(
-            timeout=300,
+            timeout=600,
             condition=None,
             jsonpath=jsonpath,
         ):
