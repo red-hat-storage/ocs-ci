@@ -1116,6 +1116,7 @@ OC_MIRROR_IMAGESET_CONFIG = os.path.join(
 OC_MIRROR_IMAGESET_CONFIG_V2 = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config-v2.yaml"
 )
+OC_INGRESS_CERT_YAML = os.path.join(TEMPLATE_DIR, "ocp-deployment", "ingress_cert.yaml")
 
 CSI_CEPHFS_ROX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "csi-cephfs-rox.yaml")
 
@@ -2367,6 +2368,7 @@ CLI_TOOL_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 ODF_CLI_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
+DEFAULT_INGRESS_CRT_OPENSHIFT = "default-ingress-cert"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
@@ -2419,6 +2421,7 @@ FLEXY_DEFAULT_PRIVATE_CONF_REPO = (
 FLEXY_JENKINS_USER = "jenkins"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
+OPENSHIFT_CONFIG_MANAGED_NAMESPACE = "openshift-config-managed"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "images.paas.redhat.com/dno-ood/ocp4:latest"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
