@@ -46,7 +46,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
     # Allow IO to settle and state to stabilize before inducing node outage
     WAIT_BEFORE_NODE_OUTAGE_SEC = 120
     # Time for Kubernetes to evict pods and reschedule on healthy nodes
-    WAIT_FOR_POD_MIGRATION_SEC = 300
+    WAIT_FOR_POD_MIGRATION_SEC = 180
     # Timeout for pods to reach Running state after migration
     POD_RUNNING_TIMEOUT = 300
     # IO parameters for data integrity and post-migration write tests
@@ -63,6 +63,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         Finalizer runs on test end (pass or fail). Request node_restart_teardown
         in the test to ensure stopped nodes are restarted by its finalizer.
         """
+
         def finalizer():
             if self.taint_nodes_list:
                 logger.info(
@@ -85,7 +86,12 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         ],
     )
     def test_automate_networkfence_workflow_with_cephsi(
-        self, node_shutdown, nodes, deployment_pod_factory, teardown, node_restart_teardown
+        self,
+        node_shutdown,
+        nodes,
+        deployment_pod_factory,
+        teardown,
+        node_restart_teardown,
     ):
         """
         Test workload migration with PVCs during a node outage.
