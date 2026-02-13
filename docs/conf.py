@@ -12,7 +12,20 @@
 #
 import os
 import sys
+import logging
 
+# Suppress verbose logging from various libraries during doc generation
+logging.getLogger("markdown_it").setLevel(logging.WARNING)
+logging.getLogger("myst_parser").setLevel(logging.WARNING)
+logging.getLogger("botocore").setLevel(logging.WARNING)
+logging.getLogger("boto3").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("s3transfer").setLevel(logging.WARNING)
+logging.getLogger("google.cloud.storage").setLevel(logging.WARNING)
+# Suppress ocs_ci module logs that run at import time
+logging.getLogger("ocs_ci.utility.utils").setLevel(logging.ERROR)
+logging.getLogger("ocs_ci.utility.aws").setLevel(logging.ERROR)
+logging.getLogger("ocs_ci.utility.nfs_utils").setLevel(logging.ERROR)
 
 sys.path.insert(0, os.path.abspath(".."))
 
