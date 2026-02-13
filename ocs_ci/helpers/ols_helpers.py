@@ -4,7 +4,7 @@ import time
 
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
@@ -19,6 +19,10 @@ from ocs_ci.utility.retry import retry
 
 
 log = logging.getLogger(__name__)
+
+# OLSConfig status condition type used to determine connection ready state.
+# Only ApiReady is checked; ready when ApiReady has reason=Available, status=True.
+OLS_READY_CONDITION_TYPE = "ApiReady"
 
 
 def do_deploy_ols():
@@ -134,7 +138,7 @@ def create_ols_config(overrides=None):
     )
     try:
         # ToDo: when we get konflux build the code need to be modified to get lightspeed-image
-       
+
         auth = ocsci_config.AUTH["ibm_watsonx_llm_for_ols"]
         project_id = (overrides or {}).get("projectID", auth["projectID"])
         url = (overrides or {}).get("url", auth["url"])
@@ -155,78 +159,121 @@ def create_ols_config(overrides=None):
         return False
 
 
-@retry(ResourceWrongStatusException, tries=20, delay=5, backoff=3)
-def verify_ols_connects_to_llm():
-    """
-
-    Verifies ols pods are up and running, and successfully connected to LLM provider
-
-    """
-
-    # verify all the pods are running
-    if not wait_for_pods_to_be_running(namespace=constants.OLS_OPERATOR_NAMESPACE):
-        return False
-
-    # Verify the OLS connected to LLM
+def _get_ols_config_conditions():
+    """Fetch OLSConfig status conditions from the cluster."""
     ols_config_obj = OCP(
         kind=constants.OLS_CONFIG_KIND, namespace=constants.OLS_OPERATOR_NAMESPACE
     )
-    command = f"get {constants.OLS_CONFIG_KIND} -oyaml"
-    ols_yaml_output = ols_config_obj.exec_oc_cmd(command=command)
-    ols_status = ols_yaml_output["items"][0]["status"]["conditions"]
-    for status in ols_status:
-        if status["status"] and status["reason"] == "Available":
-            log.info(f"Type {status['type']} is in expected state")
-        else:
-            log.error(f"Type {status['type']} is in not expected state")
-            raise ResourceWrongStatusException(
-                f"Resource type: {status['type']} is not in expected state: {status}. OLS is not configured correctly"
-            )
+    out = ols_config_obj.exec_oc_cmd(command=f"get {constants.OLS_CONFIG_KIND} -o yaml")
+    items = out.get("items") or []
+    if not items:
+        return []
+    return items[0].get("status", {}).get("conditions") or []
 
 
-def verify_ols_connection_fails(timeout=300, interval=15):
+def _is_ols_connection_ready(conditions):
     """
 
-    Verify that OLS does NOT reach Available state within the given timeout.
-    Used for negative tests (intentionally misconfigured OLS BYOK).
+    Return True if OLS connection is ready based on ApiReady status condition only.
+
+    Ready when ApiReady has reason=Available and status=True.
+    Other condition types (e.g. ConsolePluginReady, CacheReady) are not checked.
+
+    """
+    by_type = {c.get("type"): c for c in conditions if c.get("type")}
+    cond = by_type.get(OLS_READY_CONDITION_TYPE)
+    if not cond:
+        return False
+    return cond.get("reason") == "Available" and cond.get("status") == "True"
+
+
+def wait_for_ols_connection_state(expect_ready=True, timeout=300, interval=15):
+    """
+
+    Wait until OLS connection state matches the expected state (single shared logic).
+
+    Uses OLSConfig ApiReady condition only: ready when ApiReady has
+    reason=Available, status=True.
 
     Args:
-        timeout (int): Maximum time in seconds to wait. If OLS becomes Available
-            within this time, the verification fails (returns False).
-        interval (int): Polling interval in seconds for checking OLSConfig status.
+        expect_ready (bool): If True, wait until connection is ready (returns True
+            when ready, False on timeout). If False, wait until timeout without
+            ever seeing ready (returns True when timeout without ready, False if
+            connection became ready).
+        timeout (int): Maximum time in seconds to wait.
+        interval (int): Polling interval in seconds.
 
     Returns:
-        bool: True if OLS never became Available (expected for misconfigured setup).
-            False if OLS became Available (unexpected in negative scenario).
+        bool: True when the desired state was observed (ready and expect_ready,
+            or not ready after timeout when expect_ready=False). False when
+            expect_ready=True and timeout, or when expect_ready=False and
+            connection became ready.
 
     """
-    ols_config_obj = OCP(
-        kind=constants.OLS_CONFIG_KIND, namespace=constants.OLS_OPERATOR_NAMESPACE
-    )
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            out = ols_config_obj.exec_oc_cmd(
-                command=f"get {constants.OLS_CONFIG_KIND} -o yaml"
-            )
-            items = out.get("items") or []
-            if not items:
-                time.sleep(interval)
-                continue
-            conditions = items[0].get("status", {}).get("conditions") or []
-            for cond in conditions:
-                if cond.get("type") == "Available" and cond.get("status") == "True":
+            conditions = _get_ols_config_conditions()
+            ready = _is_ols_connection_ready(conditions)
+            if expect_ready:
+                if ready:
+                    log.info("OLS connection is ready (ApiReady Available).")
+                    return True
+            else:
+                if ready:
                     log.error(
-                        "OLS connection succeeded (Available=True); expected failure for misconfigured setup"
+                        "OLS connection became ready (expected failure for misconfigured setup)"
                     )
                     return False
         except Exception as ex:
             log.debug("Could not get OLSConfig status: %s", ex)
         time.sleep(interval)
+
+    if expect_ready:
+        log.warning("OLS connection did not become ready within timeout.")
+        return False
     log.info(
-        "OLS did not reach Available state within timeout (misconfiguration behaved as expected)"
+        "OLS did not reach ready state within timeout (misconfiguration behaved as expected)."
     )
     return True
+
+
+@retry(ResourceWrongStatusException, tries=20, delay=5, backoff=3)
+def verify_ols_connects_to_llm(timeout=600, interval=15):
+    """
+
+    Verifies OLS pods are up and running and OLSConfig reaches connection-ready state.
+
+    Ready is defined as ApiReady having reason=Available, status=True.
+
+    """
+    if not wait_for_pods_to_be_running(namespace=constants.OLS_OPERATOR_NAMESPACE):
+        raise ResourceWrongStatusException("OLS pods did not reach Running state")
+
+    if not wait_for_ols_connection_state(
+        expect_ready=True, timeout=timeout, interval=interval
+    ):
+        conditions = _get_ols_config_conditions()
+        by_type = {c.get("type"): c for c in conditions if c.get("type")}
+        raise ResourceWrongStatusException(
+            "OLS connection did not become ready within timeout. "
+            f"ApiReady must be Available/True. Conditions: {by_type}"
+        )
+
+
+def verify_ols_connection_fails(timeout=300, interval=15):
+    """
+
+    Verify that OLS does NOT reach connection-ready state within the given timeout.
+    Used for negative tests (intentionally misconfigured OLS BYOK).
+
+    Ready is defined as ApiReady Available/True. Returns True if OLS never became
+    ready (expected); False if it became ready.
+
+    """
+    return wait_for_ols_connection_state(
+        expect_ready=False, timeout=timeout, interval=interval
+    )
 
 
 def delete_ols_config_and_secret():
@@ -314,7 +361,10 @@ def verify_ols_pod_logs_contain_expected_errors(
                 "OLS pod logs contain all expected error pattern(s): %s",
                 patterns,
             )
-            return True, f"Found all expected error pattern(s) in OLS pod logs: {patterns}"
+            return (
+                True,
+                f"Found all expected error pattern(s) in OLS pod logs: {patterns}",
+            )
         return (
             False,
             f"Not all expected error patterns found in OLS pod logs. "
@@ -332,4 +382,3 @@ def verify_ols_pod_logs_contain_expected_errors(
         f"None of the expected error patterns found in OLS pod logs. "
         f"Patterns checked: {patterns}. Log snippet (last 500 chars): {all_logs[-500:]!r}",
     )
-

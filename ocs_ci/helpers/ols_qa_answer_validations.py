@@ -1,5 +1,3 @@
-from difflib import SequenceMatcher
-
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 
@@ -25,15 +23,6 @@ def calculate_accuracy(answer, keywords):
         return 1.0
     matched = sum(1 for k in keywords if k.lower() in answer.lower())
     return matched / len(keywords)
-
-
-def calculate_consistency(ans1, ans2):
-    """
-
-    Calculate consistency based on the response given by OLS for 2 same question
-
-    """
-    return SequenceMatcher(None, ans1, ans2).ratio()
 
 
 def is_uncertain(answer):
