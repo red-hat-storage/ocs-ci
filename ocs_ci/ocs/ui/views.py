@@ -1487,6 +1487,34 @@ acm_configuration_4_20 = {
     ),
 }
 
+acm_configuration_4_21 = {
+    "protected-applications-tab": (
+        "//a[normalize-space()='Protected applications'] | "
+        "//a[@data-test-id='horizontal-link-Protected applications']",
+        By.XPATH,
+    ),
+    "protected-app-search-bar": (
+        "//input[contains(@placeholder, 'Search') or contains(@aria-label, 'Search')]",
+        By.XPATH,
+    ),
+    "protected-app-list-table": (
+        "//table",
+        By.XPATH,
+    ),
+    "protected-app-name-in-list": (
+        "//a[@data-test='resource-link-{}']",
+        By.XPATH,
+    ),
+    "protected-app-kebab-menu": (
+        "//tr[.//a[@data-test='resource-link-{}']]//button[@aria-label='Kebab toggle' or contains(@class, 'pf-v5-c-menu-toggle')]",
+        By.XPATH,
+    ),
+    "protected-app-action-menu-item": (
+        "//button[@role='menuitem'][contains(., '{}')]",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -3035,6 +3063,7 @@ locators = {
             **acm_configuration_4_19,
             **acm_page_nav_420,
             **acm_configuration_4_20,
+            **acm_configuration_4_21,
         },
         "validation": {
             **validation,
