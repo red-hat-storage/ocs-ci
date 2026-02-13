@@ -314,7 +314,11 @@ def noobaa_db_backup_and_recovery_locally(
 
         # Wait for on-demand backup to complete
         backup_obj.wait_for_resource(
-            "completed", column="PHASE", timeout=1200, sleep=60
+            "completed",
+            resource_name=backup_name,
+            column="PHASE",
+            timeout=1200,
+            sleep=60,
         )
         logger.info(f"On-demand backup {backup_name} completed successfully")
 
