@@ -75,6 +75,7 @@ from ocs_ci.utility.utils import (
     create_directory_path,
     read_file_as_str,
     replace_content_in_file,
+    replace_regexp_in_file,
     run_cmd,
     exec_cmd,
     upload_file,
@@ -1074,6 +1075,7 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info("Deploying OCP cluster for vSphere platform")
             logger.info(f"Openshift-installer will be using loglevel:{log_cli_level}")
             os.chdir(self.terraform_data_dir)
+            adujst_node_names()
             self.terraform.initialize()
             self.terraform.apply(self.terraform_var)
             if config.ENV_DATA["sno"]:
@@ -2920,6 +2922,31 @@ def comment_bootstrap_in_lb_module():
     logger.debug(f"Commenting bootstrap module in {constants.VSPHERE_MAIN}")
     replace_str = "module.ipam_bootstrap.ip_addresses[0]"
     replace_content_in_file(constants.VSPHERE_MAIN, replace_str, f"//{replace_str}")
+
+
+def adujst_node_names():
+    """
+    Adjust node namesi in main.tf
+    """
+    logger.debug("Adjusting node names in main.tf file to contain the cluster name")
+    compute_nodes_regexp = r"^  compute_fqdns\s*=.*$"
+    compute_nodes_replacement = (
+        "  compute_fqdns       = [for idx in range(var.compute_count) : "
+        '"compute-${element(split(".", var.cluster_domain), 0)}-${idx}.${var.cluster_domain}"]'
+    )
+    control_plane_nodes_regexp = r"^  control_plane_fqdns\s*=.*$"
+    control_plane_nodes_replacement = (
+        "  control_plane_fqdns = [for idx in range(var.control_plane_count) : "
+        '"control-plane-${element(split(".", var.cluster_domain), 0)}-${idx}.${var.cluster_domain}"]'
+    )
+    replace_regexp_in_file(
+        constants.VSPHERE_MAIN, compute_nodes_regexp, compute_nodes_replacement
+    )
+    replace_regexp_in_file(
+        constants.VSPHERE_MAIN,
+        control_plane_nodes_regexp,
+        control_plane_nodes_replacement,
+    )
 
 
 def modify_haproxyservice():
