@@ -1304,6 +1304,9 @@ class Deployment(object):
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
         # hence perform_lso_standalone_deployment must be False if we want to deploy LSO with ODF operator and do not
         # execute 2nd LSO installation
+        if config.ENV_DATA.get("skip_lso_installation_check", False):
+            logger.info("Skipping LSO installation check")
+            local_storage = False
         if local_storage and not perform_lso_standalone_deployment:
             # we only deploy LSO if localblock storageclass is not present, otherwise we will fail with 2nd installation
             lso_deployed = ocp.OCP(kind=constants.STORAGECLASS).is_exist(
