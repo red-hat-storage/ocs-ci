@@ -1,0 +1,33 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: custom-odf-nic-bandwidth-saturation
+  namespace: openshift-storage
+  labels:
+    role: alert-rules
+    app: custom-odf
+spec:
+  groups:
+  - name: odf_healthchecks.rules.override
+    rules:
+    - alert: ODFNodeNICBandwidthSaturation   # SAME ALERT NAME
+      annotations:
+        description: Node {{ $labels.instance }} interface {{ $labels.device }} is at {{ printf "%.0f" $value }}% bandwidth utilization. May impact Ceph performance.
+        runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFNodeNICBandwidthSaturation.md
+        summary: ODF node NIC bandwidth > 90% saturation
+      expr: |
+        (
+          sum by (instance, device) (
+            rate(node_network_receive_bytes_total{job="node-exporter", device!~"^(veth|docker|flannel|cali|tun|tap).*"}[5m])
+          + rate(node_network_transmit_bytes_total{job="node-exporter", device!~"^(veth|docker|flannel|cali|tun|tap).*"}[5m])
+          )
+        )
+        /
+        sum by (instance, device) (
+          node_network_speed_bytes
+        )
+        > 0
+      for: 1m
+      labels:
+        component: odf
+        severity: warning

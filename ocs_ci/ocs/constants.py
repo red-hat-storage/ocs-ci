@@ -1599,6 +1599,13 @@ ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
 ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
 ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
 ALERT_ODFOPERATORNOTUPGRADABLE = "ODFOperatorNotUpgradeable"
+# ODF 4.21 new alerts
+ALERT_ODF_CORE_POD_RESTART = "ODFCorePodRestarted"
+ALERT_ODF_DISK_UTILIZATION_HIGH = "ODFDiskUtilizationHigh"
+ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES = "ODFNodeLatencyHighOnOSDNodes"
+ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES = "ODFNodeLatencyHighOnNonOSDNodes"
+ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION = "ODFNodeNICBandwidthSaturation"
+ALERT_ODF_NODE_MTU_LESS_THAN_9000 = "ODFNodeMTULessThan9000"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -2115,7 +2122,7 @@ EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET = OSU_SECRET_BASE.format(
     "external-", "noobaa", "ceph-objectstore-user"
 )
 OCS_SECRET = "ocs-secret"
-AZURE_NOOBAA_SECRET = "noobaa-azure-container-creds"
+AZURE_NOOBAA_SECRET = "noobaa-azure-container-creds"  # pragma: allowlist secret
 # Names of Managed Service secrets are derived from addon name
 # Following secret strings contain only suffix
 MANAGED_SMTP_SECRET_SUFFIX = "-smtp"
@@ -3804,3 +3811,6 @@ MON_STATUS_DOWN = "down"
 
 # ODF 4.21 health overview resources
 BLACKBOX_POD_LABEL = "app.kubernetes.io/name=odf-blackbox-exporter"
+
+# ODF 4.21 health overview mock alerts dir
+HEALTHALERTS_DIR = os.path.join(TEMPLATE_DIR, "health_overview_alerts")

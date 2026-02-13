@@ -2263,7 +2263,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "filter_by_details": (
-        "//input[@placeholder='Find by name or details']",
+        "//input[@placeholder='Find by name or details'] | //input[@placeholder='Find by name']",
         By.XPATH,
     ),
     "issue_table_checkbox": (
@@ -2308,14 +2308,14 @@ validation_4_21 = {
         By.XPATH,
     ),
     # web element returns number of checks with text like '3'
-    "critical_issues_count": {
+    "critical_issues_count": (
         "//small[normalize-space(.)='Critical']/preceding-sibling::h4",
         By.XPATH,
-    },
-    "moderate_issues_count": {
+    ),
+    "moderate_issues_count": (
         "//small[normalize-space(.)='Moderate']/preceding-sibling::h4",
         By.XPATH,
-    },
+    ),
     "minor_issues_count": (
         "//small[normalize-space(.)='Minor']/preceding-sibling::h4",
         By.XPATH,

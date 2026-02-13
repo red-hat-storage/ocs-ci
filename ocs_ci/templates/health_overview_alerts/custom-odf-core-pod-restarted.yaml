@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: custom-odf-core-pod-restarted
+  namespace: openshift-storage
+  labels:
+    role: alert-rules
+    app: custom-odf
+spec:
+  groups:
+  - name: odf_healthchecks.rules.override
+    rules:
+    - alert: ODFCorePodRestarted   # SAME ALERT NAME
+      annotations:
+        description: Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} restarted {{ $value }} time(s) in the last 24h. Investigate stability.
+        runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFCorePodRestarted.md
+        summary: ODF core pod restarted in last 24h
+      expr: |
+        changes(
+          kube_pod_container_status_restarts_total{
+            pod=~"rook-ceph-osd-.*|rook-ceph-mon-.*|rook-ceph-mgr-.*|odf-operator-.*|ocs-metrics-exporter-.*"
+          }[3m]
+        ) > 0
+        and on(namespace)
+        ceph_health_status
+      for: 10m
+      labels:
+        component: odf
+        severity: warning

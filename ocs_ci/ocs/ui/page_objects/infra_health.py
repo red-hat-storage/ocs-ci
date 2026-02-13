@@ -8,14 +8,15 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import DataFoundationTabBar
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs import constants
 
 SEVERITY_BY_CHECK = {
-    "ODFNodeLatencyHighOnOSDNodes": "Medium",
-    "ODFNodeLatencyHighOnNonOSDNodes": "Medium",
-    "ODFNodeMTULessThan9000": "Minor",
-    "ODFDiskUtilizationHigh": "Medium",
-    "ODFCorePodRestarted": "Medium",
-    "ODFNodeNICBandwidthSaturation": "Medium",
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES: "Medium",
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES: "Medium",
+    constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000: "Minor",
+    constants.ALERT_ODF_DISK_UTILIZATION_HIGH: "Medium",
+    constants.ALERT_ODF_CORE_POD_RESTART: "Medium",
+    constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: "Medium",
 }
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,10 @@ MTU_RE = re.compile(r"MTU\s+(\d+)")
 DURATION_RE = re.compile(
     r"((?:\d+\s*d)?\s*(?:\d+\s*h)?\s*(?:\d+\s*(?:m|min))?)", re.IGNORECASE
 )
-DATETIME_RE = re.compile(r"(\w+\s+\d{1,2},\s+\d{4},\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)")
+DATETIME_RE = re.compile(
+    r"((?:\d{1,2}\s+\w+|\w+\s+\d{1,2}),?\s+\d{4},\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)",
+    re.IGNORECASE,
+)
 CHECK_RE = re.compile(r"\b(ODF[A-Za-z0-9]+)\b")
 
 
@@ -331,6 +335,19 @@ class InfraHealthOverview(PageNavigator):
         # self.print_checks()
         self.select_all_alerts()
         self.take_screenshot("unsilence_all_alerts")
+        self.unsilence_alerts()
+
+    def unsilence_alert_by_name(self, alert_name):
+        """
+        Unsilence alert based on name
+        Args:
+            alert_name (str): Name of the alert to unsilence
+        """
+        logger.info("Unsilencing alert by name")
+        self.click_silenced_alerts()
+        self.do_send_keys(self.validation_loc["filter_by_details"], alert_name)
+        self.select_all_alerts()
+        self.take_screenshot(f"unsilence_alert_{alert_name}")
         self.unsilence_alerts()
 
     def silence_all_alerts(self, silent_duration: int):
