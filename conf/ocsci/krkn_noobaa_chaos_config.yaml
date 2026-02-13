@@ -1,0 +1,127 @@
+# Krkn NooBaa Chaos Testing Configuration
+#
+# This configuration is specifically designed for NooBaa pod disruption chaos testing
+# with continuous S3 metadata workload operations.
+#
+# Usage:
+#   pytest --ocsci-conf conf/ocsci/krkn_noobaa_chaos_config.yaml \
+#       tests/cross_functional/krkn_chaos/test_krkn_noobaa_chaos.py
+#
+
+ENV_DATA:
+  krkn_config:
+    # ========================================================================
+    # WORKLOAD CONFIGURATION
+    # ========================================================================
+    # Use MCG_WORKLOAD for NooBaa chaos testing
+    # This creates S3 workloads specifically on MCG/NooBaa buckets
+    workloads:
+      - "MCG_WORKLOAD"
+
+    # Enable workload execution during chaos testing
+    run_workload: true
+
+    # ========================================================================
+    # MCG/NOOBAA WORKLOAD CONFIGURATION
+    # ========================================================================
+    mcg_config:
+      # Number of MCG buckets to create for workload testing
+      # Each bucket will have its own S3 workload running in parallel
+      num_buckets: 3
+
+      # Number of iterations for each S3 operation cycle
+      # Higher values = more intensive testing
+      iteration_count: 20
+
+      # S3 operation types to perform
+      # Includes upload, download, list, and delete operations
+      operation_types:
+        - upload
+        - download
+        - list
+        - delete
+
+      # Upload multiplier (number of objects to upload per iteration)
+      upload_multiplier: 2
+
+      # Enable metadata-intensive operations (important for NooBaa testing)
+      # This stresses the NooBaa database with metadata operations
+      metadata_ops_enabled: true
+
+      # Delay between operation iterations (seconds)
+      # Lower values = more aggressive testing
+      delay_between_iterations: 20
+
+      # Whether to delete buckets during cleanup
+      # Set to true to clean up test buckets after chaos testing
+      delete_bucket_on_cleanup: true
+
+    # ========================================================================
+    # VERIFICATION CONFIGURATION
+    # ========================================================================
+    # Enable/disable post-chaos verification
+    # For NooBaa, this verifies S3 workload integrity after chaos
+    enable_verification: true
+
+    # ========================================================================
+    # BACKGROUND CLUSTER OPERATIONS
+    # ========================================================================
+    # Background operations run continuously during chaos to validate
+    # cluster health in real-time
+    background_cluster_operations:
+      enabled: true
+      operation_interval: 60  # Seconds between operations
+      max_concurrent_operations: 2
+      enabled_operations:
+        - snapshot_lifecycle
+        - clone_lifecycle
+        # Note: OSD/MDS operations disabled for NooBaa testing
+        # as we're focusing on NooBaa-specific resilience
+
+# ========================================================================
+# ADDITIONAL NOTES
+# ========================================================================
+#
+# NooBaa Pod Disruption Test Scenarios:
+# ----------------------------------------
+# 1. **noobaa-db-pg-0** (Primary target)
+#    - PostgreSQL database pod
+#    - Most critical for data consistency
+#    - Test validates database recovery after abrupt failures
+#    - Kill intervals: 180s, 240s, 300s
+#    - Test durations: 20min, 30min, 60min
+#
+# 2. **noobaa-core-0** (Secondary target)
+#    - Core NooBaa service pod
+#    - Handles S3 API requests
+#    - Test validates S3 service resilience
+#    - Kill intervals: 180s, 240s
+#    - Test durations: 20min, 30min
+#
+# 3. **noobaa-operator** (Tertiary target)
+#    - NooBaa operator pod
+#    - Manages NooBaa lifecycle
+#    - Test validates operator recovery
+#    - Kill interval: 180s
+#    - Test duration: 20min
+#
+# Expected Behavior During Chaos:
+# ---------------------------------
+# - Pod restarts are EXPECTED
+# - Temporary S3 failures (503, timeouts) are EXPECTED
+# - Workload should continue after pod recovery
+# - No permanent database corruption
+# - No data loss
+# - S3 service returns to normal after pod restart
+#
+# Strength Testing Stress Levels:
+# ---------------------------------
+# - **high**: 3x duration, 120s kill interval
+# - **extreme**: 5x duration, 90s kill interval
+# - **ultimate**: 8x duration, 60s kill interval
+#
+# Each stress level targets multiple NooBaa components simultaneously:
+# - noobaa-db-pg (database)
+# - noobaa-core (S3 service)
+# - noobaa-operator (lifecycle management)
+#

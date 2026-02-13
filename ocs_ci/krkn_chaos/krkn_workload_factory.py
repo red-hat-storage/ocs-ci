@@ -71,6 +71,10 @@ class WorkloadOps:
                     self._validate_cnv_workload(workload)
                 elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
                     self._validate_rgw_workload(workload)
+                elif workload_type == KrknWorkloadConfig.MCG_WORKLOAD:
+                    self._validate_mcg_workload(workload)
+                elif workload_type == KrknWorkloadConfig.WARP_WORKLOAD:
+                    self._validate_warp_workload(workload)
 
                 ready_count += 1
             except Exception as e:
@@ -153,6 +157,8 @@ class WorkloadOps:
                     self._validate_cnv_workload(workload)
                 elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
                     self._validate_rgw_workload(workload)
+                elif workload_type == KrknWorkloadConfig.MCG_WORKLOAD:
+                    self._validate_mcg_workload(workload)
                 else:
                     log.warning(f"Unknown workload type: {workload_type}")
 
@@ -198,6 +204,10 @@ class WorkloadOps:
                     self._validate_cnv_workload(workload)
                 elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
                     self._validate_rgw_workload(workload)
+                elif workload_type == KrknWorkloadConfig.MCG_WORKLOAD:
+                    self._validate_mcg_workload(workload)
+                elif workload_type == KrknWorkloadConfig.WARP_WORKLOAD:
+                    self._validate_warp_workload(workload)
                 else:
                     log.warning(f"Unknown workload type: {workload_type}")
 
@@ -253,7 +263,14 @@ class WorkloadOps:
                 return KrknWorkloadConfig.CNV_WORKLOAD
             elif "vdbench" in class_name:
                 return KrknWorkloadConfig.VDBENCH
+            elif "warp" in class_name:
+                return KrknWorkloadConfig.WARP_WORKLOAD
             elif "rgw" in class_name:
+                # Check if this is MCG or RGW based on bucket type
+                if hasattr(workload, "rgw_bucket") and workload.rgw_bucket:
+                    bucket_class_name = workload.rgw_bucket.__class__.__name__
+                    if "MCG" in bucket_class_name:
+                        return KrknWorkloadConfig.MCG_WORKLOAD
                 return KrknWorkloadConfig.RGW_WORKLOAD
 
         return (
@@ -315,6 +332,30 @@ class WorkloadOps:
                     log.warning("RGW workload reports as not running")
             except Exception as e:
                 log.warning(f"Failed to get RGW workload status: {e}")
+
+    def _validate_mcg_workload(self, workload):
+        """Validate MCG/NooBaa workload health."""
+        # MCG workload uses same RGWWorkload class, so validation is similar
+        self._validate_rgw_workload(workload)
+
+    def _validate_warp_workload(self, workload):
+        """Validate Warp workload health."""
+        # Check if Warp workload is still running
+        if hasattr(workload, "is_running") and callable(workload.is_running):
+            if not workload.is_running():
+                log.warning("Warp workload is not running")
+
+        # Check workload status
+        if hasattr(workload, "get_workload_status") and callable(
+            workload.get_workload_status
+        ):
+            try:
+                status = workload.get_workload_status()
+                log.info(f"Warp workload status: {status}")
+                if not status.get("is_running", False):
+                    log.warning("Warp workload reports as not running")
+            except Exception as e:
+                log.warning(f"Failed to get Warp workload status: {e}")
 
 
 class KrknWorkloadFactory:
@@ -1057,5 +1098,344 @@ class KrknWorkloadFactory:
             )
         else:
             log.info(f"✓ Successfully created all {len(workloads)} RGW workloads")
+
+        return workloads
+
+    def _create_mcg_workloads_for_project(
+        self, proj_obj, multi_pvc_factory, awscli_pod
+    ):
+        """
+        Create multiple MCG/NooBaa workloads with different configurations.
+
+        Args:
+            proj_obj: Project object
+            multi_pvc_factory: Multi-PVC factory (not used by MCG, but required for consistency)
+            awscli_pod: Pod with AWS CLI for S3 operations
+
+        Returns:
+            List of MCG workload objects (using RGWWorkload class for S3 operations)
+        """
+        from ocs_ci.resiliency.resiliency_workload import RGWWorkload
+
+        # Get MCG configuration from krkn_config
+        mcg_config = self.config.get_mcg_config()
+
+        # Configure workload parameters from config
+        num_buckets = mcg_config.get("num_buckets", 3)
+        iteration_count = mcg_config.get("iteration_count", 10)
+        operation_types = mcg_config.get(
+            "operation_types", ["upload", "download", "list", "delete"]
+        )
+        upload_multiplier = mcg_config.get("upload_multiplier", 1)
+        metadata_ops_enabled = mcg_config.get(
+            "metadata_ops_enabled", True
+        )  # Enable metadata ops for NooBaa
+        delay_between_iterations = mcg_config.get("delay_between_iterations", 30)
+        delete_bucket_on_cleanup = mcg_config.get("delete_bucket_on_cleanup", True)
+
+        workloads = []
+
+        log.info(f"Creating {num_buckets} MCG/NooBaa workloads")
+
+        # Pre-flight check: Verify NooBaa pods are running
+        try:
+            from ocs_ci.ocs.ocp import OCP
+            from ocs_ci.ocs import constants
+
+            log.info("Checking NooBaa pod health before creating buckets...")
+
+            # Check NooBaa core pods
+            noobaa_core_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector=constants.NOOBAA_CORE_POD_LABEL)
+
+            # Check NooBaa DB pods
+            noobaa_db_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
+
+            if (
+                not noobaa_core_pods
+                or "items" not in noobaa_core_pods
+                or not noobaa_core_pods["items"]
+            ):
+                log.warning("No NooBaa core pods found - NooBaa may not be deployed")
+                raise RuntimeError("NooBaa core service is not available")
+
+            if (
+                not noobaa_db_pods
+                or "items" not in noobaa_db_pods
+                or not noobaa_db_pods["items"]
+            ):
+                log.warning(
+                    "No NooBaa DB pods found - NooBaa database may not be deployed"
+                )
+                raise RuntimeError("NooBaa database is not available")
+
+            # Check pod status
+            core_running = sum(
+                1
+                for pod in noobaa_core_pods["items"]
+                if pod.get("status", {}).get("phase") == "Running"
+            )
+            core_total = len(noobaa_core_pods["items"])
+
+            db_running = sum(
+                1
+                for pod in noobaa_db_pods["items"]
+                if pod.get("status", {}).get("phase") == "Running"
+            )
+            db_total = len(noobaa_db_pods["items"])
+
+            log.info(f"NooBaa core pods: {core_running}/{core_total} running")
+            log.info(f"NooBaa DB pods: {db_running}/{db_total} running")
+
+            if core_running == 0 or db_running == 0:
+                raise RuntimeError(
+                    "NooBaa services are not running. "
+                    "Ensure NooBaa is healthy in your ODF deployment."
+                )
+
+        except Exception as e:
+            log.error(f"NooBaa health check failed: {e}")
+            raise RuntimeError(f"Cannot create MCG workloads: {e}")
+
+        # Create MCG buckets for workload testing
+        try:
+            log.info("Creating MCG buckets for workload testing")
+
+            for i in range(num_buckets):
+                try:
+                    # Create MCG bucket using MCGOCBucket
+                    from ocs_ci.ocs.resources.objectbucket import MCGOCBucket
+                    import fauxfactory
+
+                    bucket_name = f"mcg-workload-{fauxfactory.gen_alpha(4).lower()}"
+                    log.info(f"Creating MCG bucket: {bucket_name}")
+
+                    # Create MCG bucket - it creates the OBC
+                    mcg_bucket = MCGOCBucket(bucket_name)
+
+                    # Give OBC a moment to be reconciled by the operator
+                    log.info(f"Waiting 15s for OBC {bucket_name} to be reconciled...")
+                    time.sleep(15)
+
+                    # Wait for bucket to be bound and ready (timeout 300s)
+                    log.info(
+                        f"Waiting for bucket {bucket_name} to be ready (up to 5 minutes)..."
+                    )
+                    try:
+                        mcg_bucket.verify_health(timeout=300)
+                        log.info(f"✓ Bucket {bucket_name} is ready")
+                    except Exception as e:
+                        log.error(f"Bucket {bucket_name} failed to become healthy: {e}")
+                        # Continue with next bucket instead of failing completely
+                        continue
+
+                    # Workload configuration
+                    workload_config = {
+                        "iteration_count": iteration_count,
+                        "operation_types": operation_types,
+                        "upload_multiplier": upload_multiplier,
+                        "metadata_ops_enabled": metadata_ops_enabled,
+                        "delay_between_iterations": delay_between_iterations,
+                    }
+
+                    # Create MCG workload (reuse RGWWorkload for S3 operations)
+                    mcg_workload = RGWWorkload(
+                        rgw_bucket=mcg_bucket,  # MCG bucket also works with RGWWorkload
+                        awscli_pod=awscli_pod,
+                        namespace=proj_obj.namespace,
+                        workload_config=workload_config,
+                        delete_bucket_on_cleanup=delete_bucket_on_cleanup,
+                    )
+
+                    # Start the workload
+                    mcg_workload.start_workload()
+
+                    workloads.append(mcg_workload)
+                    log.info(f"✓ Created and started MCG workload: {bucket_name}")
+
+                except Exception as e:
+                    log.error(f"Failed to create MCG workload {i + 1}: {e}")
+                    import traceback
+
+                    log.error(traceback.format_exc())
+                    # Continue with next workload instead of failing completely
+                    continue
+
+        except Exception as e:
+            log.error(f"Failed to create MCG workloads: {e}")
+            raise RuntimeError(f"Failed to create any MCG workloads: {e}")
+
+        if not workloads:
+            log.error("Failed to create any MCG workloads")
+            log.error(
+                "This may be due to NooBaa health issues. "
+                "Check NooBaa pod status and OBC controller health."
+            )
+            raise RuntimeError("Failed to create any MCG workloads")
+
+        if len(workloads) < num_buckets:
+            log.warning(
+                f"Only created {len(workloads)} out of {num_buckets} requested MCG workloads. "
+                f"Some buckets failed to bind - check cluster health."
+            )
+        else:
+            log.info(f"✓ Successfully created all {len(workloads)} MCG workloads")
+
+        return workloads
+
+    def _create_warp_workloads_for_project(
+        self, proj_obj, multi_pvc_factory, mcg_obj_session
+    ):
+        """
+        Create Warp workloads for high-intensity MCG/NooBaa stress testing.
+
+        Warp is MinIO's S3 benchmarking tool that provides high-performance
+        S3 operations for stress testing MCG/NooBaa.
+
+        Args:
+            proj_obj: Project object
+            multi_pvc_factory: Multi-PVC factory (not used by Warp, but required for consistency)
+            mcg_obj_session: MCG object for NooBaa access (session-scoped fixture)
+
+        Returns:
+            List of Warp workload objects
+        """
+        from ocs_ci.resiliency.resiliency_workload import WarpWorkload
+
+        # Get Warp configuration from krkn_config
+        warp_config = self.config.get_warp_config()
+
+        # Configure workload parameters from config
+        num_workloads = warp_config.get("num_workloads", 1)
+        workload_type = warp_config.get("workload_type", "mixed")
+        duration = warp_config.get("duration", "10m")
+        concurrent = warp_config.get("concurrent", 1)
+        objects = warp_config.get("objects", 1000)
+        obj_size = warp_config.get("obj_size", "1MiB")
+
+        # Get namespace configuration (default to 'default')
+        warp_namespace = warp_config.get("namespace", "default")
+        log.info(f"Warp workloads will be deployed in namespace: {warp_namespace}")
+
+        workloads = []
+
+        log.info(f"Creating {num_workloads} Warp MCG stress workloads")
+
+        # Pre-flight check: Verify NooBaa pods are running
+        try:
+            from ocs_ci.ocs.ocp import OCP
+            from ocs_ci.ocs import constants
+
+            log.info("Checking NooBaa pod health before creating Warp workloads...")
+
+            # Check NooBaa core pods
+            noobaa_core_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector=constants.NOOBAA_CORE_POD_LABEL)
+
+            if (
+                not noobaa_core_pods
+                or "items" not in noobaa_core_pods
+                or not noobaa_core_pods["items"]
+            ):
+                log.warning("No NooBaa core pods found - NooBaa may not be deployed")
+                raise RuntimeError("NooBaa core service is not available")
+
+            # Check pod status
+            core_running = sum(
+                1
+                for pod in noobaa_core_pods["items"]
+                if pod.get("status", {}).get("phase") == "Running"
+            )
+            core_total = len(noobaa_core_pods["items"])
+
+            log.info(f"NooBaa core pods: {core_running}/{core_total} running")
+
+            if core_running == 0:
+                raise RuntimeError(
+                    "NooBaa services are not running. "
+                    "Ensure NooBaa is healthy in your ODF deployment."
+                )
+
+        except Exception as e:
+            log.error(f"NooBaa health check failed: {e}")
+            raise RuntimeError(f"Cannot create Warp workloads: {e}")
+
+        # Create Warp workloads
+        try:
+            log.info("Creating Warp workloads for MCG stress testing")
+
+            for i in range(num_workloads):
+                try:
+                    # Create a unique bucket for each Warp workload
+                    import fauxfactory
+
+                    bucket_name = f"warp-test-{fauxfactory.gen_alpha(4).lower()}"
+                    log.info(
+                        f"Creating Warp workload {i + 1} with bucket: {bucket_name}"
+                    )
+
+                    # Create the bucket using MCG
+                    from ocs_ci.ocs.bucket_utils import s3_create_bucket
+
+                    s3_create_bucket(
+                        s3_obj=mcg_obj_session,
+                        bucket_name=bucket_name,
+                    )
+                    log.info(f"✓ Created bucket: {bucket_name}")
+
+                    # Workload configuration
+                    workload_config = {
+                        "workload_type": workload_type,
+                        "duration": duration,
+                        "concurrent": concurrent,
+                        "objects": objects,
+                        "obj_size": obj_size,
+                    }
+
+                    # Create Warp workload
+                    warp_workload = WarpWorkload(
+                        mcg_obj=mcg_obj_session,
+                        bucket_name=bucket_name,
+                        namespace=warp_namespace,  # Use configured namespace
+                        workload_config=workload_config,
+                    )
+
+                    # Start the workload
+                    warp_workload.start_workload()
+
+                    workloads.append(warp_workload)
+                    log.info(f"✓ Created and started Warp workload: {bucket_name}")
+
+                except Exception as e:
+                    log.error(f"Failed to create Warp workload {i + 1}: {e}")
+                    import traceback
+
+                    log.error(traceback.format_exc())
+                    # Continue with next workload instead of failing completely
+                    continue
+
+        except Exception as e:
+            log.error(f"Failed to create Warp workloads: {e}")
+            raise RuntimeError(f"Failed to create any Warp workloads: {e}")
+
+        if not workloads:
+            log.error("Failed to create any Warp workloads")
+            log.error(
+                "This may be due to NooBaa health issues. "
+                "Check NooBaa pod status and S3 service health."
+            )
+            raise RuntimeError("Failed to create any Warp workloads")
+
+        if len(workloads) < num_workloads:
+            log.warning(
+                f"Only created {len(workloads)} out of {num_workloads} requested Warp workloads. "
+                f"Some workloads failed to start - check cluster health."
+            )
+        else:
+            log.info(f"✓ Successfully created all {len(workloads)} Warp workloads")
 
         return workloads

@@ -6,7 +6,7 @@ ENV_DATA:
   krkn_version: "v5.0.0"
 
   krkn_config:
-    # Workload types: VDBENCH, CNV_WORKLOAD, RGW_WORKLOAD, FIO
+    # Workload types: VDBENCH, CNV_WORKLOAD, RGW_WORKLOAD, MCG_WORKLOAD, WARP_WORKLOAD
     workloads:
       - VDBENCH
       - RGW_WORKLOAD
@@ -104,6 +104,34 @@ ENV_DATA:
         - download
         - list
         - delete
+
+    # MCG/NooBaa Workload configuration (S3 workload on MCG/NooBaa)
+    mcg_config:
+      num_buckets: 3
+      iteration_count: 10
+      upload_multiplier: 1
+      metadata_ops_enabled: true  # Enable metadata operations for NooBaa testing
+      delay_between_iterations: 30
+      delete_bucket_on_cleanup: true
+      operation_types:
+        - upload
+        - download
+        - list
+        - delete
+
+    # Warp Workload configuration (High-performance MCG/NooBaa stress testing)
+    # Warp is MinIO's S3 benchmarking tool for intensive stress testing
+    warp_config:
+      # Namespace where Warp pods will be deployed
+      # Options: 'default', 'openshift-storage', or any custom namespace
+      namespace: "default"
+
+      num_workloads: 1  # Number of concurrent Warp workloads to run
+      workload_type: "mixed"  # Options: mixed, get, put, delete, stat
+      duration: "10m"  # Duration for each Warp iteration (e.g., "10m", "30s", "1h")
+      concurrent: 1  # Number of concurrent operations per workload
+      objects: 1000  # Number of objects to create/operate on
+      obj_size: "1MiB"  # Object size (e.g., "1MiB", "10KiB", "100MiB")
 
     # Background Cluster Operations Configuration
     background_cluster_operations:
