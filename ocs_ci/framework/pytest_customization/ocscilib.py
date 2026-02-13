@@ -28,6 +28,7 @@ from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
+    TOP_DIR,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -850,6 +851,44 @@ def pytest_collection_modifyitems(session, config, items):
 def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
+
+    # Write test results to files first (always do this)
+    if rep.failed:
+        test_name = item.nodeid
+        # Write the failure information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/failed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.passed and rep.when == "call":
+        test_name = item.nodeid
+        # Write the passed information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/passed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.skipped:
+        test_name = item.nodeid
+        # Write the skipped information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/skipped_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    # Check if stop was requested and if it's not graceful, skip log collection
+    stop_requested = ocsci_config.RUN.get("stop_requested", False)
+    graceful_stop = ocsci_config.RUN.get("graceful_stop", True)
+
+    # Skip log collection if .stop file was used (not graceful)
+    if stop_requested and not graceful_stop:
+        log.info(
+            "Skipping log collection due to .stop file - "
+            "use .stop_gracefully if you want logs collected"
+        )
+        return
+
     # we only look at actual failing test calls, not setup/teardown
     # Don't collect must-gather for deployment here since its already
     # handled in deployment
@@ -957,30 +996,6 @@ def pytest_runtest_makereport(item, call):
         except Exception:
             log.exception("Failed to collect performance stats")
 
-    if rep.failed:
-        test_name = item.nodeid
-        # Write the failure information to a file
-        with open(
-            f'{ocsci_config.ENV_DATA.get("cluster_path")}/failed_testcases.txt', "a"
-        ) as file:
-            file.write(f"{test_name}\n")
-
-    if rep.passed and rep.when == "call":
-        test_name = item.nodeid
-        # Write the passed information to a file
-        with open(
-            f'{ocsci_config.ENV_DATA.get("cluster_path")}/passed_testcases.txt', "a"
-        ) as file:
-            file.write(f"{test_name}\n")
-
-    if rep.skipped:
-        test_name = item.nodeid
-        # Write the skipped information to a file
-        with open(
-            f'{ocsci_config.ENV_DATA.get("cluster_path")}/skipped_testcases.txt', "a"
-        ) as file:
-            file.write(f"{test_name}\n")
-
 
 def set_log_level(config):
     """
@@ -994,12 +1009,71 @@ def set_log_level(config):
     log.setLevel(logging.getLevelName(level))
 
 
+def check_stop_file():
+    """
+    Check if stop files exist in the repository root directory.
+
+    Returns:
+        tuple: (stop_requested, graceful_stop, message)
+            - stop_requested (bool): True if any stop file exists
+            - graceful_stop (bool): True if .stop_gracefully file exists
+            - message (str): Skip message to display
+    """
+    stop_file = os.path.join(TOP_DIR, ".stop")
+    stop_gracefully_file = os.path.join(TOP_DIR, ".stop_gracefully")
+
+    if os.path.exists(stop_gracefully_file):
+        log.warning(
+            f"Graceful stop file detected at {stop_gracefully_file}. "
+            "Current test will complete with log collection, remaining tests will be skipped."
+        )
+        return True, True, "Graceful stop requested via .stop_gracefully file"
+    elif os.path.exists(stop_file):
+        log.warning(
+            f"Stop file detected at {stop_file}. "
+            "Current test will complete without log collection, remaining tests will be skipped."
+        )
+        return True, False, "Stop requested via .stop file - skipping log collection"
+
+    return False, False, ""
+
+
+def set_stop_flags_for_all_clusters(stop_requested, graceful_stop):
+    """
+    Set stop flags in RUN config for all clusters in multicluster scenarios.
+
+    Args:
+        stop_requested (bool): Whether stop was requested
+        graceful_stop (bool): Whether graceful stop was requested
+    """
+    if ocsci_config.multicluster:
+        # Set flags for all clusters
+        for cluster in ocsci_config.clusters:
+            cluster.RUN["stop_requested"] = stop_requested
+            cluster.RUN["graceful_stop"] = graceful_stop
+    else:
+        # Single cluster scenario
+        ocsci_config.RUN["stop_requested"] = stop_requested
+        ocsci_config.RUN["graceful_stop"] = graceful_stop
+
+
 global consumed_ram_start_test
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     try:
+        # Check for stop files before starting the test
+        stop_requested, graceful_stop, skip_message = check_stop_file()
+
+        if stop_requested:
+            # Set flag in config to control log collection behavior
+            # Handle both single and multicluster scenarios
+            set_stop_flags_for_all_clusters(stop_requested, graceful_stop)
+
+            log.warning(f"Skipping test: {item.nodeid} - {skip_message}")
+            pytest.skip(skip_message)
+
         start_monitor_memory()
 
         global consumed_ram_start_test, test_start_time
