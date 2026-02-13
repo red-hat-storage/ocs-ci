@@ -1,0 +1,13 @@
+# Minimal alerts profile for OCS-CI Krkn runs.
+#
+# Newer Krkn enables resiliency scoring when Prometheus is reachable (typical on
+# OpenShift). It loads performance_monitoring.alert_profile (default config/alerts.yaml)
+# relative to the Krkn process working directory (the Krkn clone root).
+#
+# KrknConfigGenerator copies this file to data/krkn/config/alerts.yaml and KrKnRunner
+# sets cwd to that clone. Replace with upstream defaults if full SLO coverage is needed:
+# https://github.com/krkn-chaos/krkn/blob/main/config/alerts.yaml
+
+- expr: absent(up{job="krkn-ocs-ci-placeholder-job"})
+  description: OCS-CI bundled alerts placeholder (harmless)
+  severity: info

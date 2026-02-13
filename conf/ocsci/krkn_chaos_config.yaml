@@ -95,12 +95,16 @@ ENV_DATA:
             skew: 0
 
     # RGW Workload configuration (S3 workload on RADOS Gateway)
+    # Buckets provision in a background thread during setup_workloads() so Krkn
+    # is not blocked on OBC binding; each started workload runs S3 ops in its own thread.
     rgw_config:
       num_buckets: 5
       iteration_count: 10
       upload_multiplier: 1
       metadata_ops_enabled: false
       delay_between_iterations: 30
+      obc_reconcile_wait_seconds: 15
+      bucket_health_timeout_seconds: 300
       delete_bucket_on_cleanup: true # Automatically delete buckets after workload completes
       operation_types:
         - upload

@@ -6044,21 +6044,83 @@ def archive_ceph_crashes(toolbox_pod):
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
 
 
+def format_ceph_crash_summary_lines(crashes):
+    """Build per-crash summary lines for logs/assertions (every crash, no cap)."""
+    lines = []
+    for i, crash in enumerate(crashes, 1):
+        if isinstance(crash, dict):
+            crash_id = crash.get("crash_id", "unknown")
+            timestamp = crash.get("timestamp", "unknown")
+            entity = crash.get("entity_name", "unknown")
+        else:
+            crash_id = str(crash)
+            timestamp = entity = "unknown"
+        lines.append(
+            f"  {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}"
+        )
+    return lines
+
+
+def log_all_ceph_crash_details(toolbox_pod):
+    """
+    Log summary and full ``ceph crash info`` output for every unarchived crash.
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    Returns:
+        list: Crash entries from ``ceph crash ls`` (dicts with crash_id, etc.)
+    """
+    crashes = []
+    try:
+        raw = toolbox_pod.exec_ceph_cmd("ceph crash ls")
+        crashes = raw if raw else []
+    except (CommandFailed, subprocess.TimeoutExpired) as ex:
+        log.error("Failed to list ceph crashes: %s", ex)
+        for crash_id in get_ceph_crashes(toolbox_pod):
+            crashes.append({"crash_id": crash_id})
+
+    if not crashes:
+        return []
+
+    total = len(crashes)
+    log.error("Found %s Ceph crash(es); logging ``ceph crash info`` for each:", total)
+    for index, crash in enumerate(crashes, start=1):
+        if isinstance(crash, dict):
+            crash_id = crash.get("crash_id", "unknown")
+            entity = crash.get("entity_name", "unknown")
+            timestamp = crash.get("timestamp", "unknown")
+        else:
+            crash_id = str(crash)
+            entity = "unknown"
+            timestamp = "unknown"
+        log.error(
+            "Ceph crash %s/%s — ID: %s, Entity: %s, Time: %s",
+            index,
+            total,
+            crash_id,
+            entity,
+            timestamp,
+        )
+        try:
+            crash_info = toolbox_pod.exec_ceph_cmd(
+                f"ceph crash info {crash_id}", out_yaml_format=False
+            )
+            log.error("ceph crash info %s:\n%s", crash_id, crash_info)
+        except (CommandFailed, subprocess.TimeoutExpired) as ex:
+            log.error("Failed to get ceph crash info for %s: %s", crash_id, ex)
+    return crashes
+
+
 def ceph_crash_info_display(toolbox_pod):
     """
-    Displays ceph crash information
+    Displays ceph crash information for every crash.
 
     Args:
         toolbox_pod (obj): Ceph toolbox pod object
 
     """
-    ceph_crashes = get_ceph_crashes(toolbox_pod)
-    for each_crash in ceph_crashes:
-        log.error(f"ceph crash: {each_crash}")
-        crash_info = toolbox_pod.exec_ceph_cmd(
-            f"ceph crash info {each_crash}", out_yaml_format=False
-        )
-        log.error(crash_info)
+    log_all_ceph_crash_details(toolbox_pod)
 
 
 def add_time_report_to_email(session, soup):

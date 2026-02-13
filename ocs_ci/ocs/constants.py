@@ -3856,7 +3856,7 @@ KRKN_NODE_CRASH = "node_crash_scenario"
 
 # krknclt chaos constants
 KRKNCTL_BINARY_TAR = (
-    "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.10.20-beta-linux-amd64.tar.gz"
+    "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.10.22-beta-linux-amd64.tar.gz"
 )
 KRKNCTL = os.path.join(DATA_DIR, "krknctl")
 KRKNCTL_PLAN_TEMPLATE = os.path.join(

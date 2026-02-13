@@ -15,6 +15,8 @@ Used by:
 import logging
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.utility import version as version_util
+from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     get_primary_nb_db_pod,
@@ -286,10 +288,12 @@ def validate_noobaa_health(component_name="NooBaa"):
     """
     log.info(f"Validating NooBaa health for {component_name}")
 
+    noobaa_db_label, _ = get_noobaa_db_chaos_target()
+
     # Check NooBaa pods are running
     log.info("   Checking NooBaa pod status...")
     noobaa_pods = [
-        (constants.NOOBAA_DB_LABEL_419_AND_ABOVE, "NooBaa DB"),
+        (noobaa_db_label, "NooBaa DB"),
         (constants.NOOBAA_CORE_POD_LABEL, "NooBaa Core"),
         (constants.NOOBAA_OPERATOR_POD_LABEL, "NooBaa Operator"),
     ]
@@ -341,9 +345,11 @@ def validate_noobaa_db_health():
     """
     log.info("Validating NooBaa database health")
 
+    noobaa_db_label, _ = get_noobaa_db_chaos_target()
+
     # Check database pods
     db_pods = get_pods_having_label(
-        label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
+        label=noobaa_db_label,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
@@ -457,6 +463,24 @@ def validate_noobaa_endpoints_health():
 # ============================================================================
 
 
+def get_noobaa_db_chaos_target():
+    """
+    Return NooBaa DB label selector and primary container for chaos tests.
+
+    Matches deployment layout by OCS version (pre-4.7 mongo, 4.7–4.18 StatefulSet
+    postgres, 4.19+ CNPG cluster).
+
+    Returns:
+        tuple[str, str]: (label_selector, primary_container_name)
+    """
+    ocs_version = version_util.get_semantic_ocs_version_from_config()
+    if get_ocs_version_from_csv(only_major_minor=True) >= version_util.VERSION_4_19:
+        return constants.NOOBAA_DB_LABEL_419_AND_ABOVE, "postgres"
+    if ocs_version < version_util.VERSION_4_7:
+        return constants.NOOBAA_DB_LABEL_46_AND_UNDER, "noobaa"
+    return constants.NOOBAA_DB_LABEL_47_AND_ABOVE, "postgres"
+
+
 def get_noobaa_component_label(component_name):
     """
     Get the Kubernetes label selector for a NooBaa component.
@@ -476,7 +500,7 @@ def get_noobaa_component_label(component_name):
         'noobaa-core=noobaa'
     """
     component_labels = {
-        "db": constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
+        "db": get_noobaa_db_chaos_target()[0],
         "db_primary": constants.NB_DB_PRIMARY_POD_LABEL,
         "db_replica": constants.NB_DB_SECONDARY_POD_LABEL,
         "core": constants.NOOBAA_CORE_POD_LABEL,
