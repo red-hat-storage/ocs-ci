@@ -3331,6 +3331,7 @@ def clone_repo(
     to_checkout=None,
     clone_type="shallow",
     force_checkout=False,
+    clone_token=None,
 ):
     """
     Clone a repository or checkout latest changes if it already exists at
@@ -3347,6 +3348,7 @@ def clone_repo(
             clone_type as "normal".
         force_checkout (bool): True for force checkout to branch.
             force checkout will ignore the unmerged entries.
+        clone_token (str): Token to clone repo
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -3386,7 +3388,10 @@ def clone_repo(
 
     if not os.path.isdir(location) or (tmp_repo and os.path.isdir(location)):
         log.info("Cloning repository into %s", location)
-        run_cmd(f"git clone {git_params} {url} {location}")
+        if clone_token:
+            url = url.replace("https://", f"https://{clone_token}@")
+            clone_token = [clone_token]
+        run_cmd(cmd=f"git clone {git_params} {url} {location}", secrets=clone_token)
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
