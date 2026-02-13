@@ -8170,6 +8170,80 @@ def cnv_workload_factory(request):
         for cnv_wl in cnv_workloads[::-1]:
             cnv_wl.delete()
 
+        # Wait a bit to ensure all PVC deletions have completed
+        # and PVs have transitioned to Released state if needed
+        time.sleep(5)
+
+        # Clean up Released PVs after VM and PVC deletion
+        try:
+            from ocs_ci.ocs.resources.pv import get_all_pvs, get_pv_status
+
+            all_pvs = get_all_pvs().get("items", [])
+            released_pvs = [
+                pv for pv in all_pvs if get_pv_status(pv) == constants.STATUS_RELEASED
+            ]
+            if released_pvs:
+                log.info(
+                    f"Found {len(released_pvs)} PV(s) in Released state. "
+                    "Cleaning them up after VM deletion."
+                )
+                for pv_dict in released_pvs:
+                    try:
+                        pv_name = pv_dict.get("metadata", {}).get("name")
+
+                        pv_obj = OCS(**pv_dict)
+
+                        # Try to delete the PV directly
+                        log.info(f"Attempting to delete PV {pv_name}")
+                        pv_obj.delete(wait=False)
+                        try:
+                            pv_obj.ocp.wait_for_delete(
+                                resource_name=pv_name, timeout=60
+                            )
+                            log.info(f"PV {pv_name} deleted successfully")
+                        except CommandFailed:
+                            log.warning(
+                                f"PV {pv_name} still exists after direct deletion. "
+                                "Attempting to remove finalizers and force delete."
+                            )
+                            # Remove finalizers to force delete the PV
+                            try:
+                                params = '{"metadata": {"finalizers":null}}'
+                                pv_obj.ocp.patch(resource_name=pv_name, params=params)
+                                log.info(
+                                    f"Removed finalizers from PV {pv_name}. "
+                                    "Waiting for deletion..."
+                                )
+                                try:
+                                    pv_obj.ocp.wait_for_delete(
+                                        resource_name=pv_name, timeout=60
+                                    )
+                                    log.info(
+                                        f"PV {pv_name} deleted successfully after removing finalizers"
+                                    )
+                                except CommandFailed:
+                                    log.warning(
+                                        f"PV {pv_name} still exists after removing finalizers. "
+                                        "Continuing with teardown."
+                                    )
+                            except CommandFailed as patch_ex:
+                                if "not found" in str(patch_ex).lower():
+                                    log.info(f"PV {pv_name} already deleted")
+                                else:
+                                    log.warning(
+                                        f"Failed to patch PV {pv_name}: {patch_ex}. "
+                                        "Continuing with teardown."
+                                    )
+                    except Exception as pv_cleanup_ex:
+                        log.warning(
+                            f"Error while cleaning up Released PV: {pv_cleanup_ex}"
+                        )
+        except Exception as pv_check_ex:
+            log.warning(
+                f"Error checking for Released PVs: {pv_check_ex}. "
+                "Continuing with teardown."
+            )
+
     request.addfinalizer(teardown)
     return factory
 

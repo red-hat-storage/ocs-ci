@@ -7,6 +7,8 @@ import base64
 import logging
 import re
 import time
+import secrets
+import string
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -620,3 +622,39 @@ def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
     return "running" in output
+
+
+def generate_vm_password(length=10):
+    """
+    Generates a strong password for virtual machines with specified length.
+    The password will contain at least one lowercase letter, one uppercase letter,
+    one digit, and one punctuation symbol, with the rest filled randomly from all categories.
+
+    Args:
+    length (int): The desired length of the password. Default is 10.
+
+    Returns:
+    str: A strong password meeting the criteria.
+    """
+
+    lowercase_letters = string.ascii_lowercase
+    uppercase_letters = string.ascii_uppercase
+    digits = string.digits
+    punctuation = string.punctuation
+
+    # Ensure at least one character from each category
+    password_parts = [
+        secrets.choice(lowercase_letters),
+        secrets.choice(uppercase_letters),
+        secrets.choice(digits),
+        secrets.choice(punctuation),
+    ]
+    # Fill the rest of the password length with a mix of all characters
+    all_characters = lowercase_letters + uppercase_letters + digits + punctuation
+    password_parts.extend(secrets.choice(all_characters) for _ in range(length - 4))
+
+    # Shuffle the list to avoid predictable patterns
+    secrets.SystemRandom().shuffle(password_parts)
+
+    # Join the list into a single string and return
+    return "".join(password_parts)
