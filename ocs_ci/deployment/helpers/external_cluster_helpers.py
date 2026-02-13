@@ -26,7 +26,7 @@ from ocs_ci.ocs.exceptions import (
     ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
+from ocs_ci.ocs.resources.csv import CSV, get_csv_name_start_with_prefix
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
@@ -701,6 +701,9 @@ def get_exporter_script_from_csv():
     Returns:
         str: The exporter script from the csv
 
+    Raises:
+        KeyError: If the required annotation is missing from the CSV
+
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
     operator_name = defaults.ROOK_CEPH_OPERATOR
@@ -720,15 +723,78 @@ def get_exporter_script_from_csv():
     for each_csv in ocs_operator_data["status"]["channels"]:
         if each_csv["currentCSV"] == csv_name:
             logger.info(f"exporter script for csv: {each_csv['currentCSV']}")
+            # Check if currentCSVDesc exists
+            if "currentCSVDesc" not in each_csv:
+                logger.error(
+                    f"currentCSVDesc not found in channel data for CSV: {csv_name}"
+                )
+                raise KeyError(
+                    f"currentCSVDesc not found in channel data for CSV: {csv_name}"
+                )
+            # Check if annotations exist
+            if "annotations" not in each_csv["currentCSVDesc"]:
+                logger.error(
+                    f"annotations not found in currentCSVDesc for CSV: {csv_name}"
+                )
+                raise KeyError(
+                    f"annotations not found in currentCSVDesc for CSV: {csv_name}"
+                )
+            annotations = each_csv["currentCSVDesc"]["annotations"]
             if ocs_version >= version.VERSION_4_16:
-                exporter_script = each_csv["currentCSVDesc"]["annotations"][
-                    "externalClusterScript"
-                ]
+                annotation_key = "externalClusterScript"
             else:
-                exporter_script = each_csv["currentCSVDesc"]["annotations"][
-                    "external.features.ocs.openshift.io/export-script"
-                ]
+                annotation_key = "external.features.ocs.openshift.io/export-script"
+            exporter_script = annotations.get(annotation_key)
+            if not exporter_script:
+                logger.warning(
+                    f"Annotation '{annotation_key}' not found in PackageManifest for CSV {csv_name}. "
+                    f"Available annotations: {list(annotations.keys())}. "
+                    f"Trying to get from installed CSV resource as fallback."
+                )
+                # Fallback: try to get annotation from the installed CSV resource
+                try:
+                    csv_obj = CSV(
+                        resource_name=csv_name,
+                        namespace=config.ENV_DATA["cluster_namespace"],
+                    )
+                    csv_data = csv_obj.get()
+                    csv_annotations = csv_data.get("metadata", {}).get(
+                        "annotations", {}
+                    )
+                    exporter_script = csv_annotations.get(annotation_key)
+                    if exporter_script:
+                        logger.info(
+                            f"Successfully retrieved annotation '{annotation_key}' from installed CSV resource"
+                        )
+                    else:
+                        logger.error(
+                            f"Annotation '{annotation_key}' not found in installed CSV {csv_name} annotations. "
+                            f"Available annotations: {list(csv_annotations.keys())}"
+                        )
+                        raise KeyError(
+                            f"Annotation '{annotation_key}' not found in CSV {csv_name} annotations "
+                            f"(checked both PackageManifest and installed CSV). "
+                            f"Available annotations in PackageManifest: {list(annotations.keys())}, "
+                            f"Available annotations in CSV: {list(csv_annotations.keys())}"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to get annotation from installed CSV resource: {e}"
+                    )
+                    raise KeyError(
+                        f"Annotation '{annotation_key}' not found in CSV {csv_name} annotations. "
+                        f"Available annotations: {list(annotations.keys())}. "
+                        f"Also failed to retrieve from installed CSV: {e}"
+                    )
             break
+
+    if not exporter_script:
+        logger.error(
+            f"Could not find exporter script for CSV: {csv_name} in any channel"
+        )
+        raise KeyError(
+            f"Could not find exporter script for CSV: {csv_name} in any channel"
+        )
 
     return exporter_script
 
