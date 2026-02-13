@@ -2,13 +2,13 @@ import logging
 import re
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_mon_pods
 from ocs_ci.framework.testlib import (
     tier1,
     brown_squad,
     polarion_id,
     skipif_ocs_version,
-    skipif_external_mode,
 )
 
 log = logging.getLogger(__name__)
@@ -33,14 +33,24 @@ class TestGetCommands:
         self.validate_pg_status(output)
         self.validate_mgr_pods(output)
 
-    @skipif_external_mode
     @polarion_id("OCS-6238")
     def test_get_mon_endpoint(self):
         result = self.odf_cli_runner.run_get_mon_endpoint()
         output = result.stdout.decode().strip()
         assert output, "Mon endpoint not found in output"
-        # Validate the format of the mon endpoint output
-        endpoint_pattern = r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+,?)+$"
+
+        # In external mode, IP addresses may have a different format
+        # Standard format: 192.168.1.1:6789
+        # External mode format: 576133165110.0.66.64:3300 (first octet can be longer)
+        is_external_mode = config.DEPLOYMENT.get("external_mode", False)
+
+        if is_external_mode:
+            # External mode: first octet can be any number of digits
+            endpoint_pattern = r"^(\d+\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+,?)+$"
+        else:
+            # Standard IPv4 format: all octets are 1-3 digits (0-255)
+            endpoint_pattern = r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+,?)+$"
+
         assert re.match(
             endpoint_pattern, output
         ), f"Invalid mon endpoint format: {output}"
@@ -63,9 +73,21 @@ class TestGetCommands:
             ), f"Invalid port number in endpoint: {endpoint}"
             octets = ip.split(".")
             assert len(octets) == 4, f"Invalid IP address in endpoint: {endpoint}"
-            assert all(
-                0 <= int(octet) <= 255 for octet in octets
-            ), f"Invalid IP address in endpoint: {endpoint}"
+
+            # In external mode, only validate last 3 octets (0-255 range)
+            # First octet can be any positive integer
+            if is_external_mode:
+                assert all(
+                    0 <= int(octet) <= 255 for octet in octets[1:]
+                ), f"Invalid IP address format in endpoint: {endpoint} (last 3 octets must be 0-255)"
+                assert (
+                    int(octets[0]) > 0
+                ), f"Invalid IP address format in endpoint: {endpoint} (first octet must be positive)"
+            else:
+                # Standard mode: validate all octets are in 0-255 range
+                assert all(
+                    0 <= int(octet) <= 255 for octet in octets
+                ), f"Invalid IP address in endpoint: {endpoint}"
 
     def validate_mon_pods(self, output):
         mon_pods = [
