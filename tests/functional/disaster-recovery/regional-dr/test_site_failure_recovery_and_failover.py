@@ -198,6 +198,39 @@ class TestSiteFailureRecoveryAndFailover:
         logger.info("DRPC output from new hub cluster before failover")
         logger.info(drpc_cmd)
 
+
+        # Verify DRPC PROGRESSION status before failover
+        # If PROGRESSION is in either Completed or WaitOnUserToCleanUp, it is safe to proceed
+        logger.info(
+            "Verifying DRPC PROGRESSION status for all workloads before failover"
+        )
+        for drpc_obj in drpc_objs:
+            progression_status = drpc_obj.get_progression_status()
+            logger.info(
+                f"################ DRPC {drpc_obj.resource_name} PROGRESSION status: {progression_status} ################"
+            )
+            if progression_status not in [
+                constants.STATUS_COMPLETED,
+                constants.STATUS_WAITFORUSERTOCLEANUP,
+            ]:
+                raise UnexpectedBehaviour(
+                    f"DRPC {drpc_obj.resource_name} PROGRESSION status is {progression_status}, "
+                    f"expected {constants.STATUS_COMPLETED} or {constants.STATUS_WAITFORUSERTOCLEANUP}"
+                )
+        logger.info(
+            "All DRPC PROGRESSION statuses are in expected state, safe to proceed with failover"
+        )
+
+
+
+        # Edit the global KlusterletConfig on the new hub and remove
+        # the parameter appliedManifestWorkEvictionGracePeriod and its value
+        logger.info(
+            "Edit the global KlusterletConfig on the new hub and "
+            "remove the parameter appliedManifestWorkEvictionGracePeriod before failover"
+        )
+        remove_parameter_klusterlet_config()
+
         # Failover action via CLI
         logger.info("Failover workloads after hub recovery")
         failover_results = []
