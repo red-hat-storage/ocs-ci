@@ -97,10 +97,26 @@ class FusionDataFoundationDeployment:
         logger.info("Creating or Updating FDF ImageTagMirrorSet")
 
         imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
+        if config.DEPLOYMENT.get("image_tag_mirror"):
+            with open(imagetag_file) as f:
+                mirrorset_data = yaml.safe_load(f.read())
+                mirrorset_data["spec"]["imageTagMirrors"][0]["mirrors"][0] = (
+                    config.DEPLOYMENT.get("image_tag_mirror")
+                )
+                mirrorset_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="mirrorset", delete=False
+                )
+                templating.dump_data_to_temp_yaml(mirrorset_data, mirrorset_yaml.name)
+                run_cmd(
+                    f"oc --kubeconfig {self.kubeconfig} apply -f {mirrorset_yaml.name}",
+                    silent=True,
+                )
 
-        run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}", silent=True
-        )
+        else:
+            run_cmd(
+                f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}",
+                silent=True,
+            )
 
     def create_image_digest_mirror_set(self):
         """
