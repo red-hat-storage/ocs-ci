@@ -16,5 +16,8 @@ help:
 
 # Catch-all target: route all unknown targets to Sphinx using the new
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
+# -q: quiet mode (only show warnings and errors)
+# -W: treat warnings as errors
+# -E: don't use a saved environment, always read all files
 %: Makefile.tox
-	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) -W -E $(O)
+	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) -q -W -E $(O)
