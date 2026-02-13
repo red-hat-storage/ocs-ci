@@ -120,8 +120,32 @@ class FusionDataFoundationDeployment:
         Create Fusion Data Foundation Service CR.
         """
         logger.info("Creating FDF service CR")
+
+        with open(constants.FDF_SERVICE_CR, "r") as f:
+            fdf_service_data = yaml.safe_load(f.read())
+
+        backing_storage_type = config.DEPLOYMENT.get("backing_storage_type")
+
+        if not backing_storage_type:
+            platform = config.ENV_DATA.get("platform", "").lower()
+            local_platforms = [constants.VSPHERE_PLATFORM, constants.BAREMETAL_PLATFORM]
+            if platform in local_platforms:
+                backing_storage_type = "Local"
+
+        if backing_storage_type:
+            logger.info(f"Setting backingStorageType to: {backing_storage_type}")
+            for param in fdf_service_data["spec"]["parameters"]:
+                if param["name"] == "backingStorageType":
+                    param["value"] = backing_storage_type
+                    break
+
+        fdf_service_cr_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_service_cr", delete=False
+        )
+        templating.dump_data_to_temp_yaml(fdf_service_data, fdf_service_cr_yaml.name)
+
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f {constants.FDF_SERVICE_CR}",
+            f"oc --kubeconfig {self.kubeconfig} apply -f {fdf_service_cr_yaml.name}",
             silent=True,
         )
 
