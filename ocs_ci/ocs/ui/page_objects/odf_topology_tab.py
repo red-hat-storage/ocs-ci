@@ -722,7 +722,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
         # zoom out to read rack/zone label
         zoom_out_times = 1 if len(node_names) < 4 else 2
 
-        if config.ENV_DATA["platform"] != constants.HCI_BAREMETAL:
+        if config.ENV_DATA["platform"] != constants.IBM_BAREMETAL:
             self.validate_node_group_names(
                 cluster_app_name_cli, topology_deviation, zoom_out_times
             )

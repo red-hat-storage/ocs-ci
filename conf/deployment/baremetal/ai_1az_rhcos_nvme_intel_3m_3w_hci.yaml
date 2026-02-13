@@ -4,7 +4,7 @@ DEPLOYMENT:
   local_storage: true
   host_network: true
 ENV_DATA:
-  platform: 'hci_baremetal'
+  platform: 'ibm_baremetal'
   deployment_type: 'ai'
   cluster_type: 'provider'
   odf_provider_mode_deployment: true

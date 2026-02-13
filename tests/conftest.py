@@ -2285,7 +2285,7 @@ def environment_checker(request):
             exclude_labels.extend(list(mark.args))
     if ocsci_config.ENV_DATA["platform"] in {
         constants.FUSIONAAS_PLATFORM,
-        constants.HCI_BAREMETAL,
+        constants.IBM_BAREMETAL,
         constants.HCI_VSPHERE,
     }:
         log.error(
@@ -2322,7 +2322,7 @@ def resource_checker(request):
             exclude_labels.extend(list(mark.args))
     if ocsci_config.ENV_DATA["platform"] in {
         constants.FUSIONAAS_PLATFORM,
-        constants.HCI_BAREMETAL,
+        constants.IBM_BAREMETAL,
         constants.HCI_VSPHERE,
     }:
         log.error(
