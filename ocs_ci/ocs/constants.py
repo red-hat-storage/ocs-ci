@@ -3128,6 +3128,7 @@ OLS_OPERATOR_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-operator.yaml
 OLS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-secret.yaml")
 OLS_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-config.yaml")
 OLS_QA_EXPECTATIONS = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "qa-expectations.yaml")
+OLS_ATTACHED_PVC_YAML = os.path.join(CONF_DIR, "ocsci", "ols_attached_pvc.yaml")
 
 # Submariner constants
 SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"
