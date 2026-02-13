@@ -48,6 +48,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     verify_pods_upgraded,
 )
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -311,8 +312,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         version_before_upgrade (float): version of OCS before upgrade
 
     """
-    nodes = OCP().exec_oc_cmd(f"get node -l {constants.OPERATOR_NODE_LABEL} -o yaml")
-    number_of_worker_nodes = len(nodes.get("items"))
+    # Get all worker nodes for CSI nodeplugin count (they run on all workers, not just storage-labeled)
+    all_worker_nodes = get_worker_nodes()
+    number_of_all_worker_nodes = len(all_worker_nodes)
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     if not (
         config.ENV_DATA.get("mcg_only_deployment")
@@ -335,8 +337,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
         )
         csi_rbdplugin_provisioner_label = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+        # CSI nodeplugin pods run on ALL worker nodes (including app nodes), not just storage-labeled nodes
         count_csi_cephfsplugin_label = count_csi_rbdplugin_label = (
-            number_of_worker_nodes
+            number_of_all_worker_nodes
         )
         if odf_running_version >= version.VERSION_4_19:
             csi_cephfsplugin_label = constants.CSI_CEPHFSPLUGIN_LABEL_419
@@ -347,8 +350,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             csi_rbdplugin_provisioner_label = (
                 constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419
             )
+            # CSI nodeplugin pods run on ALL worker nodes (including app nodes), not just storage-labeled nodes
             count_csi_cephfsplugin_label = count_csi_rbdplugin_label = (
-                number_of_worker_nodes
+                number_of_all_worker_nodes
             )
         else:
             log.info(
