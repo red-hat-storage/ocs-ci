@@ -752,6 +752,52 @@ class BaseUI:
             return False
         return True
 
+    def clear_input_with_retry(self, locator, retries=3, wait_between=0.5):
+        """
+        Clears an input field reliably with retry handling.
+
+        Args:
+            locator (tuple): (By.XPATH, "//input[@placeholder='...']")
+            retries (int): number of attempts
+            wait_between (int): pause between attempts
+        """
+        VALID_BY = {By.ID, By.NAME, By.XPATH}
+
+        if not isinstance(locator, tuple) or len(locator) != 2:
+            raise ValueError(f"Invalid locator: {locator}")
+
+        a, b = locator
+
+        if a in VALID_BY:
+            by, value = a, b
+        elif b in VALID_BY:
+            by, value = b, a
+        else:
+            raise ValueError(f"Unsupported locator strategy: {locator}")
+
+        # 🔁 Retry clear logic
+        for attempt in range(1, retries + 1):
+            try:
+                element = self.driver.find_element(by, value)
+
+                if not element.get_attribute("value"):
+                    logger.info(f"Attempt {attempt}: already empty")
+                    return True
+
+                element.clear()
+                time.sleep(wait_between)
+
+                if not self.driver.find_element(by, value).get_attribute("value"):
+                    logger.info(f"Attempt {attempt}: cleared successfully")
+                    return True
+
+                logger.warning(f"Attempt {attempt}: clear didn't stick")
+
+            except (StaleElementReferenceException, NoSuchElementException) as e:
+                logger.warning(f"Attempt {attempt}: retrying due to {type(e).__name__}")
+
+        raise Exception(f"Failed to clear input after {retries} attempts")
+
 
 def screenshot_dom_location(type_loc="screenshot"):
     """
