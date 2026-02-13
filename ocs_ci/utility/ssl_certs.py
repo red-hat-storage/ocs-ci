@@ -392,6 +392,15 @@ def configure_custom_ingress_cert(
         configure_trusted_ca_bundle(ssl_ca_cert, skip_tls_verify=skip_tls_verify)
 
     logger.debug(f"Configuring '{ssl_key}' and '{ssl_cert}' for ingress")
+    # check if ocs-cert secret already exists, if yes, delete the old secret before the new one is created
+    secret_obj = ocp.OCP(
+        kind=constants.SECRET,
+        namespace=constants.OPENSHIFT_INGRESS_NAMESPACE,
+        resource_name="ocs-cert",
+        skip_tls_verify=skip_tls_verify,
+    )
+    if secret_obj.is_exist():
+        secret_obj.delete(resource_name="ocs-cert", wait=True)
     cmd = (
         f"oc create secret tls ocs-cert -n openshift-ingress {ignore_tls}"
         f"--cert={ssl_cert} --key={ssl_key}"
@@ -479,6 +488,15 @@ def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=
         logger.info(f"Certificate saved to '{ssl_cert}' and key to '{ssl_key}'")
 
     logger.debug(f"Configuring '{ssl_key}' and '{ssl_cert}' for api")
+    # check if api-cert secret already exists, if yes, delete the old secret before the new one is created
+    secret_obj = ocp.OCP(
+        kind=constants.SECRET,
+        namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+        resource_name="api-cert",
+        skip_tls_verify=skip_tls_verify,
+    )
+    if secret_obj.is_exist():
+        secret_obj.delete(resource_name="api-cert", wait=True)
     cmd = (
         f"oc create secret tls api-cert -n openshift-config {ignore_tls}"
         f"--cert={ssl_cert} --key={ssl_key}"
