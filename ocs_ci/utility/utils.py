@@ -2908,6 +2908,30 @@ def ceph_health_resolve_network_partition(health_status):
 
     mute_mon_netsplit()
 
+    log.info("Wait a minute to breathe")
+    time.sleep(60)
+
+    wait_for_ceph_health_ok()
+
+
+def wait_for_ceph_health_ok(timeout=900, sleep=10):
+    """
+    Wait until the ceph health is OK
+
+    """
+
+    def check_ceph_health_ok():
+        """
+        Check if ceph health is OK
+
+        """
+
+        status = run_ceph_health_cmd(config.ENV_DATA["cluster_namespace"])
+        return str(status).strip() == "HEALTH_OK"
+
+    sampler = TimeoutSampler(timeout=timeout, sleep=sleep, func=check_ceph_health_ok)
+    sampler.wait_for_func_status(True)
+
 
 def restart_mon_pods(mon_ids):
     """
