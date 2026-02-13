@@ -48,6 +48,7 @@ def is_uncertain(answer):
         "no information",
         "not found",
         "i don't know",
-        "i don't have" "no data",
+        "i don't have",
+        "no data",
     ]
     return any(p in answer.lower() for p in phrases)
