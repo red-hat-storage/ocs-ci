@@ -5786,6 +5786,23 @@ def setup_ui_fixture(request):
 
 @pytest.fixture(scope="session")
 def setup_acm_ui(request):
+    # Try to find any test in the session with via_ui parameter
+    via_ui_value = None
+
+    # Check all test items in the session
+    for item in request.session.items:
+        if hasattr(item, "callspec") and "via_ui" in item.callspec.params:
+            via_ui_value = item.callspec.params["via_ui"]
+            # If any test has via_ui=True, we need to set up
+            if via_ui_value is True:
+                break
+
+    # If via_ui is explicitly False for all tests (or only False tests exist), skip
+    if via_ui_value is False:
+        log.info("Skipping Setting Up ACM UI")
+        return None
+
+    # Default behavior: run the fixture (when via_ui=True or not specified)
     return setup_acm_ui_fixture(request)
 
 
