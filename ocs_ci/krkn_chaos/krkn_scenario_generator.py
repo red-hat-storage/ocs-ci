@@ -5,10 +5,10 @@ from ocs_ci.ocs.constants import KRKN_SCENARIO_TEMPLATE
 
 # Signal name to number mapping for container kill scenarios
 SIGNAL_MAP = {
-    "SIGTERM": "15",
-    "SIGKILL": "9",
-    "SIGINT": "2",
-    "SIGHUP": "1",
+    "SIGTERM": 15,
+    "SIGKILL": 9,
+    "SIGINT": 2,
+    "SIGHUP": 1,
 }
 
 
@@ -16,24 +16,31 @@ def convert_signal_to_number(signal):
     """Convert signal name to signal number.
 
     Args:
-        signal (str): Signal name (e.g., "SIGKILL", "SIGTERM") or number (e.g., "9", "15")
+        signal (str or int): Signal name (e.g., "SIGKILL", "SIGTERM") or number (e.g., 9, "9", 15)
 
     Returns:
-        str: Signal number as string
+        int: Signal number as integer
 
     Examples:
         >>> convert_signal_to_number("SIGKILL")
-        "9"
+        9
         >>> convert_signal_to_number("SIGTERM")
-        "15"
+        15
         >>> convert_signal_to_number("9")
-        "9"
+        9
+        >>> convert_signal_to_number(9)
+        9
     """
-    # If it's already a number, return as-is
-    if signal.isdigit():
+    # If it's already an integer, return as-is
+    if isinstance(signal, int):
         return signal
+    # If it's a string representing a number, convert to int
+    if isinstance(signal, str) and signal.isdigit():
+        return int(signal)
     # Convert signal name to number
-    return SIGNAL_MAP.get(signal.upper(), signal)
+    if isinstance(signal, str):
+        return SIGNAL_MAP.get(signal.upper(), signal)
+    return signal
 
 
 class TemplateWriter:
