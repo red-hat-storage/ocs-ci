@@ -6647,3 +6647,54 @@ def apply_oadp_workaround(namespace):
         run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
     except IndexError:
         log.error(f"OADP not found in given Namespace {namespace}")
+
+
+def create_kubeconfig(kubeconfig_path):
+    """
+    Create kubeconfig if doesn't exist and OCP url and kubeadmin password is provided
+
+    Args:
+        kubeconfig_path (str): kubeconfig file location
+
+    """
+    if not os.path.isfile(kubeconfig_path):
+        if config.RUN.get("kubeadmin_password") and config.RUN.get("ocp_url"):
+            log.info(
+                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
+            )
+            # check and correct OCP URL (change it to API url if console url provided and add port if needed
+            ocp_api_url = config.RUN.get("ocp_url").replace(
+                "console-openshift-console.apps", "api"
+            )
+            if ":6443" not in ocp_api_url:
+                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
+
+            cmd = (
+                f"oc login --username {config.RUN['username']} "
+                f"--password {config.RUN['kubeadmin_password']} "
+                f"{ocp_api_url} "
+                f"--kubeconfig {kubeconfig_path} "
+                "--insecure-skip-tls-verify=true"
+            )
+            result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
+            if result.returncode:
+                log.warning(f"executed command: {cmd}")
+                log.warning(f"returncode: {result.returncode}")
+                log.warning(f"stdout: {result.stdout}")
+                log.warning(f"stderr: {result.stderr}")
+            else:
+                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+
+            kubeadmin_password_file = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+            )
+            if not os.path.isfile(kubeadmin_password_file):
+                with open(kubeadmin_password_file, "w") as fd:
+                    fd.write(config.RUN.get("kubeadmin_password"))
+                log.info("Created kubeadmin-password file")
+
+        else:
+            raise ConfigurationError(
+                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
+                "environment variables were not provided."
+            )

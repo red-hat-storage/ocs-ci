@@ -22,6 +22,7 @@ from ocs_ci.utility.utils import (
     get_openshift_client,
     get_running_ocp_version,
     run_cmd,
+    create_kubeconfig,
 )
 
 
@@ -192,6 +193,10 @@ class Initializer(object):
         config.RUN["kubeconfig"] = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
+
+        # create kubeconfig if doesn't exist and OCP url and kubeadmin password is provided
+        create_kubeconfig(config.RUN["kubeconfig"])
+
         setup_bin_dir()
         check_cluster_access(config.RUN["kubeconfig"])
 
