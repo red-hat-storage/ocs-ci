@@ -2,9 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod as pod_helpers
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier2,
@@ -16,22 +14,27 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.helpers import cluster_exp_helpers
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
-from ocs_ci.ocs import cluster as cluster_helpers
-from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.framework import config
-from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
+from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.ocs import constants, cluster as cluster_helpers
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod as pod_helpers, storage_cluster
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
+from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
+from ocs_ci.ocs.node import get_cluster_resource_capacity
+from ocs_ci.ocs.cluster import CephCluster
+
 
 logger = logging.getLogger(__name__)
 
-# TO DO: replace/remove this with actual workloads like couchbase, amq and
-# pgsql later
+
+# Constants for the Gatekeeper (Easily adjustable for future changes)
+REQUIRED_RAM_GB = 65
+REQUIRED_CPU_CORES = 6
 
 
 @brown_squad
@@ -48,6 +51,46 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 class TestAddCapacity(ManageTest):
+    @pytest.fixture(autouse=True)
+    def resource_check(self):
+        """
+        Gatekeeper: Ensures hardware capacity before starting deployment.
+        Calculates availability and skips if requirements are not met.
+        """
+        free_ram, free_cpu, breakdown = get_cluster_resource_capacity()
+
+        logger.info(
+            f"Available Capacity: {free_ram:.2f}GB RAM | {free_cpu:.2f} CPU Cores"
+        )
+
+        if free_ram < REQUIRED_RAM_GB or free_cpu < REQUIRED_CPU_CORES:
+            # Prepare Breakdown Table
+            header = "{:<45} | {:<12} | {:<12}".format(
+                "Namespace", "RAM Req(GB)", "CPU Req(Cores)"
+            )
+            table_rows = [header, "-" * 75]
+
+            sorted_ns = sorted(
+                breakdown["ram"].keys(), key=lambda x: breakdown["ram"][x], reverse=True
+            )
+
+            for ns in sorted_ns:
+                ram_gb = breakdown["ram"][ns] / (1024 * 1024)
+                cpu_c = breakdown["cpu"][ns] / 1000
+                if ram_gb > 0.1 or cpu_c > 0.1:
+                    table_rows.append(
+                        "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb, cpu_c)
+                    )
+
+            logger.error(
+                "RESOURCE GATEKEEPER FAILED. Breakdown: \n" + "\n".join(table_rows)
+            )
+
+            pytest.skip(
+                f"Insufficient Resources: {free_ram:.2f}GB RAM / {free_cpu:.2f} CPU cores available. "
+                f"Required: {REQUIRED_RAM_GB}GB / {REQUIRED_CPU_CORES} Cores."
+            )
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
@@ -242,6 +285,11 @@ class TestAddCapacity(ManageTest):
             selector="app=rook-ceph-osd",
             resource_count=result * replica_count,
         )
+        ceph_cluster = CephCluster()
+        logger.info("Waiting for rebalance in the TEST BODY (not finalizer)...")
+        assert ceph_cluster.wait_for_rebalance(
+            timeout=7200, repeat=3
+        ), "Rebalance too slow!"
 
         #################################
         # Exit criteria verification:   #

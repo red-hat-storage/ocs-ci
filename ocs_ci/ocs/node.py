@@ -7,6 +7,8 @@ from collections import defaultdict
 from operator import itemgetter
 import random
 import json
+import unicodedata
+from ocs_ci.ocs.ocp import exec_cmd
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -3436,3 +3438,86 @@ def mark_masters_schedulable():
     assert scheduler_obj.patch(
         params=params, format_type="json"
     ), "Failed to run patch command to update control nodes as scheduleable"
+
+
+def get_cluster_resource_capacity():
+    """
+    Parses 'oc describe node' for all worker nodes to calculate actual
+    unreserved CPU and RAM capacity.
+
+    Returns:
+        tuple: (free_ram_gb, free_cpu_cores, namespace_breakdown_dict)
+            - free_ram_gb (float): Total unreserved RAM in GB.
+            - free_cpu_cores (float): Total unreserved CPU cores.
+            - breakdown (dict): Dictionary containing 'ram' and 'cpu' usage per namespace.
+    """
+    worker_names = get_worker_nodes()
+    total_free_ram_kb = 0
+    total_free_cpu_m = 0
+
+    breakdown = {"ram": defaultdict(int), "cpu": defaultdict(int)}
+    ocp_node_obj = OCP(kind=constants.NODE)
+
+    for name in worker_names:
+        # Use exec_cmd instead of deprecated run_cmd
+        node_data_raw = exec_cmd(f"oc describe node {name}").stdout.decode()
+        node_data = unicodedata.normalize("NFKD", node_data_raw)
+        node_info = ocp_node_obj.get(resource_name=name)
+
+        # 1. Base Allocatable precision
+        alloc_ram_kb = int(
+            node_info["status"]["allocatable"]["memory"].replace("Ki", "")
+        )
+        cpu_raw = node_info["status"]["allocatable"]["cpu"]
+        alloc_cpu_m = (
+            int(cpu_raw.replace("m", "")) if "m" in cpu_raw else int(cpu_raw) * 1000
+        )
+
+        # 2. Parse overall reservation
+        mem_res_match = re.search(r"memory\s+(\d+)Mi\s+\((\d+)%\)", node_data)
+        cpu_res_match = re.search(r"cpu\s+(\d+)m\s+\((\d+)%\)", node_data)
+
+        if mem_res_match:
+            used_percent = int(mem_res_match.group(2))
+            total_free_ram_kb += alloc_ram_kb * (1.0 - (used_percent / 100.0))
+        if cpu_res_match:
+            used_percent = int(cpu_res_match.group(2))
+            total_free_cpu_m += alloc_cpu_m * (1.0 - (used_percent / 100.0))
+
+        # 3. Component Breakdown
+        try:
+            pod_section = node_data.split("Non-terminated Pods:")[1].split(
+                "Allocated resources:"
+            )[0]
+            for line in pod_section.strip().split("\n"):
+                parts = line.split()
+                if len(parts) >= 7 and "(" in line and "%" in line:
+                    ns = parts[0]
+                    if ns.lower() in ["namespace", "name"] or ns.startswith("("):
+                        continue
+
+                    cpu_usage = re.findall(r"(\d+m?)\s+\(", line)
+                    mem_usage = re.findall(r"(\d+[GMK]i)\s+\(", line)
+
+                    if cpu_usage:
+                        raw_c = cpu_usage[0]
+                        c_val = int(re.search(r"\d+", raw_c).group())
+                        if "m" not in raw_c:
+                            c_val *= 1000
+                        breakdown["cpu"][ns] += c_val
+
+                    if mem_usage:
+                        raw_m = mem_usage[0]
+                        m_val = int(re.search(r"\d+", raw_m).group())
+                        if "Gi" in raw_m:
+                            m_val *= 1024 * 1024
+                        elif "Mi" in raw_m:
+                            m_val *= 1024
+                        breakdown["ram"][ns] += m_val
+        except (IndexError, ValueError, KeyError) as e:
+            log.debug(f"Parsing row failed for node {name}: {e}")
+
+    free_ram_gb = total_free_ram_kb / (1024 * 1024)
+    free_cpu_cores = total_free_cpu_m / 1000
+
+    return free_ram_gb, free_cpu_cores, breakdown
