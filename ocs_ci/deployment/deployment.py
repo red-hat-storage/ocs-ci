@@ -22,10 +22,12 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
+    get_and_apply_rgw_cert_ca,
 )
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
@@ -85,6 +87,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.node import (
     get_worker_nodes,
+    mark_masters_schedulable,
     verify_all_nodes_created,
     label_nodes,
     get_all_nodes,
@@ -187,6 +190,7 @@ from ocs_ci.utility.utils import (
     get_acm_version,
     get_acm_mce_build_tag,
     apply_oadp_workaround,
+    mute_mon_netsplit,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -207,13 +211,66 @@ class Deployment(object):
     """
 
     def __init__(self):
-        self.platform = config.ENV_DATA["platform"]
-        self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
-        self.cluster_path = config.ENV_DATA["cluster_path"]
-        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.sts_role_arn = None
-        self.storage_class = storage_class.get_storageclass()
-        self.custom_storage_class_path = None
+        storage_class.set_custom_storage_class_path()
+        logger.info(
+            f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
+        )
+
+    # Because of for different platform multicluster run, as by wrong design we define only one deployer
+    # We need use config to hold the storage class for each cluster.
+    # See issue: https://issues.redhat.com/browse/OCSQE-4214 for more details
+    @property
+    def storage_class(self):
+        if not config.ENV_DATA.get("storage_class"):
+            sc = storage_class.get_storageclass()
+            self.storage_class = sc
+            return sc
+        return config.ENV_DATA["storage_class"]
+
+    @storage_class.setter
+    def storage_class(self, value):
+        config.ENV_DATA["storage_class"] = value
+
+    @property
+    def platform(self):
+        return config.ENV_DATA["platform"]
+
+    @platform.setter
+    def platform(self, value):
+        config.ENV_DATA["platform"] = value
+
+    @property
+    def ocp_deployment_type(self):
+        return config.ENV_DATA["deployment_type"]
+
+    @ocp_deployment_type.setter
+    def ocp_deployment_type(self, value):
+        config.ENV_DATA["ocp_deployment_type"] = value
+
+    @property
+    def cluster_path(self):
+        return config.ENV_DATA["cluster_path"]
+
+    @cluster_path.setter
+    def cluster_path(self, value):
+        config.ENV_DATA["cluster_path"] = value
+
+    @property
+    def namespace(self):
+        return config.ENV_DATA["cluster_namespace"]
+
+    @namespace.setter
+    def namespace(self, value):
+        config.ENV_DATA["namespace"] = value
+
+    @property
+    def custom_storage_class_path(self):
+        return config.ENV_DATA["custom_storage_class_path"]
+
+    @custom_storage_class_path.setter
+    def custom_storage_class_path(self, value):
+        config.ENV_DATA["custom_storage_class_path"] = value
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -408,7 +465,7 @@ class Deployment(object):
                 # Run ocs_install_verification here only in case of multicluster.
                 # For single cluster, test_deployment will take care.
                 if config.multicluster:
-                    for i in range(config.multicluster):
+                    for i in range(config.nclusters):
                         if i in get_all_acm_indexes():
                             continue
                         else:
@@ -442,26 +499,32 @@ class Deployment(object):
                             )
                             storage_cluster.reload_data()
                             storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
-                            ptch = (
-                                f'\'{{"spec": {{"network": {{"multiClusterService": '
-                                f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
-                            )
-                            ptch_cmd = (
-                                f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                                f"-n openshift-storage  --type merge --patch {ptch}"
-                            )
-                            run_cmd(ptch_cmd)
+                            if (
+                                get_provider_service_type() != "NodePort"
+                                and cluster.ENV_DATA.get("cluster_type", "").lower()
+                                != constants.HCI_CLIENT
+                            ):
+                                ptch = (
+                                    f'\'{{"spec": {{"network": {{"multiClusterService": '
+                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+                                    f'"enabled": true}}}}}}}}\''
+                                )
+                                ptch_cmd = (
+                                    f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+                                    f"-n openshift-storage  --type merge --patch {ptch}"
+                                )
+                                run_cmd(ptch_cmd)
+                                storage_cluster.reload_data()
+                                assert (
+                                    storage_cluster.data.get("spec")
+                                    .get("network")
+                                    .get("multiClusterService")
+                                    .get("enabled")
+                                ), "Failed to update StorageCluster globalnet"
+                                validate_serviceexport()
                             ocs_registry_image = config.DEPLOYMENT.get(
                                 "ocs_registry_image", None
                             )
-                            storage_cluster.reload_data()
-                            assert (
-                                storage_cluster.data.get("spec")
-                                .get("network")
-                                .get("multiClusterService")
-                                .get("enabled")
-                            ), "Failed to update StorageCluster globalnet"
-                            validate_serviceexport()
                             ocs_install_verification(
                                 timeout=2000, ocs_registry_image=ocs_registry_image
                             )
@@ -785,7 +848,7 @@ class Deployment(object):
             else:
                 x_addr_list = None
             if config.DEPLOYMENT.get("arbiter_deployment"):
-                arbiter_zone = self.get_arbiter_location()
+                arbiter_zone = get_arbiter_location()
                 logger.debug("detected arbiter zone: %s", arbiter_zone)
             else:
                 arbiter_zone = None
@@ -825,7 +888,10 @@ class Deployment(object):
             from ocs_ci.deployment.hub_spoke import enable_nested_virtualization
 
             enable_nested_virtualization()
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+        if (
+            config.DEPLOYMENT.get("enable_data_replication_separation")
+            and config.ENV_DATA.get("cluster_type") == "provider"
+        ):
             annotate_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
@@ -863,6 +929,10 @@ class Deployment(object):
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.ocp_deployment = self.OCPDeployment()
+        # self.ocp_deployment.outer is a dependency injection,
+        # necessary to refer an outer instance methods from the inner OCPDeployment
+        # works for all classes inherited from Deployment
+        self.ocp_deployment.outer = self
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
         # logging the cluster UUID so that we can ask for it's telemetry data
@@ -892,6 +962,7 @@ class Deployment(object):
         if config.ENV_DATA["deployment_type"] not in (
             constants.MANAGED_DEPL_TYPE,
             constants.MANAGED_CP_DEPL_TYPE,
+            constants.AI_AGENT_DEPL_TYPE,
         ):
             add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
@@ -1115,7 +1186,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             subscription_yaml_data, subscription_manifest.name
         )
-        run_cmd(f"oc create -f {subscription_manifest.name}")
+        run_cmd(f"oc apply -f {subscription_manifest.name}")
         self.wait_for_subscription(ocs_operator_name)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
@@ -1171,40 +1242,6 @@ class Deployment(object):
                     logger.info(f"CSV found: {found_csv_name}")
                     return
                 logger.debug(f"Still waiting for the CSV: {csv_name}")
-
-    def get_arbiter_location(self):
-        """
-        Get arbiter mon location for storage cluster
-        """
-        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
-            "arbiter_autodetect"
-        ):
-            return config.DEPLOYMENT.get("arbiter_zone")
-
-        # below logic will autodetect arbiter_zone
-        nodes = ocp.OCP(kind="node").get().get("items", [])
-
-        worker_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.WORKER_LABEL in node["metadata"]["labels"]
-            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
-        }
-
-        master_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.MASTER_LABEL in node["metadata"]["labels"]
-        }
-
-        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
-
-        if len(arbiter_locations) < 1:
-            raise UnavailableResourceException(
-                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
-            )
-
-        return arbiter_locations[0]
 
     def deploy_ocs_via_operator(self, image=None):
         """
@@ -1539,7 +1576,7 @@ class Deployment(object):
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
 
-        storage_cluster_setup = StorageClusterSetup(deployment=self)
+        storage_cluster_setup = StorageClusterSetup()
         storage_cluster_setup.setup_storage_cluster()
 
         if config.DEPLOYMENT["infra_nodes"]:
@@ -1614,12 +1651,57 @@ class Deployment(object):
         deployment_obj.install_ocs_ui()
         close_browser()
 
+    def set_noobaa_core_for_rgw_ssl(self):
+        """
+        Set env variables for noobaa-core StatefulSet to inject SSL environment variables
+        required for RGW SSL connections in external mode to W/A issue:
+        https://issues.redhat.com/browse/DFBUGS-3777#
+
+        This adds NODE_OPTIONS and SSL_CERT_FILE environment variables
+        to the noobaa-core container to enable SSL certificate validation.
+        """
+        logger.info(
+            "Setting env variables for noobaa-core StatefulSet for RGW SSL support"
+        )
+
+        # Wait for noobaa-core StatefulSet to exist
+        sts_obj = ocp.OCP(
+            kind="StatefulSet", namespace=self.namespace, resource_name="noobaa-core"
+        )
+
+        # Wait for StatefulSet for noobaa-core exists before patching
+        jsonpath: str = "'{.status.readyReplicas}'=1"
+        if not sts_obj.wait(
+            timeout=600,
+            condition=None,
+            jsonpath=jsonpath,
+        ):
+            raise ResourceNotFoundError("noobaa-core StatefulSet not found")
+
+        set_env_cmd = (
+            f"oc set env statefulset noobaa-core -n {self.namespace} "
+            f"NODE_OPTIONS='--use-openssl-ca' SSL_CERT_FILE='/etc/ocp-injected-ca-bundle/ca-bundle.crt'"
+        )
+
+        try:
+            run_cmd(set_env_cmd)
+            logger.info(
+                "Successfully set env variables for noobaa-core StatefulSet with SSL environment variables"
+            )
+        except CommandFailed as e:
+            logger.error(
+                f"Failed to set env variables for noobaa-core StatefulSet: {e}"
+            )
+            raise
+
     def deploy_with_external_mode(self):
         """
         This function handles the deployment of OCS on
         external/indpendent RHCS cluster
 
         """
+        if config.EXTERNAL_MODE.get("rgw_secure"):
+            get_and_apply_rgw_cert_ca()
 
         if not config.DEPLOYMENT.get("multi_storagecluster"):
             live_deployment = config.DEPLOYMENT.get("live_deployment")
@@ -1679,7 +1761,7 @@ class Deployment(object):
             cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
         # Create secret for external cluster
-        create_external_secret()
+        create_external_secret(apply=True)
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
@@ -1746,8 +1828,10 @@ class Deployment(object):
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        run_cmd(f"oc apply -f {cluster_data_yaml.name}", timeout=2400)
         external_cluster.disable_certificate_check()
+        if config.EXTERNAL_MODE.get("rgw_secure"):
+            self.set_noobaa_core_for_rgw_ssl()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
@@ -1862,15 +1946,7 @@ class Deployment(object):
 
             # Mark master nodes schedulable if mark_masters_schedulable: True
             if config.ENV_DATA.get("mark_masters_schedulable", True):
-                path = "/spec/mastersSchedulable"
-                params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-                scheduler_obj = ocp.OCP(
-                    kind=constants.SCHEDULERS_CONFIG,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-                assert scheduler_obj.patch(
-                    params=params, format_type="json"
-                ), "Failed to run patch command to update control nodes as scheduleable"
+                mark_masters_schedulable()
                 # Allow ODF to be deployed on all nodes
                 logger.info("labeling all nodes as storage nodes")
                 nodes = get_all_nodes()
@@ -2021,6 +2097,10 @@ class Deployment(object):
                     f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
                 )
 
+        # Mute MON_NETSPLIT for arbiter deployments to avoid:
+        # https://issues.redhat.com/browse/DFBUGS-4521
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            mute_mon_netsplit(namespace=self.namespace)
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
@@ -2268,6 +2348,9 @@ class Deployment(object):
             self.deploy_multicluster_hub()
         if config.ENV_DATA.get("configure_acm_to_import_mce"):
             self.configure_acm_to_import_mce_clusters()
+        from ocs_ci.ocs.acm.acm import verify_running_acm
+
+        verify_running_acm()
 
     def configure_acm_to_import_mce_clusters(self):
         """
@@ -2276,93 +2359,137 @@ class Deployment(object):
 
         # Before starting the configuration, verify the presence of the pods cluster-proxy-proxy-agent,
         # klusterlet-addon-workmgr and managed-serviceaccount-addon-agent in the default addons namespace
-        for pod_label in [
-            "open-cluster-management.io/addon=cluster-proxy",
-            "component=work-manager",
-            "addon-agent=managed-serviceaccount",
-        ]:
-            if not wait_for_pods_by_label_count(
-                label=pod_label,
-                expected_count=1,
+        acm_version = get_acm_version()
+        if version.compare_versions(f"{acm_version} <= 2.14"):
+            logger.info(
+                "Setting Up Configure ACM to import MCE operator cluster via Manual Way"
+            )
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+            ]:
+                if not wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=constants.ACM_ADDONS_NAMESPACE,
+                    timeout=300,
+                    sleep=10,
+                ):
+                    raise ResourceNotFoundError(
+                        f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                    )
+
+            # Verify the status of existing pods in the default addons namespace
+            all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
+            if not wait_for_pods_to_be_in_statuses(
+                expected_statuses=[
+                    constants.STATUS_RUNNING,
+                    constants.STATUS_COMPLETED,
+                ],
+                pod_names=[pod_obj.name for pod_obj in all_pods],
                 namespace=constants.ACM_ADDONS_NAMESPACE,
                 timeout=300,
                 sleep=10,
             ):
-                raise ResourceNotFoundError(
-                    f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                raise ResourceWrongStatusException(
+                    f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
                 )
 
-        # Verify the status of existing pods in the default addons namespace
-        all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
-        if not wait_for_pods_to_be_in_statuses(
-            expected_statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-            pod_names=[pod_obj.name for pod_obj in all_pods],
-            namespace=constants.ACM_ADDONS_NAMESPACE,
-            timeout=300,
-            sleep=10,
-        ):
-            raise ResourceWrongStatusException(
-                f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
+            # Create AddOnDeploymentConfig to install add-ons in a different multicluster
+            # engine operator namespace so that
+            # the multicluster engine operator can self-manage with the local-cluster add-ons while
+            # ACM manages multicluster engine operator at the same time
+            logger.info(
+                "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
+            )
+            addon_deployment_config = helpers.create_resource(
+                **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
             )
 
-        # Create AddOnDeploymentConfig to install add-ons in a different multicluster engine operator namespace so that
-        # the multicluster engine operator can self-manage with the local-cluster add-ons while
-        # ACM manages multicluster engine operator at the same time
-        logger.info(
-            "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
-        )
-        addon_deployment_config = helpers.create_resource(
-            **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
-        )
-
-        # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
-        # in the namespace that is specified in the AddOnDeploymentConfig
-        patch_cmd = (
-            f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
-            f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
-            f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
-            f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
-        )
-
-        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
-        for management_addon in [
-            "work-manager",
-            "managed-serviceaccount",
-            "cluster-proxy",
-        ]:
-            addon_obj.patch(
-                resource_name=management_addon, params=patch_cmd, format_type="merge"
+            # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
+            # in the namespace that is specified in the AddOnDeploymentConfig
+            patch_cmd = (
+                f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
+                f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
+                f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
+                f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
             )
 
-        # Verify the presence and Running status of the pods cluster-proxy-proxy-agent, klusterlet-addon-workmgr and
-        # managed-serviceaccount-addon-agent
-        for pod_label in [
-            "open-cluster-management.io/addon=cluster-proxy",
-            "component=work-manager",
-            "addon-agent=managed-serviceaccount",
-        ]:
-            wait_for_pods_by_label_count(
-                label=pod_label,
-                expected_count=1,
+            addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+            for management_addon in [
+                "work-manager",
+                "managed-serviceaccount",
+                "cluster-proxy",
+            ]:
+                addon_obj.patch(
+                    resource_name=management_addon,
+                    params=patch_cmd,
+                    format_type="merge",
+                )
+
+            # Verify the presence and Running status of the pods cluster-proxy-proxy-agent,
+            # klusterlet-addon-workmgr and managed-serviceaccount-addon-agent
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+            ]:
+                wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=addon_deployment_config.data["spec"][
+                        "agentInstallNamespace"
+                    ],
+                    timeout=900,
+                    sleep=20,
+                )
+            wait_for_pods_to_be_running(
                 namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
                 timeout=900,
                 sleep=20,
             )
-        wait_for_pods_to_be_running(
-            namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
-            timeout=900,
-            sleep=20,
-        )
 
-        # Create a KlusterletConfig resource that is used by ManagedCluster resources to import multicluster engine
-        # operator clusters so that the klusterlet is installed with a different name to avoid the conflict
-        klusterlet_config = helpers.create_resource(
-            **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
-        )
+            # Create a KlusterletConfig resource that is used by ManagedCluster resources to import multicluster engine
+            # operator clusters so that the klusterlet is installed with a different name to avoid the conflict
+            helpers.create_resource(
+                **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
+            )
 
-        logger.info(
-            "Configured Red Hat ACM to import multicluster engine operator clusters"
-        )
+            logger.info(
+                "Configured Red Hat ACM to import multicluster engine operator clusters"
+            )
+
+        else:
+            logger.info(
+                "Setting Up Configure ACM to import MCE operator cluster via Automated Way"
+            )
+
+            cmd = (
+                "oc patch addondeploymentconfig hypershift-addon-deploy-config "
+                "-n multicluster-engine "
+                "--type=merge "
+                '-p \'{"spec":{"customizedVariables":[{"name":"configureMceImport","value":"true"}]}}\''
+            )
+            run_cmd(cmd=cmd)
+            logger.info("Sleeping for 60 Sec for Background Activity")
+            time.sleep(60)
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+                "component=application-manager",
+            ]:
+                if not wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=constants.ACM_ADDONS_NAMESPACE_DISCOVERY,
+                    timeout=400,
+                    sleep=10,
+                ):
+                    raise ResourceNotFoundError(
+                        f"Pod with label {pod_label} not found in the ns {constants.ACM_ADDONS_NAMESPACE_DISCOVERY}"
+                    )
 
         # Configuration for backup and restore. Add backup label to the default and new addondeploymentconfig,
         # clustermanagementaddon and KlusterletConfig
@@ -2370,17 +2497,36 @@ class Deployment(object):
             "Add label for backup in addondeploymentconfigs, clustermanagementaddons and klusterletconfig"
         )
         backup_label = "cluster.open-cluster-management.io/backup=true"
-        addon_deployment_config.add_label(label=backup_label)
-        addon_deployment_config.ocp.add_label(
-            resource_name="hypershift-addon-deploy-config", label=backup_label
+        addon_deployment_config = OCP(
+            kind=constants.ADDONDEPLOYMENTCONFIG,
+            namespace=constants.MCE_NAMESPACE,
         )
+        klusterlet_config = OCP(
+            kind=constants.KLUSTERLET_CONFIG,
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+        )
+        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+
+        addon_deployment_config.add_label(
+            label=backup_label,
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
+        )
+        addon_deployment_config.add_label(
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
+            label=backup_label,
+        )
+
         for management_addon in [
             "work-manager",
             "managed-serviceaccount",
             "cluster-proxy",
+            "application-manager",
         ]:
             addon_obj.add_label(resource_name=management_addon, label=backup_label)
-        klusterlet_config.add_label(label=backup_label)
+        klusterlet_config.add_label(
+            label=backup_label,
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+        )
 
     def deploy_acm_hub_unreleased(self):
         """
@@ -2505,7 +2651,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -2591,7 +2737,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -4049,3 +4195,38 @@ MULTICLUSTER_DR_MAP = {
     "regional-dr": RDRMultiClusterDROperatorsDeploy,
     "metro-dr": MDRMultiClusterDROperatorsDeploy,
 }
+
+
+def get_arbiter_location():
+    """
+    Get arbiter mon location for storage cluster
+    """
+    if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+        "arbiter_autodetect"
+    ):
+        return config.DEPLOYMENT.get("arbiter_zone")
+
+    # below logic will autodetect arbiter_zone
+    nodes = ocp.OCP(kind="node").get().get("items", [])
+
+    worker_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.WORKER_LABEL in node["metadata"]["labels"]
+        and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+    }
+
+    master_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.MASTER_LABEL in node["metadata"]["labels"]
+    }
+
+    arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+    if len(arbiter_locations) < 1:
+        raise UnavailableResourceException(
+            "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+        )
+
+    return arbiter_locations[0]

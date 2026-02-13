@@ -318,7 +318,8 @@ class BackgroundClusterOperations:
         try:
             # Step 1: Create snapshot
             log.info(f"Creating snapshot of PVC {workload_pvc.name}")
-            snapshot_obj = workload_pvc.create_snapshot(wait=True)
+            # Use longer timeout during chaos testing as system may be under stress
+            snapshot_obj = workload_pvc.create_snapshot(wait=True, timeout=180)
             log.info(f"Snapshot {snapshot_obj.name} created and ready")
 
             # Step 2: Restore PVC from snapshot
@@ -946,7 +947,7 @@ class BackgroundClusterOperations:
             for pvc_obj in workload_pvcs:
                 try:
                     pvc_obj.reload()
-                    snapshot_obj = pvc_obj.create_snapshot(wait=True)
+                    snapshot_obj = pvc_obj.create_snapshot(wait=True, timeout=180)
                     snapshots.append(snapshot_obj)
                     self._resources_to_cleanup.append(snapshot_obj)
                     log.info(
@@ -1107,11 +1108,39 @@ class BackgroundClusterOperations:
 
     def _create_test_pod(self, pvc_obj):
         """Create a test pod attached to PVC."""
-        from ocs_ci.ocs.resources.pod import get_pvc_read_pod_dict
+        from ocs_ci.utility import templating
 
-        pod_dict = get_pvc_read_pod_dict(pvc_name=pvc_obj.name)
+        # Determine interface type based on PVC provisioner
+        if "rbd" in pvc_obj.provisioner.lower():
+            pod_dict_path = constants.CSI_RBD_POD_YAML
+        else:
+            pod_dict_path = constants.CSI_CEPHFS_POD_YAML
+
+        # Load pod template and configure
+        pod_dict = templating.load_yaml(pod_dict_path)
         pod_dict["metadata"]["namespace"] = self.namespace
         pod_dict["metadata"]["name"] = f"test-pod-{pvc_obj.name[:20]}"
+        pod_dict["spec"]["volumes"][0]["persistentVolumeClaim"][
+            "claimName"
+        ] = pvc_obj.name
+
+        # Handle Block volume mode - use volumeDevices instead of volumeMounts
+        volume_mode = pvc_obj.get_pvc_vol_mode
+        if volume_mode == constants.VOLUME_MODE_BLOCK:
+            # Get the volume name from volumeMounts before deleting
+            volume_name = pod_dict["spec"]["containers"][0]["volumeMounts"][0]["name"]
+
+            # Remove volumeMounts and add volumeDevices for Block volumes
+            del pod_dict["spec"]["containers"][0]["volumeMounts"]
+            pod_dict["spec"]["containers"][0]["volumeDevices"] = [
+                {
+                    "devicePath": "/dev/rbdblock",
+                    "name": volume_name,
+                }
+            ]
+            log.info(
+                "Configured pod for Block volume mode with devicePath /dev/rbdblock"
+            )
 
         pod_obj = pod_helpers.Pod(**pod_dict)
         pod_obj.create()
@@ -1119,10 +1148,24 @@ class BackgroundClusterOperations:
 
     def _verify_pod_data(self, pod_obj):
         """Verify basic data integrity on pod (file existence check)."""
-        # Basic check - verify pod can access mount point
+        # Basic check - verify pod can access mount point or device
         try:
-            pod_obj.exec_cmd_on_pod("ls /mnt")
-            log.info(f"Data verification passed for pod {pod_obj.name}")
+            # Check if pod uses Block volume (has volumeDevices) or Filesystem (has volumeMounts)
+            pod_spec = pod_obj.get().get("spec", {}).get("containers", [{}])[0]
+
+            if "volumeDevices" in pod_spec:
+                # Block volume - verify device exists
+                device_path = pod_spec["volumeDevices"][0]["devicePath"]
+                pod_obj.exec_cmd_on_pod(f"ls -l {device_path}")
+                log.info(
+                    f"Data verification passed for pod {pod_obj.name} (Block volume at {device_path})"
+                )
+            else:
+                # Filesystem volume - verify mount point
+                pod_obj.exec_cmd_on_pod("ls /mnt")
+                log.info(
+                    f"Data verification passed for pod {pod_obj.name} (Filesystem volume)"
+                )
         except Exception as e:
             log.warning(f"Data verification warning for pod {pod_obj.name}: {e}")
 

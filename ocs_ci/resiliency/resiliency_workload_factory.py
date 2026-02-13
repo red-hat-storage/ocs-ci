@@ -262,6 +262,7 @@ class ResiliencyWorkloadFactory:
         awscli_pod=None,
         scaling_helper=None,
         timeout=180,
+        storageclass_factory=None,
     ):
         """
         Create ResiliencyWorkloadOps based on the configured workload types.
@@ -275,6 +276,7 @@ class ResiliencyWorkloadFactory:
             awscli_pod: AWS CLI pod fixture (required for RGW workloads)
             scaling_helper: Optional WorkloadScalingHelper instance
             timeout: Timeout for operations
+            storageclass_factory: Storage class factory fixture (for encrypted PVCs)
 
         Returns:
             ResiliencyWorkloadOps: Configured workload operations manager
@@ -296,6 +298,7 @@ class ResiliencyWorkloadFactory:
                     resiliency_workload,
                     vdbench_block_config,
                     vdbench_filesystem_config,
+                    storageclass_factory,
                 )
                 all_workloads.extend(workloads)
             elif workload_type == "RGW_WORKLOAD":
@@ -324,6 +327,7 @@ class ResiliencyWorkloadFactory:
         resiliency_workload,
         vdbench_block_config,
         vdbench_filesystem_config,
+        storageclass_factory=None,
     ):
         """
         Create VDBENCH workloads for resiliency testing.
@@ -411,18 +415,63 @@ class ResiliencyWorkloadFactory:
         # Get PVC configuration from config
         num_pvcs_per_interface = self.config.get_num_pvcs_per_interface()
         pvc_size = self.config.get_pvc_size()
+        use_encrypted = self.config.use_encrypted_pvc()
+
         log.info(
             f"Creating {num_pvcs_per_interface} PVCs per storage interface with size {pvc_size}Gi"
         )
+        if use_encrypted:
+            log.info(
+                "Encrypted PVCs are enabled - will create encrypted storage classes"
+            )
+
+        # Create encrypted storage classes if needed
+        # NOTE: Only RBD (CEPHBLOCKPOOL) supports per-PVC encryption via storage class
+        # CephFS does NOT support per-PVC encryption via storage class parameters
+        encrypted_storage_classes = {}
+        if use_encrypted and storageclass_factory is not None:
+            log.info("Creating encrypted storage classes for VDBENCH workloads")
+            try:
+                # Create encrypted RBD storage class ONLY (CephFS not supported)
+                encrypted_rbd_sc = storageclass_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    encrypted=True,
+                )
+            except Exception as e:
+                log.error(f"Failed to create encrypted storage class: {e}")
+                log.warning("Falling back to default storage classes")
+                use_encrypted = False
+            else:
+                # Only execute if storage class creation succeeded
+                encrypted_storage_classes[constants.CEPHBLOCKPOOL] = encrypted_rbd_sc
+                log.info(
+                    f"✓ Created encrypted RBD storage class: {encrypted_rbd_sc.name}"
+                )
+
+                # IMPORTANT: CephFS encryption is NOT supported via storage class parameters
+                # CephFS can only use cluster-wide encryption (configured at StorageCluster level)
+                log.info(
+                    "NOTE: CephFS PVCs will use default storage class (no per-PVC encryption support)"
+                )
+                log.info(
+                    "      CephFS encryption requires cluster-wide encryption in StorageCluster"
+                )
 
         # Create workloads for each interface
         for interface, config_data in interface_configs.items():
             log.info(f"Creating workloads for interface: {interface}")
 
+            # Use encrypted storage class if available and encryption is enabled
+            storageclass = None
+            if use_encrypted and interface in encrypted_storage_classes:
+                storageclass = encrypted_storage_classes[interface]
+                log.info(f"Using encrypted storage class: {storageclass.name}")
+
             # Create PVCs with increased timeout for resiliency tests
             pvcs = multi_pvc_factory(
                 interface=interface,
                 project=project,
+                storageclass=storageclass,  # Pass encrypted SC if available
                 access_modes=config_data["access_modes"],
                 size=pvc_size,
                 num_of_pvc=num_pvcs_per_interface,

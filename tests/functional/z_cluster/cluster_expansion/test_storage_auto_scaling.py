@@ -63,6 +63,7 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.helpers.ceph_helpers import wait_for_percent_used_capacity_reached
 from ocs_ci.ocs.node import select_osd_node
+from ocs_ci.ocs.benchmark_operator_fio import get_file_size
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +83,8 @@ class TestStorageAutoscalerBase(ManageTest):
     Abstract base class with fixtures and helpers for the StorageAutoscaler test procedure
     """
 
-    benchmark_workload_storageutilization: any = None
-    benchmark_obj: any = None
+    fill_job_factory: any = None
+    fill_job_objs: list = []
     is_cleanup_cluster: bool = False
     used_capacity: float = None
     old_storage_size: str = None
@@ -108,7 +109,7 @@ class TestStorageAutoscalerBase(ManageTest):
         self,
         request,
         create_pvcs_and_pods,
-        benchmark_workload_storageutilization,
+        fill_job_factory,
         pause_and_resume_cluster_load,
     ):
         """
@@ -116,10 +117,8 @@ class TestStorageAutoscalerBase(ManageTest):
         resize OSD procedure, as the StorageAutoscaler will perform the Resize OSD when it triggers.
 
         """
-        self.benchmark_workload_storageutilization = (
-            benchmark_workload_storageutilization
-        )
-        self.benchmark_obj = None
+        self.fill_job_factory = fill_job_factory
+        self.fill_job_objs = []
         self.is_cleanup_cluster = False
 
         self.used_capacity = get_percent_used_capacity()
@@ -175,9 +174,7 @@ class TestStorageAutoscalerBase(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def fill_up_cluster(
-        self, target_percentage, bs="4096KiB", is_completed=True, fast_fill_up=True
-    ):
+    def fill_up_cluster(self, target_percentage, is_completed=True):
         """
         Fill up the cluster to a target percentage of total storage capacity using FIO-based load.
 
@@ -188,46 +185,45 @@ class TestStorageAutoscalerBase(ManageTest):
 
         Args:
             target_percentage (int): Desired percentage of used cluster storage to reach.
-            bs (str): Block size used for the workload. Default is "4096KiB".
             is_completed (bool): Whether to wait until the benchmark workload completes.
-            fast_fill_up (bool): If True, use aggressive parameters (higher iodepth, numjobs)
-                                 for faster cluster fill-up. The target percentage is adjusted.
+
         """
+        storage_to_fill = get_file_size(
+            expected_used_capacity_percent=target_percentage
+        )
+        # Divide the storage to fill between zero and random modes. The random mode will
+        # fill 25% of the total. This is to optimize the time taken to fill the cluster,
+        # as the zero mode is faster.
+        storage_to_fill_random_mode = int(storage_to_fill // 4)
+        storage_to_fill_zero_mode = storage_to_fill - storage_to_fill_random_mode
         logger.info(
-            f"Fill up the cluster to {target_percentage}% of it's storage capacity "
-            f"(fast_fill_up={fast_fill_up})"
+            f"Total storage to fill the cluster: {storage_to_fill}Gi, "
+            f"Storage to fill in zero mode: {storage_to_fill_zero_mode}Gi, "
+            f"Storage to fill in random mode: {storage_to_fill_random_mode}Gi"
         )
-
-        numjobs = 1
-        iodepth = 16
-        max_servers = 20
-
-        if fast_fill_up:
-            numjobs = 4
-            iodepth = 32
-            max_servers = 40
-            # Reduce the target to compensate for likely overshoot
-            target_percentage = int(target_percentage - target_percentage / 5)
-            logger.info(
-                f"Target percentage adjusted to {target_percentage}% due to fast_fill_up mode"
-            )
-
-        self.benchmark_obj = self.benchmark_workload_storageutilization(
-            target_percentage,
-            bs=bs,
-            is_completed=is_completed,
-            numjobs=numjobs,
-            iodepth=iodepth,
-            max_servers=max_servers,
+        fill_job_obj = self.fill_job_factory(
+            fill_mode="zero",
+            storage=f"{storage_to_fill_zero_mode}Gi",
         )
+        self.fill_job_objs.append(fill_job_obj)
+        fill_job_obj = self.fill_job_factory(
+            fill_mode="random",
+            storage=f"{storage_to_fill_random_mode}Gi",
+        )
+        self.fill_job_objs.append(fill_job_obj)
+
+        if is_completed:
+            for fill_job in self.fill_job_objs:
+                fill_job.wait_for_completion(timeout=1800, sleep=30)
 
     def cleanup_cluster(self):
         """
         Clean up the cluster from the benchmark operator project
 
         """
-        if self.benchmark_obj and not self.is_cleanup_cluster:
-            self.benchmark_obj.cleanup()
+        if self.fill_job_objs and not self.is_cleanup_cluster:
+            for fill_job in self.fill_job_objs:
+                fill_job.cleanup()
             self.is_cleanup_cluster = True
             config.RUN["cleanup_cluster_time"] = time.time()
 
@@ -582,7 +578,6 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscalerBase):
     The absence of autoscaler activity in these tests is the expected and correct behavior.
     """
 
-    @pytest.mark.skip_resize_pre_conditions
     @tier2
     @polarion_id("OCS-6877")
     def test_create_autoscaler_and_delete_before_threshold(self):
@@ -613,7 +608,6 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscalerBase):
         self.verify_storage_not_change()
 
     @tier2
-    @pytest.mark.skip_resize_pre_conditions
     @polarion_id("OCS-6878")
     def test_create_autoscaler_and_shutdown_osd_node(
         self, nodes, node_restart_teardown
@@ -642,7 +636,6 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscalerBase):
         self.verify_autoscaler_no_trigger_steps(auto_scaler.name, auto_scaler.namespace)
 
     @tier2
-    @pytest.mark.skip_resize_pre_conditions
     @polarion_id("OCS-6879")
     def test_storage_capacity_limit_reached(self):
         """

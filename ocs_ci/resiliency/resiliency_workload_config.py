@@ -212,6 +212,23 @@ class ResiliencyWorkloadConfig:
         vdbench_config = self.get_vdbench_config()
         return vdbench_config.get("workload_loop", 1)
 
+    def use_encrypted_pvc(self) -> bool:
+        """
+        Check if encrypted PVCs should be used for VDBENCH workloads.
+
+        NOTE: Only RBD (Ceph Block Pool) PVCs support encryption via storage class.
+              CephFS PVCs do NOT support per-PVC encryption (cluster-wide only).
+
+        When enabled:
+        - RBD PVCs will use encrypted storage class with KMS
+        - CephFS PVCs will use default storage class (no encryption)
+
+        Returns:
+            bool: True if encrypted RBD PVCs should be used (default: False)
+        """
+        vdbench_config = self.get_vdbench_config()
+        return vdbench_config.get("use_encrypted_pvc", False)
+
     def get_vdbench_block_config(self) -> Dict[str, Any]:
         """
         Get VDBENCH block configuration.

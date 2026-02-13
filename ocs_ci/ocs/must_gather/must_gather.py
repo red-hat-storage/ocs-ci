@@ -66,10 +66,20 @@ class MustGather(object):
         """
         Search File Path
 
+        In post-upgrade scenarios, uses config.UPGRADE["upgrade_ocs_version"]
+        to ensure correct version-specific file expectations.
         """
-        ocs_version = float(
-            f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        )
+        upgrade_version = config.UPGRADE.get("upgrade_ocs_version")
+        if upgrade_version:
+            ocs_version = float(upgrade_version)
+            logger.debug(
+                f"Using upgrade version for must-gather validation: {ocs_version}"
+            )
+        else:
+            ocs_version = float(
+                f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
+            )
+            logger.debug(f"Using CSV version for must-gather validation: {ocs_version}")
         if (
             self.type_log == "OTHERS"
             and config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS
@@ -254,15 +264,54 @@ class MustGather(object):
                 logger.error("noobaa_diagnostics.tar.gz does not exist")
                 self.files_not_exist.append("noobaa_diagnostics.tar.gz")
 
-    def get_all_paths(self):
+    def _get_paths_from_tarball(self, tarball_path):
         """
-        Get all paths in must gather dir
+        Collect all member paths from a must-gather tar.gz archive.
+
+        Args:
+            tarball_path (str): path to the .tar.gz file
+
+        Returns:
+            list: paths of all members (files and dirs) in the archive
 
         """
-        for root, dirs, files in os.walk(self.root):
+        paths = []
+        try:
+            with tarfile.open(tarball_path, "r:*") as tar:
+                for member in tar.getmembers():
+                    # Add the member path (files and dirs)
+                    paths.append(member.name)
+                    # Ensure parent directory paths are included for substring
+                    # matching in verify_paths_in_dir / verify_paths_not_in_dir
+                    parts = member.name.replace("\\", "/").split("/")
+                    for i in range(1, len(parts)):
+                        parent = "/".join(parts[:i])
+                        if parent and parent not in paths:
+                            paths.append(parent)
+        except (tarfile.TarError, OSError) as e:
+            logger.warning(f"Could not read tarball {tarball_path}: {e}")
+        return paths
+
+    def get_all_paths(self):
+        """
+        Get all paths in must gather dir (directory and/or tar.gz archives).
+
+        When REPORTING["tarball_mg_logs"] is used, must-gather may be packed
+        into a .tar.gz; this method collects paths from both directory trees
+        and from inside such tarballs.
+
+        """
+        self.full_paths = []
+
+        for root_dir, dirs, files in os.walk(self.root):
             for name in files + dirs:
-                full_path = os.path.join(root, name)
+                full_path = os.path.join(root_dir, name)
                 self.full_paths.append(full_path)
+            # Collect paths from must-gather tarballs found under root
+            for name in files:
+                if name.endswith(".tar.gz"):
+                    tarball_path = os.path.join(root_dir, name)
+                    self.full_paths.extend(self._get_paths_from_tarball(tarball_path))
 
     def verify_paths_in_dir(self, paths):
         """

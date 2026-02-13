@@ -1,5 +1,5 @@
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import reduce
 import base64
 import io
@@ -31,6 +31,8 @@ import unicodedata
 
 import hcl2
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 import yaml
 import git
 from bs4 import BeautifulSoup
@@ -455,6 +457,142 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
+def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
+    """
+    Check if a text block is likely base64 encoded data.
+
+    Args:
+        text_block (str): Text to check for base64 encoding
+        min_length (int): Minimum length to consider (default 100 chars)
+
+    Returns:
+        bool: True if text appears to be base64 encoded
+
+    """
+    if not text_block or len(text_block) < min_length:
+        return False
+
+    # Base64 alphabet: A-Z, a-z, 0-9, +, /, = (padding)
+    # Using string module to avoid detect-secrets false positive
+    base64_chars = set(string.ascii_letters + string.digits + "+/=")
+    non_whitespace = (
+        text_block.replace("\n", "")
+        .replace("\r", "")
+        .replace(" ", "")
+        .replace("\t", "")
+    )
+
+    if not non_whitespace:
+        return False
+
+    # Check character composition
+    base64_char_count = sum(1 for char in non_whitespace if char in base64_chars)
+    ratio = base64_char_count / len(non_whitespace)
+
+    # Must be 95%+ base64 characters to allow YAML prefixes like "- key:"
+    if ratio < 0.95:
+        return False
+
+    # Additional heuristic: reject if it looks like regular text
+    # Regular text is heavily lowercase-skewed (80%+ lowercase)
+    # Base64 can have any distribution, so we only reject obvious text patterns
+    upper_count = sum(1 for c in non_whitespace if c.isupper())
+    lower_count = sum(1 for c in non_whitespace if c.islower())
+
+    # If there are letters, check if it's heavily lowercase (indicates text)
+    if upper_count + lower_count > 0:
+        lower_ratio = lower_count / (upper_count + lower_count)
+        # Regular text typically has 80%+ lowercase
+        if lower_ratio > 0.85:
+            return False
+
+    return True
+
+
+def _extract_base64_blocks(lines: list) -> list:
+    """
+    Group consecutive base64 lines into blocks with their indices.
+
+    Args:
+        lines (list): List of output lines to process
+
+    Returns:
+        list: List of tuples (start_index, end_index, is_base64_block)
+
+    """
+    blocks = []
+    current_block_start = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        is_base64 = _is_base64_block(stripped, min_length=50)
+
+        if is_base64:
+            if current_block_start is None:
+                current_block_start = i
+        else:
+            if current_block_start is not None:
+                blocks.append((current_block_start, i - 1, True))
+                current_block_start = None
+
+    # Handle base64 block at end of output
+    if current_block_start is not None:
+        blocks.append((current_block_start, len(lines) - 1, True))
+
+    return blocks
+
+
+def truncate_large_base64(output: str, max_base64_size: int = 1024) -> str:
+    """
+    Truncate large base64 blocks in command output to reduce log noise.
+
+    Only truncates base64 strings larger than max_base64_size to preserve
+    small base64-encoded secrets that may need to be decoded for debugging.
+
+    Args:
+        output (str): Command output to process
+        max_base64_size (int): Maximum size for base64 blocks (default 1024 chars)
+
+    Returns:
+        str: Output with large base64 blocks truncated
+
+    """
+    if not output or len(output) < max_base64_size:
+        return output
+
+    lines = output.split("\n")
+    base64_blocks = _extract_base64_blocks(lines)
+
+    if not base64_blocks:
+        return output
+
+    result_lines = []
+    last_processed = -1
+
+    for start_idx, end_idx, _ in base64_blocks:
+        # Add non-base64 lines before this block
+        result_lines.extend(lines[last_processed + 1 : start_idx])
+
+        # Process base64 block
+        block_lines = lines[start_idx : end_idx + 1]
+        block_text = "\n".join(block_lines)
+
+        if len(block_text) > max_base64_size:
+            result_lines.append(
+                f"[BASE64_TRUNCATED: {len(block_text)} chars removed for log brevity]"
+            )
+        else:
+            # Block is small, keep it (might be a secret to decode)
+            result_lines.extend(block_lines)
+
+        last_processed = end_idx
+
+    # Add remaining non-base64 lines after last block
+    result_lines.extend(lines[last_processed + 1 :])
+
+    return "\n".join(result_lines)
+
+
 def run_cmd(
     cmd,
     secrets=None,
@@ -710,14 +848,16 @@ def exec_cmd(
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
-        log.debug(f"Command stdout: {masked_stdout}")
+        truncated_stdout = truncate_large_base64(masked_stdout)
+        log.debug(f"Command stdout: {truncated_stdout}")
     else:
         log.debug("Command stdout is empty")
 
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
         if not silent:
-            log.warning(f"Command stderr: {masked_stderr}")
+            truncated_stderr = truncate_large_base64(masked_stderr)
+            log.warning(f"Command stderr: {truncated_stderr}")
         else:
             if output_file:
                 with open(output_file, "a") as out_fd:
@@ -773,6 +913,8 @@ def bin_xml_escape(arg):
 
 def download_file(url, filename, **kwargs):
     """
+    ! Deprecated, use download_with_retries instead !
+
     Download a file from a specified url
 
     Args:
@@ -788,6 +930,55 @@ def download_file(url, filename, **kwargs):
         r = requests.get(url, **kwargs)
         assert r.ok, f"The URL {url} is not available! Status: {r.status_code}."
         f.write(r.content)
+
+
+def download_with_retries(url, filename, max_retries=3):
+    """
+    Download file with retries and proper error handling
+
+    Args:
+        url (str): URL of the file to download
+        filename (str): Path where to save the downloaded file
+        max_retries (int): Maximum number of retries for downloading the file
+
+    Returns:
+        str: Path to the downloaded file if successful, None otherwise
+    """
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=max_retries,
+        backoff_factor=2,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+        respect_retry_after_header=True,
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    try:
+        with session.get(url, stream=True, timeout=(10, 180), verify=False) as response:
+            response.raise_for_status()
+            total_size = int(response.headers.get("content-length", 0))
+
+            with open(filename, "wb") as f:
+                downloaded = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size:
+                            log.debug(
+                                f"Downloaded {downloaded}/{total_size} bytes ({100 * downloaded // total_size}%)"
+                            )
+
+            log.info(f"Successfully downloaded ISO to {filename}")
+            return filename
+    except requests.exceptions.RequestException as e:
+        log.error(f"Failed to download ISO: {e}")
+        if os.path.exists(filename):
+            os.remove(filename)
+        return None
 
 
 def get_url_content(url, **kwargs):
@@ -893,30 +1084,7 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        try:
-            version = expose_ocp_version(version)
-        except Exception as e:
-            log.error(
-                f"Failed to download the openshift installer {version}. Exception '{e}'"
-            )
-            # check given version is GA'ed or not
-            version_major_minor = str(
-                version_module.get_semantic_version(version, only_major_minor=True)
-            )
-            # For GA'ed version, check for N, N-1 and N-2 versions
-            for current_version_count in range(3):
-                previous_version = version_module.get_previous_version(
-                    version_major_minor, current_version_count
-                )
-                log.debug(
-                    f"previous version with count {current_version_count} is {previous_version}"
-                )
-                if is_ocp_version_gaed(previous_version):
-                    # Download GA'ed version
-                    version = expose_ocp_version(f"{previous_version}-ga")
-                    break
-                else:
-                    log.debug(f"version {previous_version} is not GA'ed")
+        version = expose_ocp_version_safe(version)
 
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
@@ -935,6 +1103,37 @@ def get_openshift_installer(
     installer_version = run_cmd(f"{installer_binary_path} version")
     log.info(f"OpenShift Installer version: {installer_version}")
     return installer_binary_path
+
+
+def expose_ocp_version_safe(version) -> str:
+    """
+    This helper function exposes latest nightly version or GA version of OCP.
+    """
+    try:
+        version = expose_ocp_version(version)
+    except Exception as e:
+        log.warning(
+            f"Failed to download the openshift installer {version}. Exception '{e}'"
+        )
+        # check given version is GA'ed or notbbb
+        version_major_minor = str(
+            version_module.get_semantic_version(version, only_major_minor=True)
+        )
+        # For GA'ed version, check for N, N-1 and N-2 versions
+        for current_version_count in range(3):
+            previous_version = version_module.get_previous_version(
+                version_major_minor, current_version_count
+            )
+            log.debug(
+                f"previous version with count {current_version_count} is {previous_version}"
+            )
+            if is_ocp_version_gaed(previous_version):
+                # Download GA'ed version
+                version = expose_ocp_version(f"{previous_version}-ga")
+                break
+            else:
+                log.debug(f"version {previous_version} is not GA'ed")
+    return version
 
 
 def get_ocm_cli(
@@ -1233,7 +1432,7 @@ def is_ocp_version_gaed(version):
         version (str): OCP version ( eg: 4.16, 4.15 )
 
     Returns:
-        bool: True if OCP is GA'ed otherwise False
+        bool: True if OCP is GA'ed otherwise None
 
     """
     channel = f"stable-{version}"
@@ -2659,6 +2858,32 @@ def ceph_health_resolve_mon_slow_ops(health_status):
     restart_mon_pods(mon_ids)
 
 
+def mute_mon_netsplit(namespace=None):
+    """
+    Mute MON_NETSPLIT health warning in Ceph cluster.
+    This is useful for arbiter deployments where network splits are expected.
+
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+    """
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    log.info("Muting MON_NETSPLIT health warning for arbiter deployment")
+    try:
+        ct_pod = get_ceph_tools_pod(namespace=namespace)
+        ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph health mute MON_NETSPLIT --sticky",
+            format=None,
+            out_yaml_format=False,
+            timeout=120,
+        )
+        log.info("Successfully muted MON_NETSPLIT health warning")
+    except Exception as ex:
+        log.warning(f"Failed to mute MON_NETSPLIT: {ex}")
+
+
 def ceph_health_resolve_network_partition(health_status):
     """
     Fix Ceph health issue with mon network partition.
@@ -2681,7 +2906,7 @@ def ceph_health_resolve_network_partition(health_status):
         f"Detected problematic MON IDs with network partition detected: {mon_ids}"
     )
 
-    restart_mon_pods(mon_ids)
+    mute_mon_netsplit()
 
 
 def restart_mon_pods(mon_ids):
@@ -2785,13 +3010,21 @@ def ceph_health_recover(
             )
             # Avoid circular dependencies, importing here
             from ocs_ci.ocs.utils import collect_ocs_logs
+            from ocs_ci.framework.pytest_customization import ocscilib
 
+            since_time_str = None
+            test_start_time = ocscilib.test_start_time
+            if test_start_time:
+                time_with_buffer = test_start_time - timedelta(minutes=5)
+                # RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
+                since_time_str = time_with_buffer.strftime("%Y-%m-%dT%H:%M:%SZ")
             # Collecting logs here before trying to fix issue
             timestamp = int(time.time())
             collect_ocs_logs(
                 f"ceph_health_recover_{timestamp}",
                 ocp=False,
                 timeout=defaults.MUST_GATHER_TIMEOUT,
+                since_time=since_time_str,
             )
             jenkins_build_url = config.RUN.get("jenkins_build_url", "")
             base_logs_url = config.RUN.get("logs_url", "")
@@ -2941,8 +3174,11 @@ def ceph_health_check_base(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     health = run_ceph_health_cmd(namespace, detail=True)
 
-    if health.strip() == "HEALTH_OK":
-        log.info("Ceph cluster health is HEALTH_OK.")
+    if health.strip().startswith("HEALTH_OK"):
+        if health.strip() != "HEALTH_OK":
+            log.warning(f"Ceph cluster health: {health}")
+        else:
+            log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
         log.warning(f"Ceph cluster health is not HEALTH_OK: {health}")
@@ -3228,6 +3464,71 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version
                     continue
                 return tag["name"]
     raise TagNotFoundException("Couldn't find any desired tag!")
+
+
+def get_latest_ocp_multi_image(version: str = None) -> str:
+    """
+    Get latest OCP multi-arch image tag for given major.minor version.
+    Optimized with paging early-exit and debug logging.
+
+    Args:
+        version (str): OCP version to get the latest multi-arch image for, if not
+            provided, the current OCP version will be used.
+
+    Returns:
+        str: Latest OCP multi-arch image:tag
+
+    Raises:
+        TagNotFoundException: If no matching tag is found
+    """
+    if not version:
+        version = str(version_module.get_semantic_ocp_version_from_config())
+    tag_regex = re.compile(rf"^{re.escape(version)}\.\d+(-rc\.\d+|-ec\.\d+)?-multi$")
+
+    page = 1
+
+    while True:
+        params = {
+            "onlyActiveTags": "true",
+            "limit": "100",
+            "page": page,
+        }
+
+        response = requests.get(
+            constants.OCP_MULTI_ARCH_QUAY_API_URL,
+            params=params,
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        tags = data.get("tags", [])
+        log.debug(f"[OCP multi tag lookup] page={page}, tags_in_page={len(tags)}")
+
+        for tag in tags:
+            name = tag["name"]
+
+            if name.startswith("v"):
+                continue
+
+            if not tag_regex.match(name):
+                continue
+
+            log.info(
+                f"[OCP multi tag lookup] Found matching tag on page {page}: {name}"
+            )
+            return f"{constants.OCP_MULTI_ARCH_IMAGE}:{name}"
+
+        if not data.get("has_additional"):
+            log.debug(f"[OCP multi tag lookup] No more pages after page {page}")
+            break
+
+        page += 1
+
+    raise TagNotFoundException(
+        f"Couldn't find multi-arch OCP tag for version {version} "
+        f"after scanning {page - 1} pages"
+    )
 
 
 def get_next_version_available_for_upgrade(current_tag):
@@ -5586,7 +5887,6 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
-@config.run_with_provider_context_if_available
 def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get the NooBaa DB pod that has been assigned the
@@ -5598,19 +5898,50 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    return get_nb_db_pod_by_cnpg_label(constants.NB_DB_PRIMARY_POD_LABEL, namespace)
+
+
+def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get the NooBaa DB pod that has been assigned the
+    secondary role by the CNPG operator.
+
+    Returns:
+        Pod: The NooBaa DB pod object
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+    """
+    return get_nb_db_pod_by_cnpg_label(constants.NB_DB_SECONDARY_POD_LABEL, namespace)
+
+
+@config.run_with_provider_context_if_available
+def get_nb_db_pod_by_cnpg_label(
+    cnpg_label, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Get one of the NooBaa DB CNPG pods
+
+    Args:
+        cnpg_label (str): The CNPG label that describes the pod role
+        namespace (str): The namespace of the NooBaa DB pod
+
+    Returns:
+        Pod: The pod
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+    """
     # importing here to avoid circular imports
     from ocs_ci.ocs.resources import pod
 
     try:
         nb_db_pod = pod.Pod(
-            **pod.get_pods_having_label(
-                label=constants.NB_DB_PRIMARY_POD_LABEL,
-                namespace=namespace,
-            )[0]
+            **pod.get_pods_having_label(label=cnpg_label, namespace=namespace)[0]
         )
     except IndexError:
         raise ResourceNotFoundError(
-            f"The NooBaa DB pod with label {constants.NB_DB_PRIMARY_POD_LABEL} "
+            f"The NooBaa DB pod with label {cnpg_label} "
             f"was not found in namespace {namespace}"
         )
     return nb_db_pod
@@ -6029,7 +6360,25 @@ def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30
 
     for attempt in range(max_retries):
         log.info(f"Node cleanup check: Attempt {attempt + 1}/{max_retries}")
-        current_nodes = get_nodes()
+        try:
+            # api server can be unresponsive for short periods during the node drain, so wrap in a safe get
+            def _safe_get_nodes():
+                try:
+                    return get_nodes()
+                except CommandFailed as ex:
+                    log.warning(f"get_nodes failed (retrying): {ex}")
+                    return []
+
+            current_nodes = None
+            for nodes_sample in TimeoutSampler(300, 30, _safe_get_nodes):
+                if nodes_sample:
+                    current_nodes = nodes_sample
+                    break
+                log.warning("get_nodes returned no nodes; retrying...")
+        except TimeoutExpiredError:
+            log.error("Timed out (300s) waiting for nodes list; aborting cleanup loop")
+            return False
+
         if not current_nodes:
             log.warning(
                 f"No nodes found for type '{node_type}'. Assuming task is complete or not applicable."
@@ -6173,10 +6522,10 @@ def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30
     return False  # Failure
 
 
-def skip_for_provider_if_ocs_version(expressions):
+def skip_for_provider_or_client_if_ocs_version(expressions):
     """
     This function evaluates the condition for test skip
-    for provider clusters based on expression
+    for provider/client clusters based on expression
 
     Args:
         expressions (str OR list): condition for which we need to check,
@@ -6298,3 +6647,54 @@ def apply_oadp_workaround(namespace):
         run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
     except IndexError:
         log.error(f"OADP not found in given Namespace {namespace}")
+
+
+def create_kubeconfig(kubeconfig_path):
+    """
+    Create kubeconfig if doesn't exist and OCP url and kubeadmin password is provided
+
+    Args:
+        kubeconfig_path (str): kubeconfig file location
+
+    """
+    if not os.path.isfile(kubeconfig_path):
+        if config.RUN.get("kubeadmin_password") and config.RUN.get("ocp_url"):
+            log.info(
+                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
+            )
+            # check and correct OCP URL (change it to API url if console url provided and add port if needed
+            ocp_api_url = config.RUN.get("ocp_url").replace(
+                "console-openshift-console.apps", "api"
+            )
+            if ":6443" not in ocp_api_url:
+                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
+
+            cmd = (
+                f"oc login --username {config.RUN['username']} "
+                f"--password {config.RUN['kubeadmin_password']} "
+                f"{ocp_api_url} "
+                f"--kubeconfig {kubeconfig_path} "
+                "--insecure-skip-tls-verify=true"
+            )
+            result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
+            if result.returncode:
+                log.warning(f"executed command: {cmd}")
+                log.warning(f"returncode: {result.returncode}")
+                log.warning(f"stdout: {result.stdout}")
+                log.warning(f"stderr: {result.stderr}")
+            else:
+                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+
+            kubeadmin_password_file = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+            )
+            if not os.path.isfile(kubeadmin_password_file):
+                with open(kubeadmin_password_file, "w") as fd:
+                    fd.write(config.RUN.get("kubeadmin_password"))
+                log.info("Created kubeadmin-password file")
+
+        else:
+            raise ConfigurationError(
+                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
+                "environment variables were not provided."
+            )

@@ -252,8 +252,8 @@ deployment_4_11 = {
     "managed-csi_sc": ("managed-csi-link", By.ID),
     "standard_sc": ("standard-link", By.ID),
     "512": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
-    "2048": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.CSS_SELECTOR),
-    "4096": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.CSS_SELECTOR),
+    "2048": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.XPATH),
+    "4096": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.XPATH),
 }
 
 deployment_4_12 = {
@@ -335,6 +335,22 @@ deployment_4_21 = {
         By.XPATH,
     ),
     "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "drop_down_performance": (
+        "//button[contains(@class,'odf-configure-performance__selector')]",
+        By.XPATH,
+    ),
+    "lean_mode": (
+        "//span[contains(@class, 'menu') and contains(text(), 'Lean mode')]",
+        By.XPATH,
+    ),
+    "balanced_mode": (
+        "//span[contains(@class, 'menu') and contains(text(), 'Balanced mode')]",
+        By.XPATH,
+    ),
+    "performance_mode": (
+        "//span[contains(@class, 'menu') and contains(text(), 'Performance mode')]",
+        By.XPATH,
+    ),
 }
 
 generic_locators = {
@@ -349,7 +365,8 @@ generic_locators = {
     "create_resource_button": ("yaml-create", By.ID),
     "search_resource_field": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "first_dropdown_option": (
-        'a[data-test="dropdown-menu-item-link"]',
+        'a[data-test="dropdown-menu-item-link"], '
+        'li[data-test="dropdown-menu-item-link"] button',
         By.CSS_SELECTOR,
     ),
     "storage_class": (
@@ -357,7 +374,8 @@ generic_locators = {
         By.XPATH,
     ),
     "second_dropdown_option": (
-        '//a[@data-test="dropdown-menu-item-link"]/../../li[2]',
+        '//a[@data-test="dropdown-menu-item-link"]/../../li[2] | '
+        '//li[@data-test="dropdown-menu-item-link"][2]//button',
         By.XPATH,
     ),
     "actions": (
@@ -490,7 +508,8 @@ mcg_stores = {
         By.XPATH,
     ),
     "store_dropdown_option": (
-        "//ul[contains(@class, 'c-dropdown__menu')]//a[normalize-space()='{}']",
+        "//ul[contains(@class, 'c-dropdown__menu')]//a[normalize-space()='{value}'] | "
+        "//ul[contains(@class, 'c-menu__list')]//button[@id='{value}']",
         By.XPATH,
     ),
     "store_secret_option": ("//*[contains(text(), '{}')]", By.XPATH),
@@ -581,6 +600,17 @@ obc = {
     "namespace_store_folder": ('input[id="folder-name"]', By.CSS_SELECTOR),
     "namespace_store_create_item": (
         'button[data-test="namespacestore-create-button"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
+obc_4_21 = {
+    "storageclass_dropdown": (
+        "button[data-test='sc-dropdown']",
+        By.CSS_SELECTOR,
+    ),
+    "bucketclass_dropdown": (
+        "button[data-test='bc-dropdown']",
         By.CSS_SELECTOR,
     ),
 }
@@ -762,6 +792,18 @@ pvc_4_19 = {
     ),
 }
 
+pvc_4_21 = {
+    "search_pvc": ("input[placeholder='Filter by name']", By.CSS_SELECTOR),
+    "pvc_filter_dropdown_status": (
+        "//div[contains(@class, 'pf-m-filter-group')]//button[.//span[normalize-space()='Status']]",
+        By.XPATH,
+    ),
+    "pvc_filter_name_option": (
+        "//li[.//span[normalize-space()='Name']]",
+        By.XPATH,
+    ),
+}
+
 storage_clients = {
     "generate_client_onboarding_ticket": (
         "//button[normalize-space()='Generate client onboarding token']",
@@ -906,7 +948,10 @@ acm_page_nav_420 = {
 }
 
 acm_configuration = {
-    "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
+    "cluster-sets": (
+        "//a[normalize-space()='Cluster sets'] | //button[.//span[normalize-space()='Cluster sets']]",
+        By.XPATH,
+    ),
     "create-cluster-set": (
         "[class*='c-button'][class*='m-primary']",
         By.CSS_SELECTOR,
@@ -938,7 +983,10 @@ acm_configuration = {
         "//span[contains(@class,'c-modal-box__title-text')]",
         By.XPATH,
     ),
-    "submariner-tab": ("//a[normalize-space()='Submariner add-ons']", By.XPATH),
+    "submariner-tab": (
+        "//a[normalize-space()='Submariner add-ons'] | //button[.//span[normalize-space()='Submariner add-ons']]",
+        By.XPATH,
+    ),
     "install-submariner-btn": (
         "//button[normalize-space()='Install Submariner add-ons']",
         By.XPATH,
@@ -1425,6 +1473,18 @@ acm_configuration_4_20 = {
     "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
     "cnv-vm-name": ('//a[@data-test-id="{}"]', By.XPATH),
     "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
+    "azure_base_domain_resource_group": (
+        "//input[@id='baseDomainResourceGroupName']",
+        By.XPATH,
+    ),
+    "azure_client_id": ("//input[@id='clientId']", By.XPATH),
+    "azure_client_secret": ("//input[@id='clientSecret']", By.XPATH),
+    "azure_subscription_id": ("//input[@id='subscriptionId']", By.XPATH),
+    "azure_tenent_id": ("//input[@id='tenantId']", By.XPATH),
+    "submariner_addon_azure_page": (
+        "//*[contains(text(), 'on Microsoft Azure')]",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
@@ -2187,6 +2247,82 @@ validation_4_20 = {
     ),
 }
 
+validation_4_21 = {
+    "breadcrumbs": (
+        "//a[contains(@class, '-c-breadcrumb__link') and text()='Overview']",
+        By.XPATH,
+    ),
+    "silenced_alerts_btn": ("//span[contains(text(), 'Silenced Alerts')]/..", By.XPATH),
+    "last_24_hours_btn": ("//span[contains(text(), 'Last 24 hours')]/..", By.XPATH),
+    "severity_filter": (
+        "//button[contains(@class,'health-overview-filter-toolbox__check-type')]",
+        By.XPATH,
+    ),
+    "severity": (
+        "//button//span[contains(text(),'{}')]",
+        By.XPATH,
+    ),
+    "filter_by_details": (
+        "//input[@placeholder='Find by name or details']",
+        By.XPATH,
+    ),
+    "issue_table_checkbox": (
+        "//input[@name='check-all']",
+        By.XPATH,
+    ),
+    "silence_alerts": (
+        "//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "unsilence_alerts": (
+        "//button[normalize-space()='Unsilence']",
+        By.XPATH,
+    ),
+    "silence_popup": (
+        "//span[contains(text(),'Silence alert')]",
+        By.XPATH,
+    ),
+    "duration_input": (
+        "//input[@name='duration']",
+        By.XPATH,
+    ),
+    "duration_increase": (
+        "//button[@aria-label='Increase duration']",
+        By.XPATH,
+    ),
+    "duration_decrease": (
+        "//button[@aria-label='Decrease duration']",
+        By.XPATH,
+    ),
+    "silence_popup_button": (
+        "//footer//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "infra_health_checks": (
+        "//a[text()='View health checks']",
+        By.XPATH,
+    ),
+    # web element returns overall score with text like '66%'
+    "infra_health_score": (
+        "//div[@class='odf-infrastructure-health-card__score']//h2",
+        By.XPATH,
+    ),
+    # web element returns number of checks with text like '3'
+    "critical_issues_count": {
+        "//small[normalize-space(.)='Critical']/preceding-sibling::h4",
+        By.XPATH,
+    },
+    "moderate_issues_count": {
+        "//small[normalize-space(.)='Moderate']/preceding-sibling::h4",
+        By.XPATH,
+    },
+    "minor_issues_count": (
+        "//small[normalize-space(.)='Minor']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
@@ -2661,6 +2797,50 @@ bucket_tab = {
         ".toast-notifications-list-pf .alert-success",
         ".co-alert--success",
     ],
+    "block_public_access_tab": (
+        "//button[contains(., 'Block public access')]",
+        By.XPATH,
+    ),
+    "manage_public_access_settings_button": (
+        "//button[normalize-space()='Manage public access settings']",
+        By.XPATH,
+    ),
+    "refresh_bucket_button": (
+        "//button[normalize-space()='Refresh']",
+        By.XPATH,
+    ),
+    "block_all_public_access_checkbox": (
+        "//label[contains(., 'Block all public access')]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "block_all_public_access_msg": (
+        "//label[.//p[contains(., 'Block all public access')]]//span[contains(@class,'c-label__text')]",
+        By.XPATH,
+    ),
+    "block_new_public_policies_checkbox": (
+        "//label[.//p[contains(., 'granted through new public bucket policies')]]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "block_new_public_policies_msg": (
+        "//label[.//p[contains(., 'new public bucket policies')]]//span[contains(@class,'c-label__text')]",
+        By.XPATH,
+    ),
+    "block_cross_account_checkbox": (
+        "//label[.//p[contains(., 'cross-account access')]]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "block_cross_account_msg": (
+        "//label[.//p[contains(., 'cross-account access')]]//span[contains(@class,'c-label__text')]",
+        By.XPATH,
+    ),
+    "save_public_access_settings_button": (
+        "//button[normalize-space()='Save changes']",
+        By.XPATH,
+    ),
+    "proceed_to_disable_public_access_button": (
+        "//button[normalize-space()='Proceed to disable']",
+        By.XPATH,
+    ),
     # Lifecycle policy locators
     "management_tab": (
         "//span[contains(@class, 'c-tabs__item-text') and text()='Management']/parent::*",
@@ -2831,7 +3011,7 @@ locators = {
             **deployment_4_19,
             **deployment_4_21,
         },
-        "obc": obc,
+        "obc": {**obc, **obc_4_21},
         "pvc": {
             **pvc,
             **pvc_4_7,
@@ -2840,6 +3020,7 @@ locators = {
             **pvc_4_12,
             **pvc_4_14,
             **pvc_4_19,
+            **pvc_4_21,
         },
         "acm_page": {
             **acm_page_nav,
@@ -2867,6 +3048,7 @@ locators = {
             **validation_4_17,
             **validation_4_18,
             **validation_4_20,
+            **validation_4_21,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},

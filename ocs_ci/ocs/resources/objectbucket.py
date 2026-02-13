@@ -78,6 +78,8 @@ class OBC(object):
             namespace=self.namespace, kind="ObjectBucket", resource_name=self.ob_name
         ).get()
         self.obc_account = ob_obj.get("spec").get("additionalState").get("account")
+        self.obc_arn = ob_obj.get("spec").get("additionalState").get("arn")
+
         secret_obc_obj = OCP(
             kind="secret", namespace=self.namespace, resource_name=self.obc_name
         ).get()
@@ -136,6 +138,18 @@ class OBC(object):
             aws_secret_access_key=self.access_key,
         )
         self.s3_client = self.s3_resource.meta.client
+
+    @property
+    def id_for_policy_principal(self):
+        """
+        Returns the ID for the OBC account to be used in bucket policies,
+        based on the OCS version.
+
+        Returns:
+            str: The ID for the OBC account to be used in bucket policies.
+        """
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        return self.obc_arn if ocs_version >= version.VERSION_4_21 else self.obc_account
 
 
 class ObjectBucket(ABC):

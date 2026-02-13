@@ -3,7 +3,7 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, stress
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cephfs_stress_helpers import (
     run_stress_cleanup,
@@ -17,6 +17,7 @@ from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 logger = logging.getLogger(__name__)
 
 
+@stress
 @magenta_squad
 class TestCephfsStressCleanUp(E2ETest):
     """

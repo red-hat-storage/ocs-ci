@@ -70,12 +70,7 @@ class CreateResourceForm(PageNavigator):
         Function retries to get all error message rule texts during 120 seconds.
         """
         # verify that all rules exist when input rules popup is visible
-        for sample in TimeoutSampler(
-            120,
-            3,
-            self._check_all_rules_exist,
-            self.generic_locators["text_input_popup_rules"],
-        ):
+        for sample in TimeoutSampler(120, 3, self._check_all_rules_exist):
             if sample:
                 self.test_results.loc[len(self.test_results)] = [
                     None,
@@ -533,12 +528,14 @@ class CreateResourceForm(PageNavigator):
         provider = "AWS S3" if provider.lower() == "aws" else provider
         self.do_click(self.mcg_stores["store_provider_dropdown"])
         self.do_click(
-            format_locator(self.mcg_stores["store_dropdown_option"], provider)
+            format_locator(self.mcg_stores["store_dropdown_option"], value=provider)
         )
 
         logger.info("Select region")
         self.do_click(self.mcg_stores["store_region_dropdown"])
-        self.do_click(format_locator(self.mcg_stores["store_dropdown_option"], region))
+        self.do_click(
+            format_locator(self.mcg_stores["store_dropdown_option"], value=region)
+        )
 
         logger.info("Select secret")
         self.do_click(self.mcg_stores["store_secret_dropdown"])

@@ -18,15 +18,22 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
     get_pods_having_label,
+    wait_for_matching_pattern_in_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.node import gracefully_reboot_nodes, get_node_objs
+from ocs_ci.ocs.node import (
+    gracefully_reboot_nodes,
+    get_node_objs,
+    get_node_internal_ip,
+    get_worker_nodes,
+)
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
@@ -82,7 +89,7 @@ def get_current_primary_cluster_name(
     if discovered_apps:
         if not resource_name:
             raise ValueError("Resource name is expected")
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpc_data = DRPC(namespace=namespace, resource_name=resource_name).get()
     else:
         drpc_data = DRPC(namespace=namespace).get()
@@ -118,7 +125,7 @@ def get_current_secondary_cluster_name(
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
     if discovered_apps:
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         primary_cluster_name = get_current_primary_cluster_name(
             namespace=namespace,
             resource_name=resource_name,
@@ -194,7 +201,7 @@ def get_scheduling_interval(
     if discovered_apps:
         if not resource_name:
             raise ValueError("Resource name is expected")
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpolicy_obj = DRPC(
             namespace=namespace, resource_name=resource_name
         ).drpolicy_obj
@@ -243,7 +250,7 @@ def failover(
             f'"failoverCluster":"{failover_cluster}",'
             f'"preferredCluster":"{old_primary}"}}}}'
         )
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:
         drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
@@ -308,7 +315,7 @@ def relocate(
             f'"failoverCluster":"{old_primary}",'
             f'"preferredCluster":"{preferred_cluster}"}}}}'
         )
-        namespace = constants.DR_OPS_NAMESAPCE
+        namespace = constants.DR_OPS_NAMESPACE
         drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:
         drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
@@ -448,8 +455,13 @@ def check_mirroring_status_ok(
             if current_stopped_value in expected_value:
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
                 return True
-            else:
-                return False
+            # Fail fast if count exceeds expected range - indicates leftover resources
+            if current_value > max(expected_value):
+                raise UnexpectedBehaviour(
+                    f"Replaying count ({current_value}) exceeds expected ({max(expected_value)}). "
+                    f"Clean up leftover DRPCs and namespaces before retrying."
+                )
+            return False
 
     return True
 
@@ -853,7 +865,7 @@ def wait_for_replication_resources_creation(
 
     """
 
-    vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
 
     wait_for_resource_existence(
         kind=constants.VOLUME_REPLICATION_GROUP,
@@ -964,7 +976,7 @@ def wait_for_replication_resources_deletion(
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
-    vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
         resource_kind = constants.REPLICATION_SOURCE
@@ -1229,7 +1241,8 @@ def get_backend_volumes_for_pvcs(namespace):
         logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            if pvc_obj.name.startswith("volsync"):
+            # Skip volsync related PVCs
+            if pvc_obj.name.startswith("volsync") or pvc_obj.name.startswith("vs-"):
                 continue
 
             if pvc_obj.backed_sc in [
@@ -2194,7 +2207,7 @@ def do_discovered_apps_cleanup(
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
-    drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE, resource_name=drpc_name)
+    drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESPACE, resource_name=drpc_name)
     drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
     time.sleep(90)
     assert drpc_obj.get_progression_status(
@@ -2240,7 +2253,7 @@ def do_discovered_apps_cleanup_multi_ns(
     config.switch_acm_ctx()
 
     drpc_obj = DRPC(
-        namespace=constants.DR_OPS_NAMESAPCE,
+        namespace=constants.DR_OPS_NAMESPACE,
         resource_name=workload_instance[0].discovered_apps_placement_name,
     )
     drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
@@ -2264,7 +2277,7 @@ def do_discovered_apps_cleanup_multi_ns(
 
     wait_for_vrg_state(
         vrg_state=vrg_state,
-        vrg_namespace=constants.DR_OPS_NAMESAPCE,
+        vrg_namespace=constants.DR_OPS_NAMESPACE,
         resource_name=vrg_name,
     )
     config.switch_acm_ctx()
@@ -2298,13 +2311,13 @@ def disable_dr_rdr(discovered_apps=False):
 
     # Delete the placement under openshift-dr-ops namespace
     if discovered_apps:
-        run_cmd(f"oc delete drpc --all -n {constants.DR_OPS_NAMESAPCE}")
-        run_cmd(f"oc delete placement --all -n {constants.DR_OPS_NAMESAPCE}")
+        run_cmd(f"oc delete drpc --all -n {constants.DR_OPS_NAMESPACE}")
+        run_cmd(f"oc delete placement --all -n {constants.DR_OPS_NAMESPACE}")
     sample = TimeoutSampler(
         timeout=300,
         sleep=5,
         func=verify_drpc_placement_deletion,
-        cmd=f"oc get placement -n '{constants.DR_OPS_NAMESAPCE}'",
+        cmd=f"oc get placement -n '{constants.DR_OPS_NAMESPACE}'",
         expected_output_lst="No resources found",
     )
     if not sample.wait_for_func_status(result=True):
@@ -2575,18 +2588,37 @@ def create_service_exporter(annotate=True):
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         if (
-            config.ENV_DATA["platform"].lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            get_provider_service_type() == "NodePort"
+            or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
         ):
             logger.info("Skipping ServiceExport creation for multiclient cluster")
             continue
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+
         if annotate:
+            if (
+                config.ENV_DATA.get("odf_provider_mode_deployment")
+                and cluster.ENV_DATA.get("cluster_type").lower()
+                == constants.HCI_PROVIDER
+            ):
+                cluster_address = get_node_internal_ip(
+                    get_node_objs(get_worker_nodes()[0])[0]
+                )
+                cluster_address_port = "31659"
+                cluster_service_export_provider_server = ""
+
+            else:
+                cluster_address = config.ENV_DATA["cluster_name"]
+                cluster_address_port = "50051"
+                cluster_service_export_provider_server = (
+                    ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                )
+
             run_cmd(
                 "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
-                f" ocs.openshift.io/api-server-exported-address={cluster.ENV_DATA['cluster_name']}"
-                ".ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
+                f" ocs.openshift.io/api-server-exported-address={cluster_address}"
+                f"{cluster_service_export_provider_server}:{cluster_address_port}"
             )
     config.switch_ctx(restore_index)
 
@@ -2680,26 +2712,31 @@ def validate_volumegroupsnapshot(vgs_namespace):
     Validates Volume Group Snapshot resource creation from odf external snapshotter
 
     Args:
-        namespace (str): the namespace of the Volume Group snapshot resources
+        vgs_namespace (str): the namespace of the Volume Group snapshot resources
 
     """
-    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = config.ENV_DATA["cluster_namespace"]
     odf_external_snapshotter_pod = get_pods_having_label(
         constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
     )[0]["metadata"]["name"]
     vgs_name = get_vgs_name(vgs_namespace)
-    sample = TimeoutSampler(
-        timeout=300,
-        sleep=5,
-        func=run_cmd_verify_cli_output,
-        cmd=f"oc logs {odf_external_snapshotter_pod} -n {namespace}",
-        expected_output_lst=(
-            f"{vgs_name} was successfully created by the CSI driver",
-            f"{vgs_name} is ready to use",
-        ),
+    expected_output_lst = (
+        f"{vgs_name} was successfully created by the CSI driver",
+        f"{vgs_name} is ready to use",
     )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("VolumeGroupSnapshot has not been created..")
+    try:
+        for expected_val in expected_output_lst:
+            wait_for_matching_pattern_in_pod_logs(
+                pod_name=odf_external_snapshotter_pod,
+                pattern=expected_val,
+                namespace=namespace,
+                timeout=300,
+                sleep=5,
+            )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+        )
 
 
 def is_cg_cephfs_enabled():

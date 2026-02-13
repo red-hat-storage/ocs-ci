@@ -1,5 +1,6 @@
+import pytest
 from logging import getLogger
-from typing import Dict, Optional
+from typing import Optional
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -33,7 +34,7 @@ from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
 from ocs_ci.ocs.replica_one import (
     delete_replica_1_sc,
     get_osd_pgs_used,
-    get_replica_1_osds,
+    wait_for_replica1_osds,
     sequential_remove_replica1_osds,
     delete_replica1_cephblockpools_cr,
     count_osd_pods,
@@ -51,7 +52,7 @@ log = getLogger(__name__)
 
 def _get_node_selector_for_failure_domain(
     failure_domain: str,
-) -> Optional[Dict[str, str]]:
+) -> Optional[dict[str, str]]:
     """
     Return a hard node selector if workers exist with the requested failure domain label.
 
@@ -124,6 +125,26 @@ def create_pod_on_failure_domain(project_factory, failure_domain: str):
 @tier1
 @skipif_external_mode
 class TestReplicaOne:
+    @pytest.fixture(autouse=True)
+    def ensure_cleanup(self, request):
+        """
+        Fixture to ensure replica-1 cleanup runs even if test fails.
+        """
+        self.storage_cluster = None
+        self.replica1_enabled = False
+
+        def finalizer():
+            if not self.replica1_enabled:
+                log.info("Replica-1 was not enabled, skipping teardown")
+                return
+            if self.storage_cluster is not None:
+                try:
+                    self.replica1_teardown(self.storage_cluster)
+                except (CommandFailed, TimeoutError) as e:
+                    log.warning(f"Teardown error (continuing): {e}")
+
+        request.addfinalizer(finalizer)
+
     def replica1_setup(self):
         # Initialize workload tracking for this test run
         self.created_projects = []
@@ -136,11 +157,12 @@ class TestReplicaOne:
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         set_non_resilient_pool(storage_cluster)
+        self.replica1_enabled = True
         validate_non_resilient_pool(storage_cluster)
         storage_cluster.wait_for_resource(
             condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
         )
-        osd_names_n_id = get_replica_1_osds()
+        osd_names_n_id = wait_for_replica1_osds(timeout=150, sleep=15)
         osd_names = list(osd_names_n_id.keys())
 
         for osd in osd_names:
@@ -321,7 +343,7 @@ class TestReplicaOne:
         log.info("Starting Tier1 replica one test")
 
         # Call setup function directly
-        storage_cluster = self.replica1_setup()
+        self.storage_cluster = self.replica1_setup()
         failure_domains = get_failure_domains()
         testing_pod = create_pod_on_failure_domain(
             project_factory,
@@ -345,7 +367,3 @@ class TestReplicaOne:
         osd_number = get_all_osd_names_by_device_class(osds, failure_domains[0])
         diff = compare_dictionaries(kb_before_workload, kb_after_workload, osd_number)
         assert not diff, "KB amount in used OSD is not equal"
-
-        # Call teardown function directly
-        log.info("Test completed successfully, starting teardown")
-        self.replica1_teardown(storage_cluster)

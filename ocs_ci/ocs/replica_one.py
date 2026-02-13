@@ -24,30 +24,79 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import wait_for_osds_down
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 log = getLogger(__name__)
 
-_FAILURE_DOMAINS = None
+
+def _get_failure_domains_from_storagecluster() -> list[str]:
+    """
+    Get failure domains from StorageCluster status.failureDomainValues.
+
+    Returns:
+        list[str]: Failure domain names, or empty list if not available.
+    """
+    try:
+        storage_cluster = OCP(
+            kind=STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        sc_data = storage_cluster.get()
+        items = sc_data.get("items", [])
+        if not items:
+            log.debug("No StorageCluster items found")
+            return []
+
+        failure_domain_values = (
+            items[0].get("status", {}).get("failureDomainValues", [])
+        )
+        if failure_domain_values:
+            log.info(
+                f"Got failure domains from StorageCluster status: {failure_domain_values}"
+            )
+            return failure_domain_values
+
+        log.debug("failureDomainValues not found in StorageCluster status")
+        return []
+    except (CommandFailed, KeyError, IndexError) as e:
+        log.debug(f"Failed to get failure domains from StorageCluster: {e}")
+        return []
 
 
 def get_failure_domains() -> list[str]:
     """
-    Gets Cluster Failure Domains
+    Gets Cluster Failure Domains.
+
+    Priority:
+        1. config.ENV_DATA["worker_availability_zones"] (if configured)
+        2. StorageCluster.status.failureDomainValues (source of truth)
+        3. Legacy: Parse from CephBlockPool names (fallback)
 
     Returns:
-        list: Failure Domains names
+        list[str]: Failure Domain names
     """
-    global _FAILURE_DOMAINS
-    if _FAILURE_DOMAINS is None:
-        try:
-            _FAILURE_DOMAINS = config.ENV_DATA.get(
-                "worker_availability_zones", get_failures_domain_name()
-            )
-        except CommandFailed as e:
-            print(f"Error initializing FAILURE_DOMAINS: {e}")
-            _FAILURE_DOMAINS = []
-    return _FAILURE_DOMAINS
+    # Priority 1: Config override
+    config_zones = config.ENV_DATA.get("worker_availability_zones")
+    if config_zones:
+        log.info(f"Using failure domains from config: {config_zones}")
+        return config_zones
+
+    # Priority 2: StorageCluster status (source of truth, available immediately)
+    sc_domains = _get_failure_domains_from_storagecluster()
+    if sc_domains:
+        return sc_domains
+
+    # Priority 3: Legacy fallback - parse CephBlockPool names
+    try:
+        cbp_domains = get_failures_domain_name()
+        if cbp_domains:
+            return cbp_domains
+    except CommandFailed as e:
+        log.warning(f"Failed to get failure domains from CephBlockPools: {e}")
+
+    log.warning("No failure domains found from any source")
+    return []
 
 
 def get_failures_domain_name() -> list[str]:
@@ -104,6 +153,34 @@ def get_replica_1_osds(failure_domains: list[str] = None) -> dict:
                 ]
     log.info(replica1_osds)
     return replica1_osds
+
+
+def wait_for_replica1_osds(
+    expected_count: int = None,
+    timeout: int = 300,
+    sleep: int = 15,
+) -> dict:
+    """
+    Wait for replica-1 OSDs to be created.
+
+    Args:
+        expected_count (int): Expected number of OSDs. If None, return on first OSD found.
+        timeout (int): Maximum time to wait in seconds.
+        sleep (int): Time to sleep between checks in seconds.
+
+    Returns:
+        dict: OSDs that match replica-1 criteria.
+
+    Raises:
+        TimeoutExpiredError: If OSDs are not created within timeout.
+
+    """
+    log.info(f"Waiting for replica-1 OSDs to be created (timeout={timeout}s)")
+
+    for osds in TimeoutSampler(timeout=timeout, sleep=sleep, func=get_replica_1_osds):
+        if osds and (expected_count is None or len(osds) >= expected_count):
+            log.info(f"Found replica-1 OSDs: {osds}")
+            return osds
 
 
 def get_replica1_osd_deployment() -> list[str]:
@@ -181,30 +258,6 @@ def delete_replica_1_sc() -> None:
             )
         else:
             raise CommandFailed(f"Failed to delete storage class: {str(e)}")
-
-
-def purge_replica1_osd() -> None:
-    """
-    Purge OSDs associated with replica1
-        1. scale down its deployments to 0
-        2. use OSD removal template (if OSDs are found)
-
-    """
-    deployments_name = get_replica1_osd_deployment()
-    log.info(f"Deployments Name: {deployments_name}")
-    scaledown_deployment(deployments_name)
-    replica1_osds = get_replica_1_osds()
-    log.info(f"Found replica-1 OSDs: {replica1_osds}")
-    log.info(f"OSD IDs: {list(replica1_osds.values())}")
-
-    if not replica1_osds:
-        log.warning("No replica-1 OSDs found – skipping OSD removal job")
-        return
-
-    run_osd_removal_job(osd_ids=replica1_osds.values())
-    verify_osd_removal_job_completed_successfully("4")
-    sleep(120)
-    delete_osd_removal_job()
 
 
 def _retry_osd_removal(osd_name: str, osd_id: str) -> bool:

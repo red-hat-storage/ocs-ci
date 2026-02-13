@@ -70,7 +70,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
         drpc_obj = DRPC(
-            namespace=constants.DR_OPS_NAMESAPCE,
+            namespace=constants.DR_OPS_NAMESPACE,
             resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
@@ -145,7 +145,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                             should_exist=False,
                         )
 
-                    # Verify the deletion of Replication Group Destination resources
+                    # Verify the creation of Replication Group Destination resources
                     # on the current secondary cluster
                     config.switch_to_cluster_by_name(
                         primary_cluster_name_before_failover
@@ -157,7 +157,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         dr_helpers.wait_for_resource_existence(
                             kind=constants.REPLICATION_GROUP_DESTINATION,
                             namespace=wl.workload_namespace,
-                            should_exist=False,
+                            should_exist=True,
                         )
 
                         # Verify the creation of Volume Snapshot
@@ -170,7 +170,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         config.switch_to_cluster_by_name(secondary_cluster_name)
         wait_for_vrg_state(
             vrg_state="primary",
-            vrg_namespace=constants.DR_OPS_NAMESAPCE,
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
             resource_name=rdr_workload[index].discovered_apps_placement_name,
         )
 
@@ -269,7 +269,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         wait_for_vrg_state(
             vrg_state="primary",
-            vrg_namespace=constants.DR_OPS_NAMESAPCE,
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
             resource_name=rdr_workload[index].discovered_apps_placement_name,
         )
 

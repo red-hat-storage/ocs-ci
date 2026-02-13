@@ -3,6 +3,7 @@ This module contains helpers functions needed for
 external cluster deployment.
 """
 
+from dataclasses import dataclass
 import json
 import logging
 import re
@@ -42,6 +43,49 @@ from ocs_ci.utility.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ZoneConfig:
+    """
+    Configuration for a single zone in topology-based replica-1 setup.
+
+    Args:
+        zone_name (str): Name of the zone (e.g., "zone-a").
+        host_name (str): Ceph OSD host name for this zone (e.g., "osd-0").
+        pool_name (str): Custom pool name. If empty, auto-generated from zone_name.
+
+    Raises:
+        ValueError: If zone_name or host_name is empty.
+
+    """
+
+    zone_name: str
+    host_name: str
+    pool_name: str = ""
+
+    def __post_init__(self):
+        if not self.zone_name:
+            raise ValueError("zone_name cannot be empty")
+        if not self.host_name:
+            raise ValueError("host_name cannot be empty")
+
+
+@dataclass
+class TopologyReplica1Config:
+    """
+    Configuration for topology-based replica-1 provisioning.
+
+    Args:
+        zones (list[ZoneConfig]): List of zone configurations.
+        pool_prefix (str): Prefix for auto-generated pool names.
+        pg_num (int): Number of placement groups per pool.
+
+    """
+
+    zones: list[ZoneConfig]
+    pool_prefix: str = "rbd-zone"
+    pg_num: int = 32
 
 
 class ExternalCluster(object):
@@ -88,6 +132,38 @@ class ExternalCluster(object):
             private_key=self.ssh_key,
             jump_host=self.jump_host,
         )
+
+    def exec_external_ceph_cmd(
+        self,
+        cmd: str,
+        error_msg: str,
+        exception_class: type,
+        raise_on_error: bool = True,
+    ) -> tuple[int, str, str]:
+        """
+        Execute a Ceph command on the external RHCS cluster with error handling.
+
+        This method wraps rhcs_conn.exec_cmd() with standardized logging and
+        exception handling for external cluster operations.
+
+        Args:
+            cmd (str): The Ceph command to execute.
+            error_msg (str): Error message prefix for logging on failure.
+            exception_class (type): Exception class to raise on failure.
+            raise_on_error (bool): If True, raise exception on non-zero return code.
+
+        Returns:
+            tuple[int, str, str]: Return code, stdout, stderr.
+
+        Raises:
+            exception_class: If command fails and raise_on_error is True.
+
+        """
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0 and raise_on_error:
+            logger.error(f"{error_msg}. Error: {err}")
+            raise exception_class(f"{error_msg}: {err}")
+        return retcode, out, err
 
     def get_external_cluster_details(self):
         """
@@ -208,7 +284,7 @@ class ExternalCluster(object):
             str: absolute path to the CA Cert
 
         """
-        rgw_cert_ca_path = get_and_apply_rgw_cert_ca()
+        rgw_cert_ca_path = get_and_apply_rgw_cert_ca(apply=False)
         remote_rgw_cert_ca_path = "/tmp/rgw-cert-ca.pem"
         upload_file(
             self.host,
@@ -710,10 +786,13 @@ def generate_exporter_script(use_configmap=False):
     return external_cluster_details_exporter.name
 
 
-def get_and_apply_rgw_cert_ca():
+def get_and_apply_rgw_cert_ca(apply=True):
     """
     Downloads CA Certificate of RGW if SSL is used and apply it to be trusted
     by the OCP cluster
+
+    Args:
+        apply (bool): if True, the certificate is applied as trusted CA by the OCP cluster
 
     Returns:
         str: path to the downloaded RGW Cert CA
@@ -730,8 +809,9 @@ def get_and_apply_rgw_cert_ca():
         rgw_cert_ca_path,
     )
     # configure the CA cert to be trusted by the OCP cluster
-    ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
-    wait_for_machineconfigpool_status("all", timeout=1800)
+    if apply:
+        ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
+        wait_for_machineconfigpool_status("all", timeout=1800)
     return rgw_cert_ca_path
 
 
@@ -800,6 +880,21 @@ def get_external_cluster_client():
     except ExternalClusterNodeRoleNotFound:
         logger.warning(f"No {node_role} role defined, using node1 address!")
         return (nodes["node1"]["ip_address"], user, password, ssh_key)
+
+
+def get_external_cluster_instance() -> "ExternalCluster":
+    """
+    Create and return an ExternalCluster instance using credentials from config.
+
+    Returns:
+        ExternalCluster: Configured external cluster connection.
+
+    Raises:
+        ExternalClusterCephSSHAuthDetailsMissing: If credentials missing.
+
+    """
+    host, user, password, ssh_key = get_external_cluster_client()
+    return ExternalCluster(host, user, password, ssh_key)
 
 
 def get_node_by_role(nodes, role, user, password, ssh_key):

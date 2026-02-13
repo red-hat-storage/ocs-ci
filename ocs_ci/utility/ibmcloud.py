@@ -38,7 +38,6 @@ from ocs_ci.ocs.node import get_nodes
 
 
 logger = logging.getLogger(name=__file__)
-ibm_config = config.AUTH.get("ibmcloud", {})
 
 
 def login(region=None, resource_group=None):
@@ -50,6 +49,13 @@ def login(region=None, resource_group=None):
         resource_group (str): resource group to log in, if not specified it will use one from config
             or nothing if not defined
     """
+    platform = config.ENV_DATA["platform"]
+    if platform != constants.IBMCLOUD_PLATFORM:
+        logger.info(
+            f"Skipping IBM Cloud login as platform: {platform} is not IBM Cloud"
+        )
+        return
+    ibm_config = config.AUTH.get("ibmcloud", {})
     api_key = ibm_config["api_key"]
     login_cmd = f"ibmcloud login --apikey {api_key}"
     account_id = ibm_config.get("account_id")
@@ -85,7 +91,9 @@ def set_region(region=None):
         region (str): region to set, if not defined it will try to get from metadata.json
 
     """
-    if not config.ENV_DATA.get("enable_region_dynamic_switching"):
+    if not config.ENV_DATA.get("enable_region_dynamic_switching") or (
+        config.ENV_DATA["platform"] != constants.IBMCLOUD_PLATFORM
+    ):
         return
     if not region:
         region = get_region(config.ENV_DATA["cluster_path"])
@@ -125,6 +133,27 @@ def get_region(cluster_path):
     if ibm_cloud_managed:
         return metadata["region"]
     return metadata["ibmcloud"]["region"]
+
+
+def get_ibmcloud_cluster_region():
+    """
+    Get IBM Cloud region from the cluster's infrastructure object.
+
+    This function queries the live cluster to retrieve the IBM Cloud region
+    from the infrastructure status, which may differ from the metadata.json file.
+
+    Returns:
+        str: IBM Cloud region where the cluster is deployed
+
+    Raises:
+        CommandFailed: If the oc command fails
+    """
+    ocp_obj = OCP()
+    region = ocp_obj.exec_oc_cmd(
+        "get infrastructure cluster -o jsonpath='{.status.platformStatus.ibmcloud.location}'"
+    )
+    logger.info(f"IBM Cloud cluster region: {region}")
+    return region.strip()
 
 
 def get_resource_group_name(cluster_path):

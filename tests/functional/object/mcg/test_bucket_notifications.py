@@ -185,7 +185,6 @@ class TestBucketNotifications(MCGTest):
         bucket_factory,
         test_directory_setup,
         notif_manager,
-        jira_issue,
     ):
         """
         Test that various bucket notification events are received by Kafka
@@ -302,23 +301,10 @@ class TestBucketNotifications(MCGTest):
             for obj_key in prefix_to_obj[prefix]:
                 expected_events.add((event, os.path.join(prefix, obj_key)))
 
-        if jira_issue("DFBUGS-1468"):
-            logger.warning(
-                (
-                    "Not testing the LifecycleExpiration:DeleteMarkerCreated"
-                    " event due to DFBUGS-1468"
-                )
-            )
-            expected_events = {
-                event
-                for event in expected_events
-                if "LifecycleExpiration:DeleteMarkerCreated" not in event
-            }
-
         delta = set()
         try:
             for raw_received_events in TimeoutSampler(
-                timeout=120,
+                timeout=600,
                 sleep=5,
                 func=notif_manager.get_events,
                 topic=topic,

@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 import random
+import string
 import time
 import tempfile
 import threading
@@ -75,6 +76,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
     ResourceWrongStatusException,
+    UnexpectedBehaviour,
     UnsupportedPlatformError,
     PoolDidNotReachReadyState,
     StorageclassNotCreated,
@@ -84,12 +86,14 @@ from ocs_ci.ocs.exceptions import (
     MissingDecoratorError,
     UnsupportedWorkloadError,
 )
+from ocs_ci.ocs.fill_pool_job import FillPoolJob
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
+from ocs_ci.ocs.resources.keda import KEDA
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 from ocs_ci.ocs.scale_lib import FioPodScale
@@ -195,10 +199,12 @@ from ocs_ci.utility.utils import (
     run_cmd,
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
+    get_latest_ocp_multi_image,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
+    ceph_health_check_with_toolbox_recovery,
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
     setup_pod_directories,
@@ -237,6 +243,8 @@ from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+
+DEPLOYERS = {}
 
 log = logging.getLogger(__name__)
 
@@ -560,7 +568,19 @@ def pytest_collection_modifyitems(session, config, items):
                         # determines the order in which tests need to be executed
                         # Lower the sum, higher the rank hence it gets prioritized early
                         # in the test execution sequence
-                        newval = val + zone_rank + role_rank
+                        if (
+                            ocsci_config.MULTICLUSTER.get("multicluster_mode", "")
+                            == "regional-dr"
+                        ):
+                            upgrade_parametrizer = (
+                                get_multicluster_upgrade_parametrizer()
+                            )
+                            newval = upgrade_parametrizer.reeval_upgrade_order(
+                                val, zone_rank, role_rank
+                            )
+                        else:
+                            newval = val + zone_rank + role_rank
+                        log.info(f"Remarked the test {item.name} with order {newval}")
                         log.info(f"ORIGINAL = {val}, NEW={newval}")
                         markers_update.append((pytest.mark.order, newval))
                         if item.own_markers:
@@ -1640,9 +1660,7 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=(
-                    constants.DEPLOYMENTCONFIG if deployment else constants.DEPLOYMENT
-                ),
+                kind=constants.DEPLOYMENT,
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)
@@ -2054,7 +2072,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
                     # "flip-flopping ceph health OK and warn because of:
                     # HEALTH_WARN Reduced data availability: 2 pgs peering
-                    ceph_health_check(
+                    ceph_health_check_with_toolbox_recovery(
                         namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                         fix_ceph_health=True,
                         update_jira=True,
@@ -2082,7 +2100,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+                ceph_health_check_with_toolbox_recovery(
+                    namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                )
 
                 if (
                     not multi_storagecluster_external_health_passed
@@ -2113,7 +2133,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             log.info("Checking for Ceph Health OK ")
             external_multi_storagecluster_status = False
             try:
-                status = ceph_health_check(
+                status = ceph_health_check_with_toolbox_recovery(
                     namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                     tries=10,
                     delay=15,
@@ -2161,8 +2181,14 @@ def cluster(
     teardown = ocsci_config.RUN["cli_params"]["teardown"]
     deploy = ocsci_config.RUN["cli_params"]["deploy"]
     if teardown or deploy:
-        factory = dep_factory.DeploymentFactory()
-        deployer = factory.get_deployment()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                # Let get initiated deployer for each cluster here to be sure all necesary
+                # values are propagated to all clusters configs
+                DEPLOYERS[config.ENV_DATA["cluster_name"]] = (
+                    dep_factory.DeploymentFactory().get_deployment()
+                )
+        deployer = DEPLOYERS[config.ENV_DATA["cluster_name"]]
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
@@ -2203,10 +2229,19 @@ def cluster(
         )
         get_openshift_client(force_download=force_download)
 
-    # set environment variable for early testing of RHCOS
-    if ocsci_config.ENV_DATA.get("early_testing"):
-        release_img = ocsci_config.ENV_DATA["RELEASE_IMG"]
-        log.info(f"Running early testing of RHCOS with release image: {release_img}")
+    multi_arch = ocsci_config.ENV_DATA.get("multi_arch")
+    if ocsci_config.ENV_DATA.get("early_testing") or multi_arch:
+        release_img = ocsci_config.ENV_DATA.get("release_img")
+        if not release_img and ocsci_config.ENV_DATA.get("multi_arch"):
+            release_img = get_latest_ocp_multi_image()
+        if not release_img:
+            raise ValueError(
+                "No release_img provided in config under ENV_DATA section!"
+            )
+        log.info(
+            f"Running early testing of RHCOS or multi-arch testing with release image: {release_img}"
+        )
+        # set environment variables for early testing of RHCOS or multi-arch
         os.environ["RELEASE_IMG"] = release_img
         os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
 
@@ -2214,9 +2249,11 @@ def cluster(
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
     else:
-        if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
-            ibmcloud.set_region()
-            ibmcloud.login()
+        for index in range(ocsci_config.nclusters):
+            with config.RunWithConfigContext(index):
+                if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+                    ibmcloud.set_region()
+                    ibmcloud.login()
     if "cephcluster" not in ocsci_config.RUN.keys():
         check_clusters()
     if not ocsci_config.ENV_DATA["skip_ocs_deployment"] and ocsci_config.RUN.get(
@@ -4434,6 +4471,112 @@ def user_factory(request, htpasswd_identity_provider, htpasswd_path):
 @pytest.fixture(scope="session")
 def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
     return users.user_factory(request, htpasswd_path)
+
+
+@pytest.fixture(scope="function")
+def dev_user_factory(request, user_factory, mcg_obj_session):
+    """
+    Factory fixture to create dev users with minimal RBAC for Object Storage access.
+
+    Creates an OpenShift user via htpasswd, binds to noobaa-odf-ui ClusterRole,
+    and creates a NooBaa account with S3 credentials.
+    Automatically cleans up RBAC bindings and MCG accounts after test.
+
+    Returns:
+        func: Factory function that returns DevUser dataclass instance.
+
+    Example:
+        def test_dev_user(self, dev_user_factory):
+            dev_user = dev_user_factory()
+            # dev_user.username, dev_user.password for OpenShift login
+            # dev_user.secret_namespace, dev_user.secret_name for S3 login modal
+
+    """
+    created_users = []
+    created_mcg_accounts = []
+    clusterrole_created = False
+
+    def factory(username=None, password=None):
+        nonlocal clusterrole_created
+
+        if not clusterrole_created:
+            users.create_noobaa_ui_clusterrole()
+            clusterrole_created = True
+
+        # Generate safe username (10-15 alphanumeric chars, starts with letter)
+        if username is None:
+            username = random.choice(string.ascii_lowercase)
+            username += "".join(
+                random.choice(string.ascii_lowercase + string.digits)
+                for _ in range(random.randint(9, 14))
+            )
+
+        # Generate safe password (12-16 chars, safe punctuation only)
+        if password is None:
+            safe_punctuation = "!@#%^*()-_=+"
+            chars = string.ascii_letters + string.digits + safe_punctuation
+            password = "".join(
+                random.choice(chars) for _ in range(random.randint(12, 16))
+            )
+
+        # Create OpenShift user
+        ocp_username, ocp_password = user_factory(username=username, password=password)
+
+        # Bind user to noobaa-odf-ui ClusterRole
+        users.bind_user_to_noobaa_ui_role(ocp_username)
+        created_users.append(ocp_username)
+
+        # Create NooBaa account for S3 access
+        mcg_account_name = f"dev-{ocp_username}"
+        cli_cmd = (
+            f"account create {mcg_account_name} "
+            f"--allow_bucket_create=true "
+            f"--default_resource {constants.DEFAULT_NOOBAA_BACKINGSTORE} "
+        )
+        mcg_obj_session.exec_mcg_cmd(cli_cmd)
+        created_mcg_accounts.append(mcg_account_name)
+
+        # Get S3 secret info for the created account
+        secret_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        secret_name = f"noobaa-account-{mcg_account_name}"
+
+        dev_user = users.DevUser(
+            username=ocp_username,
+            password=ocp_password,
+            secret_namespace=secret_namespace,
+            secret_name=secret_name,
+        )
+
+        # Save credentials to file for manual debugging
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix=f"dev_user_creds_{ocp_username}_",
+            suffix=".txt",
+            dir=constants.DATA_DIR,
+            delete=False,
+        ) as f:
+            f.write(f"username: {ocp_username}\n")
+            f.write(f"password: {ocp_password}\n")
+            f.write(f"secret_namespace: {secret_namespace}\n")
+            f.write(f"secret_name: {secret_name}\n")
+            log.info(f"Dev user credentials saved to: {f.name}")
+
+        return dev_user
+
+    def finalizer():
+        # Clean up RBAC bindings
+        for username in created_users:
+            users.delete_user_noobaa_ui_binding(username)
+        # Clean up MCG accounts
+        for acc_name in created_mcg_accounts:
+            try:
+                mcg_obj_session.exec_mcg_cmd(f"account delete {acc_name}")
+                log.info(f"Deleted MCG account {acc_name}")
+            except CommandFailed as e:
+                log.warning(f"Failed to delete MCG account {acc_name}: {e}")
+
+    request.addfinalizer(finalizer)
+    return factory
 
 
 @pytest.fixture(autouse=True)
@@ -7033,7 +7176,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 interface = constants.CEPHBLOCKPOOL
 
             if deployment:
-                pod_dict_path = pod_dict_path or constants.FEDORA_DC_YAML
+                pod_dict_path = pod_dict_path or constants.FEDORA_DEPLOY_YAML
             elif pvc_obj.volume_mode == "Block":
                 pod_dict_path = pod_dict_path or constants.CSI_RBD_RAW_BLOCK_POD_YAML
             else:
@@ -7303,16 +7446,11 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
     return factory
 
 
-@pytest.fixture()
-def dr_workload(request):
-    """
-    Setup Busybox workload for DR setup
-
-    """
+def create_workload_factory():
     instances = []
     ctx = []
 
-    def factory(
+    def _create_resources(
         num_of_subscription=1,
         num_of_appset=0,
         appset_model=None,
@@ -7360,6 +7498,7 @@ def dr_workload(request):
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
                 pvc_interface=pvc_interface,
+                workload_path=workload_details["workload_path"],
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -7380,6 +7519,7 @@ def dr_workload(request):
                 workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
                 appset_model=appset_model,
                 pvc_interface=pvc_interface,
+                workload_path=workload_details["workload_path"],
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -7391,7 +7531,7 @@ def dr_workload(request):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
 
-    def teardown():
+    def _teardown():
         failed_to_delete = []
         for instance in instances:
             try:
@@ -7403,6 +7543,64 @@ def dr_workload(request):
             raise ResourceNotDeleted(
                 f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
             )
+
+    def factory(
+        num_of_subscription=1,
+        num_of_appset=0,
+        appset_model=None,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        switch_ctx=None,
+    ):
+        return _create_resources(
+            num_of_subscription, num_of_appset, appset_model, pvc_interface, switch_ctx
+        )
+
+    return factory, _teardown
+
+
+def dr_workload_end_to_end(request):
+    """
+    TODO: Remove this function if pytest_sessionstart hook works
+    Run dr workloads throug out the session, used mostly in the case of
+    DR upgrades. Starts at the beginning of session and ends once all tests
+    are done
+    """
+
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
+    ):
+        return
+    log.info("Setting up dr workloads running along the session")
+    factory, teardown = create_workload_factory()
+    log.info("Deploying the DR workloads")
+    try:
+        factory()
+    except Exception:  # TODO: If possible find specific exceptions
+        log.warning("DR workload factory invocation failed at session start")
+
+    def _finalizer():
+        try:
+            log.info("Teardown session dr workload")
+            teardown()
+        except Exception as e:
+            log.exception("Failed to teardown DR workloads")
+            raise e
+
+    request.addfinalizer(_finalizer)
+
+    return factory
+
+
+@pytest.fixture()
+def dr_workload(request):
+    """
+    Setup Busybox workload for DR setup
+
+    """
+
+    factory, teardown = create_workload_factory()
 
     request.addfinalizer(teardown)
     return factory
@@ -7505,13 +7703,17 @@ def cnv_dr_workload(request):
     instances = []
 
     def factory(
-        num_of_vm_subscription=1, num_of_vm_appset_push=0, num_of_vm_appset_pull=0
+        num_of_vm_subscription=1,
+        num_of_vm_appset_push=0,
+        num_of_vm_appset_pull=0,
+        vm_type=constants.VM_VOLUME_PVC,
     ):
         """
         Args:
             num_of_vm_subscription (int): Number of Subscription type workload to be created
             num_of_vm_appset_push (int): Number of ApplicationSet Push type workload to be created
             num_of_vm_appset_pull (int): Number of ApplicationSet Pull type workload to be created
+            vm_type (str): Vm type that needs to be created
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7521,21 +7723,57 @@ def cnv_dr_workload(request):
 
         """
         total_pvc_count = 0
-        workload_types = [
-            (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
-            (
-                constants.APPLICATION_SET,
-                "dr_cnv_workload_appset_push",
-                num_of_vm_appset_push,
-            ),
-            (
-                constants.APPLICATION_SET,
-                "dr_cnv_workload_appset_pull",
-                num_of_vm_appset_pull,
-            ),
-        ]
+        workload_types = {
+            constants.VM_VOLUME_PVC: [
+                (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+            constants.VM_VOLUME_DV: [
+                (
+                    constants.SUBSCRIPTION,
+                    "dr_cnv_dv_workload_sub",
+                    num_of_vm_subscription,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dv_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dv_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+            constants.VM_VOLUME_DVT: [
+                (
+                    constants.SUBSCRIPTION,
+                    "dr_cnv_dvt_workload_sub",
+                    num_of_vm_subscription,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dvt_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dvt_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+        }
 
-        for workload_type, data_key, num_of_vm in workload_types:
+        for workload_type, data_key, num_of_vm in workload_types[vm_type]:
             for index in range(num_of_vm):
                 workload_details = ocsci_config.ENV_DATA[data_key][index]
                 workload = CnvWorkload(
@@ -7588,7 +7826,11 @@ def discovered_apps_dr_workload(request):
     instances = []
 
     def factory(
-        kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL, multi_ns=False
+        kubeobject=1,
+        recipe=0,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        multi_ns=False,
+        workloads=None,
     ):
         """
         Args:
@@ -7613,19 +7855,38 @@ def discovered_apps_dr_workload(request):
             raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
-        workload_details_list = ocsci_config.ENV_DATA[workload_key]
+        if workloads == "filebrowser":
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
+            else:
+                workload_key = "dr_workload_discovered_apps_filebrowser_rbd"
+        elif workloads == "mongodb":
+            if pvc_interface == constants.CEPHFILESYSTEM:
+                workload_key = "dr_workload_discovered_apps_mongodb_cephfs"
+            else:
+                workload_key = "dr_workload_discovered_apps_mongodb_rbd"
 
+        workload_details_list = ocsci_config.ENV_DATA[workload_key]
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            pvc_type = constants.RBD_INTERFACE
+        elif pvc_interface == constants.CEPHFILESYSTEM:
+            pvc_type = constants.CEPHFS_INTERFACE
         if bool(kubeobject):
             for index in range(kubeobject):
                 workload_details = workload_details_list[index]
+                workload_namespace = (
+                    create_unique_resource_name("workload", "dist")[:20]
+                    + "-"
+                    + pvc_type
+                )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_namespace=(
-                        workload_details["workload_namespace"] + "-multi-ns"
+                        workload_namespace + "-multi-ns"
                         if multi_ns
-                        else workload_details["workload_namespace"]
+                        else workload_namespace
                     ),
                     discovered_apps_pvc_selector_key=workload_details[
                         "dr_workload_app_pvc_selector_key"
@@ -7657,10 +7918,11 @@ def discovered_apps_dr_workload(request):
                 pvc_type = constants.RBD_INTERFACE
             elif pvc_interface == constants.CEPHFILESYSTEM:
                 pvc_type = constants.CEPHFS_INTERFACE
-            drpc_name = f"busybox-multi-ns-{pvc_type}-" + "-".join(
+            randam_hash = get_random_str(size=5)
+            drpc_name = f"bb-mlt-ns-{randam_hash}-{pvc_type}-" + "-".join(
                 map(str, range(1, kubeobject + 1))
             )
-            placement_name = drpc_name + "-placement-1"
+            placement_name = drpc_name + "-plmnt-1"
             for index in range(kubeobject):
                 instances[index].discovered_apps_placement_name = drpc_name
             instances[0].create_placement(placement_name=placement_name)
@@ -7681,12 +7943,16 @@ def discovered_apps_dr_workload(request):
         if bool(recipe):
             for index in range(recipe):
                 workload_details = ocsci_config.ENV_DATA[workload_key][index]
+                workload_namespace = (
+                    create_unique_resource_name("workload-rp", "dist")[:20]
+                    + "-"
+                    + pvc_type
+                )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
-                    workload_namespace=workload_details["workload_namespace"]
-                    + "-recipe-ns",
+                    workload_namespace=workload_namespace + "-recipe-ns",
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
                     ]
@@ -7782,13 +8048,14 @@ def discovered_apps_dr_workload_cnv(request):
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
             workload = CnvWorkloadDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=workload_details["workload_namespace"],
+                workload_namespace=workload_namespace,
                 discovered_apps_pvc_selector_key=workload_details[
                     "dr_workload_app_pvc_selector_key"
                 ],
@@ -10080,6 +10347,35 @@ def set_encryption_at_teardown(request):
     request.addfinalizer(teardown)
 
 
+def pytest_sessionstart(session):
+    """
+    Creating this hook to handle session scoped dr workload
+    especially for DR upgrade scenarios
+    """
+    session._dr_workload_teardown = None
+
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
+    ):
+        return
+
+    prev_ctx = ocsci_config.cur_index
+    log.info("Setting up dr workloads running along the session")
+    factory, teardown = create_workload_factory()
+    session._dr_workload_teardown = teardown
+    try:
+        log.info("Deploying the DR workloads")
+        factory()
+    except Exception as e:
+        log.warning(
+            f"DR workload factory invocation failed at session start, not failing the run: {e}"
+        )
+    finally:
+        ocsci_config.switch_ctx(prev_ctx)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """
     Do some session finish teardown functionality
@@ -10090,6 +10386,14 @@ def pytest_sessionfinish(session, exitstatus):
         cluster_load.finish_cluster_load()
     except Exception:
         log.exception("During finishing the Cluster load an exception was hit!")
+
+    # Handle dr workload teardown if its set
+    if session._dr_workload_teardown:
+        try:
+            log.info("Tearing down session DR workloads")
+            session._dr_workload_teardown()
+        except Exception:
+            log.exception("DR workload teardown failed")
 
 
 @pytest.fixture()
@@ -11107,3 +11411,160 @@ def keyrotation_precedence_helper():
             return KEYROTATION_SCHEDULE_ANNOTATION
 
     return KeyRotationPrecedenceHelper()
+
+
+@pytest.fixture
+def fill_job_factory(request):
+    """
+    Factory to generate and create a Job resource in OpenShift to fill up the cluster.
+    Also creates a new namespace for the Job, Pod and PVC.
+    Returns a factory method to create the FillPoolJob object.
+
+    """
+    fill_pool_job_objs = []
+
+    def factory(
+        name=None,
+        block_size="1M",
+        cpu_request="100m",
+        mem_request="128Mi",
+        cpu_limit="500m",
+        mem_limit="256Mi",
+        fill_mode="zero",
+        base_yaml_path=constants.FILL_POOL_JOB_YAML,
+        pvc_name=None,
+        sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+        storage="50Gi",
+    ):
+        """
+        Create a Job that fills up the cluster storage by writing data to a PVC.
+
+        Args:
+            name (str): Name of the Pod to create.
+            block_size (str): Block size for the dd command.
+            cpu_request (str): CPU request for the Pod.
+            mem_request (str): Memory request for the Pod.
+            cpu_limit (str): CPU limit for the Pod.
+            mem_limit (str): Memory limit for the Pod.
+            fill_mode (str): Mode of filling data, either 'zero' or 'random'.
+            base_yaml_path (str): Path to the base Job YAML manifest.
+            pvc_name (str): Name of the PVC to create and attach to the Pod.
+            sc_name (str): StorageClass name for the PVC.
+            storage (str): Storage size for the PVC.
+
+        Returns:
+            FillPoolJob: The created FillPoolJob object.
+
+        """
+        fill_pool_job_obj = FillPoolJob()
+        fill_pool_job_objs.append(fill_pool_job_obj)
+
+        fill_pool_job_obj.create(
+            name=name,
+            block_size=block_size,
+            cpu_request=cpu_request,
+            mem_request=mem_request,
+            cpu_limit=cpu_limit,
+            mem_limit=mem_limit,
+            fill_mode=fill_mode,
+            base_yaml_path=base_yaml_path,
+            pvc_name=pvc_name,
+            sc_name=sc_name,
+            storage=storage,
+        )
+
+        return fill_pool_job_obj
+
+    def finalizer():
+        """
+        Delete created Jobs, Pods, PVCs, and Namespaces of the FillPoolJob objects.
+
+        """
+        for fill_pool_job_obj in fill_pool_job_objs:
+            log.info(f"Cleanup the FillPoolJob object {fill_pool_job_obj.name}")
+            fill_pool_job_obj.cleanup()
+
+        timeout = 15
+        log.info(f"Wait {timeout} seconds for any capacity changes to reflect")
+        time.sleep(timeout)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def install_helm_class(request):
+    return install_helm_fixture(request)
+
+
+def install_helm_fixture(request):
+    """
+    Install Helm client
+    """
+    # Check if already installed
+    try:
+        exec_cmd("helm version")
+        log.info("Helm client is already installed")
+        return
+    except FileNotFoundError:
+        log.info("Helm client is not installed - installing it")
+
+    def install():
+        # Download the install script
+        tmp_dir = tempfile.mkdtemp(prefix="helm_dir_")
+        url = "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
+        exec_cmd(f"curl -fsSL -o {tmp_dir}/get_helm.sh {url}")
+
+        # Make the script executable
+        exec_cmd(f"chmod 700 {tmp_dir}/get_helm.sh")
+
+        # Install Helm in a non-restricted directory for no-sudo installation
+        bin_dir = os.path.expanduser("~/.local/bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        os.environ["HELM_INSTALL_DIR"] = bin_dir
+        exec_cmd(f"{tmp_dir}/get_helm.sh --no-sudo")
+
+        # Verify the installation
+        exec_cmd("helm version")
+        log.info("Helm client installed successfully")
+
+    def uninstall():
+        helm_bin_path = exec_cmd("which helm").stdout.strip().decode("utf-8")
+        exec_cmd(f"rm -rf {helm_bin_path}")
+
+        # Verify the uninstallation
+        try:
+            exec_cmd("helm version")
+            raise Exception("Helm client is still installed")
+        except FileNotFoundError:
+            log.info("Helm client uninstalled successfully")
+
+    request.addfinalizer(uninstall)
+    install()
+    return
+
+
+@pytest.fixture(scope="class")
+def keda_class(request, install_helm_class):
+    return keda_fixture(request)
+
+
+def keda_fixture(request):
+    """
+    Install Keda, add a cleanup finalizer and return the KEDA object
+    """
+    keda = KEDA(
+        workload_namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+    )
+    request.addfinalizer(keda.cleanup)
+
+    if not keda.is_installed():
+        keda.install()
+    else:
+        log.info("KEDA is already installed, skipping installation")
+
+    keda.setup_access_to_thanos_metrics()
+    if not keda.can_read_thanos_metrics():
+        raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
+
+    return keda

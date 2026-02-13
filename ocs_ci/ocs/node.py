@@ -1350,7 +1350,11 @@ def get_worker_nodes():
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
     if is_hci_provider_cluster():
         master_node_list = get_master_nodes()
-        worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
+        if not (
+            len(get_all_nodes()) == 3
+            and set(worker_nodes_list) == set(master_node_list)
+        ):
+            worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
     return worker_nodes_list
 
 
@@ -3417,3 +3421,18 @@ def select_osd_node():
     log.info(f"Selected OSD node is {osd_node_name}")
     node_obj = get_node_objs([osd_node_name])[0]
     return node_obj
+
+
+def mark_masters_schedulable():
+    """
+    Mark master nodes as schedulable
+    """
+    path = "/spec/mastersSchedulable"
+    params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+    scheduler_obj = OCP(
+        kind=constants.SCHEDULERS_CONFIG,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert scheduler_obj.patch(
+        params=params, format_type="json"
+    ), "Failed to run patch command to update control nodes as scheduleable"

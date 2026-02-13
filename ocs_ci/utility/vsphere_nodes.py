@@ -46,8 +46,7 @@ class VSPHERENode(object):
             server (str): NTP server
 
         """
-        default_str = "pool 2.rhel.pool.ntp.org"
-        ntp_server_str = f"server {server}"
+        default_str = "server"
 
         # backup the conf file
         cmd = f"sudo cp {constants.CHRONY_CONF}" f" {constants.CHRONY_CONF}_backup"
@@ -55,9 +54,10 @@ class VSPHERENode(object):
 
         # replace default NTP server
         cmd = (
-            f"sudo sed -i 's/{default_str}/{ntp_server_str}/'"
-            f" {constants.CHRONY_CONF}"
+            rf"sudo sed -i 's|^\({default_str}[[:space:]]\+\).* \+iburst|\1{server} iburst|' "
+            rf"{constants.CHRONY_CONF}"
         )
+
         self.vmnode.exec_cmd(cmd)
 
     def restart_service(self, service_name):
@@ -152,9 +152,10 @@ def update_ntp_compute_nodes():
     """
     Updates NTP server on all compute nodes
     """
+    ntp_server = config.ENV_DATA.get("ntp_server")
     if config.ENV_DATA["deployment_type"] == "upi":
         compute_nodes = get_node_ips_from_module(constants.COMPUTE_MODULE)
     else:
         compute_nodes = get_node_ips()
     for compute in compute_nodes:
-        update_ntp_and_restart_chrony(compute)
+        update_ntp_and_restart_chrony(compute, server=ntp_server)

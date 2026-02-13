@@ -8,6 +8,7 @@ from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
+from ocs_ci.ocs import node
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -201,6 +202,7 @@ class Operator:
         )
         self._create_catalog(mirrored_index_image, self.unreleased_catalog_name)
 
+    @retry(CommandFailed, tries=5, delay=30, backoff=1)
     def is_available(self):
         """
         Check if the operator is available
@@ -457,11 +459,18 @@ class NMStateOperator(Operator):
         Verify the pods for NMState Operator are running
 
         """
+        # the list of pods is this:
+        # nmstate-console-plugin-*
+        # nmstate-metrics-*
+        # nmstate-operator-*
+        # nmstate-webhook-*
+        # nmstate-handler-* for each node
+        number_of_expected_pods = 4 + len(node.get_all_nodes())
         sample = TimeoutSampler(
             timeout=300,
             sleep=10,
             func=self.count_nmstate_pods_running,
-            count=10,
+            count=number_of_expected_pods,
         )
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError(
@@ -545,4 +554,46 @@ class LocalStorageOperator(Operator):
         ), "Local storage operator did not reach running phase"
 
 
-# TODO: Add MetalLB operator
+class MetalLBOperator(Operator):
+    def __init__(self, create_catalog: bool = False):
+        self.name = constants.METALLB_OPERATOR_NAME
+        ocp_version = get_semantic_ocp_version_from_config()
+        self.unreleased_catalog_image_tag: str = (
+            f"ocp__{ocp_version}__metallb-rhel9-operator"
+        )
+        self.unreleased_images = [
+            "registry.redhat.io/openshift4/frr-rhel9",
+            "registry.redhat.io/openshift4/metallb-rhel9-operator",
+            "registry.redhat.io/openshift4/metallb-rhel9",
+            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
+            "registry.redhat.io/openshift4/ose-metallb-operator-bundle",
+        ]
+        self.disconnected_required_packages = [
+            "metallb-operator",
+        ]
+        self.namespace = constants.METALLB_DEFAULT_NAMESPACE
+        super().__init__(create_catalog)
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for MetalLB to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["metadata"]["annotations"] = {
+            "olm.providedAPIs": "MetalLB.v1beta1.metallb.io",
+        }
+        # metallb does not support InstallMode OwnNamespace
+        operatorgroup_data["spec"]["targetNamespaces"] = []
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the MetalLB operator
+        """
+        metallb_operator = OCP(kind=constants.POD, namespace=self.namespace)
+        assert metallb_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MANAGED_CONTROLLER_LABEL,
+            timeout=600,
+        ), "MetalLB operator did not reach running phase"
