@@ -1080,20 +1080,20 @@ class OCP(object):
                 )
 
         log.info(
-            (
-                f"Waiting for a resource(s) of kind {self._kind}"
-                f" identified by name '{resource_name}'"
-                f" using selector {selector}"
-                f" at column name {column}"
-                f" to reach desired condition {condition}"
-            )
+            f"Waiting for a resource(s) of kind {self._kind}"
+            f" identified by name '{resource_name}'"
+            f" using selector {selector}"
+            f" at column name {column}"
+            f" to reach desired condition {condition}"
         )
+
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
 
         # actual status of the resource we are waiting for, setting it to None
         # now prevents UnboundLocalError raised when waiting timeouts
         actual_status = None
+        last_progress_log = None
 
         try:
             for sample in TimeoutSampler(
@@ -1108,18 +1108,21 @@ class OCP(object):
                         retry=retry,
                         wait=sleep,
                     )
+
                     if status == condition:
                         log.info(
                             f"status of {resource_name} at {column}"
                             " reached condition!"
                         )
                         return True
-                    log.info(
-                        (
-                            f"status of {resource_name} at column {column} was {status},"
-                            f" but we were waiting for {condition}"
-                        )
+                    log_msg = (
+                        f"status of {resource_name} at column {column} was {status},"
+                        f" but we were waiting for {condition}"
                     )
+                    if log_msg != last_progress_log:
+                        log.info(log_msg)
+                        last_progress_log = log_msg
+
                     actual_status = status
                     if error_condition is not None and status == error_condition:
                         raise ResourceWrongStatusException(
@@ -1168,11 +1171,14 @@ class OCP(object):
                                     dont_allow_other_resources
                                     and sample_len != in_condition_len
                                 ):
-                                    log.info(
+                                    log_msg = (
                                         f"There are {sample_len} resources in "
                                         f"total. Continue to waiting as "
                                         f"you don't allow other resources!"
                                     )
+                                    if log_msg != last_progress_log:
+                                        log.info(log_msg)
+                                        last_progress_log = log_msg
                                     continue
                                 return True
                         elif len(sample) == len(in_condition):
@@ -1183,13 +1189,14 @@ class OCP(object):
                         exp_num_str = f"all {resource_count}"
                     else:
                         exp_num_str = "all"
-                    log.info(
-                        (
-                            f"status of {resource_name} at column {column} - item(s) were {actual_status},"
-                            f" but we were waiting"
-                            f" for {exp_num_str} of them to be {condition}"
-                        )
+                    log_msg = (
+                        f"status of {resource_name} at column {column} - item(s) were {actual_status},"
+                        f" but we were waiting"
+                        f" for {exp_num_str} of them to be {condition}"
                     )
+                    if log_msg != last_progress_log:
+                        log.info(log_msg)
+                        last_progress_log = log_msg
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
             # run `oc describe` on the resources we were waiting for to provide
