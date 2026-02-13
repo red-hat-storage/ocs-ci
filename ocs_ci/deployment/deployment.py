@@ -101,7 +101,7 @@ from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
     disable_specific_source,
 )
-from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
@@ -327,12 +327,20 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
+        if config.ENV_DATA.get("skip_gitops_deployment", False):
+            return
         (
             config.switch_ctx(switch_ctx)
             if switch_ctx is not None
             else config.switch_acm_ctx()
         )
 
+        if get_csvs_start_with_prefix(
+            csv_prefix=constants.GITOPS_OPERATOR_NAME,
+            namespace=constants.GITOPS_NAMESPACE,
+        ):
+            logger.info(f"Found {constants.GITOPS_OPERATOR_NAME} skipping creation")
+            return
         logger.info("Creating Namespace for GitOps Operator ")
         gitops_namespace = OCP(
             kind=constants.NAMESPACE, resource_name=constants.GITOPS_NAMESPACE
@@ -577,6 +585,8 @@ class Deployment(object):
         Deploy OADP Operator
 
         """
+        if config.ENV_DATA.get("skip_oadp_deployment", False):
+            return
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
 
@@ -608,6 +618,14 @@ class Deployment(object):
                 index = cluster.MULTICLUSTER["multicluster_index"]
                 with config.RunWithConfigContext(index):
                     config.switch_ctx(index)
+                    if get_csvs_start_with_prefix(
+                        csv_prefix=constants.OADP_OPERATOR_NAME,
+                        namespace=constants.OADP_NAMESPACE,
+                    ):
+                        logger.info(
+                            f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
+                        )
+                        continue
                     logger.info("Creating Namespace")
                     # creating Namespace and operator group for cert-manager
                     logger.info(
