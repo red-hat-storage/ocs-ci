@@ -131,9 +131,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             md5sum_before = []
             for pod_obj in pod_obj_list:
                 get_fio_rw_iops(pod_obj)
-                md5sum_before.append(
-                    cal_md5sum(pod_obj=pod_obj, file_name="io_file1")
-                )
+                md5sum_before.append(cal_md5sum(pod_obj=pod_obj, file_name="io_file1"))
             logger.info(
                 f"Stored initial checksums for pods {[p.name for p in pod_obj_list]}"
             )
@@ -186,8 +184,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
 
             # Verify data integrity: compare against initial checksums
             md5sum_after = [
-                cal_md5sum(pod_obj=p, file_name="io_file1")
-                for p in migrated_pod_list
+                cal_md5sum(pod_obj=p, file_name="io_file1") for p in migrated_pod_list
             ]
             assert len(md5sum_before) == len(md5sum_after), (
                 f"Pod count mismatch: before={len(md5sum_before)}, "
@@ -207,9 +204,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 nodes.start_nodes([node])
             else:
                 nodes.restart_nodes([node])
-            wait_for_nodes_status(
-                node_names=[node.name], status=constants.NODE_READY
-            )
+            wait_for_nodes_status(node_names=[node.name], status=constants.NODE_READY)
             assert untaint_nodes(
                 taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
                 nodes_to_untaint=[node],
@@ -256,9 +251,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 constants.CEPHBLOCKPOOL,
                 constants.CEPHFILESYSTEM,
             ]:
-                deployment_pod_factory(
-                    interface=interface, node_name=node.name
-                )
+                deployment_pod_factory(interface=interface, node_name=node.name)
         finally:
             # Ensure taints are removed even on test failure (node_restart_teardown
             # fixture finalizer runs at test end to restore/restart nodes)
