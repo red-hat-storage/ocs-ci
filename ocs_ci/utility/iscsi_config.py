@@ -4,42 +4,19 @@ This module is used for configuring iscsi.
 
 import logging
 import re
+import traceback
 
 from ocs_ci.ocs import node, ocp, constants
-from ocs_ci.ocs.exceptions import NodeNotFoundError, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    NodeNotFoundError,
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 
 log = logging.getLogger(__name__)
-
-
-def setup_target_environment(target_node_ssh):
-    """
-    Set up target environment on remote target VM via SSH.
-
-    Parameters:
-        target_node_ssh (Connection): An established SSH connection to the target VM.
-    """
-    log.info("Setting up target environment")
-    commands = [
-        # Create target directory
-        "mkdir -p /etc/target",
-        # Start and enable target service
-        "systemctl start target",
-        "systemctl enable target",
-        # Verify setup
-        "systemctl status target --no-pager",
-    ]
-
-    for cmd in commands:
-        log.info(f"Executing on target VM: {cmd}")
-
-        retcode, stdout, stderr = target_node_ssh.exec_cmd(cmd)
-
-        if not retcode and "already" not in stderr.lower():
-            log.warning(f"Command warning: {stderr}")
-        if stdout:
-            log.debug(f"Output: {stdout.strip()}")
 
 
 def get_worker_node_names():
@@ -67,7 +44,7 @@ def get_worker_iqns(worker_node_names):
     Collects iSCSI initiator IQNs from worker nodes.
     This function ensures the iSCSI service is started before reading the IQN.
 
-    Parameters:
+    Args:
         worker_node_names (list): List of worker node names (strings).
 
     Returns:
@@ -139,6 +116,8 @@ def get_worker_iqns(worker_node_names):
                 else:
                     log.error(f"Node IP is none or empty for {node_name}")
                     raise NodeNotFoundError(f"Node IP is none or empty for {node_name}")
+            except NodeNotFoundError:
+                raise
             except Exception as fallback_error:
                 log.error(f"SSH fallback also failed for {node_name}: {fallback_error}")
 
@@ -152,15 +131,12 @@ def configure_target(target_node_ssh, target_iqn, worker_iqns):
     """
     Configures the iSCSI target with given IQNs and IP.
 
-    Parameters:
+    Args:
         target_node_ssh (object): An established SSH connection to the target VM.
         target_iqn (str): Target iSCSI IQN.
         worker_iqns (list): List of IQNs of worker nodes.
 
     """
-
-    # Setup environment first
-    # setup_target_environment(target_node_ssh)
 
     # Check if target exists
     check_cmd = f"targetcli /iscsi/{target_iqn} ls 2>/dev/null"
@@ -240,11 +216,8 @@ def configure_initiators(worker_node_names):
     This function installs necessary packages, discovers targets, logs in to the target,
     and enables the iSCSI service.
 
-    Parameters:
+    Args:
         worker_node_names (list): List of worker node names (strings).
-
-    Returns:
-        None
 
     Raises:
         NodeNotFoundError: If the node IP cannot be retrieved (none or empty).
@@ -272,7 +245,7 @@ def configure_initiators(worker_node_names):
                     node=node_name, cmd_list=[cmd], use_root=True, timeout=120
                 )
                 log.debug(f"Command output on {node_name}: {stdout}")
-        except Exception as e:
+        except (CommandFailed, TimeoutExpiredError) as e:
             log.error(f"Failed to configure initiator on {node_name}: {e}")
             # Fallback to SSH if oc debug fails
             try:
@@ -299,6 +272,8 @@ def configure_initiators(worker_node_names):
                 else:
                     log.error(f"Node IP is none or empty for {node_name}")
                     raise NodeNotFoundError(f"Node IP is none or empty for {node_name}")
+            except NodeNotFoundError:
+                raise
             except Exception as fallback_error:
                 log.error(f"SSH fallback also failed for {node_name}: {fallback_error}")
 
@@ -307,7 +282,7 @@ def remove_acls_from_target(target_node_ssh, target_iqn, worker_iqns, username):
     """
     Remove ACLs and LUN mappings from target using targetcli.
 
-    Parameters:
+    Args:
         target_node_ssh (object): An established SSH connection to the target VM.
         target_iqn (str): Target iSCSI IQN.
         worker_iqns (list): List of IQNs of worker nodes.
@@ -343,13 +318,10 @@ def wipe_luns_on_target(target_node_ssh, target_iqn, username):
     Also deletes IBM Spectrum Scale related resources.
     Only wipes devices that are referenced in LocalDisks resources.
 
-    Parameters:
+    Args:
         target_node_ssh (object): An established SSH connection to the target VM.
         target_iqn (str): Target iSCSI IQN.
         username (str): Username for the target VM.
-
-    Returns:
-        None
 
     Raises:
         Exception: If there is an error while deleting StorageClasses or LocalDisks.
@@ -442,7 +414,7 @@ def verify_cleanup(target_node_ssh, target_iqn, username_target, worker_iqns):
     """
     Verify cleanup was successful.
 
-    Parameters:
+    Args:
         target_node_ssh (object): An established SSH connection to the target VM.
         target_iqn (str): Target iSCSI IQN.
         username_target (str): Username for the target VM.
@@ -476,7 +448,7 @@ def cleanup_iscsi_target(
     """
     Complete cleanup of iSCSI target.
 
-    Parameters:
+    Args:
         target_node_ssh (object): An established SSH connection to the target VM.
         target_iqn (str): Target IQN
         worker_iqns (list): List of worker IQNs to remove
@@ -507,8 +479,6 @@ def cleanup_iscsi_target(
 
     except Exception as e:
         log.error(f"Cleanup failed: {e}")
-        import traceback
-
         traceback.print_exc()
         raise e
 
@@ -586,7 +556,7 @@ def verify_iscsi_sessions(worker_node_names, target_iqn):
     """
     Verify iSCSI sessions are established on worker nodes.
 
-    Parameters:
+    Args:
         worker_node_names (list): List of worker node names (strings).
         target_iqn (str): Target iSCSI IQN to verify.
 
@@ -628,7 +598,7 @@ def verify_iscsi_devices(worker_node_names, target_iqn):
     This function detects iSCSI block devices by:
     1. Using lsblk to find devices with transport type 'iscsi'
 
-    Parameters:
+    Args:
         worker_node_names (list): List of worker node names (strings).
         target_iqn (str): Target iSCSI IQN to verify.
 
@@ -697,7 +667,7 @@ def verify_iscsi_target_connectivity(worker_node_names, target_ip, target_port=3
     """
     Verify network connectivity to iSCSI target from worker nodes.
 
-    Parameters:
+    Args:
         worker_node_names (list): List of worker node names (strings).
         target_ip (str): iSCSI target IP address.
         target_port (int): iSCSI target port (default: 3260).
@@ -834,8 +804,6 @@ def verify_iscsi_setup():
 
     except Exception as e:
         log.error(f"Error during iSCSI verification: {e}")
-        import traceback
-
         traceback.print_exc()
         return {"error": str(e)}
 
