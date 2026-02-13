@@ -240,7 +240,7 @@ class ObjectBucket(ABC):
             self.internal_delete()
         except NotFoundError:
             logger.warning(f"{self.name} was not found, or already deleted.")
-        except TimeoutError:
+        except (TimeoutError, TimeoutExpiredError):
             logger.warning(f"{self.name} deletion timed out. Verifying deletion.")
             verify = True
         if verify:
