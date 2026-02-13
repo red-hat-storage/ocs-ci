@@ -364,6 +364,7 @@ higher priority).
 * `deploy_acm_hub_cluster` - Deploy ACM hub cluster or not (Default: false)
 * `cnv_deployment` - Deploy CNV or not (Default: false) necessary for Converged clusters with hosted clients
 * `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
+* `install_latest_hypershift_operator` - Install the latest hypershift operator (Default: false). Will also upgrade existing hypershift operator to latest version. Necessary to support unreleased guest OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
       * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files

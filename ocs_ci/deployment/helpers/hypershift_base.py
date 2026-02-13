@@ -438,6 +438,43 @@ def resolve_ocp_image(ocp_version: str) -> str:
     return index_image
 
 
+def update_hypershift_operator(version="latest"):
+    """
+    Update the hypershift operator by extracting the latest image and installing it.
+    This function is also used to update the existing hypershift operator.
+    One of the suggested options to support unreleased guest OCP clusters
+
+    Args:
+        version (str): The version of the hypershift operator to install. Default is 'latest'.
+
+    """
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+
+        try:
+            logger.info("Extracting hypershift operator binary from the latest image")
+            exec_cmd(
+                f"oc image extract {constants.HCP_REGISTRY}:{version} "
+                f"--path=/usr/bin/hypershift:{temp_dir}",
+                shell=True,
+            )
+            logger.info("Setting executable permissions for the hypershift binary")
+            hypershift_binary_path = os.path.join(temp_dir, "hypershift")
+            os.chmod(hypershift_binary_path, 0o755)
+            hypershift_abs_path = os.path.abspath(hypershift_binary_path)
+            logger.info(f"hypershift binary path: {hypershift_abs_path}")
+            logger.info("Installing the hypershift operator")
+            cmd = (
+                f"{hypershift_binary_path} install --hypershift-image {constants.HCP_REGISTRY}:{version}",
+            )
+            exec_cmd(
+                cmd,
+                shell=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to install/update hypershift operator: {e}")
+
+
 class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management

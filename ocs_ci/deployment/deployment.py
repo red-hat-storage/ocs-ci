@@ -17,6 +17,7 @@ import yaml
 
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
+from ocs_ci.deployment.helpers.hypershift_base import update_hypershift_operator
 from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -568,9 +569,13 @@ class Deployment(object):
 
         """
         if config.ENV_DATA["skip_ocs_deployment"]:
+            mce_installer = MCEInstaller()
             if config.ENV_DATA.get("deploy_mce"):
-                mce_installer = MCEInstaller()
                 mce_installer.deploy_mce()
+
+            if config.ENV_DATA.get("install_latest_hypershift_operator"):
+                if mce_installer.mce_installed():
+                    update_hypershift_operator()
 
     def do_deploy_oadp(self):
         """
