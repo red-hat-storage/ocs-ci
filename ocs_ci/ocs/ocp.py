@@ -322,9 +322,13 @@ class OCP(object):
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
         field_selector = field_selector if field_selector else self.field_selector
+        kind = self.kind
+        if kind == constants.NETWORK_ATTACHMENT_DEFINITION:
+            # https://github.com/k8snetworkplumbingwg/multus-cni/issues/295
+            kind = "network-attachment-definition"
         if selector or field_selector:
             resource_name = ""
-        command = f"get {self.kind} {resource_name}"
+        command = f"get {kind} {resource_name}"
         if all_namespaces and not self.namespace:
             command += " -A"
         elif self.namespace:
@@ -348,7 +352,7 @@ class OCP(object):
                 if not silent:
                     log.warning(
                         f"Failed to get resource: {resource_name} of kind: "
-                        f"{self.kind}, selector: {selector}, Error: {ex}"
+                        f"{kind}, selector: {selector}, Error: {ex}"
                     )
                 retry -= 1
                 if not retry:

@@ -736,6 +736,11 @@ class HyperShiftBase:
                 f"Valid values are: {constants.AVAILABILITY_POLICIES}"
             )
 
+        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+            create_hcp_cluster_cmd += (
+                f" --additional-network name:clusters-{name}/storage"
+            )
+
         if disable_default_sources:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
 

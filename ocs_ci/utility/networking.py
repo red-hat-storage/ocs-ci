@@ -2,12 +2,18 @@
 Module that contains network related functions
 """
 
+import base64
 import ipaddress
 import logging
+import os
+import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.utility.templating import load_yaml
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
     UnavailableResourceException,
@@ -83,3 +89,65 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
 
         cluster_data["spec"]["network"]["addressRanges"]["public"] = [str_network]
     return cluster_data
+
+
+def get_network_interface_by_ip(node, ip):
+    """
+    Get interface name from a node that has provided ip address liste.
+
+    Args:
+        node (str): node name
+        ip (str): IP address
+
+    Returns:
+        str: name of the interface
+    """
+    oc_obj = OCP(kind="node")
+    network_info = oc_obj.exec_oc_debug_cmd(node, cmd_list=["ip -br -4 a sh"])
+    interface_info = [line for line in network_info.split("\n") if ip in line][
+        0
+    ].split()
+    interface_name = interface_info[0]
+    return interface_name
+
+
+def create_drs_machine_config():
+    """
+    Create Machine Config that moves the second physical network to a bridge.
+    This is done for HCP configuraion of data replication separation.
+    """
+    interfaces_path = os.path.join(
+        constants.TEMPLATE_DEPLOYMENT_DIR, "drs_interfaces.yaml"
+    )
+    interfaces_yaml = load_yaml(interfaces_path)
+    worker = get_worker_nodes()[0]
+    network_data = config.ENV_DATA.get("baremetal", {}).get("servers", {}).get(worker)
+    interface_name = get_network_interface_by_ip(worker, network_data["private_ip"])
+    interfaces_yaml["interfaces"][0]["bridge"]["port"][0]["name"] = interface_name
+    interfaces_yaml["interfaces"][1]["name"] = interface_name
+    interfaces_yaml_string = yaml.dump(interfaces_yaml)
+    base64_interfaces = base64.b64encode(interfaces_yaml_string.encode()).decode()
+    machineconfigurations_path = os.path.join(
+        constants.TEMPLATE_DEPLOYMENT_DIR, "drs_machineconfig.yaml"
+    )
+    machineconfigurations_yaml = load_yaml(machineconfigurations_path)
+    machineconfigurations_yaml["spec"]["config"]["storage"]["files"][0]["contents"][
+        "source"
+    ] = f"data:text/plain;base64,{base64_interfaces}"
+    machineconfigurations_obj = OCS(**machineconfigurations_yaml)
+    machineconfigurations_obj.apply(**machineconfigurations_yaml)
+
+
+def create_drs_nad(namespace):
+    """
+    Create NetworkAttachmentDefinition in namespace where the virt-launcher pods exist.
+    This is done for HCP configuraion of data replication separation.
+
+    Args:
+        namespace (str): namespace on provider cluster where virt-launcher pods exist
+    """
+    nad_path = os.path.join(constants.TEMPLATE_DEPLOYMENT_DIR, "drs_nad.yaml")
+    nad_yaml = load_yaml(nad_path)
+    nad_yaml["metadata"]["namespace"] = namespace
+    nad_obj = OCS(**nad_yaml)
+    nad_obj.apply(**nad_yaml)
