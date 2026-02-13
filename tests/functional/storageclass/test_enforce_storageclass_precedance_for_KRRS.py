@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier1,
     kms_config_required,
+    skipif_disconnected_cluster,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ class TestEnforceStorageclassPrecedenceForReclaimSpace:
 
 
 @green_squad
+@skipif_disconnected_cluster
 @kms_config_required
 class TestEnforceStorageclassPrecedenceForKeyRotation:
     """
