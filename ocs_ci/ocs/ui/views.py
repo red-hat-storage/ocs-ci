@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 
-osd_sizes = ("512", "2048", "4096")
+osd_sizes = ("512", "2048", "4096", "0.5 TiB", "1 TiB", "2 TiB", "4 TiB", "8 TiB")
 
 OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
@@ -334,7 +334,11 @@ deployment_4_21 = {
         "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
         By.XPATH,
     ),
-    "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "0.5 TiB": ('//button[@data-test-dropdown-menu="0.5 TiB"]', By.XPATH),
+    "1 TiB": ('//button[@data-test-dropdown-menu="1 TiB"]', By.XPATH),
+    "2 TiB": ('//button[@data-test-dropdown-menu="2 TiB"]', By.XPATH),
+    "4 TiB": ('//button[@data-test-dropdown-menu="4 TiB"]', By.XPATH),
+    "8 TiB": ('//button[@data-test-dropdown-menu="8 TiB"]', By.XPATH),
     "drop_down_performance": (
         "//button[contains(@class,'odf-configure-performance__selector')]",
         By.XPATH,
