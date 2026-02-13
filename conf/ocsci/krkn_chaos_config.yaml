@@ -1,6 +1,10 @@
 # Krkn chaos testing configuration
 
 ENV_DATA:
+  # Krkn version to clone (e.g., 'v5.0.0', 'v5.1.0')
+  # If not set or empty, the latest code from the default branch will be cloned
+  krkn_version: "v5.0.0"
+
   krkn_config:
     # Workload types: VDBENCH, CNV_WORKLOAD, RGW_WORKLOAD, FIO
     workloads:

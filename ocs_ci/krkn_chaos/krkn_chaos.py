@@ -67,6 +67,16 @@ class KrKnRunner:
 
     def _validate_environment(self):
         """Validate the environment before running Krkn."""
+        # Check if Krkn venv python exists
+        # KRKN_RUN_CMD is data/krkn/run_kraken.py
+        # venv is at data/krkn/venv/bin/python
+        krkn_dir = os.path.dirname(KRKN_RUN_CMD)  # data/krkn
+        krkn_python = os.path.join(krkn_dir, "venv", "bin", "python")
+
+        if not os.path.exists(krkn_python):
+            log.error(f"Krkn venv python not found at: {krkn_python}")
+            return False
+
         # Check if Krkn run command exists
         if not os.path.exists(KRKN_RUN_CMD):
             log.error(f"Krkn run command not found at: {KRKN_RUN_CMD}")
@@ -532,8 +542,14 @@ class KrKnRunner:
         except Exception as e:
             log.warning(f"Failed to set IBM Cloud credentials: {str(e)}")
 
+        # Use krkn venv python directly to run krkn
+        # KRKN_RUN_CMD is data/krkn/run_kraken.py
+        # venv is at data/krkn/venv/bin/python
+        krkn_dir = os.path.dirname(KRKN_RUN_CMD)
+        krkn_python = os.path.join(krkn_dir, "venv", "bin", "python")
+
         krkn_cmd = [
-            "python3",
+            krkn_python,
             KRKN_RUN_CMD,
             "--config",
             self.krkn_config,

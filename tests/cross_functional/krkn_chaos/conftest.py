@@ -4,8 +4,6 @@ import fauxfactory
 import yaml
 import logging
 from ocs_ci.ocs.constants import (
-    KRKN_REPO_URL,
-    KRKN_VERSION,
     KRKN_DIR,
     KRKN_CHAOS_DIR,
     KRKN_CHAOS_SCENARIO_DIR,
@@ -25,13 +23,14 @@ def krkn_setup():
     """
     Fixture to set up Krkn chaos testing environment.
 
-    - Clones the Krkn repo into the data directory
-    - Installs Krkn as an editable Python package
-    - Validates presence of global config and scenario directories
+    - Clones krkn repository into data/krkn
+    - Creates virtual environment inside data/krkn/venv
+    - Installs krkn requirements
+    - ocs-ci invokes krkn using: data/krkn/venv/bin/python data/krkn/run_kraken.py
 
     This fixture does not return anything.
     """
-    # Set KUBECONFIG environment variable to prevent krkn_lib from failing during import
+    # Set KUBECONFIG environment variable for krkn
     from ocs_ci.framework import config
 
     kubeconfig_path = os.path.join(
@@ -41,69 +40,81 @@ def krkn_setup():
     if os.path.exists(kubeconfig_path):
         os.environ["KUBECONFIG"] = kubeconfig_path
 
-        # Create symlink or copy kubeconfig to ~/.kube/config for hardcoded references
+        # Create symlink or copy kubeconfig to ~/.kube/config
         default_kube_dir = os.path.expanduser("~/.kube")
         default_kubeconfig = os.path.join(default_kube_dir, "config")
 
-        # Create ~/.kube directory if it doesn't exist
         os.makedirs(default_kube_dir, exist_ok=True)
 
-        # Remove existing ~/.kube/config if it exists
         if os.path.exists(default_kubeconfig):
             if os.path.islink(default_kubeconfig):
                 os.unlink(default_kubeconfig)
             else:
                 os.remove(default_kubeconfig)
 
-        # Try to create symlink first, fall back to copy if symlink fails
         try:
             os.symlink(kubeconfig_path, default_kubeconfig)
         except (OSError, NotImplementedError) as e:
             log.error(e)
-            # Symlink might fail on some systems, fall back to copy
             import shutil
 
             shutil.copy2(kubeconfig_path, default_kubeconfig)
     else:
-        log.warning(
-            f"Kubeconfig file not found at {kubeconfig_path}, krkn_lib import may fail"
+        log.warning(f"Kubeconfig file not found at {kubeconfig_path}, krkn may fail")
+
+    # Run simple setup script
+    setup_script = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+        "scripts",
+        "setup_krkn.sh",
+    )
+
+    if not os.path.exists(setup_script):
+        raise CommandFailed(
+            f"Krkn setup script not found at {setup_script}. "
+            "Please ensure scripts/setup_krkn.sh exists."
         )
 
-    # Cleanup if old krkn dir exists
-    if os.path.exists(KRKN_DIR):
-        import shutil
+    log.info("Setting up Krkn environment via setup_krkn.sh")
 
-        shutil.rmtree(KRKN_DIR)
+    # Get krkn version from config if set
+    krkn_version = config.ENV_DATA.get("krkn_version", "")
 
-    # Clone the Krkn repo
+    # Prepare environment variables for the setup script
+    env_vars = os.environ.copy()
+    if krkn_version:
+        env_vars["KRKN_VERSION"] = krkn_version
+        log.info(f"Using Krkn version: {krkn_version}")
+    else:
+        log.info("Using latest Krkn version (default branch)")
+
     try:
         run_cmd(
-            f"git clone --branch {KRKN_VERSION} --single-branch {KRKN_REPO_URL} {KRKN_DIR}"
+            f"bash {setup_script}",
+            timeout=600,  # 10 minutes for setup
+            env=env_vars,
         )
-    except CommandFailed:
-        log.error(f"Failed to clone Krkn repository version {KRKN_VERSION}")
-        raise
+        log.info("Krkn setup completed successfully")
+    except CommandFailed as e:
+        log.error(f"Failed to set up Krkn: {e}")
+        raise CommandFailed("Failed to set up Krkn. Check the logs for details.")
 
-    # Fix setup.cfg if needed (kraken → krkn issue)
-    setup_cfg_path = os.path.join(KRKN_DIR, "setup.cfg")
-    if os.path.exists(setup_cfg_path):
-        with open(setup_cfg_path, "r+") as f:
-            content = f.read()
-            if "package_dir =\n    =kraken" in content:
-                f.seek(0)
-                f.write(content.replace("=kraken", "=krkn"))
-                f.truncate()
+    # Validate krkn installation
+    if not os.path.exists(KRKN_DIR):
+        raise CommandFailed(f"Krkn directory not found at {KRKN_DIR}")
 
-    # Install Krkn in editable mode
-    try:
-        run_cmd("pip install --upgrade pip")
-        run_cmd(
-            f"pip install -r {KRKN_DIR}/requirements.txt > /dev/null 2>&1", shell=True
-        )
-        run_cmd(f"pip install -e {KRKN_DIR}")
-    except CommandFailed:
-        log.error("Failed to install Krkn package")
-        raise CommandFailed("Failed to install Krkn package")
+    krkn_venv = os.path.join(KRKN_DIR, "venv", "bin", "python")
+    if not os.path.exists(krkn_venv):
+        raise CommandFailed(f"Krkn venv not found at {krkn_venv}")
+
+    krkn_run_script = os.path.join(KRKN_DIR, "run_kraken.py")
+    if not os.path.exists(krkn_run_script):
+        raise CommandFailed(f"Krkn run script not found at {krkn_run_script}")
+
+    log.info("✓ Krkn setup validated:")
+    log.info("  - Krkn directory: %s", KRKN_DIR)
+    log.info("  - Krkn venv: %s", krkn_venv)
+    log.info("  - Krkn run script: %s", krkn_run_script)
 
 
 @pytest.fixture(scope="session")
