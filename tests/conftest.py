@@ -1122,6 +1122,287 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=No
     request.addfinalizer(finalizer)
     return factory
 
+@pytest.fixture(scope="class")
+def ceph_ec_pool_factory_class(request):
+    """
+    Create a Ceph EC pool factory with class scope.
+    Calling this fixture creates new Ceph EC pool instances with metadata pools.
+    """
+    return ceph_ec_pool_factory_fixture(request)
+
+
+@pytest.fixture(scope="session")
+def ceph_ec_pool_factory_session(request):
+    """
+    Create a Ceph EC pool factory with session scope.
+    Calling this fixture creates new Ceph EC pool instances with metadata pools.
+    """
+    return ceph_ec_pool_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
+def ceph_ec_pool_factory(request):
+    """
+    Create a Ceph EC pool factory with function scope.
+    Calling this fixture creates new Ceph EC pool instances with metadata pools.
+    """
+    return ceph_ec_pool_factory_fixture(request)
+
+
+def ceph_ec_pool_factory_fixture(request):
+    """
+    Create a Ceph EC pool factory.
+    Calling this fixture creates new Ceph EC pool instances with metadata pools.
+
+    EC pools require two pools:
+    1. Data pool (erasure coded) - for actual data storage
+    2. Metadata pool (replicated) - for RBD metadata
+
+    Returns:
+        function: Factory function that creates EC pools with metadata pools
+    """
+    instances = []
+
+    def factory(
+        ec_pool_name=None,
+        metadata_pool_name=None,
+        data_chunks=4,
+        coding_chunks=2,
+        failure_domain=None,
+        device_class=None,
+        metadata_replica=3,
+        metadata_failure_domain=None,
+        verify=True,
+    ):
+        """
+        Create an EC pool with metadata pool.
+
+        Args:
+            ec_pool_name (str): EC data pool name (auto-generated if None)
+            metadata_pool_name (str): Metadata pool name (auto-generated if None)
+            data_chunks (int): Number of data chunks for erasure coding (default: 4)
+            coding_chunks (int): Number of coding chunks for erasure coding (default: 2)
+            failure_domain (str): Failure domain for EC pool (optional)
+            device_class (str): Device class for EC pool (e.g., 'ssd', 'hdd') (optional)
+            metadata_replica (int): Replica size for metadata pool (default: 3)
+            metadata_failure_domain (str): Failure domain for metadata pool (optional)
+            verify (bool): Verify pools exist after creation (default: True)
+
+        Returns:
+            OCS: EC pool object with metadata_pool_name and metadata_pool_obj attributes
+        """
+        ec_pool_obj = helpers.create_ceph_ec_block_pool(
+            ec_pool_name=ec_pool_name,
+            metadata_pool_name=metadata_pool_name,
+            data_chunks=data_chunks,
+            coding_chunks=coding_chunks,
+            failure_domain=failure_domain,
+            device_class=device_class,
+            metadata_replica=metadata_replica,
+            metadata_failure_domain=metadata_failure_domain,
+            verify=verify,
+        )
+
+        # Store both pools for cleanup
+        instances.append(ec_pool_obj)
+
+        return ec_pool_obj
+
+    def finalizer():
+        """
+        Delete EC and metadata pools
+        """
+        skip_resource_not_found_error = None
+        node = request.node
+        for mark in node.iter_markers():
+            if mark.name == ignore_resource_not_found_error_label.name:
+                skip_resource_not_found_error = True
+
+        for ec_pool in instances:
+            # Get metadata pool name from the EC pool object
+            metadata_pool_name = getattr(ec_pool, "metadata_pool_name", None)
+
+            # Delete EC pool first
+            try:
+                ec_pool.delete(wait=False)
+            except CommandFailed as ex:
+                if "NotFound" in str(ex):
+                    if skip_resource_not_found_error:
+                        log.info(
+                            f"Resource {ec_pool.kind} {ec_pool.name} not found in "
+                            f"namespace {ec_pool.namespace}, ignore_resource_not_found_error_label "
+                            "applied. Skipping deletion"
+                        )
+                    else:
+                        log.info(f"EC pool {ec_pool.name} already deleted or not found")
+                else:
+                    raise
+
+            try:
+                ec_pool.ocp.wait_for_delete(ec_pool.name)
+            except CommandFailed as wait_ex:
+                if "NotFound" in str(wait_ex) or skip_resource_not_found_error:
+                    log.info(f"EC pool {ec_pool.name} already deleted or not found")
+                else:
+                    raise
+
+            # Delete metadata pool if it exists
+            if metadata_pool_name:
+                try:
+                    metadata_pool_ocp = ocp.OCP(
+                        kind=constants.CEPHBLOCKPOOL,
+                        namespace=ec_pool.namespace,
+                    )
+                    metadata_pool_ocp.delete(resource_name=metadata_pool_name)
+                except CommandFailed as ex:
+                    if "NotFound" in str(ex):
+                        if skip_resource_not_found_error:
+                            log.info(
+                                f"Metadata pool {metadata_pool_name} not found in "
+                                f"namespace {ec_pool.namespace}, ignore_resource_not_found_error_label "
+                                "applied. Skipping deletion"
+                            )
+                        else:
+                            log.info(
+                                f"Metadata pool {metadata_pool_name} already deleted or not found"
+                            )
+                    else:
+                        raise
+
+                try:
+                    metadata_pool_ocp.wait_for_delete(metadata_pool_name)
+                except CommandFailed as wait_ex:
+                    if "NotFound" in str(wait_ex) or skip_resource_not_found_error:
+                        log.info(
+                            f"Metadata pool {metadata_pool_name} already deleted or not found"
+                        )
+                    else:
+                        raise
+
+    request.addfinalizer(finalizer)
+    return factory
+
+@pytest.fixture(scope="class")
+def ec_storageclass_factory_class(request, ceph_ec_pool_factory_class):
+    """
+    Create an EC StorageClass factory with class scope.
+    Calling this fixture creates new EC StorageClass instances.
+    """
+    return ec_storageclass_factory_fixture(request, ceph_ec_pool_factory_class)
+
+
+@pytest.fixture(scope="session")
+def ec_storageclass_factory_session(request, ceph_ec_pool_factory_session):
+    """
+    Create an EC StorageClass factory with session scope.
+    Calling this fixture creates new EC StorageClass instances.
+    """
+    return ec_storageclass_factory_fixture(request, ceph_ec_pool_factory_session)
+
+
+@pytest.fixture(scope="function")
+def ec_storageclass_factory(request, ceph_ec_pool_factory):
+    """
+    Create an EC StorageClass factory with function scope.
+    Calling this fixture creates new EC StorageClass instances.
+    """
+    return ec_storageclass_factory_fixture(request, ceph_ec_pool_factory)
+
+
+def ec_storageclass_factory_fixture(request, ceph_ec_pool_factory):
+    """
+    Create an EC StorageClass factory.
+    Calling this fixture creates new EC StorageClass instances backed by EC pools.
+
+    Returns:
+        function: Factory function that creates EC StorageClasses
+    """
+    instances = []
+
+    def factory(
+        ec_pool_obj=None,
+        sc_name=None,
+        reclaim_policy="Delete",
+        volume_binding_mode="Immediate",
+        allow_volume_expansion=True,
+    ):
+        """
+        Create an EC StorageClass.
+
+        Args:
+            ec_pool_obj (OCS): EC pool object from ceph_ec_pool_factory.
+                If None, a new EC pool will be created.
+            sc_name (str): Name of the StorageClass (auto-generated if None)
+            reclaim_policy (str): Reclaim policy (e.g., "Delete" or "Retain")
+            volume_binding_mode (str): Volume binding mode (e.g., "Immediate", "WaitForFirstConsumer")
+            allow_volume_expansion (bool): Allow volume expansion (True/False)
+
+        Returns:
+            OCS: StorageClass object with ec_pool_obj attribute
+        """
+        # Create EC pool if not provided
+        if not ec_pool_obj:
+            ec_pool_obj = ceph_ec_pool_factory()
+
+        # Get metadata pool name from EC pool object
+        metadata_pool_name = getattr(ec_pool_obj, "metadata_pool_name", None)
+        if not metadata_pool_name:
+            raise ValueError("EC pool object must have metadata_pool_name attribute")
+
+        # Create the StorageClass
+        sc_obj = helpers.create_ec_storage_class(
+            ec_pool_name=ec_pool_obj.name,
+            metadata_pool_name=metadata_pool_name,
+            sc_name=sc_name,
+            reclaim_policy=reclaim_policy,
+            volume_binding_mode=volume_binding_mode,
+            allow_volume_expansion=allow_volume_expansion,
+        )
+
+        # Store reference to EC pool for convenience
+        sc_obj.ec_pool_obj = ec_pool_obj
+
+        instances.append(sc_obj)
+        return sc_obj
+
+    def finalizer():
+        """
+        Delete the StorageClasses
+        """
+        skip_resource_not_found_error = None
+        node = request.node
+        for mark in node.iter_markers():
+            if mark.name == ignore_resource_not_found_error_label.name:
+                skip_resource_not_found_error = True
+
+        for instance in instances:
+            try:
+                instance.delete()
+            except CommandFailed as ex:
+                if "NotFound" in str(ex):
+                    if skip_resource_not_found_error:
+                        log.info(
+                            f"StorageClass {instance.name} not found in "
+                            f"namespace {instance.namespace}, ignore_resource_not_found_error_label "
+                            "applied. Skipping deletion"
+                        )
+                    else:
+                        log.info(f"StorageClass {instance.name} already deleted or not found")
+                else:
+                    raise
+
+            try:
+                instance.ocp.wait_for_delete(instance.name, timeout=120)
+            except CommandFailed as wait_ex:
+                if "NotFound" in str(wait_ex) or skip_resource_not_found_error:
+                    log.info(f"StorageClass {instance.name} already deleted or not found")
+                else:
+                    raise
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
 
 @pytest.fixture(scope="class")
 def storageclass_factory_class(request, secret_factory_class, ceph_pool_factory_class):
