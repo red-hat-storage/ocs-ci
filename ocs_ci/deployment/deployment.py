@@ -43,6 +43,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
+from ocs_ci.utility.iscsi_config import iscsi_setup
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
@@ -982,6 +983,15 @@ class Deployment(object):
             except Exception as err:
                 logger.warning(
                     f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
+                )
+        # Setup iSCSI if configured
+        if config.ENV_DATA.get("iscsi_setup", False):
+            try:
+                logger.info("Setting up iSCSI configuration after OCP deployment...")
+                iscsi_setup()
+            except Exception as err:
+                logger.warning(
+                    f"iSCSI setup failed: {err}. Continuing with deployment..."
                 )
 
     def label_and_taint_nodes(self):
