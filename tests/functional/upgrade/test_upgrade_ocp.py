@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 import pytest
 
@@ -23,6 +24,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     load_config_file,
     wait_for_machineconfigpool_status,
+    get_latest_ocp_multi_image,
 )
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
@@ -161,6 +163,9 @@ class TestUpgradeOCP(ManageTest):
                 config.ENV_DATA["platform"].lower() in constants.ROSA_PLATFORMS
             )
 
+            # Initialize image_path (will be set properly in non-ROSA branches)
+            image_path = config.UPGRADE.get("ocp_upgrade_path", "")
+
             if rosa_platform:
                 # Handle ROSA-specific upgrade logic
                 # On ROSA environment, Nightly builds are not supported.
@@ -182,19 +187,60 @@ class TestUpgradeOCP(ManageTest):
                     target_image = latest_ocp_ver
             else:
                 # Handle non-ROSA upgrade logic
-                if ocp_upgrade_version:
+                multi_arch = config.ENV_DATA.get("multi_arch")
+                if multi_arch:
+                    # Handle multi-arch upgrade
+                    # Check if image is already a multi-arch image (contains -multi in version)
+                    user_provided_path = config.UPGRADE.get("ocp_upgrade_path")
+                    is_multi_arch_image = (
+                        ocp_upgrade_version and "-multi" in ocp_upgrade_version
+                    )
+
+                    if is_multi_arch_image and user_provided_path:
+                        # User provided explicit multi-arch image - use it directly
+                        image_path = user_provided_path
+                        target_image = ocp_upgrade_version
+                        logger.info(
+                            f"Using user-provided multi-arch image for upgrade: {image_path}:{target_image}"
+                        )
+                    elif ocp_upgrade_version:
+                        # Version provided but not multi-arch, fetch proper multi-arch image
+                        # Extract major.minor version (X.Y) using regex to get latest and greatest
+                        # e.g., "4.21.0-0.nightly" -> "4.21"
+                        version_match = re.match(r"^(\d+\.\d+)", ocp_upgrade_version)
+                        if version_match:
+                            base_version = version_match.group(1)
+                        else:
+                            # Fallback if regex doesn't match
+                            base_version = ocp_upgrade_version.split(".")[0:2]
+                            base_version = ".".join(base_version)
+                        full_image = get_latest_ocp_multi_image(version=base_version)
+                        logger.info(
+                            "Multi-arch enabled: fetching latest multi-arch image for version "
+                            f"{base_version}: {full_image}"
+                        )
+                        image_path, target_image = full_image.rsplit(":", 1)
+                    else:
+                        # Get latest multi-arch image for current OCP version
+                        full_image = get_latest_ocp_multi_image()
+                        logger.info(
+                            f"Multi-arch enabled: using latest multi-arch image: {full_image}"
+                        )
+                        image_path, target_image = full_image.rsplit(":", 1)
+                elif ocp_upgrade_version:
                     target_image = (
                         expose_ocp_version(ocp_upgrade_version)
                         if ocp_upgrade_version.endswith(".nightly")
                         else ocp_upgrade_version
                     )
+                    image_path = config.UPGRADE["ocp_upgrade_path"]
                 else:
                     ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
                     ocp_arch = config.UPGRADE["ocp_arch"]
                     target_image = f"{ocp_upgrade_version}-{ocp_arch}"
+                    image_path = config.UPGRADE["ocp_upgrade_path"]
             logger.info(f"Target image: {target_image}")
 
-            image_path = config.UPGRADE["ocp_upgrade_path"]
             cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
             # disconnected environment prerequisites
