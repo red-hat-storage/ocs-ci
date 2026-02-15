@@ -24,6 +24,7 @@ from ocs_ci.utility.users import (
     bind_user_to_noobaa_ui_role,
     create_noobaa_ui_clusterrole,
     delete_user_noobaa_ui_binding,
+    wait_for_rbac_propagation,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class TestDevUserObjectBrowserUI:
 
         create_noobaa_ui_clusterrole()
         bind_user_to_noobaa_ui_role(username)
+        wait_for_rbac_propagation(username, resource="noobaas.noobaa.io")
         logger.info(f"Bound user {username} to noobaa-odf-ui ClusterRole")
 
         account_name = f"dev-{username.lower()}"
@@ -137,8 +139,11 @@ class TestDevUserObjectBrowserUI:
         bucket_ui_admin.nav_object_storage_page()
         time.sleep(2)
 
+        s3_login_check = S3LoginForm()
         s3_login_form_visible = bool(
-            s3_login.get_elements(s3_login.bucket_tab["s3_login_project_dropdown"])
+            s3_login_check.get_elements(
+                s3_login_check.bucket_tab["s3_login_project_dropdown"]
+            )
         )
         assert (
             not s3_login_form_visible
