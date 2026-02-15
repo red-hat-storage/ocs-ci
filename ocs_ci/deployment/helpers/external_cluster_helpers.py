@@ -850,13 +850,13 @@ class ExternalCluster(object):
         )
 
         existing_rules = out.strip().split("\n")
-        logger.debug(f"Existing CRUSH rules for verification: {existing_rules}")
+        logger.info(f"Existing CRUSH rules for verification: {existing_rules}")
         for rule in expected_rules:
             if rule not in existing_rules:
                 raise ExternalClusterReplica1ConfigurationFailed(
                     f"CRUSH rule {rule} not found. Existing rules: {existing_rules}"
                 )
-        logger.debug(f"All expected CRUSH rules exist: {expected_rules}")
+        logger.info(f"All expected CRUSH rules exist: {expected_rules}")
 
         # Verify pools exist with correct configuration
         for pool in expected_pools:
@@ -870,7 +870,7 @@ class ExternalCluster(object):
                 raise ExternalClusterReplica1ConfigurationFailed(
                     f"Pool {pool} does not have size 1. Got: {out}"
                 )
-        logger.debug(f"All expected pools have size 1: {expected_pools}")
+        logger.info(f"All expected pools have size 1: {expected_pools}")
 
         logger.info("Replica-1 setup verification passed")
         return True
@@ -945,16 +945,17 @@ class ExternalCluster(object):
         if retcode != 0:
             logger.warning(f"Failed to enable pool deletion: {err}")
 
-        for pool_name in pool_names:
-            cmd = f"ceph osd pool delete {pool_name} {pool_name} --yes-i-really-really-mean-it"
-            logger.info(f"Deleting pool: {pool_name}")
-            retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
-            if retcode != 0:
-                logger.warning(f"Failed to delete pool {pool_name}: {err}")
-
-        # Disable pool deletion
-        cmd = "ceph config set mon mon_allow_pool_delete false"
-        self.rhcs_conn.exec_cmd(cmd)
+        try:
+            for pool_name in pool_names:
+                cmd = f"ceph osd pool delete {pool_name} {pool_name} --yes-i-really-really-mean-it"
+                logger.info(f"Deleting pool: {pool_name}")
+                retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+                if retcode != 0:
+                    logger.warning(f"Failed to delete pool {pool_name}: {err}")
+        finally:
+            # Always revert pool deletion config, even if deletion loop fails
+            cmd = "ceph config set mon mon_allow_pool_delete false"
+            self.rhcs_conn.exec_cmd(cmd)
 
         logger.info("Cleanup of replica-1 pools completed")
 
