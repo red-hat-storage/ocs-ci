@@ -34,7 +34,6 @@ class DevUser:
         password: OpenShift password for console login.
         secret_namespace: Namespace containing the S3 credentials secret.
         secret_name: Name of the secret containing S3 credentials.
-        clusterrole_binding_name: Computed name of the ClusterRoleBinding (property).
 
     """
 
@@ -42,11 +41,6 @@ class DevUser:
     password: str
     secret_namespace: str
     secret_name: str
-
-    @property
-    def clusterrole_binding_name(self) -> str:
-        """Return the ClusterRoleBinding name derived from username."""
-        return f"noobaa-odf-ui-binding-{self.username}"
 
 
 def add_htpasswd_user(username, password, htpasswd_path):
@@ -312,6 +306,74 @@ def bind_user_to_noobaa_ui_role(username: str) -> OCS:
 
     create_resource(**binding_data)
     return OCS(**binding_data)
+
+
+def _can_user_access_resource(
+    username: str, resource: str, verb: str, kubeconfig: str
+) -> bool:
+    """
+    Check if a user has permission to perform a verb on a resource.
+
+    Args:
+        username (str): The OpenShift username to check.
+        resource (str): The resource to check (e.g., noobaas.noobaa.io).
+        verb (str): The verb to check (e.g., list, get).
+        kubeconfig (str): Path to the kubeconfig file.
+
+    Returns:
+        bool: True if the user has the permission, False otherwise.
+
+    """
+    cmd = (
+        f"oc auth can-i {verb} {resource} "
+        f"--as={shlex.quote(username)} --kubeconfig={kubeconfig}"
+    )
+    try:
+        result = exec_cmd(cmd)
+        return "yes" in result.stdout.decode().strip().lower()
+    except CommandFailed:
+        return False
+
+
+def wait_for_rbac_propagation(
+    username: str,
+    resource: str,
+    verb: str = "list",
+    timeout: int = 120,
+    sleep: int = 10,
+) -> None:
+    """
+    Wait for RBAC permissions to propagate for a user.
+
+    Uses 'oc auth can-i --as=<username>' to verify that the API server
+    recognizes the user's permissions before proceeding.
+
+    Args:
+        username (str): The OpenShift username to check.
+        resource (str): The resource to check (e.g., noobaas.noobaa.io).
+        verb (str): The verb to check.
+        timeout (int): Maximum wait time in seconds.
+        sleep (int): Interval between checks in seconds.
+
+    Raises:
+        TimeoutExpiredError: If permissions don't propagate within timeout.
+
+    """
+    log.info(f"Waiting for RBAC propagation: user={username}, {verb} {resource}")
+    kubeconfig = config.RUN["kubeconfig"]
+
+    for has_access in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=_can_user_access_resource,
+        username=username,
+        resource=resource,
+        verb=verb,
+        kubeconfig=kubeconfig,
+    ):
+        if has_access:
+            log.info(f"RBAC verified: {username} can {verb} {resource}")
+            break
 
 
 def delete_user_noobaa_ui_binding(username: str) -> None:
