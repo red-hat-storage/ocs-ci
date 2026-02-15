@@ -939,6 +939,13 @@ class ExternalCluster(object):
         """
         logger.info(f"Cleaning up replica-1 pools: {pool_names}")
 
+        # Save current pool deletion config
+        _, original_value, _ = self.rhcs_conn.exec_cmd(
+            "ceph config get mon mon_allow_pool_delete"
+        )
+        original_value = original_value.strip() or "false"
+        logger.info(f"Saved mon_allow_pool_delete original value: {original_value}")
+
         # Enable pool deletion
         cmd = "ceph config set mon mon_allow_pool_delete true"
         retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
@@ -953,8 +960,8 @@ class ExternalCluster(object):
                 if retcode != 0:
                     logger.warning(f"Failed to delete pool {pool_name}: {err}")
         finally:
-            # Always revert pool deletion config, even if deletion loop fails
-            cmd = "ceph config set mon mon_allow_pool_delete false"
+            # Restore original pool deletion config
+            cmd = f"ceph config set mon mon_allow_pool_delete {original_value}"
             self.rhcs_conn.exec_cmd(cmd)
 
         logger.info("Cleanup of replica-1 pools completed")
