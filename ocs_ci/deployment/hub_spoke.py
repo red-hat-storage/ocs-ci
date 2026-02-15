@@ -5,7 +5,8 @@ import os
 import random
 import tempfile
 import time
-from abc import ABC
+import traceback
+from abc import ABC, abstractmethod
 import yaml
 import copy
 from concurrent.futures import ThreadPoolExecutor
@@ -80,6 +81,8 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_server_version,
 )
+from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr
+from botocore.exceptions import ClientError
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.ssl_certs import (
     create_ocs_ca_bundle,
@@ -575,7 +578,24 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
 
     for index, cluster_name in enumerate(cluster_names_desired):
         logger.info(f"Creating hosted OCP cluster: {cluster_name}")
-        hosted_ocp_cluster = HypershiftHostedOCP(cluster_name)
+
+        # Determine the hosted cluster platform (kubevirt, agent, or aws)
+        hosted_cluster_platform = (
+            config.ENV_DATA["clusters"]
+            .get(cluster_name)
+            .get("hosted_cluster_platform", "kubevirt")
+        )
+
+        # Instantiate the appropriate class based on platform
+        if hosted_cluster_platform == "aws":
+            logger.info(f"Cluster '{cluster_name}' will be deployed on AWS platform")
+            hosted_ocp_cluster = HypershiftAWSHostedOCP(cluster_name)
+        else:
+            logger.info(
+                f"Cluster '{cluster_name}' will be deployed on {hosted_cluster_platform} platform"
+            )
+            hosted_ocp_cluster = HypershiftHostedOCP(cluster_name)
+
         # we need to ensure that all dependencies are installed so for the first cluster we will install all,
         # operators and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP
         # with hcp command.
@@ -606,8 +626,22 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
             deploy_hyperconverged = False
             deploy_mce = False
 
-        if not config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
-            raise ProviderModeNotFoundException()
+        platform = config.ENV_DATA["platform"].lower()
+        if (
+            platform not in HCI_PROVIDER_CLIENT_PLATFORMS
+            and platform != constants.AWS_PLATFORM
+        ):
+            raise ProviderModeNotFoundException(
+                f"Platform {config.ENV_DATA['platform']} "
+                f"is not supported for Hosted Control Plane provider deployment"
+            )
+
+        if hosted_cluster_platform == constants.AWS_PLATFORM:
+            deploy_hypershift_oidc = first_ocp_deployment
+            create_deployer_iam_role = first_ocp_deployment
+        else:
+            deploy_hypershift_oidc = False
+            create_deployer_iam_role = False
 
         hosted_ocp_cluster.deploy_dependencies(
             deploy_acm_hub=deploy_acm_hub,
@@ -616,6 +650,8 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
             download_hcp_binary=first_ocp_deployment,
             deploy_hyperconverged=deploy_hyperconverged,
             deploy_mce=deploy_mce,
+            deploy_hypershift_oidc=deploy_hypershift_oidc,
+            create_deployer_iam_role=create_deployer_iam_role,
         )
 
         cluster_name = hosted_ocp_cluster.deploy_ocp()
@@ -1324,6 +1360,10 @@ class HostedClients(HyperShiftBase):
 class SpokeOCP(ABC):
     """
     A base class representing a Spoke OCP cluster.
+
+    This abstract base class provides common functionality for all spoke clusters.
+    Concrete implementations must define their platform-specific initialization
+    and implement the abstract methods.
     """
 
     @property
@@ -1428,6 +1468,157 @@ class SpokeOCP(ABC):
             return False
 
         return self.network_policy_exists(namespace=namespace)
+
+    def get_hosted_cluster_ocp_version(self):
+        """
+        Get hosted cluster OCP version from version history.
+
+        Returns:
+            Optional[str]: Version string (e.g. 4.18.9) if available, otherwise None.
+        """
+        try:
+            history = get_hosted_cluster_version_history(self.name)
+            if not history:
+                logger.warning(
+                    f"No version history found for HostedCluster '{self.name}'"
+                )
+                return None
+
+            def _parse_ts(ts):
+                if not ts:
+                    return datetime.min.replace(tzinfo=timezone.utc)
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+            completed = [e for e in history if e.get("state") == "Completed"]
+            candidates = completed or history
+            candidates.sort(
+                key=lambda e: _parse_ts(
+                    e.get("completionTime") or e.get("startedTime")
+                ),
+                reverse=True,
+            )
+            hosted_ocp_version_history = candidates[0].get("version")
+            if not hosted_ocp_version_history:
+                logger.warning(
+                    f"Latest version entry missing 'version' for HostedCluster '{self.name}'"
+                )
+                return None
+            return hosted_ocp_version_history
+        except Exception as e:
+            logger.error(
+                f"Failed to determine hosted cluster OCP version for '{self.name}': {e}"
+            )
+            return None
+
+    def compute_target_release_image(self, upgrade_scenario=False):
+        """
+        Compute the target release image for OCP upgrade based on:
+
+        - Configured ocp_version in config.ENV_DATA["clusters"][cluster_name] and configured
+          version is lower than provider version
+        - If configured version is matching to existing hosted ocp version,
+          use the provider OCP version from get_server_version()
+
+        Args:
+            upgrade_scenario (bool): If True, the method is being called in the context of OCP upgrade,
+            and additional checks may be applied to determine the target release image.
+
+        Returns:
+            str: Full release image reference, or None if it cannot be determined.
+
+        """
+        ocp_version = (
+            config.ENV_DATA.get("clusters", {}).get(self.name, {}).get("ocp_version")
+        )
+        ocp_version = str(ocp_version).strip() if ocp_version is not None else None
+        provider_version = get_server_version()
+
+        if (
+            ocp_version
+            and "nightly" not in ocp_version
+            and len(ocp_version.split(".")) == 2
+        ):
+            try:
+                ocp_version = get_ocp_ga_version(ocp_version)
+            except Exception as e:
+                # since hypershift client can be not the only one in upgrade scenario, proceed with warning
+                logger.warning(
+                    f"Bad configuration. Failed to resolve GA version for '{ocp_version}': {e}"
+                )
+
+        if not ocp_version:
+            logger.info(
+                f"No ocp_version configured for cluster '{self.name}'; will use provider version"
+            )
+        elif upgrade_scenario:
+            desired_sem = get_semantic_version(ocp_version)
+            provider_sem = get_semantic_version(provider_version)
+            if desired_sem >= provider_sem:
+                logger.warning(
+                    "desired ocp_version from configuration is higher or equal to provider version"
+                )
+                return None
+
+            # TODO: improve code - ensure get_hosted_cluster_ocp_version is called only in upgrade scenario
+            running_hosted_ocp_version = self.get_hosted_cluster_ocp_version()
+            if get_semantic_version(running_hosted_ocp_version) >= desired_sem:
+                logger.warning(
+                    f"Hosted cluster '{self.name}' is at version '{running_hosted_ocp_version}' "
+                    f"which matches or higher than desired ocp_version '{ocp_version}', proceed with provider version"
+                )
+                ocp_version = None
+        else:
+            logger.info(
+                f"Using configured ocp_version '{ocp_version}' for cluster '{self.name}'"
+            )
+
+        target_version = ocp_version or provider_version
+        if "nightly" in target_version:
+            return f"{constants.REGISTRY_SVC}:{target_version}"
+        return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
+
+    @abstractmethod
+    def deploy_dependencies(
+        self,
+        deploy_acm_hub=False,
+        deploy_cnv=False,
+        deploy_metallb=False,
+        download_hcp_binary=False,
+        deploy_hyperconverged=False,
+        deploy_mce=False,
+        deploy_hypershift_oidc=False,
+        create_deployer_iam_role=False,
+    ):
+        """
+        Deploy dependencies required for the cluster.
+        Must be implemented by child classes.
+
+        Args:
+            deploy_acm_hub (bool): Deploy ACM Hub
+            deploy_cnv (bool): Deploy CNV
+            deploy_metallb (bool): Deploy MetalLB
+            download_hcp_binary (bool): Download HCP binary
+            deploy_hyperconverged (bool): Deploy Hyperconverged
+            deploy_mce (bool): Deploy MCE
+            deploy_hypershift_oidc (bool): AWS-specific, setup S3 bucket for OIDC
+            create_deployer_iam_role (bool): AWS-specific, create IAM role for deployer
+
+        """
+        pass
+
+    @abstractmethod
+    def deploy_ocp(self, **kwargs):
+        """
+        Deploy OCP cluster.
+        Must be implemented by child classes.
+
+        Args:
+            **kwargs: Additional arguments for deploy_hosted_ocp_cluster (currently not in use)
+
+        Returns:
+            str: Name of the hosted cluster
+        """
+        pass
 
 
 class ExternalOCP(SpokeOCP, Deployment):
@@ -1711,24 +1902,35 @@ class HypershiftHostedOCP(
 
     def deploy_dependencies(
         self,
-        deploy_acm_hub,
-        deploy_cnv,
-        deploy_metallb,
-        download_hcp_binary,
-        deploy_mce,
-        deploy_hyperconverged,
+        deploy_acm_hub=False,
+        deploy_cnv=False,
+        deploy_metallb=False,
+        download_hcp_binary=False,
+        deploy_hyperconverged=False,
+        deploy_mce=False,
+        deploy_hypershift_oidc=False,
+        create_deployer_iam_role=False,
     ):
         """
-        Deploy dependencies for hosted OCP cluster
+        Deploy dependencies for hosted OCP cluster.
+
         Args:
-            deploy_acm_hub: bool Deploy ACM Hub
-            deploy_cnv: bool Deploy CNV
-            deploy_metallb: bool Deploy MetalLB
-            download_hcp_binary: bool Download HCP binary
-            deploy_mce: bool Deploy mce
-            deploy_hyperconverged: bool Deploy Hyperconverged
+            deploy_acm_hub (bool): Deploy ACM Hub
+            deploy_cnv (bool): Deploy CNV
+            deploy_metallb (bool): Deploy MetalLB
+            download_hcp_binary (bool): Download HCP binary
+            deploy_hyperconverged (bool): Deploy Hyperconverged
+            deploy_mce (bool): Deploy MCE
+            deploy_hypershift_oidc (bool): AWS-specific, ignored in base class
+            create_deployer_iam_role (bool): AWS-specific, ignored in base class
 
         """
+        # AWS-specific parameters are ignored in the base class
+        if deploy_hypershift_oidc or create_deployer_iam_role:
+            logger.debug(
+                "deploy_hypershift_oidc and create_deployer_iam_role are AWS-specific "
+                "and ignored in HypershiftHostedOCP base class"
+            )
 
         # log out all args in one log.info
         logger.info(
@@ -1786,62 +1988,6 @@ class HypershiftHostedOCP(
             create_patch_provisioning()
             create_agent_service_config()
 
-    def _compute_target_release_image(self):
-        """
-        Compute the target release image for OCP upgrade based on:
-        - Configured ocp_version in config.ENV_DATA["clusters"][cluster_name] and configured version is
-          lower than provider version
-        - If configured version is matching to existing hosted ocp version,
-          use the provider OCP version from get_server_version()
-
-        Returns:
-            str: Full release image reference, or None if it cannot be determined.
-        """
-        ocp_version = (
-            config.ENV_DATA.get("clusters", {}).get(self.name, {}).get("ocp_version")
-        )
-        ocp_version = str(ocp_version).strip() if ocp_version is not None else None
-        provider_version = get_server_version()
-
-        if (
-            ocp_version
-            and "nightly" not in ocp_version
-            and len(ocp_version.split(".")) == 2
-        ):
-            try:
-                ocp_version = get_ocp_ga_version(ocp_version)
-            except Exception as e:
-                # since hypershift client can be not the only one in upgrade scenario, proceed with warning
-                logger.warning(
-                    f"Bad configuration. Failed to resolve GA version for '{ocp_version}': {e}"
-                )
-
-        if not ocp_version:
-            logger.info(
-                f"No ocp_version configured for cluster '{self.name}'; will use provider version"
-            )
-        else:
-            desired_sem = get_semantic_version(ocp_version)
-            provider_sem = get_semantic_version(provider_version)
-            if desired_sem >= provider_sem:
-                logger.warning(
-                    "desired ocp_version from configuration is higher or equal to provider version"
-                )
-                return None
-
-            running_hosted_ocp_version = self.get_hosted_cluster_ocp_version()
-            if get_semantic_version(running_hosted_ocp_version) >= desired_sem:
-                logger.warning(
-                    f"Hosted cluster '{self.name}' is at version '{running_hosted_ocp_version}' "
-                    f"which matches or higher than desired ocp_version '{ocp_version}', proceed with provider version"
-                )
-                ocp_version = None
-
-        target_version = ocp_version or provider_version
-        if "nightly" in target_version:
-            return f"{constants.REGISTRY_SVC}:{target_version}"
-        return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
-
     @if_version("<4.20")
     def apply_admin_acks_to_hosted_cluster(self):
         """
@@ -1860,7 +2006,7 @@ class HypershiftHostedOCP(
             bool: True if patch is applied, False otherwise
 
         """
-        image = self._compute_target_release_image()
+        image = self.compute_target_release_image(upgrade_scenario=True)
         if not image:
             return False
         try:
@@ -1895,7 +2041,7 @@ class HypershiftHostedOCP(
             bool: True if patch is applied, False otherwise
 
         """
-        image = self._compute_target_release_image()
+        image = self.compute_target_release_image(upgrade_scenario=True)
         if not image:
             return False
         try:
@@ -1916,47 +2062,6 @@ class HypershiftHostedOCP(
         except Exception as e:
             logger.error(f"Failed to patch NodePool '{self.name}' for OCP upgrade: {e}")
             return False
-
-    def get_hosted_cluster_ocp_version(self):
-        """
-        Get hosted cluster OCP version from version history.
-
-        Returns:
-            Optional[str]: Version string (e.g. 4.18.9) if available, otherwise None.
-        """
-        try:
-            history = get_hosted_cluster_version_history(self.name)
-            if not history:
-                logger.warning(
-                    f"No version history found for HostedCluster '{self.name}'"
-                )
-                return None
-
-            def _parse_ts(ts):
-                if not ts:
-                    return datetime.min.replace(tzinfo=timezone.utc)
-                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-            completed = [e for e in history if e.get("state") == "Completed"]
-            candidates = completed or history
-            candidates.sort(
-                key=lambda e: _parse_ts(
-                    e.get("completionTime") or e.get("startedTime")
-                ),
-                reverse=True,
-            )
-            hosted_ocp_version_history = candidates[0].get("version")
-            if not hosted_ocp_version_history:
-                logger.warning(
-                    f"Latest version entry missing 'version' for HostedCluster '{self.name}'"
-                )
-                return None
-            return hosted_ocp_version_history
-        except Exception as e:
-            logger.error(
-                f"Failed to determine hosted cluster OCP version for '{self.name}': {e}"
-            )
-            return None
 
     def wait_hosted_cluster_upgrade_completed(self, timeout=3600):
         """
@@ -2075,6 +2180,1846 @@ class HypershiftHostedOCP(
                 logger.error(f"Required file not found during deployment: {e}")
                 return False
             return True
+
+
+class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller, AWS):
+    """
+    Class to represent functionality necessary to deploy and manage AWS HCP
+    (Hosted Control Plane) cluster with EC2 worker nodes.
+
+    Control plane runs on the management cluster (hub).
+    Worker nodes run as independent EC2 instances in AWS.
+
+    Inherits:
+        - SpokeOCP: Base spoke cluster functionality (kubeconfig, exec_oc_cmd)
+        - HyperShiftBase: HCP binary management, cluster operations
+        - Deployment: Deployment utilities and base methods
+        - MCEInstaller: MCE installation (if needed for HCP)
+
+    ODF Deployment: Use SpokeODF methods via instantiation, not inheritance
+    Orchestration: Integrates with existing HostedClients class
+    """
+
+    def __init__(self, name):
+        """
+        Initialize AWS HCP cluster deployment.
+
+        Args:
+            name (str): Cluster name
+        """
+        SpokeOCP.__init__(self, name)
+        Deployment.__init__(self)
+        HyperShiftBase.__init__(self)
+        MCEInstaller.__init__(self)
+        AWS.__init__(self)
+
+        # Load AWS-specific configuration
+        self.vpc_cidr = None
+        self.oidc_secret_name = None
+        self.oidc_bucket_arn = None
+        self.oidc_bucket_name = None
+
+        # Path to STS session credentials file
+        self.sts_credentials_file = None
+
+        # Path to AWS HCP files directory and infra output file
+        self.aws_hcp_files_dir = None
+        self.output_infra_file = None
+
+        # Infrastructure ID for AWS resources
+        self.infra_id = f"{self.name}-infra"
+
+        # Role ARN for deployer
+        self.role_arn = None
+
+        # Infrastructure zone IDs and machine CIDR
+        self.public_zone_id = None
+        self.private_zone_id = None
+        self.local_zone_id = None
+        self.infra_machine_cidr = None
+
+        # Path to IAM output file
+        self.output_iam_file = None
+
+        # OIDC bucket region
+        self.oidc_bucket_region = None
+
+        self._load_aws_config()
+
+    def _load_aws_config(self):
+        """
+        Load AWS-specific configuration from ENV_DATA.
+
+        Reads AWS region, instance types, networking configuration, and other
+        AWS-specific parameters from the cluster configuration.
+        """
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+
+        self.aws_region = cluster_config.get("region", "us-west-2")
+        if not self.aws_region:
+            logger.warning(
+                f"region not set for cluster '{self.name}' in config. Using default 'us-west-2'."
+            )
+            self.aws_region = config.ENV_DATA["region"]
+
+        self.worker_instance_type = cluster_config.get(
+            "worker_instance_type", "m5.xlarge"
+        )
+
+        self.base_domain = cluster_config.get(
+            "base_domain", config.ENV_DATA["base_domain"]
+        )
+        if not self.base_domain:
+            logger.warning(
+                f"base_domain not set for cluster '{self.name}' in config. "
+                "Using global base_domain from ENV_DATA."
+            )
+            self.base_domain = config.ENV_DATA["base_domain"]
+
+        logger.info(
+            f"Loaded AWS config for cluster '{self.name}': "
+            f"region={self.aws_region}, instance_type={self.worker_instance_type}"
+        )
+
+    def retrieve_sts_session_token(self, duration_seconds=7200, output_file=None):
+        """
+        Retrieve AWS STS session token and save it to a file.
+
+        This method retrieves temporary AWS credentials and stores the file path
+        in self.sts_credentials_file for later use.
+
+        Args:
+            duration_seconds (int): Duration of the session token in seconds.
+                Default is 7200 (2 hours). Valid range: 900 (15 min) to 129600 (36 hours).
+            output_file (str): Path to the file where credentials will be saved.
+                If not provided, creates a temp file with cluster name prefix.
+
+        Returns:
+            str: Path to the credentials file
+
+        """
+        if not output_file:
+            output_file = tempfile.NamedTemporaryFile(
+                mode="w",
+                prefix=f"sts-creds-{self.name}-",
+                suffix=".json",
+                delete=False,
+            ).name
+
+        result = self.get_session_token(
+            duration_seconds=duration_seconds,
+            output_file=output_file,
+        )
+
+        # Store the credentials file path
+        self.sts_credentials_file = result["credentials_file"]
+
+        logger.info(
+            f"STS credentials saved to: {self.sts_credentials_file}\n"
+            f"  Expires at: {result['credentials']['Expiration']}"
+        )
+
+        return self.sts_credentials_file
+
+    def retrieve_sts_session_token_via_cli(
+        self, duration_seconds=7200, output_file=None
+    ):
+        """
+        Alternative method to retrieve AWS STS session token using AWS CLI directly.
+
+        Executes: aws sts get-session-token --duration-seconds <duration> > <output_file>
+
+        This is an alternative to retrieve_sts_session_token() that uses the AWS CLI
+        command directly instead of using boto3. Useful when boto3 has issues or when
+        you need to match exact CLI behavior.
+
+        Args:
+            duration_seconds (int): Duration of the session token in seconds.
+                Default is 7200 (2 hours). Valid range: 900 (15 min) to 129600 (36 hours).
+            output_file (str): Path to the file where credentials will be saved.
+                If not provided, saves to cluster_path/sts-creds-{cluster_name}.json
+
+        Returns:
+            str: Path to the credentials file
+
+        Raises:
+            CommandFailed: If AWS CLI command fails
+
+        """
+        logger.info(
+            f"Retrieving STS session token via AWS CLI for cluster '{self.name}' "
+            f"(duration: {duration_seconds}s)"
+        )
+
+        if not output_file:
+            output_file = tempfile.NamedTemporaryFile(
+                mode="w",
+                prefix=f"sts-creds-{self.name}-",
+                suffix=".json",
+                delete=False,
+            ).name
+
+        # Build AWS CLI command
+        cmd = f"aws sts get-session-token --duration-seconds {duration_seconds}"
+
+        try:
+            # Execute AWS CLI command and capture output
+            result = exec_cmd(cmd, shell=True)
+
+            # Write output to file
+            with open(output_file, "w") as f:
+                f.write(result.stdout.decode("utf-8"))
+
+            # Parse the output to get expiration time for logging
+            try:
+                creds_data = json.loads(result.stdout.decode("utf-8"))
+                expiration = creds_data.get("Credentials", {}).get(
+                    "Expiration", "Unknown"
+                )
+                logger.info(f"AWS CLI: Session token saved to file: {output_file}")
+                logger.info(f"AWS CLI: Session token expires at: {expiration}")
+            except json.JSONDecodeError:
+                logger.warning("Could not parse AWS CLI output for expiration time")
+                expiration = "Unknown"
+
+            # Store the credentials file path
+            self.sts_credentials_file = output_file
+
+            logger.info(
+                f"STS credentials saved to: {self.sts_credentials_file}\n"
+                f"  Command used: {cmd}\n"
+                f"  Expires at: {expiration}"
+            )
+
+            return self.sts_credentials_file
+
+        except CommandFailed as e:
+            logger.error(f"Failed to retrieve STS session token via AWS CLI: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving STS session token: {e}")
+            raise
+
+    def validate_sts_credentials_not_expired(self):
+        """
+        Validate that STS credentials file exists and credentials are not expired.
+
+        Returns:
+            bool: True if credentials are valid and not expired, False otherwise
+
+        Raises:
+            FileNotFoundError: If credentials file doesn't exist
+        """
+        if not self.sts_credentials_file:
+            logger.error("STS credentials file path is not set")
+            return False
+
+        if not os.path.exists(self.sts_credentials_file):
+            raise FileNotFoundError(
+                f"STS credentials file not found: {self.sts_credentials_file}"
+            )
+
+        try:
+            with open(self.sts_credentials_file, "r") as f:
+                creds_data = json.load(f)
+
+            expiration_str = creds_data.get("Credentials", {}).get("Expiration")
+            if not expiration_str:
+                logger.warning("No expiration time found in STS credentials file")
+                return True  # Assume valid if no expiration
+
+            # Parse expiration time
+            from dateutil import parser as date_parser
+
+            expiration_time = date_parser.parse(expiration_str)
+
+            # Make timezone-aware comparison
+            import datetime
+
+            current_time = datetime.datetime.now(expiration_time.tzinfo)
+
+            if current_time >= expiration_time:
+                logger.error(
+                    f"STS credentials have EXPIRED!\n"
+                    f"  Expiration: {expiration_str}\n"
+                    f"  Current time: {current_time.isoformat()}\n"
+                    f"  Call retrieve_sts_session_token() to get new credentials."
+                )
+                return False
+
+            time_remaining = expiration_time - current_time
+            logger.info(f"STS credentials are valid. Time remaining: {time_remaining}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error validating STS credentials: {e}")
+            return False
+
+    def _create_aws_hcp_files_dir(self):
+        """
+        Create a directory for AWS HCP files inside the hosted_cluster_path.
+
+        Creates a folder called 'aws_hcp_files' inside the cluster's hosted_cluster_path
+        directory. This folder is used to store AWS-specific files like infra output,
+        STS credentials, etc.
+
+        Returns:
+            str: Path to the created aws_hcp_files directory
+
+        Raises:
+            ValueError: If hosted_cluster_path is not configured for the cluster
+
+        """
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+        hosted_cluster_path = cluster_config.get("hosted_cluster_path")
+
+        if not hosted_cluster_path:
+            raise ValueError(
+                f"hosted_cluster_path not configured for cluster '{self.name}'. "
+                "Set ENV_DATA.clusters.<cluster_name>.hosted_cluster_path in config."
+            )
+
+        hosted_cluster_path = os.path.expanduser(hosted_cluster_path)
+
+        # Create the aws_hcp_files directory
+        aws_hcp_files_dir = os.path.join(hosted_cluster_path, "aws_hcp_files")
+
+        if not os.path.exists(aws_hcp_files_dir):
+            logger.info(f"Creating AWS HCP files directory: {aws_hcp_files_dir}")
+            os.makedirs(aws_hcp_files_dir, mode=0o755, exist_ok=True)
+        else:
+            logger.info(f"AWS HCP files directory already exists: {aws_hcp_files_dir}")
+
+        self.aws_hcp_files_dir = aws_hcp_files_dir
+        return aws_hcp_files_dir
+
+    def create_aws_infra(self, timeout=1800):
+        """
+        Create AWS infrastructure for HyperShift hosted cluster.
+
+        Executes 'hypershift create infra aws' command to create the necessary
+        AWS infrastructure (VPC, subnets, security groups, etc.) for the hosted cluster.
+        Automatically selects an unused VPC CIDR to avoid conflicts with existing VPCs.
+
+        Equivalent to:
+            hypershift create infra aws --name $NAME \\
+                --sts-creds $STS_CREDENTIALS \\
+                --base-domain $BASEDOMAIN \\
+                --infra-id $INFRA_ID \\
+                --region $REGION \\
+                --role-arn $ROLE_ARN \\
+                --output-file $OUTPUT_INFRA_FILE \\
+                --vpc-cidr $VPC_CIDR
+
+        Args:
+            timeout (int): Timeout in seconds for the infra creation command.
+                Default is 1800 (30 minutes).
+
+        Returns:
+            str: Path to the output infra file if successful
+
+        Raises:
+            ValueError: If required parameters are missing
+            CommandFailed: If the infrastructure creation fails
+
+        """
+        logger.info(f"Creating AWS infrastructure for cluster '{self.name}'")
+
+        # Validate required parameters
+        if not self.sts_credentials_file:
+            raise ValueError(
+                "STS credentials file not set. Call retrieve_sts_session_token() first."
+            )
+
+        if not self.role_arn:
+            raise ValueError("Role ARN not set. Call create_deployer_iam_role() first.")
+
+        if not self.aws_hcp_files_dir:
+            self._create_aws_hcp_files_dir()
+
+        self.output_infra_file = os.path.join(
+            self.aws_hcp_files_dir, f"{self.name}-infra-output.json"
+        )
+
+        # Check if infrastructure already exists
+        logger.info(f"Checking if infrastructure '{self.infra_id}' already exists")
+        try:
+            existing_vpcs = self.get_vpc_from_existing_infra()
+
+            if existing_vpcs:
+                logger.info(
+                    f"Infrastructure '{self.infra_id}' already exists. "
+                    f"Found {len(existing_vpcs)} VPC(s) with matching tag. Skipping creation."
+                )
+
+                if os.path.exists(self.output_infra_file):
+                    logger.info(
+                        f"Using existing infrastructure output file: {self.output_infra_file}, "
+                        f"reloading infra to class attributes"
+                    )
+                    self.read_infra_output()
+                    return self.output_infra_file
+                else:
+                    logger.warning(
+                        f"Infrastructure exists but output file not found: {self.output_infra_file}. "
+                        "Infrastructure may have been created outside this tool."
+                    )
+                    return self.output_infra_file
+        except ClientError as e:
+            logger.error(
+                f"AWS API error while checking for existing infrastructure: {e}"
+            )
+            raise
+
+        logger.info(f"Finding unused VPC CIDR in region {self.aws_region}")
+        try:
+            self.vpc_cidr = get_unused_vpc_cidr(region_name=self.aws_region)
+            logger.info(f"Selected unused VPC CIDR: {self.vpc_cidr}")
+        except ClientError as e:
+            logger.error(f"AWS API error while finding unused VPC CIDR: {e}")
+            raise
+        except RuntimeError as e:
+            logger.error(f"Failed to find unused VPC CIDR: {e}")
+            raise
+
+        cmd = (
+            f"{self.hypershift_binary_path} create infra aws "
+            f"--name {self.name} "
+            f"--sts-creds {self.sts_credentials_file} "
+            f"--base-domain {self.base_domain} "
+            f"--infra-id {self.infra_id} "
+            f"--region {self.aws_region} "
+            f"--role-arn {self.role_arn} "
+            f"--output-file {self.output_infra_file} "
+            f"--vpc-cidr {self.vpc_cidr} "
+        )
+
+        logger.debug(f"Executing hypershift create infra aws command: {cmd}")
+
+        try:
+            result = exec_cmd(cmd, timeout=timeout)
+            logger.info("AWS infrastructure creation command completed successfully")
+            logger.debug(
+                f"Output: {result.stdout.decode('utf-8') if result.stdout else ''}"
+            )
+        except CommandFailed as e:
+            logger.error(f"Failed to create AWS infrastructure: {e}")
+            raise
+
+        # Verify output file was created
+        if not os.path.exists(self.output_infra_file):
+            raise CommandFailed(
+                f"Infrastructure output file was not created: {self.output_infra_file}"
+            )
+
+        logger.info(f"AWS infrastructure output file created: {self.output_infra_file}")
+
+        # Verify infrastructure exists by checking the output file content
+        try:
+            with open(self.output_infra_file, "r") as f:
+                infra_data = json.load(f)
+                logger.info(
+                    f"AWS infrastructure created successfully:\n"
+                    f"  Infra ID: {self.infra_id}\n"
+                    f"  Output file: {self.output_infra_file}\n"
+                    f"  Infrastructure details: {json.dumps(infra_data, indent=2)}"
+                )
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Could not read/parse infra output file: {e}")
+
+        return self.output_infra_file
+
+    def get_vpc_from_existing_infra(self, infra_id=None):
+        """
+        Check for existing VPCs with the tag corresponding to the infrastructure ID.
+
+        Args:
+            infra_id (str): Optional infrastructure ID to check for. If not provided, uses self.infra_id.
+
+        Returns:
+            list: List of existing VPCs matching the infrastructure tag. Empty if none found.
+        """
+
+        if not infra_id:
+            infra_id = self.infra_id
+
+        vpcs = self.ec2_client.describe_vpcs(
+            Filters=[
+                {
+                    "Name": "tag:kubernetes.io/cluster/" + infra_id,
+                    "Values": ["owned"],
+                }
+            ]
+        )
+        existing_vpcs = vpcs.get("Vpcs", [])
+        return existing_vpcs
+
+    def read_infra_output(self):
+        """
+        Read the infrastructure output file and extract zone IDs and machine CIDR.
+
+        Reads the JSON output file created by 'hypershift create infra aws' and
+        assigns the relevant values to instance attributes:
+        - self.infra_id from 'infraID'
+        - self.public_zone_id from 'publicZoneID'
+        - self.private_zone_id from 'privateZoneID'
+        - self.local_zone_id from 'localZoneID'
+        - self.infra_machine_cidr from 'machineCIDR'
+
+        Returns:
+            dict: The parsed infrastructure output data
+
+        Raises:
+            FileNotFoundError: If output_infra_file does not exist
+            ValueError: If output_infra_file is not set
+            json.JSONDecodeError: If the file is not valid JSON
+        """
+        if not self.output_infra_file:
+            raise ValueError(
+                "output_infra_file not set. Call create_aws_infra() first."
+            )
+
+        if not os.path.exists(self.output_infra_file):
+            raise FileNotFoundError(
+                f"Infrastructure output file not found: {self.output_infra_file}"
+            )
+
+        logger.info(f"Reading infrastructure output from: {self.output_infra_file}")
+
+        try:
+            with open(self.output_infra_file, "r") as f:
+                infra_data = json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse infrastructure output file: {e}")
+            raise
+
+        # Extract and assign zone IDs, machine CIDR, and infra ID
+        self.infra_id = infra_data.get("infraID")
+        self.public_zone_id = infra_data.get("publicZoneID")
+        self.private_zone_id = infra_data.get("privateZoneID")
+        self.local_zone_id = infra_data.get("localZoneID")
+        self.infra_machine_cidr = infra_data.get("machineCIDR")
+
+        logger.info(
+            f"Extracted infrastructure configuration:\n"
+            f"  Infra ID: {self.infra_id}\n"
+            f"  Public Zone ID: {self.public_zone_id}\n"
+            f"  Private Zone ID: {self.private_zone_id}\n"
+            f"  Local Zone ID: {self.local_zone_id}\n"
+            f"  Machine CIDR: {self.infra_machine_cidr}"
+        )
+
+        return infra_data
+
+    def create_aws_iam(self, timeout=1800):
+        """
+        Create AWS IAM resources for HyperShift hosted cluster.
+
+        Executes 'hypershift create iam aws' command to create the necessary
+        IAM resources (roles, policies, etc.) for the hosted cluster.
+
+        Equivalent to:
+            hypershift create iam aws --infra-id $INFRA_ID \\
+                --sts-creds $STS_CREDENTIALS \\
+                --role-arn $ROLE_ARN \\
+                --oidc-storage-provider-s3-bucket-name $OIDC_BUCKET_NAME \\
+                --oidc-storage-provider-s3-region $OIDC_BUCKET_REGION \\
+                --region $REGION \\
+                --public-zone-id $PUBLIC_ZONE_ID \\
+                --private-zone-id $PRIVATE_ZONE_ID \\
+                --local-zone-id $LOCAL_ZONE_ID \\
+                --output-file $OUTPUT_IAM_FILE
+
+        Args:
+            timeout (int): Timeout in seconds for the IAM creation command.
+                Default is 1800 (30 minutes).
+
+        Returns:
+            str: Path to the output IAM file if successful
+
+        Raises:
+            ValueError: If required parameters are missing
+            CommandFailed: If the IAM creation fails
+        """
+        logger.info(f"Creating AWS IAM resources for cluster '{self.name}'")
+
+        # Validate required parameters
+        if not self.infra_id:
+            raise ValueError("infra_id not set. Call create_aws_infra() first.")
+
+        if not self.sts_credentials_file:
+            raise ValueError(
+                "STS credentials file not set. Call retrieve_sts_session_token() first."
+            )
+
+        if not self.validate_sts_credentials_not_expired():
+            raise ValueError(
+                "STS credentials are expired or invalid. "
+                "Call retrieve_sts_session_token() to get new credentials."
+            )
+
+        if not self.role_arn:
+            raise ValueError("Role ARN not set. Call create_deployer_iam_role() first.")
+
+        if not self.oidc_bucket_name:
+            raise ValueError(
+                "OIDC bucket name not set. Ensure self.oidc_bucket_name is configured."
+            )
+
+        if not self.oidc_bucket_region:
+            raise ValueError(
+                "OIDC bucket region not set. Ensure self.oidc_bucket_region is configured."
+            )
+
+        if (
+            not self.public_zone_id
+            or not self.private_zone_id
+            or not self.local_zone_id
+        ):
+            raise ValueError(
+                "Zone IDs not set. Call read_infra_output() first to extract zone IDs."
+            )
+
+        if not self.aws_hcp_files_dir:
+            self._create_aws_hcp_files_dir()
+
+        # Set output IAM file path
+        self.output_iam_file = os.path.join(
+            self.aws_hcp_files_dir, f"{self.name}-iam-output.json"
+        )
+
+        # TODO: remove this workaround once hypershift create iam properly creates
+        #  the OIDC discovery documents in the S3 bucket
+        #
+        # # CRITICAL: Create OIDC documents BEFORE running hypershift create iam
+        # # This ensures documents exist when AWS IAM OIDC provider is registered
+        # issuer_url = f"https://{self.oidc_bucket_name}.s3.{self.oidc_bucket_region}.amazonaws.com/{self.infra_id}"
+        # logger.info(
+        #     "Pre-creating OIDC discovery documents before IAM creation "
+        #     "(required for OIDC provider registration)"
+        # )
+        # if not self._create_oidc_discovery_documents(issuer_url):
+        #     logger.warning(
+        #         "Failed to pre-create OIDC documents. "
+        #         "Will retry validation after IAM creation."
+        #     )
+        # else:
+        #     logger.info("✅ OIDC documents pre-created successfully")
+
+        # Build the hypershift create iam aws command
+        cmd = (
+            f"{self.hypershift_binary_path} create iam aws "
+            f"--infra-id {self.infra_id} "
+            f"--sts-creds {self.sts_credentials_file} "
+            f"--role-arn {self.role_arn} "
+            f"--oidc-storage-provider-s3-bucket-name {self.oidc_bucket_name} "
+            f"--oidc-storage-provider-s3-region {self.oidc_bucket_region} "
+            f"--region {self.aws_region} "
+            f"--public-zone-id {self.public_zone_id} "
+            f"--private-zone-id {self.private_zone_id} "
+            f"--local-zone-id {self.local_zone_id} "
+            f"--output-file {self.output_iam_file}"
+        )
+
+        logger.debug(f"Executing hypershift create iam aws command: {cmd}")
+
+        try:
+            result = exec_cmd(cmd, timeout=timeout)
+            logger.info("AWS IAM creation command completed successfully")
+
+            # Log the full output for debugging
+            stdout = result.stdout.decode("utf-8") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8") if result.stderr else ""
+
+            if stdout:
+                logger.info(f"hypershift create iam stdout:\n{stdout}")
+            if stderr:
+                logger.warning(f"hypershift create iam stderr:\n{stderr}")
+
+        except CommandFailed as e:
+            logger.error(f"Failed to create AWS IAM resources: {e}")
+            raise
+
+        # Verify output file was created
+        if not os.path.exists(self.output_iam_file):
+            raise CommandFailed(
+                f"IAM output file was not created: {self.output_iam_file}"
+            )
+
+        logger.info(f"AWS IAM output file created: {self.output_iam_file}")
+
+        # Verify IAM resources exist by checking the output file content
+        try:
+            with open(self.output_iam_file, "r") as f:
+                iam_data = json.load(f)
+                issuer_url = iam_data.get("issuerURL", "")
+                logger.info(
+                    f"AWS IAM resources created successfully:\n"
+                    f"  Infra ID: {self.infra_id}\n"
+                    f"  Issuer URL: {issuer_url}\n"
+                    f"  Output file: {self.output_iam_file}\n"
+                    f"  IAM details: {json.dumps(iam_data, indent=2)[:500]}..."
+                )
+
+                # Validate OIDC discovery document is accessible
+                if issuer_url:
+                    logger.info("Validating OIDC discovery document accessibility...")
+                    if not self._validate_and_create_oidc_docs(issuer_url):
+                        logger.warning(
+                            "OIDC discovery document validation failed. "
+                            "Cluster may fail to authenticate."
+                        )
+
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Could not read/parse IAM output file: {e}")
+
+        return self.output_iam_file
+
+    def _create_oidc_discovery_documents(self, issuer_url):
+        """
+        Manually create and upload OIDC discovery documents to S3.
+
+        This is a fallback for when hypershift create iam doesn't upload them.
+
+        Args:
+            issuer_url (str): The OIDC issuer URL
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        logger.info(f"Manually creating OIDC discovery documents for: {issuer_url}")
+
+        # Extract bucket and path from issuer URL
+        # Format: https://bucket-name.s3.region.amazonaws.com/infra-id
+        import re
+
+        match = re.match(
+            r"https://([^.]+)\.s3\.([^.]+)\.amazonaws\.com/(.+)", issuer_url
+        )
+        if not match:
+            logger.error(f"Could not parse issuer URL: {issuer_url}")
+            return False
+
+        bucket_name = match.group(1)
+        region = match.group(2)
+        infra_id = match.group(3)
+
+        logger.info(
+            f"Parsed: bucket={bucket_name}, region={region}, infra_id={infra_id}"
+        )
+
+        # Create OIDC configuration
+        oidc_config = {
+            "issuer": issuer_url,
+            "jwks_uri": f"{issuer_url}/.well-known/jwks.json",
+            "response_types_supported": ["id_token"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+        }
+
+        # Create JWKS (empty - will be populated by hypershift operator)
+        jwks = {"keys": []}
+
+        try:
+            # Upload openid-configuration
+            config_key = f"{infra_id}/.well-known/openid-configuration"
+            logger.info(
+                f"Uploading openid-configuration to s3://{bucket_name}/{config_key}"
+            )
+            self.s3_client.put_object(
+                Bucket=bucket_name,
+                Key=config_key,
+                Body=json.dumps(oidc_config, indent=2).encode("utf-8"),
+                ContentType="application/json",
+            )
+            logger.info("✅ Uploaded openid-configuration")
+
+            # Upload jwks.json
+            jwks_key = f"{infra_id}/.well-known/jwks.json"
+            logger.info(f"Uploading jwks.json to s3://{bucket_name}/{jwks_key}")
+            self.s3_client.put_object(
+                Bucket=bucket_name,
+                Key=jwks_key,
+                Body=json.dumps(jwks, indent=2).encode("utf-8"),
+                ContentType="application/json",
+            )
+            logger.info("✅ Uploaded jwks.json")
+            logger.info("✅ Successfully created and uploaded OIDC discovery documents")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to upload OIDC discovery documents: {e}")
+            return False
+
+    def _validate_and_create_oidc_docs(self, issuer_url, max_retries=5, retry_delay=10):
+        """
+        Validate that OIDC discovery document is accessible, create if missing.
+
+        Args:
+            issuer_url (str): The OIDC issuer URL
+            max_retries (int): Maximum number of retry attempts
+            retry_delay (int): Seconds to wait between retries
+
+        Returns:
+            bool: True if accessible or successfully created, False otherwise
+        """
+        from urllib.request import urlopen
+        from urllib.error import HTTPError
+
+        discovery_url = f"{issuer_url}/.well-known/openid-configuration"
+        logger.info(f"Checking OIDC discovery document: {discovery_url}")
+
+        # Try to access the document
+        for attempt in range(1, max_retries + 1):
+            try:
+                with urlopen(discovery_url, timeout=10) as response:
+                    if response.status == 200:
+                        content = response.read().decode("utf-8")
+                        discovery_doc = json.loads(content)
+                        if "issuer" in discovery_doc:
+                            logger.info(
+                                f"✅ OIDC discovery document is accessible (attempt {attempt}/{max_retries})"
+                            )
+                            logger.info(f"   Issuer: {discovery_doc['issuer']}")
+                            return True
+            except HTTPError as e:
+                if e.code == 403 or e.code == 404:
+                    logger.warning(
+                        f"   OIDC discovery document not found (HTTP {e.code}) "
+                        f"(attempt {attempt}/{max_retries})"
+                    )
+                    if attempt == 1:
+                        # On first 403/404, try to create the documents
+                        logger.info("Attempting to create OIDC documents manually...")
+                        if self._create_oidc_discovery_documents(issuer_url):
+                            logger.info("Waiting 5 seconds for S3 propagation...")
+                            time.sleep(5)
+                            continue  # Retry immediately after creation
+                else:
+                    logger.warning(f"   HTTP Error {e.code}: {e.reason}")
+            except Exception as e:
+                logger.warning(f"   Error: {e}")
+
+            if attempt < max_retries:
+                logger.info(f"   Waiting {retry_delay} seconds before retry...")
+                time.sleep(retry_delay)
+
+        logger.error("❌ OIDC discovery document is NOT accessible after all attempts!")
+        logger.error(f"   URL: {discovery_url}")
+        logger.error("   This will cause ValidAWSIdentityProvider: WebIdentityErr")
+        return False
+
+    def deploy_ocp(self, **kwargs) -> str:
+        """
+        Deploy AWS HCP cluster with EC2 workers.
+
+        This method orchestrates the complete AWS HCP cluster deployment including:
+        1. Validation of AWS prerequisites
+        2. Creation of AWS credentials secret
+        3. HCP cluster creation via hcp CLI
+        4. Waiting for EC2 workers to become ready
+
+        Args:
+            **kwargs: Additional arguments (reserved for future use)
+
+        Returns:
+            str: Name of the hosted cluster if successful, empty string if failed
+
+        """
+
+        # Get node pool configuration
+        nodepool_replicas = self._get_nodepool_replicas()
+
+        # Get availability policies
+        cp_availability_policy = self._get_cp_availability_policy()
+        infra_availability_policy = self._get_infra_availability_policy()
+
+        # Get disable default sources setting
+        disable_default_sources = self._get_disable_default_sources()
+
+        # Get generate SSH setting
+        generate_ssh = self._get_generate_ssh()
+
+        # Check if cluster already exists
+        if self.name in get_hosted_cluster_names():
+            logger.info(f"AWS HCP cluster '{self.name}' already exists")
+            return self.name
+
+        log_step(f"Validating AWS prerequisites for cluster '{self.name}'")
+        if not self.validate_aws_prerequisites():
+            logger.error("AWS prerequisites validation failed")
+            return ""
+
+        release_image = self.compute_target_release_image(upgrade_scenario=False)
+
+        log_step(
+            f"Creating AWS HCP cluster '{self.name}' with {nodepool_replicas} workers"
+        )
+        cluster_name = self.create_aws_hcp_cluster(
+            nodepool_replicas=nodepool_replicas,
+            release_image=release_image,
+            worker_instance_type=self.worker_instance_type,
+            cp_availability_policy=cp_availability_policy,
+            infra_availability_policy=infra_availability_policy,
+            disable_default_sources=disable_default_sources,
+            generate_ssh=generate_ssh,
+        )
+
+        if not cluster_name:
+            logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
+            return ""
+
+        logger.info(f"Successfully deployed AWS HCP cluster '{self.name}'")
+        return cluster_name
+
+    def deploy_dependencies(
+        self,
+        deploy_acm_hub=False,
+        deploy_mce=False,
+        download_hcp_binary=False,
+        deploy_cnv=False,
+        deploy_metallb=False,
+        deploy_hyperconverged=False,
+        deploy_hypershift_oidc=True,
+        create_deployer_iam_role=True,
+    ):
+        """
+        Deploy dependencies for AWS HCP cluster.
+
+        AWS HCP clusters don't require CNV, MetalLB, or HyperConverged since
+        workers run as EC2 instances, not as VMs on the management cluster.
+
+        Args:
+            deploy_acm_hub (bool): Deploy ACM hub (mutually exclusive with MCE)
+            deploy_mce (bool): Deploy MCE (mutually exclusive with ACM)
+            download_hcp_binary (bool): Download HCP binary
+            deploy_cnv (bool): Ignored for AWS (not needed)
+            deploy_metallb (bool): Ignored for AWS (not needed)
+            deploy_hyperconverged (bool): Ignored for AWS (not needed)
+            deploy_hypershift_oidc (bool): Setup S3 bucket for HyperShift OIDC provider and
+                create secret with bucket info. Default True (required for create_aws_iam).
+            create_deployer_iam_role (bool): Create IAM role for deployer. Default True
+                (required for create_aws_infra and create_aws_iam). Set to False only if
+                role_arn is pre-configured.
+        """
+        logger.info(
+            f"Deploying dependencies for AWS HCP cluster '{self.name}': "
+            f"deploy_acm_hub={deploy_acm_hub}, deploy_mce={deploy_mce}, "
+            f"download_hcp_binary={download_hcp_binary}"
+        )
+
+        if deploy_cnv or deploy_metallb or deploy_hyperconverged:
+            logger.warning(
+                "CNV, MetalLB, and HyperConverged are not required for AWS HCP clusters "
+                "(workers run as EC2 instances). Skipping these installations."
+            )
+
+        if deploy_acm_hub and deploy_mce:
+            raise UnexpectedDeploymentConfiguration(
+                "Conflict: Both 'deploy_acm_hub' and 'deploy_mce' are enabled. Choose one."
+            )
+
+        initial_default_sc = helpers.get_default_storage_class()
+        logger.info(f"Initial default StorageClass: {initial_default_sc}")
+        if initial_default_sc != constants.CEPHBLOCKPOOL_SC:
+            logger.info(
+                f"Changing the default StorageClass to {constants.CEPHBLOCKPOOL_SC}"
+            )
+            try:
+                helpers.change_default_storageclass(scname=constants.CEPHBLOCKPOOL_SC)
+            except CommandFailed as e:
+                logger.error(f"Failed to change default StorageClass: {e}")
+
+        if deploy_acm_hub:
+            self.deploy_acm_hub()
+        elif deploy_mce:
+            self.deploy_mce()
+            self.enable_hypershift_preview()
+
+        if download_hcp_binary:
+            self.update_hcp_binary()
+
+        log_step("Saving IDMS mirrors list to file for image-content-sources")
+        self.save_mirrors_list_to_file()
+
+        if deploy_hypershift_oidc:
+            log_step("Setting up S3 bucket for HyperShift OIDC provider")
+            # Check if a shared OIDC bucket is configured
+            cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+            shared_bucket = cluster_config.get("oidc_bucket_name")
+            if shared_bucket:
+                logger.info(f"Using shared OIDC bucket: {shared_bucket}")
+                self.setup_hypershift_oidc(bucket_name=shared_bucket)
+            else:
+                logger.info("Creating cluster-specific OIDC bucket")
+                self.setup_hypershift_oidc()
+        else:
+            # If not deploying OIDC, check if configuration is pre-set
+            cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+            self.oidc_bucket_name = cluster_config.get("oidc_bucket_name")
+            self.oidc_bucket_region = cluster_config.get(
+                "oidc_bucket_region", self.aws_region
+            )
+            if self.oidc_bucket_name:
+                logger.info(
+                    f"Using pre-configured OIDC bucket: {self.oidc_bucket_name} "
+                    f"in region {self.oidc_bucket_region}"
+                )
+
+        if create_deployer_iam_role:
+            log_step(
+                "Setting up IAM role for a deployer to create AWS infrastructure for hosted cluster"
+            )
+            role_result = self.create_deployer_iam_role(
+                role_name="aws-agent-deployer-role",
+                policy_name="aws-agent-deployer-policy",
+            )
+            self.role_arn = role_result["role_arn"]
+
+        log_step("Creating AWS infrastructure for the hosted cluster")
+
+        if not self.role_arn:
+            raise ValueError(
+                "role_arn is not set. Either call with create_deployer_iam_role=True "
+                "or pre-configure self.role_arn before calling deploy_dependencies()."
+            )
+
+        if not self.oidc_bucket_name or not self.oidc_bucket_region:
+            raise ValueError(
+                "OIDC bucket configuration is missing. Either call with "
+                "deploy_hypershift_oidc=True or pre-configure self.oidc_bucket_name "
+                "and self.oidc_bucket_region before calling deploy_dependencies()."
+            )
+
+        logger.info(
+            f"OIDC Configuration validated:\n"
+            f"  Bucket Name: {self.oidc_bucket_name}\n"
+            f"  Bucket Region: {self.oidc_bucket_region}"
+        )
+        # TODO: remove back if does not help
+        # self.retrieve_sts_session_token()
+        self.retrieve_sts_session_token_via_cli()
+        logger.info(
+            "Waiting 30 seconds to ensure STS credentials are available before proceeding..."
+        )
+        time.sleep(30)
+        self.create_aws_infra()
+        self.read_infra_output()
+        logger.info(
+            "Waiting 30 seconds to ensure AWS infrastructure is fully available before proceeding "
+            "to IAM creation..."
+        )
+        time.sleep(30)
+        self.create_aws_iam()
+
+    def validate_aws_prerequisites(self):
+        """
+        Validate AWS prerequisites before cluster deployment.
+
+        Checks:
+        - AWS credentials are available
+        - Base domain is configured
+        - AWS region is valid
+        - VPC exists (if specified)
+        - Subnets are available (if specified)
+
+        Returns:
+            bool: True if all prerequisites are met, False otherwise
+        """
+        logger.info(f"Validating AWS prerequisites for cluster '{self.name}'")
+
+        if not self.base_domain:
+            logger.error(
+                f"Base domain not configured for cluster '{self.name}'. "
+                "Set 'base_domain' in ENV_DATA.clusters.<cluster_name>"
+            )
+            return False
+
+        if not self.aws_region:
+            logger.error(f"AWS region not configured for cluster '{self.name}'")
+            return False
+
+        logger.info("AWS prerequisites validation passed")
+        return True
+
+    def create_aws_hcp_cluster(
+        self,
+        nodepool_replicas,
+        release_image,
+        worker_instance_type,
+        cp_availability_policy=constants.AVAILABILITY_POLICY_SINGLE,
+        infra_availability_policy=constants.AVAILABILITY_POLICY_SINGLE,
+        disable_default_sources=True,
+        generate_ssh=True,
+    ):
+        """
+        Create AWS HCP cluster using the hypershift CLI.
+
+        Executes the 'hypershift create cluster aws' command with appropriate parameters
+        to create a hosted control plane cluster with EC2 worker nodes.
+
+        This method assumes the following functions have already been called:
+        - retrieve_sts_session_token() - creates self.sts_credentials_file
+        - create_aws_infra() - creates self.output_infra_file and self.vpc_cidr
+        - read_infra_output() - populates zone IDs and infra_id
+        - create_aws_iam() - creates self.output_iam_file
+
+        Args:
+            nodepool_replicas (int): Number of worker nodes
+            release_image (str): The OCP release image for the cluster. If none, command will run without
+            --release-image flag and default will be used.
+            worker_instance_type (str): AWS EC2 instance type (e.g., "m5.xlarge")
+            cp_availability_policy (str): Control plane availability policy
+                (default: constants.AVAILABILITY_POLICY_HA)
+            infra_availability_policy (str): Infrastructure availability policy
+                (default: constants.AVAILABILITY_POLICY_HA)
+            disable_default_sources (bool): Disable default operator sources (default: True)
+            generate_ssh (bool): Generate SSH key for node access (default: True)
+
+        Returns:
+            str: Cluster name if successful, empty string if failed
+        """
+
+        logger.info(
+            f"Creating AWS HCP cluster '{self.name}' with release image: {release_image}"
+        )
+
+        # Validate required parameters that should have been set by prerequisite functions
+        if not self.sts_credentials_file:
+            raise ValueError(
+                "STS credentials file not set. Call retrieve_sts_session_token() first."
+            )
+
+        if not self.output_infra_file:
+            raise ValueError(
+                "Infrastructure output file not set. Call create_aws_infra() first."
+            )
+
+        if not self.output_iam_file:
+            raise ValueError("IAM output file not set. Call create_aws_iam() first.")
+
+        if not self.role_arn:
+            raise ValueError("Role ARN not set. Call create_deployer_iam_role() first.")
+
+        if not self.infra_id:
+            raise ValueError("Infra ID not set. Call read_infra_output() first.")
+
+        if not self.vpc_cidr:
+            raise ValueError(
+                "VPC CIDR not set. Should be set during create_aws_infra()."
+            )
+
+        cmd_parts = [
+            f"{self.hypershift_binary_path} create cluster aws",
+            f"--region {self.aws_region}",
+            f"--infra-id {self.infra_id}",
+            f"--name {self.name}",
+            f"--sts-creds {self.sts_credentials_file}",
+            f"--role-arn {self.role_arn}",
+            f"--infra-json {self.output_infra_file}",
+            f"--iam-json {self.output_iam_file}",
+            f"--instance-type {worker_instance_type}",
+            f"--node-pool-replicas {nodepool_replicas}",
+            f"--vpc-cidr {self.vpc_cidr}",
+        ]
+
+        if not release_image:
+            logger.warning(
+                "Release image not set. Call retrieve_sts_session_token() first."
+            )
+        else:
+            cmd_parts.append(f"--release-image {release_image}")
+
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        if os.path.exists(pull_secret_path):
+            cmd_parts.append(f"--pull-secret {pull_secret_path}")
+        else:
+            raise FileNotFoundError(
+                f"Pull secret file not found at expected path: {pull_secret_path}"
+            )
+
+        if (
+            cp_availability_policy
+            and cp_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            cmd_parts.append(
+                f"--control-plane-availability-policy {cp_availability_policy}"
+            )
+            logger.info(f"Control plane availability policy: {cp_availability_policy}")
+        else:
+            logger.warning(
+                f"Control plane availability policy '{cp_availability_policy}' is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}. Skipping flag."
+            )
+
+        # Add infrastructure availability policy
+        if (
+            infra_availability_policy
+            and infra_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            cmd_parts.append(f"--infra-availability-policy {infra_availability_policy}")
+            logger.info(
+                f"Infrastructure availability policy: {infra_availability_policy}"
+            )
+        else:
+            logger.warning(
+                f"Infrastructure availability policy '{infra_availability_policy}' is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}. Skipping flag."
+            )
+
+        if disable_default_sources:
+            cmd_parts.append("--olm-disable-default-sources")
+            logger.info("OLM default sources will be disabled")
+
+        if generate_ssh:
+            cmd_parts.append("--generate-ssh")
+            logger.info("SSH key generation enabled for cluster nodes")
+
+        if hasattr(self, "idms_mirrors_path") and os.path.exists(
+            self.idms_mirrors_path
+        ):
+            if os.path.getsize(self.idms_mirrors_path) > 0:
+                cmd_parts.append(f"--image-content-sources {self.idms_mirrors_path}")
+                logger.info(
+                    f"Using image content sources from: {self.idms_mirrors_path}"
+                )
+
+        # Add --wait flag as the last parameter to wait for cluster to be ready
+        cmd_parts.append("--wait")
+        # set command timeout to just under 45 minutes to allow for cluster creation
+        # to complete without hitting the timeout
+        cmd_parts.append(f"--timeout {44}m")
+
+        cmd = " ".join(cmd_parts)
+
+        logger.info(
+            f"Executing hypershift create cluster aws command for cluster '{self.name}'"
+        )
+        logger.debug(f"Command: {cmd}")
+
+        try:
+            # Execute with exec timeout 45 minutes timeout (2700 seconds) to allow cluster creation to complete
+            result = exec_cmd(cmd, timeout=2700)
+            logger.info("Cluster creation command completed successfully")
+            logger.debug(
+                f"Output: {result.stdout.decode('utf-8') if result.stdout else ''}"
+            )
+
+            logger.info(f"Verifying HostedCluster '{self.name}' was created...")
+            for sample in TimeoutSampler(
+                timeout=300, sleep=10, func=get_hosted_cluster_names
+            ):
+                if self.name in sample:
+                    logger.info(f"HostedCluster '{self.name}' created successfully")
+                    return self.name
+
+            logger.error(
+                f"HostedCluster '{self.name}' was not found after cluster creation"
+            )
+            return ""
+
+        except CommandFailed as e:
+            logger.error(f"Failed to create AWS HCP cluster '{self.name}': {e}")
+            raise
+        except TimeoutExpiredError as e:
+            logger.error(
+                f"Timeout waiting for AWS HCP cluster '{self.name}' creation: {e}"
+            )
+            return ""
+        except Exception as e:
+            logger.error(
+                f"Unexpected error creating AWS HCP cluster '{self.name}': {e}"
+            )
+            return ""
+
+    def setup_hypershift_oidc(self, bucket_name=None):
+        """
+        Setup S3 bucket for HyperShift OIDC provider.
+
+        Creates an S3 bucket with public read policy and a Kubernetes secret
+        containing AWS credentials and bucket information needed for HyperShift
+        OIDC provider functionality.
+
+        Args:
+            bucket_name (str, optional): Name of the S3 bucket to create.
+                If not provided, defaults to "{cluster_name}-oidc-bucket".
+                To reuse an existing shared bucket across clusters, pass the bucket name.
+
+        Returns:
+            bool: True if setup successful, False otherwise
+        """
+        # Allow configuration override for shared OIDC bucket
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+        configured_bucket_name = cluster_config.get("oidc_bucket_name")
+
+        if not bucket_name:
+            if configured_bucket_name:
+                bucket_name = configured_bucket_name
+                logger.info(f"Using configured OIDC bucket name: {bucket_name}")
+            else:
+                bucket_name = f"{self.name}-oidc-bucket"
+                logger.info(f"Using default OIDC bucket naming: {bucket_name}")
+
+        # Get namespace for the secret from config or use default
+        secret_namespace = cluster_config.get("oidc_secret_namespace", "local-cluster")
+
+        logger.info(
+            f"Setting up S3 bucket '{bucket_name}' for HyperShift OIDC provider "
+            f"in region '{self.aws_region}'"
+        )
+
+        try:
+            result = self.create_s3_bucket_for_hypershift_oidc(
+                bucket_name=bucket_name,
+                region=self.aws_region,
+                namespace=secret_namespace,
+            )
+
+            logger.info(
+                f"HyperShift OIDC S3 bucket setup completed:\n"
+                f"  Bucket: {result['bucket_name']}\n"
+                f"  Region: {result['region']}\n"
+                f"  ARN: {result['bucket_arn']}\n"
+                f"  Secret: {result['secret_name']} (namespace: {result['namespace']})"
+            )
+
+            self.oidc_bucket_name = result["bucket_name"]
+            self.oidc_bucket_arn = result["bucket_arn"]
+            self.oidc_bucket_region = result["region"]
+            self.oidc_secret_name = result["secret_name"]
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to setup HyperShift OIDC S3 bucket: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    def create_s3_bucket_for_hypershift_oidc(
+        self, bucket_name, region, namespace="local-cluster"
+    ):
+        """
+        Create an S3 bucket for HyperShift OIDC provider with public read policy
+        and create Kubernetes secret with bucket credentials.
+
+        This function:
+
+        1. Creates an S3 bucket in the specified region
+        2. Applies a public read policy to allow OIDC discovery
+        3. Creates a Kubernetes secret with AWS credentials and bucket info
+
+        Args:
+            bucket_name (str): Name of the S3 bucket to create
+            region (str): AWS region where the bucket should be created
+            namespace (str): Kubernetes namespace for the secret
+                (default: "local-cluster")
+
+        Returns:
+            dict: Dictionary with bucket details:
+
+                - ``bucket_name`` (str): Name of the bucket
+                - ``region`` (str): AWS region of the bucket
+                - ``bucket_arn`` (str): ARN of the bucket
+                - ``location`` (str): URL location of the bucket
+                - ``secret_name`` (str): Name of the Kubernetes secret
+                - ``namespace`` (str): Kubernetes namespace of the secret
+
+        Raises:
+            ClientError: If bucket creation or policy application fails
+            CommandFailed: If Kubernetes secret creation fails
+
+        """
+        logger.info(
+            f"Creating S3 bucket '{bucket_name}' for HyperShift OIDC provider in region '{region}'"
+        )
+        aws_credentials_path = os.path.expanduser(config.DEPLOYMENT["aws_cred_path"])
+
+        if not os.path.exists(aws_credentials_path):
+            logger.warning(
+                f"AWS credentials file not found at {aws_credentials_path}. "
+                "Assuming credentials are available via environment or IAM role."
+            )
+            aws_credentials_path = None
+
+        try:
+            existing_buckets = self.list_buckets()
+            if any(bucket["Name"] == bucket_name for bucket in existing_buckets):
+                logger.info(f"Bucket '{bucket_name}' already exists, skipping creation")
+                bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
+                bucket_arn = f"arn:aws:s3:::{bucket_name}"
+            else:
+                logger.info(f"Creating S3 bucket '{bucket_name}' in region '{region}'")
+                try:
+                    create_response = self.s3_client.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={"LocationConstraint": region},
+                    )
+
+                    bucket_location = create_response.get("Location")
+                    bucket_arn = f"arn:aws:s3:::{bucket_name}"
+                    logger.info(
+                        f"Bucket created successfully. Location: {bucket_location}, ARN: {bucket_arn}"
+                    )
+
+                except ClientError as e:
+                    error_code = e.response.get("Error", {}).get("Code", "")
+                    if error_code == "BucketAlreadyOwnedByYou":
+                        logger.info(f"Bucket '{bucket_name}' already owned by you")
+                        bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
+                        bucket_arn = f"arn:aws:s3:::{bucket_name}"
+                    else:
+                        logger.error(f"Failed to create bucket: {e}")
+                        raise
+
+        except ClientError as e:
+            logger.error(f"Error checking/creating bucket: {e}")
+            raise
+
+        bucket_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": f"{bucket_arn}/*",
+                }
+            ],
+        }
+
+        # Disable Block Public Access settings to allow public policy
+        # This is required because AWS S3 buckets have Block Public Access enabled by default
+        # which prevents applying any public policies. For HyperShift OIDC to work,
+        # the bucket must be publicly accessible for OIDC discovery documents.
+        try:
+            logger.info(
+                f"Disabling Block Public Access settings for bucket '{bucket_name}' "
+                "to allow public OIDC discovery"
+            )
+            self.s3_client.put_public_access_block(
+                Bucket=bucket_name,
+                PublicAccessBlockConfiguration={
+                    "BlockPublicAcls": False,
+                    "IgnorePublicAcls": False,
+                    "BlockPublicPolicy": False,  # Must be False to allow public bucket policies
+                    "RestrictPublicBuckets": False,
+                },
+            )
+            logger.info("Block Public Access settings disabled successfully")
+        except ClientError as e:
+            # Continue anyway - might already be disabled at account level or might succeed anyway
+            logger.warning(f"Could not disable Block Public Access settings: {e}")
+            logger.warning(
+                "Continuing anyway - settings might already be disabled at account level"
+            )
+
+        try:
+            logger.info(f"Applying public read policy to bucket '{bucket_name}'")
+            self.s3_client.put_bucket_policy(
+                Bucket=bucket_name, Policy=json.dumps(bucket_policy)
+            )
+            logger.info("Bucket policy applied successfully")
+
+            response = self.s3_client.get_bucket_policy(Bucket=bucket_name)
+            policy_str = response.get("Policy")
+            if policy_str:
+                policy_dict = json.loads(policy_str)
+                logger.info(
+                    f"Verified bucket policy: {json.dumps(policy_dict, indent=2)}"
+                )
+            else:
+                logger.warning("Could not verify bucket policy")
+
+        except ClientError as e:
+            logger.error(f"Failed to apply bucket policy: {e}")
+            raise
+
+        secret_name = "hypershift-operator-oidc-provider-s3-credentials"
+        logger.info(
+            f"Creating Kubernetes secret '{secret_name}' in namespace '{namespace}'"
+        )
+
+        # Delete existing secret if it exists (might be from previous cluster)
+        secret_obj = OCP(kind="secret", namespace=namespace, resource_name=secret_name)
+        if secret_obj.is_exist():
+            logger.info(f"Found existing secret '{secret_name}', deleting it")
+            secret_obj.delete(resource_name=secret_name)
+            logger.info(f"Deleted old secret '{secret_name}'")
+
+        try:
+            if aws_credentials_path:
+                cmd = (
+                    f"oc create secret generic {secret_name} "
+                    f"--from-file=credentials={aws_credentials_path} "
+                    f"--from-literal=bucket={bucket_name} "
+                    f"--from-literal=region={region} "
+                    f"-n {namespace}"
+                )
+            else:
+                logger.warning(
+                    "No credentials file provided. Creating secret with bucket info only. "
+                    "Ensure AWS credentials are available via IAM role or environment."
+                )
+                cmd = (
+                    f"oc create secret generic {secret_name} "
+                    f"--from-literal=bucket={bucket_name} "
+                    f"--from-literal=region={region} "
+                    f"-n {namespace}"
+                )
+
+            logger.debug(f"Executing command: {cmd}")
+            exec_cmd(cmd, shell=True)
+            logger.info(
+                f"Kubernetes secret '{secret_name}' created successfully in namespace '{namespace}'"
+            )
+
+        except CommandFailed as e:
+            if "already exists" in str(e).lower():
+                logger.info(
+                    f"Secret '{secret_name}' already exists in namespace '{namespace}', skipping creation"
+                )
+            else:
+                logger.error(f"Failed to create Kubernetes secret: {e}")
+                raise
+
+        result = {
+            "bucket_name": bucket_name,
+            "region": region,
+            "bucket_arn": bucket_arn,
+            "location": bucket_location,
+            "secret_name": secret_name,
+            "namespace": namespace,
+        }
+
+        logger.info(
+            f"HyperShift OIDC S3 bucket setup completed successfully:\n{json.dumps(result, indent=2)}"
+        )
+        return result
+
+    def _check_nodepool_ready(self):
+        """
+        Internal helper to check if NodePool is ready.
+
+        Returns:
+            bool: True if NodePool has all replicas ready, False otherwise
+        """
+        # TODO: Implement NodePool readiness check
+        # Get NodePool for this cluster
+        # Check .status.replicas == .status.readyReplicas
+        return False
+
+    def cleanup_aws_resources(self):
+        """
+        Cleanup AWS resources when cluster is destroyed.
+
+        This method should be called during cluster teardown to ensure
+        all AWS resources (EC2 instances, networking, etc.) are properly cleaned up.
+
+        Returns:
+            bool: True if cleanup successful, False otherwise
+        """
+        logger.info(f"Cleaning up AWS resources for cluster '{self.name}'")
+
+        # TODO: Implement AWS resource cleanup
+        # This should:
+        # 1. Delete the HostedCluster resource (triggers HCP cleanup)
+        # 2. Verify EC2 instances are terminated
+        # 3. Clean up any orphaned AWS resources
+        # 4. Delete VPC/subnets if they were created by the deployment
+
+        logger.warning("AWS resource cleanup not yet fully implemented")
+        return True
+
+    def _get_nodepool_replicas(self):
+        """
+        Get nodepool replicas from configuration.
+
+        Returns:
+            int: Number of worker node replicas
+        """
+        return (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("nodepool_replicas", defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT)
+        )
+
+    def _get_cp_availability_policy(self):
+        """
+        Get control plane availability policy from configuration.
+
+        Returns:
+            str: Availability policy (e.g., "HighlyAvailable" or "SingleReplica")
+        """
+        return (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("cp_availability_policy", constants.AVAILABILITY_POLICY_SINGLE)
+        )
+
+    def _get_infra_availability_policy(self):
+        """
+        Get infrastructure availability policy from configuration.
+
+        Returns:
+            str: Availability policy (e.g., "HighlyAvailable" or "SingleReplica")
+        """
+        return (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("infra_availability_policy", constants.AVAILABILITY_POLICY_SINGLE)
+        )
+
+    def _get_disable_default_sources(self):
+        """
+        Get disable_default_sources setting from configuration.
+
+        Returns:
+            bool: True if default sources should be disabled, False otherwise
+        """
+        return (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("disable_default_sources", True)
+        )
+
+    def _get_generate_ssh(self):
+        """
+        Get generate_ssh setting from configuration.
+
+        Returns:
+            bool: True if SSH key should be generated, False otherwise
+        """
+        return config.ENV_DATA["clusters"].get(self.name).get("generate_ssh", True)
+
+    def create_deployer_iam_role(
+        self,
+        role_name,
+        policy_name,
+        principal_arn=None,
+        description="IAM role for HyperShift deployer",
+    ):
+        """
+        Create an IAM role for a deployer with assume role policy and attach a custom policy.
+
+        This function performs the following:
+
+        1. Fetches the caller identity ARN (if principal_arn not provided)
+        2. Creates an IAM role with an assume role policy that allows the principal to assume it
+        3. Attaches an inline policy to the role
+        4. Verifies the policy was attached correctly
+
+        Equivalent to::
+
+            aws iam create-role --role-name <role_name> --assume-role-policy-document <trust_policy>
+            aws iam put-role-policy --role-name <role_name> --policy-name <policy_name> --policy-document <policy>
+
+        Args:
+            role_name (str): Name of the IAM role to create (e.g., "aws-agent-deployer-role")
+            policy_name (str): Name of the inline policy to attach (e.g., "aws-agent-deployer-policy")
+            principal_arn (str, optional): The ARN of the principal allowed to assume the role.
+                If not provided, uses the caller's ARN from get_caller_identity_arn().
+            description (str, optional): Description for the IAM role.
+
+        Returns:
+            dict: Dictionary containing role information with keys:
+
+                - ``role_arn`` (str): ARN of the created role
+                - ``role_name`` (str): Name of the role
+                - ``policy_name`` (str): Name of the attached policy
+                - ``principal_arn`` (str): ARN of the principal that can assume the role
+
+        Raises:
+            ClientError: If role creation or policy attachment fails
+
+        """
+
+        if not principal_arn:
+            principal_arn = self.get_caller_identity_arn()
+            logger.info(f"Using caller identity ARN as principal: {principal_arn}")
+
+        # Expected assume role policy structure
+        assume_role_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": principal_arn},
+                    "Action": "sts:AssumeRole",
+                }
+            ],
+        }
+
+        assume_role_policy_str = json.dumps(assume_role_policy)
+
+        with open(constants.HCP_DEPLOYER_POLICY, "r") as f:
+            policy_document = json.load(f)
+        policy_document_str = json.dumps(policy_document)
+
+        logger.info("Checking if IAM role already exists")
+        try:
+            existing_role = self.iam_client.get_role(RoleName=role_name)
+            role_arn = existing_role["Role"]["Arn"]
+            logger.info(
+                f"IAM role '{role_name}' already exists with ARN: {role_arn}, checking policies"
+            )
+
+            existing_assume_policy = existing_role["Role"].get(
+                "AssumeRolePolicyDocument", {}
+            )
+
+            def normalize_policy(policy):
+                """Normalize policy for comparison"""
+                if isinstance(policy, str):
+                    policy = json.loads(policy)
+                normalized = {
+                    "Version": policy.get("Version", "2012-10-17"),
+                    "Statement": sorted(
+                        policy.get("Statement", []),
+                        key=lambda x: json.dumps(x, sort_keys=True),
+                    ),
+                }
+                return json.dumps(normalized, sort_keys=True)
+
+            expected_normalized = normalize_policy(assume_role_policy)
+            existing_normalized = normalize_policy(existing_assume_policy)
+
+            if expected_normalized != existing_normalized:
+                logger.warning(
+                    f"Existing role '{role_name}' has different assume role policy. "
+                    f"Expected principal: {principal_arn}"
+                )
+                logger.info("Updating assume role policy to match expected format")
+                try:
+                    self.iam_client.update_assume_role_policy(
+                        RoleName=role_name,
+                        PolicyDocument=assume_role_policy_str,
+                    )
+                    logger.info("Assume role policy updated successfully")
+                    # Wait for IAM role trust policy update to propagate
+                    # AWS IAM eventual consistency can take up to 30 seconds
+                    propagation_delay = 30
+                    logger.info(
+                        f"Waiting {propagation_delay} seconds for IAM role trust policy update to propagate..."
+                    )
+                    time.sleep(propagation_delay)
+                    logger.info("IAM role trust policy propagation wait completed")
+                except ClientError as update_error:
+                    logger.error(f"Failed to update assume role policy: {update_error}")
+                    raise
+            else:
+                logger.info("Existing assume role policy matches expected format")
+
+            # Check if policy with same name already exists
+            try:
+                self.iam_client.get_role_policy(
+                    RoleName=role_name,
+                    PolicyName=policy_name,
+                )
+                logger.info(
+                    f"Policy '{policy_name}' already exists on role '{role_name}'. "
+                    "Reusing existing role and policy."
+                )
+
+                result = {
+                    "role_arn": role_arn,
+                    "role_name": role_name,
+                    "policy_name": policy_name,
+                    "principal_arn": principal_arn,
+                    "reused": True,
+                }
+
+                logger.info(
+                    f"Reusing existing deployer IAM role:\n"
+                    f"  Role ARN: {role_arn}\n"
+                    f"  Role Name: {role_name}\n"
+                    f"  Policy Name: {policy_name}\n"
+                    f"  Principal ARN: {principal_arn}"
+                )
+
+                return result
+
+            except ClientError as policy_error:
+                if policy_error.response["Error"]["Code"] == "NoSuchEntity":
+                    logger.info(
+                        f"Role '{role_name}' exists but policy '{policy_name}' not found. "
+                        "Will attach the policy."
+                    )
+                else:
+                    raise
+
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchEntity":
+                logger.info(f"Creating IAM role: {role_name}")
+                try:
+                    create_response = self.iam_client.create_role(
+                        RoleName=role_name,
+                        AssumeRolePolicyDocument=assume_role_policy_str,
+                        Description=description,
+                    )
+                    role_arn = create_response["Role"]["Arn"]
+                    logger.info(f"IAM role created successfully. ARN: {role_arn}")
+                    # Wait for IAM role trust policy to propagate before it can be assumed
+                    # AWS IAM eventual consistency can take up to 30 seconds
+                    propagation_delay = 30
+                    logger.info(
+                        f"Waiting {propagation_delay} seconds for IAM role trust policy to propagate..."
+                    )
+                    time.sleep(propagation_delay)
+                    logger.info("IAM role trust policy propagation wait completed")
+                except ClientError as create_error:
+                    logger.error(
+                        f"Failed to create IAM role '{role_name}': {create_error}"
+                    )
+                    raise
+            else:
+                logger.error(f"Error checking IAM role '{role_name}': {e}")
+                raise
+
+        logger.info(f"Attaching policy '{policy_name}' to role '{role_name}'")
+        try:
+            self.iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName=policy_name,
+                PolicyDocument=policy_document_str,
+            )
+            logger.info(
+                f"Policy '{policy_name}' attached successfully to role '{role_name}'"
+            )
+        except ClientError as e:
+            logger.error(
+                f"Failed to attach policy '{policy_name}' to role '{role_name}': {e}"
+            )
+            raise
+
+        try:
+            logger.info(f"Verifying policy '{policy_name}' on role '{role_name}'")
+            policy_response = self.iam_client.get_role_policy(
+                RoleName=role_name,
+                PolicyName=policy_name,
+            )
+            logger.info(
+                f"Policy verification successful. Policy document: "
+                f"{json.dumps(policy_response.get('PolicyDocument', {}), indent=2)}"
+            )
+        except ClientError as e:
+            logger.warning(f"Could not verify policy attachment: {e}")
+
+        result = {
+            "role_arn": role_arn,
+            "role_name": role_name,
+            "policy_name": policy_name,
+            "principal_arn": principal_arn,
+        }
+
+        logger.info(
+            f"Deployer IAM role setup completed:\n"
+            f"  Role ARN: {role_arn}\n"
+            f"  Role Name: {role_name}\n"
+            f"  Policy Name: {policy_name}\n"
+            f"  Principal ARN: {principal_arn}"
+        )
+
+        return result
 
 
 class SpokeODF(SpokeOCP, ABC):

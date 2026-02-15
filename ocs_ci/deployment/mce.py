@@ -290,6 +290,48 @@ class MCEInstaller(object):
             annotation=f"imageOverridesCM={self.hypershift_override_image_cm}"
         )
 
+    def enable_hypershift_preview(self):
+        """
+        Enable hypershift-preview component in MultiClusterEngine.
+
+        Patches the multiclusterengine resource to enable the hypershift-preview component
+        which is required for HyperShift hosted control plane functionality.
+
+        Equivalent to:
+            oc patch mce multiclusterengine --type=merge \
+                -p '{"spec":{"overrides":{"components":[{"name":"hypershift-preview","enabled": true}]}}}'
+
+        Returns:
+            bool: True if patch was successful, False otherwise
+
+        Raises:
+            CommandFailed: If the patch operation fails
+
+        """
+        logger.info("Enabling hypershift-preview component in MultiClusterEngine")
+
+        patch_params = json.dumps(
+            {
+                "spec": {
+                    "overrides": {
+                        "components": [{"name": "hypershift-preview", "enabled": True}]
+                    }
+                }
+            }
+        )
+
+        try:
+            self.multicluster_engine.patch(
+                resource_name=constants.MULTICLUSTER_ENGINE,
+                params=patch_params,
+                format_type="merge",
+            )
+            logger.info("hypershift-preview component enabled successfully")
+            return True
+        except CommandFailed as e:
+            logger.error(f"Failed to enable hypershift-preview component: {e}")
+            raise
+
     def deploy_mce(self):
         """
         Installs mce enabling software emulation.

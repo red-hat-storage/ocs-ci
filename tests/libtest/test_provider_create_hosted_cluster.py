@@ -596,7 +596,7 @@ class TestProviderHosted(object):
         self_stub.name = cluster
         self_stub.get_hosted_cluster_ocp_version = lambda: case["hosted"]
 
-        result = hs_module.HypershiftHostedOCP._compute_target_release_image(self_stub)
+        result = hs_module.HypershiftHostedOCP.compute_target_release_image(self_stub)
         assert result == case["expected"]()
 
     @runs_on_provider
