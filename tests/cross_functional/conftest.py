@@ -1,4 +1,3 @@
-import os
 import logging
 import boto3
 import pytest
@@ -8,9 +7,11 @@ from threading import Event
 from subprocess import TimeoutExpired
 
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.helpers.helpers import (
+    run_cmd_verify_cli_output,
+    create_unique_resource_name,
+)
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
-from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.helpers.e2e_helpers import (
     create_muliple_types_provider_obcs,
@@ -21,7 +22,6 @@ from ocs_ci.helpers.e2e_helpers import (
     validate_mcg_nsfs_feature,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
@@ -32,8 +32,9 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_cache,
     write_random_test_objects_to_bucket,
     retrieve_verification_mode,
-    s3_list_objects_v2,
     bulk_s3_put_bucket_lifecycle_config,
+    list_objects_from_bucket,
+    verify_s3_object_integrity,
 )
 
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
@@ -41,12 +42,9 @@ from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.pod import (
-    Pod,
     get_noobaa_pods,
     get_pod_logs,
-    get_pods_having_label,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -56,11 +54,9 @@ from ocs_ci.helpers.helpers import (
     validate_pv_delete,
     default_storage_class,
 )
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.utility.utils import (
     clone_notify,
-    exec_nb_db_query,
-    get_primary_nb_db_pod,
     TimeoutSampler,
 )
 
@@ -93,339 +89,357 @@ def start_noobaa_services(noobaa_endpoint_dc, noobaa_operator_dc):
     )
 
 
-@pytest.fixture()
-def noobaa_db_backup_and_recovery_locally(
-    request, bucket_factory, awscli_pod_session, mcg_obj_session
+def _get_storage_cluster_obj():
+    """
+    Get the OCS storage cluster object.
+
+    Returns:
+        OCP: OCS storage cluster OCP object
+    """
+    return OCP(
+        kind="storagecluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+
+def _patch_db_backup_config(
+    ocs_storage_obj, schedule_cron_interval, num_backups, snapshot_class
 ):
     """
-    Test to verify Backup and Restore for Multicloud Object Gateway database locally
-    Backup procedure:
-        * Create a test bucket and write some data
-        * Backup noobaa secrets to local folder OR store it in secret objects
-        * Backup the PostgreSQL database and save it to a local folder
-        * For testing, write new data to show a little data loss between backup and restore
-    Restore procedure:
-        * Stop MCG reconciliation
-        * Stop the NooBaa Service before restoring the NooBaa DB.
-          There will be no object service after this point
-        * Verify that all NooBaa components (except NooBaa DB) have 0 replicas
-        * Login to the NooBaa DB pod and cleanup potential database clients to nbcore
-        * Restore DB from a local folder
-        * Delete current noobaa secrets and restore them from a local folder OR secrets objects.
-        * Restore MCG reconciliation
-        * Start the NooBaa service
-        * Restart the NooBaa DB pod
-        * Check that the old data exists, but not s3://testloss/
+    Patch the storage cluster with DB backup configuration.
 
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        schedule_cron_interval (int): Cron schedule interval in minutes
+        num_backups (int): Maximum number of backups to retain
+        snapshot_class (str): Volume snapshot class name
+
+    Returns:
+        None
     """
-    # OCS storagecluster object
-    ocs_storagecluster_obj = OCP(
+    db_backup_param = (
+        f'{{"spec": {{"multiCloudGateway": '
+        f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+        f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+    )
+    ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
+    logger.info(
+        f"DB backup info patched successfully with maxSnapshots={num_backups}, "
+        f"schedule=*/{schedule_cron_interval} * * * *"
+    )
+    time.sleep(15)
+
+
+def _get_noobaa_obj():
+    """
+    Get the NooBaa CR object.
+
+    Returns:
+        OCP: NooBaa OCP object
+    """
+    return OCP(
+        kind="noobaa",
         namespace=config.ENV_DATA["cluster_namespace"],
-        kind=constants.STORAGECLUSTER,
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
     )
 
-    # OCP object for kind deployment
-    ocp_deployment_obj = OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
 
-    # Noobaa operator & noobaa endpoint deployments objects
-    nb_operator_dc = Deployment(
-        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
-    )
-    nb_endpoint_dc = Deployment(
-        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
-    )
+def _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj):
+    """
+    Verify that DB backup configuration is propagated from storage cluster to NooBaa CR.
 
-    secrets_obj = []
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        noobaa_obj (OCP): NooBaa object
+
+    Returns:
+        dict: DB backup info from NooBaa CR
+
+    Raises:
+        AssertionError: If configuration mismatch is detected
+    """
+    ocs_storage_obj.reload_data()
+    noobaa_obj.reload_data()
+    db_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+        "multiCloudGateway"
+    ]["dbBackup"]
+    db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
+    assert (
+        db_info_from_ocs_storage == db_info_from_noobaa_cr
+    ), "Mismatch in DB backup info between ocs-storagecluster and noobaa CR"
+    return db_info_from_noobaa_cr
+
+
+def _patch_db_recovery_config(ocs_storage_obj, backup_name):
+    """
+    Patch the storage cluster with DB recovery configuration.
+
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        backup_name (str): Name of the backup to use for recovery
+
+    Returns:
+        None
+    """
+    db_recovery_param = (
+        f'{{"spec": {{"multiCloudGateway": '
+        f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_name}"}}}}}}}}'
+    )
+    ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
+    logger.info("DB recovery info patched successfully")
+    time.sleep(15)
+
+
+def _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj):
+    """
+    Verify that DB recovery configuration is propagated from storage cluster to NooBaa CR.
+
+    Args:
+        ocs_storage_obj (OCP): OCS storage cluster object
+        noobaa_obj (OCP): NooBaa object
+
+    Raises:
+        AssertionError: If configuration mismatch is detected
+    """
+    ocs_storage_obj.reload_data()
+    noobaa_obj.reload_data()
+    recovery_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+        "multiCloudGateway"
+    ]["dbRecovery"]
+    recovery_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
+        "dbRecovery"
+    ]
+    assert (
+        recovery_info_from_ocs_storage == recovery_info_from_noobaa_cr
+    ), "Mismatch in DB recovery info between ocs-storagecluster and noobaa CR"
+
+
+def _delete_and_wait_for_cluster_recovery(db_cluster_name):
+    """
+    Delete NooBaa DB cluster and wait for automatic recovery.
+
+    Args:
+        db_cluster_name (str): Name of the DB cluster to delete
+
+    Returns:
+        None
+    """
+    cluster_obj = OCP(kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"])
+    cluster_obj.delete(resource_name=db_cluster_name, force=True)
+    cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+
+    # Validate noobaa pods are up and running after recovery
+    noobaa_pods = get_noobaa_pods()
+    pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        resource_count=len(noobaa_pods),
+        selector=constants.NOOBAA_APP_LABEL,
+        timeout=3600,
+    )
+    logger.info("NooBaa pods are up and running after recovery")
+
+
+@pytest.fixture()
+def noobaa_db_backup_and_recovery_locally(
+    request, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
+):
+    """
+    Test to verify CNPG based noobaa DB Backup and recovery for Multicloud Object Gateway database locally
+    Backup procedure:
+        * Create OBC and write data
+        * Validate Noobaa CR is accepting backup configuration in it
+        * Validate backup is getting created after scheduled time from secondary DB instance
+    Restore procedure:
+        * Validate Noobaa CR is accepting recovery configuration in it
+        * Delete Cluster CR and check automatic recovery is getting triggered
+        * Validate data is present in OBC after recovery
+    """
 
     def factory(
+        mcg_obj=mcg_obj,
+        awscli_pod=awscli_pod,
         bucket_factory=bucket_factory,
-        awscli_pod_session=awscli_pod_session,
-        mcg_obj_session=mcg_obj_session,
+        test_directory_setup=test_directory_setup,
     ):
-        nonlocal secrets_obj
 
-        # create bucket and write some objects to it
-        test_bucket = bucket_factory()[0]
-        write_random_test_objects_to_bucket(
-            io_pod=awscli_pod_session,
-            file_dir="test_dir",
-            pattern="test-object",
-            bucket_to_write=test_bucket.name,
-            mcg_obj=mcg_obj_session,
+        # 1: Create OBC and write data
+        obj_download_path = test_directory_setup.result_dir
+        bucket_obj = bucket_factory(1)[0]
+        bucket_name = bucket_obj.name
+        full_object_path = f"s3://{bucket_name}"
+
+        sync_object_directory(
+            awscli_pod, constants.AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+        )
+        # Adding hard coded sleep to trigger async backup from primary to Secondary DB
+        time.sleep(60)
+
+        objs_in_bucket = list_objects_from_bucket(
+            pod_obj=awscli_pod,
+            target=bucket_name,
+            s3_obj=mcg_obj,
+            recursive=True,
         )
 
-        # Backup secrets
-        ocp_secret_obj = OCP(
-            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        secrets = [
-            "noobaa-root-master-key-volume",
-            "noobaa-admin",
-            "noobaa-operator",
-            "noobaa-server",
-            "noobaa-endpoints",
-        ]
-        if not is_kms_enabled():
-            secrets.append("noobaa-root-master-key-backend")
+        # 2: Add backup info in OCS Storage cluster CR
+        ocs_storage_obj = _get_storage_cluster_obj()
+        noobaa_obj = _get_noobaa_obj()
 
-        secrets_yaml = [
-            ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
-        ]
-        secrets_obj = [OCS(**secret_yaml) for secret_yaml in secrets_yaml]
-        logger.info("Backed up secrets as secret objects!")
-
-        # Backup the PostgreSQL database and save it to a local folder
-        noobaa_db_pod = get_primary_nb_db_pod()
-        noobaa_db_pod.exec_cmd_on_pod(
-            command="pg_dump nbcore -F custom -f /dev/shm/test.db",
+        _patch_db_backup_config(
+            ocs_storage_obj=ocs_storage_obj,
+            schedule_cron_interval=15,
+            num_backups=1,
+            snapshot_class=constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
         )
-        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"cp --retries=-1 {noobaa_db_pod.name}:/dev/shm/test.db ./mcg.bck",
-            out_yaml_format=False,
-        )
-        logger.info("Backed up PostgreSQL and stored it in local folder!")
+        _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj)
+        logger.info("DB backup configuration added to OCS Storage cluster CR")
 
-        # Backup the noobaa-db-pg-cluster resource
-        cnpg_cluster_yaml = OCP(
-            kind=constants.CNPG_CLUSTER_KIND,
+        # 3: Run noobaa cli command to create on demand backup and validate backup is getting created or not
+        logger.info("Creating on-demand backup using NooBaa CLI")
+        backup_name = create_unique_resource_name("noobaa-cli", "backup")
+        logger.info(backup_name)
+
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"system db-backup --name {backup_name}",
             namespace=config.ENV_DATA["cluster_namespace"],
-        ).get(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
-        original_db_replica_count = cnpg_cluster_yaml["spec"]["instances"]
-
-        # For testing, write new data to show a little data loss between backup and restore
-        testloss_bucket = bucket_factory()[0]
-        write_random_test_objects_to_bucket(
-            io_pod=awscli_pod_session,
-            file_dir="testloss_dir",
-            pattern="testloss-object",
-            bucket_to_write=testloss_bucket.name,
-            mcg_obj=mcg_obj_session,
+            use_yes=True,
+            ignore_error=False,
         )
+        logger.info("On-demand backup command executed")
 
-        # Stop MCG reconcilation
-        params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "ignore"}}}'
-        ocs_storagecluster_obj.patch(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            params=params,
-            format_type="merge",
-        )
-        logger.info("Stopped MCG reconcilation!")
+        # Get on-demand backup
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
 
-        # Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
-        nb_operator_dc.scale(replicas=0)
-        nb_endpoint_dc.scale(replicas=0)
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=0
+        # Wait for on-demand backup to complete
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=backup_name,
+            column="PHASE",
+            timeout=1200,
+            sleep=60,
         )
+        logger.info(f"On-demand backup {backup_name} completed successfully")
+
+        # 4: Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
+        _patch_db_recovery_config(ocs_storage_obj, backup_name)
+        _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj)
+        logger.info("DB recovery configuration added to OCS Storage cluster CR")
+
+        # 5: Delete Cluster CR and check automatic recovery is getting triggered
+        db_cluster_name = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster", "Cluster"
+        )[0]
+        _delete_and_wait_for_cluster_recovery(db_cluster_name)
+
+        # Verify Bucket health after recovery process
+        bucket_obj.verify_health(timeout=600)
+
+        # 6: Validate data is present in OBC after recovery
+        sync_object_directory(
+            podobj=awscli_pod,
+            src=full_object_path,
+            target=obj_download_path,
+            s3_obj=mcg_obj,
+        )
+        logger.info(f"Objects are downloaded to the dir {obj_download_path}")
+
+        for obj in objs_in_bucket:
+            assert verify_s3_object_integrity(
+                original_object_path=f"{constants.AWSCLI_TEST_OBJ_DIR}/{obj}",
+                result_object_path=f"{obj_download_path}/{obj}",
+                awscli_pod=awscli_pod,
+            ), "Mismatch in Checksum between original object and object downloaded after recovery"
         logger.info(
-            "Stopped the noobaa service: Noobaa endpoint, Noobaa core, Noobaa operator pods!!"
+            "Cluster recovered successfully using CLI-created backup and validated data after recovery"
         )
-
-        # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
-        query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
-        try:
-            exec_nb_db_query(query)
-        except CommandFailed as ex:
-            if "terminating connection due to administrator command" not in str(ex):
-                raise ex
-            logger.info("Cleaned up potential database clients to nbcore!")
-
-        # Delete the existing cnpg cluster
-        OCP(
-            kind=constants.CNPG_CLUSTER_KIND,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        ).delete(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
-
-        # Ensure the the cnpg cluster yaml uses the correct bootstrap object
-        cnpg_cluster_yaml["bootstrap"] = {
-            "initdb": {
-                "database": "nbcore",
-                "encoding": "UTF8",
-                "localeCType": "C",
-                "localeCollate": "C",
-                "owner": "noobaa",
-            }
-        }
-        cnpg_cluster_obj = OCS(**cnpg_cluster_yaml)
-        cnpg_cluster_obj.create()
-
-        # Wait for the cluster status to be in a healthy state
-        selector = (
-            f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
-            f"{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
-        )
-        OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        ).wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=selector,
-            resource_count=original_db_replica_count,
-            timeout=600,
-            sleep=5,
-        )
-
-        # Restore DB from a local folder to the primary instance
-        for pod_info in get_pods_having_label(label=constants.NOOBAA_CNPG_POD_LABEL):
-            noobaa_db_pod = Pod(**pod_info)
-            noobaa_db_pod = get_primary_nb_db_pod()
-            OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-                command=f"cp --retries=-1 ./mcg.bck {noobaa_db_pod.name}:/dev/shm/test.db",
-                out_yaml_format=False,
-            )
-            cmd = (
-                'bash -c "pg_restore --no-owner -n public '
-                "--role=noobaa -d nbcore "
-                '--verbose < /dev/shm/test.db"'
-            )
-            noobaa_db_pod.exec_cmd_on_pod(command=cmd)
-            logger.info(f"Restored {noobaa_db_pod.name} from the local folder!")
-
-        # Delete secrets and restore them from a local folder.
-        # Please note that verify that there are no errors before you proceed to the next steps.
-        for secret in secrets_obj:
-            secret.delete()
-        logger.info(f"Deleted current Noobaa secrets: {secrets}!")
-        for secret in secrets_obj:
-            secret.create()
-        logger.info(f"Restored old Noobaa secrets: {secrets}")
-
-        # Restore MCG reconciliation
-        restore_mcg_reconcilation(ocs_storagecluster_obj)
-        logger.info("Restored MCG reconcilation!")
-
-        # Start the NooBaa service
-        nb_operator_dc.scale(replicas=1)
-        nb_endpoint_dc.scale(replicas=1)
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
-        )
-        logger.info(
-            "Started noobaa services: Noobaa endpoint, Noobaa core, Noobaa operator pods!"
-        )
-
-        # Restart the NooBaa DB pod
-        noobaa_db_pod.delete()
-        logger.info("Restarted noobaa-db pod!")
-
-        # Make sure the testloss bucket doesn't exists and test bucket consists all the data
-        @retry(Exception, tries=10, delay=5)
-        def check_for_buckets_content(bucket):
-            try:
-                response = s3_list_objects_v2(
-                    s3_obj=mcg_obj_session, bucketname=bucket.name
-                )
-                logger.info(response)
-                return response
-            except Exception as err:
-                if "The specified bucket does not exist" in err.args[0]:
-                    return err.args[0]
-                else:
-                    raise
-
-        assert "The specified bucket does not exist" in check_for_buckets_content(
-            testloss_bucket
-        ), "Test loss bucket exists even though it shouldn't be present in the recovered db"
-
-        assert (
-            check_for_buckets_content(test_bucket)["KeyCount"] == 1
-        ), "test bucket doesnt consists of data post db recovery"
 
     def finalizer():
+        """
+        removes the DB backup and recovery information from storage cluster CR
+        """
 
-        nonlocal secrets_obj
-
-        # remove the local copy of ./mcg.bck
-        if os.path.exists("./mcg.bck"):
-            os.remove("mcg.bck")
-            logger.info("Removed the local copy of mcg.bck")
-
-        # create the secrets if they're deleted
-        if secrets_obj:
-            for secret in secrets_obj:
-                if secret.is_deleted:
-                    secret.create()
-                else:
-                    logger.info(f"{secret.name} is not deleted!")
-
-        # restore MCG reconcilation if not restored already
-        if (
-            ocs_storagecluster_obj.get(resource_name=constants.DEFAULT_CLUSTERNAME)[
-                "spec"
-            ]["multiCloudGateway"]["reconcileStrategy"]
-            != "manage"
-        ):
-            restore_mcg_reconcilation(ocs_storagecluster_obj)
-            logger.info("MCG reconcilation restored!")
-
-        # start noobaa services if its down
-        ocp_deployment_obj = OCP(
-            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        ocs_storage_obj = _get_storage_cluster_obj()
+        backup_params = '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
+        recovery_params = (
+            '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
         )
-        nb_operator_dc = Deployment(
-            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
+        for i in [backup_params, recovery_params]:
+            try:
+                ocs_storage_obj.patch(
+                    resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                    params=i,
+                    format_type="json",
+                )
+            except Exception as e:
+                logger.error(e)
+                pass
+        logger.info(
+            "Successfully removed backup and recovery section from Storage cluster"
         )
-        nb_endpoint_dc = Deployment(
-            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+        logger.info("Removing created backups now")
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
         )
-        start_noobaa_services(nb_endpoint_dc, nb_operator_dc)
+        for bkp_name in backup_names:
+            backup_obj.delete(resource_name=bkp_name, force=True)
+            backup_obj.wait_for_delete(resource_name=bkp_name)
+        logger.info("Backups created by CNPG operator Removed successfully")
 
     request.addfinalizer(finalizer)
     return factory
 
 
 @pytest.fixture()
-def noobaa_db_backup_locally(bucket_factory, awscli_pod_session, mcg_obj_session):
+def noobaa_db_backup_locally(request, mcg_obj):
     """
     Noobaa db backup locally
 
     """
 
-    secrets_obj = []
+    def factory(mcg_obj=mcg_obj):
 
-    def factory():
+        # add in testcase to wait for 1 minute for async backup to trigger between primary and secondary db
 
-        nonlocal secrets_obj
+        # 1: Add backup info in OCS Storage cluster CR
+        ocs_storage_obj = _get_storage_cluster_obj()
+        noobaa_obj = _get_noobaa_obj()
 
-        # Backup secrets
-        ocp_secret_obj = OCP(
-            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
+        _patch_db_backup_config(
+            ocs_storage_obj=ocs_storage_obj,
+            schedule_cron_interval=15,
+            num_backups=1,
+            snapshot_class=constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
         )
-        secrets = [
-            "noobaa-root-master-key-volume",
-            "noobaa-root-master-key-backend",
-            "noobaa-admin",
-            "noobaa-operator",
-            "noobaa-server",
-            "noobaa-endpoints",
-        ]
+        _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj)
+        logger.info("DB backup configuration added to OCS Storage cluster CR")
 
-        secrets_yaml = [
-            ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
-        ]
-        secrets_obj = [OCS(**secret_yaml) for secret_yaml in secrets_yaml]
-        logger.info("Backed up secrets as secret objects!")
-
-        # Backup the PostgreSQL database and save it to a local folder
-        noobaa_db_pod = get_primary_nb_db_pod()
-        noobaa_db_pod.exec_cmd_on_pod(
-            command="pg_dump nbcore -F custom -f /dev/shm/test.db",
-        )
-        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"cp --retries=-1 {noobaa_db_pod.name}:/dev/shm/test.db ./mcg.bck",
-            out_yaml_format=False,
-        )
-        logger.info("Backed up PostgreSQL and stored it in local folder!")
-
-        # Backup the noobaa-db-pg-cluster resource
-        cnpg_cluster_yaml = OCP(
-            kind=constants.CNPG_CLUSTER_KIND,
+        # 2: Run noobaa cli command to create on demand backup and validate backup is getting created or not
+        logger.info("Creating on-demand backup using NooBaa CLI")
+        backup_name = create_unique_resource_name("noobaa-cli", "backup")
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"system db-backup --name {backup_name}",
             namespace=config.ENV_DATA["cluster_namespace"],
-        ).get(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
-        original_db_replica_count = cnpg_cluster_yaml["spec"]["instances"]
+            use_yes=True,
+            ignore_error=False,
+        )
+        logger.info("On-demand backup command executed")
 
-        return cnpg_cluster_yaml, original_db_replica_count, secrets_obj
+        # Get on-demand backup
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+
+        # Wait for on-demand backup to complete
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=backup_name,
+            column="PHASE",
+            timeout=300,
+        )
+        logger.info(f"On-demand backup {backup_name} completed successfully")
+
+        return ocs_storage_obj, backup_name, noobaa_obj
 
     return factory
 
@@ -433,177 +447,50 @@ def noobaa_db_backup_locally(bucket_factory, awscli_pod_session, mcg_obj_session
 @pytest.fixture()
 def noobaa_db_recovery_from_local(request):
 
-    # OCS storagecluster object
-    ocs_storagecluster_obj = OCP(
-        namespace=config.ENV_DATA["cluster_namespace"],
-        kind=constants.STORAGECLUSTER,
-    )
+    def factory(ocs_storage_obj, backup_name, noobaa_obj):
 
-    # OCP object for kind deployment
-    ocp_deployment_obj = OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+        # 1: Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
+        _patch_db_recovery_config(ocs_storage_obj, backup_name)
+        _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj)
+        logger.info("DB recovery configuration added to OCS Storage cluster CR")
 
-    # Noobaa operator & noobaa endpoint deployments objects
-    nb_operator_dc = Deployment(
-        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
-    )
-    nb_endpoint_dc = Deployment(
-        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
-    )
+        # 2: Delete Cluster CR and check automatic recovery is getting triggered
+        db_cluster_name = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster", "Cluster"
+        )[0]
+        _delete_and_wait_for_cluster_recovery(db_cluster_name)
 
-    secrets_obj = []
-
-    def factory(cnpg_cluster_yaml, original_db_replica_count, secrets):
-
-        nonlocal secrets_obj
-        secrets_obj = secrets
-
-        # Stop MCG reconcilation
-        params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "ignore"}}}'
-        ocs_storagecluster_obj.patch(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            params=params,
-            format_type="merge",
-        )
-        logger.info("Stopped MCG reconcilation!")
-
-        # Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
-        nb_operator_dc.scale(replicas=0)
-        nb_endpoint_dc.scale(replicas=0)
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=0
-        )
-        logger.info(
-            "Stopped the noobaa service: Noobaa endpoint, Noobaa core, Noobaa operator pods!!"
-        )
-
-        # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
-        query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
-        try:
-            exec_nb_db_query(query)
-        except CommandFailed as ex:
-            if "terminating connection due to administrator command" not in str(ex):
-                raise ex
-            logger.info("Cleaned up potential database clients to nbcore!")
-
-        # Delete the existing cnpg cluster
-        OCP(
-            kind=constants.CNPG_CLUSTER_KIND,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        ).delete(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
-
-        # Ensure the the cnpg cluster yaml uses the correct bootstrap object
-        cnpg_cluster_yaml["bootstrap"] = {
-            "initdb": {
-                "database": "nbcore",
-                "encoding": "UTF8",
-                "localeCType": "C",
-                "localeCollate": "C",
-                "owner": "noobaa",
-            }
-        }
-        cnpg_cluster_obj = OCS(**cnpg_cluster_yaml)
-        cnpg_cluster_obj.create()
-
-        # Wait for the cluster status to be in a healthy state
-        selector = (
-            f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
-            f"{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
-        )
-        OCP(kind=constants.POD).wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=selector,
-            resource_count=original_db_replica_count,
-            timeout=600,
-            sleep=5,
-        )
-
-        # Restore DB from a local folder to the primary instance
-        # for pod_info in get_pods_having_label(label=constants.NOOBAA_CNPG_POD_LABEL):
-        #     noobaa_db_pod = Pod(**pod_info)
-        noobaa_db_pod = get_primary_nb_db_pod()
-        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"cp --retries=-1 ./mcg.bck {noobaa_db_pod.name}:/dev/shm/test.db",
-            out_yaml_format=False,
-        )
-        cmd = (
-            'bash -c "pg_restore --no-owner -n public '
-            "--role=noobaa -d nbcore "
-            '--verbose < /dev/shm/test.db"'
-        )
-        noobaa_db_pod.exec_cmd_on_pod(command=cmd)
-        logger.info(f"Restored {noobaa_db_pod.name} from the local folder!")
-
-        # Delete secrets and restore them from a local folder.
-        # Please note that verify that there are no errors before you proceed to the next steps.
-        for secret in secrets_obj:
-            secret.delete()
-        logger.info(
-            f"Deleted current Noobaa secrets: {[secret.name for secret in secrets_obj]}!"
-        )
-        for secret in secrets_obj:
-            secret.create()
-        logger.info(
-            f"Restored old Noobaa secrets: {[secret.name for secret in secrets_obj]}"
-        )
-
-        # Restore MCG reconciliation
-        restore_mcg_reconcilation(ocs_storagecluster_obj)
-        logger.info("Restored MCG reconcilation!")
-
-        # Start the NooBaa service
-        nb_operator_dc.scale(replicas=1)
-        nb_endpoint_dc.scale(replicas=1)
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
-        )
-        logger.info(
-            "Started noobaa services: Noobaa endpoint, Noobaa core, Noobaa operator pods!"
-        )
-
-        # Restart the NooBaa DB pod
-        noobaa_db_pod.delete()
-        logger.info("Restarted noobaa-db pod!")
+        # add in tetscase to wait for bucket to reach healthy state
 
     def finalizer():
 
-        nonlocal secrets_obj
-
-        # remove the local copy of ./mcg.bck
-        if os.path.exists("./mcg.bck"):
-            os.remove("mcg.bck")
-            logger.info("Removed the local copy of mcg.bck")
-
-        # create the secrets if they're deleted
-        if secrets_obj:
-            for secret in secrets_obj:
-                if secret.is_deleted:
-                    secret.create()
-                else:
-                    logger.info(f"{secret.name} is not deleted!")
-
-        # restore MCG reconcilation if not restored already
-        if (
-            ocs_storagecluster_obj.get(resource_name=constants.DEFAULT_CLUSTERNAME)[
-                "spec"
-            ]["multiCloudGateway"]["reconcileStrategy"]
-            != "manage"
-        ):
-            restore_mcg_reconcilation(ocs_storagecluster_obj)
-            logger.info("MCG reconcilation restored!")
-
-        # start noobaa services if its down
-        ocp_deployment_obj = OCP(
-            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        ocs_storage_obj = _get_storage_cluster_obj()
+        backup_params = '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
+        recovery_params = (
+            '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
         )
-        nb_operator_dc = Deployment(
-            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
+        for i in [backup_params, recovery_params]:
+            try:
+                ocs_storage_obj.patch(
+                    resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                    params=i,
+                    format_type="json",
+                )
+            except Exception as e:
+                logger.error(e)
+                pass
+        logger.info(
+            "Successfully removed backup and recovery section from Storage cluster"
         )
-        nb_endpoint_dc = Deployment(
-            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+        logger.info("Removing created backups now")
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
         )
-        start_noobaa_services(nb_endpoint_dc, nb_operator_dc)
+        for bkp_name in backup_names:
+            backup_obj.delete(resource_name=bkp_name, force=True)
+            backup_obj.wait_for_delete(resource_name=bkp_name)
+        logger.info("Backups created by CNPG operator Removed successfully")
 
     request.addfinalizer(finalizer)
     return factory

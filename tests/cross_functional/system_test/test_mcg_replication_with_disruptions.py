@@ -364,9 +364,7 @@ class TestLogBasedReplicationWithDisruptions:
             ), f"Deletion sync failed to complete for the objects {objs_to_delete} deleted in the first bucket set"
 
         logger.info("Taking backup of noobaa db")
-        cnpg_cluster_yaml, original_db_replica_count, secrets_obj = (
-            noobaa_db_backup_locally()
-        )
+        ocs_storage_obj, backup_name, noobaa_obj = noobaa_db_backup_locally()
 
         disable_deletion_sync = source_bucket.replication_policy
         disable_deletion_sync["rules"][0]["sync_deletions"] = False
@@ -382,9 +380,7 @@ class TestLogBasedReplicationWithDisruptions:
 
         # Do noobaa db recovery and see if the deletion sync works now
         logger.info("Recovering noobaa db from backup")
-        noobaa_db_recovery_from_local(
-            cnpg_cluster_yaml, original_db_replica_count, secrets_obj
-        )
+        noobaa_db_recovery_from_local(ocs_storage_obj, backup_name, noobaa_obj)
         wait_for_noobaa_pods_running(timeout=420)
 
         assert compare_bucket_object_list(
@@ -693,9 +689,7 @@ class TestMCGReplicationWithVersioningSystemTest:
         # Take the noobaa db backup and then disable the sync versions
         # make sure no version sync happens
         logger.info("Taking backup of noobaa db")
-        cnpg_cluster_yaml, original_db_replica_count, secrets_obj = (
-            noobaa_db_backup_locally()
-        )
+        ocs_storage_obj, backup_name, noobaa_obj = noobaa_db_backup_locally()
 
         logger.info("Disabling version sync for both the buckets")
         replication_1["rules"][0]["sync_versions"] = False
@@ -742,9 +736,7 @@ class TestMCGReplicationWithVersioningSystemTest:
         # Recover the noobaa db from the backup and perform
         # object deletion and verify deletion sync works
         logger.info("Recovering noobaa db from backup")
-        noobaa_db_recovery_from_local(
-            cnpg_cluster_yaml, original_db_replica_count, secrets_obj
-        )
+        noobaa_db_recovery_from_local(ocs_storage_obj, backup_name, noobaa_obj)
         wait_for_noobaa_pods_running(timeout=420)
 
         logger.info("Enabling version sync for both the buckets")
