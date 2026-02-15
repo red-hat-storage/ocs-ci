@@ -7,6 +7,7 @@ from collections import defaultdict
 from operator import itemgetter
 import random
 import json
+import yaml
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -32,7 +33,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
+from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version, run_cmd
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     get_pv_size,
@@ -3436,3 +3437,85 @@ def mark_masters_schedulable():
     assert scheduler_obj.patch(
         params=params, format_type="json"
     ), "Failed to run patch command to update control nodes as scheduleable"
+def get_worker_node_allocatable():
+    """
+    Fetch the allocatable CPU and memory resources for worker nodes in a Kubernetes cluster.
+
+    This function queries the OpenShift (okd) cluster's API using 'oc' command to retrieve the
+    available CPU and memory resources for each worker node. The results are then parsed
+    and returned as a dictionary with node names as keys, and nested dictionaries containing
+    CPU (in millicores) and Memory (in GB) values.
+
+    Returns:
+    dict: A dictionary where keys are worker node names and values are another dictionary
+          containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
+    """
+    cmd = ["oc", "get", "nodes", "-l", "node-role.kubernetes.io/worker", "-o", "yaml"]
+    result = run_cmd(cmd)
+    nodes = yaml.safe_load(result)
+    alloc = {}
+    for node in nodes["items"]:
+        name = node["metadata"]["name"]
+        cpu_str = node["status"]["allocatable"]["cpu"]
+        if cpu_str.endswith("m"):  # e.g. "500m"
+            cpu = int(int(cpu_str[:-1]) / 1000)
+        else:
+            cpu = int(cpu_str)
+        mem_raw = node["status"]["allocatable"]["memory"]  # e.g. "31948256Ki"
+        mem_gib = int(mem_raw.replace("Ki", "")) / (1024**2)
+        alloc[name] = {"cpu": cpu, "mem": mem_gib}
+    return alloc
+
+
+def get_pod_requests_per_node(worker_nodes=None):
+    """
+    Fetch requested CPU/Memory resources for all running pods, grouped by node.
+
+    This function queries the OpenShift (okd) cluster's API using 'oc' command to retrieve
+    details about all pods in the cluster. It then parses these details and aggregates
+    the requested CPU (in millicores) and Memory (in GB) for each worker node.
+
+    Args:
+    worker_nodes (list, optional): A list of worker node names to filter pods by.
+                                   If not provided, all nodes are considered.
+
+    Returns:
+    dict: A dictionary where keys are worker node names and values are another dictionary
+          containing 'cpu' (float, in millicores) and 'mem' (float, in GB).
+    """
+    cmd = ["oc", "get", "pods", "-A", "-o", "yaml"]
+    result = run_cmd(cmd)
+    pods = yaml.safe_load(result)
+
+    usage = defaultdict(lambda: {"cpu": 0, "mem": 0})
+    for pod_data in pods["items"]:
+        node = pod_data.get("spec", {}).get("nodeName")
+        if not node or (worker_nodes and node not in worker_nodes):
+            continue  # skip unscheduled pods and non-worker nodes
+
+        for container in pod["spec"].get("containers", []):
+            requests = container.get("resources", {}).get("requests", {})
+            cpu_req = requests.get("cpu", "0")
+            mem_req = requests.get("memory", "0")
+
+            # CPU conversion
+            if cpu_req.endswith("m"):  # e.g. "500m"
+                cpu_val = int(cpu_req[:-1]) / 1000
+            elif cpu_req:
+                cpu_val = int(cpu_req)
+            else:
+                cpu_val = 0
+
+            # Memory conversion
+            if mem_req.endswith("Mi"):
+                mem_val = int(mem_req[:-2]) / 1024
+            elif mem_req.endswith("Gi"):
+                mem_val = int(mem_req[:-2])
+            elif mem_req.endswith("Ki"):
+                mem_val = int(mem_req[:-2]) / (1024**2)
+            else:
+                mem_val = 0
+
+            usage[node]["cpu"] += cpu_val
+            usage[node]["mem"] += mem_val
+    return usage

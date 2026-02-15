@@ -238,7 +238,11 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
-from ocs_ci.helpers.cnv_helpers import run_fio
+from ocs_ci.helpers.cnv_helpers import (
+    run_fio,
+    compute_vm_count_from_storage_capacity,
+    calculate_vm_cnt_cpu_ram,
+)
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -8239,7 +8243,11 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     Class scoped fixture to deploy multiple CNV workload
 
     """
-    return multi_cnv_workload_factory(request, storageclass_factory, cnv_workload)
+    return multi_cnv_workload_factory(
+        request,
+        storageclass_factory,
+        cnv_workload,
+    )
 
 
 def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
@@ -8257,10 +8265,15 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
 
     """
 
-    def factory(namespace=None, encrypted=False):
+    def factory(namespace=None, encrypted=False, use_cluster_capacity=False):
         """
         Args:
             namespace (str, optional): The namespace to create the vm on.
+            use_cluster_capacity (bool):
+                If True, VM count will be calculated dynamically based on available
+                worker node CPU, RAM, and storage capacity in the cluster.
+                If False, VM count will be fixed and equal to the number of
+                configurations defined in `cnv_vm_workload.yaml`.
 
         Returns:
             tuple: tuple containing:
@@ -8322,37 +8335,83 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
         # Load VM configs from cnv_vm_workload yaml
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
 
-        # Use ThreadPoolExecutor to create VMs parallel
-        with ThreadPoolExecutor() as executor:
-            futures = {}
-            for vm_config in vm_configs["cnv_vm_configs"]:
-                # Determine the storage class based on the compression type
-                storageclass = (
-                    sc_obj_def_compr.name
-                    if vm_config["sc_compression"] == "default"
-                    else sc_obj_aggressive.name
-                )
-                future = executor.submit(
-                    cnv_workload,
-                    volume_interface=vm_config["volume_interface"],
-                    access_mode=vm_config["access_mode"],
-                    storageclass=storageclass,
-                    pvc_size="30Gi",
-                    namespace=namespace,
-                )
+        if use_cluster_capacity:
+            vm_cnt_by_storage = compute_vm_count_from_storage_capacity()
+            vm_cnt_by_cpu_ram, _ = calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4)
+            provisionable_vms = min(vm_cnt_by_storage, vm_cnt_by_cpu_ram)
+            log.info(
+                f"\nCluster can safely host {provisionable_vms}"
+                f"VMs(1 CPU + 4GiB RAM + 30GiB rootdisks each) on worker nodes:"
+            )
+            if provisionable_vms > len(vm_configs["cnv_vm_configs"]):
+                with ThreadPoolExecutor() as executor:
+                    futures = {}
+                    for i in range(provisionable_vms):
+                        # Cycle through configs
+                        vm_config = vm_configs["cnv_vm_configs"][
+                            i % len(vm_configs["cnv_vm_configs"])
+                        ]
 
-                futures[future] = vm_config["sc_compression"]
-            for future in concurrent.futures.as_completed(futures):
-                sc_compression = futures[future]
-                try:
-                    vm_obj = future.result()
-                    run_fio(vm_obj)
-                    if sc_compression == "aggressive":
-                        vm_list_agg_compr.append(vm_obj)
-                    else:
-                        vm_list_default_compr.append(vm_obj)
-                except Exception as e:
-                    log.error(f"Error occurred while creating VM: {e}")
+                        # Determine the storage class based on the compression type
+                        storageclass = (
+                            sc_obj_def_compr.name
+                            if vm_config["sc_compression"] == "default"
+                            else sc_obj_aggressive.name
+                        )
+                        future = executor.submit(
+                            cnv_workload,
+                            volume_interface=vm_config["volume_interface"],
+                            access_mode=vm_config["access_mode"],
+                            storageclass=storageclass,
+                            pvc_size="30Gi",
+                            namespace=namespace,
+                        )
+
+                        futures[future] = vm_config["sc_compression"]
+                for future in concurrent.futures.as_completed(futures):
+                    sc_compression = futures[future]
+                    try:
+                        vm_obj = future.result()
+                        run_fio(vm_obj)
+                        # Append to the appropriate list based on sc_compression
+                        if sc_compression == "aggressive":
+                            vm_list_agg_compr.append(vm_obj)
+                        else:
+                            vm_list_default_compr.append(vm_obj)
+                    except Exception as e:
+                        log.error(f"Error occurred while creating VM: {e}")
+        else:
+            # Use ThreadPoolExecutor to create VMs parallel
+            with ThreadPoolExecutor() as executor:
+                futures = {}
+                for vm_config in vm_configs["cnv_vm_configs"]:
+                    # Determine the storage class based on the compression type
+                    storageclass = (
+                        sc_obj_def_compr.name
+                        if vm_config["sc_compression"] == "default"
+                        else sc_obj_aggressive.name
+                    )
+                    future = executor.submit(
+                        cnv_workload,
+                        volume_interface=vm_config["volume_interface"],
+                        access_mode=vm_config["access_mode"],
+                        storageclass=storageclass,
+                        pvc_size="30Gi",
+                        namespace=namespace,
+                    )
+
+                    futures[future] = vm_config["sc_compression"]
+                for future in concurrent.futures.as_completed(futures):
+                    sc_compression = futures[future]
+                    try:
+                        vm_obj = future.result()
+                        run_fio(vm_obj)
+                        if sc_compression == "aggressive":
+                            vm_list_agg_compr.append(vm_obj)
+                        else:
+                            vm_list_default_compr.append(vm_obj)
+                    except Exception as e:
+                        log.error(f"Error occurred while creating VM: {e}")
 
         return (
             vm_list_default_compr,
