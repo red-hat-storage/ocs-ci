@@ -87,7 +87,6 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import (
-    get_worker_nodes,
     mark_masters_schedulable,
     verify_all_nodes_created,
     label_nodes,
@@ -159,7 +158,6 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
-from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -1346,119 +1344,21 @@ class Deployment(object):
             else:
                 raise
 
-        # Create Multus Networks
+        # Validate multus config flags are not both set
+        if config.ENV_DATA.get("is_multus_enabled") and config.ENV_DATA.get(
+            "multus_after_ocs_install"
+        ):
+            raise UnexpectedDeploymentConfiguration(
+                "is_multus_enabled and multus_after_ocs_install are mutually exclusive. "
+                "Set only one of them to true."
+            )
+
+        # Create Multus Networks during OCS install
         if config.ENV_DATA.get("is_multus_enabled"):
             log_step("Establish Multus Network")
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if (
-                config.ENV_DATA.get("multus_create_public_net")
-                and ocs_version >= version.VERSION_4_16
-            ):
-                nmstate_operator = NMStateOperator(
-                    create_catalog=True,
-                )
-                nmstate_operator.deploy()
-                from ocs_ci.helpers.helpers import (
-                    configure_node_network_configuration_policy_on_all_worker_nodes,
-                )
+            from ocs_ci.helpers.helpers import setup_multus_networking
 
-                configure_node_network_configuration_policy_on_all_worker_nodes()
-
-            create_public_net = config.ENV_DATA["multus_create_public_net"]
-            create_cluster_net = config.ENV_DATA["multus_create_cluster_net"]
-            interfaces = set()
-            if create_public_net:
-                interfaces.add(config.ENV_DATA["multus_public_net_interface"])
-            if create_cluster_net:
-                interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
-            worker_nodes = get_worker_nodes()
-            node_obj = ocp.OCP(kind="node")
-            platform = config.ENV_DATA.get("platform").lower()
-            if platform not in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
-                for node in worker_nodes:
-                    for interface in interfaces:
-                        ip_link_cmd = f"ip link set promisc on {interface}"
-                        node_obj.exec_oc_debug_cmd(
-                            node=node, cmd_list=[ip_link_cmd], namespace="default"
-                        )
-
-            if create_public_net:
-                nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
-                logger.info("Creating Multus public network")
-                if config.DEPLOYMENT.get("ipv6"):
-                    nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
-                public_net_data = templating.load_yaml(nad_to_load)
-                public_net_data["metadata"]["name"] = config.ENV_DATA.get(
-                    "multus_public_net_name"
-                )
-                public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
-                    "multus_public_net_namespace"
-                )
-                public_net_config_str = public_net_data["spec"]["config"]
-                public_net_config_dict = json.loads(public_net_config_str)
-                public_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_public_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_public_net_range"
-                    )
-                else:
-                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_public_ipv6_net_range"
-                    )
-                public_net_config_dict["type"] = config.ENV_DATA.get(
-                    "multus_public_net_type"
-                )
-                public_net_config_dict["mode"] = config.ENV_DATA.get(
-                    "multus_public_net_mode"
-                )
-                public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
-                public_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_public", delete=False
-                )
-                templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
-                run_cmd(f"oc create -f {public_net_yaml.name}")
-
-            if create_cluster_net:
-                logger.info("Creating Multus cluster network")
-                if config.DEPLOYMENT.get("ipv6"):
-                    constants.MULTUS_CLUSTER_NET_YAML = (
-                        constants.MULTUS_CLUSTER_NET_IPV6_YAML
-                    )
-                cluster_net_data = templating.load_yaml(
-                    constants.MULTUS_CLUSTER_NET_YAML
-                )
-                cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
-                    "multus_cluster_net_name"
-                )
-                cluster_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
-                    "multus_cluster_net_namespace"
-                )
-                cluster_net_config_str = cluster_net_data["spec"]["config"]
-                cluster_net_config_dict = json.loads(cluster_net_config_str)
-                cluster_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_cluster_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_cluster_net_range"
-                    )
-                else:
-                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_cluster_ipv6_net_range"
-                    )
-                cluster_net_config_dict["mode"] = config.ENV_DATA.get(
-                    "multus_cluster_net_mode"
-                )
-                cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
-                cluster_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_public", delete=False
-                )
-                templating.dump_data_to_temp_yaml(
-                    cluster_net_data, cluster_net_yaml.name
-                )
-                run_cmd(f"oc create -f {cluster_net_yaml.name}")
+            setup_multus_networking(patch_storage_cluster=False)
 
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
         managed_ibmcloud = (
@@ -1494,7 +1394,6 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_version = version.get_semantic_ocs_version_from_config()
         ocs_operator_names = get_required_csvs()
 
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
@@ -2161,6 +2060,13 @@ class Deployment(object):
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
         self.objectstore_user_check()
+
+        # Post-install Multus setup (after OCS is installed and validated)
+        if config.ENV_DATA.get("multus_after_ocs_install"):
+            log_step("Post-install: Establish Multus Network and patch StorageCluster")
+            from ocs_ci.helpers.helpers import setup_multus_networking
+
+            setup_multus_networking(patch_storage_cluster=True)
 
     def deploy_lvmo(self):
         """
