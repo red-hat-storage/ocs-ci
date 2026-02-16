@@ -925,11 +925,6 @@ class HostedClients(HyperShiftBase):
                 self.verify_hosted_ocp_clusters_from_provider()
             )
 
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
-            create_drs_machine_config()
-            for cluster_name in cluster_names:
-                create_drs_nad(cluster_name)
-
         # configure proxy object with trusted ca bundle for custom ingress ssl certificate
         if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
             ssl_ca_cert = get_root_ca_cert()
@@ -1025,6 +1020,11 @@ class HostedClients(HyperShiftBase):
                 ]
             )
         )
+
+        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+            create_drs_machine_config()
+            for cluster_name in cluster_names:
+                create_drs_nad(cluster_name)
 
         log_step("Verify storage is available on all hosted ODF clusters")
         hosted_odf_storage_verified = []
