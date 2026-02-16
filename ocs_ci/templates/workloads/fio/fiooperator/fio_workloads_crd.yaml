@@ -1,0 +1,48 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: fioworkloads.workloads.com
+spec:
+  group: workloads.com
+  names:
+    kind: FIOWorkload
+    listKind: FIOWorkloadList
+    plural: fioworkloads
+    singular: fioworkload
+  scope: Cluster
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                replicas:
+                  type: integer
+                  description: Number of fio pods to spawn
+                action:
+                  type: string
+                  description: Action to be performed on fio pod, example-scale_up, scale_down
+                fioArgs:
+                  type: object
+                  description: FIO command-line arguments
+                  properties:
+                    filesize:
+                      type: string
+                      description: File size for the workload
+                    iodepth:
+                      type: integer
+                      description: IO depth for fio
+                    rw:
+                      type: string
+                      description: Read/Write pattern for fio
+                    runtime:
+                      type: integer
+                      description: Run time
+                    run_name:
+                      type: string
+                      description: Run name

@@ -1,0 +1,12 @@
+WORKLOAD:
+  name: "fio"
+  fioArgs:
+    size: "1G"
+    io_depth: 4
+    filename: 'testfile'
+    readwrite: 'read'
+    bs: "4k"
+    runtime: "60s"
+  storage_class: "RBD"
+  fiooperator:
+    autoscale: False

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fiooperator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fiooperator
+  template:
+    metadata:
+      labels:
+        app: fiooperator
+    spec:
+      restartPolicy: Always
+      serviceAccountName: fiooperator-sa
+      containers:
+      - name: fiooperator
+        image: quay.io/ocsci/fiooperator:latest
+        imagePullPolicy: Always
+      imagePullSecrets:
+      - name: fiooperator-registry-secret
