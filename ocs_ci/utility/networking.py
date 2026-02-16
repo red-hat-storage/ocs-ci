@@ -134,8 +134,9 @@ def create_drs_machine_config():
     machineconfigurations_yaml["spec"]["config"]["storage"]["files"][0]["contents"][
         "source"
     ] = f"data:text/plain;base64,{base64_interfaces}"
-    machineconfigurations_obj = OCS(**machineconfigurations_yaml)
-    machineconfigurations_obj.apply(**machineconfigurations_yaml)
+    with config.RunWithProviderConfigContextIfAvailable():
+        machineconfigurations_obj = OCS(**machineconfigurations_yaml)
+        machineconfigurations_obj.apply(**machineconfigurations_yaml)
 
 
 def create_drs_nad(namespace):
@@ -149,5 +150,6 @@ def create_drs_nad(namespace):
     nad_path = os.path.join(constants.TEMPLATE_DEPLOYMENT_DIR, "drs_nad.yaml")
     nad_yaml = load_yaml(nad_path)
     nad_yaml["metadata"]["namespace"] = namespace
-    nad_obj = OCS(**nad_yaml)
-    nad_obj.apply(**nad_yaml)
+    with config.RunWithProviderConfigContextIfAvailable():
+        nad_obj = OCS(**nad_yaml)
+        nad_obj.apply(**nad_yaml)
