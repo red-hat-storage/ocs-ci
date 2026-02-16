@@ -595,9 +595,6 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
         )
 
         cluster_name = hosted_ocp_cluster.deploy_ocp()
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
-            create_drs_machine_config()
-            create_drs_nad(cluster_name)
         if cluster_name:
             cluster_names.append(cluster_name)
 
@@ -927,6 +924,11 @@ class HostedClients(HyperShiftBase):
             hosted_ocp_verification_passed = (
                 self.verify_hosted_ocp_clusters_from_provider()
             )
+
+        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+            create_drs_machine_config()
+            for cluster_name in cluster_names:
+                create_drs_nad(cluster_name)
 
         # configure proxy object with trusted ca bundle for custom ingress ssl certificate
         if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
