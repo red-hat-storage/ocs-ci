@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     skipif_external_mode,
     skipif_ibm_cloud,
+    skipif_bm,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants
@@ -245,6 +246,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @tier4a
 @skipif_ibm_cloud
 @skipif_compact_mode
+@skipif_bm
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
@@ -315,7 +317,6 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         ],
     )
     @skipif_external_mode
-    @skipif_ibm_cloud
     def test_automated_recovery_from_stopped_node_and_start(
         self, nodes, additional_node
     ):
