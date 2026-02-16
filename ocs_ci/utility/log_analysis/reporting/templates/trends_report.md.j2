@@ -1,0 +1,79 @@
+# OCS-CI Cross-Run Trend Analysis
+
+**Period**: {{ report.period }}
+**Runs Analyzed**: {{ report.runs_analyzed }}
+
+---
+
+## Pass Rate Trend
+
+| Date | Pass Rate | Total | Failed |
+|------|-----------|-------|--------|
+{% for entry in report.pass_rate_trend %}
+| {{ entry.timestamp }} | {{ "%.1f"|format(entry.pass_rate * 100) }}% | {{ entry.total }} | {{ entry.failed }} |
+{% endfor %}
+
+{% if report.regressions %}
+---
+
+## Regressions
+
+Tests that recently started failing after previously passing.
+
+| Test | Squad | Consecutive Failures | Since | Previous Passes | Category | Version Changed |
+|------|-------|---------------------|-------|-----------------|----------|-----------------|
+{% for r in report.regressions %}
+| `{{ r.test_name }}` | {{ r.squad or 'N/A' }} | {{ r.consecutive_failures }} | {{ r.first_failure_timestamp[:10] }} | {{ r.previous_pass_count }} | {{ r.category or 'N/A' }} | {{ "Yes" if r.ocs_version_changed else "No" }} |
+{% endfor %}
+{% endif %}
+
+{% if report.top_flaky_tests %}
+---
+
+## Flaky Tests
+
+Tests with intermittent pass/fail behavior across runs.
+
+| Test | Squad | Flakiness Rate | Pass | Fail | Error | Total Runs | Recent Results |
+|------|-------|---------------|------|------|-------|------------|----------------|
+{% for t in report.top_flaky_tests %}
+| `{{ t.test_name }}` | {{ t.squad or 'N/A' }} | {{ "%.0f"|format(t.flakiness_rate * 100) }}% | {{ t.pass_count }} | {{ t.fail_count }} | {{ t.error_count }} | {{ t.total_runs }} | {{ t.recent_results[-5:] | join(' ') }} |
+{% endfor %}
+{% endif %}
+
+{% if report.most_failing_tests %}
+---
+
+## Most Failing Tests
+
+Top tests by total failure count across all analyzed runs.
+
+| Test | Squad | Failures | Total Runs | Failure Rate |
+|------|-------|----------|------------|-------------|
+{% for t in report.most_failing_tests %}
+| `{{ t.test_name }}` | {{ t.squad or 'N/A' }} | {{ t.fail_count + t.error_count }} | {{ t.total_runs }} | {{ "%.0f"|format(t.flakiness_rate * 100) }}% |
+{% endfor %}
+{% endif %}
+
+{% if report.squad_health %}
+---
+
+## Squad Health
+
+| Squad | Tests | Pass Rate | Failures | Flaky Tests |
+|-------|-------|-----------|----------|-------------|
+{% for squad, stats in report.squad_health.items() | sort %}
+| {{ squad }} | {{ stats.total_tests }} | {{ "%.1f"|format(stats.pass_rate * 100) }}% | {{ stats.fail_count }} | {{ stats.flaky_count }} |
+{% endfor %}
+{% endif %}
+
+{% if report.category_trend %}
+---
+
+## Failure Category Distribution
+
+{% for category, entries in report.category_trend.items() | sort %}
+**{{ category }}**: {% for e in entries %}{{ e.timestamp }} ({{ e.count }}){% if not loop.last %}, {% endif %}{% endfor %}
+
+{% endfor %}
+{% endif %}

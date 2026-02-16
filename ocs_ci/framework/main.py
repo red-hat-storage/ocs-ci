@@ -27,4 +27,9 @@ def main(argv=None):
             pytest_logs_dir,
         ]
     )
+
+    # Conditionally register the AI log analysis post-session hook
+    if framework.config.LOG_ANALYSIS.get("ci_post_hook_enabled", False):
+        arguments.extend(["-p", "ocs_ci.utility.log_analysis.integrations.ci_hook"])
+
     return pytest.main(arguments)
