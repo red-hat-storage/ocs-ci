@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True)
 def teardown(request):
+    """
+    Ensure cluster health after metrics validation.
+    """
+
     def finalizer():
         assert ceph_health_check(), "Cluster became unhealthy after metrics test"
 
@@ -38,6 +42,11 @@ def test_rbd_metrics_validation_multi_scenario(
     write_size_mib,
     volume_mode,
 ):
+    """
+    Validates that RBD metrics (Used, Capacity, Available) are correctly reported
+    by both Kubelet (via Prometheus) and the Ceph backend (rbd du) across
+    multiple write operations and volume modes.
+    """
     project_obj = project_factory()
     namespace = project_obj.namespace
 
@@ -95,6 +104,13 @@ def test_rbd_metrics_validation_multi_scenario(
 def validate_all_layers(prom_api, pvc_obj, namespace, expected_mib, volume_mode):
     """
     Validates metrics at both Kubelet (Prometheus) and Ceph (rbd du) layers.
+
+    Args:
+        prom_api (PrometheusAPI): The Prometheus API object for querying metrics.
+        pvc_obj (PVC): The PVC object being validated.
+        namespace (str): The namespace where the PVC and Pod reside.
+        expected_mib (int): The amount of data written in MiB.
+        volume_mode (str): The volume mode (Block or Filesystem).
     """
     expected_bytes = expected_mib * 1024 * 1024
 
@@ -115,24 +131,20 @@ def validate_all_layers(prom_api, pvc_obj, namespace, expected_mib, volume_mode)
         assert (
             kube_metrics["capacity"] == ceph_metrics["capacity"]
         ), f"Capacity mismatch! Kube: {kube_metrics['capacity']}, Ceph: {ceph_metrics['capacity']}"
-        # Kubelet Used vs Ceph Used
-        assert abs(
+
+        assert (
             kube_metrics["used"] == ceph_metrics["used"]
         ), f"Used bytes out of sync! Kube: {kube_metrics['used']}, Ceph: {ceph_metrics['used']}"
 
-        # Kubelet Available vs Ceph Available
-        assert abs(
+        assert (
             kube_metrics["available"] == ceph_metrics["available"]
         ), f"Available bytes out of sync! Kube: {kube_metrics['available']}, Ceph: {ceph_metrics['available']}"
 
-        # Kubelet Used vs What we actually wrote (Logical check)
         assert (
             kube_metrics["used"] >= expected_bytes
         ), f"Kubelet reports less used than written! Kube: {kube_metrics['used']}, Target: {expected_bytes}"
     else:
-        # Filesystem mode: Kubelet Capacity (statfs) is always smaller than Ceph Capacity (RBD size)
-        # We allow small tolerance Percentage/Margin for XFS/Ext4 overhead (around 50 MB)
-        # Total capacity for FS mode PVCs is reflecting as 973MB at Kubelet side instead of 1024MB at cpeh rbd side
+        # Filesystem mode tolerance check
         tolerance_factor = 0.90
         assert kube_metrics["capacity"] >= (
             ceph_metrics["capacity"] * tolerance_factor
@@ -143,23 +155,29 @@ def validate_all_layers(prom_api, pvc_obj, namespace, expected_mib, volume_mode)
 
         margin = 50 * 1024 * 1024
 
-        # Kubelet Used vs Ceph Used
         assert (
             abs(kube_metrics["used"] - ceph_metrics["used"]) < margin
         ), f"Used bytes out of sync! Kube: {kube_metrics['used']}, Ceph: {ceph_metrics['used']}"
 
-        # Kubelet Available vs Ceph Available
         assert (
             abs(kube_metrics["available"] - ceph_metrics["available"]) < margin
         ), f"Available bytes out of sync! Kube: {kube_metrics['available']}, Ceph: {ceph_metrics['available']}"
 
-        # Kubelet Used vs What we actually wrote (Logical check)
         assert (
             kube_metrics["used"] >= expected_bytes
         ), f"Kubelet reports less used than written! Kube: {kube_metrics['used']}, Target: {expected_bytes}"
 
 
 def get_ceph_rbd_metrics(pvc_obj):
+    """
+    Retrieves used, provisioned, and available size for an RBD image directly from Ceph.
+
+    Args:
+        pvc_obj (PVC): The PVC object to check.
+
+    Returns:
+        dict: A dictionary containing 'used', 'capacity', and 'available' bytes.
+    """
     ceph_toolbox = pod_helpers.get_ceph_tools_pod()
     pv_data = pvc_obj.backed_pv_obj.get()
     rbd_pool = constants.DEFAULT_BLOCKPOOL
@@ -181,6 +199,19 @@ def get_ceph_rbd_metrics(pvc_obj):
 
 
 def get_dd_command(mode, path, size_mib, seek_val=None, append=False):
+    """
+    Generates a dd command string suitable for Block or Filesystem writes.
+
+    Args:
+        mode (str): Volume mode (Block or Filesystem).
+        path (str): The device or file path to write to.
+        size_mib (int): Amount of data to write in MiB.
+        seek_val (int, optional): The offset for dd seek. Defaults to None.
+        append (bool): If True, use append mode for filesystem writes.
+
+    Returns:
+        str: The constructed dd command.
+    """
     if mode == constants.VOLUME_MODE_BLOCK:
         seek_str = f"seek={seek_val}" if seek_val else ""
         return f"dd if=/dev/urandom of={path} bs=1M count={size_mib} {seek_str} oflag=direct"
@@ -192,6 +223,18 @@ def get_dd_command(mode, path, size_mib, seek_val=None, append=False):
 
 
 def query_kubelet_metric(prom_api, metric_name, pvc_name, namespace):
+    """
+    Queries a specific Kubelet volume metric from Prometheus.
+
+    Args:
+        prom_api (PrometheusAPI): The Prometheus API object.
+        metric_name (str): The name of the Prometheus metric.
+        pvc_name (str): The name of the PVC.
+        namespace (str): The namespace where the PVC resides.
+
+    Returns:
+        int: The metric value (usually bytes).
+    """
     promql = (
         f'{metric_name}{{persistentvolumeclaim="{pvc_name}",namespace="{namespace}"}}'
     )
@@ -200,6 +243,22 @@ def query_kubelet_metric(prom_api, metric_name, pvc_name, namespace):
 
 
 def wait_for_all_metrics(prom_api, pvc_name, namespace, expected_used, timeout=600):
+    """
+    Waits for Prometheus metrics to reflect at least the expected used bytes.
+
+    Args:
+        prom_api (PrometheusAPI): The Prometheus API object.
+        pvc_name (str): The name of the PVC.
+        namespace (str): The namespace.
+        expected_used (int): The target used bytes to wait for.
+        timeout (int): Seconds to wait before failing. Defaults to 600.
+
+    Returns:
+        dict: Used, capacity, and available bytes from Prometheus.
+
+    Raises:
+        AssertionError: If metrics are not updated within the timeout.
+    """
     start_time = time.time()
     while time.time() - start_time < timeout:
         space_used = query_kubelet_metric(
