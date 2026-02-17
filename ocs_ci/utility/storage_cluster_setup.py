@@ -181,7 +181,7 @@ class StorageClusterSetup(object):
         # set size of request for storage
         if self.platform.lower() in [
             constants.BAREMETAL_PLATFORM,
-            constants.HCI_BAREMETAL,
+            constants.IBM_BAREMETAL,
         ]:
             pv_size_list = helpers.get_pv_size(
                 storageclass=constants.DEFAULT_STORAGECLASS_LSO

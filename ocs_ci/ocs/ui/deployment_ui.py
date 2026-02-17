@@ -274,7 +274,7 @@ class DeploymentUI(PageNavigator):
             )
         if config.ENV_DATA.get("platform") not in [
             constants.BAREMETAL_PLATFORM,
-            constants.HCI_BAREMETAL,
+            constants.IBM_BAREMETAL,
         ]:
             self.take_screenshot()
             self.verify_disks_lso_attached()
