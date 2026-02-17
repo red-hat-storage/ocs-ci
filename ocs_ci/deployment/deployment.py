@@ -4177,12 +4177,12 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     condition="1", column="AVAILABLE", resource_count=1, timeout=300
                 )
                 continue
-            if config.ENV_DATA["setup_fdf_catsrc_for_hub"]:
+            if config.ENV_DATA.get("setup_fdf_catsrc_for_hub"):
                 setup_fdf_catsrc_for_hub()
 
             self.deploy_dr_multicluster_orchestrator(
                 use_fdf_catsrc=(
-                    True if config.ENV_DATA["setup_fdf_catsrc_for_hub"] else False
+                    True if config.ENV_DATA.get("setup_fdf_catsrc_for_hub") else False
                 )
             )
             # Enable MCO console plugin
