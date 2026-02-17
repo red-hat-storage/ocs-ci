@@ -3025,7 +3025,7 @@ def setup_fdf_catsrc_for_hub():
     logger.info("Creating FDF specific resource")
     for i in acm_indexes:
         config.switch_ctx(i)
-        fdf = FusionDataFoundationDeployment
+        fdf = FusionDataFoundationDeployment()
         fdf.create_image_tag_mirror_set()
         fdf.create_image_digest_mirror_set()
     logger.info("Creating FDF Catsrc from Primary")
