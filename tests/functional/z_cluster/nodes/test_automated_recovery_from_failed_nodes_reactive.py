@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_compact_mode
+from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_compact_mode, skipif_ibm_power
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -247,6 +247,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @skipif_ibm_cloud
 @skipif_compact_mode
 @skipif_bm
+@skipif_ibm_power
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
