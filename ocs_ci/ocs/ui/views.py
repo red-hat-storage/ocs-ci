@@ -2541,6 +2541,9 @@ alerting = {
 }
 
 bucket_tab = {
+    "provider_card_rgw": ("#rgw-s3", By.CSS_SELECTOR),
+    "provider_radio_rgw": ("#rgwInternal", By.CSS_SELECTOR),
+    "provider_card_mcg": ("#mcg-s3", By.CSS_SELECTOR),
     "create_bucket_button_obc": (
         "//div[text()='Create via Object Bucket Claim']",
         By.XPATH,
@@ -2612,7 +2615,8 @@ bucket_tab = {
     ),
     "bucket_list_items": (
         "//a[starts-with(@href, '/odf/object-storage/buckets/')] |"
-        "//a[starts-with(@href, '/odf/object-storage/noobaa/buckets/')]",
+        "//a[starts-with(@href, '/odf/object-storage/noobaa/buckets/')] |"
+        "//a[starts-with(@href, '/odf/object-storage/rgwInternal/buckets/')]",
         By.XPATH,
     ),
     "bucket_action_button": (

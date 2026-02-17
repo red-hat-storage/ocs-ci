@@ -2361,6 +2361,10 @@ NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
 RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
+# S3 UI Provider Types (matches odf-console S3ProviderType enum)
+S3_PROVIDER_NOOBAA = "noobaa"
+S3_PROVIDER_RGW_INTERNAL = "rgwInternal"
+
 # Routes
 RGW_ROUTE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
 RGW_ROUTE_INTERNAL_MODE_SECURE = "ocs-storagecluster-cephobjectstore-secure"
