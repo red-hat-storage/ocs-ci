@@ -1,6 +1,10 @@
 import logging
 import pytest
-from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_compact_mode, skipif_ibm_power
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    skipif_compact_mode,
+    skipif_ibm_power,
+)
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
