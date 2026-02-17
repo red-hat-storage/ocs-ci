@@ -3011,16 +3011,8 @@ def setup_fdf_catsrc_for_hub():
     """
     This function creates fdf catalogsource on hub
 
-
     """
     restore_index = config.cur_index
-    logger.info("Getting FDF Catsrc from Primary")
-    with config.RunWithPrimaryConfigContext():
-        fdf_catsrc_data = ocp.OCP(
-            kind=constants.CATSRC,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-            resource_name=constants.FDF_CATALOG_NAME,
-        )
     acm_indexes = get_all_acm_indexes()
     logger.info("Creating FDF specific resource")
     for i in acm_indexes:
@@ -3029,10 +3021,20 @@ def setup_fdf_catsrc_for_hub():
         fdf.create_image_tag_mirror_set()
         fdf.create_image_digest_mirror_set()
     logger.info("Creating FDF Catsrc from Primary")
+    isf_data_foundation_catsrc = templating.load_yaml(constants.FDF_CATSRC_CR)
+    isf_data_foundation_catsrc["spec"]["image"] = (
+        constants.FDF_CATSRC_IMAGE_PATH + ":" + config.DEPLOYMENT.get("fdf_image_tag")
+    )
+    isf_data_foundation_catsrc_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="isf_df_catsrc", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        isf_data_foundation_catsrc, isf_data_foundation_catsrc_yaml.name
+    )
     for i in acm_indexes:
         config.switch_ctx(i)
         wait_for_machineconfigpool_status("all", timeout=1800)
-        fdf_catsrc_data.create()
+        run_cmd(f"oc create -f {isf_data_foundation_catsrc_yaml.name}")
     config.switch_ctx(restore_index)
 
 

@@ -3684,7 +3684,8 @@ SPECTRUM_FUSION_CR = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION, "spectrum-fusion.yaml"
 )
 FDF_ODFCLUSTER_CR = os.path.join(FDF_TEMPLATE_DIR, "odfcluster.yaml")
-
+FDF_CATSRC_CR = os.path.join(FDF_TEMPLATE_DIR, "isf_datafoundation_catsrc.yaml")
+FDF_CATSRC_IMAGE_PATH = "icr.io/cpopen/isf-data-foundation-catalog"
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"
 ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"

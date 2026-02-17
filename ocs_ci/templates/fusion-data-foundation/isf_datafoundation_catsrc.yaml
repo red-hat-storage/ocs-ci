@@ -1,0 +1,26 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: isf-data-foundation-catalog
+  namespace: openshift-marketplace
+spec:
+  displayName: Data Foundation Catalog
+  grpcPodConfig:
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+            - key: gpu.isf.ibm.com
+              operator: DoesNotExist
+          weight: 50
+    securityContextConfig: restricted
+  icon:
+    base64data: ""
+    mediatype: ""
+  image: PLACEHOLDER
+  publisher: IBM
+  sourceType: grpc
+  updateStrategy:
+    registryPoll:
+      interval: 60m
