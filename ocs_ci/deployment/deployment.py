@@ -56,6 +56,7 @@ from ocs_ci.helpers.dr_helpers import (
     validate_drpolicy_grouping,
     create_ingress_cert_dr,
     create_multiclusterservice_dr,
+    setup_fdf_catsrc_for_hub,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -3368,7 +3369,7 @@ class MultiClusterDROperatorsDeploy(object):
         # HUB operator will be deployed by multicluster orechestrator
         self.verify_dr_hub_operator()
 
-    def deploy_dr_multicluster_orchestrator(self):
+    def deploy_dr_multicluster_orchestrator(self, use_fdf_catsrc=False):
         """
         Deploy multicluster orchestrator
         """
@@ -3400,6 +3401,10 @@ class MultiClusterDROperatorsDeploy(object):
         logger.info(f"CurrentCSV={current_csv}")
         odf_multicluster_orchestrator_data["spec"]["channel"] = self.channel
         odf_multicluster_orchestrator_data["spec"]["startingCSV"] = current_csv
+        if use_fdf_catsrc:
+            odf_multicluster_orchestrator_data["spec"][
+                "source"
+            ] = constants.FDF_CATALOG_NAME
         odf_multicluster_orchestrator = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odf_multicluster_orchestrator", delete=False
         )
@@ -4172,7 +4177,14 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     condition="1", column="AVAILABLE", resource_count=1, timeout=300
                 )
                 continue
-            self.deploy_dr_multicluster_orchestrator()
+            if config.ENV_DATA["setup_fdf_catsrc_for_hub"]:
+                setup_fdf_catsrc_for_hub()
+
+            self.deploy_dr_multicluster_orchestrator(
+                use_fdf_catsrc=(
+                    True if config.ENV_DATA["setup_fdf_catsrc_for_hub"] else False
+                )
+            )
             # Enable MCO console plugin
             enable_mco_console_plugin()
         config.switch_acm_ctx()
