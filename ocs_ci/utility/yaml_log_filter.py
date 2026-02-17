@@ -25,11 +25,12 @@ def filter_verbose_yaml(yaml_str: str, min_size: int = MIN_SIZE_FOR_FILTERING) -
     Filter verbose fields from YAML string for logging purposes only.
 
     Args:
-        yaml_str: Raw YAML string from oc command output
-        min_size: Minimum size to trigger filtering
+        yaml_str (str): Raw YAML string from oc command output.
+        min_size (int): Minimum size to trigger filtering.
 
     Returns:
-        str: Summary string for logging
+        str: Summary string for logging.
+
     """
     if not yaml_str or len(yaml_str) < min_size:
         return yaml_str
