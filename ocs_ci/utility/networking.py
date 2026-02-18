@@ -29,7 +29,7 @@ def get_node_private_ip(node_name):
         node_name (str): Name of the node
 
     Returns:
-        tuple: (private_ip, prefix_length) - IP address and network prefix length
+        tuple: (private_ip (str), prefix_length (str)) - IP address and network prefix length
 
     Raises:
         CommandFailed: If unable to retrieve IP address from the node
@@ -51,7 +51,7 @@ def get_node_private_ip(node_name):
             )
 
         # Parse IP and prefix
-        ip_with_prefix = output.split("\n")[
+        ip_with_prefix = output.splitlines()[
             -1
         ].strip()  # Get last line in case of multiple lines
         match = re.search(r"(\d+\.\d+\.\d+\.\d+)/(\d+)", ip_with_prefix)
