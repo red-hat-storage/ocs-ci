@@ -4,6 +4,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_compact_mode,
     skipif_ibm_power,
+    skipif_azure_platform,
 )
 from ocs_ci.framework.testlib import (
     tier4a,
@@ -252,6 +253,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @skipif_compact_mode
 @skipif_bm
 @skipif_ibm_power
+@skipif_azure_platform
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
