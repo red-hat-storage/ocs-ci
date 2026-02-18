@@ -3376,7 +3376,7 @@ class MultiClusterDROperatorsDeploy(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         current_csv = None
 
-        if not live_deployment:
+        if not live_deployment and not use_fdf_catsrc:
             create_catalog_source()
         odf_multicluster_orchestrator_data = templating.load_yaml(
             constants.ODF_MULTICLUSTER_ORCHESTRATOR

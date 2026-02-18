@@ -2718,25 +2718,22 @@ def create_service_exporter(annotate=True):
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         if (
-            cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
-            or get_provider_service_type() == "NodePort"
+            get_provider_service_type() == "NodePort"
+            or get_provider_service_type() == "ClusterIP"
+            or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
         ):
             logger.info("Skipping ServiceExport creation for multiclient cluster")
             continue
-        elif (
-            get_provider_service_type() != "NodePort"
-            and cluster.ENV_DATA.get("cluster_type", "").lower() != constants.HCI_CLIENT
-        ):
+        else:
             logger.info("Checking if multiClusterService exists")
             create_multiclusterservice_dr()
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
-            if (
-                config.ENV_DATA.get("odf_provider_mode_deployment")
-                and cluster.ENV_DATA.get("cluster_type").lower()
-                == constants.HCI_PROVIDER
+            if config.ENV_DATA.get("odf_provider_mode_deployment") or (
+                cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
+                or get_provider_service_type() == "NodePort"
             ):
                 cluster_address = get_node_internal_ip(
                     get_node_objs(get_worker_nodes()[0])[0]
