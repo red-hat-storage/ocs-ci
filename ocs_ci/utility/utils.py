@@ -44,6 +44,7 @@ from jinja2 import FileSystemLoader, Environment
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility.yaml_log_filter import filter_verbose_yaml
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CephHealthRecoveredException,
@@ -847,8 +848,9 @@ def exec_cmd(
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
+    log_stdout = filter_verbose_yaml(masked_stdout)
     if len(completed_process.stdout) > 0:
-        truncated_stdout = truncate_large_base64(masked_stdout)
+        truncated_stdout = truncate_large_base64(log_stdout)
         log.debug(f"Command stdout: {truncated_stdout}")
     else:
         log.debug("Command stdout is empty")
