@@ -3032,7 +3032,7 @@ def setup_fdf_catsrc_for_hub():
     for i in acm_indexes:
         config.switch_ctx(i)
         wait_for_machineconfigpool_status("all", timeout=1800)
-        run_cmd(f"oc create -f {isf_data_foundation_catsrc_yaml.name}")
+        run_cmd(f"oc apply -f {isf_data_foundation_catsrc_yaml.name}")
         fdf_catalog_source = CatalogSource(
             resource_name=constants.FDF_CATALOG_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
