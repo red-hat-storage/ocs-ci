@@ -27,5 +27,3 @@ spec:
       config:
         - destination: 192.168.20.0/24
           next-hop-interface: odf-pub-shim
-        - destination: 192.168.30.0/24
-          next-hop-interface: odf-pub-shim
