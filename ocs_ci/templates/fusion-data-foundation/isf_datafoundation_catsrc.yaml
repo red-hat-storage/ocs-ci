@@ -3,6 +3,8 @@ kind: CatalogSource
 metadata:
   name: isf-data-foundation-catalog
   namespace: openshift-marketplace
+  labels:
+      fdf-operator-internal: "true"
 spec:
   displayName: Data Foundation Catalog
   grpcPodConfig:

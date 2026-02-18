@@ -3881,6 +3881,7 @@ BLACKBOX_POD_LABEL = "app.kubernetes.io/name=odf-blackbox-exporter"
 # ODF 4.21 health overview mock alerts dir
 HEALTHALERTS_DIR = os.path.join(TEMPLATE_DIR, "health_overview_alerts")
 FDF_CATALOG_NAME = "isf-data-foundation-catalog"
+FDF_OPERATOR_SELECTOR = "fdf-operator-internal=true"
 
 # CSI PORTS
 CEPH_NODE_PORT = 31659

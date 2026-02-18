@@ -3381,9 +3381,15 @@ class MultiClusterDROperatorsDeploy(object):
         odf_multicluster_orchestrator_data = templating.load_yaml(
             constants.ODF_MULTICLUSTER_ORCHESTRATOR
         )
-        package_manifest = packagemanifest.PackageManifest(
-            resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
-        )
+        if use_fdf_catsrc:
+            package_manifest = packagemanifest.PackageManifest(
+                resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+                selector=constants.FDF_OPERATOR_SELECTOR,
+            )
+        else:
+            package_manifest = packagemanifest.PackageManifest(
+                resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+            )
 
         retry(
             (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
