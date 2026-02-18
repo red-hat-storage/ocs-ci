@@ -454,3 +454,25 @@ def get_provider_service_type():
     service_type = service_obj.get().get("spec").get("type")
     logger.info(f"The type of the ocs-provider-server Service = {service_type}")
     return service_type
+
+
+def is_hostnetwork_enabled():
+    """
+    Check if host networking is enabled in the storage cluster
+
+    Returns:
+        bool: True if host networking is enabled, False otherwise
+
+    """
+    storagecluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+    spec = storagecluster_obj.get().get("spec", {})
+    host_network = spec.get("hostNetwork", False)
+    if host_network:
+        logger.info("Cluster has HostNetworking enabled")
+    else:
+        logger.info("Cluster has HostNetworking disabled")
+    return host_network
