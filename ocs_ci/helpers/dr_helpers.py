@@ -44,6 +44,7 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
 )
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster, validate_serviceexport
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
@@ -3032,6 +3033,13 @@ def setup_fdf_catsrc_for_hub():
         config.switch_ctx(i)
         wait_for_machineconfigpool_status("all", timeout=1800)
         run_cmd(f"oc create -f {isf_data_foundation_catsrc_yaml.name}")
+        fdf_catalog_source = CatalogSource(
+            resource_name=constants.FDF_CATALOG_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+
+        logger.info("Waiting for CatalogSource to be READY")
+        fdf_catalog_source.wait_for_state("READY")
     config.switch_ctx(restore_index)
 
 
