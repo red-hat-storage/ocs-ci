@@ -27,7 +27,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
     ResourceWrongStatusException,
 )
-from ocs_ci.ocs.managedservice import get_provider_service_type
+from ocs_ci.ocs.managedservice import get_provider_service_type, is_hostnetwork_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
@@ -2718,16 +2718,15 @@ def create_service_exporter(annotate=True):
     for cluster in managed_clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
-        if (
+        if not (
             get_provider_service_type() == "NodePort"
-            or get_provider_service_type() == "ClusterIP"
+            or is_hostnetwork_enabled()
             or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
         ):
-            logger.info("Skipping ServiceExport creation for multiclient cluster")
-            continue
-        else:
             logger.info("Checking if multiClusterService exists")
             create_multiclusterservice_dr()
+        else:
+            logger.info("Skipping multiClusterService creation for multiclient cluster")
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
 
