@@ -196,6 +196,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
                 runtime=30,
                 fio_filename=f"{pod_obj.name}_file",
                 end_fsync=1,
+                direct=int(storage_type == "block"),
             )
 
         assert (

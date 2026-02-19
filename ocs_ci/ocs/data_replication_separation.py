@@ -10,6 +10,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.utility.networking import get_node_private_ip
 
 log = logging.getLogger(__name__)
 
@@ -210,8 +211,11 @@ def validate_csi_pods_have_host_network():
 @config.run_with_provider_context_if_available
 def validate_mon_ip_annotation_on_workers():
     """
-    Validate that worker nodes have correctly setnetwork.rook.io/mon-ip annotation.
-    It should be a private ip of the node.
+    Validate that worker nodes have correctly set network.rook.io/mon-ip annotation.
+    It should be the private IP of the node.
+
+    This function retrieves the actual private IP from each worker node using
+    the 'ip addr' command and compares it with the annotation value.
 
     Returns:
         bool: True if all nodes have correct annotation
@@ -223,23 +227,33 @@ def validate_mon_ip_annotation_on_workers():
     ]
     if not worker_nodes:
         raise UnavailableResourceException("No worker node found!")
+
     correct_annotations = True
     for worker in worker_nodes:
-        log.info(
-            f"Checking node {worker['metadata']['name']} for annotation network.rook.io/mon-ip"
-        )
-        network_data = (
-            config.ENV_DATA.get("baremetal", {})
-            .get("servers", {})
-            .get(worker["metadata"]["name"])
-        )
+        worker_name = worker["metadata"]["name"]
+        log.info(f"Checking node {worker_name} for annotation network.rook.io/mon-ip")
+
+        # Get the actual private IP from the node using ip addr command
+        try:
+            expected_private_ip, _ = get_node_private_ip(worker_name)
+        except Exception as e:
+            log.error(f"Failed to retrieve private IP from node {worker_name}: {e}")
+            correct_annotations = False
+            continue
+
         annotation_ip = (
             worker.get("metadata").get("annotations", {}).get("network.rook.io/mon-ip")
         )
-        if annotation_ip != network_data["private_ip"]:
+
+        if annotation_ip != expected_private_ip:
             log.error(
-                f"Node {worker['metadata']['name']} has annotation network.rook.io/mon-ip={annotation_ip}"
-                f" instead of network.rook.io/mon-ip={network_data['private_ip']}"
+                f"Node {worker_name} has annotation network.rook.io/mon-ip={annotation_ip} "
+                f"instead of network.rook.io/mon-ip={expected_private_ip}"
             )
             correct_annotations = False
+        else:
+            log.info(
+                f"Node {worker_name} has correct annotation network.rook.io/mon-ip={annotation_ip}"
+            )
+
     return correct_annotations

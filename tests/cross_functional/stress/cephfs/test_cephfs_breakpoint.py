@@ -1,7 +1,7 @@
 import logging
 import time
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, stress
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 from ocs_ci.ocs import constants
@@ -10,6 +10,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@stress
 @magenta_squad
 class TestCephfsStress(E2ETest):
     """

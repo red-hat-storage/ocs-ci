@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 
-osd_sizes = ("512", "2048", "4096")
+osd_sizes = ("512", "2048", "4096", "0.5 TiB", "1 TiB", "2 TiB", "4 TiB", "8 TiB")
 
 OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
@@ -334,7 +334,11 @@ deployment_4_21 = {
         "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
         By.XPATH,
     ),
-    "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "0.5 TiB": ('//button[@data-test-dropdown-menu="0.5 TiB"]', By.XPATH),
+    "1 TiB": ('//button[@data-test-dropdown-menu="1 TiB"]', By.XPATH),
+    "2 TiB": ('//button[@data-test-dropdown-menu="2 TiB"]', By.XPATH),
+    "4 TiB": ('//button[@data-test-dropdown-menu="4 TiB"]', By.XPATH),
+    "8 TiB": ('//button[@data-test-dropdown-menu="8 TiB"]', By.XPATH),
     "drop_down_performance": (
         "//button[contains(@class,'odf-configure-performance__selector')]",
         By.XPATH,
@@ -788,6 +792,18 @@ pvc_4_19 = {
     ),
     "new-capacity": (
         "//dd[@data-test-id='pvc-capacity']//div[text()='{}']",
+        By.XPATH,
+    ),
+}
+
+pvc_4_21 = {
+    "search_pvc": ("input[placeholder='Filter by name']", By.CSS_SELECTOR),
+    "pvc_filter_dropdown_status": (
+        "//div[contains(@class, 'pf-m-filter-group')]//button[.//span[normalize-space()='Status']]",
+        By.XPATH,
+    ),
+    "pvc_filter_name_option": (
+        "//li[.//span[normalize-space()='Name']]",
         By.XPATH,
     ),
 }
@@ -2235,6 +2251,82 @@ validation_4_20 = {
     ),
 }
 
+validation_4_21 = {
+    "breadcrumbs": (
+        "//a[contains(@class, '-c-breadcrumb__link') and text()='Overview']",
+        By.XPATH,
+    ),
+    "silenced_alerts_btn": ("//span[contains(text(), 'Silenced Alerts')]/..", By.XPATH),
+    "last_24_hours_btn": ("//span[contains(text(), 'Last 24 hours')]/..", By.XPATH),
+    "severity_filter": (
+        "//button[contains(@class,'health-overview-filter-toolbox__check-type')]",
+        By.XPATH,
+    ),
+    "severity": (
+        "//button//span[contains(text(),'{}')]",
+        By.XPATH,
+    ),
+    "filter_by_details": (
+        "//input[@placeholder='Find by name or details'] | //input[@placeholder='Find by name']",
+        By.XPATH,
+    ),
+    "issue_table_checkbox": (
+        "//input[@name='check-all']",
+        By.XPATH,
+    ),
+    "silence_alerts": (
+        "//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "unsilence_alerts": (
+        "//button[normalize-space()='Unsilence']",
+        By.XPATH,
+    ),
+    "silence_popup": (
+        "//span[contains(text(),'Silence alert')]",
+        By.XPATH,
+    ),
+    "duration_input": (
+        "//input[@name='duration']",
+        By.XPATH,
+    ),
+    "duration_increase": (
+        "//button[@aria-label='Increase duration']",
+        By.XPATH,
+    ),
+    "duration_decrease": (
+        "//button[@aria-label='Decrease duration']",
+        By.XPATH,
+    ),
+    "silence_popup_button": (
+        "//footer//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "infra_health_checks": (
+        "//a[text()='View health checks']",
+        By.XPATH,
+    ),
+    # web element returns overall score with text like '66%'
+    "infra_health_score": (
+        "//div[@class='odf-infrastructure-health-card__score']//h2",
+        By.XPATH,
+    ),
+    # web element returns number of checks with text like '3'
+    "critical_issues_count": (
+        "//small[normalize-space(.)='Critical']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "moderate_issues_count": (
+        "//small[normalize-space(.)='Moderate']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "minor_issues_count": (
+        "//small[normalize-space(.)='Minor']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
@@ -2932,6 +3024,7 @@ locators = {
             **pvc_4_12,
             **pvc_4_14,
             **pvc_4_19,
+            **pvc_4_21,
         },
         "acm_page": {
             **acm_page_nav,
@@ -2959,6 +3052,7 @@ locators = {
             **validation_4_17,
             **validation_4_18,
             **validation_4_20,
+            **validation_4_21,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},

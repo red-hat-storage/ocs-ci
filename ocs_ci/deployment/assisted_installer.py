@@ -393,6 +393,29 @@ class AssistedInstallerCluster(object):
                     mapping.append((host["id"], interface["mac_address"]))
         return mapping
 
+    def get_ip_list_by_cluster_id(self):
+        """
+        Get list of IP addresses assigned to the hosts in the cluster.
+        """
+        ip_list = []
+        for host in self.api.get_cluster_hosts(self.id):
+            inventory = host.get("inventory")
+            if not inventory:
+                continue
+            if isinstance(inventory, str):
+                try:
+                    inventory = json.loads(inventory)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Unable to decode inventory for host %s", host.get("id")
+                    )
+                    continue
+            interfaces = inventory.get("interfaces", [])
+            for interface in interfaces:
+                for ip_cidr in interface.get("ipv4_addresses", []):
+                    ip_list.append(ip_cidr.split("/")[0])
+        return ip_list
+
     def update_hosts_config(self, mac_name_mapping, mac_role_mapping):
         """
         Update host names and roles.

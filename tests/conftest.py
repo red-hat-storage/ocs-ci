@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 import random
+import string
 import time
 import tempfile
 import threading
@@ -242,6 +243,7 @@ from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.utility.iscsi_config import iscsi_teardown
 
 DEPLOYERS = {}
 
@@ -567,7 +569,19 @@ def pytest_collection_modifyitems(session, config, items):
                         # determines the order in which tests need to be executed
                         # Lower the sum, higher the rank hence it gets prioritized early
                         # in the test execution sequence
-                        newval = val + zone_rank + role_rank
+                        if (
+                            ocsci_config.MULTICLUSTER.get("multicluster_mode", "")
+                            == "regional-dr"
+                        ):
+                            upgrade_parametrizer = (
+                                get_multicluster_upgrade_parametrizer()
+                            )
+                            newval = upgrade_parametrizer.reeval_upgrade_order(
+                                val, zone_rank, role_rank
+                            )
+                        else:
+                            newval = val + zone_rank + role_rank
+                        log.info(f"Remarked the test {item.name} with order {newval}")
                         log.info(f"ORIGINAL = {val}, NEW={newval}")
                         markers_update.append((pytest.mark.order, newval))
                         if item.own_markers:
@@ -1647,9 +1661,7 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=(
-                    constants.DEPLOYMENTCONFIG if deployment else constants.DEPLOYMENT
-                ),
+                kind=constants.DEPLOYMENT,
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)
@@ -2203,6 +2215,11 @@ def cluster(
                     log.error(
                         f"Either failed to delete bucket or bucket doesn't exist {ex}"
                     )
+            if ocsci_config.ENV_DATA.get("iscsi_setup", False):
+                try:
+                    iscsi_teardown()
+                except Exception as ex:
+                    log.error(f"Failed to teardown iSCSI: {ex}")
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -4460,6 +4477,112 @@ def user_factory(request, htpasswd_identity_provider, htpasswd_path):
 @pytest.fixture(scope="session")
 def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
     return users.user_factory(request, htpasswd_path)
+
+
+@pytest.fixture(scope="function")
+def dev_user_factory(request, user_factory, mcg_obj_session):
+    """
+    Factory fixture to create dev users with minimal RBAC for Object Storage access.
+
+    Creates an OpenShift user via htpasswd, binds to noobaa-odf-ui ClusterRole,
+    and creates a NooBaa account with S3 credentials.
+    Automatically cleans up RBAC bindings and MCG accounts after test.
+
+    Returns:
+        func: Factory function that returns DevUser dataclass instance.
+
+    Example:
+        def test_dev_user(self, dev_user_factory):
+            dev_user = dev_user_factory()
+            # dev_user.username, dev_user.password for OpenShift login
+            # dev_user.secret_namespace, dev_user.secret_name for S3 login modal
+
+    """
+    created_users = []
+    created_mcg_accounts = []
+    clusterrole_created = False
+
+    def factory(username=None, password=None):
+        nonlocal clusterrole_created
+
+        if not clusterrole_created:
+            users.create_noobaa_ui_clusterrole()
+            clusterrole_created = True
+
+        # Generate safe username (10-15 alphanumeric chars, starts with letter)
+        if username is None:
+            username = random.choice(string.ascii_lowercase)
+            username += "".join(
+                random.choice(string.ascii_lowercase + string.digits)
+                for _ in range(random.randint(9, 14))
+            )
+
+        # Generate safe password (12-16 chars, safe punctuation only)
+        if password is None:
+            safe_punctuation = "!@#%^*()-_=+"
+            chars = string.ascii_letters + string.digits + safe_punctuation
+            password = "".join(
+                random.choice(chars) for _ in range(random.randint(12, 16))
+            )
+
+        # Create OpenShift user
+        ocp_username, ocp_password = user_factory(username=username, password=password)
+
+        # Bind user to noobaa-odf-ui ClusterRole
+        users.bind_user_to_noobaa_ui_role(ocp_username)
+        created_users.append(ocp_username)
+
+        # Create NooBaa account for S3 access
+        mcg_account_name = f"dev-{ocp_username}"
+        cli_cmd = (
+            f"account create {mcg_account_name} "
+            f"--allow_bucket_create=true "
+            f"--default_resource {constants.DEFAULT_NOOBAA_BACKINGSTORE} "
+        )
+        mcg_obj_session.exec_mcg_cmd(cli_cmd)
+        created_mcg_accounts.append(mcg_account_name)
+
+        # Get S3 secret info for the created account
+        secret_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        secret_name = f"noobaa-account-{mcg_account_name}"
+
+        dev_user = users.DevUser(
+            username=ocp_username,
+            password=ocp_password,
+            secret_namespace=secret_namespace,
+            secret_name=secret_name,
+        )
+
+        # Save credentials to file for manual debugging
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix=f"dev_user_creds_{ocp_username}_",
+            suffix=".txt",
+            dir=constants.DATA_DIR,
+            delete=False,
+        ) as f:
+            f.write(f"username: {ocp_username}\n")
+            f.write(f"password: {ocp_password}\n")
+            f.write(f"secret_namespace: {secret_namespace}\n")
+            f.write(f"secret_name: {secret_name}\n")
+            log.info(f"Dev user credentials saved to: {f.name}")
+
+        return dev_user
+
+    def finalizer():
+        # Clean up RBAC bindings
+        for username in created_users:
+            users.delete_user_noobaa_ui_binding(username)
+        # Clean up MCG accounts
+        for acc_name in created_mcg_accounts:
+            try:
+                mcg_obj_session.exec_mcg_cmd(f"account delete {acc_name}")
+                log.info(f"Deleted MCG account {acc_name}")
+            except CommandFailed as e:
+                log.warning(f"Failed to delete MCG account {acc_name}: {e}")
+
+    request.addfinalizer(finalizer)
+    return factory
 
 
 @pytest.fixture(autouse=True)
@@ -7059,7 +7182,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 interface = constants.CEPHBLOCKPOOL
 
             if deployment:
-                pod_dict_path = pod_dict_path or constants.FEDORA_DC_YAML
+                pod_dict_path = pod_dict_path or constants.FEDORA_DEPLOY_YAML
             elif pvc_obj.volume_mode == "Block":
                 pod_dict_path = pod_dict_path or constants.CSI_RBD_RAW_BLOCK_POD_YAML
             else:
@@ -7329,16 +7452,11 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
     return factory
 
 
-@pytest.fixture()
-def dr_workload(request):
-    """
-    Setup Busybox workload for DR setup
-
-    """
+def create_workload_factory():
     instances = []
     ctx = []
 
-    def factory(
+    def _create_resources(
         num_of_subscription=1,
         num_of_appset=0,
         appset_model=None,
@@ -7386,6 +7504,9 @@ def dr_workload(request):
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
                 pvc_interface=pvc_interface,
+                workload_path=workload_details.get(
+                    "workload_path", workload_details["workload_dir"]
+                ),
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -7406,6 +7527,9 @@ def dr_workload(request):
                 workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
                 appset_model=appset_model,
                 pvc_interface=pvc_interface,
+                workload_path=workload_details.get(
+                    "workload_path", workload_details["workload_dir"]
+                ),
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -7417,7 +7541,7 @@ def dr_workload(request):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
 
-    def teardown():
+    def _teardown():
         failed_to_delete = []
         for instance in instances:
             try:
@@ -7429,6 +7553,64 @@ def dr_workload(request):
             raise ResourceNotDeleted(
                 f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
             )
+
+    def factory(
+        num_of_subscription=1,
+        num_of_appset=0,
+        appset_model=None,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        switch_ctx=None,
+    ):
+        return _create_resources(
+            num_of_subscription, num_of_appset, appset_model, pvc_interface, switch_ctx
+        )
+
+    return factory, _teardown
+
+
+def dr_workload_end_to_end(request):
+    """
+    TODO: Remove this function if pytest_sessionstart hook works
+    Run dr workloads throug out the session, used mostly in the case of
+    DR upgrades. Starts at the beginning of session and ends once all tests
+    are done
+    """
+
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
+    ):
+        return
+    log.info("Setting up dr workloads running along the session")
+    factory, teardown = create_workload_factory()
+    log.info("Deploying the DR workloads")
+    try:
+        factory()
+    except Exception:  # TODO: If possible find specific exceptions
+        log.warning("DR workload factory invocation failed at session start")
+
+    def _finalizer():
+        try:
+            log.info("Teardown session dr workload")
+            teardown()
+        except Exception as e:
+            log.exception("Failed to teardown DR workloads")
+            raise e
+
+    request.addfinalizer(_finalizer)
+
+    return factory
+
+
+@pytest.fixture()
+def dr_workload(request):
+    """
+    Setup Busybox workload for DR setup
+
+    """
+
+    factory, teardown = create_workload_factory()
 
     request.addfinalizer(teardown)
     return factory
@@ -7531,13 +7713,17 @@ def cnv_dr_workload(request):
     instances = []
 
     def factory(
-        num_of_vm_subscription=1, num_of_vm_appset_push=0, num_of_vm_appset_pull=0
+        num_of_vm_subscription=1,
+        num_of_vm_appset_push=0,
+        num_of_vm_appset_pull=0,
+        vm_type=constants.VM_VOLUME_PVC,
     ):
         """
         Args:
             num_of_vm_subscription (int): Number of Subscription type workload to be created
             num_of_vm_appset_push (int): Number of ApplicationSet Push type workload to be created
             num_of_vm_appset_pull (int): Number of ApplicationSet Pull type workload to be created
+            vm_type (str): Vm type that needs to be created
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7547,21 +7733,57 @@ def cnv_dr_workload(request):
 
         """
         total_pvc_count = 0
-        workload_types = [
-            (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
-            (
-                constants.APPLICATION_SET,
-                "dr_cnv_workload_appset_push",
-                num_of_vm_appset_push,
-            ),
-            (
-                constants.APPLICATION_SET,
-                "dr_cnv_workload_appset_pull",
-                num_of_vm_appset_pull,
-            ),
-        ]
+        workload_types = {
+            constants.VM_VOLUME_PVC: [
+                (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+            constants.VM_VOLUME_DV: [
+                (
+                    constants.SUBSCRIPTION,
+                    "dr_cnv_dv_workload_sub",
+                    num_of_vm_subscription,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dv_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dv_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+            constants.VM_VOLUME_DVT: [
+                (
+                    constants.SUBSCRIPTION,
+                    "dr_cnv_dvt_workload_sub",
+                    num_of_vm_subscription,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dvt_workload_appset_push",
+                    num_of_vm_appset_push,
+                ),
+                (
+                    constants.APPLICATION_SET,
+                    "dr_cnv_dvt_workload_appset_pull",
+                    num_of_vm_appset_pull,
+                ),
+            ],
+        }
 
-        for workload_type, data_key, num_of_vm in workload_types:
+        for workload_type, data_key, num_of_vm in workload_types[vm_type]:
             for index in range(num_of_vm):
                 workload_details = ocsci_config.ENV_DATA[data_key][index]
                 workload = CnvWorkload(
@@ -7655,18 +7877,26 @@ def discovered_apps_dr_workload(request):
                 workload_key = "dr_workload_discovered_apps_mongodb_rbd"
 
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
-
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            pvc_type = constants.RBD_INTERFACE
+        elif pvc_interface == constants.CEPHFILESYSTEM:
+            pvc_type = constants.CEPHFS_INTERFACE
         if bool(kubeobject):
             for index in range(kubeobject):
                 workload_details = workload_details_list[index]
+                workload_namespace = (
+                    create_unique_resource_name("workload", "dist")[:20]
+                    + "-"
+                    + pvc_type
+                )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_namespace=(
-                        workload_details["workload_namespace"] + "-multi-ns"
+                        workload_namespace + "-multi-ns"
                         if multi_ns
-                        else workload_details["workload_namespace"]
+                        else workload_namespace
                     ),
                     discovered_apps_pvc_selector_key=workload_details[
                         "dr_workload_app_pvc_selector_key"
@@ -7698,10 +7928,11 @@ def discovered_apps_dr_workload(request):
                 pvc_type = constants.RBD_INTERFACE
             elif pvc_interface == constants.CEPHFILESYSTEM:
                 pvc_type = constants.CEPHFS_INTERFACE
-            drpc_name = f"busybox-multi-ns-{pvc_type}-" + "-".join(
+            randam_hash = get_random_str(size=5)
+            drpc_name = f"bb-mlt-ns-{randam_hash}-{pvc_type}-" + "-".join(
                 map(str, range(1, kubeobject + 1))
             )
-            placement_name = drpc_name + "-placement-1"
+            placement_name = drpc_name + "-plmnt-1"
             for index in range(kubeobject):
                 instances[index].discovered_apps_placement_name = drpc_name
             instances[0].create_placement(placement_name=placement_name)
@@ -7722,12 +7953,16 @@ def discovered_apps_dr_workload(request):
         if bool(recipe):
             for index in range(recipe):
                 workload_details = ocsci_config.ENV_DATA[workload_key][index]
+                workload_namespace = (
+                    create_unique_resource_name("workload-rp", "dist")[:20]
+                    + "-"
+                    + pvc_type
+                )
                 workload = BusyboxDiscoveredApps(
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
-                    workload_namespace=workload_details["workload_namespace"]
-                    + "-recipe-ns",
+                    workload_namespace=workload_namespace + "-recipe-ns",
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
                     ]
@@ -7823,13 +8058,14 @@ def discovered_apps_dr_workload_cnv(request):
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
             workload = CnvWorkloadDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=workload_details["workload_namespace"],
+                workload_namespace=workload_namespace,
                 discovered_apps_pvc_selector_key=workload_details[
                     "dr_workload_app_pvc_selector_key"
                 ],
@@ -10121,6 +10357,35 @@ def set_encryption_at_teardown(request):
     request.addfinalizer(teardown)
 
 
+def pytest_sessionstart(session):
+    """
+    Creating this hook to handle session scoped dr workload
+    especially for DR upgrade scenarios
+    """
+    session._dr_workload_teardown = None
+
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
+    ):
+        return
+
+    prev_ctx = ocsci_config.cur_index
+    log.info("Setting up dr workloads running along the session")
+    factory, teardown = create_workload_factory()
+    session._dr_workload_teardown = teardown
+    try:
+        log.info("Deploying the DR workloads")
+        factory()
+    except Exception as e:
+        log.warning(
+            f"DR workload factory invocation failed at session start, not failing the run: {e}"
+        )
+    finally:
+        ocsci_config.switch_ctx(prev_ctx)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """
     Do some session finish teardown functionality
@@ -10131,6 +10396,14 @@ def pytest_sessionfinish(session, exitstatus):
         cluster_load.finish_cluster_load()
     except Exception:
         log.exception("During finishing the Cluster load an exception was hit!")
+
+    # Handle dr workload teardown if its set
+    if session._dr_workload_teardown:
+        try:
+            log.info("Tearing down session DR workloads")
+            session._dr_workload_teardown()
+        except Exception:
+            log.exception("DR workload teardown failed")
 
 
 @pytest.fixture()

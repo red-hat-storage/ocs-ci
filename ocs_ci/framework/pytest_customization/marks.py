@@ -87,6 +87,7 @@ flowtests = pytest.mark.flowtests
 system = pytest.mark.system
 # system_test mark is deprecated, use system instead
 system_test = compose(system, pytest.mark.system_test)
+stress = pytest.mark.stress
 performance = pytest.mark.performance
 performance_a = pytest.mark.performance_a
 performance_b = pytest.mark.performance_b
@@ -619,8 +620,10 @@ skipif_hci_provider_or_client = pytest.mark.skipif(
     reason="Test will not run on Fusion HCI provider or Client clusters",
 )
 
-# Marker for skipping tests for provider clusters based on OCS version
-skip_for_provider_if_ocs_version = pytest.mark.skip_for_provider_if_ocs_version
+# Marker for skipping tests for provider or client clusters based on OCS version
+skip_for_provider_or_client_if_ocs_version = (
+    pytest.mark.skip_for_provider_or_client_if_ocs_version
+)
 
 skipif_rosa = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
@@ -689,6 +692,11 @@ skipif_vsphere_ipi = pytest.mark.skipif(
 skipif_vsphere_platform = pytest.mark.skipif(
     (config.ENV_DATA["platform"].lower() == "vsphere"),
     reason="Test will not run on vSphere cluster",
+)
+
+skipif_azure_platform = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "azure",
+    reason="Test will not run on Azure deployed cluster",
 )
 
 skipif_tainted_nodes = pytest.mark.skipif(

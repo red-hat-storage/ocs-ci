@@ -81,6 +81,11 @@ class StorageClusterSetup(object):
         if config.ENV_DATA.get("odf_provider_mode_deployment", False):
             cluster_data["spec"]["providerAPIServerServiceType"] = "NodePort"
 
+        if config.DEPLOYMENT.get("provider_api_server_service_type"):
+            cluster_data["spec"]["providerAPIServerServiceType"] = (
+                config.DEPLOYMENT.get("provider_api_server_service_type")
+            )
+
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
             comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
@@ -135,7 +140,7 @@ class StorageClusterSetup(object):
             and self.ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
-            and not (self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS)
+            and self.platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
@@ -303,6 +308,31 @@ class StorageClusterSetup(object):
             )["hostNetwork"] = False
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
+        if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+            pv_size_list = helpers.get_pv_size(
+                storageclass=constants.DEFAULT_STORAGECLASS_LSO + "-part"
+            )
+            pv_size_list.sort()
+            deviceset_data_part = deepcopy(deviceset_data)
+            deviceset_data_part["name"] = (
+                constants.DEFAULT_DEVICESET_LSO_PVC_NAME + "-part"
+            )
+            if config.ENV_DATA.get("storage_class"):
+                deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
+                    config.ENV_DATA["storage_class"] + "-part"
+                )
+            elif deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"]:
+                deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
+                    deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"]
+                    + "-part"
+                )
+            deviceset_data_part["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = f"{pv_size_list[0]}"
+            deviceset_data_part["primaryAffinity"] = config.DEPLOYMENT.get(
+                "partitioned_disk_primary_affinity", "0.0"
+            )
+            cluster_data["spec"]["storageDeviceSets"].append(deviceset_data_part)
 
         if self.managed_ibmcloud:
             mon_pvc_template = {

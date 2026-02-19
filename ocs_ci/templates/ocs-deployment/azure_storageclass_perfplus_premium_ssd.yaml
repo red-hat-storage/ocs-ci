@@ -1,4 +1,7 @@
 ---
+# Azure Performance Plus StorageClass - Premium SSD
+# For disks 513 GiB or larger with Performance Plus (Premium_LRS)
+# See: https://learn.microsoft.com/en-us/azure/virtual-machines/disks-enable-performance
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

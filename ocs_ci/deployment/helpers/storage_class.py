@@ -35,6 +35,11 @@ def get_storageclass() -> str:
 
     """
     logger.info("Getting storageclass")
+    if config.DEPLOYMENT.get("local_storage", False):
+        storage_class = constants.DEFAULT_STORAGECLASS_LSO
+        logger.info(f"LSO is enabled, using {storage_class}")
+        return storage_class
+
     platform = config.ENV_DATA.get("platform")
     customized_deployment_storage_class = config.DEPLOYMENT.get(
         "customized_deployment_storage_class"
@@ -43,7 +48,12 @@ def get_storageclass() -> str:
     if customized_deployment_storage_class:
         storage_class = customized_deployment_storage_class
     else:
-        storage_class = DEFAULT_STORAGE_CLASS_MAP.get(platform)
+        if platform == constants.VSPHERE_PLATFORM and not config.ENV_DATA.get(
+            "use_custom_sc_in_deployment"
+        ):
+            storage_class = constants.THIN_CSI_STORAGECLASS
+        else:
+            storage_class = DEFAULT_STORAGE_CLASS_MAP.get(platform)
 
     logger.info(f"Using storage class: {storage_class}")
     return storage_class
@@ -90,8 +100,17 @@ def get_custom_storage_class_path() -> str:
         if config.ENV_DATA.get("azure_performance_plus") or config.DEPLOYMENT.get(
             "azure_performance_plus"
         ):
+            # Select template by disk type: Standard SSD or Premium SSD (default)
+            disk_type = config.DEPLOYMENT.get(
+                "azure_performance_plus_disk_type",
+                constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_PREMIUM_SSD,
+            )
+            if disk_type == constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_STANDARD_SSD:
+                template_name = "azure_storageclass_perfplus_standard_ssd.yaml"
+            else:
+                template_name = "azure_storageclass_perfplus_premium_ssd.yaml"
             custom_sc_path = os.path.join(
-                constants.TEMPLATE_DEPLOYMENT_DIR, "azure_storageclass_perfplus.yaml"
+                constants.TEMPLATE_DEPLOYMENT_DIR, template_name
             )
     elif platform == constants.VSPHERE_PLATFORM:
         if config.ENV_DATA.get("use_custom_sc_in_deployment"):

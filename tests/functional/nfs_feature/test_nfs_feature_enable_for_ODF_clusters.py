@@ -25,7 +25,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     skipif_ocp_version,
     skipif_managed_service,
-    skip_for_provider_if_ocs_version,
+    skip_for_provider_or_client_if_ocs_version,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     polarion_id,
@@ -56,10 +56,10 @@ ERRMSG = "Error in command"
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
-@skip_for_provider_if_ocs_version("<4.19")
+@skipif_hci_client
+@skip_for_provider_or_client_if_ocs_version("<4.19")
 @skipif_lean_deployment
 @polarion_id("OCS-4270")
-@skipif_hci_client
 class TestDefaultNfsDisabled(ManageTest):
     """
     Test nfs feature enable for ODF 4.11
@@ -118,7 +118,7 @@ class TestDefaultNfsDisabled(ManageTest):
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
-@skip_for_provider_if_ocs_version("<4.19")
+@skip_for_provider_or_client_if_ocs_version("<4.19")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @skipif_lean_deployment
@@ -181,7 +181,6 @@ class TestNfsEnable(ManageTest):
         self.pvc_obj = ocp.OCP(kind=constants.PVC, namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = constants.NFS_STORAGECLASS_NAME
-        self.nfs_sc_copy = "ocs-storagecluster-ceph-nfs-copy"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
         self.retain_nfs_sc_name = "ocs-storagecluster-ceph-nfs-retain"
         platform = config.ENV_DATA.get("platform", "").lower()
@@ -215,20 +214,20 @@ class TestNfsEnable(ManageTest):
                 < version_module.VERSION_4_21
             ):
                 _ = nfs_utils.create_nfs_sc(
-                    sc_name_to_create=self.nfs_sc_copy,
+                    sc_name_to_create=constants.COPY_NFS_STORAGECLASS_NAME,
                     sc_name_to_copy=self.nfs_sc,
                     server=self.hostname_add,
                 )
-                self.nfs_sc = self.nfs_sc_copy
+                self.nfs_sc = constants.COPY_NFS_STORAGECLASS_NAME
             yield
             # Disable nfs feature
             nfs_utils.disable_nfs_service_from_provider(self.sc, nfs_ganesha_pod)
-            if (
-                version_module.get_semantic_ocs_version_from_config()
-                < version_module.VERSION_4_21
+
+            # delete nfs non default storageclass if available
+            if ocp.OCP(kind=constants.STORAGECLASS).is_exist(
+                resource_name=constants.COPY_NFS_STORAGECLASS_NAME
             ):
-                # Delete nfs sc created
-                self.sc_obj.delete(resource_name=self.nfs_sc_copy)
+                self.sc_obj.delete(resource_name=constants.COPY_NFS_STORAGECLASS_NAME)
 
         else:
             nfs_ganesha_pod_name = nfs_utils.nfs_enable(
@@ -1668,11 +1667,11 @@ class TestNfsEnable(ManageTest):
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
         _ = nfs_utils.create_nfs_sc(
-            sc_name_to_create=self.nfs_sc_copy,
+            sc_name_to_create=constants.COPY_NFS_STORAGECLASS_NAME,
             sc_name_to_copy=self.nfs_sc,
             server=self.hostname_add,
         )
-        self.nfs_sc = self.nfs_sc_copy
+        self.nfs_sc = constants.COPY_NFS_STORAGECLASS_NAME
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
@@ -1815,4 +1814,4 @@ class TestNfsEnable(ManageTest):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
         log.info("delete non default nfs storageclass created for the test")
-        self.sc_obj.delete(resource_name=self.nfs_sc_copy)
+        self.sc_obj.delete(resource_name=constants.COPY_NFS_STORAGECLASS_NAME)

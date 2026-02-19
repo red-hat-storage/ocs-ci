@@ -3,7 +3,11 @@ import pytest
 from ocs_ci.framework.testlib import config, tier2
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
-from ocs_ci.helpers.helpers import create_pods
+from ocs_ci.helpers.helpers import (
+    create_pods,
+    set_schedule_precedence,
+    get_schedule_precedance_value_from_csi_addons_configmap,
+)
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     vault_kms_deployment_required,
@@ -107,6 +111,30 @@ class PVKeyrotationTestBase:
         # Initialize the PVKeyrotation helper
         self.pv_keyrotation_obj = PVKeyrotation(self.sc_obj)
 
+        # Save original schedule precedence and set to 'pvc' for OCS 4.21+
+        self.original_precedence = (
+            get_schedule_precedance_value_from_csi_addons_configmap()
+        )
+        log.info(f"Original schedule precedence: {self.original_precedence}")
+
+        if self.original_precedence != "pvc":
+            log.info("Setting schedule precedence to 'pvc' for test...")
+            set_schedule_precedence("pvc")
+            log.info(
+                "Schedule precedence set to 'pvc' and CSI Addons controller restarted."
+            )
+
+        yield
+
+        # Teardown: Restore original schedule precedence
+        current_precedence = get_schedule_precedance_value_from_csi_addons_configmap()
+        if current_precedence != self.original_precedence:
+            log.info(
+                f"Restoring schedule precedence to '{self.original_precedence}'..."
+            )
+            set_schedule_precedence(self.original_precedence)
+            log.info(f"Schedule precedence restored to '{self.original_precedence}'.")
+
 
 @tier2
 @green_squad
@@ -134,10 +162,10 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
         self.pv_keyrotation_obj.set_keyrotation_state_by_annotation(False)
         log.info("Key rotation disabled globally via storage class annotation.")
 
-        # Verify key rotation cronjobs are deleted
-        for pvc_obj in self.pvc_objs:
-            with pytest.raises(ValueError):
-                self.pv_keyrotation_obj.get_keyrotation_cronjob_for_pvc(pvc_obj)
+        # Wait for key rotation cronjobs to be deleted
+        assert self.pv_keyrotation_obj.wait_for_keyrotation_cronjobs_deletion(
+            self.pvc_objs
+        ), "Failed to delete key rotation cronjobs after disabling."
         log.info("Verified key rotation cronjobs are removed.")
 
         # Enable key rotation globally

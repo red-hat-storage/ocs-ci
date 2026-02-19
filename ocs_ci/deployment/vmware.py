@@ -11,14 +11,18 @@ import gzip
 from shutil import rmtree, copyfile
 from subprocess import TimeoutExpired
 import time
+
 import requests
 import base64
+
+from botocore.exceptions import ClientError
 from ping3 import ping
 import tempfile
 import hcl2
 import yaml
 import re
 import shutil
+import boto3
 
 from pyVmomi import vmodl
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
@@ -37,6 +41,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     RDMDiskNotFound,
     PassThroughEnabledDeviceNotFound,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.node import (
     get_node_ips,
@@ -44,6 +49,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
@@ -70,6 +76,7 @@ from ocs_ci.utility.utils import (
     read_file_as_str,
     replace_content_in_file,
     run_cmd,
+    exec_cmd,
     upload_file,
     wait_for_co,
     get_infra_id,
@@ -80,6 +87,9 @@ from ocs_ci.utility.utils import (
     get_terraform_ignition_provider,
     get_ocp_upgrade_history,
     add_chrony_to_ocp_deployment,
+    download_with_retries,
+    expose_ocp_version_safe,
+    is_ocp_version_gaed,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
@@ -89,12 +99,22 @@ from ocs_ci.utility.vsphere import VSPHERE
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs.exceptions import ConnectivityFail
 from ocs_ci.deployment import assisted_installer
+from ocs_ci.framework.logger_helper import log_step
+from .helpers.hypershift_base import (
+    HyperShiftBase,
+    create_kubeconfig_file_hosted_cluster,
+    prepare_vsphere_agent_host_cluster_config,
+    wait_for_hosted_cluster_available,
+    wait_for_worker_nodes_ready,
+)
+from .hub_spoke import create_agent_service_config, create_patch_provisioning
+from .mce import set_mirror_registry_configmap
+from ..helpers.helpers import change_default_storageclass
+from ..utility.deployment import get_ocp_ga_version
 
 logger = logging.getLogger(__name__)
 
-
-# As of now only UPI
-__all__ = ["VSPHEREUPI", "VSPHEREIPI", "VSPHEREAI"]
+__all__ = ["VSPHEREUPI", "VSPHEREIPI", "VSPHEREAI", "VSPHEREAgentAI"]
 
 
 class VSPHEREBASE(Deployment):
@@ -2007,6 +2027,411 @@ class VSPHEREAI(VSPHEREBASE):
         self.post_destroy_checks()
 
 
+class VSPHEREAgentAI(VSPHEREBASE):
+    """
+    A class to handle vSphere specific deployment for HCP Agent clusters via Assisted Installer running on HCP cluster
+    To use this class we need to switch to client context first
+    """
+
+    def __init__(self):
+        self.cluster_name = config.ENV_DATA["cluster_name"]
+        super(VSPHEREAgentAI, self).__init__()
+
+    class OCPDeployment(BaseOCPDeployment):
+
+        def __init__(self):
+
+            super(VSPHEREAgentAI.OCPDeployment, self).__init__()
+
+            self.api_vip = None
+            self.ingress_vip = None
+
+            from .hub_spoke import AgentWorkflow
+
+            self.agent_workflow = AgentWorkflow(self.cluster_name)
+
+            if not (
+                config.DEPLOYMENT.get("hub_cluster_path")
+                and config.DEPLOYMENT.get("hub_cluster_name")
+            ):
+                raise exceptions.ConfigurationError(
+                    "HCP Agent deployment requires reference to the HUB cluster "
+                    "in DEPLOYMENT section: hub_cluster_path, hub_cluster_name"
+                )
+
+            cluster_config = prepare_vsphere_agent_host_cluster_config()
+            logger.info(
+                "Inserting HUB cluster config to Multicluster Config "
+                f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
+            )
+            self.hub_cluster_config_context = config.nclusters
+            config.insert_cluster_config(
+                self.hub_cluster_config_context, cluster_config
+            )
+
+            with config.RunWithConfigContext(self.hub_cluster_config_context):
+                # check connection to the Hub cluster
+                exec_cmd("oc version")
+
+            # define local path for downloading discovery iso
+            self.discovery_iso_image = f"/tmp/{self.cluster_name}-discovery.iso"
+            # create terraform_data directory
+            self.terraform_data_dir = os.path.join(
+                self.cluster_path, constants.TERRAFORM_DATA_DIR
+            )
+            create_directory_path(self.terraform_data_dir)
+
+            # Download terraform binary based on ocp version and
+            # update the installer path in ENV_DATA
+            terraform_version = config.DEPLOYMENT["terraform_version"]
+            terraform_installer = get_terraform(version=terraform_version)
+            config.ENV_DATA["terraform_installer"] = terraform_installer
+
+            # Initialize Terraform. It will be used later for infrastructure creation
+            self.terraform_work_dir = os.path.join(os.getcwd(), "terraform/ai/vsphere/")
+            self.terraform = Terraform(self.terraform_work_dir)
+
+        def deploy_prereq(self):
+            """
+            Pre-Requisites for vSphere Assisted installer deployment
+            """
+            # no general prereq for Agent Assisted installer deployment at this phase.
+            # InfraEnv, agent configuration should be already prepared.
+
+            # create initial metadata.json file in cluster dir, to ensure, that
+            # destroy job will be properly triggered even when the deployment fails
+            # and metadata.json file will not be created
+            with open(
+                os.path.join(self.cluster_path, "metadata.json"), "w"
+            ) as metadata_file:
+                json.dump(
+                    {"clusterName": self.cluster_name, "infraID": self.cluster_name},
+                    metadata_file,
+                )
+
+            # patch default sc. This is a prerequisite for assistant-service PVCs and pods to be scheduled properly
+            with config.RunWithProviderConfigContextIfAvailable():
+                change_default_storageclass(constants.CEPHBLOCKPOOL_SC)
+
+            create_patch_provisioning()
+            set_mirror_registry_configmap()
+            create_agent_service_config()
+
+            # wait for 3 minutes to let the assistant service to propagate correct values
+            time.sleep(60 * 3)
+
+            log_step("Create host inventory and wait for min image creation")
+            self.agent_workflow.create_host_inventory()
+            self.agent_workflow.wait_for_image_created_in_infraenv()
+
+            self.assign_api_ingress_ips()
+
+            # generate terraform variable file
+            self.generate_terraform_vars()
+
+        def create_config(self):
+            """
+            Creates the OCP deploy config for the vSphere - not required for Assisted installer deployment
+            """
+            logger.debug(
+                "create_config() is not required for Assisted installer deployment"
+            )
+
+        def deploy(self, log_cli_level="DEBUG"):
+            """
+            Deployment specific to OCP cluster on this platform
+
+            Args:
+                log_cli_level (str): not used for Assisted Installer deployment
+
+            """
+            logger.info(
+                "Deploying OCP cluster on vSphere platform with Assistant Installer "
+                "service running on MCE cluster"
+            )
+
+            log_step("download discovery iso from the pre-created InfraEnv")
+            if not self.download_discovery_iso():
+                raise RuntimeError("Failed to download discovery ISO image")
+
+            log_step("Creating infrastructure in vSphere and DNS records via Terraform")
+            previous_dir = os.getcwd()
+            os.chdir(self.terraform_data_dir)
+            self.terraform.initialize()
+
+            if not os.path.isfile(self.discovery_iso_image):
+                raise FileNotFoundError(
+                    f"Discovery ISO image not found at {self.discovery_iso_image}"
+                )
+
+            self.terraform.apply(self.terraform_vars_file)
+            os.chdir(previous_dir)
+
+            # we need to populate the container policy for all created VMs
+            # this is a workaround for vSphere clusters with strict network policies
+            # https://issues.redhat.com/browse/OCPBUGS-74272
+            log_step("Populating container policy on created VMs")
+            server = config.ENV_DATA["vsphere_server"]
+            user = config.ENV_DATA["vsphere_user"]
+            password = config.ENV_DATA["vsphere_password"]
+            vsphere = VSPHERE(server, user, password)
+            vm_list = vsphere.get_vms_by_string(self.cluster_name)
+            vm_ip_list = vsphere.get_vms_ips(vm_list)
+            populate_containers_policy(vm_ip_list)
+
+            self.agent_workflow.wait_agents_available(
+                config.ENV_DATA["worker_replicas"]
+            )
+            self.agent_workflow.approve_agents()
+            log_step(
+                "Modifying DNS records for API and Ingress, pointing to host (machines) IPs"
+            )
+            agent_ip_list = self.agent_workflow.get_agents_external_ip_list()
+
+            with config.RunWithProviderConfigContextIfAvailable():
+                master_node_ips = get_node_ips(constants.MASTER_MACHINE)
+
+            create_dns_records_api_int(master_node_ips)
+
+            logger.info("Waiting 60 seconds for DNS records to propagate")
+            time.sleep(60)
+            modify_dns_records(api_ips=master_node_ips, ingress_ips=agent_ip_list)
+
+            log_step("Create agent using available hosts")
+            ocp_version = config.DEPLOYMENT["installer_version"]
+            if (
+                ocp_version
+                and is_ocp_version_gaed(ocp_version)
+                and len(ocp_version.split(".")) in [1, 2]
+            ):
+                ocp_version = get_ocp_ga_version(ocp_version)
+                logger.info(
+                    f"using OCP GA version for Agent cluster deployment {ocp_version}"
+                )
+            elif ocp_version and "nightly" in ocp_version.lower():
+                ocp_version = expose_ocp_version_safe(ocp_version)
+                logger.info(
+                    f"using OCP Nightly version for Agent cluster deployment {ocp_version}"
+                )
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    f"OCP version for Agent cluster deployment invalid: "
+                    f"{config.DEPLOYMENT['installer_version']}"
+                )
+
+            cp_availability_policy = config.ENV_DATA.get(
+                "cp_availability_policy", constants.AVAILABILITY_POLICY_HA
+            )
+            infra_availability_policy = config.ENV_DATA.get(
+                "infra_availability_policy", constants.AVAILABILITY_POLICY_HA
+            )
+            disable_default_sources = config.ENV_DATA.get(
+                "disable_default_sources", constants.DISABLE_DEFAULT_SOURCES
+            )
+            auto_repair = config.ENV_DATA.get("auto_repair", constants.AUTO_REPAIR)
+            nodepool_replicas = config.ENV_DATA["worker_replicas"]
+
+            with config.RunWithProviderConfigContextIfAvailable():
+                hypershift = HyperShiftBase()
+                hypershift.update_hcp_binary()
+
+            hypershift.create_agent_ocp_cluster(
+                self.cluster_name,
+                nodepool_replicas=nodepool_replicas,
+                ocp_version=ocp_version,
+                cp_availability_policy=cp_availability_policy,
+                infra_availability_policy=infra_availability_policy,
+                disable_default_sources=disable_default_sources,
+                auto_repair=auto_repair,
+            )
+
+            log_step("Waiting for hosted cluster to become available")
+            wait_for_hosted_cluster_available(self.cluster_name, timeout=1200, sleep=30)
+
+            create_kubeconfig_file_hosted_cluster()
+
+            log_step(
+                "Waiting for worker nodes to appear and become ready in inventory of the Agent cluster"
+            )
+            wait_for_worker_nodes_ready(
+                timeout=1200, sleep=30, expected_nodes=nodepool_replicas
+            )
+
+        def generate_terraform_vars(self):
+            """
+            Generates the terraform.tfvars.json file
+            """
+            self.terraform_vars_file = os.path.join(
+                self.terraform_data_dir,
+                "terraform.tfvars.json",
+            )
+            # control plane specs removed by purpose. HCP spoke clusters can not have own control plane nodes
+            tfvars = {
+                "cluster_id": self.cluster_name,
+                "vsphere_server": config.ENV_DATA["vsphere_server"],
+                "vsphere_user": config.ENV_DATA["vsphere_user"],
+                "vsphere_password": config.ENV_DATA["vsphere_password"],
+                "vsphere_cluster": config.ENV_DATA["vsphere_cluster"],
+                "vsphere_datacenter": config.ENV_DATA["vsphere_datacenter"],
+                "vsphere_datastore": config.ENV_DATA["vsphere_datastore"],
+                "vm_network": config.ENV_DATA["vm_network"],
+                "base_domain": config.ENV_DATA["base_domain"],
+                "api_ip": self.api_vip,
+                "ingress_ip": self.ingress_vip,
+                "iso_image": self.discovery_iso_image,
+                "compute_count": config.ENV_DATA["worker_replicas"],
+                "compute_memory": config.ENV_DATA["compute_memory"],
+                "compute_num_cpus": config.ENV_DATA["worker_num_cpus"],
+                "system_disk_size": constants.VM_ROOT_DISK_SIZE,
+                "compute_data_disks_count": config.ENV_DATA.get("extra_disks", 1),
+                "compute_data_disks_size": config.ENV_DATA.get(
+                    "device_size", defaults.DEVICE_SIZE
+                ),
+                "control_plane_count": 0,
+            }
+            if config.ENV_DATA.get("vsphere_storage_policy"):
+                tfvars["vsphere_storage_policy"] = config.ENV_DATA[
+                    "vsphere_storage_policy"
+                ]
+            with open(self.terraform_vars_file, "w") as tf_var_file:
+                json.dump(tfvars, tf_var_file, indent=4)
+
+        def assign_api_ingress_ips(self):
+            """
+            Request API and Ingress IPs from IPAM server
+            """
+            ipam = IPAM(appiapp="address")
+            subnet = config.ENV_DATA["machine_cidr"].split("/")[0]
+            self.api_vip = ipam.assign_ip(f"api.{self.cluster_name}", subnet)
+            self.ingress_vip = ipam.assign_ip(f"ingress.{self.cluster_name}", subnet)
+            logger.info(
+                f"Assigned (reserved) API ({self.api_vip}) and Ingress ({self.ingress_vip}) IPs"
+            )
+
+        @config.run_with_provider_context_if_available
+        def download_discovery_iso(self):
+            """
+            Download the ISO image from the InfraEnv to cluster_path of the client cluster
+            Assumption is that this method is called from the client context, and th InfraEnv is created on the
+            management cluster (Provider context)
+
+            Returns:
+                str: Path to downloaded ISO image or None if download failed
+            """
+            from ocs_ci.ocs.ocp import OCP as OCPobj
+
+            infraenv_obj = OCPobj(kind=constants.INFRA_ENV, namespace=self.cluster_name)
+            infraenv_list = infraenv_obj.get().get("items", [])
+
+            if not infraenv_list:
+                logger.error(f"No InfraEnv found in namespace {self.cluster_name}")
+                return None
+
+            infraenv = infraenv_list[0]
+            iso_url = infraenv.get("status", {}).get("isoDownloadURL")
+
+            if not iso_url:
+                logger.error(
+                    f"No ISO download URL found in InfraEnv {self.cluster_name}"
+                )
+                return None
+
+            logger.info(
+                f"Downloading ISO image from {iso_url} to {self.discovery_iso_image}"
+            )
+
+            try:
+                return download_with_retries(
+                    iso_url, self.discovery_iso_image, max_retries=20
+                )
+            except Exception as e:
+                self.discovery_iso_image = None
+                logger.error(f"Failed to download ISO image: {e}")
+                return None
+
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        """
+        Deployment specific to OCP cluster on vSphere platform
+
+        Args:
+            log_cli_level (str): openshift installer's log level
+                (default: "DEBUG")
+
+        """
+        cluster_name_parts = config.ENV_DATA.get("cluster_name").split("-")
+        prefix = cluster_name_parts[0]
+        if not (
+            prefix.startswith(tuple(constants.PRODUCTION_JOBS_PREFIX))
+            or config.DEPLOYMENT.get("force_deploy_multiple_clusters")
+        ):
+            if self.check_cluster_existence(prefix):
+                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
+                    f"Cluster with name prefix {prefix} already exists. "
+                    f"Please destroy the existing cluster for a new cluster "
+                    f"deployment"
+                )
+        super(VSPHEREAgentAI, self).deploy_ocp(log_cli_level)
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific to vSphere Assisted installer
+
+        Args:
+            log_level (str): this parameter is not used here
+
+        """
+        # Download terraform binary based on terraform version
+        # in terraform.log
+        terraform_version = Terraform.get_terraform_version()
+
+        terraform_installer = get_terraform(version=terraform_version)
+        config.ENV_DATA["terraform_installer"] = terraform_installer
+
+        # removing mon and osd pods are skipped. ODF on Agent clusters is not supposed to have own ceph components.
+
+        terraform_data_dir = os.path.join(
+            self.cluster_path, constants.TERRAFORM_DATA_DIR
+        )
+        tfvars = os.path.join(
+            config.ENV_DATA.get("cluster_path"),
+            constants.TERRAFORM_DATA_DIR,
+            "terraform.tfvars.json",
+        )
+
+        # terraform initialization and destroy cluster
+        try:
+            logger.info(
+                "Destroying infrastructure in vSphere and DNS records from Assisted Installer deployment "
+                "(via Terraform)"
+            )
+            terraform_work_dir = os.path.join(os.getcwd(), "terraform/ai/vsphere/")
+            terraform = Terraform(os.path.join(terraform_work_dir))
+
+            previous_dir = os.getcwd()
+            os.chdir(terraform_data_dir)
+            terraform.initialize()
+            terraform.destroy(tfvars)
+            os.chdir(previous_dir)
+        except exceptions.CommandFailed as err:
+            logger.warning(
+                f"Failed to destroy cluster resources via Terraform: {err}\n"
+                "(ignoring the failure and continuing the destroy process to remove other resources)"
+            )
+
+        # release IPs
+        try:
+            release_reserved_ips(self.cluster_name)
+        except Exception as err:
+            logger.warning(
+                f"Failed to release reserved IPs: {err}\n"
+                "Failure may happen due to already released IPs with modify_dns_records call. "
+                "(ignoring the failure and continuing the destroy process to remove other resources)"
+            )
+
+        # post destroy checks
+        self.post_destroy_checks()
+
+
 class VSPHEREUPIFlexy(VSPHEREBASE):
     """
     A class to handle vSphere UPI Flexy deployment
@@ -2041,7 +2466,7 @@ class VSPHEREUPIFlexy(VSPHEREBASE):
             Deployment specific to OCP cluster on this platform
 
             Args:
-                log_cli_level (str): openshift installer's log level
+                log_level (str): openshift installer's log level
                     (default: "DEBUG")
 
             """
@@ -2603,11 +3028,34 @@ def create_dns_records(ips):
 
     """
     logger.info("creating DNS records")
-    aws = AWS()
     dns_record_names = [
         f"api.{config.ENV_DATA.get('cluster_name')}",
         f"*.apps.{config.ENV_DATA.get('cluster_name')}",
     ]
+    _create_dns_records_helper(dns_record_names, ips)
+
+
+def create_dns_records_api_int(ip_list):
+    """
+    Create DNS record for api-int prefix
+
+    Args:
+        ip_list list(str): IP addresses for the api-int DNS record
+
+    Example:
+        For cluster_name='<cluster_name>' and base_domain='qe.rh-ocs.com',
+        creates: api-int.<cluster_name>.qe.rh-ocs.com -> ip
+    """
+    logger.info("Creating api-int DNS record")
+    dns_record_name = f"api-int.{config.ENV_DATA.get('cluster_name')}"
+    _create_dns_records_helper([dns_record_name], ip_list)
+
+
+def _create_dns_records_helper(dns_record_names: list[str], ips: list):
+    """
+    Helper function to create DNS records. Not supposed to be called directly.
+    """
+    aws = AWS()
     responses = []
     dns_record_mapping = {}
     for index, record in enumerate(dns_record_names):
@@ -2651,12 +3099,77 @@ def delete_dns_records():
         f"\\052.apps.{cluster_domain}.",
     ]
 
+    # Only delete api-int for hosted cluster agent platform
+    if config.ENV_DATA.get("hosted_cluster_platform") == "agent":
+        records_to_delete.append(f"api-int.{cluster_domain}.")
+        logger.info(
+            "Including api-int DNS record for deletion (hosted cluster agent platform)"
+        )
+
     # delete the records
     hosted_zone_id = aws.get_hosted_zone_id_for_domain()
     logger.info(f"hosted zone id: {hosted_zone_id}")
     for record in record_sets:
         if record["Name"] in records_to_delete:
             aws.delete_record(record, hosted_zone_id)
+
+
+def modify_dns_records(api_ips, ingress_ips, ttl=60):
+    """
+    Update existing DNS records with multiple IP addresses.
+
+    Args:
+        api_ips (list(str)): IPs for api.<cluster>.
+        ingress_ips (list(str)): IPs for *.apps.<cluster>.
+        ttl (int, optional): TTL for the records (defaults to 60).
+    """
+    if not api_ips or not ingress_ips:
+        raise ValueError("Both api_ips and apps_ips must be provided")
+
+    cluster_domain = (
+        f"{config.ENV_DATA.get('cluster_name')}."
+        f"{config.ENV_DATA.get('base_domain')}"
+    )
+    record_map = {
+        f"api.{cluster_domain}.": api_ips,
+        f"*.apps.{cluster_domain}.": ingress_ips,
+    }
+
+    aws = AWS()
+    zone_id = aws.get_hosted_zone_id_for_domain(config.ENV_DATA["base_domain"])
+    change_batch = {
+        "Changes": [
+            {
+                "Action": "UPSERT",
+                "ResourceRecordSet": {
+                    "Name": record_name,
+                    "Type": "A",
+                    "TTL": ttl,
+                    "ResourceRecords": [{"Value": ip} for ip in dict.fromkeys(ips)],
+                },
+            }
+            for record_name, ips in record_map.items()
+        ]
+    }
+
+    logger.info(
+        "Submitting DNS UPSERT for %s",
+        ", ".join(
+            f"{name} -> {', '.join(dict.fromkeys(ips))}"
+            for name, ips in record_map.items()
+        ),
+    )
+    route53_client = boto3.client("route53")
+    try:
+        response = route53_client.change_resource_record_sets(
+            HostedZoneId=zone_id,
+            ChangeBatch=change_batch,
+        )
+    except ClientError as e:
+        logger.error("Failed to update DNS: %s", e)
+        raise
+    aws.wait_for_record_set(response_list=[response])
+    logger.info("DNS records modified successfully")
 
 
 def get_ignition_provider_version():
@@ -2709,3 +3222,58 @@ def enable_hardware_virtualization():
 
     # write data t json file
     dump_data_to_json(terraform_json_content, constants.VM_MAIN_JSON)
+
+
+def release_reserved_ips(name: str):
+    """
+    Release reserved API and Ingress IPs
+    """
+    logger.info("Releasing reserved API and Ingress IPs")
+    ipam = IPAM(appiapp="address")
+    ipam.release_ips(
+        [
+            f"api.{name}",
+            f"ingress.{name}",
+        ]
+    )
+
+
+def populate_containers_policy(vm_ip_list):
+    """
+    Populate /etc/containers/policy.json with relaxed defaults
+
+    Args:
+        vm_ip_list (list): List of VM IPs to configure
+    """
+    logger.info("Populating /etc/containers/policy.json on VMs")
+    # Populate remote command to set containers policy with relaxed defaults
+    cmd = """sudo tee /etc/containers/policy.json >/dev/null <<'EOF'
+{
+  \"default\": [
+    {
+      \"type\": \"insecureAcceptAnything\"
+    }
+  ],
+  \"transports\": {
+    \"docker\": {
+      \"registry.redhat.io/multicluster-engine\": [
+        {
+          \"type\": \"insecureAcceptAnything\"
+        }
+      ]
+    }
+  }
+}
+EOF
+"""
+
+    for ip in vm_ip_list:
+        ssh = Connection(
+            host=ip,
+            user=constants.VSPHERE_NODE_USER,
+            password="",
+            private_key=os.path.expanduser(config.DEPLOYMENT["ssh_key_private"]),
+            stdout=True,
+        )
+        _, out, _ = ssh.exec_cmd(cmd)
+        logger.info(f"Output for {ip}: {out}")

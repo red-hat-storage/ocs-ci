@@ -230,6 +230,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 size=f"{io_size}G",
                 runtime=30,
                 fio_filename=f"{pod_obj.name}_io",
+                direct=int(storage_type == "block"),
             )
 
     @polarion_id("OCS-5176")

@@ -109,6 +109,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
                 runtime=30,
                 rate="10M",
                 fio_filename=f"{pod_obj.name}_f1",
+                direct=int(storage_type == "block"),
             )
 
         log.info("Wait for IO to complete on pods")
@@ -198,6 +199,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
                 rate="10M",
                 fio_filename=f"{pod_obj.name}_f2",
                 end_fsync=1,
+                direct=int(storage_type == "block"),
             )
 
         log.info("Wait for IO to complete on all pods")

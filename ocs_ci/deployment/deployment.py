@@ -22,6 +22,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
+    get_and_apply_rgw_cert_ca,
 )
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
@@ -42,6 +43,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
+from ocs_ci.utility.iscsi_config import iscsi_setup
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
@@ -86,6 +88,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.node import (
     get_worker_nodes,
+    mark_masters_schedulable,
     verify_all_nodes_created,
     label_nodes,
     get_all_nodes,
@@ -188,6 +191,7 @@ from ocs_ci.utility.utils import (
     get_acm_version,
     get_acm_mce_build_tag,
     apply_oadp_workaround,
+    mute_mon_netsplit,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -885,7 +889,10 @@ class Deployment(object):
             from ocs_ci.deployment.hub_spoke import enable_nested_virtualization
 
             enable_nested_virtualization()
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+        if (
+            config.DEPLOYMENT.get("enable_data_replication_separation")
+            and config.ENV_DATA.get("cluster_type") == "provider"
+        ):
             annotate_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
@@ -923,6 +930,10 @@ class Deployment(object):
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.ocp_deployment = self.OCPDeployment()
+        # self.ocp_deployment.outer is a dependency injection,
+        # necessary to refer an outer instance methods from the inner OCPDeployment
+        # works for all classes inherited from Deployment
+        self.ocp_deployment.outer = self
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
         # logging the cluster UUID so that we can ask for it's telemetry data
@@ -952,6 +963,7 @@ class Deployment(object):
         if config.ENV_DATA["deployment_type"] not in (
             constants.MANAGED_DEPL_TYPE,
             constants.MANAGED_CP_DEPL_TYPE,
+            constants.AI_AGENT_DEPL_TYPE,
         ):
             add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
@@ -971,6 +983,15 @@ class Deployment(object):
             except Exception as err:
                 logger.warning(
                     f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
+                )
+        # Setup iSCSI if configured
+        if config.ENV_DATA.get("iscsi_setup", False):
+            try:
+                logger.info("Setting up iSCSI configuration after OCP deployment...")
+                iscsi_setup()
+            except Exception as err:
+                logger.warning(
+                    f"iSCSI setup failed: {err}. Continuing with deployment..."
                 )
 
     def label_and_taint_nodes(self):
@@ -1175,7 +1196,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             subscription_yaml_data, subscription_manifest.name
         )
-        run_cmd(f"oc create -f {subscription_manifest.name}")
+        run_cmd(f"oc apply -f {subscription_manifest.name}")
         self.wait_for_subscription(ocs_operator_name)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
@@ -1640,12 +1661,57 @@ class Deployment(object):
         deployment_obj.install_ocs_ui()
         close_browser()
 
+    def set_noobaa_core_for_rgw_ssl(self):
+        """
+        Set env variables for noobaa-core StatefulSet to inject SSL environment variables
+        required for RGW SSL connections in external mode to W/A issue:
+        https://issues.redhat.com/browse/DFBUGS-3777#
+
+        This adds NODE_OPTIONS and SSL_CERT_FILE environment variables
+        to the noobaa-core container to enable SSL certificate validation.
+        """
+        logger.info(
+            "Setting env variables for noobaa-core StatefulSet for RGW SSL support"
+        )
+
+        # Wait for noobaa-core StatefulSet to exist
+        sts_obj = ocp.OCP(
+            kind="StatefulSet", namespace=self.namespace, resource_name="noobaa-core"
+        )
+
+        # Wait for StatefulSet for noobaa-core exists before patching
+        jsonpath: str = "'{.status.readyReplicas}'=1"
+        if not sts_obj.wait(
+            timeout=600,
+            condition=None,
+            jsonpath=jsonpath,
+        ):
+            raise ResourceNotFoundError("noobaa-core StatefulSet not found")
+
+        set_env_cmd = (
+            f"oc set env statefulset noobaa-core -n {self.namespace} "
+            f"NODE_OPTIONS='--use-openssl-ca' SSL_CERT_FILE='/etc/ocp-injected-ca-bundle/ca-bundle.crt'"
+        )
+
+        try:
+            run_cmd(set_env_cmd)
+            logger.info(
+                "Successfully set env variables for noobaa-core StatefulSet with SSL environment variables"
+            )
+        except CommandFailed as e:
+            logger.error(
+                f"Failed to set env variables for noobaa-core StatefulSet: {e}"
+            )
+            raise
+
     def deploy_with_external_mode(self):
         """
         This function handles the deployment of OCS on
         external/indpendent RHCS cluster
 
         """
+        if config.EXTERNAL_MODE.get("rgw_secure"):
+            get_and_apply_rgw_cert_ca()
 
         if not config.DEPLOYMENT.get("multi_storagecluster"):
             live_deployment = config.DEPLOYMENT.get("live_deployment")
@@ -1705,7 +1771,7 @@ class Deployment(object):
             cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
         # Create secret for external cluster
-        create_external_secret()
+        create_external_secret(apply=True)
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
@@ -1772,8 +1838,10 @@ class Deployment(object):
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        run_cmd(f"oc apply -f {cluster_data_yaml.name}", timeout=2400)
         external_cluster.disable_certificate_check()
+        if config.EXTERNAL_MODE.get("rgw_secure"):
+            self.set_noobaa_core_for_rgw_ssl()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
@@ -1888,15 +1956,7 @@ class Deployment(object):
 
             # Mark master nodes schedulable if mark_masters_schedulable: True
             if config.ENV_DATA.get("mark_masters_schedulable", True):
-                path = "/spec/mastersSchedulable"
-                params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-                scheduler_obj = ocp.OCP(
-                    kind=constants.SCHEDULERS_CONFIG,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-                assert scheduler_obj.patch(
-                    params=params, format_type="json"
-                ), "Failed to run patch command to update control nodes as scheduleable"
+                mark_masters_schedulable()
                 # Allow ODF to be deployed on all nodes
                 logger.info("labeling all nodes as storage nodes")
                 nodes = get_all_nodes()
@@ -2047,6 +2107,10 @@ class Deployment(object):
                     f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
                 )
 
+        # Mute MON_NETSPLIT for arbiter deployments to avoid:
+        # https://issues.redhat.com/browse/DFBUGS-4521
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            mute_mon_netsplit(namespace=self.namespace)
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
@@ -2294,6 +2358,9 @@ class Deployment(object):
             self.deploy_multicluster_hub()
         if config.ENV_DATA.get("configure_acm_to_import_mce"):
             self.configure_acm_to_import_mce_clusters()
+        from ocs_ci.ocs.acm.acm import verify_running_acm
+
+        verify_running_acm()
 
     def configure_acm_to_import_mce_clusters(self):
         """
@@ -2594,7 +2661,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -2680,7 +2747,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)

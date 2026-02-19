@@ -1,6 +1,7 @@
 import logging
 import pytest
 import random
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
@@ -32,6 +33,8 @@ class TestCephtoolboxPod:
             Finalizer will take care of below activities:
             1. Untaint the nodes: remove taints from nodes
             2. Removes nodeaffinity to bring storage cluster with default values.
+            3. Waits for all pods to be running (with extended timeout) since removing
+               placement triggers operator reconciliation and pod recreation.
 
             """
             if check_taint_on_nodes():
@@ -47,9 +50,12 @@ class TestCephtoolboxPod:
             params = '[{"op": "remove", "path": "/spec/placement/toolbox"},]'
             storagecluster_obj.patch(params=params, format_type="json")
             log.info("Patched storage cluster  back to the default")
-            assert (
-                wait_for_pods_to_be_running()
-            ), "some of the pods didn't came up running"
+            # After removing placement, operator reconciles and toolbox (and possibly
+            # other pods) may be recreated. Use longer timeout to avoid flaky teardown.
+            time.sleep(30)
+            assert wait_for_pods_to_be_running(
+                timeout=480, sleep=15
+            ), "some of the pods didn't come up running after teardown (timeout 480s)"
 
         request.addfinalizer(finalizer)
 
