@@ -3621,3 +3621,53 @@ def get_cluster_resource_capacity():
     free_cpu_cores = total_free_cpu_m / 1000
 
     return free_ram_gb, free_cpu_cores, breakdown
+
+
+def check_cluster_resources(ram_gb=65, cpu_cores=6):
+    """
+    Check if the cluster has enough unreserved resources.
+    Logs a breakdown table if resources are insufficient.
+
+    Args:
+        ram_gb (int): Minimum required RAM in GB.
+        cpu_cores (int): Minimum required CPU cores.
+
+    Returns:
+        bool: True if resources are sufficient, False otherwise.
+    """
+    try:
+        free_ram, free_cpu, breakdown = get_cluster_resource_capacity()
+
+        if free_ram >= ram_gb and free_cpu >= cpu_cores:
+            log.info(
+                f"Gatekeeper Check PASSED: {free_ram:.2f}GB RAM, {free_cpu:.2f} Cores available."
+            )
+            return True
+
+        # If we reach here, resources are insufficient. Log the breakdown.
+        header = "{:<45} | {:<12} | {:<12}".format(
+            "Namespace", "RAM Req(GB)", "CPU Req(Cores)"
+        )
+        table_rows = [header, "-" * 75]
+
+        # Sort namespaces by RAM usage
+        sorted_ns = sorted(
+            breakdown["ram"].keys(), key=lambda x: breakdown["ram"][x], reverse=True
+        )
+        for ns in sorted_ns:
+            ram_gb_used = breakdown["ram"][ns] / (1024 * 1024)
+            cpu_c_used = breakdown["cpu"][ns] / 1000
+            if ram_gb_used > 0.1 or cpu_c_used > 0.1:
+                table_rows.append(
+                    "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb_used, cpu_c_used)
+                )
+
+        log.error(
+            f"RESOURCE GATEKEEPER FAILED. Available: {free_ram:.2f}GB RAM / {free_cpu:.2f} Cores. "
+            f"Required: {ram_gb}GB / {cpu_cores} Cores.\n" + "\n".join(table_rows)
+        )
+        return False
+
+    except Exception as e:
+        log.error(f"Failed to calculate cluster capacity: {e}")
+        return True
