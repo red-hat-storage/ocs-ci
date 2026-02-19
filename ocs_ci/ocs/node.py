@@ -3437,6 +3437,8 @@ def mark_masters_schedulable():
     assert scheduler_obj.patch(
         params=params, format_type="json"
     ), "Failed to run patch command to update control nodes as scheduleable"
+
+
 def get_worker_node_allocatable():
     """
     Fetch the allocatable CPU and memory resources for worker nodes in a Kubernetes cluster.
