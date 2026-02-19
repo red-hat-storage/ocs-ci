@@ -648,14 +648,14 @@ def calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4, buffer=0.9):
     considering both CPU and memory constraints. It uses the provided buffer factor to account for overheads.
 
     Args:
-    cpu_per_vm (int): The amount of CPU required per VM (default: 1).
-    mem_per_vm (int): The amount of memory required per VM in GB (default: 4GB).
-    buffer (float): The buffer percentage to reserve for node overheads (default: 0.9 or 90%).
+        cpu_per_vm (int): The amount of CPU required per VM (default: 1).
+        mem_per_vm (int): The amount of memory required per VM in GB (default: 4GB).
+        buffer (float): The buffer percentage to reserve for node overheads (default: 0.9 or 90%).
 
     Returns:
-    tuple: A tuple containing two dictionaries -
-        cluster_vm_count (dict): Total number of VMs that can be provisioned across the entire cluster.
-        per_node_vm_count (dict): Number of VMs that can be provisioned on each node in the cluster.
+        tuple: A tuple containing two dictionaries -
+            cluster_vm_count (dict): Total number of VMs that can be provisioned across the entire cluster.
+            per_node_vm_count (dict): Number of VMs that can be provisioned on each node in the cluster.
     """
     node_alloc = get_worker_node_allocatable()
     pod_usage = get_pod_requests_per_node(worker_nodes=node_alloc.keys())
