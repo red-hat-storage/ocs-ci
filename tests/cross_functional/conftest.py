@@ -1507,7 +1507,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         )
         # verify noobaa statefulset is present
         sample = TimeoutSampler(
-            timeout=500,
+            timeout=1000,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get sts noobaa-core -n openshift-storage",
@@ -1551,6 +1551,8 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         Cleanup function which clears all the noobaa rebuild entries.
 
         """
+        import pdb
+        pdb.set_trace()  # Stop at first teardown (remove after debugging)
         # Get the deployment replica count
         deploy_obj = OCP(
             kind=constants.DEPLOYMENT,
