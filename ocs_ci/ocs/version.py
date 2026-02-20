@@ -122,7 +122,24 @@ def get_ocp_version(version_dict=None):
     Returns:
       str: full version string of OCP cluster
     """
-    version_dict = get_ocp_version_dict()
+    if version_dict is None:
+        try:
+            version_dict = get_ocp_version_dict()
+        except CommandFailed as e:
+            # During deployment tests, the cluster doesn't exist yet
+            # Fall back to the version from config
+            # Return the installer version from config
+            # This matches the behavior of the deprecated utils.get_ocp_version()
+            installer_version = config.DEPLOYMENT.get("installer_version")
+            logger.warning(
+                f"Failed to get OCP version from cluster: {e}. "
+                f"Using version from config instead: {installer_version}."
+            )
+            if installer_version:
+                return installer_version
+            else:
+                logger.error("installer_version not found in config.DEPLOYMENT")
+                raise
     version_str = version_dict["status"]["desired"]["version"]
     return version_str
 
