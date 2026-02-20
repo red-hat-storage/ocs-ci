@@ -3009,14 +3009,11 @@ def setup_fdf_catsrc_for_hub():
     This function creates fdf catalogsource on hub
 
     """
-    restore_index = config.cur_index
-    acm_indexes = get_all_acm_indexes()
     logger.info("Creating FDF specific resource")
-    for i in acm_indexes:
-        config.switch_ctx(i)
-        fdf = FusionDataFoundationDeployment()
-        fdf.create_image_tag_mirror_set()
-        fdf.create_image_digest_mirror_set()
+
+    fdf = FusionDataFoundationDeployment()
+    fdf.create_image_tag_mirror_set()
+    fdf.create_image_digest_mirror_set()
     logger.info("Creating FDF Catsrc from Primary")
     isf_data_foundation_catsrc = templating.load_yaml(constants.FDF_CATSRC_CR)
     isf_data_foundation_catsrc["spec"]["image"] = (
@@ -3028,18 +3025,16 @@ def setup_fdf_catsrc_for_hub():
     templating.dump_data_to_temp_yaml(
         isf_data_foundation_catsrc, isf_data_foundation_catsrc_yaml.name
     )
-    for i in acm_indexes:
-        config.switch_ctx(i)
-        wait_for_machineconfigpool_status("all", timeout=1800)
-        run_cmd(f"oc apply -f {isf_data_foundation_catsrc_yaml.name}")
-        fdf_catalog_source = CatalogSource(
-            resource_name=constants.FDF_CATALOG_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
 
-        logger.info("Waiting for CatalogSource to be READY")
-        fdf_catalog_source.wait_for_state("READY")
-    config.switch_ctx(restore_index)
+    wait_for_machineconfigpool_status("all", timeout=1800)
+    run_cmd(f"oc apply -f {isf_data_foundation_catsrc_yaml.name}")
+    fdf_catalog_source = CatalogSource(
+        resource_name=constants.FDF_CATALOG_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+
+    logger.info("Waiting for CatalogSource to be READY")
+    fdf_catalog_source.wait_for_state("READY")
 
 
 def validate_protection_label(kind, namespace, protection_name=None):
