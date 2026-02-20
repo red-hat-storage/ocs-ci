@@ -8321,6 +8321,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
     - Storage class: Custom storage classes, including default compression and aggressive profiles.
 
     """
+    created_vms = []
 
     def factory(namespace=None, encrypted=False, use_cluster_capacity=False):
         """
@@ -8462,6 +8463,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
                     sc_compression = futures[future]
                     try:
                         vm_obj = future.result()
+                    created_vms.append(vm_obj)
                         run_fio(vm_obj)
                         if sc_compression == "aggressive":
                             vm_list_agg_compr.append(vm_obj)
@@ -8469,6 +8471,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
                             vm_list_default_compr.append(vm_obj)
                     except Exception as e:
                         log.error(f"Error occurred while creating VM: {e}")
+                    raise
 
         return (
             vm_list_default_compr,
@@ -8476,6 +8479,19 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
             sc_obj_def_compr,
             sc_obj_aggressive,
         )
+    def teardown():
+        log.info("Starting multi_cnv_workload teardown")
+
+        for vm in created_vms:
+            try:
+                log.info(f"Deleting VM {vm.name}")
+                vm.delete(wait=True)
+            except Exception as e:
+                log.warning(f"Failed to delete VM {vm.name}: {e}")
+
+        log.info("multi_cnv_workload teardown completed")
+
+    request.addfinalizer(teardown)
 
     return factory
 
