@@ -3449,8 +3449,8 @@ def get_worker_node_allocatable():
     CPU (in millicores) and Memory (in GB) values.
 
     Returns:
-    dict: A dictionary where keys are worker node names and values are another dictionary
-          containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
+        dict: A dictionary where keys are worker node names and values are another
+            dictionary containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
     """
     cmd = ["oc", "get", "nodes", "-l", "node-role.kubernetes.io/worker", "-o", "yaml"]
     result = run_cmd(cmd)
@@ -3478,12 +3478,12 @@ def get_pod_requests_per_node(worker_nodes=None):
     the requested CPU (in millicores) and Memory (in GB) for each worker node.
 
     Args:
-    worker_nodes (list, optional): A list of worker node names to filter pods by.
-                                   If not provided, all nodes are considered.
+        worker_nodes (list, optional): A list of worker node names to filter pods by.
+            If not provided, all nodes are considered.
 
     Returns:
-    dict: A dictionary where keys are worker node names and values are another dictionary
-          containing 'cpu' (float, in millicores) and 'mem' (float, in GB).
+        dict: A dictionary where keys are worker node names and values are another
+            dictionary containing 'cpu' (float, in millicores) and 'mem' (float, in GB).
     """
     cmd = ["oc", "get", "pods", "-A", "-o", "yaml"]
     result = run_cmd(cmd)
