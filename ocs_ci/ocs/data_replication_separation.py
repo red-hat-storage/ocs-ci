@@ -235,7 +235,7 @@ def validate_mon_ip_annotation_on_workers():
 
         # Get the actual private IP from the node using ip addr command
         try:
-            expected_private_ip, _ = get_node_private_ip(worker_name)
+            _, expected_private_ip, _ = get_node_private_ip(worker_name)
         except Exception as e:
             log.error(f"Failed to retrieve private IP from node {worker_name}: {e}")
             correct_annotations = False
