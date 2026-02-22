@@ -18,6 +18,8 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.node import get_node_names
 from ocs_ci.ocs.ocp import OCP
+from pathlib import Path
+
 from ocs_ci.ocs.ui.base_ui import BaseUI, logger
 from ocs_ci.ocs.ui.odf_topology import TopologyUiStr, OdfTopologyHelper
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
@@ -27,6 +29,24 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 from ocs_ci.ocs.ui.workload_ui import WorkloadUi
 from ocs_ci.utility.retry import retry
 
+SIDEBAR_SCROLL_JS = """
+var sidebar = document.querySelector('.odf-topology__sidebar');
+if (sidebar) {
+    sidebar.scrollTop = sidebar.scrollHeight / 2;
+    return true;
+}
+return false;
+"""
+
+SIDEBAR_SCROLL_RESET_JS = """
+var sidebar = document.querySelector('.odf-topology__sidebar');
+if (sidebar) {
+    sidebar.scrollTop = 0;
+    return true;
+}
+return false;
+"""
+
 
 class TopologySidebar(BaseUI):
     """
@@ -35,6 +55,45 @@ class TopologySidebar(BaseUI):
 
     def __init__(self):
         BaseUI.__init__(self)
+
+    def take_screenshot_for_llm(self, name_suffix=""):
+        """
+        Takes two screenshots to capture the full ODF topology sidebar content.
+
+        Overrides BaseUI.take_screenshot_for_llm to handle the scrollable sidebar
+        panel in ODF topology. The sidebar (div.odf-topology__sidebar) has a fixed
+        height and overflows — a single viewport screenshot cuts off lower fields
+        like addresses, annotations, and creation timestamp.
+
+        This method takes one screenshot at the current scroll position, then
+        scrolls the sidebar halfway down via JavaScript and takes a second
+        screenshot, so the LLM receives visibility into all detail fields.
+
+        Args:
+            name_suffix (str): Optional suffix for the screenshot filename.
+
+        Returns:
+            list: List of absolute paths to the saved screenshot files
+                (typically two: top and bottom of the sidebar).
+        """
+        top_suffix = f"{name_suffix}_top_llm" if name_suffix else "top_llm"
+        self.take_screenshot(name_suffix=top_suffix)
+        screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+        screenshot_top = str(screenshots[-1])
+
+        scrolled = self.driver.execute_script(SIDEBAR_SCROLL_JS)
+        if scrolled:
+            logger.info("Scrolled sidebar panel to bottom for second screenshot")
+            time.sleep(0.5)
+            bottom_suffix = f"{name_suffix}_bottom_llm" if name_suffix else "bottom_llm"
+            self.take_screenshot(name_suffix=bottom_suffix)
+            screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+            screenshot_bottom = str(screenshots[-1])
+            self.driver.execute_script(SIDEBAR_SCROLL_RESET_JS)
+            return [screenshot_top, screenshot_bottom]
+
+        logger.info("No scrollable sidebar found, using single screenshot")
+        return [screenshot_top]
 
     def is_alert_tab_present(self) -> bool:
         """

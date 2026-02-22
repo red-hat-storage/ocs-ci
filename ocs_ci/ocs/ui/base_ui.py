@@ -681,6 +681,26 @@ class BaseUI:
             screenshots_folder=self.screenshots_folder, name_suffix=name_suffix
         )
 
+    def take_screenshot_for_llm(self, name_suffix=""):
+        """
+        Takes a screenshot for LLM-based UI analysis and returns the file path.
+
+        This base implementation captures a single viewport screenshot. Subclasses
+        that operate on scrollable panels (e.g. TopologySidebar) should override
+        this method to capture additional screenshots after scrolling, so the LLM
+        receives the full content of the panel.
+
+        Args:
+            name_suffix (str): Optional suffix for the screenshot filename.
+
+        Returns:
+            list: List of absolute paths to the saved screenshot files.
+        """
+        suffix = f"{name_suffix}_llm" if name_suffix else "llm"
+        take_screenshot(screenshots_folder=self.screenshots_folder, name_suffix=suffix)
+        screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+        return [str(screenshots[-1])]
+
     def copy_dom(self, name_suffix: str = ""):
         """
         Get page source of the webpage

@@ -352,6 +352,7 @@ UI_SELENIUM:
   ignore_ssl: True
   ai_fallback: True
   llm_model: "claude:sonnet"
+  llm_host: "http://localhost:11434"
 
 # This section is related to performance tests which need Elasticsearch server
 PERF:
