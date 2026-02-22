@@ -1,5 +1,7 @@
 import logging
 
+import requests
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -8,6 +10,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
 from ocs_ci.ocs.ui.workload_ui import wait_for_container_status_ready
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutExpiredError, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +31,7 @@ class Pushgateway:
         """
         self.namespace = namespace
         self.ocp_obj = OCP(namespace=self.namespace)
-        self._exec_pod = None
+        self.service_url = None
 
     def install(self):
         """
@@ -65,16 +68,21 @@ class Pushgateway:
             )
             wait_for_container_status_ready(pod=pod_obj)
 
-            # Resolve one Prometheus pod (has curl) for exec when sending metrics
-            prometheus_pods = pod.get_pods_having_label(
-                label=constants.PROMETHEUS_POD_LABEL,
-                namespace=constants.OPENSHIFT_MONITORING_NAMESPACE,
-            )
-            if not prometheus_pods:
+            # Get service URL (Route)
+            ocp_route = OCP(kind=constants.ROUTE, namespace=self.namespace)
+            routes = ocp_route.get(selector=constants.PUSHGATEWAY_APP_LABEL)
+
+            if not routes.get("items"):
                 raise Exception(
-                    f"No Prometheus pod found in {constants.OPENSHIFT_MONITORING_NAMESPACE}"
+                    f"Pushgateway route not found in namespace {self.namespace}"
                 )
-            self._exec_pod = pod.Pod(**prometheus_pods[0])
+
+            host = routes["items"][0]["spec"]["host"]
+            if not host:
+                raise Exception("Pushgateway route does not have a host configured")
+
+            self.service_url = f"http://{host}"
+            self._wait_for_pushgateway_reachable()  # Avoid 503 on first send
 
             logger.info(
                 f"Pushgateway installed successfully in namespace {self.namespace}"
@@ -84,9 +92,38 @@ class Pushgateway:
             logger.error(f"Failed to install Pushgateway: {e}")
             raise
 
+    def _wait_for_pushgateway_reachable(self):
+        """
+        Wait for Pushgateway endpoint to be reachable.
+
+        Raises:
+            TimeoutExpiredError: If Pushgateway endpoint is not reachable within 60s
+        """
+        logger.info(
+            f"Waiting for Pushgateway endpoint to be reachable: {self.service_url}"
+        )
+        try:
+            for response in TimeoutSampler(
+                timeout=60,
+                sleep=3,
+                func=requests.get,
+                url=self.service_url,
+                allow_redirects=True,
+            ):
+                if response.status_code in (200, 405):
+                    logger.info("Pushgateway endpoint is reachable")
+                    break
+        except TimeoutExpiredError:
+            message = (
+                f"Pushgateway at {self.service_url} did not become reachable "
+                f"within 60s (503 or connection error)"
+            )
+            logger.error(response)
+            raise TimeoutExpiredError(message)
+
     def send_custom_metric(self, metric_name, metric_value, job_name="test_job"):
         """
-        Send a custom metric to Pushgateway via exec from a Prometheus pod (curl to Service).
+        Send a custom metric to Pushgateway.
 
         Args:
             metric_name (str): Name of the metric
@@ -96,35 +133,28 @@ class Pushgateway:
         Raises:
             Exception: If sending metric fails
         """
-        if not self._exec_pod:
+        if not self.service_url:
             raise Exception(
-                "Pushgateway install not complete (no exec pod). Ensure install() was called."
+                "Pushgateway service URL not available. Ensure install() was called."
             )
 
-        url = (
-            f"http://pushgateway.{self.namespace}.svc.cluster.local:9091"
-            f"/metrics/job/{job_name}"
-        )
-        payload = f"{metric_name} {metric_value}\n"
-        # Escape single quotes for use inside single-quoted shell string
-        escaped_payload = payload.replace("'", "'\"'\"'")
-        curl_cmd = (
-            f"curl -s -S -X POST -H 'Content-Type: text/plain' "
-            f"--data-binary '{escaped_payload}' '{url}'"
-        )
+        url = f"{self.service_url}/metrics/job/{job_name}"
+        metric_data = f"{metric_name} {metric_value}\n"
 
-        logger.info(
-            f"Sending metric to Pushgateway via pod exec: {url} = {metric_value}"
-        )
+        logger.info(f"Sending metric to Pushgateway: {url} = {metric_value}")
 
         try:
-            self._exec_pod.exec_cmd_on_pod(
-                command=curl_cmd, out_yaml_format=False, timeout=15
+            response = requests.post(
+                url,
+                data=metric_data.encode("utf-8"),
+                headers={"Content-Type": "text/plain"},
+                timeout=10,
             )
+            response.raise_for_status()
             logger.info(
                 f"Successfully sent metric {metric_name}={metric_value} to Pushgateway"
             )
-        except CommandFailed as e:
+        except requests.exceptions.RequestException as e:
             logger.error(f"Failed to send metric to Pushgateway: {e}")
             raise
 
