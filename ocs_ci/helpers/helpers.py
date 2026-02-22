@@ -7149,3 +7149,58 @@ def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) 
         )
 
     log.info(f"All OSDs {osd_ids} are now marked as 'down'")
+
+
+def wait_for_all_containers_ready(pod, timeout=300):
+    """
+    Wait for all containers of the pod to be ready
+
+    Args:
+        pod: a pod object of the pod which container is to be checked
+        timeout: timeout in seconds to wait for all containers to be ready
+
+    Raises:
+        TimeoutExpiredError: If all containers are not ready within timeout
+    """
+    logger.info(f"Waiting for all containers of the pod {pod.name} to be ready")
+
+    def _are_containers_ready(pod):
+        return all(
+            container["ready"] for container in pod.get()["status"]["containerStatuses"]
+        )
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=_are_containers_ready,
+        pod=pod,
+    )
+    sampler.wait_for_func_status(result=True)
+    if not sampler.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"All containers of the pod {pod.name} are not ready within {timeout} seconds"
+        )
+    logger.info(f"All containers of the pod {pod.name} are ready")
+
+
+def wait_for_prometheus_ready(timeout=300):
+    """
+    Wait for all of Prometheus pods to be running
+    and for their containers to be ready
+
+    Raises:
+        TimeoutExpiredError: If Prometheus is not ready within timeout
+    """
+    pod.wait_for_pods_by_label_count(
+        label=constants.PROMETHEUS_POD_LABEL,
+        namespace=constants.OPENSHIFT_MONITORING_NAMESPACE,
+        expected_count=2,
+        timeout=timeout,
+    )
+    pods_dicts = pod.get_pods_having_label(
+        label=constants.PROMETHEUS_POD_LABEL,
+        namespace=constants.OPENSHIFT_MONITORING_NAMESPACE,
+    )
+    for pod_dict in pods_dicts:
+        pod_obj = pod.Pod(**pod_dict)
+        wait_for_all_containers_ready(pod_obj, timeout=timeout)

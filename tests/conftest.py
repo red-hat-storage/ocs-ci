@@ -212,6 +212,7 @@ from ocs_ci.helpers.helpers import (
     modify_deployment_replica_count,
     create_resource,
     create_network_fence_class,
+    wait_for_prometheus_ready,
     wait_for_resource_state,
     storagecluster_independent_check,
     get_schedule_precedance_value_from_csi_addons_configmap,
@@ -11589,6 +11590,10 @@ def enable_custom_metrics(request):
         """
         Modify the cluster-monitoring-config configmap to enable custom metrics.
         """
+        log.info(
+            "Modifying the cluster-monitoring-config configmap to enable custom metrics"
+        )
+
         nonlocal original_config_yaml
         ocp_obj = OCP(
             kind=constants.CONFIGMAP,
@@ -11600,10 +11605,17 @@ def enable_custom_metrics(request):
         patch_params = json.dumps({"data": {"config.yaml": new_config_yaml}})
         ocp_obj.patch(params=patch_params, format_type="merge")
 
+        log.info("Waiting for 30 seconds for the changes to take effect")
+        time.sleep(30)
+
+        wait_for_prometheus_ready(timeout=300)
+        log.info("Custom metrics enabled successfully")
+
     def revert_cm_cfg_change():
         """
         Revert the change to the cluster-monitoring-config configmap.
         """
+        log.info("Reverting the change to the cluster-monitoring-config configmap")
         nonlocal original_config_yaml
         ocp_obj = OCP(
             kind=constants.CONFIGMAP,
@@ -11612,6 +11624,12 @@ def enable_custom_metrics(request):
         )
         patch_params = json.dumps({"data": {"config.yaml": original_config_yaml}})
         ocp_obj.patch(params=patch_params, format_type="merge")
+
+        log.info("Waiting for 30 seconds for the changes to take effect")
+        time.sleep(30)
+
+        wait_for_prometheus_ready(timeout=300)
+        log.info("Custom metrics reverted successfully")
 
     request.addfinalizer(revert_cm_cfg_change)
     modify_cm_cfg()
