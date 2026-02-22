@@ -8485,7 +8485,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
         for vm in created_vms:
             try:
                 log.info(f"Deleting VM {vm.name}")
-                vm.delete(wait=True)
+                vm.delete()
             except Exception as e:
                 log.warning(f"Failed to delete VM {vm.name}: {e}")
 
