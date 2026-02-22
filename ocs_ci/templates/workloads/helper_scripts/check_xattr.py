@@ -1,8 +1,11 @@
 import os
 import errno
 import sys
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+
+log = logging.getLogger(__name__)
 
 
 def print_help():
@@ -30,7 +33,7 @@ Examples:
 The program will continuously toggle the 'user.author' extended attribute
 on each file between 'kevin' and 'michael'. Press Ctrl+C to stop gracefully.
     """
-    print(help_text)
+    log.info(help_text)
     sys.exit(0)
 
 
@@ -114,7 +117,7 @@ if __name__ == "__main__":
 
     # Example usage
     files = create_files("testfile_", file_count, directory)
-    print(f"Creation of {len(files)} files in '{directory}' directory completed.")
+    log.info(f"Creation of {len(files)} files in '{directory}' directory completed.")
 
     # Toggle author xattr for each file continuously in parallel batches
     try:
@@ -123,12 +126,12 @@ if __name__ == "__main__":
                 futures = [executor.submit(toggle_author_xattr, file) for file in files]
                 for file, future in zip(files, futures):
                     _ = future.result()
-                print(".", end="", flush=True)
+                log.info(".", end="", flush=True)
     except KeyboardInterrupt:
-        print("\nInterrupted by user. Shutting down gracefully...")
+        log.info("\nInterrupted by user. Shutting down gracefully...")
         # ThreadPoolExecutor context manager automatically calls shutdown(wait=True)
         # which waits for all pending tasks to complete before exiting
     except Exception as e:
-        print(f"Error occurred: {e}")
+        log.info(f"Error occurred: {e}")
     finally:
-        print(f"All resources released. Worker threads: {max_workers}. Exiting...")
+        log.info(f"All resources released. Worker threads: {max_workers}. Exiting...")

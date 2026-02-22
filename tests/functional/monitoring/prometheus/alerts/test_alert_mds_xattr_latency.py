@@ -2,7 +2,7 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
@@ -10,7 +10,6 @@ from ocs_ci.ocs import cluster, constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
-    delete_deployment_pods,
     get_operator_pods,
     delete_pods,
     get_prometheus_pods,
@@ -18,6 +17,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pv import delete_released_pvs_in_sc
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -50,7 +50,7 @@ def set_xattr_with_high_cpu_usage(
     """
     log.info("setting extented attributes value for multiple files in MDS server ")
     active_mds_node_name = cluster.get_active_mds_info()["node_name"]
-    file = constants.EXTENTDED_ATTRIBUTES
+    file = constants.EXTENDED_ATTRIBUTES
     stress_mgr = CephFSStressTestManager(namespace=constants.DEFAULT_NAMESPACE)
     m_factor = "1,2,3,4"
     parallelism = 5
@@ -65,17 +65,24 @@ def set_xattr_with_high_cpu_usage(
         project=OCP(kind="Project", namespace=config.ENV_DATA["cluster_namespace"]),
     )
     # Create service_account to get privilege for deployment pods
-    sa_name = helpers.create_serviceaccount(pvc_obj.project.namespace)
+    sa_obj = helpers.create_serviceaccount(pvc_obj.project.namespace)
 
-    helpers.add_scc_policy(sa_name=sa_name.name, namespace=pvc_obj.project.namespace)
-    pod_obj = helpers.create_pod(
-        interface_type=constants.CEPHFILESYSTEM,
-        pvc_name=pvc_obj.name,
-        namespace=pvc_obj.project.namespace,
-        sa_name=sa_name.name,
+    helpers.add_scc_policy(sa_name=sa_obj.name, namespace=pvc_obj.project.namespace)
+    # pod_obj = helpers.create_pod(
+    #     interface_type=constants.CEPHFILESYSTEM,
+    #     pvc_name=pvc_obj.name,
+    #     namespace=pvc_obj.project.namespace,
+    #     sa_name=sa_name.name,
+    #     node_name=active_mds_node_name,
+    #     deployment=True,
+    # )
+    pod_obj = deployment_pod_factory(
+        interface=constants.CEPHFILESYSTEM,
+        pvc=pvc_obj,
         node_name=active_mds_node_name,
-        deployment=True,
+        sa_obj=sa_obj,
     )
+
     log.info("Copying check_xattr.py to fedora pod ")
     cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/mnt/"
     helpers.run_cmd(cmd=cmd)
@@ -133,12 +140,18 @@ def set_xattr_with_high_cpu_usage(
 
     def finalizer():
 
-        delete_deployment_pods(pod_obj)
+        # delete_deployment_pods(pod_obj)
+
         job_obj = OCP(
             kind="Job",
             namespace=constants.DEFAULT_NAMESPACE,
         )
         job_obj.delete(resource_name="cephfs-stress-job")
+
+        pvc_obj1.delete()
+        pvc_obj1.wait_for_delete(resource_name=pvc_obj1.name)
+        delete_released_pvs_in_sc(sc_name)
+        log.info("All rsources cleaned up successully")
 
     request.addfinalizer(finalizer)
 
@@ -180,7 +193,7 @@ def MDSxattr_alert_values(threading_lock, timeout):
         return False
 
 
-def initiate_alert_clearanace():
+def initiate_alert_clearance():
     """
     This function initiates the clerance of mds alert
     """
@@ -193,7 +206,7 @@ def initiate_alert_clearanace():
     )
 
 
-@magenta_squad
+@blue_squad
 @tier2
 class TestMdsXattrAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
@@ -217,6 +230,8 @@ class TestMdsXattrAlerts(E2ETest):
     def test_mds_xattr_alert_triggered(
         self, set_xattr_with_high_cpu_usage, threading_lock
     ):
+        api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
@@ -224,10 +239,13 @@ class TestMdsXattrAlerts(E2ETest):
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
         log.info("Checking for clearance of alert")
-        initiate_alert_clearanace()
+        initiate_alert_clearance()
         # waiting for sometime for load distribution
         time.sleep(600)
-        assert MDSxattr_alert_values(threading_lock, timeout=30) is False
+        # assert MDSxattr_alert_values(threading_lock, timeout=30) is False
+        api.check_alert_cleared(
+            label=constants.ALERT_MDSXATTR, measure_end_time=300, time_min=30
+        )
 
     def test_alert_triggered_by_restarting_operator_and_metrics_pods(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -249,10 +267,6 @@ class TestMdsXattrAlerts(E2ETest):
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
         log.info("Respin the ocs-metrics-exporter pod")
-        # metrics_pods = OCP_POD_OBJ.get(selector="app.kubernetes.io/name=ocs-metrics-exporter")[
-        #     "items"
-        # ]
-        # metrics_pods.delete(force=True)
         metrics_pods = get_pods_having_label(
             label="app.kubernetes.io/name=ocs-metrics-exporter",
             namespace=config.ENV_DATA["cluster_namespace"],
