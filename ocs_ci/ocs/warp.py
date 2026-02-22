@@ -14,9 +14,12 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
+from ocs_ci.ocs.resources.pod import (
+    Pod,
+    get_pods_having_label,
+    wait_for_pods_by_label_count,
+)
 from ocs_ci.utility import templating
-from ocs_ci.ocs.ui.workload_ui import wait_for_container_status_ready
 
 log = logging.getLogger(__name__)
 
@@ -104,8 +107,13 @@ class Warp(object):
             )
         ]
 
+        wait_for_pods_by_label_count(
+            label=self.WARP_POD_LABEL,
+            expected_count=replicas,
+            namespace=self.namespace,
+        )
         for con in all_warp_pods:
-            wait_for_container_status_ready(pod=con)
+            helpers.wait_for_all_containers_ready(pod=con)
 
         if multi_client:
             self.client_pods = [
