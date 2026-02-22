@@ -5,7 +5,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
+from ocs_ci.ocs.ui.workload_ui import wait_for_container_status_ready
 from ocs_ci.utility import templating
 
 logger = logging.getLogger(__name__)
@@ -52,12 +54,18 @@ class Pushgateway:
             for resource in pushgateway_data:
                 create_resource(**resource)
 
-            # Wait for pushgateway pod to be running
+            # Wait for pushgateway pod to be ready
             wait_for_pods_by_label_count(
                 label=constants.PUSHGATEWAY_APP_LABEL,
                 expected_count=1,
                 namespace=self.namespace,
             )
+            pod_obj = pod.Pod(
+                **pod.get_pods_having_label(
+                    label=constants.PUSHGATEWAY_APP_LABEL, namespace=self.namespace
+                )[0]
+            )
+            wait_for_container_status_ready(pod=pod_obj)
 
             # Get service URL
             ocp_route = OCP(kind=constants.ROUTE, namespace=self.namespace)

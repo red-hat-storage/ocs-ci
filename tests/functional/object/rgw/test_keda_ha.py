@@ -318,9 +318,9 @@ class TestKedaHA:
     def warp_multi_client(self, request):
         """Fixture to create Warp instance with 3 clients for multi-client benchmarking"""
         warp = Warp()
+        request.addfinalizer(lambda: warp.cleanup(multi_client=True))
         warp.host = f"{constants.RGW_SERVICE_INTERNAL_MODE}.{config.ENV_DATA['cluster_namespace']}.svc:443"
         warp.create_resource_warp(multi_client=True, replicas=3)
-        request.addfinalizer(lambda: warp.cleanup(multi_client=True))
         return warp
 
     @pytest.fixture(scope="function")

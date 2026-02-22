@@ -13,7 +13,6 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
 from ocs_ci.utility import templating
@@ -30,6 +29,8 @@ class Warp(object):
     WARP measures GET and PUT performance from multiple clients against a MinIO cluster.
 
     """
+
+    WARP_POD_LABEL = "app=warppod"
 
     def __init__(self):
         """
@@ -99,7 +100,7 @@ class Warp(object):
         all_warp_pods = [
             Pod(**pod_info)
             for pod_info in get_pods_having_label(
-                label="app=warppod", namespace=self.pod_obj.namespace
+                label=self.WARP_POD_LABEL, namespace=self.pod_obj.namespace
             )
         ]
 
@@ -247,7 +248,15 @@ class Warp(object):
                 self.service_obj.delete()
         log.info("Deleting pods and deployment config")
         if self.pod_obj:
-            pod.delete_deployment_pods(self.pod_obj)
+            try:
+                ocp_obj = OCP(namespace=self.namespace)
+                ocp_obj.exec_oc_cmd(
+                    f"delete {constants.DEPLOYMENT} -l {self.WARP_POD_LABEL}"
+                )
+            except CommandFailed as e:
+                log.warning(
+                    f"Failed to delete deployment with label {self.WARP_POD_LABEL}: {e}"
+                )
         if self.pvc_obj:
             self.pvc_obj.delete()
 
