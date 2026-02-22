@@ -349,6 +349,8 @@ UI_SELENIUM:
   headless: True
   screenshot: True
   ignore_ssl: True
+  llm_model: "qwen2.5vl:7b"
+  llm_host: "http://localhost:11434"
 
 # This section is related to performance tests which need Elasticsearch server
 PERF:
