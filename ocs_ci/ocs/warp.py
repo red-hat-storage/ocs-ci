@@ -196,11 +196,18 @@ class Warp(object):
         # Setup warp clients on warp client pods
         self.client_str = ""
         multi_client_options = ""
+        client_futures = []
         if multi_client:
             thread_exec = futures.ThreadPoolExecutor(max_workers=len(self.client_pods))
             for p in self.client_pods:
                 command = f"{self.warp_bin_dir} client"
-                thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
+                fut = thread_exec.submit(
+                    p.exec_cmd_on_pod,
+                    command=command,
+                    out_yaml_format=False,
+                    timeout=timeout,
+                )
+                client_futures.append(fut)
             log.info("Wait for 5 seconds after the clients are started listening!")
             time.sleep(5)
             for client in self.client_ips:
@@ -219,6 +226,23 @@ class Warp(object):
 
         if validate:
             self.validate_warp_workload()
+
+        # Kill warp clients
+        if multi_client:
+            log.info("Killing warp clients")
+            for p in self.client_pods:
+                p.exec_cmd_on_pod(command="pkill warp", timeout=timeout)
+
+            log.info("Waiting for warp clients threads to finish")
+            for fut in client_futures:
+                try:
+                    fut.result(timeout=timeout)
+
+                # Ignoring the expected process-killed stderr
+                except CommandFailed as e:
+                    if "143" in str(e):
+                        log.info("Thread killed by signal 143")
+            log.info("Warp clients threads finished")
 
     def validate_warp_workload(self):
         """
