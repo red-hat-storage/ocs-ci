@@ -125,8 +125,12 @@ def get_node_private_ip(node_name):
     # Run 'ip -o addr show' to get all IP addresses in one-line format
     # First try to get IPv4 addresses with "scope global" to exclude link-local and other non-routable addresses
     # Output format: 2: eth0    inet 192.168.1.10/24 ...
-    cmd_global = "ip -o addr show | grep 'inet ' | grep 'scope global' | awk '{print $2, $4}'"
-    cmd_all = "ip -o addr show | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2, $4}'"
+    cmd_global = (
+        "ip -o addr show | grep 'inet ' | grep 'scope global' | awk '{print $2, $4}'"
+    )
+    cmd_all = (
+        "ip -o addr show | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2, $4}'"
+    )
 
     try:
         output = nodes_obj.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd_global])
@@ -145,9 +149,7 @@ def get_node_private_ip(node_name):
         raise
 
     if not output:
-        raise CommandFailed(
-            f"No IP addresses found on node {node_name}"
-        )
+        raise CommandFailed(f"No IP addresses found on node {node_name}")
 
     # Parse all IP addresses from output
     # Expected format per line: "interface_name ip/prefix"
