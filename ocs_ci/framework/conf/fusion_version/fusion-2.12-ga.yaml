@@ -1,0 +1,5 @@
+---
+DEPLOYMENT:
+  fusion_image: "icr.io/cpopen/isf-operator-software-catalog:2.12.0"
+RUN:
+  resource_checker: False
