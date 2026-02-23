@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 def get_cluster_network_cidrs():
     """
-    Get the clusterNetwork CIDR ranges from the OCP Network resource.
+    Get the clusterNetwork and serviceNetwork CIDR ranges from the OCP Network resource.
 
     Returns:
-        list: List of ipaddress.IPv4Network objects representing cluster network CIDRs
+        list: List of ipaddress.IPv4Network objects representing cluster and service network CIDRs
 
     Raises:
         UnavailableResourceException: If unable to retrieve Network resource
@@ -32,15 +32,27 @@ def get_cluster_network_cidrs():
         network_obj = OCP(kind="network.config.openshift.io", resource_name="cluster")
         network_data = network_obj.get()
 
-        cluster_networks = network_data.get("spec", {}).get("clusterNetwork", [])
         cidrs = []
 
+        # Get clusterNetwork CIDRs
+        cluster_networks = network_data.get("spec", {}).get("clusterNetwork", [])
         for network in cluster_networks:
             cidr_str = network.get("cidr")
             if cidr_str:
                 try:
                     cidrs.append(ipaddress.IPv4Network(cidr_str))
                     logger.info(f"Found cluster network CIDR: {cidr_str}")
+                except (ValueError, ipaddress.AddressValueError) as e:
+                    logger.warning(f"Invalid CIDR format '{cidr_str}': {e}")
+                    continue
+
+        # Get serviceNetwork CIDRs
+        service_networks = network_data.get("spec", {}).get("serviceNetwork", [])
+        for cidr_str in service_networks:
+            if cidr_str:
+                try:
+                    cidrs.append(ipaddress.IPv4Network(cidr_str))
+                    logger.info(f"Found service network CIDR: {cidr_str}")
                 except (ValueError, ipaddress.AddressValueError) as e:
                     logger.warning(f"Invalid CIDR format '{cidr_str}': {e}")
                     continue
@@ -61,14 +73,14 @@ def get_cluster_network_cidrs():
 
 def is_ip_in_cluster_network(ip_addr, cluster_cidrs):
     """
-    Check if an IP address falls within any of the cluster network CIDR ranges.
+    Check if an IP address falls within any of the cluster or service network CIDR ranges.
 
     Args:
         ip_addr (str): IP address to check
-        cluster_cidrs (list): List of ipaddress.IPv4Network objects
+        cluster_cidrs (list): List of ipaddress.IPv4Network objects (includes both cluster and service networks)
 
     Returns:
-        bool: True if IP is in any cluster network CIDR, False otherwise
+        bool: True if IP is in any cluster or service network CIDR, False otherwise
     """
     try:
         ip = ipaddress.IPv4Address(ip_addr)
@@ -86,7 +98,8 @@ def get_node_private_ip(node_name):
     Get the private IP address of a node using ip addr command.
 
     This function executes 'ip addr' command on the node to retrieve
-    the first non-loopback IPv4 address that is not in the cluster network CIDR ranges.
+    the first non-loopback IPv4 address that is not in the cluster network
+    or service network CIDR ranges.
 
     Args:
         node_name (str): Name of the node
@@ -97,10 +110,11 @@ def get_node_private_ip(node_name):
 
     Raises:
         CommandFailed: If unable to retrieve IP address from the node
+        UnavailableResourceException: If unable to retrieve Network resource
     """
     nodes_obj = OCP(kind="node")
 
-    # Get cluster network CIDRs to exclude
+    # Get cluster and service network CIDRs to exclude
     cluster_cidrs = get_cluster_network_cidrs()
 
     # Run 'ip -o addr show' to get all IP addresses in one-line format
@@ -139,20 +153,20 @@ def get_node_private_ip(node_name):
             f"Unable to parse any IP addresses from node {node_name}. Output: {output}"
         )
 
-    # Find first IP that is not in cluster network
+    # Find first IP that is not in cluster or service network
     for interface, ip_addr, prefix in ip_addresses:
         if not is_ip_in_cluster_network(ip_addr, cluster_cidrs):
             logger.info(
                 f"Retrieved private IP {ip_addr}/{prefix} on interface {interface} "
-                f"from node {node_name} (excluded cluster network IPs)"
+                f"from node {node_name} (excluded cluster and service network IPs)"
             )
             return interface, ip_addr, prefix
 
-    # If all IPs are in cluster network, raise an error
-    cluster_cidr_strings = [str(cidr) for cidr in cluster_cidrs]
+    # If all IPs are in cluster or service network, raise an error
+    cidr_strings = [str(cidr) for cidr in cluster_cidrs]
     raise CommandFailed(
         f"No valid private IP found on node {node_name}. "
-        f"All non-loopback IP addresses are in cluster network CIDRs: {cluster_cidr_strings}. "
+        f"All non-loopback IP addresses are in cluster or service network CIDRs: {cidr_strings}. "
         f"Found IPs: {[f'{ip[1]}/{ip[2]} on {ip[0]}' for ip in ip_addresses]}"
     )
 
