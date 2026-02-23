@@ -534,6 +534,18 @@ rosa_hcp_required = pytest.mark.skipif(
     reason="Test runs ONLY on ROSA HCP cluster",
 )
 
+hcp_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA.get("deployment_type") == "managed_cp"
+        or config.hci_client_exist()
+        or any(
+            c.get("hosted_cluster_platform") == "aws"
+            for c in config.ENV_DATA.get("clusters", {}).values()
+        )
+    ),
+    reason="Test runs only on HCP clusters (ROSA HCP or AWS HCP)",
+)
+
 external_mode_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is not True,
     reason="Test will run on External Mode cluster only",
