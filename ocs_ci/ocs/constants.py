@@ -1951,6 +1951,7 @@ METRICS_EXPORTER_CONF = "ocs-metrics-exporter-ceph-conf"
 MANAGED_FUSION_AGENT = "managed-fusion-agent"
 OCS_CLIENT_OPERATOR = "ocs-client-operator"
 ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
+# Base VNET name - cluster name will be appended to make it unique per cluster
 ARO_VNET = "aro-vnet"
 ARO_VNET_ADDRESS_PREFIXES = "10.0.0.0/22"
 ARO_WORKER_SUBNET = "worker-subnet"
