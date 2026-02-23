@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ibm_cloud_managed,
 )
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import black_squad
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,23 @@ class TestScaleConnection(object):
     @skipif_ibm_cloud_managed
     @tier2
     @skipif_ocs_version("<4.20")
+    @black_squad
+    def test_connect_scale(self, setup_ui_class):
+        scale_connect_obj = PageNavigator()
+        external_systems = scale_connect_obj.nav_external_systems_page()
+        external_systems.connect_scale(
+            system_name="scale_cluster_1",
+            endpoint=config.ENV_DATA["scale_endpoint"],
+            port="443",
+            username=config.ENV_DATA["scale_username"],
+            password=config.ENV_DATA["scale_password"],
+            filesystem_name="fs1",
+        )
+
+    @ui
+    @skipif_ibm_cloud_managed
+    @tier2
+    @skipif_ocs_version("<4.21")
     @black_squad
     def test_add_delete_filesystem(self, setup_ui_class):
         scale_connect_obj = PageNavigator()
