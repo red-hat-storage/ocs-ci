@@ -1918,6 +1918,9 @@ def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
         operator_upgrade_timeout (int): timeout for operator upgrade
     """
     cluster_operators = get_all_cluster_operators()
+    if "aro" in cluster_operators:
+        log.debug("aro cluster operator check will be ignored!")
+        cluster_operators.remove("aro")
     for ocp_operator in cluster_operators:
         for sampler in TimeoutSampler(
             timeout=operator_upgrade_timeout,
