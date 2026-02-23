@@ -47,6 +47,10 @@ class AttachStorage(BaseUI):
         - Data protection policy: 3-way Replication
         - New StorageClass name: <device_class_value>-sc
 
+        Returns:
+            str: The device class value used in the form. This can be used for further validation
+                after the form is submitted and the storage is attached.
+
         """
         logger.info(
             "Filling the form for attaching storage with default values and submitting it."
@@ -81,3 +85,5 @@ class AttachStorage(BaseUI):
             expected_text=self.storage_cluster_title_text,
             timeout=90,
         )
+
+        return device_class_val
