@@ -1177,9 +1177,10 @@ def get_rgw_endpoint():
             if config.EXTERNAL_MODE.get("use_fqdn_rgw_endpoint"):
                 logger.info("using FQDN as rgw endpoint")
                 rgw_endpoint = each["hostname"]
-            elif config.EXTERNAL_MODE.get("use_ipv6_rgw_endpoint"):
+            elif config.DEPLOYMENT.get("ipv6"):
                 logger.info("using IPv6 as rgw endpoint")
-                rgw_endpoint = each["ipv6_address"]
+                # This is a workaround for DFBUGS-5859 till 4.22 rgw must use hostname in ipv6
+                rgw_endpoint = each["hostname"]
             else:
                 logger.info("using IPv4 as rgw endpoint")
                 rgw_endpoint = each["ip_address"]
