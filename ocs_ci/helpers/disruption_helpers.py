@@ -326,12 +326,15 @@ class FIOIntegrityChecker:
     INTEGRITY_FILE = "integrity_data"
     BG_IO_FILE = "bg_io_data"
 
+    DEFAULT_MAX_LATENCY_SEC = 30
+
     def __init__(
         self,
         pvc_factory,
         pod_factory,
         interfaces=None,
         pvc_size=5,
+        max_latency_sec=None,
     ):
         """
         Args:
@@ -340,6 +343,10 @@ class FIOIntegrityChecker:
             interfaces (list): Storage interfaces to test.
                 Defaults to [CEPHBLOCKPOOL, CEPHFILESYSTEM].
             pvc_size (int): Size of each PVC in GiB.
+            max_latency_sec (int): Maximum allowed p99 completion
+                latency in seconds for background FIO. If the p99
+                latency exceeds this value, the test fails indicating
+                IO was stalled. Defaults to 30.
         """
         self.pvc_factory = pvc_factory
         self.pod_factory = pod_factory
@@ -348,6 +355,11 @@ class FIOIntegrityChecker:
             constants.CEPHFILESYSTEM,
         ]
         self.pvc_size = pvc_size
+        self.max_latency_sec = (
+            max_latency_sec
+            if max_latency_sec is not None
+            else self.DEFAULT_MAX_LATENCY_SEC
+        )
         self.io_pods = []
         self._md5sums = {}
         self._bg_runtime = None
@@ -433,6 +445,7 @@ class FIOIntegrityChecker:
             "-------- FIOIntegrityChecker: waiting for background "
             "FIO to complete --------"
         )
+        max_latency_ns = self.max_latency_sec * 1_000_000_000
         for io_pod in self.io_pods:
             fio_result = io_pod.get_fio_results(timeout=self._bg_runtime + 300)
             job = fio_result["jobs"][0]
@@ -440,15 +453,46 @@ class FIOIntegrityChecker:
             write_iops = job["write"]["iops"]
             read_err = job.get("read", {}).get("io_error", 0)
             write_err = job.get("write", {}).get("io_error", 0)
+
+            read_clat_max = job["read"].get("clat_ns", {}).get("max", 0)
+            write_clat_max = job["write"].get("clat_ns", {}).get("max", 0)
+            read_clat_p99 = (
+                job["read"].get("clat_ns", {}).get("percentile", {}).get("99.000000", 0)
+            )
+            write_clat_p99 = (
+                job["write"]
+                .get("clat_ns", {})
+                .get("percentile", {})
+                .get("99.000000", 0)
+            )
+
             log.info(
                 f"FIO on pod '{io_pod.name}': "
                 f"Read IOPS={read_iops:.1f}, "
                 f"Write IOPS={write_iops:.1f}, "
-                f"Read errors={read_err}, Write errors={write_err}"
+                f"Read errors={read_err}, Write errors={write_err}, "
+                f"Read clat max={read_clat_max / 1e9:.2f}s "
+                f"p99={read_clat_p99 / 1e9:.2f}s, "
+                f"Write clat max={write_clat_max / 1e9:.2f}s "
+                f"p99={write_clat_p99 / 1e9:.2f}s"
             )
+
             assert read_err == 0 and write_err == 0, (
                 f"FIO reported IO errors on pod '{io_pod.name}': "
                 f"read_errors={read_err}, write_errors={write_err}"
+            )
+
+            worst_p99 = max(read_clat_p99, write_clat_p99)
+            if worst_p99 > max_latency_ns:
+                log.warning(
+                    f"IO stall detected on pod '{io_pod.name}': "
+                    f"p99 latency {worst_p99 / 1e9:.2f}s exceeds "
+                    f"threshold {self.max_latency_sec}s"
+                )
+            assert worst_p99 <= max_latency_ns, (
+                f"IO stall detected on pod '{io_pod.name}': "
+                f"p99 completion latency {worst_p99 / 1e9:.2f}s "
+                f"exceeds threshold of {self.max_latency_sec}s"
             )
 
         log.info(
