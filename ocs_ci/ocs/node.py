@@ -3495,10 +3495,10 @@ def get_pod_requests_per_node(worker_nodes=None):
         if not node or (worker_nodes and node not in worker_nodes):
             continue  # skip unscheduled pods and non-worker nodes
 
-        for container in pod["spec"].get("containers", []):
+        for container in pod_data["spec"].get("containers", []):
             requests = container.get("resources", {}).get("requests", {})
-            cpu_req = requests.get("cpu", "0")
-            mem_req = requests.get("memory", "0")
+            cpu_req = str(requests.get("cpu") or "0")
+            mem_req = str(requests.get("memory") or "0")
 
             # CPU conversion
             if cpu_req.endswith("m"):  # e.g. "500m"
