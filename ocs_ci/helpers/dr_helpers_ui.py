@@ -15,7 +15,6 @@ from selenium.common.exceptions import (
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
 from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
     wait_for_element_to_be_visible,
@@ -24,6 +23,13 @@ from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import get_running_acm_version
+from ocs_ci.ocs.exceptions import (
+    ResourceWrongStatusException,
+    TimeoutException,
+    UnexpectedBehaviour,
+)
+from ocs_ci.utility.utils import TimeoutSampler
+
 
 log = logging.getLogger(__name__)
 
@@ -973,3 +979,180 @@ def navigate_using_fleet_virtualization(acm_obj):
             acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
 
     return True
+
+
+def validate_failover_relocate_status_ui(
+    acm_obj,
+    workload_name=None,
+    primary_cluster_name=None,
+    target_cluster_name=None,
+    expected_status=None,
+    action=constants.ACTION_FAILOVER,
+):
+    """
+    Function to validate the specified application's DR health status on UI
+    and it's messages in popover window. In case of failover and relocate,
+    primary and target clusters will be validated
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_name(str): Name of the workload to validate the status
+        primary_cluster_name(str): Expected primary cluster name during failover/relocate in the popover
+        target_cluster_name(str): Expected Target cluster during failover/relocate in the popover
+        expected_status(str): expected status of the respective workload on UI
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    log.info("Navigating to the Applications page")
+    acm_obj.navigate_applications_page()
+    acm_obj.take_screenshot()
+
+    clear_filter = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["clear-filter"],
+        expected_text="Clear all filters",
+        timeout=10,
+    )
+    if clear_filter:
+        log.info("Clear existing filters")
+        acm_obj.do_click(acm_loc["clear-filter"])
+
+    log.info(f"Click on search bar for the workload {workload_name}")
+    acm_obj.do_click(acm_loc["search-bar"])
+    log.info("Clear existing text from search bar if any")
+    acm_obj.do_clear(acm_loc["search-bar"])
+    log.info("Enter the workload name to be searched")
+    acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_name)
+    acm_obj.take_screenshot()
+
+    log.info("Verifying DR status on UI...")
+    wait_for_text_result = TimeoutSampler(
+        timeout=600,
+        sleep=10,
+        func=acm_obj.wait_until_expected_text_is_found,
+        locator=acm_loc["dr-status"],
+        expected_text=expected_status,
+    )
+
+    if not wait_for_text_result.wait_for_func_status(result=True):
+        log.info(
+            f"DR status is not as expected as {expected_status}"
+            f" for the application {workload_name}"
+        )
+        current_status = acm_obj.get_element_text(acm_loc["dr-status"])
+        log.info(f"Current status is {current_status}")
+        acm_obj.take_screenshot()
+        raise ResourceWrongStatusException
+
+    log.info(
+        f"DR status is in expected state --> '{expected_status}' "
+        f" for the application {workload_name}"
+    )
+
+    for _ in range(10):
+        try:
+            log.info("Clicking on the dr status button...")
+            button_action = wait_for_element_to_be_clickable(
+                acm_loc["dr_status_button"]
+            )
+            acm_obj.driver.execute_script("arguments[0].click();", button_action)
+        except (TimeoutException, NoSuchElementException):
+            log.warning("Dr status button is not clickable yet, retrying...")
+            time.sleep(1)
+
+    log.info("Validating the message in popover...")
+    for _ in range(5):
+        current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
+        if current_pop_over_text:
+            break
+        log.info("Clicking the pop over again to fetch the Message")
+
+    acm_obj.take_screenshot()
+    current_pop_over_text = acm_obj.get_element_text(acm_loc["popover_text"])
+
+    if current_status == expected_status:
+        log.info(
+            f"DR health status is in expected state --> '{expected_status}' "
+            f" for the application {workload_name}"
+        )
+    else:
+        log.error("DR status is not as expected")
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour
+
+    if action == constants.ACTION_FAILOVER:
+        expected_popover_message = constants.DR_POPOVER_MESSAGE_FAILOVER
+        expected_popover_message = f"{expected_popover_message} {target_cluster_name}"
+        log.info(f"Validating Failover popover message: {expected_popover_message}")
+
+    else:
+        expected_popover_message = constants.DR_POPOVER_MESSAGE_RELOCATE
+        expected_popover_message = f"{expected_popover_message} {primary_cluster_name}"
+        log.info(f"Validating Relocate popover message: {expected_popover_message}")
+
+    if expected_popover_message and expected_popover_message != current_pop_over_text:
+        log.error(
+            f"current popover message is '{current_pop_over_text}' "
+            f"but expected is '{expected_popover_message}'"
+        )
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour
+
+    log.info("Popover message validation is successful")
+    log.info(
+        f"Expected popover message '{expected_popover_message}' found "
+        f"for the workload {workload_name}"
+    )
+
+    validate_ui_progression(acm_obj, action)
+
+
+def validate_ui_progression(acm_obj, action):
+    """
+    Function to validate UI progression based on action type (Failover or Relocate)
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        action (str): action type - either "Failover" or "Relocate"
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    if action == constants.ACTION_FAILOVER:
+        log.info("Validating UI progression for Failover action")
+        failover_phases = [
+            "failover_phase_preparing",
+            "failover_phase_failover",
+            "failover_phase_restoring",
+            "failover_phase_clean_up",
+        ]
+        expected_phases = ["Preparing", "Failover", "Restoring", "Clean Up"]
+
+        for phase_locator, expected_phase in zip(failover_phases, expected_phases):
+            phase_text = acm_obj.get_element_text(acm_loc[phase_locator])
+            log.info(f"Validating phase: {expected_phase}, current text: {phase_text}")
+            if expected_phase in phase_text:
+                log.info(f"Phase '{expected_phase}' found successfully")
+            else:
+                log.error(f"Phase '{expected_phase}' not found, got: {phase_text}")
+                acm_obj.take_screenshot()
+                raise UnexpectedBehaviour
+
+    elif action == constants.ACTION_RELOCATE:
+        log.info("Validating UI progression for Relocate action")
+        relocate_phases = [
+            "relocate_phase_preparing",
+            "relocate_phase_syncing",
+            "relocate_phase_restoring",
+            "relocate_phase_cleanup",
+        ]
+        expected_phases = ["Preparing", "Syncing", "Restoring", "Cleanup"]
+
+        for phase_locator, expected_phase in zip(relocate_phases, expected_phases):
+            phase_text = acm_obj.get_element_text(acm_loc[phase_locator])
+            log.info(f"Validating phase: {expected_phase}, current text: {phase_text}")
+            if expected_phase in phase_text:
+                log.info(f"Phase '{expected_phase}' found successfully")
+            else:
+                log.error(f"Phase '{expected_phase}' not found, got: {phase_text}")
+                acm_obj.take_screenshot()
+                raise UnexpectedBehaviour
