@@ -1,6 +1,7 @@
 import json
 import random
 import logging
+import time
 
 import pytest
 
@@ -22,10 +23,14 @@ from ocs_ci.ocs.node import (
     schedule_nodes,
     get_node_pods,
     get_worker_nodes,
+    wait_for_nodes_status,
 )
 from ocs_ci.ocs import node
+from ocs_ci.ocs import ocp
+from ocs_ci.ocs.platform_nodes import HypershiftAWSNode
 from ocs_ci.ocs.resources.pod import get_osd_pods
-from ocs_ci.utility.utils import get_random_str, ceph_health_check
+from ocs_ci.helpers.disruption_helpers import FIOIntegrityChecker
+from ocs_ci.utility.utils import get_random_str, ceph_health_check, TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -147,52 +152,37 @@ class TestAddNodeToHubWithClientIO(ManageTest):
     @tier4a
     @brown_squad
     @hcp_required
+    @polarion_id("OCS-7715")
     def test_add_hub_node_verify_client_io(self, add_nodes, pvc_factory, pod_factory):
         """
         Add OCS nodes to the hub cluster and verify rebalance completes
-        while client cluster IO runs without errors.
+        while client cluster IO runs without errors. During the hub node
+        add and rebalance, FIO runs on both RBD and CephFS PVCs on the
+        client cluster. After the operation, data integrity is verified
+        via md5sum and FIO error counters.
 
         Steps:
-        1. Switch to client cluster, create PVC and pod, start background IO
-        2. Switch back to hub cluster
-        3. Add OCS nodes to the hub (same as test_add_ocs_node)
-        4. Wait for ceph rebalance to complete
-        5. Switch to client cluster, verify IO completed without errors
+        1. Switch to client cluster, write integrity files on RBD and
+           CephFS, compute md5sum, start background FIO
+        2. Switch back to hub cluster, add OCS nodes
+        3. Wait for ceph rebalance to complete
+        4. Wait for background FIO, check IO errors and md5sum integrity
         """
-        io_file = "/var/lib/www/html/io_test_file"
-
-        log.info("Creating PVC and pod on client cluster for background IO")
+        log.info("-------- Setting up IO on client cluster --------")
         with config.RunWithFirstConsumerConfigContextIfAvailable():
-            pvc_obj = pvc_factory(interface=constants.CEPHBLOCKPOOL, size=10)
-            io_pod = pod_factory(pvc=pvc_obj)
-            log.info(f"Starting background IO on client pod '{io_pod.name}'")
-            io_pod.exec_cmd_on_pod(
-                command=(
-                    f"bash -c 'nohup sh -c \""
-                    f"while true; do dd if=/dev/urandom of={io_file} "
-                    f"bs=4k count=256 conv=fsync 2>/dev/null; done"
-                    f"\" > /dev/null 2>&1 &'"
-                ),
-                timeout=30,
-            )
+            integrity_checker = FIOIntegrityChecker(pvc_factory, pod_factory)
+            integrity_checker.start_io(bg_runtime=500)
 
-        log.info("Adding OCS nodes to hub cluster")
+        log.info("-------- Adding OCS nodes to hub cluster --------")
         add_nodes(ocs_nodes=True)
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=3600
         ), "Data re-balance failed to complete"
 
-        log.info("Verifying client cluster IO was successful")
+        log.info("-------- Verifying client cluster IO integrity --------")
         with config.RunWithFirstConsumerConfigContextIfAvailable():
-            result = io_pod.exec_cmd_on_pod(
-                command=f"ls -la {io_file}",
-                out_yaml_format=False,
-            )
-        log.info(f"IO file on client pod: {result}")
-        assert io_file in str(
-            result
-        ), f"IO file '{io_file}' not found on client pod '{io_pod.name}'"
+            integrity_checker.wait_and_verify()
 
 
 @ignore_leftovers
@@ -216,9 +206,7 @@ class TestAddNodeToClientCluster(ManageTest):
                 )
                 try:
                     with config.RunWithProviderConfigContextIfAvailable():
-                        from ocs_ci.ocs import ocp as ocp_module
-
-                        nodepool_ocp = ocp_module.OCP(
+                        nodepool_ocp = ocp.OCP(
                             kind="NodePool",
                             namespace=constants.CLUSTERS_NAMESPACE,
                             resource_name=self._np_name,
@@ -239,43 +227,118 @@ class TestAddNodeToClientCluster(ManageTest):
     @tier4a
     @brown_squad
     @hcp_required
-    def test_add_client_node_verify_odf_scheduled(self, scale_back_nodepool, add_nodes):
+    @polarion_id("OCS-7714")
+    def test_add_client_node_verify_odf_scheduled(
+        self, scale_back_nodepool, pvc_factory, pod_factory
+    ):
         """
         Add a worker node to the client cluster, label it with the OCS label,
         and verify ODF client pods (cephfs/rbd node plugins) schedule on it.
+        During the node scaling operation, FIO runs on both RBD and CephFS
+        PVCs. After the operation, data integrity is verified via md5sum
+        and FIO error counters.
 
         Steps:
         1. Record initial nodepool size and worker nodes
-        2. Switch to client cluster context
-        3. Add 1 worker node and label it for OCS
-        4. Verify new node appears in the cluster
-        5. Verify CSI node plugin pods are scheduled on the new node
+        2. Write integrity files on RBD and CephFS PVCs, compute md5sum,
+           start background FIO
+        3. Scale up the NodePool to add 1 worker node
+        4. Wait for the new node to appear and become Ready
+        5. Label the new node for OCS
+        6. Verify CSI node plugin pods are scheduled on the new node
+        7. Wait for background FIO, check IO errors and md5sum integrity
         """
         with config.RunWithFirstConsumerConfigContextIfAvailable():
-            from ocs_ci.ocs.platform_nodes import HypershiftAWSNode
-
             cluster_name = config.ENV_DATA.get("cluster_name")
             node_util = HypershiftAWSNode()
             nodepools = node_util._get_nodepools_for_cluster(cluster_name)
-            if nodepools:
-                self._np_name = nodepools[0]["metadata"]["name"]
-                self._initial_replicas = nodepools[0].get("spec", {}).get("replicas", 0)
+            if not nodepools:
+                raise Exception(f"No NodePool found for cluster '{cluster_name}'")
+
+            self._np_name = nodepools[0]["metadata"]["name"]
+            self._initial_replicas = nodepools[0].get("spec", {}).get("replicas", 0)
+            log.info(
+                f"NodePool '{self._np_name}' initial replicas: "
+                f"{self._initial_replicas}"
+            )
 
             initial_workers = get_worker_nodes()
-            log.info(f"Initial worker nodes: {len(initial_workers)}")
+            log.info(
+                f"Initial worker nodes ({len(initial_workers)}): " f"{initial_workers}"
+            )
 
-            add_nodes(ocs_nodes=True, node_count=1)
+            integrity_checker = FIOIntegrityChecker(pvc_factory, pod_factory)
+            integrity_checker.start_io(bg_runtime=500)
 
-            current_workers = get_worker_nodes()
-            new_nodes = list(set(current_workers) - set(initial_workers))
-            assert new_nodes, "No new worker node appeared after add_nodes"
-            log.info(f"New node(s) added: {new_nodes}")
+            log.info(
+                "-------- Starting node add operation: scaling "
+                f"NodePool '{self._np_name}' from "
+                f"{self._initial_replicas} to "
+                f"{self._initial_replicas + 1} --------"
+            )
+            node_op_start = time.time()
+
+            node_util.create_and_attach_nodes_to_cluster(
+                node_conf={}, node_type=constants.RHCOS, num_nodes=1
+            )
+
+            new_nodes = []
+            node_wait_timeout = 450
+            log.info(
+                f"Waiting up to {node_wait_timeout}s for a new worker "
+                f"node to appear in the cluster"
+            )
+            for sample in TimeoutSampler(
+                timeout=node_wait_timeout,
+                sleep=30,
+                func=get_worker_nodes,
+            ):
+                current_workers = sample
+                new_nodes = list(set(current_workers) - set(initial_workers))
+                if new_nodes:
+                    log.info(f"New node(s) detected: {new_nodes}")
+                    break
+                log.info(
+                    f"No new nodes yet. Current workers "
+                    f"({len(current_workers)}): {current_workers}"
+                )
+
+            assert new_nodes, (
+                f"No new worker node appeared after scaling NodePool. "
+                f"Initial workers: {initial_workers}, "
+                f"Current workers: {get_worker_nodes()}, "
+                f"NodePool '{self._np_name}' expected replicas: "
+                f"{self._initial_replicas + 1}"
+            )
 
             new_node_name = new_nodes[0]
-            from ocs_ci.ocs import ocp
+            log.info(f"Waiting for new node '{new_node_name}' to become Ready")
+            wait_for_nodes_status(
+                node_names=[new_node_name],
+                status=constants.NODE_READY,
+                timeout=300,
+            )
+
+            log.info(f"Labeling new node '{new_node_name}' with OCS label")
+            node_obj = ocp.OCP(kind="node")
+            node_obj.add_label(
+                resource_name=new_node_name,
+                label=constants.OPERATOR_NODE_LABEL,
+            )
+            log.info(
+                f"Successfully labeled '{new_node_name}' with "
+                f"{constants.OPERATOR_NODE_LABEL}"
+            )
+
+            node_op_duration = time.time() - node_op_start
+            log.info(
+                "-------- Node add operation completed in "
+                f"{node_op_duration:.0f}s --------"
+            )
 
             pod_obj = ocp.OCP(
-                kind="Pod", namespace=config.ENV_DATA["cluster_namespace"]
+                kind="Pod",
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             all_pods = pod_obj.get(
                 field_selector=f"spec.nodeName={new_node_name}",
@@ -289,6 +352,8 @@ class TestAddNodeToClientCluster(ManageTest):
                 f"CSI nodeplugin pods on new node '{new_node_name}': "
                 f"{nodeplugin_pods}"
             )
-            assert (
-                nodeplugin_pods
-            ), f"No CSI nodeplugin pods found on new node '{new_node_name}'"
+            assert nodeplugin_pods, (
+                f"No CSI nodeplugin pods found on new node " f"'{new_node_name}'"
+            )
+
+            integrity_checker.wait_and_verify()

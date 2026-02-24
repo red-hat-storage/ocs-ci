@@ -1,9 +1,11 @@
 import logging
 import os
 import random
+import time
 
 from ocs_ci.helpers.helpers import get_provisioner_label, get_node_plugin_label
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler, run_async, run_cmd
@@ -295,3 +297,180 @@ def delete_resource_multiple_times(resource_name, num_of_iterations):
         )
         d.set_resource(resource_name)
         d.delete_resource(resource_id)
+
+
+class FIOIntegrityChecker:
+    """
+    Verifies data integrity on RBD and CephFS PVCs during disruptive
+    operations using a three-phase approach:
+
+    1. **Write phase**: Write a known file with FIO (size-based).
+       Compute and store md5sum of each file.
+    2. **Background IO phase**: Start a time-based FIO run_io
+       (randrw, no verify) that runs throughout the disruptive
+       operation.
+    3. **Verify phase**: Wait for FIO to complete, check that it
+       finished without errors. Re-compute md5sum of the integrity
+       file and compare with the stored checksum.
+
+    Usage::
+
+        checker = FIOIntegrityChecker(pvc_factory, pod_factory)
+        checker.start_io()
+
+        # ... perform disruptive operation ...
+
+        checker.wait_and_verify()
+    """
+
+    INTEGRITY_FILE = "integrity_data"
+    BG_IO_FILE = "bg_io_data"
+
+    def __init__(
+        self,
+        pvc_factory,
+        pod_factory,
+        interfaces=None,
+        pvc_size=5,
+    ):
+        """
+        Args:
+            pvc_factory: Pytest fixture for creating PVCs.
+            pod_factory: Pytest fixture for creating pods.
+            interfaces (list): Storage interfaces to test.
+                Defaults to [CEPHBLOCKPOOL, CEPHFILESYSTEM].
+            pvc_size (int): Size of each PVC in GiB.
+        """
+        self.pvc_factory = pvc_factory
+        self.pod_factory = pod_factory
+        self.interfaces = interfaces or [
+            constants.CEPHBLOCKPOOL,
+            constants.CEPHFILESYSTEM,
+        ]
+        self.pvc_size = pvc_size
+        self.io_pods = []
+        self._md5sums = {}
+        self._bg_runtime = None
+        self._start_time = None
+
+    def start_io(self, size="1G", bg_runtime=900, bs="4K", rate="4m"):
+        """
+        Create PVCs and pods, write integrity files with FIO, compute
+        md5sums, then start background FIO (time-based, no verify).
+
+        Args:
+            size (str): Size of the integrity file to write.
+            bg_runtime (int): Background FIO runtime in seconds.
+                Should be longer than the expected operation duration.
+            bs (str): Block size for FIO.
+            rate (str): IO rate limit for background FIO.
+        """
+        self._start_time = time.time()
+        self._bg_runtime = bg_runtime
+
+        log.info(
+            "-------- FIOIntegrityChecker: creating PVCs and "
+            "writing integrity files --------"
+        )
+        for interface in self.interfaces:
+            pvc_obj = self.pvc_factory(interface=interface, size=self.pvc_size)
+            io_pod = self.pod_factory(pvc=pvc_obj, interface=interface)
+            self.io_pods.append(io_pod)
+
+            log.info(
+                f"Writing {size} integrity file on pod "
+                f"'{io_pod.name}' ({interface})"
+            )
+            io_pod.run_io(
+                storage_type="fs",
+                size=size,
+                io_direction="wo",
+                runtime=0,
+                bs="1M",
+                depth=4,
+                rate="100m",
+                fio_filename=self.INTEGRITY_FILE,
+            )
+
+        for io_pod in self.io_pods:
+            io_pod.get_fio_results()
+            log.info(f"FIO write completed on pod '{io_pod.name}'")
+
+        log.info("-------- FIOIntegrityChecker: computing md5sums --------")
+        for io_pod in self.io_pods:
+            md5 = cal_md5sum(io_pod, self.INTEGRITY_FILE)
+            self._md5sums[io_pod.name] = md5
+            log.info(f"md5sum for pod '{io_pod.name}': {md5}")
+
+        log.info(
+            "-------- FIOIntegrityChecker: starting background "
+            f"FIO (runtime={bg_runtime}s) --------"
+        )
+        for io_pod in self.io_pods:
+            io_pod.run_io(
+                storage_type="fs",
+                size=size,
+                io_direction="rw",
+                runtime=bg_runtime,
+                bs=bs,
+                depth=4,
+                rate=rate,
+                fio_filename=self.BG_IO_FILE,
+            )
+            log.info(f"Background FIO started on pod '{io_pod.name}'")
+
+    def wait_and_verify(self):
+        """
+        Wait for background FIO to complete, check results for errors,
+        then re-compute md5sum of the integrity file and compare with
+        the stored checksum.
+
+        Raises:
+            AssertionError: If FIO reported errors or md5sum does not
+                match.
+        """
+        log.info(
+            "-------- FIOIntegrityChecker: waiting for background "
+            "FIO to complete --------"
+        )
+        for io_pod in self.io_pods:
+            fio_result = io_pod.get_fio_results(timeout=self._bg_runtime + 300)
+            job = fio_result["jobs"][0]
+            read_iops = job["read"]["iops"]
+            write_iops = job["write"]["iops"]
+            read_err = job.get("read", {}).get("io_error", 0)
+            write_err = job.get("write", {}).get("io_error", 0)
+            log.info(
+                f"FIO on pod '{io_pod.name}': "
+                f"Read IOPS={read_iops:.1f}, "
+                f"Write IOPS={write_iops:.1f}, "
+                f"Read errors={read_err}, Write errors={write_err}"
+            )
+            assert read_err == 0 and write_err == 0, (
+                f"FIO reported IO errors on pod '{io_pod.name}': "
+                f"read_errors={read_err}, write_errors={write_err}"
+            )
+
+        log.info(
+            "-------- FIOIntegrityChecker: verifying data "
+            "integrity via md5sum --------"
+        )
+        for io_pod in self.io_pods:
+            md5_verify = cal_md5sum(io_pod, self.INTEGRITY_FILE)
+            original = self._md5sums[io_pod.name]
+            log.info(
+                f"Pod '{io_pod.name}': original md5={original}, "
+                f"current md5={md5_verify}"
+            )
+            assert md5_verify == original, (
+                f"Data integrity check FAILED on pod "
+                f"'{io_pod.name}': md5sum changed from "
+                f"{original} to {md5_verify}"
+            )
+            log.info(f"Data integrity verified on pod '{io_pod.name}'")
+
+        elapsed = time.time() - self._start_time
+        log.info(
+            f"-------- FIOIntegrityChecker: all checks passed "
+            f"(total elapsed: {elapsed:.0f}s) --------"
+        )
