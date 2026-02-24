@@ -13,6 +13,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     CommandFailed,
 )
+from ocs_ci.ocs.node import get_worker_nodes
 
 
 logger = logging.getLogger(__name__)
@@ -208,12 +209,7 @@ def annotate_worker_nodes_with_mon_ip():
     the 'ip addr' command and annotates the node with that IP address.
     """
     nodes_obj = OCP(kind="node")
-    nodes = nodes_obj.get().get("items", [])
-    worker_nodes = [
-        node["metadata"]["name"]
-        for node in nodes
-        if constants.WORKER_LABEL in node["metadata"]["labels"]
-    ]
+    worker_nodes = get_worker_nodes()
     if not worker_nodes:
         raise UnavailableResourceException("No worker node found!")
 
@@ -248,12 +244,7 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
         dict: updated storage storage cluster yaml
     """
     if config.DEPLOYMENT.get("enable_data_replication_separation"):
-        nodes = OCP(kind="node").get().get("items", [])
-        worker_nodes = [
-            node["metadata"]["name"]
-            for node in nodes
-            if constants.WORKER_LABEL in node["metadata"]["labels"]
-        ]
+        worker_nodes = get_worker_nodes()
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
 
