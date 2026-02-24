@@ -207,9 +207,11 @@ def annotate_worker_nodes_with_mon_ip():
 
     This function retrieves the private IP address from each worker node using
     the 'ip addr' command and annotates the node with that IP address.
+    Master nodes are also included to ensure all nodes hosting OCS/ODF components
+    receive the annotation.
     """
     nodes_obj = OCP(kind="node")
-    worker_nodes = get_worker_nodes()
+    worker_nodes = get_worker_nodes(skip_master_nodes=False)
     if not worker_nodes:
         raise UnavailableResourceException("No worker node found!")
 

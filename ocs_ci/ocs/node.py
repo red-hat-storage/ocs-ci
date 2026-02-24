@@ -1322,10 +1322,16 @@ def get_master_nodes():
     return master_nodes_list
 
 
-def get_worker_nodes():
+def get_worker_nodes(skip_master_nodes=None):
     """
     Fetches all worker nodes.
-    In case of HCI provider cluster, it will exclude the master nodes.
+    In case of HCI provider cluster, it will exclude the master nodes by default.
+
+    Args:
+        skip_master_nodes (bool): Whether to exclude master nodes from the result.
+            If None (default), master nodes are excluded only for HCI provider clusters.
+            If True, master nodes are always excluded.
+            If False, master nodes are never excluded.
 
     Returns:
         list: List of names of worker nodes
@@ -1348,7 +1354,14 @@ def get_worker_nodes():
             if node.get("metadata").get("name") not in infra_node_ids
         ]
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
-    if is_hci_provider_cluster():
+
+    # Determine whether to skip master nodes
+    should_skip_masters = skip_master_nodes
+    if should_skip_masters is None:
+        # Auto-detect: skip masters only for HCI provider clusters
+        should_skip_masters = is_hci_provider_cluster()
+
+    if should_skip_masters:
         master_node_list = get_master_nodes()
         if not (
             len(get_all_nodes()) == 3
