@@ -47,7 +47,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
@@ -1544,6 +1544,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
     """
 
     def factory(bucket_factory_session, mcg_obj_session):
+        import pdb;pdb.set_trace()
 
         noobaa_obj = OCP(
             kind=constants.NOOBAA_RESOURCE_NAME,
@@ -1568,7 +1569,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             "waiting for some time for deletion and recreation of all noobaa resources"
         )
 
-        time.sleep(60)
+        time.sleep(180)
         pvc_obj = OCP(
             kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -1590,15 +1591,33 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         pod_obj = OCP(
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        noobaa_pods = get_noobaa_pods()
-        logger.info("Waiting Validate noobaa pods are up and running")
 
-        pod_obj.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_count=len(noobaa_pods),
-            selector=constants.NOOBAA_APP_LABEL,
-            timeout=1500,
-        )
+        max_retries = 3
+        last_error = None
+        for attempt in range(max_retries):
+            noobaa_pods = get_noobaa_pods()
+            expected_count = len(noobaa_pods)
+            logger.info(
+                "Waiting Validate noobaa pods are up and running "
+                f"(attempt {attempt + 1}/{max_retries}, expected count={expected_count})"
+            )
+            try:
+                pod_obj.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    resource_count=expected_count,
+                    selector=constants.NOOBAA_APP_LABEL,
+                    timeout=600,
+                )
+                break
+            except TimeoutExpiredError as ex:
+                last_error = ex
+                if attempt + 1 < max_retries:
+                    logger.warning(
+                        f"Wait failed (count may have changed). Retrying with fresh "
+                        f"noobaa pod count (retry {attempt + 1}/{max_retries})."
+                    )
+                else:
+                    raise last_error
         logger.info("Waiting completed Validate noobaa pods are up and running")
 
         # verify noobaa statefulset is present
