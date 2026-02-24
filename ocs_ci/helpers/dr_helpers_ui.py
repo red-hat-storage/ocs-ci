@@ -1156,3 +1156,77 @@ def validate_ui_progression(acm_obj, action):
                 log.error(f"Phase '{expected_phase}' not found, got: {phase_text}")
                 acm_obj.take_screenshot()
                 raise UnexpectedBehaviour
+
+
+def validate_dr_status_ui(
+    acm_obj,
+    workload_name=None,
+    expected_status=None,
+    timeout=600,
+):
+    """
+    Function to validate the current DR status of a specified workload on the ACM UI
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_name (str): Name of the workload to validate the DR status
+        expected_status (str): Expected DR status of the workload (e.g., "Healthy", "Unhealthy")
+        timeout (int): Timeout in seconds to wait for the expected status to be found
+
+    Returns:
+        bool: True if the DR status matches the expected status, raises exception otherwise
+
+    """
+    if not workload_name or not expected_status:
+        log.error("workload_name and expected_status are mandatory parameters")
+        raise ValueError(
+            "Parameters 'workload_name' and 'expected_status' are required"
+        )
+
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    log.info("Navigating to the Applications page")
+    acm_obj.navigate_applications_page()
+    acm_obj.take_screenshot()
+
+    clear_filter = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["clear-filter"],
+        expected_text="Clear all filters",
+        timeout=10,
+    )
+    if clear_filter:
+        log.info("Clear existing filters")
+        acm_obj.do_click(acm_loc["clear-filter"])
+
+    log.info(f"Click on search bar to search for workload {workload_name}")
+    acm_obj.do_click(acm_loc["search-bar"])
+    log.info("Clear existing text from search bar if any")
+    acm_obj.do_clear(acm_loc["search-bar"])
+    log.info(f"Enter the workload name {workload_name} to be searched")
+    acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_name)
+    acm_obj.take_screenshot()
+
+    log.info(f"Verifying DR status '{expected_status}' for workload {workload_name}...")
+    wait_for_text_result = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=acm_obj.wait_until_expected_text_is_found,
+        locator=acm_loc["dr-status"],
+        expected_text=expected_status,
+    )
+
+    if not wait_for_text_result.wait_for_func_status(result=True):
+        log.error(
+            f"DR status is not as expected '{expected_status}' "
+            f"for the workload {workload_name}"
+        )
+        current_status = acm_obj.get_element_text(acm_loc["dr-status"])
+        log.error(f"Current DR status is {current_status}")
+        acm_obj.take_screenshot()
+        raise ResourceWrongStatusException
+
+    log.info(
+        f"DR status validation successful --> '{expected_status}' "
+        f"for the workload {workload_name}"
+    )
+    acm_obj.take_screenshot()
+    return True
