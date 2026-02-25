@@ -1209,6 +1209,31 @@ def close_browser():
     garbage_collector_webdriver()
 
 
+def logout_ui():
+    """
+    Logout from OpenShift Console via UI.
+
+    Clicks the user dropdown menu in the masthead and selects 'Log out'.
+    After logout, the browser remains open at the login page.
+
+    Raises:
+        TimeoutException: If user dropdown or logout button not found.
+
+    """
+    logger.info("Logging out from OpenShift Console")
+    login_loc = locators_for_current_ocp_version()["login"]
+
+    # Click user dropdown menu
+    user_dropdown = wait_for_element_to_be_clickable(login_loc["user_dropdown"], 30)
+    user_dropdown.click()
+
+    # Click logout button
+    logout_btn = wait_for_element_to_be_clickable(login_loc["logout_button"], 30)
+    logout_btn.click()
+
+    logger.info("Successfully logged out from OpenShift Console")
+
+
 def proceed_to_login_console():
     """
     Proceed to the login console, if needed to confirm this action in a page that appears before.

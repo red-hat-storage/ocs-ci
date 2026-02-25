@@ -564,16 +564,21 @@ class AzureAroUtil(AZURE):
         cluster_resource_group = config.ENV_DATA.get(
             "azure_cluster_resource_group_name", f"aro-{cluster_name}"
         )
-        vnet = config.ENV_DATA.get("aro_vnet", "aro-vnet")
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        base_domain = config.ENV_DATA["base_domain"]
+
+        # Create network resources with cluster-specific VNET name
+        self.create_network(cluster_name)
+
+        # Get the created VNET and subnet names from ENV_DATA (set by create_network)
+        vnet = config.ENV_DATA.get("aro_vnet")
         master_subnet = config.ENV_DATA.get(
             "aro_master_subnet", constants.ARO_MASTER_SUBNET
         )
         worker_subnet = config.ENV_DATA.get(
             "aro_worker_subnet", constants.ARO_WORKER_SUBNET
         )
-        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        base_domain = config.ENV_DATA["base_domain"]
-        self.create_network()
+
         cmd = (
             f"az aro create --resource-group {resource_group} --cluster-resource-group {cluster_resource_group} "
             f"--name {cluster_name} --version {ocp_version} --vnet {vnet} --master-subnet {master_subnet} "
@@ -664,11 +669,24 @@ class AzureAroUtil(AZURE):
                 if attempts >= maximum_attempts:
                     raise
 
-    def create_network(self):
+    def create_network(self, cluster_name=None):
         """
         Create network related stuff for the cluster.
+        Each cluster gets its own VNET with cluster-specific name to allow multiple deployments.
+
+        Args:
+            cluster_name (str): Name of the cluster. If not provided, will use cluster_name from ENV_DATA.
+
         """
-        vnet = config.ENV_DATA.get("aro_vnet", "aro-vnet")
+        # Get cluster name from parameter or ENV_DATA
+        if not cluster_name:
+            cluster_name = config.ENV_DATA.get("cluster_name")
+
+        # Create cluster-specific VNET name by appending cluster name
+        vnet = config.ENV_DATA.get("aro_vnet")
+        if not vnet:
+            vnet = f"{constants.ARO_VNET}-{cluster_name}"
+
         vnet_address_prefixes = config.ENV_DATA.get(
             "aro_vnet_address_prefixes", constants.ARO_VNET_ADDRESS_PREFIXES
         )
@@ -687,15 +705,24 @@ class AzureAroUtil(AZURE):
             constants.ARO_WORKER_SUBNET_ADDRESS_PREFIXES,
         )
         resource_group = config.ENV_DATA.get("azure_base_domain_resource_group_name")
+
+        logger.info(
+            f"Creating VNET '{vnet}' with address prefixes '{vnet_address_prefixes}' "
+            f"for cluster '{cluster_name}'"
+        )
         vnet_cmd = (
             f"az network vnet create --resource-group {resource_group} --name {vnet} "
             f"--address-prefixes {vnet_address_prefixes}"
         )
         exec_cmd(vnet_cmd)
+
         for subnet, prefixes_address in {
             master_subnet: master_subnet_address_prefixes,
             worker_subnet: worker_subnet_address_prefixes,
         }.items():
+            logger.info(
+                f"Creating subnet '{subnet}' with address prefixes '{prefixes_address}' in VNET '{vnet}'"
+            )
             subnet_prefixes_cmd = (
                 f"az network vnet subnet create --resource-group {resource_group} --vnet-name {vnet} "
                 f"--name {subnet} --address-prefixes {prefixes_address} --service-endpoints Microsoft.ContainerRegistry"
@@ -703,6 +730,14 @@ class AzureAroUtil(AZURE):
             )
 
             exec_cmd(subnet_prefixes_cmd)
+
+        # Store the created VNET name in ENV_DATA for later use
+        config.ENV_DATA["aro_vnet"] = vnet
+
+        logger.info(
+            f"Successfully created network resources for cluster '{cluster_name}': "
+            f"VNET='{vnet}', Master subnet='{master_subnet}', Worker subnet='{worker_subnet}'"
+        )
 
     def get_cluster_details(self, cluster_name):
         """
@@ -814,6 +849,29 @@ class AzureAroUtil(AZURE):
         )
         config.RUN["kubeconfig"] = kubeconfig_path
 
+    def delete_network(self, cluster_name, resource_group):
+        """
+        Delete the VNET and associated resources for the cluster.
+
+        Args:
+            cluster_name (str): Cluster name
+            resource_group (str): Azure resource group name
+
+        """
+        # Get VNET name - either from ENV_DATA or construct it
+        vnet = config.ENV_DATA.get("aro_vnet")
+        if not vnet:
+            vnet = f"{constants.ARO_VNET}-{cluster_name}"
+
+        logger.info(f"Deleting VNET '{vnet}' for cluster '{cluster_name}'")
+        try:
+            cmd = f"az network vnet delete --resource-group {resource_group} --name {vnet}"
+            out = exec_cmd(cmd, timeout=600).stdout
+            logger.info(f"VNET deletion output: {out}")
+        except CommandFailed as e:
+            logger.warning(f"Failed to delete VNET '{vnet}': {e}")
+            logger.info("VNET may have already been deleted or does not exist")
+
     def destroy_cluster(self, cluster_name, resource_group):
         """
         Destroy the cluster in Azure ARO.
@@ -827,6 +885,9 @@ class AzureAroUtil(AZURE):
         cmd = f"az aro delete --resource-group {resource_group} --name {cluster_name} --yes"
         out = exec_cmd(cmd, timeout=3600).stdout
         logger.info(f"Destroy command output: {out}")
+
+        # Delete the VNET after cluster deletion
+        self.delete_network(cluster_name, resource_group)
 
 
 def azure_storageaccount_check():

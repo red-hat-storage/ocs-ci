@@ -27,5 +27,3 @@ spec:
       config:
         - destination: fd01:db8:1:1::/96
           next-hop-interface: odf-pub-shim
-        - destination: fd01:db8:2:1::/96
-          next-hop-interface: odf-pub-shim

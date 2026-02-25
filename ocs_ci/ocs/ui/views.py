@@ -28,6 +28,9 @@ login = {
         By.CSS_SELECTOR,
     ),
     "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),
+    # Console logout locators
+    "user_dropdown": ("//button[contains(@class, 'co-user-menu')]", By.XPATH),
+    "logout_button": ("//span[text()='Log out']/ancestor::button", By.XPATH),
 }
 
 ibm_cloud_managed = (
@@ -334,11 +337,11 @@ deployment_4_21 = {
         "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
         By.XPATH,
     ),
-    "0.5 TiB": ('//button[@data-test-dropdown-menu="0.5 TiB"]', By.XPATH),
-    "1 TiB": ('//button[@data-test-dropdown-menu="1 TiB"]', By.XPATH),
-    "2 TiB": ('//button[@data-test-dropdown-menu="2 TiB"]', By.XPATH),
-    "4 TiB": ('//button[@data-test-dropdown-menu="4 TiB"]', By.XPATH),
-    "8 TiB": ('//button[@data-test-dropdown-menu="8 TiB"]', By.XPATH),
+    "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "1 TiB": ('//li[@data-test-dropdown-menu="1 TiB"]/button', By.XPATH),
+    "2 TiB": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.XPATH),
+    "4 TiB": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.XPATH),
+    "8 TiB": ('//li[@data-test-dropdown-menu="8 TiB"]/button', By.XPATH),
     "drop_down_performance": (
         "//button[contains(@class,'odf-configure-performance__selector')]",
         By.XPATH,
@@ -2974,6 +2977,41 @@ bucket_tab = {
     "expired_markers_checkbox": (
         "#expired-delete-marker",
         By.CSS_SELECTOR,
+    ),
+    "s3_login_project_dropdown": (
+        "//span[text()='Secret namespace']/ancestor::div[contains(@class, 'form__group')]"
+        "//div[contains(@class, 'odf-s3-secret__dropdown')]//button",
+        By.XPATH,
+    ),
+    "s3_login_secret_dropdown": (
+        "//span[text()='Secret name']/ancestor::div[contains(@class, 'form__group')]"
+        "//div[contains(@class, 'odf-s3-secret__dropdown')]//button",
+        By.XPATH,
+    ),
+    "s3_login_dropdown_search": (
+        "search-bar",
+        By.ID,
+    ),
+    "s3_login_dropdown_item": (
+        "//span[@class='odf-resource-item' and contains(., '{}')]",
+        By.XPATH,
+    ),
+    "s3_login_sign_in_button": (
+        "//button[text()='Sign in']",
+        By.XPATH,
+    ),
+    "s3_login_success_label": (
+        "//*[contains(text(), 'Signed in with credentials')]",
+        By.XPATH,
+    ),
+    "s3_login_selected_project": (
+        "//span[text()='Secret namespace']/ancestor::div[contains(@class, 'form__group')]"
+        "//span[@class='odf-resource-item']",
+        By.XPATH,
+    ),
+    "s3_login_selected_secret": (
+        "//span[text()='Secret name']/ancestor::div[contains(@class, 'form__group')]//span[@class='odf-resource-item']",
+        By.XPATH,
     ),
 }
 locate_aws_regions = {

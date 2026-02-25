@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 
 from ocs_ci.framework.logger_helper import log_step
@@ -290,8 +291,13 @@ def generate_test_params():
     """
     Generate test parameters for the test_obc_creation_and_deletion - helper function to reuse fixture in parametrize
     """
-
-    noobaa_sc = fetch_noobaa_storage_class_name().decode("utf-8")
+    # During collect-only mode, use a placeholder to avoid cluster connections
+    # Check sys.argv since config.RUN['cli_params'] is not populated at module import time
+    is_collect_only = "--collect-only" in sys.argv or "--co" in sys.argv
+    if is_collect_only:
+        noobaa_sc = "noobaa"
+    else:
+        noobaa_sc = fetch_noobaa_storage_class_name().decode("utf-8")
     return [
         pytest.param(
             *[

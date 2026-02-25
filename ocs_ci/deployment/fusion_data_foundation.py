@@ -67,7 +67,6 @@ class FusionDataFoundationDeployment:
         Installs IBM Fusion Data Foundation.
         """
 
-        self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
@@ -120,8 +119,32 @@ class FusionDataFoundationDeployment:
         Create Fusion Data Foundation Service CR.
         """
         logger.info("Creating FDF service CR")
+
+        with open(constants.FDF_SERVICE_CR, "r") as f:
+            fdf_service_data = yaml.safe_load(f.read())
+
+        backing_storage_type = config.DEPLOYMENT.get("backing_storage_type")
+
+        if not backing_storage_type:
+            platform = config.ENV_DATA.get("platform", "").lower()
+            local_platforms = [constants.VSPHERE_PLATFORM, constants.BAREMETAL_PLATFORM]
+            if platform in local_platforms:
+                backing_storage_type = "Local"
+
+        if backing_storage_type:
+            logger.info(f"Setting backingStorageType to: {backing_storage_type}")
+            for param in fdf_service_data["spec"]["parameters"]:
+                if param["name"] == "backingStorageType":
+                    param["value"] = backing_storage_type
+                    break
+
+        fdf_service_cr_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_service_cr", delete=False
+        )
+        templating.dump_data_to_temp_yaml(fdf_service_data, fdf_service_cr_yaml.name)
+
         run_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f {constants.FDF_SERVICE_CR}",
+            f"oc --kubeconfig {self.kubeconfig} apply -f {fdf_service_cr_yaml.name}",
             silent=True,
         )
 
@@ -203,6 +226,8 @@ class FusionDataFoundationDeployment:
         Setup storage
         """
         logger.info("Configuring storage.")
+        if self.lso_enabled:
+            self.ensure_lso_installed()
         self.patch_catalogsource()
 
         fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")
@@ -221,7 +246,8 @@ class FusionDataFoundationDeployment:
             if self.lso_enabled:
                 add_disks_lso()
             clustersetup = StorageClusterSetup()
-            create_lvs_resource(self.storage_class, self.storage_class)
+            if self.lso_enabled:
+                create_lvs_resource(self.storage_class, self.storage_class)
             if config.ENV_DATA.get("mark_masters_schedulable", False):
                 node.mark_masters_schedulable()
             add_storage_label()

@@ -53,7 +53,6 @@ class IBMCloudBM(object):
         tries=3,
         delay=20,
         backoff=1,
-        text_in_exception="Remote management command has recently been issued for server",
     )
     def run_ibmcloud_bm_cmd(
         self, cmd, secrets=None, timeout=600, ignore_error=False, **kwargs

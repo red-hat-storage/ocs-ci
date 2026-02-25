@@ -1669,6 +1669,16 @@ class ExternalOCP(SpokeOCP, Deployment):
         SpokeOCP.__init__(self, name)
         Deployment.__init__(self)
 
+    def deploy_dependencies(self, **kwargs):
+        logger.info(
+            f"ExternalOCP '{self.name}': OCP already exists, skipping dependency deployment."
+        )
+
+    def deploy_ocp(self, **kwargs):
+        logger.info(
+            f"ExternalOCP '{self.name}': OCP already exists, skipping OCP deployment."
+        )
+
     @kubeconfig_exists_decorator
     def verify_ping_to_provider(self, ip_address):
         """

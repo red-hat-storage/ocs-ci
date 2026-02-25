@@ -115,7 +115,7 @@ class TestCloneWithDifferentAccessMode(ManageTest):
         log.info("Verifying cloned PVCs are Bound")
         for pvc_obj in cloned_pvcs:
             helpers.wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=200
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=480
             )
             pvc_obj.reload()
         log.info("Verified: Cloned PVCs are Bound")

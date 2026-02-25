@@ -321,6 +321,10 @@ higher priority).
 * `performance_profile` - performance profile to be used (balanced, lean, performance).
 * `noobaa_external_pgsql` - Set to True if external PgSQL server for noobaa should be used.
   See AUTH and pgsql section there for additional data you need to provide via config.
+* `noobaa_db_backup_enabled` - Used to enable automatic noobaa DB backup feature.
+* `noobaa_db_backup_schedule` - Used to set backup schedule; valid values: daily, weekly, monthly
+* `noobaa_db_backup_max_snapshots` - Maximum number of backup snapshots to retain
+* `noobaa_db_backup_snapshot_class` - Volume snapshot class to use for backups
 * `baremetal` - sub-section related to Bare Metal platform
     * `env_name` - name of the Bare Metal environment (used mainly for identification of configuration specific for the particular environment, e.g. _dnsmasq_ or _iPXE_ configuration)
     * `bm_httpd_server` - hostname or IP of helper/provisioning node (publicly accessible)
