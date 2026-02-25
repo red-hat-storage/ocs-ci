@@ -7,7 +7,6 @@ from collections import defaultdict
 from operator import itemgetter
 import random
 import json
-import pytest
 import unicodedata
 from ocs_ci.ocs.ocp import exec_cmd
 import yaml
@@ -3539,7 +3538,6 @@ def get_pod_requests_per_node(worker_nodes=None):
     return usage
 
 
-def check_cluster_resource_availability(needed_ram_gb, needed_cpu_cores):
 def get_cluster_resource_capacity():
     """
     Parses 'oc describe node' for all worker nodes to calculate actual
