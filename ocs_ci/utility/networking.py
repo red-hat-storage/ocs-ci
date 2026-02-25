@@ -19,7 +19,6 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     CommandFailed,
 )
-from ocs_ci.ocs.node import get_worker_nodes
 
 
 logger = logging.getLogger(__name__)
