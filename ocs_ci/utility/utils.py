@@ -1249,18 +1249,41 @@ class TimeoutSampler(object):
     def __iter__(self):
         if self.start_time is None:
             self.start_time = time.time()
+        iteration_count = 0
+        last_exception = None
+        log.info(
+            "Sampling %s every %ds for %ds",
+            self.func.__name__,
+            self.sleep,
+            self.timeout,
+        )
         while True:
+            iteration_count += 1
             self.last_sample_time = time.time()
             if self.timeout <= (self.last_sample_time - self.start_time):
+                if last_exception is not None:
+                    log.warning(
+                        "TimeoutSampler exhausted after %d iterations. "
+                        "Last error: %s",
+                        iteration_count - 1,
+                        last_exception,
+                    )
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
             except Exception as ex:
-                msg = f"Exception raised during iteration: {ex}"
-                log.exception(msg)
+                last_exception = ex
+                log.debug("Exception during iteration %d: %s", iteration_count, ex)
             if self.timeout <= (time.time() - self.start_time):
+                if last_exception is not None:
+                    log.warning(
+                        "TimeoutSampler exhausted after %d iterations. "
+                        "Last error: %s",
+                        iteration_count,
+                        last_exception,
+                    )
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
-            log.info("Going to sleep for %d seconds before next iteration", self.sleep)
+            log.debug("Going to sleep for %d seconds before next iteration", self.sleep)
             time.sleep(self.sleep)
 
     def wait_for_func_value(self, value):
