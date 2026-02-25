@@ -16,7 +16,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_hci_client,
     skipif_mcg_only,
-    jira,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -171,7 +170,6 @@ def deprecated_test_noobaa_service_mon_after_ocs_upgrade():
 @skipif_external_mode
 @skipif_hci_client
 @skipif_mcg_only
-@jira("DFBUGS-5211")
 @pytest.mark.polarion_id("OCS-7419")
 @purple_squad
 def test_blackbox_pod_after_upgrade():
