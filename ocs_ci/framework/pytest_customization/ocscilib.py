@@ -11,6 +11,7 @@ import datetime
 import logging
 import os
 import shutil
+import threading
 
 import pandas as pd
 import pytest
@@ -67,6 +68,52 @@ log = logging.getLogger(__name__)
 
 # Global variable to store test start time
 test_start_time = None
+
+# Collects live debugger results across all tests for the session report
+live_debug_results = []
+# Lock for thread-safe appending to live_debug_results
+_live_debug_lock = threading.Lock()
+
+
+def _run_live_debug(
+    test_name, test_nodeid, test_source_path, traceback_text,
+    markers_str, start_time_str, failure_phase, test_log_path, log_dir,
+):
+    """
+    Run live cluster debugging in a background thread.
+
+    This function is the target for the debugger thread spawned in
+    ``pytest_runtest_makereport``. Results are appended to the global
+    ``live_debug_results`` list for the session report.
+    """
+    try:
+        from ocs_ci.utility.live_debugger import LiveClusterDebugger
+
+        cli_params = ocsci_config.RUN.get("cli_params", {})
+        model = cli_params.get("live_debug_model", "sonnet")
+        budget = cli_params.get("live_debug_budget", 1.00)
+        timeout = cli_params.get("live_debug_timeout", 300)
+
+        debugger = LiveClusterDebugger(
+            model=model,
+            max_budget_usd=budget,
+            timeout=timeout,
+        )
+        result = debugger.investigate(
+            test_name=test_name,
+            test_nodeid=test_nodeid,
+            test_source_path=test_source_path,
+            traceback_text=traceback_text,
+            markers=markers_str,
+            test_start_time=start_time_str,
+            failure_phase=failure_phase,
+            test_log_path=test_log_path,
+            log_dir=log_dir,
+        )
+        with _live_debug_lock:
+            live_debug_results.append(result)
+    except Exception:
+        log.exception(f"Live debugger failed for {test_name}")
 
 
 def _pytest_addoption_cluster_specific(parser):
@@ -390,6 +437,33 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help=("Skips the RPM and go version collection for every pod for session"),
+    )
+    parser.addoption(
+        "--live-debug",
+        dest="live_debug",
+        action="store_true",
+        default=False,
+        help="Invoke Claude Code to investigate cluster on test failure",
+    )
+    parser.addoption(
+        "--live-debug-model",
+        dest="live_debug_model",
+        default="sonnet",
+        help="AI model for live debugging (default: sonnet)",
+    )
+    parser.addoption(
+        "--live-debug-budget",
+        dest="live_debug_budget",
+        type=float,
+        default=1.00,
+        help="Max USD per investigation (default: 1.00)",
+    )
+    parser.addoption(
+        "--live-debug-timeout",
+        dest="live_debug_timeout",
+        type=int,
+        default=300,
+        help="Timeout seconds per investigation (default: 300)",
     )
 
 
@@ -811,6 +885,10 @@ def process_cluster_cli_params(config):
     )
     ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
     ocsci_config.ENV_DATA["product_type"] = get_cli_param(config, "product_type")
+    get_cli_param(config, "live_debug")
+    get_cli_param(config, "live_debug_model")
+    get_cli_param(config, "live_debug_budget")
+    get_cli_param(config, "live_debug_timeout")
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -889,7 +967,61 @@ def pytest_collection_modifyitems(session, config, items):
 def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
-    # we only look at actual failing test calls, not setup/teardown
+
+    debugger_thread = None
+
+    # Launch live debugger in background thread BEFORE must-gather
+    # so they run in parallel. Triggers on all failure phases.
+    if (
+        rep.failed
+        and ocsci_config.RUN.get("cli_params", {}).get("live_debug")
+        and not ocsci_config.RUN.get("cli_params", {}).get("deploy")
+    ):
+        global test_start_time
+        try:
+            from ocs_ci.utility.utils import ocsci_log_path
+
+            markers_str = ",".join(m.name for m in item.iter_markers())
+            start_time_str = (
+                test_start_time.isoformat() + "Z" if test_start_time else ""
+            )
+            test_source_path = str(item.fspath)
+
+            # Get the per-test log path if available
+            test_log_path = None
+            log_base = ocsci_log_path()
+            if log_base and os.path.isdir(log_base):
+                # pytest-logger writes per-test logs using the test node id
+                candidate = os.path.join(log_base, item.name + ".log")
+                if os.path.isfile(candidate):
+                    test_log_path = candidate
+
+            traceback_text = str(rep.longrepr) if rep.longrepr else ""
+
+            debugger_thread = threading.Thread(
+                target=_run_live_debug,
+                args=(
+                    item.name,
+                    item.nodeid,
+                    test_source_path,
+                    traceback_text,
+                    markers_str,
+                    start_time_str,
+                    rep.when,
+                    test_log_path,
+                    log_base,
+                ),
+                daemon=True,
+            )
+            debugger_thread.start()
+            log.info(
+                f"Live debugger started for {item.name} (phase={rep.when})"
+            )
+        except Exception:
+            log.exception("Failed to start live debugger thread")
+            debugger_thread = None
+
+    # Must-gather runs as before (synchronous, blocking)
     # Don't collect must-gather for deployment here since its already
     # handled in deployment
     if (
@@ -938,7 +1070,6 @@ def pytest_runtest_makereport(item, call):
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
                 # Format test start time in RFC3339 format for must-gather
                 # Subtract 5 minutes buffer to capture events before test started
-                global test_start_time
                 since_time_str = None
                 if test_start_time:
                     # Add 5 minute buffer before test start time
@@ -1020,6 +1151,12 @@ def pytest_runtest_makereport(item, call):
         ) as file:
             file.write(f"{test_name}\n")
 
+    # Wait for live debugger to finish before moving to next test
+    if debugger_thread is not None:
+        log.info(f"Waiting for live debugger to complete for {item.name}...")
+        debugger_thread.join()
+        log.info(f"Live debugger completed for {item.name}")
+
 
 def set_log_level(config):
     """
@@ -1031,6 +1168,28 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Generate aggregated live debug report after all tests complete."""
+    if live_debug_results:
+        try:
+            from ocs_ci.utility.live_debugger.report_builder import DebugReportBuilder
+            from ocs_ci.utility.utils import ocsci_log_path
+
+            log_dir = ocsci_log_path()
+            builder = DebugReportBuilder()
+            report_path = builder.build_session_report(live_debug_results, log_dir)
+            if report_path:
+                log.info(f"Live debug session report: {report_path}")
+
+            total_cost = sum(r.get("cost_usd", 0) for r in live_debug_results)
+            log.info(
+                f"Live debugger session summary: {len(live_debug_results)} tests "
+                f"investigated, total cost: ${total_cost:.4f}"
+            )
+        except Exception:
+            log.exception("Failed to generate live debug session report")
 
 
 global consumed_ram_start_test
