@@ -284,7 +284,20 @@ def create_drs_machine_config():
     """
     Create Machine Config that moves the second physical network to a bridge.
     This is done for HCP configuraion of data replication separation.
+
+    If the MachineConfig '99-br-storage-nmstate-worker' already exists,
+    this function will skip creation and return early.
     """
+    from ocs_ci.ocs.resources.machineconfig import machineconfig_exists
+
+    mc_name = "99-br-storage-nmstate-worker"
+    if machineconfig_exists(mc_name):
+        logger.info(
+            "MachineConfig %s already exists, skipping creation",
+            mc_name
+        )
+        return
+
     interfaces_path = os.path.join(
         constants.TEMPLATE_DEPLOYMENT_DIR, "drs_interfaces.yaml"
     )

@@ -1,7 +1,7 @@
 apiVersion: machineconfiguration.openshift.io/v1
 kind: MachineConfig
 metadata:
-  name: 99-br-storage-keyfiles-worker
+  name: 99-br-storage-nmstate-worker
   labels:
     machineconfiguration.openshift.io/role: worker
 spec:
