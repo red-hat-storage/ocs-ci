@@ -3668,6 +3668,8 @@ def check_cluster_resources(ram_gb=65, cpu_cores=6):
         )
         return False
 
-    except Exception as e:
-        log.error(f"Failed to calculate cluster capacity: {e}")
+    except (CommandFailed, KeyError, ValueError, AttributeError) as e:
+        log.error(
+            f"Resource capacity check failed due to environment or parsing error: {e}"
+        )
         return True
