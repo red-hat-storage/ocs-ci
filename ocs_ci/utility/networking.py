@@ -281,26 +281,6 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     return cluster_data
 
 
-def get_network_interface_by_ip(node, ip):
-    """
-    Get interface name from a node that has provided ip address liste.
-
-    Args:
-        node (str): node name
-        ip (str): IP address
-
-    Returns:
-        str: name of the interface
-    """
-    oc_obj = OCP(kind="node")
-    network_info = oc_obj.exec_oc_debug_cmd(node, cmd_list=["ip -br -4 a sh"])
-    interface_info = [line for line in network_info.split("\n") if ip in line][
-        0
-    ].split()
-    interface_name = interface_info[0]
-    return interface_name
-
-
 def create_drs_machine_config():
     """
     Create Machine Config that moves the second physical network to a bridge.
@@ -311,8 +291,7 @@ def create_drs_machine_config():
     )
     interfaces_yaml = load_yaml(interfaces_path)
     worker = get_worker_nodes()[0]
-    private_ip, _ = get_node_private_ip(worker)
-    interface_name = get_network_interface_by_ip(worker, private_ip)
+    interface_name, _, _ = get_node_private_ip(worker)
     interfaces_yaml["interfaces"][0]["bridge"]["port"][0]["name"] = interface_name
     interfaces_yaml["interfaces"][1]["name"] = interface_name
     interfaces_yaml_string = yaml.dump(interfaces_yaml)
