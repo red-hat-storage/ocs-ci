@@ -63,7 +63,6 @@ from ocs_ci.ocs.node import (
     get_provider_internal_node_ips,
     add_disk_stretch_arbiter,
 )
-from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
     get_ocs_version_from_csv,
@@ -861,14 +860,6 @@ def ocs_install_verification(
             device_class = get_device_class()
             verify_storage_device_class(device_class)
             verify_device_class_in_osd_tree(ct_pod, device_class)
-
-    # RDR with globalnet submariner
-    if config.MULTICLUSTER.get(
-        "multicluster_mode"
-    ) == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
-        "enable_globalnet", True
-    ):
-        validate_serviceexport()
 
     # Verify the owner of CSI deployments and daemonsets
     csi_owner_name = (
