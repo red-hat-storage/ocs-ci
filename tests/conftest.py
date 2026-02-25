@@ -10901,11 +10901,8 @@ def vm_clone_fixture(request):
                 )
             log.info(f"Deleting VM {cloned_vm.name}")
             try:
-                if cloned_vm.exists:
-                    cloned_vm.delete(wait=True)
-                    log.info(f"Cloned VM {cloned_vm.name} deleted")
-                else:
-                    log.info(f"Cloned VM {cloned_vm.name} already deleted")
+                cloned_vm.delete(wait=True)
+                log.info(f"Cloned VM {cloned_vm.name} deleted")
             except CommandFailed as e:
                 if "NotFound" in str(e):
                     log.warning(f"Cloned VM {cloned_vm.name} was already deleted.")
