@@ -124,6 +124,15 @@ class LiveClusterDebugger:
             platform=platform,
         )
 
+        # Resolve model short names to full model IDs to avoid stale
+        # aliases in older Claude Code CLI versions
+        model_aliases = {
+            "opus": "claude-opus-4-6",
+            "sonnet": "claude-sonnet-4-5-20250514",
+            "haiku": "claude-haiku-4-5-20251001",
+        }
+        resolved_model = model_aliases.get(self.model, self.model)
+
         # Build the command
         cmd = [
             "claude",
@@ -131,7 +140,7 @@ class LiveClusterDebugger:
             "--tools", "Bash,Read",
             "--dangerously-skip-permissions",
             "--output-format", "json",
-            "--model", self.model,
+            "--model", resolved_model,
             "--max-budget-usd", str(self.max_budget_usd),
         ]
 
@@ -179,11 +188,16 @@ class LiveClusterDebugger:
         result["duration_seconds"] = time.time() - start
 
         if proc.returncode != 0:
+            stderr_text = proc.stderr.strip()[:500] if proc.stderr else ""
+            stdout_text = proc.stdout.strip()[:500] if proc.stdout else ""
             result["error"] = (
                 f"Claude Code exited with code {proc.returncode}: "
-                f"{proc.stderr.strip()[:500]}"
+                f"stderr={stderr_text} stdout={stdout_text}"
             )
             logger.error(result["error"])
+            # Log the command (without the full prompt) for debugging
+            cmd_summary = [c for c in cmd if c != prompt]
+            logger.error(f"Command was: {' '.join(cmd_summary)}")
             return result
 
         # Parse the JSON response
