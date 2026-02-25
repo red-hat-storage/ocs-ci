@@ -320,14 +320,27 @@ def create_drs_machine_config():
         machineconfigurations_obj.apply(**machineconfigurations_yaml)
 
 
-def create_drs_nad(namespace):
+def create_drs_nad(cluster_name):
     """
     Create NetworkAttachmentDefinition in namespace where the virt-launcher pods exist.
     This is done for HCP configuraion of data replication separation.
 
+    The namespace is constructed as f"clusters-{cluster_name}". If the namespace
+    doesn't exist, it will be created automatically.
+
     Args:
-        namespace (str): namespace on provider cluster where virt-launcher pods exist
+        cluster_name (str): cluster name used to construct the namespace on provider cluster
     """
+    namespace = f"clusters-{cluster_name}"
+
+    # Check if namespace exists, create if it doesn't
+    ocp_ns = OCP(kind="namespace")
+    if not ocp_ns.is_exist(resource_name=namespace):
+        logger.info("Namespace %s does not exist, creating it", namespace)
+        ocp_ns.new_project(namespace)
+    else:
+        logger.info("Namespace %s already exists", namespace)
+
     nad_path = os.path.join(constants.TEMPLATE_DEPLOYMENT_DIR, "drs_nad.yaml")
     nad_yaml = load_yaml(nad_path)
     nad_yaml["metadata"]["namespace"] = namespace
