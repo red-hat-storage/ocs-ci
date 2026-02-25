@@ -3,7 +3,7 @@
 import os
 import logging
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 def test_nontest_code_unexpected_in_tests_dir():

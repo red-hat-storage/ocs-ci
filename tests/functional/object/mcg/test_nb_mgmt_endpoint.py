@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version
 
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 @mcg

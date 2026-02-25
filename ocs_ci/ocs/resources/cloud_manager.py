@@ -33,7 +33,7 @@ from ocs_ci.utility.utils import (
     get_role_arn_from_sub,
 )
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class CloudManager(ABC):

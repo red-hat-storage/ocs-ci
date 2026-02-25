@@ -37,7 +37,7 @@ from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, Timeout
 from ocs_ci.ocs.node import get_nodes
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 def login(region=None, resource_group=None):

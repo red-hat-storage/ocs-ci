@@ -21,7 +21,7 @@ from ocs_ci.ocs.fusion import create_fusion_monitoring_resources, deploy_odf
 from ocs_ci.ocs.managedservice import update_pull_secret
 from ocs_ci.ocs.resources import pvc
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class FUSIONAASOCP(rosa_deployment.ROSAOCP):

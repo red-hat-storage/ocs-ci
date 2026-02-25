@@ -14,7 +14,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.retry import retry
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class IBMCloudBM(object):
