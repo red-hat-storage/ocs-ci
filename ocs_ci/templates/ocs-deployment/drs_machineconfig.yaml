@@ -14,8 +14,3 @@ spec:
         mode: 0600
         contents:
           source: PLACEHOLDER
-      - path: /etc/NetworkManager/system-connections/eno1-slave.nmconnection
-        mode: 0600
-        contents:
-          source: PLACEHOLDER
-
