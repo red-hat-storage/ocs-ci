@@ -216,7 +216,6 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
     get_schedule_precedance_value_from_csi_addons_configmap,
     set_schedule_precedence,
-    get_reclaimspacecronjob_for_pvc,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -11224,14 +11223,20 @@ class BaseStorageClassPrecedenceTest(ABC):
 
     def _wait_for_cronjob_creation(self, pvc_obj, timeout=120):
         """
-        Wait for CronJob to be created after PVC annotation.
+        Wait for CronJob CRD to be created after PVC schedule annotation.
+
+        Waits for either:
+        - The controller to set the cronjob-name annotation on the PVC and the
+          CRD to exist, or
+        - The CRD to exist by naming convention (<pvc_name>-reclaimspace or
+          <pvc_name>-keyrotation). Some controllers do not set the name annotation.
 
         Args:
             pvc_obj: PVC object
             timeout: Timeout in seconds (default: 120)
 
         Raises:
-            TimeoutExpiredError: If CronJob is not created within timeout
+            TimeoutExpiredError: If CronJob CRD is not found within timeout
         """
         annotation_key = self.get_annotation_key()
         cronjob_annotation_key = (
@@ -11239,48 +11244,49 @@ class BaseStorageClassPrecedenceTest(ABC):
             if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
             else "keyrotation.csiaddons.openshift.io/cronjob"
         )
+        crd_kind = (
+            constants.RECLAIMSPACECRONJOB
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else constants.ENCRYPTIONKEYROTATIONCRONJOB
+        )
+        default_suffix = (
+            "-reclaimspace"
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else "-keyrotation"
+        )
 
-        log.info(f"Waiting for CronJob creation for PVC: {pvc_obj.name}")
+        log.info(f"Waiting for CronJob CRD creation for PVC: {pvc_obj.name}")
 
         try:
             for _ in TimeoutSampler(timeout=timeout, sleep=5, func=lambda: None):
                 pvc_obj.reload()
+                # Prefer name from controller annotation; else use naming convention
                 cronjob_name = (
                     pvc_obj.data.get("metadata", {})
                     .get("annotations", {})
                     .get(cronjob_annotation_key)
-                )
+                ) or f"{pvc_obj.name}{default_suffix}"
 
-                if cronjob_name:
-                    # Verify the CronJob actually exists
-                    cronjob_kind = (
-                        constants.RECLAIMSPACECRONJOB
-                        if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
-                        else constants.ENCRYPTIONKEYROTATIONCRONJOB
+                try:
+                    cronjob_obj = OCP(
+                        kind=crd_kind,
+                        namespace=pvc_obj.namespace,
+                        resource_name=cronjob_name,
+                    )
+                    cronjob_obj.get()
+                    log.info(
+                        f"CronJob CRD '{cronjob_name}' found for PVC '{pvc_obj.name}'"
+                    )
+                    return
+                except Exception:
+                    log.debug(
+                        f"CronJob CRD '{cronjob_name}' not yet available, continuing to wait..."
                     )
 
-                    try:
-                        cronjob_obj = OCP(
-                            kind=cronjob_kind,
-                            namespace=pvc_obj.namespace,
-                            resource_name=cronjob_name,
-                        )
-                        cronjob_obj.get()  # This will raise an exception if not found
-                        log.info(
-                            f"CronJob '{cronjob_name}' found for PVC '{pvc_obj.name}'"
-                        )
-                        return
-                    except Exception:
-                        log.debug(
-                            f"CronJob '{cronjob_name}' not yet available, continuing to wait..."
-                        )
-
-                log.debug(
-                    f"CronJob annotation not yet present for PVC '{pvc_obj.name}', waiting..."
-                )
-
         except TimeoutExpiredError:
-            log.error(f"Timeout waiting for CronJob creation for PVC: {pvc_obj.name}")
+            log.error(
+                f"Timeout waiting for CronJob CRD creation for PVC: {pvc_obj.name}"
+            )
             raise
 
     def _verify_cronjob_schedule(
@@ -11290,7 +11296,14 @@ class BaseStorageClassPrecedenceTest(ABC):
         precedence_type,
     ):
         """
-        Verify that a PVC's CronJob has the expected schedule.
+        Verify that a PVC's CronJob has the expected schedule by reading the
+        schedule from the respective CRD (ReclaimSpaceCronJob or
+        EncryptionKeyRotationCronJob). Uses the cronjob name from the PVC
+        annotation when set (as set by the controller), otherwise falls back
+        to <pvc_name>-reclaimspace or <pvc_name>-keyrotation.
+
+        Equivalent to: oc get reclaimspacecronjobs <name> -n <ns> -o yaml
+        and checking spec.schedule (and similarly for keyrotation).
 
         Args:
             pvc_obj: PVC object
@@ -11302,20 +11315,75 @@ class BaseStorageClassPrecedenceTest(ABC):
         """
         log.debug(f"Verifying CronJob schedule for PVC: {pvc_obj.name}")
 
-        # Wait for CronJob to be created after PVC annotation
+        # Wait for CronJob CRD to be created after PVC annotation
         self._wait_for_cronjob_creation(pvc_obj)
 
-        # Use appropriate CronJob function based on annotation key
         annotation_key = self.get_annotation_key()
-        if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
-            # For KeyRotation tests, use PVKeyrotation helper
-            keyrotation_helper = PVKeyrotation(pvc_obj.storageclass)
-            cronjob = keyrotation_helper.get_keyrotation_cronjob_for_pvc(pvc_obj)
-        else:
-            # For ReclaimSpace tests, use the existing helper
-            cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj)
+        cronjob_annotation_key = (
+            "reclaimspace.csiaddons.openshift.io/cronjob"
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else "keyrotation.csiaddons.openshift.io/cronjob"
+        )
 
-        actual_schedule = cronjob.data["spec"]["schedule"]
+        if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
+            crd_kind = constants.ENCRYPTIONKEYROTATIONCRONJOB
+            default_suffix = "-keyrotation"
+        else:
+            crd_kind = constants.RECLAIMSPACECRONJOB
+            default_suffix = "-reclaimspace"
+
+        # Use cronjob name from PVC annotation (set by controller), else naming convention
+        pvc_obj.reload()
+        crd_name = (
+            pvc_obj.data.get("metadata", {})
+            .get("annotations", {})
+            .get(cronjob_annotation_key)
+            or f"{pvc_obj.name}{default_suffix}"
+        )
+
+        crd_obj = OCP(
+            kind=crd_kind,
+            namespace=pvc_obj.namespace,
+            resource_name=crd_name,
+        )
+
+        # Wait for CRD spec.schedule to match expected (controller may reconcile after
+        # precedence change in csi-addons-config, e.g. storageclass -> @weekly from SC).
+        schedule_timeout = 60
+        schedule_sleep = 5
+        log.debug(
+            f"Waiting up to {schedule_timeout}s for CRD '{crd_name}' schedule to match "
+            f"expected {precedence_type} schedule '{expected_schedule}'"
+        )
+        try:
+            for _ in TimeoutSampler(
+                timeout=schedule_timeout, sleep=schedule_sleep, func=lambda: None
+            ):
+                crd_data = crd_obj.get()
+                if not crd_data:
+                    raise AssertionError(
+                        f"ReclaimSpaceCronJob/KeyRotationCronJob '{crd_name}' not found in "
+                        f"namespace '{pvc_obj.namespace}' for PVC '{pvc_obj.name}'"
+                    )
+                actual_schedule = crd_data.get("spec", {}).get("schedule")
+                if actual_schedule is None:
+                    raise AssertionError(
+                        f"ReclaimSpaceCronJob/KeyRotationCronJob '{crd_name}' has no "
+                        f"spec.schedule for PVC '{pvc_obj.name}'"
+                    )
+                if actual_schedule == expected_schedule:
+                    break
+                log.debug(
+                    f"CRD '{crd_name}' schedule is '{actual_schedule}', expected "
+                    f"'{expected_schedule}'; retrying in {schedule_sleep}s..."
+                )
+        except TimeoutExpiredError:
+            raise AssertionError(
+                f"PVC {pvc_obj.name} CronJob schedule did not match expected {precedence_type} "
+                f"schedule within {schedule_timeout}s. Actual: '{actual_schedule}', "
+                f"expected: '{expected_schedule}' (csi-addons-config schedule-precedence "
+                f"determines whether StorageClass or PVC schedule is used)"
+            )
 
         assert expected_schedule == actual_schedule, (
             f"PVC {pvc_obj.name} CronJob schedule '{actual_schedule}' "
