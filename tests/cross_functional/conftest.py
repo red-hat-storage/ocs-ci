@@ -47,7 +47,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
@@ -1454,7 +1454,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
     """
 
     def factory(bucket_factory_session, mcg_obj_session):
-        import pdb;pdb.set_trace()
 
         noobaa_obj = OCP(
             kind=constants.NOOBAA_RESOURCE_NAME,
@@ -1479,7 +1478,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             "waiting for some time for deletion and recreation of all noobaa resources"
         )
 
-        time.sleep(180)
+        time.sleep(60)
         pvc_obj = OCP(
             kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -1488,7 +1487,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         )
 
         # Wait and validate noobaa PVC is in bound state
-        logger.info("waiting Wait and validate noobaa PVC is in bound state")
         for pvc_index in range(len(noobaa_pvc_obj)):
             pvc_obj.wait_for_resource(
                 condition=constants.STATUS_BOUND,
@@ -1496,51 +1494,25 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
                 timeout=600,
                 sleep=120,
             )
-        logger.info("waiting completed for Wait and validate noobaa PVC is in bound state")
         # Validate noobaa pods are up and running
         pod_obj = OCP(
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
-
-        max_retries = 3
-        last_error = None
-        for attempt in range(max_retries):
-            noobaa_pods = get_noobaa_pods()
-            expected_count = len(noobaa_pods)
-            logger.info(
-                "Waiting Validate noobaa pods are up and running "
-                f"(attempt {attempt + 1}/{max_retries}, expected count={expected_count})"
-            )
-            try:
-                pod_obj.wait_for_resource(
-                    condition=constants.STATUS_RUNNING,
-                    resource_count=expected_count,
-                    selector=constants.NOOBAA_APP_LABEL,
-                    timeout=600,
-                )
-                break
-            except TimeoutExpiredError as ex:
-                last_error = ex
-                if attempt + 1 < max_retries:
-                    logger.warning(
-                        f"Wait failed (count may have changed). Retrying with fresh "
-                        f"noobaa pod count (retry {attempt + 1}/{max_retries})."
-                    )
-                else:
-                    raise last_error
-        logger.info("Waiting completed Validate noobaa pods are up and running")
-
+        noobaa_pods = get_noobaa_pods()
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_count=len(noobaa_pods),
+            selector=constants.NOOBAA_APP_LABEL,
+            timeout=900,
+        )
         # verify noobaa statefulset is present
-        logger.info("Waiting verify noobaa statefulset is present")
         sample = TimeoutSampler(
-            timeout=1500,
+            timeout=500,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get sts noobaa-core -n openshift-storage",
             expected_output_lst={"noobaa-core", "1/1"},
         )
-        logger.info("Waiting completed verify noobaa statefulset is present")
-
         if not sample.wait_for_func_status(result=True):
             raise Exception("Statefulset noobaa-core is not recreated")
 
@@ -1549,7 +1521,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         mcg_obj_session.update_s3_creds()
 
         # Verify default backingstore/bucketclass
-        logger.info("wait for Verify default backingstore/bucketclass")
         sample = TimeoutSampler(
             timeout=1200,
             sleep=30,
@@ -1563,7 +1534,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             raise Exception(
                 "Backingstore noobaa-default-backing-store is not recreated"
             )
-        logger.info("wait completed for Verify default backingstore/bucketclass")
 
         default_bc = OCP(
             kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
@@ -1581,8 +1551,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         Cleanup function which clears all the noobaa rebuild entries.
 
         """
-        import pdb
-        pdb.set_trace()  # Stop at first teardown (remove after debugging)
         # Get the deployment replica count
         deploy_obj = OCP(
             kind=constants.DEPLOYMENT,
