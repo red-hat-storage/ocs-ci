@@ -10,7 +10,7 @@ spec:
       version: 3.2.0
     storage:
       files:
-      - path: /etc/NetworkManager/system-connections/br-storage.nmconnection
+      - path: /etc/nmstate/br-storage.yml
         mode: 0600
         contents:
           source: PLACEHOLDER
