@@ -3724,7 +3724,22 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Validate service exporter at the end after everything is settled
         if odf_running_version >= version.VERSION_4_19:
             if get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True):
-                validate_serviceexport()
+                restore_index = config.cur_index
+                managed_clusters = get_non_acm_cluster_config()
+                for cluster in managed_clusters:
+                    index = cluster.MULTICLUSTER["multicluster_index"]
+                    config.switch_ctx(index)
+                    if (
+                        config.ENV_DATA["platform"].lower()
+                        in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                    ):
+                        logger.info(
+                            "Skipping ServiceExport validation for multiclient cluster"
+                        )
+                        continue
+                    logger.info("Validating ServiceExport resources")
+                    validate_serviceexport()
+                config.switch_ctx(restore_index)
 
     @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
     def check_observability_status(self):
