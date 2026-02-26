@@ -4969,7 +4969,9 @@ class SpokeODF(SpokeOCP, ABC):
             .get("hosted_odf_registry", defaults.HOSTED_ODF_REGISTRY_DEFAULT)
         )
         self.catsrc_image = f"{self.odf_registry}:{self.odf_version}"
-        self.namespace_client = config.ENV_DATA.get(
+        self.namespace_client = config.ENV_DATA.get("clusters", {}).get(
+            self.name, {}
+        ).get("cluster_namespace") or config.ENV_DATA.get(
             "client_namespace", "openshift-storage"
         )
         # default cluster name picked from the storage client yaml
