@@ -710,6 +710,7 @@ class HyperShiftBase:
         cp_availability_policy=None,
         infra_availability_policy=None,
         disable_default_sources=None,
+        data_replication_separation=False,
         auto_repair=True,
     ):
         """
@@ -730,6 +731,8 @@ class HyperShiftBase:
                 selected, cluster will be created with etcd ingress controller, monitoring, cloud controller with min
                 available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
+            data_replication_separation (bool): If the deployment uses data replication separation
+                then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
 
         Returns:
@@ -808,7 +811,7 @@ class HyperShiftBase:
                 f"Valid values are: {constants.AVAILABILITY_POLICIES}"
             )
 
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+        if data_replication_separation:
             create_hcp_cluster_cmd += (
                 f" --additional-network name:clusters-{name}/storage"
             )

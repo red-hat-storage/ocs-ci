@@ -1885,6 +1885,9 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("disable_default_sources", True)
         )
+        data_replication_separation = config.DEPLOYMENT.get(
+            "enable_data_replication_separation"
+        )
 
         hosted_cluster_platform = (
             config.ENV_DATA["clusters"]
@@ -1946,6 +1949,7 @@ class HypershiftHostedOCP(
                 cp_availability_policy=cp_availability_policy,
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
+                data_replication_separation=data_replication_separation,
             )
 
     def deploy_dependencies(
