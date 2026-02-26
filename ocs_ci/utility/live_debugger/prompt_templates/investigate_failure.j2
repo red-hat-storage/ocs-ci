@@ -29,7 +29,13 @@ Follow these three phases in order. Be methodical and focused.
 1. Read the test source file at `{{ test_source_path }}` to understand what the test was trying to do.
    - What resources does it create? What operations does it perform? What does it assert?
 {% if test_log_path %}
-2. Read the test log file at `{{ test_log_path }}` to see the sequence of actions and where it broke.
+2. Inspect the test log file at `{{ test_log_path }}` to see the sequence of actions and where it broke.
+   - WARNING: Test logs can be very large (thousands of lines) because they contain full oc command output.
+     Do NOT Read the entire file. Instead, use Bash to inspect it efficiently:
+     - `wc -l {{ test_log_path }}` to check the size first
+     - `tail -200 {{ test_log_path }}` to see the end where the failure occurred
+     - `grep -n -i 'error\|failed\|exception\|traceback' {{ test_log_path }} | tail -30` to find error lines
+     - `grep -B5 -A5 '<specific_error_text>' {{ test_log_path }}` to get context around a specific error
    - What commands ran successfully before the failure?
    - What was the last successful operation?
 {% endif %}
