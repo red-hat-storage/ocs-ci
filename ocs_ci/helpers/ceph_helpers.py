@@ -117,6 +117,7 @@ def cleanup_stale_cephfs_subvolumes(odf_cli_runner):
 
     except Exception as e:
         logger.error(f"Failed to cleanup stale subvolumes: {e}")
+        raise
 
 
 
