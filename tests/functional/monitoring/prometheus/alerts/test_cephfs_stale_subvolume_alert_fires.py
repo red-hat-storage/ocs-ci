@@ -1,5 +1,6 @@
 import logging
 import time
+
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -19,7 +20,6 @@ from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO, get_file_siz
 
 log = logging.getLogger(__name__)
 
-# Helper functions
 
 def create_stale_cephfs_subvolumes(
     storageclass_factory,
@@ -29,6 +29,14 @@ def create_stale_cephfs_subvolumes(
     """
     Create stale CephFS subvolumes by using
     reclaimPolicy=Retain and deleting PVCs and PVs.
+
+    Args:
+        storageclass_factory: Factory fixture to create storage classes.
+        pvc_factory: Factory fixture to create PVCs.
+        count (int): Number of stale CephFS subvolumes to create.
+    
+    Returns:
+        Lists of created PVC and PV names.
     """
     log.info(f"Creating {count} stale CephFS subvolume(s)")
 
@@ -170,7 +178,7 @@ class TestCephFSStaleSubvolumeAlert:
         self.odf_cli_runner = odf_cli_setup
 
         def finalizer():
-            cleanup_stale_cephfs_subvolumes(self.odf_cli_runner, log)
+            cleanup_stale_cephfs_subvolumes(self.odf_cli_runner)
 
         request.addfinalizer(finalizer)
 
@@ -241,10 +249,9 @@ class TestCephFSStaleSubvolumeAlert:
         log.info("Restarting metrics exporter")
         restart_metrics_exporter()
 
-        # exporter uses 10 min PV reflector resync
-        time.sleep(660)
+        # exporter uses 10 min PV reflector resync, allow sufficient timeout
 
-        wait_and_validate_stale_subvolume_alert(api)
+        wait_and_validate_stale_subvolume_alert(api, timeout=900)
 
     @pytest.mark.polarion_id("OCS-7473")
     def test_stale_subvolume_alert_persists_across_mds_restart(
@@ -385,7 +392,7 @@ class TestCephFSStaleSubvolumeAlert:
 
             # Step 4: Mitigation – remove stale subvolumes to verify alert resolution
             log.info("Performing mitigation: deleting stale CephFS subvolumes")
-            cleanup_stale_cephfs_subvolumes(self.odf_cli_runner, log)
+            cleanup_stale_cephfs_subvolumes(self.odf_cli_runner)
 
             # Step 5: Verify alert resolution
             log.info("Waiting for CephFSStaleSubvolume alert to stop firing")
@@ -482,7 +489,7 @@ class TestCephFSStaleSubvolumeAlert:
 
         # Step 5: Mitigation – remove stale subvolumes
         log.info("Performing mitigation: deleting stale CephFS subvolumes")
-        cleanup_stale_cephfs_subvolumes(self.odf_cli_runner, log)
+        cleanup_stale_cephfs_subvolumes(self.odf_cli_runner)
 
         log.info(
             "Stale CephFS subvolumes cleaned up after validating alert "
