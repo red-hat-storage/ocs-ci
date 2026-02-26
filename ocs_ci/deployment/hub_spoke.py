@@ -4969,11 +4969,27 @@ class SpokeODF(SpokeOCP, ABC):
             .get("hosted_odf_registry", defaults.HOSTED_ODF_REGISTRY_DEFAULT)
         )
         self.catsrc_image = f"{self.odf_registry}:{self.odf_version}"
-        self.namespace_client = config.ENV_DATA.get("clusters", {}).get(
-            self.name, {}
-        ).get("cluster_namespace") or config.ENV_DATA.get(
-            "client_namespace", "openshift-storage"
-        )
+
+        # Get cluster namespace - parse from yaml_text_config if present
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+        self.namespace_client = None
+
+        if "yaml_text_config" in cluster_config:
+            try:
+                nested_config = yaml.safe_load(cluster_config["yaml_text_config"])
+                self.namespace_client = nested_config.get("ENV_DATA", {}).get(
+                    "cluster_namespace"
+                )
+            except (yaml.YAMLError, AttributeError, KeyError) as e:
+                logger.warning(
+                    f"Failed to parse yaml_text_config for cluster {self.name}: {e}"
+                )
+
+        # Fall back to direct path or global default
+        if not self.namespace_client:
+            self.namespace_client = cluster_config.get(
+                "cluster_namespace"
+            ) or config.ENV_DATA.get("client_namespace", "openshift-storage")
         # default cluster name picked from the storage client yaml
         storage_client_data = templating.load_yaml(
             constants.PROVIDER_MODE_STORAGE_CLIENT
