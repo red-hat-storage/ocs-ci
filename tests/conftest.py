@@ -10901,7 +10901,21 @@ def vm_clone_fixture(request):
                 )
             log.info(f"Deleting VM {cloned_vm.name}")
             try:
-                cloned_vm.delete(wait=True)
+                cloned_vm.delete()
+                def _vm_deleted():
+                    try:
+                        cloned_vm.get()
+                        return False
+                    except CommandFailed as e:
+                        if "NotFound" in str(e):
+                            return True
+                        raise
+
+                TimeoutSampler(
+                    timeout=600,
+                    sleep=5,
+                    func=_vm_deleted
+                ).wait_for_func_value(True)
                 log.info(f"Cloned VM {cloned_vm.name} deleted")
             except CommandFailed as e:
                 if "NotFound" in str(e):
