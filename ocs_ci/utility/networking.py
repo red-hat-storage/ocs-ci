@@ -292,10 +292,7 @@ def create_drs_machine_config():
 
     mc_name = "99-br-storage-nmstate-worker"
     if machineconfig_exists(mc_name):
-        logger.info(
-            "MachineConfig %s already exists, skipping creation",
-            mc_name
-        )
+        logger.info("MachineConfig %s already exists, skipping creation", mc_name)
         return
 
     interfaces_path = os.path.join(
