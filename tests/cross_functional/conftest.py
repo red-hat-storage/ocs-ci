@@ -5,6 +5,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from subprocess import TimeoutExpired
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+
 
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.helpers.helpers import (
@@ -47,7 +49,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
@@ -145,26 +147,67 @@ def _get_noobaa_obj():
     )
 
 
-def _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj):
+def _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj, timeout=300, sleep=15):
     """
     Verify that DB backup configuration is propagated from storage cluster to NooBaa CR.
+    Waits for 'dbBackup' to appear in both CRs (e.g. after NooBaa rebuild propagation).
 
     Args:
         ocs_storage_obj (OCP): OCS storage cluster object
         noobaa_obj (OCP): NooBaa object
+        timeout (int): Max seconds to wait for dbBackup to appear
+        sleep (int): Seconds between checks
 
     Returns:
         dict: DB backup info from NooBaa CR
 
     Raises:
-        AssertionError: If configuration mismatch is detected
+        AssertionError: If configuration mismatch or dbBackup missing after timeout
     """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ocs_storage_obj.reload_data()
+        noobaa_obj.reload_data()
+        ocs_data = ocs_storage_obj.get("ocs-storagecluster") or {}
+        noobaa_data = noobaa_obj.get("noobaa") or {}
+        db_info_from_ocs_storage = (ocs_data.get("spec") or {}).get(
+            "multiCloudGateway", {}
+        ).get("dbBackup")
+        db_info_from_noobaa_cr = (noobaa_data.get("spec") or {}).get("dbSpec", {}).get(
+            "dbBackup"
+        )
+        if db_info_from_ocs_storage is not None and db_info_from_noobaa_cr is not None:
+            if db_info_from_ocs_storage == db_info_from_noobaa_cr:
+                return db_info_from_noobaa_cr
+            logger.info(
+                "dbBackup present in both CRs but not yet matching (waiting for "
+                "operator propagation), retrying..."
+            )
+        else:
+            logger.info(
+                "dbBackup not yet propagated to NooBaa CR (or storage cluster), retrying..."
+            )
+        time.sleep(sleep)
     ocs_storage_obj.reload_data()
     noobaa_obj.reload_data()
-    db_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
-        "multiCloudGateway"
-    ]["dbBackup"]
-    db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
+    ocs_data = ocs_storage_obj.get("ocs-storagecluster") or {}
+    noobaa_data = noobaa_obj.get("noobaa") or {}
+    db_info_from_ocs_storage = (ocs_data.get("spec") or {}).get(
+        "multiCloudGateway", {}
+    ).get("dbBackup")
+    db_info_from_noobaa_cr = (noobaa_data.get("spec") or {}).get("dbSpec", {}).get(
+        "dbBackup"
+    )
+    if db_info_from_ocs_storage is None:
+        raise KeyError(
+            "dbBackup not found in storage cluster spec.multiCloudGateway after "
+            f"{timeout}s - ensure DB backup config is patched and operator is running"
+        )
+    if db_info_from_noobaa_cr is None:
+        raise KeyError(
+            "dbBackup not found in NooBaa CR spec.dbSpec after "
+            f"{timeout}s - NooBaa may not have propagated config yet (e.g. after rebuild)"
+        )
     assert (
         db_info_from_ocs_storage == db_info_from_noobaa_cr
     ), "Mismatch in DB backup info between ocs-storagecluster and noobaa CR"
@@ -191,25 +234,62 @@ def _patch_db_recovery_config(ocs_storage_obj, backup_name):
     time.sleep(15)
 
 
-def _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj):
+def _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj, timeout=120, sleep=10):
     """
     Verify that DB recovery configuration is propagated from storage cluster to NooBaa CR.
+    Waits for 'dbRecovery' to appear in both CRs if missing.
 
     Args:
         ocs_storage_obj (OCP): OCS storage cluster object
         noobaa_obj (OCP): NooBaa object
+        timeout (int): Max seconds to wait for dbRecovery to appear
+        sleep (int): Seconds between checks
 
     Raises:
         AssertionError: If configuration mismatch is detected
+        KeyError: If dbRecovery missing after timeout
     """
-    ocs_storage_obj.reload_data()
-    noobaa_obj.reload_data()
-    recovery_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
-        "multiCloudGateway"
-    ]["dbRecovery"]
-    recovery_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
-        "dbRecovery"
-    ]
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ocs_storage_obj.reload_data()
+        noobaa_obj.reload_data()
+        ocs_data = ocs_storage_obj.get("ocs-storagecluster") or {}
+        noobaa_data = noobaa_obj.get("noobaa") or {}
+        recovery_info_from_ocs_storage = (ocs_data.get("spec") or {}).get(
+            "multiCloudGateway", {}
+        ).get("dbRecovery")
+        recovery_info_from_noobaa_cr = (noobaa_data.get("spec") or {}).get(
+            "dbSpec", {}
+        ).get("dbRecovery")
+        if (
+            recovery_info_from_ocs_storage is not None
+            and recovery_info_from_noobaa_cr is not None
+        ):
+            assert (
+                recovery_info_from_ocs_storage == recovery_info_from_noobaa_cr
+            ), "Mismatch in DB recovery info between ocs-storagecluster and noobaa CR"
+            return
+        logger.info(
+            "dbRecovery not yet propagated to NooBaa CR (or storage cluster), retrying..."
+        )
+        time.sleep(sleep)
+    ocs_data = ocs_storage_obj.get("ocs-storagecluster") or {}
+    noobaa_data = noobaa_obj.get("noobaa") or {}
+    recovery_info_from_ocs_storage = (ocs_data.get("spec") or {}).get(
+        "multiCloudGateway", {}
+    ).get("dbRecovery")
+    recovery_info_from_noobaa_cr = (noobaa_data.get("spec") or {}).get(
+        "dbSpec", {}
+    ).get("dbRecovery")
+    if recovery_info_from_ocs_storage is None:
+        raise KeyError(
+            "dbRecovery not found in storage cluster spec.multiCloudGateway after "
+            f"{timeout}s"
+        )
+    if recovery_info_from_noobaa_cr is None:
+        raise KeyError(
+            "dbRecovery not found in NooBaa CR spec.dbSpec after " f"{timeout}s"
+        )
     assert (
         recovery_info_from_ocs_storage == recovery_info_from_noobaa_cr
     ), "Mismatch in DB recovery info between ocs-storagecluster and noobaa CR"
@@ -1544,7 +1624,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
     """
 
     def factory(bucket_factory_session, mcg_obj_session):
-        import pdb;pdb.set_trace()
 
         noobaa_obj = OCP(
             kind=constants.NOOBAA_RESOURCE_NAME,
@@ -1564,12 +1643,13 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             params = '{"metadata": {"finalizers":null}}'
             noobaa_obj.exec_oc_cmd(f"patch noobaas/noobaa --type=merge -p '{params}' ")
 
+        time.sleep(300)
+
         logger.info("--------NooBaa resource rebuild verification----------")
         logger.info(
             "waiting for some time for deletion and recreation of all noobaa resources"
         )
 
-        time.sleep(180)
         pvc_obj = OCP(
             kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -1592,7 +1672,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-        max_retries = 3
+        max_retries = 30
         last_error = None
         for attempt in range(max_retries):
             noobaa_pods = get_noobaa_pods()
@@ -1671,8 +1751,6 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         Cleanup function which clears all the noobaa rebuild entries.
 
         """
-        import pdb
-        pdb.set_trace()  # Stop at first teardown (remove after debugging)
         # Get the deployment replica count
         deploy_obj = OCP(
             kind=constants.DEPLOYMENT,
@@ -1733,8 +1811,9 @@ def validate_noobaa_db_backup_recovery_locally_system(
         # create a bucket for warp benchmarking
         bucket_name = bucket_factory_session()[0].name
 
-        # Backup and restore noobaa db using fixture
-        noobaa_db_backup_and_recovery_locally(bucket_factory_session)
+        # Backup and restore noobaa db using fixture (pass bucket_factory by keyword;
+        # the fixture's factory first param is mcg_obj, so positional would overwrite it)
+        noobaa_db_backup_and_recovery_locally(bucket_factory=bucket_factory_session)
 
         # Run multi client warp benchmarking
         warps3.run_benchmark(

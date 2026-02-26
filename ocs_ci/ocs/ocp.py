@@ -1631,7 +1631,7 @@ def get_all_resource_of_kind_containing_string(search_string, kind):
     """
 
     resource_list = []
-    for resource in OCP(kind=kind).get().get("items"):
+    for resource in OCP(kind=kind, namespace=config.ENV_DATA["cluster_namespace"]).get().get("items"):
         if search_string in resource["metadata"]["name"]:
             resource_list.append(resource.get("metadata").get("name"))
     return resource_list
