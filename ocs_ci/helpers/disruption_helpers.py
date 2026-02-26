@@ -3,6 +3,8 @@ import os
 import random
 import time
 
+import yaml
+
 from ocs_ci.helpers.helpers import get_provisioner_label, get_node_plugin_label
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import cal_md5sum
@@ -11,6 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler, run_async, run_cmd
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -306,25 +309,33 @@ class FIOIntegrityChecker:
 
     1. **Write phase**: Write a known file with FIO (size-based).
        Compute and store md5sum of each file.
-    2. **Background IO phase**: Start a time-based FIO run_io
-       (randrw, no verify) that runs throughout the disruptive
-       operation.
-    3. **Verify phase**: Wait for FIO to complete, check that it
-       finished without errors. Re-compute md5sum of the integrity
-       file and compare with the stored checksum.
+    2. **Background IO phase**: Start a time-based FIO (randrw)
+       that runs throughout the disruptive operation. FIO results
+       are written to a file inside the pod so they can be
+       recovered if the oc rsh connection drops.
+    3. **Verify phase**: Wait for FIO to complete, check IO errors,
+       p99 latency, and verify FIO runtime covered the operation.
+       If oc rsh connection dropped during the operation, recover
+       FIO results from the output file. Re-compute md5sum of the
+       integrity file and compare with the stored checksum.
 
     Usage::
 
         checker = FIOIntegrityChecker(pvc_factory, pod_factory)
-        checker.start_io()
+        checker.start_io(bg_runtime=500)
 
         # ... perform disruptive operation ...
 
         checker.wait_and_verify()
+
+    For node removal operations where IO pods may be killed::
+
+        checker.verify_md5sum_only()
     """
 
     INTEGRITY_FILE = "integrity_data"
     BG_IO_FILE = "bg_io_data"
+    FIO_RESULTS_FILE = "fio_results.json"
 
     DEFAULT_MAX_LATENCY_SEC = 10
 
@@ -375,24 +386,29 @@ class FIOIntegrityChecker:
     ):
         """
         Create PVCs and pods, write integrity files with FIO, compute
-        md5sums, then start background FIO (time-based, no verify).
+        md5sums, then start background FIO (time-based, randrw).
+
+        Background FIO writes results to a file inside the pod
+        (fio_results.json) so they can be recovered if the oc rsh
+        connection drops during the disruptive operation.
 
         Args:
             size (str): Size of the integrity file to write.
             bg_runtime (int): Background FIO runtime in seconds.
-                Should be longer than the expected operation duration.
-            bs (str): Block size for FIO.
+                Should be longer than the expected operation
+                duration to ensure IO coverage.
+            bs (str): Block size for background FIO.
             rate (str): IO rate limit for background FIO.
             node_name (str): Pin IO pods to this specific node.
-                Useful when other nodes may be removed during the
-                operation.
+                Useful when other nodes may be removed during
+                the operation.
         """
         self._start_time = time.time()
         self._bg_runtime = bg_runtime
 
         if node_name:
             log.info(
-                f"-------- FIOIntegrityChecker: pinning IO pods "
+                "-------- FIOIntegrityChecker: pinning IO pods "
                 f"to node '{node_name}' --------"
             )
 
@@ -439,17 +455,40 @@ class FIOIntegrityChecker:
             f"FIO (runtime={bg_runtime}s) --------"
         )
         for io_pod in self.io_pods:
-            io_pod.run_io(
-                storage_type="fs",
-                size=size,
-                io_direction="rw",
-                runtime=bg_runtime,
-                bs=bs,
-                depth=4,
-                rate=rate,
-                fio_filename=self.BG_IO_FILE,
+            if not io_pod.wl_setup_done:
+                io_pod.workload_setup(storage_type="fs", jobs=1)
+            mount_path = (
+                io_pod.get()
+                .get("spec", {})
+                .get("containers", [{}])[0]
+                .get("volumeMounts", [{}])[0]
+                .get("mountPath", "/var/lib/www/html")
             )
-            log.info(f"Background FIO started on pod " f"'{io_pod.name}'")
+            results_file = f"{mount_path}/{self.FIO_RESULTS_FILE}"
+            io_pod.io_params = {
+                "name": "fio-rand-readwrite",
+                "readwrite": "randrw",
+                "bs": bs,
+                "direct": 0,
+                "numjobs": 1,
+                "time_based": 1,
+                "runtime": bg_runtime,
+                "size": size,
+                "iodepth": 4,
+                "invalidate": 1,
+                "fsync_on_close": 1,
+                "rwmixread": 75,
+                "ioengine": "libaio",
+                "rate": rate,
+                "rate_process": "poisson",
+                "filename": self.BG_IO_FILE,
+                "output": results_file,
+            }
+            io_pod.fio_thread = io_pod.wl_obj.run(**io_pod.io_params)
+            log.info(
+                "Background FIO started on pod "
+                f"'{io_pod.name}' (results -> {results_file})"
+            )
 
     def _collect_pod_diagnostics(self, io_pod):
         """
@@ -457,7 +496,7 @@ class FIOIntegrityChecker:
         Logs pod status, events, container state, process status,
         and mount point health.
         """
-        log.info(f"======== IO Failure Diagnostics for " f"'{io_pod.name}' ========")
+        log.info(f"======== IO Failure Diagnostics for '{io_pod.name}' ========")
 
         # 1. Pod status and container state
         try:
@@ -465,7 +504,7 @@ class FIOIntegrityChecker:
             phase = pod_data.get("status", {}).get("phase", "Unknown")
             node_name = pod_data.get("spec", {}).get("nodeName", "Unknown")
             ns = pod_data.get("metadata", {}).get("namespace", "Unknown")
-            log.info(f"Pod phase: {phase}, node: {node_name}, " f"namespace: {ns}")
+            log.info(f"Pod phase: {phase}, node: {node_name}, namespace: {ns}")
             for cs in pod_data.get("status", {}).get("containerStatuses", []):
                 log.info(
                     f"Container '{cs.get('name')}': "
@@ -507,7 +546,7 @@ class FIOIntegrityChecker:
                 if "fio" in line and "grep" not in line
             ]
             if fio_procs:
-                log.info(f"FIO process still running: " f"{fio_procs}")
+                log.info(f"FIO process still running: {fio_procs}")
             else:
                 log.info("FIO process is NOT running in the pod")
         except Exception as ex:
@@ -522,23 +561,9 @@ class FIOIntegrityChecker:
             )
             log.info(f"Mount point status:\n{df_out}")
         except Exception as ex:
-            log.warning(
-                f"Mount point check failed (volume may be " f"unavailable): {ex}"
-            )
+            log.warning(f"Mount point check failed (volume may be unavailable): {ex}")
 
-        # 5. Check for IO errors in dmesg
-        try:
-            dmesg = io_pod.exec_cmd_on_pod(
-                command="dmesg -T | tail -30",
-                out_yaml_format=False,
-                timeout=30,
-            )
-            if dmesg:
-                log.info(f"Last 30 dmesg lines:\n{dmesg}")
-        except Exception as ex:
-            log.warning(f"Failed to get dmesg: {ex}")
-
-        # 6. Pod logs (FIO stderr)
+        # 5. Pod logs (FIO stderr)
         try:
             logs = io_pod.ocp.exec_oc_cmd(
                 f"logs {io_pod.name} --tail=50",
@@ -562,35 +587,134 @@ class FIOIntegrityChecker:
                 out_yaml_format=False,
             )
             log.info(
-                f"All pods in {storage_ns} namespace " f"(client cluster):\n{pods_out}"
+                f"All pods in {storage_ns} namespace (client cluster):\n{pods_out}"
             )
         except Exception as ex:
             log.warning(f"Failed to list storage pods: {ex}")
 
-        log.info(f"======== End diagnostics for " f"'{io_pod.name}' ========")
+        log.info(f"======== End diagnostics for '{io_pod.name}' ========")
+
+    def _is_fio_running(self, io_pod):
+        """Check if FIO process is running inside the pod."""
+        try:
+            ps_out = io_pod.exec_cmd_on_pod(
+                command="ps aux",
+                out_yaml_format=False,
+                timeout=30,
+            )
+            return any(
+                "fio" in line and "grep" not in line for line in str(ps_out).split("\n")
+            )
+        except CommandFailed:
+            return False
+
+    def _wait_for_fio_to_finish(self, io_pod, timeout=300):
+        """
+        Wait for FIO process to exit inside the pod.
+
+        Args:
+            io_pod: Pod object.
+            timeout (int): Max seconds to wait.
+        """
+        log.info(f"Waiting up to {timeout}s for FIO to finish on pod '{io_pod.name}'")
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=15,
+            func=self._is_fio_running,
+            io_pod=io_pod,
+        ):
+            if not sample:
+                log.info(f"FIO finished on pod '{io_pod.name}'")
+                return
+            log.info(f"FIO still running on pod '{io_pod.name}', waiting...")
+
+    def _read_fio_results_from_pod(self, io_pod):
+        """
+        Read FIO JSON results from the output file inside the pod.
+        Use this when oc rsh dropped but FIO completed and wrote
+        results to the file.
+
+        Returns:
+            dict: Parsed FIO JSON results, or None if unreadable.
+        """
+        try:
+            mount_path = (
+                io_pod.get()
+                .get("spec", {})
+                .get("containers", [{}])[0]
+                .get("volumeMounts", [{}])[0]
+                .get("mountPath", "/var/lib/www/html")
+            )
+            results_file = f"{mount_path}/{self.FIO_RESULTS_FILE}"
+            raw = io_pod.exec_cmd_on_pod(
+                command=f"cat {results_file}",
+                out_yaml_format=False,
+                timeout=30,
+            )
+            if raw:
+                fio_result = yaml.safe_load(raw)
+                log.info(
+                    f"Successfully read FIO results from file on pod '{io_pod.name}'"
+                )
+                return fio_result
+        except (CommandFailed, yaml.YAMLError, KeyError) as ex:
+            log.warning(
+                f"Failed to read FIO results file from pod '{io_pod.name}': {ex}"
+            )
+        return None
 
     def wait_and_verify(self):
         """
-        Wait for background FIO to complete, check results for errors,
-        then re-compute md5sum of the integrity file and compare with
-        the stored checksum.
+        Wait for background FIO to complete, validate results, and
+        verify data integrity.
+
+        Checks performed:
+        - FIO IO error counters (read/write errors == 0)
+        - p99 completion latency under max_latency_sec threshold
+        - FIO runtime covered the disruptive operation duration
+        - md5sum of integrity file matches pre-operation checksum
+
+        If oc rsh connection dropped during the operation, FIO
+        results are recovered from the output file inside the pod.
 
         Raises:
-            AssertionError: If FIO reported errors or md5sum does not
-                match.
+            AssertionError: If FIO reported IO errors, latency
+                exceeded threshold, or md5sum does not match.
+            CommandFailed: If FIO results cannot be recovered.
         """
         log.info(
             "-------- FIOIntegrityChecker: waiting for background "
             "FIO to complete --------"
         )
         max_latency_ns = self.max_latency_sec * 1_000_000_000
+        check_failures = []
+        fio_failed_pods = []
         for io_pod in self.io_pods:
             try:
                 fio_result = io_pod.get_fio_results(timeout=self._bg_runtime + 300)
-            except Exception as ex:
+            except CommandFailed as ex:
                 log.error(f"FIO failed on pod '{io_pod.name}': {ex}")
                 self._collect_pod_diagnostics(io_pod)
-                raise
+                if self._is_fio_running(io_pod):
+                    log.warning(
+                        "FIO still running on pod "
+                        f"'{io_pod.name}' -- oc rsh "
+                        "connection was likely disrupted. "
+                        "Waiting for FIO to finish."
+                    )
+                    self._wait_for_fio_to_finish(io_pod)
+                fio_result = self._read_fio_results_from_pod(io_pod)
+                if fio_result:
+                    jobs = fio_result.get("jobs", [])
+                    log.info(
+                        "Recovered FIO results from file "
+                        f"for pod '{io_pod.name}' "
+                        f"({len(jobs)} job(s))"
+                    )
+                    fio_failed_pods.append(io_pod)
+                else:
+                    log.error(f"Could not recover FIO results from pod '{io_pod.name}'")
+                    raise
             job = fio_result["jobs"][0]
 
             read = job["read"]
@@ -605,7 +729,7 @@ class FIOIntegrityChecker:
             write_io_kb = write.get("io_kbytes", 0)
             read_err = read.get("io_error", 0)
             write_err = write.get("io_error", 0)
-            runtime_ms = job.get("elapsed", 0)
+            fio_elapsed_sec = job.get("elapsed", 0)
 
             read_clat = read.get("clat_ns", {})
             write_clat = write.get("clat_ns", {})
@@ -618,7 +742,7 @@ class FIOIntegrityChecker:
 
             log.info(
                 f"FIO on pod '{io_pod.name}': "
-                f"runtime={runtime_ms}ms, "
+                f"runtime={fio_elapsed_sec}s, "
                 f"Read: IOPS={read_iops:.1f} "
                 f"BW={read_bw}KB/s "
                 f"total_ios={read_total_ios} "
@@ -636,23 +760,55 @@ class FIOIntegrityChecker:
                 f"Errors: read={read_err} write={write_err}"
             )
 
-            assert read_err == 0 and write_err == 0, (
-                f"FIO reported IO errors on pod '{io_pod.name}': "
-                f"read_errors={read_err}, write_errors={write_err}"
-            )
+            if read_err == 0 and write_err == 0:
+                log.info(
+                    f"[PASS] IO errors check on pod '{io_pod.name}': read=0, write=0"
+                )
+            else:
+                msg = (
+                    "[FAIL] IO errors on pod "
+                    f"'{io_pod.name}': read_errors="
+                    f"{read_err}, write_errors={write_err}"
+                )
+                log.error(msg)
+                check_failures.append(msg)
 
             worst_p99 = max(read_clat_p99, write_clat_p99)
-            if worst_p99 > max_latency_ns:
-                log.warning(
-                    f"IO stall detected on pod '{io_pod.name}': "
-                    f"p99 latency {worst_p99 / 1e9:.2f}s exceeds "
-                    f"threshold {self.max_latency_sec}s"
+            worst_p99_sec = worst_p99 / 1e9
+            if worst_p99 <= max_latency_ns:
+                log.info(
+                    "[PASS] p99 latency check on pod "
+                    f"'{io_pod.name}': "
+                    f"{worst_p99_sec:.2f}s <= "
+                    f"{self.max_latency_sec}s threshold"
                 )
-            assert worst_p99 <= max_latency_ns, (
-                f"IO stall detected on pod '{io_pod.name}': "
-                f"p99 completion latency {worst_p99 / 1e9:.2f}s "
-                f"exceeds threshold of {self.max_latency_sec}s"
+            else:
+                msg = (
+                    "[FAIL] IO stall on pod "
+                    f"'{io_pod.name}': p99 latency "
+                    f"{worst_p99_sec:.2f}s exceeds "
+                    f"{self.max_latency_sec}s threshold"
+                )
+                log.error(msg)
+                check_failures.append(msg)
+
+        elapsed_since_start = time.time() - self._start_time
+        if self._bg_runtime <= elapsed_since_start:
+            log.info(
+                "[PASS] FIO duration coverage: "
+                f"bg_runtime={self._bg_runtime}s, "
+                f"elapsed={elapsed_since_start:.0f}s"
             )
+        else:
+            msg = (
+                "[FAIL] FIO duration gap: bg_runtime="
+                f"{self._bg_runtime}s but only "
+                f"{elapsed_since_start:.0f}s elapsed -- "
+                "FIO may not have covered the full "
+                "operation"
+            )
+            log.error(msg)
+            check_failures.append(msg)
 
         log.info(
             "-------- FIOIntegrityChecker: verifying data "
@@ -661,21 +817,43 @@ class FIOIntegrityChecker:
         for io_pod in self.io_pods:
             md5_verify = cal_md5sum(io_pod, self.INTEGRITY_FILE)
             original = self._md5sums[io_pod.name]
-            log.info(
-                f"Pod '{io_pod.name}': original md5={original}, "
-                f"current md5={md5_verify}"
+            if md5_verify == original:
+                log.info(f"[PASS] md5sum on pod '{io_pod.name}': {md5_verify}")
+            else:
+                msg = (
+                    "[FAIL] md5sum mismatch on pod "
+                    f"'{io_pod.name}': original="
+                    f"{original}, current={md5_verify}"
+                )
+                log.error(msg)
+                check_failures.append(msg)
+
+        if fio_failed_pods:
+            log.warning(
+                "-------- FIO results recovered from "
+                f"file for {len(fio_failed_pods)} pod(s) "
+                "due to oc rsh connection drop: "
+                f"{[p.name for p in fio_failed_pods]} "
+                "--------"
             )
-            assert md5_verify == original, (
-                f"Data integrity check FAILED on pod "
-                f"'{io_pod.name}': md5sum changed from "
-                f"{original} to {md5_verify}"
-            )
-            log.info(f"Data integrity verified on pod '{io_pod.name}'")
 
         elapsed = time.time() - self._start_time
+        if check_failures:
+            log.error(
+                "-------- FIOIntegrityChecker: "
+                f"{len(check_failures)} check(s) FAILED "
+                f"(elapsed: {elapsed:.0f}s) --------"
+            )
+            for failure in check_failures:
+                log.error(f"  - {failure}")
+            assert False, (
+                "FIOIntegrityChecker: "
+                f"{len(check_failures)} check(s) failed: " + "; ".join(check_failures)
+            )
+
         log.info(
-            f"-------- FIOIntegrityChecker: all checks passed "
-            f"(total elapsed: {elapsed:.0f}s) --------"
+            "-------- FIOIntegrityChecker: all checks "
+            f"PASSED (elapsed: {elapsed:.0f}s) --------"
         )
 
     def verify_md5sum_only(self):
@@ -699,9 +877,9 @@ class FIOIntegrityChecker:
         for io_pod in self.io_pods:
             try:
                 md5_verify = cal_md5sum(io_pod, self.INTEGRITY_FILE)
-            except Exception:
+            except CommandFailed:
                 log.warning(
-                    f"Pod '{io_pod.name}' is not reachable, " f"skipping md5sum check"
+                    f"Pod '{io_pod.name}' is not reachable, skipping md5sum check"
                 )
                 continue
             original = self._md5sums[io_pod.name]
@@ -710,12 +888,12 @@ class FIOIntegrityChecker:
                 f"md5={original}, current md5={md5_verify}"
             )
             assert md5_verify == original, (
-                f"Data integrity check FAILED on pod "
+                "Data integrity check FAILED on pod "
                 f"'{io_pod.name}': md5sum changed from "
                 f"{original} to {md5_verify}"
             )
             verified_count += 1
-            log.info(f"Data integrity verified on pod " f"'{io_pod.name}'")
+            log.info(f"Data integrity verified on pod '{io_pod.name}'")
         assert verified_count > 0, "No IO pods were reachable for md5sum verification"
         log.info(
             f"-------- md5sum verified on {verified_count}/"

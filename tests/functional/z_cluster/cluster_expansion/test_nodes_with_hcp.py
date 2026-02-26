@@ -44,8 +44,6 @@ from ocs_ci.utility.utils import get_random_str, ceph_health_check, TimeoutSampl
 
 log = logging.getLogger(__name__)
 
-MACHINESET_KIND = "machinesets.machine.openshift.io"
-
 
 def get_provider_machinesets():
     """
@@ -58,7 +56,7 @@ def get_provider_machinesets():
         list[tuple]: List of (machineset_name, replica_count) tuples.
     """
     ms_ocp = ocp.OCP(
-        kind=MACHINESET_KIND,
+        kind=constants.MACHINESET_KIND,
         namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
     )
     result = []
@@ -79,11 +77,11 @@ def scale_provider_machineset(ms_name, replicas):
         replicas (int): Target replica count.
     """
     ms_ocp = ocp.OCP(
-        kind=MACHINESET_KIND,
+        kind=constants.MACHINESET_KIND,
         namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
     )
     ms_ocp.exec_oc_cmd(
-        f"scale {MACHINESET_KIND}/{ms_name} "
+        f"scale {constants.MACHINESET_KIND}/{ms_name} "
         f"--replicas={replicas} "
         f"-n {constants.OPENSHIFT_MACHINE_API_NAMESPACE}"
     )
@@ -234,6 +232,14 @@ class TestAddRemoveHubNodeWithClientIO(ManageTest):
         self, restore_hub_nodes, pvc_factory, pod_factory
     ):
         """
+        This test was initially planned during test design but was later marked as deprecated since hub node
+        addition/removal is not a common ODF operation and the test is time-consuming due to machineset scaling and
+        waiting for node readiness.
+        We have more complicated scenario that involves node addition and removal along with OSD expansion
+        in TestExpandOSDOnHub (test_expand_osd_on_hub_verify_client_io, test_restart_osd_node_verify_client_io),
+        which provides better coverage of the cluster expansion use case while verifying client IO integrity.
+
+
         Add a worker node to the hub (provider) cluster by scaling
         its machineset, verify client IO integrity, then remove the
         node and verify again.
@@ -282,11 +288,11 @@ class TestAddRemoveHubNodeWithClientIO(ManageTest):
             if new_hub_nodes:
                 log.info(f"New hub node(s): {new_hub_nodes}")
                 break
-            log.info(f"No new hub nodes yet. Workers " f"({len(sample)}): {sample}")
+            log.info(f"No new hub nodes yet. Workers {len(sample)}: {sample}")
 
-        assert new_hub_nodes, (
-            "No new hub worker node appeared after scaling " "machineset"
-        )
+        assert (
+            new_hub_nodes
+        ), "No new hub worker node appeared after scaling 'machineset'"
         new_node = new_hub_nodes[0]
         wait_for_nodes_status(
             node_names=[new_node],
@@ -325,7 +331,7 @@ class TestAddRemoveHubNodeWithClientIO(ManageTest):
         ):
             if new_node not in sample:
                 log.info(
-                    f"Node '{new_node}' removed. " f"Workers ({len(sample)}): {sample}"
+                    f"Node '{new_node}' removed. Workers ({len(sample)}): {sample}"
                 )
                 break
             log.info(
@@ -408,7 +414,7 @@ class TestAddNodeToClientCluster(ManageTest):
             )
             patch = {"spec": {"replicas": target_replicas}}
             nodepool_ocp.patch(params=json.dumps(patch), format_type="merge")
-        log.info(f"Patched NodePool '{np_name}' to {target_replicas} " f"replicas")
+        log.info(f"Patched NodePool '{np_name}' to {target_replicas} replicas")
         node_util = HypershiftAWSNode()
         node_util._wait_nodepool_replicas_ready(np_name, target_replicas)
 
@@ -453,7 +459,7 @@ class TestAddNodeToClientCluster(ManageTest):
 
             initial_workers = get_worker_nodes()
             log.info(
-                f"Initial worker nodes ({len(initial_workers)}): " f"{initial_workers}"
+                f"Initial worker nodes ({len(initial_workers)}): {initial_workers}"
             )
 
             # ---- Phase 1: Add node ----
@@ -501,7 +507,7 @@ class TestAddNodeToClientCluster(ManageTest):
             self._node_added = True
 
             new_node_name = new_nodes[0]
-            log.info(f"Waiting for node '{new_node_name}' to become " f"Ready")
+            log.info(f"Waiting for node '{new_node_name}' to become Ready")
             wait_for_nodes_status(
                 node_names=[new_node_name],
                 status=constants.NODE_READY,
@@ -516,7 +522,7 @@ class TestAddNodeToClientCluster(ManageTest):
             )
 
             add_duration = time.time() - node_op_start
-            log.info(f"-------- Node add completed in " f"{add_duration:.0f}s --------")
+            log.info(f"-------- Node add completed in {add_duration:.0f}s --------")
 
             pod_obj = ocp.OCP(
                 kind="Pod",
@@ -530,7 +536,7 @@ class TestAddNodeToClientCluster(ManageTest):
                 for p in all_pods.get("items", [])
                 if "nodeplugin" in p["metadata"]["name"]
             ]
-            log.info(f"CSI nodeplugin pods on '{new_node_name}': " f"{nodeplugin_pods}")
+            log.info(f"CSI nodeplugin pods on '{new_node_name}': {nodeplugin_pods}")
             assert nodeplugin_pods, f"No CSI nodeplugin pods on '{new_node_name}'"
 
             add_checker.wait_and_verify()
@@ -548,7 +554,7 @@ class TestAddNodeToClientCluster(ManageTest):
 
             self._scale_nodepool(self._np_name, self._initial_replicas)
 
-            log.info("Waiting for worker count to return to " f"{len(initial_workers)}")
+            log.info(f"Waiting for worker count to return to {len(initial_workers)}")
             for sample in TimeoutSampler(
                 timeout=450,
                 sleep=30,
@@ -676,7 +682,7 @@ class TestExpandOSDOnHub(ManageTest):
             if new_hub_nodes:
                 log.info(f"New hub node(s): {new_hub_nodes}")
                 break
-            log.info(f"No new hub nodes yet. Workers " f"({len(sample)}): {sample}")
+            log.info(f"No new hub nodes yet. Workers ({len(sample)}): {sample}")
 
         assert new_hub_nodes, "No new hub worker appeared after scaling " "machineset"
         new_hub_node = new_hub_nodes[0]
@@ -692,7 +698,7 @@ class TestExpandOSDOnHub(ManageTest):
             label=constants.OPERATOR_NODE_LABEL,
         )
 
-        log.info(f"-------- Expanding OSD capacity by " f"{osd_size}Gi --------")
+        log.info(f"-------- Expanding OSD capacity by {osd_size}Gi --------")
         storage_cluster.add_capacity(osd_size)
 
         expected_osd_count = (deviceset_count + 1) * 3
@@ -749,7 +755,7 @@ class TestRestartOSDNodeOnHub(ManageTest):
                     nodes_platform = factory.get_nodes_platform()
                     nodes_platform.restart_nodes_by_stop_and_start_teardown()
             except (CommandFailed, ClientError) as e:
-                log.warning(f"Failed to verify hub nodes in " f"teardown: {e}")
+                log.warning(f"Failed to verify hub nodes in teardown: {e}")
 
         request.addfinalizer(finalizer)
 
@@ -757,7 +763,7 @@ class TestRestartOSDNodeOnHub(ManageTest):
     @brown_squad
     @hcp_required
     @runs_on_provider
-    # @polarion_id("placeholder")
+    @polarion_id("OCS-7727")
     def test_restart_osd_node_verify_client_io(
         self, ensure_nodes_up, pvc_factory, pod_factory
     ):
@@ -781,7 +787,7 @@ class TestRestartOSDNodeOnHub(ManageTest):
 
             osd_node_name = random.choice(osd_node_names)
             osd_node = get_node_objs([osd_node_name])[0]
-            log.info(f"Selected OSD node for restart: " f"'{osd_node_name}'")
+            log.info(f"Selected OSD node for restart: '{osd_node_name}'")
 
         with config.RunWithFirstConsumerConfigContextIfAvailable():
             integrity_checker = FIOIntegrityChecker(pvc_factory, pod_factory)
@@ -800,7 +806,7 @@ class TestRestartOSDNodeOnHub(ManageTest):
                 nodes=[osd_node], wait=True, force=True
             )
 
-            log.info(f"Waiting for node '{osd_node_name}' to become " f"Ready")
+            log.info(f"Waiting for node '{osd_node_name}' to become Ready")
             wait_for_nodes_status(
                 node_names=[osd_node_name],
                 status=constants.NODE_READY,
