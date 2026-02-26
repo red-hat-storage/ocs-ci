@@ -375,12 +375,23 @@ class ODFCliRunner:
     def list_stale_cephfs_subvolumes(self) -> str:
         """
         List stale CephFS subvolumes.
+
+        Returns:
+            str: CLI command result output.
         """
         return self.run_command("subvolume ls --stale")
 
     def delete_cephfs_subvolume(self, filesystem, subvol, group) -> str:
         """
         Delete a CephFS subvolume.
+
+        Args:
+            filesystem (str): Name of the CephFS filesystem.
+            subvol (str): Name of the subvolume to delete.
+            group (str): Name of the subvolume group.
+            
+        Returns:
+            str: CLI command result output.
         """
         return self.run_command(
             f"subvolume delete {filesystem} {subvol} {group}"
