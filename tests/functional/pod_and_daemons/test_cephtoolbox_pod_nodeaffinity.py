@@ -5,7 +5,12 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
-from ocs_ci.framework.testlib import tier1, tier4b, polarion_id
+from ocs_ci.framework.testlib import (
+    tier1,
+    tier4b,
+    polarion_id,
+    runs_on_provider,
+)
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.node import (
     apply_node_affinity_for_ceph_toolbox,
@@ -25,6 +30,7 @@ log = logging.getLogger(__name__)
 
 
 @brown_squad
+@runs_on_provider
 class TestCephtoolboxPod:
     @pytest.fixture(scope="class", autouse=True)
     def teardown(self, request):
@@ -64,6 +70,7 @@ class TestCephtoolboxPod:
     def test_node_affinity_to_ceph_toolbox_pod(self):
         """
         This test verifies whether ceph toolbox failovered or not after applying node affinity
+        In provider-client mode, this runs in the provider cluster where toolbox exists
 
         """
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
@@ -82,6 +89,7 @@ class TestCephtoolboxPod:
         This test verifies ceph toolbox runs only on the node given in node-affinity.
         Reboot the node after applying node-affinity.
         Expectation is the pod should come up only on that node mentioned in affinity.
+        In provider-client mode, this runs in the provider cluster where toolbox exists
 
         """
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
@@ -110,7 +118,8 @@ class TestCephtoolboxPod:
     @polarion_id("OCS-6090")
     def test_nodeaffinity_to_ceph_toolbox_with_default_taints(self):
         """
-        This test verifies whether ceph toolbox failovered or not after applying node affinity on tainted node
+        This test verifies whether ceph toolbox failovered or not after applying node affinity on tainted node.
+        In provider-client mode, this runs in the provider cluster where toolbox exists.
 
         """
         worker_nodes = get_worker_nodes()
