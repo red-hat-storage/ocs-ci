@@ -4338,7 +4338,9 @@ def get_module_ip(terraform_state_file, module):
     with open(terraform_state_file) as fd:
         obj = json.loads(fd.read())
 
-        if config.ENV_DATA.get("folder_structure"):
+        # Auto-detect terraform state file format
+        # Newer terraform versions use "resources", older versions use "modules"
+        if "resources" in obj or config.ENV_DATA.get("folder_structure"):
             resources = obj["resources"]
             log.debug(f"Extracting module information for {module}")
             log.debug(f"Resource in {terraform_state_file}: {resources}")
@@ -4347,7 +4349,7 @@ def get_module_ip(terraform_state_file, module):
                     for each_resource in resource["instances"]:
                         resource_body = each_resource["attributes"]["body"]
                         ips.append(resource_body.split('"')[3])
-        else:
+        elif "modules" in obj:
             modules = obj["modules"]
             target_module = module.split("_")[1]
             log.debug(f"Extracting module information for {module}")
@@ -4355,6 +4357,11 @@ def get_module_ip(terraform_state_file, module):
             for each_module in modules:
                 if target_module in each_module["path"]:
                     return each_module["outputs"]["ip_addresses"]["value"]
+        else:
+            raise KeyError(
+                f"Terraform state file {terraform_state_file} does not contain "
+                "'resources' or 'modules' key. Unable to extract module information."
+            )
 
         return ips
 
