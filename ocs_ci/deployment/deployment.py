@@ -378,7 +378,7 @@ class Deployment(object):
                                 "ocs_registry_image", None
                             )
                             ocs_install_verification(
-                                ocs_registry_image=ocs_registry_image
+                                ocs_registry_image=ocs_registry_image,
                             )
                     # if we have Globalnet enabled in case of submariner with RDR
                     # we need to add a flag to storagecluster
@@ -422,9 +422,9 @@ class Deployment(object):
                                 .get("multiClusterService")
                                 .get("enabled")
                             ), "Failed to update StorageCluster globalnet"
-                            validate_serviceexport()
                             ocs_install_verification(
-                                timeout=2000, ocs_registry_image=ocs_registry_image
+                                timeout=2000,
+                                ocs_registry_image=ocs_registry_image,
                             )
                     config.reset_ctx()
                 if config.REPORTING["collect_logs_on_success_run"]:
@@ -3371,6 +3371,25 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
             self.enable_managed_serviceaccount()
+
+        # Validate service exporter at the end after everything is settled
+        if get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True):
+            restore_index = config.cur_index
+            managed_clusters = get_non_acm_cluster_config()
+            for cluster in managed_clusters:
+                index = cluster.MULTICLUSTER["multicluster_index"]
+                config.switch_ctx(index)
+                if (
+                    config.ENV_DATA["platform"].lower()
+                    in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                ):
+                    logger.info(
+                        "Skipping ServiceExport validation for multiclient cluster"
+                    )
+                    continue
+                logger.info("Validating ServiceExport resources")
+                validate_serviceexport()
+            config.switch_ctx(restore_index)
 
     @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
     def check_observability_status(self):
