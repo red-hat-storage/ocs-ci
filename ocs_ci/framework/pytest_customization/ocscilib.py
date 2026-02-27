@@ -845,20 +845,20 @@ def pytest_collection_modifyitems(session, config, items):
                 f"\nTest name length: {length} characters (exceeds limit of {MAX_TEST_NAME_LENGTH})\n"
                 f"Test name: {test_name}\n"
                 f"Full path: {nodeid}\n"
-                f"{'-'*80}"
+                f"{'-' * 80}"
             )
 
         # Combine all details into one message
         full_error_message = (
-            f"\n{'='*80}\n"
+            f"\n{'=' * 80}\n"
             f"ERROR: Found {len(long_test_names)} test(s) with names exceeding "
             f"{MAX_TEST_NAME_LENGTH} characters.\n"
             f"Long test names cause issues with data upload and reporting.\n"
-            f"{'='*80}" + "".join(error_details) + f"\n{'='*80}\n"
+            f"{'=' * 80}" + "".join(error_details) + f"\n{'=' * 80}\n"
             f"Test collection failed: {len(long_test_names)} test(s) have names "
             f"exceeding {MAX_TEST_NAME_LENGTH} characters.\n"
             f"Please shorten the parametrization names or test function names.\n"
-            f"{'='*80}"
+            f"{'=' * 80}"
         )
 
         # Exit with the complete error message
@@ -927,6 +927,20 @@ def pytest_runtest_makereport(item, call):
             "use .stop_gracefully if you want logs collected"
         )
         return
+    # Record test failure in the AI analysis registry, but only when AI live
+    # analysis is enabled. This avoids any overhead (import, item.fspath
+    # resolution, dict writes) when the feature is off.
+    if rep.failed and rep.when == "call":
+        try:
+            from ocs_ci.ocs.must_gather.ai_analyzer import (
+                _is_ai_analysis_enabled,
+                record_test_failure,
+            )
+
+            if _is_ai_analysis_enabled():
+                record_test_failure(item, rep)
+        except Exception:
+            log.debug("Failed to record test failure for AI analysis", exc_info=True)
 
     # we only look at actual failing test calls, not setup/teardown
     # Don't collect must-gather for deployment here since its already
@@ -1215,3 +1229,29 @@ def pytest_runtest_teardown(item):
             mon = ocs_ci.utility.memory.mon
             if mon and mon.is_alive():
                 mon.cancel()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """
+    Generate the consolidated AI failure analysis HTML report at the end of the
+    pytest session (after all tests have run).
+
+    Only runs when ai_live_analysis is enabled in ENV_DATA config.
+    """
+    try:
+        from ocs_ci.ocs.must_gather.ai_analyzer import (
+            _is_ai_analysis_enabled,
+            generate_consolidated_html_report,
+        )
+
+        if not _is_ai_analysis_enabled():
+            return
+
+        report_path = generate_consolidated_html_report()
+        if report_path:
+            log.info(f"AI consolidated failure analysis report: {report_path}")
+    except Exception:
+        log.debug(
+            "Failed to generate consolidated AI analysis report",
+            exc_info=True,
+        )

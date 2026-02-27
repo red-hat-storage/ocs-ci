@@ -16,6 +16,7 @@ from ocs_ci.ocs.must_gather.const_must_gather import (
 )
 from ocs_ci.utility import version
 from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
+from ocs_ci.ocs.must_gather import ai_analyzer
 
 
 logger = logging.getLogger(__name__)
@@ -51,16 +52,52 @@ class MustGather(object):
         """
         Collect ocs_must_gather and copy the logs to a temporary folder.
 
+        If AI live analysis is enabled (config.ENV_DATA["ai_live_analysis"] is True)
+        and the current test has failed (detected via PYTEST_CURRENT_TEST env var and
+        the ai_analyzer failure registry), Claude Code CLI is spawned in a parallel
+        thread to perform live cluster investigation. Must-gather proceeds concurrently.
+        Both are awaited (joined) before this method returns.
+
         Args:
             ocs_flags (str): ocs flags to must gather command for example ["-- /usr/bin/gather -cs"]
             mg_options (str): Options of must gather command For example "--host_network=True"
 
         """
+        # --- AI Live Analysis: spawn Claude in parallel if enabled and test failed ---
+        ai_thread = None
+        if ai_analyzer._is_ai_analysis_enabled():
+            if ai_analyzer._is_current_test_failed():
+                failure_info = ai_analyzer._get_current_test_failure_info()
+                if failure_info:
+                    logger.info(
+                        "AI live analysis enabled. Spawning Claude analysis for test: "
+                        f"{failure_info.get('test_name', 'unknown')}"
+                    )
+                    ai_thread = ai_analyzer.trigger_ai_analysis_parallel(failure_info)
+            else:
+                logger.debug(
+                    "AI live analysis is enabled but current test has not failed; "
+                    "skipping AI analysis."
+                )
+
+        # --- Run must-gather (blocking) ---
         temp_folder = tempfile.mkdtemp()
         collect_ocs_logs(
             dir_name=temp_folder, ocp=False, ocs_flags=ocs_flags, mg_options=mg_options
         )
         self.root = temp_folder + "_ocs_logs"
+
+        # --- Wait for AI analysis thread to complete (if spawned) ---
+        if ai_thread is not None:
+            logger.info("Waiting for AI analysis thread to complete...")
+            ai_thread.join()
+            result = ai_thread.__dict__.get("result_container", [None])[0]
+            if isinstance(result, Exception):
+                logger.warning(f"AI analysis completed with error: {result}")
+            elif isinstance(result, str):
+                logger.info(f"AI analysis summary written to: {result}")
+            else:
+                logger.warning("AI analysis thread completed with no result")
 
     def search_file_path(self):
         """
