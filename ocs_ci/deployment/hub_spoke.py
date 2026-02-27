@@ -5291,6 +5291,9 @@ class SpokeODF(SpokeOCP, ABC):
             constants.PROVIDER_MODE_OPERATORGROUP
         )
 
+        # Set the correct namespace for the operator group
+        operator_group_data["metadata"]["namespace"] = self.namespace_client
+
         operator_group_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="operator_group", delete=False
         )
@@ -5429,6 +5432,9 @@ class SpokeODF(SpokeOCP, ABC):
             return
 
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
+
+        # Set the correct namespace for the subscription
+        subscription_data["metadata"]["namespace"] = self.namespace_client
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
         hosted_odf_version = (
