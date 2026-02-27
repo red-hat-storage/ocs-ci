@@ -132,6 +132,7 @@ DEPLOYMENT:
   host_network: False # Use host network for ODF pods, propagates to spec of StorageCluster. Mandatory for Hub/Spoke deployments.
   enable_data_replication_separation: False # separates client data path from data replication
 
+
 # Section for reporting configuration
 REPORTING:
   email:
@@ -157,6 +158,16 @@ REPORTING:
 
 # This is the default information about environment.
 ENV_DATA:
+  # AI live analysis: when enabled, Claude Code CLI is invoked in parallel with
+  # must-gather whenever a test fails. Claude performs a live read-only
+  # investigation of the cluster and writes a summary report to the test log dir.
+  # Requires claude-code CLI to be installed and configured on the run host.
+  ai_live_analysis: false
+  # Timeout in seconds for the Claude Code CLI invocation (default: 300s / 5 min)
+  ai_analysis_timeout: 300
+  # Path to CLAUDE.md file providing project context to Claude.
+  # Defaults to ~/.claude/CLAUDE.md if not set.
+  # ai_claude_md_path: "/path/to/your/CLAUDE.md"
   cluster_name: null # will be changed in ocscilib plugin
   storage_cluster_name: "ocs-storagecluster"
   storage_client_name: "ocs-storagecluster"
