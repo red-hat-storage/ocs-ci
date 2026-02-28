@@ -938,6 +938,17 @@ def _run_claude_analysis(
     test_short_name = failure_info.get("test_short_name", "unknown")
     analysis_start = time.monotonic()
 
+    logger.info(
+        "=" * 70
+        + f"\n[AI ANALYZER] STARTED — test: {test_short_name}"
+        + f"\n[AI ANALYZER] ocsci_root : {ocsci_root}"
+        + f"\n[AI ANALYZER] test_file  : {failure_info.get('test_file_path', 'unknown')}"
+        + f"\n[AI ANALYZER] log_dir    : {test_log_dir}"
+        + f"\n[AI ANALYZER] timeout    : {timeout}s"
+        + "\n"
+        + "=" * 70
+    )
+
     try:
         prompt = _build_claude_prompt(
             failure_info, kubeconfig_entries, ocsci_root, claude_md_path
@@ -1011,9 +1022,14 @@ def _run_claude_analysis(
             )
             logger.warning("Claude produced no stdout output")
         else:
+            analysis_duration = time.monotonic() - analysis_start
             logger.info(
-                f"Claude analysis completed successfully "
-                f"({len(summary_content)} chars)"
+                "=" * 70
+                + f"\n[AI ANALYZER] COMPLETED — test: {test_short_name}"
+                + f"\n[AI ANALYZER] duration  : {analysis_duration:.1f}s"
+                + f"\n[AI ANALYZER] output    : {len(summary_content)} chars"
+                + "\n"
+                + "=" * 70
             )
 
         summary_path = _write_ai_summary(summary_content, test_log_dir, test_short_name)
