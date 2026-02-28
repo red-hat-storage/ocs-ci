@@ -989,17 +989,19 @@ def _run_claude_analysis(
                 f"CLAUDE.md not found at '{claude_md_path}', proceeding without it"
             )
 
-        # Append the prompt as the last positional argument
-        cmd.append(prompt)
-
         logger.info(
             f"Launching Claude Code CLI for AI analysis of test: {test_short_name}"
         )
         logger.info(f"Claude CLI timeout: {timeout}s")
 
-        # Run claude in the ocs-ci root directory so @codebase references work
+        # Pass the prompt via stdin (input=) rather than as a positional argument.
+        # When --allowedTools contains Bash(*) patterns, the Claude CLI argument
+        # parser misinterprets the positional prompt that follows it and reports
+        # "Input must be provided either through stdin or as a prompt argument".
+        # Passing via stdin avoids this parsing ambiguity entirely.
         proc = subprocess.run(
             cmd,
+            input=prompt,
             capture_output=True,
             text=True,
             timeout=timeout,
