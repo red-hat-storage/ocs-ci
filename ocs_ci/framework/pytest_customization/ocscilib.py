@@ -1002,6 +1002,26 @@ def pytest_runtest_makereport(item, call):
                         f"Collecting logs since: {since_time_str} (5 min buffer before test start)"
                     )
 
+                # Spawn AI analysis in parallel with log collection (if enabled)
+                _ai_thread = None
+                try:
+                    from ocs_ci.ocs.must_gather.ai_analyzer import (
+                        _is_ai_analysis_enabled,
+                        _get_current_test_failure_info,
+                        trigger_ai_analysis_parallel,
+                    )
+
+                    if _is_ai_analysis_enabled():
+                        _failure_info = _get_current_test_failure_info()
+                        if _failure_info:
+                            log.info(
+                                "AI live analysis enabled. Spawning Claude analysis "
+                                f"for test: {_failure_info.get('test_name', 'unknown')}"
+                            )
+                            _ai_thread = trigger_ai_analysis_parallel(_failure_info)
+                except Exception:
+                    log.debug("Failed to spawn AI analysis thread", exc_info=True)
+
                 utils.collect_ocs_logs(
                     dir_name=test_case_name,
                     ocp=ocp_logs_collection,
@@ -1013,6 +1033,21 @@ def pytest_runtest_makereport(item, call):
                     timeout=timeout,
                     since_time=since_time_str,
                 )
+
+                # Wait for AI analysis thread to complete
+                if _ai_thread is not None:
+                    try:
+                        log.info("Waiting for AI analysis thread to complete...")
+                        _ai_thread.join()
+                        _result = _ai_thread.__dict__.get("result_container", [None])[0]
+                        if isinstance(_result, Exception):
+                            log.warning(f"AI analysis completed with error: {_result}")
+                        elif isinstance(_result, str):
+                            log.info(f"AI analysis summary written to: {_result}")
+                        else:
+                            log.warning("AI analysis thread completed with no result")
+                    except Exception:
+                        log.debug("Error waiting for AI analysis thread", exc_info=True)
         except Exception:
             log.exception("Failed to collect OCS logs")
 
