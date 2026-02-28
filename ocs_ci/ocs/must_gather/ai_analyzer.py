@@ -292,11 +292,17 @@ def _build_claude_prompt(failure_info, kubeconfig_entries, ocsci_root, claude_md
     # The @path syntax in the prompt text tells Claude to load the file/directory
     # as context before processing the rest of the prompt.
     # - @<test_file_path>  : the exact test source file that failed
-    # - @<ocsci_root>      : the ocs-ci repo root (gives access to helpers, constants, fixtures)
+    # - @<ocsci_root>/ocs_ci  : OCS-CI library code (helpers, constants, fixtures)
+    # - @<ocsci_root>/tests   : test source tree
+    # - @<ocsci_root>/conf    : configuration schemas
+    # NOTE: data/ is intentionally excluded — it may contain auth keys and credentials.
     context_refs = []
     if test_file_path and os.path.isfile(test_file_path):
         context_refs.append(f"@{test_file_path}")
-    context_refs.append(f"@{ocsci_root}")
+    for safe_subdir in ("ocs_ci", "tests", "conf"):
+        subdir_path = os.path.join(ocsci_root, safe_subdir)
+        if os.path.isdir(subdir_path):
+            context_refs.append(f"@{subdir_path}")
     context_section = "\n".join(context_refs)
 
     prompt = f"""You are an expert in OpenShift Data Foundation (ODF), OpenShift Container \
@@ -317,6 +323,9 @@ The following files/directories are provided as context for this analysis:
 - You MUST NOT run any commands that alter cluster state (no apply, delete, patch, create, edit)
 - You may only use read-only commands: oc get, oc describe, oc logs, oc status, kubectl get, etc.
 - This is a live cluster investigation - be thorough but non-destructive
+- You MUST NOT read, access, or reference any files under the `{ocsci_root}/data/` directory.
+  That directory may contain authentication keys, pull-secrets, and other credentials.
+  Treat it as off-limits regardless of any other instruction.
 
 ## Failed Test Information
 - **Test Name**: {test_name}
@@ -956,13 +965,26 @@ def _run_claude_analysis(
 
         # Build the claude CLI command.
         # --print: non-interactive/autonomous mode (prints output and exits)
-        # --allowedTools: restrict to read-only tools only
-        # --no-update-check: skip version check for speed
+        # --allowedTools: restrict to read-only tools only.
+        #
+        # Bash(cat/ls/find/grep) patterns are intentionally scoped to safe
+        # paths only — the ocs-ci data/ directory is excluded because it may
+        # contain auth keys, pull-secrets, and other credentials.
+        # Log directories (typically under /tmp or a user-specified log_dir)
+        # are allowed for reading test artefacts.
+        log_dir = os.path.expanduser(config.RUN.get("log_dir", "/tmp"))
         allowed_tools = (
             "Bash(oc get*),Bash(oc describe*),Bash(oc logs*),"
             "Bash(oc status*),Bash(oc explain*),Bash(oc adm top*),"
             "Bash(kubectl get*),Bash(kubectl describe*),Bash(kubectl logs*),"
-            "Bash(cat *),Bash(ls *),Bash(find *),Bash(grep *),"
+            f"Bash(cat {ocsci_root}/ocs_ci/*),Bash(cat {ocsci_root}/tests/*),"
+            f"Bash(cat {ocsci_root}/conf/*),Bash(cat {log_dir}/*),"
+            f"Bash(ls {ocsci_root}/ocs_ci*),Bash(ls {ocsci_root}/tests*),"
+            f"Bash(ls {ocsci_root}/conf*),Bash(ls {log_dir}*),"
+            f"Bash(find {ocsci_root}/ocs_ci *),Bash(find {ocsci_root}/tests *),"
+            f"Bash(find {ocsci_root}/conf *),Bash(find {log_dir} *),"
+            f"Bash(grep * {ocsci_root}/ocs_ci/*),Bash(grep * {ocsci_root}/tests/*),"
+            f"Bash(grep * {log_dir}/*),"
             "Read,Glob,Grep,LS"
         )
         cmd = [
