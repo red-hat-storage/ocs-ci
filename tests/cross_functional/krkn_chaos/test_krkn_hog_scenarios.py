@@ -174,6 +174,7 @@ class TestKrKnHogChaosScenarios:
             strength_scenarios = hog_helper.create_strength_test_scenarios(
                 stress_level="medium",  # Use medium stress level
                 duration=strength_duration,
+                node_selector=f"{node_selector}=",
             )
 
             for scenario in strength_scenarios:
@@ -195,6 +196,7 @@ class TestKrKnHogChaosScenarios:
             max_scenarios = hog_helper.create_strength_test_scenarios(
                 stress_level="ultimate",  # Use ultimate stress level
                 duration=max_duration,
+                node_selector=f"{node_selector}=",
             )
 
             for scenario in max_scenarios:
@@ -229,7 +231,10 @@ class TestKrKnHogChaosScenarios:
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
-                e, node_type, "multi-stress hog chaos"
+                e,
+                node_type,
+                "multi-stress hog chaos",
+                health_helper=health_helper,
             )
             raise
         except Exception as e:
@@ -435,7 +440,10 @@ class TestKrKnHogChaosScenarios:
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
-                e, stress_level, f"{stress_level} cluster strength testing"
+                e,
+                stress_level,
+                f"{stress_level} cluster strength testing",
+                health_helper=health_helper,
             )
             raise
         except Exception as e:
@@ -445,10 +453,10 @@ class TestKrKnHogChaosScenarios:
             # Cleanup workloads
             workload_ops.validate_and_cleanup()
 
-            # =================================================================
-            # UNIFIED RESULTS ANALYSIS
-            # =================================================================
-            log.info(f"{stress_level.upper()} CLUSTER STRENGTH TESTING RESULTS:")
+        # =================================================================
+        # UNIFIED RESULTS ANALYSIS
+        # =================================================================
+        log.info(f"{stress_level.upper()} CLUSTER STRENGTH TESTING RESULTS:")
         log.info("=" * 60)
 
         # Analyze overall results from unified execution
