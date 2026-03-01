@@ -133,10 +133,11 @@ class LiveClusterDebugger:
         }
         resolved_model = model_aliases.get(self.model, self.model)
 
-        # Build the command
+        # Build the command — prompt is passed via stdin to avoid
+        # shell argument length limits on large prompts
         cmd = [
             "claude",
-            "-p", prompt,
+            "-p",
             "--tools", "Bash,Read",
             "--dangerously-skip-permissions",
             "--output-format", "json",
@@ -162,6 +163,7 @@ class LiveClusterDebugger:
         try:
             proc = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
