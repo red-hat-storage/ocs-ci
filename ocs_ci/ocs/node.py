@@ -7,6 +7,9 @@ from collections import defaultdict
 from operator import itemgetter
 import random
 import json
+import unicodedata
+from ocs_ci.ocs.ocp import exec_cmd
+import yaml
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -32,7 +35,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
+from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version, run_cmd
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     get_pv_size,
@@ -1322,10 +1325,16 @@ def get_master_nodes():
     return master_nodes_list
 
 
-def get_worker_nodes():
+def get_worker_nodes(skip_master_nodes=None):
     """
     Fetches all worker nodes.
-    In case of HCI provider cluster, it will exclude the master nodes.
+    In case of HCI provider cluster, it will exclude the master nodes by default.
+
+    Args:
+        skip_master_nodes (bool): Whether to exclude master nodes from the result.
+            If None (default), master nodes are excluded only for HCI provider clusters.
+            If True, master nodes are always excluded.
+            If False, master nodes are never excluded.
 
     Returns:
         list: List of names of worker nodes
@@ -1348,9 +1357,20 @@ def get_worker_nodes():
             if node.get("metadata").get("name") not in infra_node_ids
         ]
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
-    if is_hci_provider_cluster():
+
+    # Determine whether to skip master nodes
+    should_skip_masters = skip_master_nodes
+    if should_skip_masters is None:
+        # Auto-detect: skip masters only for HCI provider clusters
+        should_skip_masters = is_hci_provider_cluster()
+
+    if should_skip_masters:
         master_node_list = get_master_nodes()
-        worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
+        if not (
+            len(get_all_nodes()) == 3
+            and set(worker_nodes_list) == set(master_node_list)
+        ):
+            worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
     return worker_nodes_list
 
 
@@ -3417,3 +3437,237 @@ def select_osd_node():
     log.info(f"Selected OSD node is {osd_node_name}")
     node_obj = get_node_objs([osd_node_name])[0]
     return node_obj
+
+
+def mark_masters_schedulable():
+    """
+    Mark master nodes as schedulable
+    """
+    path = "/spec/mastersSchedulable"
+    params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+    scheduler_obj = OCP(
+        kind=constants.SCHEDULERS_CONFIG,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert scheduler_obj.patch(
+        params=params, format_type="json"
+    ), "Failed to run patch command to update control nodes as scheduleable"
+
+
+def get_worker_node_allocatable():
+    """
+    Fetch the allocatable CPU and memory resources for worker nodes in a Kubernetes cluster.
+
+    This function queries the OpenShift (okd) cluster's API using 'oc' command to retrieve the
+    available CPU and memory resources for each worker node. The results are then parsed
+    and returned as a dictionary with node names as keys, and nested dictionaries containing
+    CPU (in millicores) and Memory (in GB) values.
+
+    Returns:
+        dict: A dictionary where keys are worker node names and values are another
+            dictionary containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
+    """
+    cmd = ["oc", "get", "nodes", "-l", "node-role.kubernetes.io/worker", "-o", "yaml"]
+    result = run_cmd(cmd)
+    nodes = yaml.safe_load(result)
+    alloc = {}
+    for node in nodes["items"]:
+        name = node["metadata"]["name"]
+        cpu_str = node["status"]["allocatable"]["cpu"]
+        if cpu_str.endswith("m"):  # e.g. "500m"
+            cpu = int(int(cpu_str[:-1]) / 1000)
+        else:
+            cpu = int(cpu_str)
+        mem_raw = node["status"]["allocatable"]["memory"]  # e.g. "31948256Ki"
+        mem_gib = int(mem_raw.replace("Ki", "")) / (1024**2)
+        alloc[name] = {"cpu": cpu, "mem": mem_gib}
+    return alloc
+
+
+def get_pod_requests_per_node(worker_nodes=None):
+    """
+    Fetch requested CPU/Memory resources for all running pods, grouped by node.
+
+    This function queries the OpenShift (okd) cluster's API using 'oc' command to retrieve
+    details about all pods in the cluster. It then parses these details and aggregates
+    the requested CPU (in millicores) and Memory (in GB) for each worker node.
+
+    Args:
+        worker_nodes (list, optional): A list of worker node names to filter pods by.
+            If not provided, all nodes are considered.
+
+    Returns:
+        dict: A dictionary where keys are worker node names and values are another
+            dictionary containing 'cpu' (float, in millicores) and 'mem' (float, in GB).
+    """
+    cmd = ["oc", "get", "pods", "-A", "-o", "yaml"]
+    result = run_cmd(cmd)
+    pods = yaml.safe_load(result)
+
+    usage = defaultdict(lambda: {"cpu": 0, "mem": 0})
+    for pod_data in pods["items"]:
+        node = pod_data.get("spec", {}).get("nodeName")
+        if not node or (worker_nodes and node not in worker_nodes):
+            continue  # skip unscheduled pods and non-worker nodes
+
+        for container in pod_data["spec"].get("containers", []):
+            requests = container.get("resources", {}).get("requests", {})
+            cpu_req = str(requests.get("cpu") or "0")
+            mem_req = str(requests.get("memory") or "0")
+
+            # CPU conversion
+            if cpu_req.endswith("m"):  # e.g. "500m"
+                cpu_val = int(cpu_req[:-1]) / 1000
+            elif cpu_req:
+                cpu_val = int(cpu_req)
+            else:
+                cpu_val = 0
+
+            # Memory conversion
+            if mem_req.endswith("Mi"):
+                mem_val = int(mem_req[:-2]) / 1024
+            elif mem_req.endswith("Gi"):
+                mem_val = int(mem_req[:-2])
+            elif mem_req.endswith("Ki"):
+                mem_val = int(mem_req[:-2]) / (1024**2)
+            else:
+                mem_val = 0
+
+            usage[node]["cpu"] += cpu_val
+            usage[node]["mem"] += mem_val
+    return usage
+
+
+def get_cluster_resource_capacity():
+    """
+    Parses 'oc describe node' for all worker nodes to calculate actual
+    unreserved CPU and RAM capacity.
+
+    Returns:
+        tuple: (free_ram_gb, free_cpu_cores, namespace_breakdown_dict)
+            - free_ram_gb (float): Total unreserved RAM in GB.
+            - free_cpu_cores (float): Total unreserved CPU cores.
+            - breakdown (dict): Dictionary containing 'ram' and 'cpu' usage per namespace.
+    """
+    worker_names = get_worker_nodes()
+    total_free_ram_kb = 0
+    total_free_cpu_m = 0
+
+    breakdown = {"ram": defaultdict(int), "cpu": defaultdict(int)}
+    ocp_node_obj = OCP(kind=constants.NODE)
+
+    for name in worker_names:
+        # Use exec_cmd instead of deprecated run_cmd
+        node_data_raw = exec_cmd(f"oc describe node {name}").stdout.decode()
+        node_data = unicodedata.normalize("NFKD", node_data_raw)
+        node_info = ocp_node_obj.get(resource_name=name)
+
+        # 1. Base Allocatable precision
+        alloc_ram_kb = int(
+            node_info["status"]["allocatable"]["memory"].replace("Ki", "")
+        )
+        cpu_raw = node_info["status"]["allocatable"]["cpu"]
+        alloc_cpu_m = (
+            int(cpu_raw.replace("m", "")) if "m" in cpu_raw else int(cpu_raw) * 1000
+        )
+
+        # 2. Parse overall reservation
+        mem_res_match = re.search(r"memory\s+(\d+)Mi\s+\((\d+)%\)", node_data)
+        cpu_res_match = re.search(r"cpu\s+(\d+)m\s+\((\d+)%\)", node_data)
+
+        if mem_res_match:
+            used_percent = int(mem_res_match.group(2))
+            total_free_ram_kb += alloc_ram_kb * (1.0 - (used_percent / 100.0))
+        if cpu_res_match:
+            used_percent = int(cpu_res_match.group(2))
+            total_free_cpu_m += alloc_cpu_m * (1.0 - (used_percent / 100.0))
+
+        # 3. Component Breakdown
+        try:
+            pod_section = node_data.split("Non-terminated Pods:")[1].split(
+                "Allocated resources:"
+            )[0]
+            for line in pod_section.strip().split("\n"):
+                parts = line.split()
+                if len(parts) >= 7 and "(" in line and "%" in line:
+                    ns = parts[0]
+                    if ns.lower() in ["namespace", "name"] or ns.startswith("("):
+                        continue
+
+                    cpu_usage = re.findall(r"(\d+m?)\s+\(", line)
+                    mem_usage = re.findall(r"(\d+[GMK]i)\s+\(", line)
+
+                    if cpu_usage:
+                        raw_c = cpu_usage[0]
+                        c_val = int(re.search(r"\d+", raw_c).group())
+                        if "m" not in raw_c:
+                            c_val *= 1000
+                        breakdown["cpu"][ns] += c_val
+
+                    if mem_usage:
+                        raw_m = mem_usage[0]
+                        m_val = int(re.search(r"\d+", raw_m).group())
+                        if "Gi" in raw_m:
+                            m_val *= 1024 * 1024
+                        elif "Mi" in raw_m:
+                            m_val *= 1024
+                        breakdown["ram"][ns] += m_val
+        except (IndexError, ValueError, KeyError) as e:
+            log.debug(f"Parsing row failed for node {name}: {e}")
+
+    free_ram_gb = total_free_ram_kb / (1024 * 1024)
+    free_cpu_cores = total_free_cpu_m / 1000
+
+    return free_ram_gb, free_cpu_cores, breakdown
+
+
+def check_cluster_resources(ram_gb=65, cpu_cores=6):
+    """
+    Check if the cluster has enough unreserved resources.
+    Logs a breakdown table if resources are insufficient.
+
+    Args:
+        ram_gb (int): Minimum required RAM in GB.
+        cpu_cores (int): Minimum required CPU cores.
+
+    Returns:
+        bool: True if resources are sufficient, False otherwise.
+    """
+    try:
+        free_ram, free_cpu, breakdown = get_cluster_resource_capacity()
+
+        if free_ram >= ram_gb and free_cpu >= cpu_cores:
+            log.info(
+                f"Gatekeeper Check PASSED: {free_ram:.2f}GB RAM, {free_cpu:.2f} Cores available."
+            )
+            return True
+
+        # If we reach here, resources are insufficient. Log the breakdown.
+        header = "{:<45} | {:<12} | {:<12}".format(
+            "Namespace", "RAM Req(GB)", "CPU Req(Cores)"
+        )
+        table_rows = [header, "-" * 75]
+
+        # Sort namespaces by RAM usage
+        sorted_ns = sorted(
+            breakdown["ram"].keys(), key=lambda x: breakdown["ram"][x], reverse=True
+        )
+        for ns in sorted_ns:
+            ram_gb_used = breakdown["ram"][ns] / (1024 * 1024)
+            cpu_c_used = breakdown["cpu"][ns] / 1000
+            if ram_gb_used > 0.1 or cpu_c_used > 0.1:
+                table_rows.append(
+                    "{:<45} | {:<12.2f} | {:<12.2f}".format(ns, ram_gb_used, cpu_c_used)
+                )
+
+        log.error(
+            f"RESOURCE GATEKEEPER FAILED. Available: {free_ram:.2f}GB RAM / {free_cpu:.2f} Cores. "
+            f"Required: {ram_gb}GB / {cpu_cores} Cores.\n" + "\n".join(table_rows)
+        )
+        return False
+
+    except (CommandFailed, KeyError, ValueError, AttributeError) as e:
+        log.error(
+            f"Resource capacity check failed due to environment or parsing error: {e}"
+        )
+        return True

@@ -271,7 +271,7 @@ class TestACMKubevirtDRIntergration:
         )
         config.switch_acm_ctx()
         drpc_obj = DRPC(
-            namespace=constants.DR_OPS_NAMESAPCE, resource_name=resource_name
+            namespace=constants.DR_OPS_NAMESPACE, resource_name=resource_name
         )
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
@@ -310,7 +310,7 @@ class TestACMKubevirtDRIntergration:
         )
         config.switch_acm_ctx()
         drpc_obj = DRPC(
-            namespace=constants.DR_OPS_NAMESAPCE, resource_name=resource_name
+            namespace=constants.DR_OPS_NAMESPACE, resource_name=resource_name
         )
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 

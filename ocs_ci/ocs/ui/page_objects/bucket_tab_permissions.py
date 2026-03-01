@@ -35,6 +35,12 @@ class PolicyType(Enum):
     ALLOW_FOLDER_ACCESS = "AllowReadWriteAccessToFolder"
 
 
+class BlockPublicAccessType(Enum):
+    BLOCK_ALL = "BlockAllPublicAccess"
+    BLOCK_NEW_POLICIES = "BlockAccessByNewPolicies"
+    BLOCK_CROSS_ACCOUNT = "BlockCrossAccountAccess"
+
+
 @dataclass
 class PolicyConfig:
     """Configuration for bucket policy creation."""
@@ -655,3 +661,122 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         self._handle_delete_confirmation_dialog()
 
         logger.info("Successfully completed delete bucket policy workflow")
+
+    def navigate_to_block_public_access_tab(self) -> None:
+        """
+        Navigate to the 'Block public access' tab from within the bucket 'Permissions' tab.
+
+        Raises:
+            NoSuchElementException: If 'Block public access' tab is not found.
+        """
+        try:
+            self.do_click(self.bucket_tab["block_public_access_tab"])
+        except (NoSuchElementException, TimeoutException):
+            raise NoSuchElementException(
+                "Could not find 'Block public access' tab. "
+                "Check if bucket permissions tab is properly loaded."
+            )
+
+    def verify_block_public_access(
+        self, block_public_access: BlockPublicAccessType
+    ) -> None:
+        """
+        Verifies that block public access button is working as expected.
+
+        The workflow is as follows:
+        1. Check the corresponding checkbox and save the page
+        2. Verify that the checkbox is indeed checked and the text appearing near it is the expected one
+        3. Uncheck the corresponding checkbox and save the page
+        4. Verify that the checkbox is indeed unchecked and the text appearing near it is the expected one
+
+        Args:
+            block_public_access (BlockPublicAccessType): Block public access type to be verified.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        try:
+
+            block_public_access_dict = {
+                BlockPublicAccessType.BLOCK_ALL: {
+                    "checkbox": "block_all_public_access_checkbox",
+                    "msg": "block_all_public_access_msg",
+                    "text_checked": "Blocked all",
+                    "text_unchecked": "Unblocked all",
+                },
+                BlockPublicAccessType.BLOCK_NEW_POLICIES: {
+                    "checkbox": "block_new_public_policies_checkbox",
+                    "msg": "block_new_public_policies_msg",
+                    "text_checked": "Blocked",
+                    "text_unchecked": "Unblocked",
+                },
+                BlockPublicAccessType.BLOCK_CROSS_ACCOUNT: {
+                    "checkbox": "block_cross_account_checkbox",
+                    "msg": "block_cross_account_msg",
+                    "text_checked": "Blocked",
+                    "text_unchecked": "Unblocked",
+                },
+            }
+
+            checkbox = block_public_access_dict[block_public_access]["checkbox"]
+            msg = block_public_access_dict[block_public_access]["msg"]
+            text_checked = block_public_access_dict[block_public_access]["text_checked"]
+            text_unchecked = block_public_access_dict[block_public_access][
+                "text_unchecked"
+            ]
+            # check the checkbox
+            self.do_click(
+                self.bucket_tab["manage_public_access_settings_button"],
+                timeout=QUICK_WAIT,
+            )
+            self.do_click(self.bucket_tab[checkbox], timeout=QUICK_WAIT)
+            self.do_click(
+                self.bucket_tab["save_public_access_settings_button"],
+                timeout=QUICK_WAIT,
+            )
+
+            self.page_has_loaded()
+            if not self.get_checkbox_status(
+                self.bucket_tab[checkbox], wait_for_clickable=False, expected_state=True
+            ):
+                raise ValueError("The checkbox was not checked")
+
+            text = self.get_element_text(self.bucket_tab[msg])
+            if text != text_checked:
+                raise ValueError(
+                    f"The text is not correct, expected {text_checked}, got {text}"
+                )
+
+            # uncheck the checkbox
+            self.do_click(
+                self.bucket_tab["manage_public_access_settings_button"],
+                timeout=QUICK_WAIT,
+            )
+            self.do_click(self.bucket_tab[checkbox], timeout=QUICK_WAIT)
+            self.do_click(
+                self.bucket_tab["save_public_access_settings_button"],
+                timeout=QUICK_WAIT,
+            )
+            self.wait_for_element_to_be_visible(
+                self.bucket_tab["proceed_to_disable_public_access_button"],
+                timeout=DEFAULT_UI_WAIT,
+            )
+            self.do_click(self.bucket_tab["proceed_to_disable_public_access_button"])
+
+            self.page_has_loaded()
+            self.wait_for_element_to_be_visible(self.bucket_tab[checkbox])
+            if self.get_checkbox_status(self.bucket_tab[checkbox]):
+                raise ValueError("The checkbox was not unchecked")
+
+            text = self.get_element_text(self.bucket_tab[msg])
+            if text != text_unchecked:
+                raise ValueError(
+                    f"The text is not correct, expected {text_unchecked}, got {text}"
+                )
+
+            return
+        except (NoSuchElementException, TimeoutException) as e:
+            raise NoSuchElementException(
+                f"Could not find element for {block_public_access.value}. "
+                f"Original error: {e}"
+            ) from e

@@ -304,6 +304,18 @@ class ExternalClusterDisableCertificateCheckFailed(Exception):
     pass
 
 
+class ExternalClusterReplica1ConfigurationFailed(Exception):
+    pass
+
+
+class ExternalClusterCrushRuleCreationFailed(Exception):
+    pass
+
+
+class ExternalClusterPoolCreationFailed(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -788,5 +800,23 @@ class PolicyApplicationError(Exception):
 
 class PolicyEditorError(RuntimeError):
     """Exception raised when policy editor manipulation fails."""
+
+    pass
+
+
+class ResourceNotSupported(Exception):
+    """Exception raised when resource is not supported."""
+
+    pass
+
+
+class PodsNotRunningError(Exception):
+    """Raised when pods in a namespace are not in the Running state"""
+
+    pass
+
+
+class PodStabilityError(Exception):
+    """Raised when pods show signs of instability (Restarts or OOMKills)"""
 
     pass

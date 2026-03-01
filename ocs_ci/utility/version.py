@@ -4,8 +4,10 @@ Module for version related util functions.
 """
 import logging
 import re
+import requests
 from semantic_version import Version
 import yaml
+import json
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
@@ -69,9 +71,11 @@ VERSION_4_17 = get_semantic_version("4.17", True)
 VERSION_4_18 = get_semantic_version("4.18", True)
 VERSION_4_19 = get_semantic_version("4.19", True)
 VERSION_4_20 = get_semantic_version("4.20", True)
+VERSION_4_21 = get_semantic_version("4.21", True)
 
 # Fusion version constants
 VERSION_2_11 = get_semantic_version("2.11", True)
+VERSION_2_12 = get_semantic_version("2.12", True)
 
 
 def get_semantic_ocs_version_from_config(cluster_config=None):
@@ -97,6 +101,80 @@ def get_semantic_ocp_version_from_config():
 
     """
     return get_semantic_version(config.DEPLOYMENT["installer_version"], True)
+
+
+def get_ocp_version(seperator=None):
+    """
+    *The deprecated form of 'get current ocp version'*
+    Use ocs_ci/utility/version.py:get_semantic_ocp_version_from_config()
+
+    Get current ocp version
+
+    Args:
+        seperator (str): String that would seperate major and
+            minor version nubers
+
+    Returns:
+        string : If seperator is 'None', version string will be returned as is
+            eg: '4.2', '4.3'.
+            If seperator is provided then '.' in the version string would be
+            replaced by seperator and resulting string will be returned.
+            eg: If seperator is '_' then string returned would be '4_2'
+
+    """
+    # importing here to avoid circular import
+    from ocs_ci.utility.utils import run_cmd
+
+    char = seperator if seperator else "."
+    raw_version = config.DEPLOYMENT["installer_version"]
+    if config.ENV_DATA.get("skip_ocp_deployment"):
+        try:
+            raw_version = json.loads(run_cmd("oc version -o json"))["openshiftVersion"]
+        except KeyError:
+            if (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
+                # In IBM ROKS, there is some issue that openshiftVersion is not available
+                # after fresh deployment. As W/A we are taking the version from config only if not found.
+                # UPD:
+                # seems like ROSA HCP takes more time to propagate version to clusterversion on fresh deployments
+                log.warning(
+                    "openshiftVersion key not found! Taking OCP version from config."
+                )
+            else:
+                raise
+    version = Version.coerce(raw_version)
+    return char.join([str(version.major), str(version.minor)])
+
+
+def get_ocp_ga_version(channel):
+    """
+    Retrieve the latest GA version for
+
+    Args:
+        channel (str): the OCP version channel to retrieve GA version for
+
+    Returns:
+        str: latest GA version for the provided channel.
+            An empty string is returned if no version exists.
+
+
+    """
+    log.debug("Retrieving GA version for channel: %s", channel)
+    url = "https://api.openshift.com/api/upgrades_info/v1/graph"
+    headers = {"Accept": "application/json"}
+    payload = {"channel": f"stable-{channel}"}
+    r = requests.get(url, headers=headers, params=payload, timeout=120)
+    nodes = r.json()["nodes"]
+    if nodes:
+        versions = [node["version"] for node in nodes]
+        versions.sort()
+        ga_version = versions[-1]
+        log.debug("Found GA version: %s", ga_version)
+        return ga_version
+    log.debug("No GA version found")
+    return ""
 
 
 def get_semantic_ocp_running_version(separator=None):
@@ -462,7 +540,7 @@ def get_running_odf_client_version():
             defaults.ODF_CLIENT_OPERATOR, namespace=namespace
         )
     except Exception as e:
-        # try second time to search ns. On Client clusters we usually have storage ns "openshift-storage-client"
+        # try second time to search ns. On Client clusters we usually have storage ns "openshift-storage"
         if "not found" in str(e):
             ns_data = OCP(kind=constants.NAMESPACE).get().get("items", [])
             ns_list = [

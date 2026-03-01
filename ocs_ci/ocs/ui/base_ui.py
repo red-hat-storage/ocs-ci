@@ -351,20 +351,38 @@ class BaseUI:
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 
-    def get_checkbox_status(self, locator, timeout=30):
+    def get_checkbox_status(
+        self, locator, timeout=30, *, wait_for_clickable=True, expected_state=None
+    ):
         """
         Checkbox Status
 
         Args:
             locator (tuple): (GUI element needs to operate on (str), type (By))
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+            wait_for_clickable (bool): When True wait for element to be clickable; otherwise wait for presence.
+            expected_state (bool | None): When provided, wait for checkbox selection state to match before returning.
 
         return:
-            bool: True if element is Enabled, False otherwise
+            bool: True if element is selected, False otherwise
 
         """
         wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        by, value = locator[1], locator[0]
+
+        if expected_state is not None:
+            wait.until(
+                ec.element_located_selection_state_to_be((by, value), expected_state)
+            )
+
+        if wait_for_clickable:
+            try:
+                element = wait.until(ec.element_to_be_clickable((by, value)))
+            except TimeoutException:
+                element = wait.until(ec.presence_of_element_located((by, value)))
+        else:
+            element = wait.until(ec.presence_of_element_located((by, value)))
+
         return element.is_selected()
 
     def select_checkbox_status(self, status, locator):
@@ -779,7 +797,7 @@ def copy_dom(name_suffix: str = "", dom_folder=None):
         name_suffix = f"_{name_suffix}"
     filename = os.path.join(
         dom_folder,
-        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}_DOM.txt",
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}_DOM.html",
     )
     logger.info(f"Copy DOM file: {filename}")
     html = SeleniumDriver().page_source
@@ -875,6 +893,7 @@ class SeleniumDriver(WebDriver):
                 config.DEPLOYMENT.get("proxy")
                 or config.DEPLOYMENT.get("disconnected")
                 or config.ENV_DATA.get("private_link")
+                or config.DEPLOYMENT.get("ipv6")
             ) and config.ENV_DATA.get("client_http_proxy"):
                 client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
                 # there is a big difference between configuring not authenticated
@@ -890,6 +909,9 @@ class SeleniumDriver(WebDriver):
                     )
                     chrome_options.add_argument(
                         f"--proxy-server={client_proxy.geturl()}"
+                    )
+                    chrome_options.add_argument(
+                        f"--proxy-bypass-list={','.join(constants.NO_PROXY_LOCALHOST)}"
                     )
                 elif not headless:
                     # authenticated proxy, not headless mode
@@ -1185,6 +1207,31 @@ def close_browser():
     SeleniumDriver.remove_instance()
     time.sleep(10)
     garbage_collector_webdriver()
+
+
+def logout_ui():
+    """
+    Logout from OpenShift Console via UI.
+
+    Clicks the user dropdown menu in the masthead and selects 'Log out'.
+    After logout, the browser remains open at the login page.
+
+    Raises:
+        TimeoutException: If user dropdown or logout button not found.
+
+    """
+    logger.info("Logging out from OpenShift Console")
+    login_loc = locators_for_current_ocp_version()["login"]
+
+    # Click user dropdown menu
+    user_dropdown = wait_for_element_to_be_clickable(login_loc["user_dropdown"], 30)
+    user_dropdown.click()
+
+    # Click logout button
+    logout_btn = wait_for_element_to_be_clickable(login_loc["logout_button"], 30)
+    logout_btn.click()
+
+    logger.info("Successfully logged out from OpenShift Console")
 
 
 def proceed_to_login_console():

@@ -2,10 +2,11 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod as pod_helpers
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    skipif_insufficient_resources,
+)
 from ocs_ci.framework.testlib import (
     tier2,
     ignore_leftovers,
@@ -16,22 +17,19 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.helpers import cluster_exp_helpers
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
-from ocs_ci.ocs import cluster as cluster_helpers
-from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.framework import config
-from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
 from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
+from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.ocs import constants, cluster as cluster_helpers
+from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod as pod_helpers, storage_cluster
+from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
+from ocs_ci.ocs.bucket_utils import s3_io_create_delete, obc_io_create_delete
 
 logger = logging.getLogger(__name__)
-
-# TO DO: replace/remove this with actual workloads like couchbase, amq and
-# pgsql later
 
 
 @brown_squad
@@ -47,7 +45,9 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@skipif_insufficient_resources(ram_gb=65, cpu_cores=6)
 class TestAddCapacity(ManageTest):
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
@@ -100,9 +100,11 @@ class TestAddCapacity(ManageTest):
         # All OCS pods are in running state:
         # ToDo https://github.com/red-hat-storage/ocs-ci/issues/2361
         expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
-        assert pod_helpers.check_pods_in_statuses(
+        assert pod_helpers.wait_for_pods_to_be_in_statuses(
             expected_statuses=expected_statuses,
-            exclude_pod_name_prefixes=["demo-pod"],
+            exclude_pod_name_prefixes=["demo-pod", "storageclient"],
+            timeout=500,
+            sleep=20,
         ), "Entry criteria FAILED: one or more OCS pods are not in running state"
         # Create the namespace under which this test will execute:
         project = project_factory()
@@ -235,12 +237,11 @@ class TestAddCapacity(ManageTest):
         else:
             replica_count = 3
         pod.wait_for_resource(
-            timeout=1200,
+            timeout=2400,
             condition=constants.STATUS_RUNNING,
             selector="app=rook-ceph-osd",
             resource_count=result * replica_count,
         )
-
         #################################
         # Exit criteria verification:   #
         #################################

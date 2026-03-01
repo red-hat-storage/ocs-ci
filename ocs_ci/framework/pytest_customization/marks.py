@@ -50,6 +50,8 @@ from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
 from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
+from ocs_ci.ocs.node import check_cluster_resources
+
 
 # tier marks
 
@@ -84,7 +86,10 @@ csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
-system_test = pytest.mark.system_test
+system = pytest.mark.system
+# system_test mark is deprecated, use system instead
+system_test = compose(system, pytest.mark.system_test)
+stress = pytest.mark.stress
 performance = pytest.mark.performance
 performance_a = pytest.mark.performance_a
 performance_b = pytest.mark.performance_b
@@ -518,6 +523,14 @@ azure_kv_config_required = pytest.mark.skipif(
     reason="Azure KV config required to run the test.",
 )
 
+azure_performance_plus_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA.get("azure_performance_plus")
+        or config.DEPLOYMENT.get("azure_performance_plus")
+    ),
+    reason="Test runs only when Azure Performance Plus is enabled",
+)
+
 rosa_hcp_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != ROSA_HCP_PLATFORM,
     reason="Test runs ONLY on ROSA HCP cluster",
@@ -609,8 +622,10 @@ skipif_hci_provider_or_client = pytest.mark.skipif(
     reason="Test will not run on Fusion HCI provider or Client clusters",
 )
 
-# Marker for skipping tests for provider clusters based on OCS version
-skip_for_provider_if_ocs_version = pytest.mark.skip_for_provider_if_ocs_version
+# Marker for skipping tests for provider or client clusters based on OCS version
+skip_for_provider_or_client_if_ocs_version = (
+    pytest.mark.skip_for_provider_or_client_if_ocs_version
+)
 
 skipif_rosa = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
@@ -679,6 +694,11 @@ skipif_vsphere_ipi = pytest.mark.skipif(
 skipif_vsphere_platform = pytest.mark.skipif(
     (config.ENV_DATA["platform"].lower() == "vsphere"),
     reason="Test will not run on vSphere cluster",
+)
+
+skipif_azure_platform = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "azure",
+    reason="Test will not run on Azure deployed cluster",
 )
 
 skipif_tainted_nodes = pytest.mark.skipif(
@@ -852,3 +872,17 @@ skipif_lean_deployment = pytest.mark.skipif(
     or not check_cluster_resources_for_nfs(),
     reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
 )
+
+
+def skipif_insufficient_resources(ram_gb=65, cpu_cores=6):
+    """
+    Dynamic decorator to skip tests if cluster resources are below the specified limits.
+
+    Args:
+        ram_gb (int): Required RAM in GB.
+        cpu_cores (int): Required CPU cores.
+    """
+    return pytest.mark.skipif(
+        not check_cluster_resources(ram_gb=ram_gb, cpu_cores=cpu_cores),
+        reason=f"Cluster hardware requirements not met: Need {ram_gb}GB RAM and {cpu_cores} Cores.",
+    )

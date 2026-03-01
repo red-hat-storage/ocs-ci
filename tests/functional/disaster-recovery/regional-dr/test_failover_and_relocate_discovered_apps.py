@@ -158,7 +158,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     resource_name=rdr_workload.discovered_apps_placement_name,
                 )
                 drpc_obj = DRPC(
-                    namespace=constants.DR_OPS_NAMESAPCE,
+                    namespace=constants.DR_OPS_NAMESPACE,
                     resource_name=rdr_workload.discovered_apps_placement_name,
                 )
 

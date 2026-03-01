@@ -26,20 +26,43 @@ class TestCnvApplicationRDR:
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["vm_type", "primary_cluster_down"],
         argvalues=[
             pytest.param(
+                constants.VM_VOLUME_PVC,
                 False,
-                id="primary_up",
+                id="primary_up_vm-pvc",
             ),
             pytest.param(
+                constants.VM_VOLUME_PVC,
                 True,
-                id="primary_down",
+                id="primary_down_vm-pvc",
+            ),
+            pytest.param(
+                constants.VM_VOLUME_DV,
+                False,
+                id="primary_up_vm-dv",
+            ),
+            pytest.param(
+                constants.VM_VOLUME_DV,
+                True,
+                id="primary_down_vm-dv",
+            ),
+            pytest.param(
+                constants.VM_VOLUME_DVT,
+                False,
+                id="primary_up_vm-dvt",
+            ),
+            pytest.param(
+                constants.VM_VOLUME_DVT,
+                True,
+                id="primary_down_vm-dvt",
             ),
         ],
     )
     def test_cnv_app_failover_and_relocate(
         self,
+        vm_type,
         primary_cluster_down,
         cnv_dr_workload,
         nodes_multicluster,
@@ -59,7 +82,10 @@ class TestCnvApplicationRDR:
 
         # Create CNV applications (Subscription and ApplicationSet)
         cnv_workloads = cnv_dr_workload(
-            num_of_vm_subscription=1, num_of_vm_appset_push=1, num_of_vm_appset_pull=1
+            num_of_vm_subscription=1,
+            num_of_vm_appset_push=1,
+            num_of_vm_appset_pull=1,
+            vm_type=vm_type,
         )
         wl_namespace = cnv_workloads[0].workload_namespace
 
@@ -88,8 +114,9 @@ class TestCnvApplicationRDR:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             wl_namespace, cnv_workloads[0].workload_type
         )
-        logger.info(f"Waiting for {scheduling_interval} minutes for sync to complete")
-        sleep(scheduling_interval * 60)
+        wait_time = 2 * scheduling_interval  # Time in minutes
+        logger.info(f"Waiting for {wait_time} minutes for sync to complete")
+        sleep(wait_time * 60)
 
         # Shutting down primary managed cluster nodes
         primary_cluster_nodes = get_node_objs()
@@ -180,8 +207,8 @@ class TestCnvApplicationRDR:
             )
         )
 
-        logger.info(f"Waiting for {scheduling_interval} minutes for sync to complete")
-        sleep(scheduling_interval * 60)
+        logger.info(f"Waiting for {wait_time} minutes for sync to complete")
+        sleep(wait_time * 60)
 
         # Relocate the applications back to primary managed cluster
         for cnv_wl in cnv_workloads:

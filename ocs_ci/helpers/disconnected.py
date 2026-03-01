@@ -57,7 +57,7 @@ def get_oc_mirror_tool():
         oc_mirror_branch = f"release-{get_ocp_version()}"
         clone_repo(url=oc_mirror_repo, location=oc_mirror_dir, branch=oc_mirror_branch)
         # build oc-mirror tool
-        exec_cmd("make build", cwd=oc_mirror_dir)
+        exec_cmd("make build", cwd=oc_mirror_dir, timeout=1800)
         os.rename(
             os.path.join(oc_mirror_dir, "bin/oc-mirror"),
             os.path.join(bin_dir, "oc-mirror"),

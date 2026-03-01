@@ -127,6 +127,51 @@ class WorkloadOps:
             log.error(f"Failed to start background cluster operations: {e}")
             self.background_cluster_ops = None
 
+    def validate_workload_operations(self):
+        """
+        Validate workload health without performing cleanup.
+
+        This method validates that workloads are still running correctly
+        after chaos testing, without stopping or cleaning them up.
+        Useful for intermediate validation during test execution.
+
+        Raises:
+            UnexpectedBehaviour: If workload validation fails
+            CommandFailed: If command execution fails during validation
+        """
+        log.info(f"Validating {len(self.workloads)} workloads...")
+
+        validation_errors = []
+        for i, workload in enumerate(self.workloads, 1):
+            try:
+                # Determine workload type for this specific workload
+                workload_type = self._get_workload_type_for_workload(workload)
+
+                if workload_type == KrknWorkloadConfig.VDBENCH:
+                    self._validate_vdbench_workload(workload)
+                elif workload_type == KrknWorkloadConfig.CNV_WORKLOAD:
+                    self._validate_cnv_workload(workload)
+                elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
+                    self._validate_rgw_workload(workload)
+                else:
+                    log.warning(f"Unknown workload type: {workload_type}")
+
+            except Exception as e:
+                error_msg = f"Issue validating workload {i}: {e}"
+                log.warning(error_msg)
+                validation_errors.append(error_msg)
+
+        if validation_errors:
+            error_summary = "\n".join(validation_errors)
+            log.error(f"Workload validation errors:\n{error_summary}")
+            from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+
+            raise UnexpectedBehaviour(
+                f"Workload validation failed for {len(validation_errors)} workload(s):\n{error_summary}"
+            )
+
+        log.info(f"✓ All {len(self.workloads)} workloads validated successfully")
+
     def validate_and_cleanup(self):
         """
         Validate workload health and perform cleanup.
@@ -297,6 +342,7 @@ class KrknWorkloadFactory:
         multi_pvc_factory,
         loaded_fixtures=None,
         timeout=360,
+        storageclass_factory=None,
         # Backward compatibility - old signature
         resiliency_workload=None,
         vdbench_block_config=None,
@@ -315,6 +361,7 @@ class KrknWorkloadFactory:
             multi_pvc_factory: Multi-PVC factory fixture
             loaded_fixtures: Dict of loaded fixtures (preferred, registry-based)
             timeout: Timeout for operations
+            storageclass_factory: Storage class factory fixture (for encrypted PVCs)
 
             # Backward compatibility (deprecated - use loaded_fixtures)
             resiliency_workload: VDBENCH fixture (optional)
@@ -389,6 +436,10 @@ class KrknWorkloadFactory:
             for param in fixture_params:
                 args.append(loaded_fixtures.get(param))
 
+            # Add storageclass_factory for VDBENCH workloads (for encrypted PVC support)
+            if workload_type == "VDBENCH" and storageclass_factory is not None:
+                args.append(storageclass_factory)
+
             # Create workloads using factory method
             try:
                 log.info(f"Creating {workload_type} workloads...")
@@ -416,6 +467,7 @@ class KrknWorkloadFactory:
                         loaded_fixtures.get("resiliency_workload"),
                         loaded_fixtures.get("vdbench_block_config"),
                         loaded_fixtures.get("vdbench_filesystem_config"),
+                        storageclass_factory,
                     )
                     workloads_by_type[KrknWorkloadConfig.VDBENCH] = vdbench_workloads
                     all_workloads.extend(vdbench_workloads)
@@ -472,8 +524,21 @@ class KrknWorkloadFactory:
         resiliency_workload,
         vdbench_block_config,
         vdbench_filesystem_config,
+        storageclass_factory=None,
     ):
-        """Create VDBENCH workloads for a given project."""
+        """Create VDBENCH workloads for a given project.
+
+        Args:
+            proj_obj: Project object
+            multi_pvc_factory: Multi-PVC factory fixture
+            resiliency_workload: Resiliency workload fixture
+            vdbench_block_config: VDBENCH block config fixture
+            vdbench_filesystem_config: VDBENCH filesystem config fixture
+            storageclass_factory: Storage class factory fixture (optional, for encrypted PVCs)
+
+        Returns:
+            list: List of created workload objects
+        """
 
         def create_temp_config_file(config_dict):
             """Create temporary config file from dictionary."""
@@ -501,6 +566,7 @@ class KrknWorkloadFactory:
             width = fs_config.get("width", 5)
             files = fs_config.get("files", 10)
             file_size = fs_config.get("file_size", "1m")
+            openflags = fs_config.get("openflags", "o_direct")
 
             # Get original patterns from config
             original_patterns = fs_config.get("patterns", [])
@@ -541,6 +607,7 @@ class KrknWorkloadFactory:
                         "width": width,
                         "files": files,
                         "file_size": file_size,
+                        "openflags": openflags,
                         "group_all_fwds_in_one_rd": True,
                         "patterns": all_patterns,
                     },
@@ -619,17 +686,62 @@ class KrknWorkloadFactory:
         # Get configurable values from krkn config
         num_pvcs = self.config.get_num_pvcs_per_interface()
         pvc_size = self.config.get_pvc_size()
+        use_encrypted = self.config.use_encrypted_pvc()
 
         log.info(
             f"Creating {num_pvcs} PVCs per storage interface with size {pvc_size}Gi"
         )
+        if use_encrypted:
+            log.info(
+                "Encrypted PVCs are enabled - will create encrypted storage classes"
+            )
+
+        # Create encrypted storage classes if needed
+        # NOTE: Only RBD (CEPHBLOCKPOOL) supports per-PVC encryption via storage class
+        # CephFS does NOT support per-PVC encryption via storage class parameters
+        encrypted_storage_classes = {}
+        if use_encrypted and storageclass_factory is not None:
+            log.info("Creating encrypted storage classes for VDBENCH workloads")
+            try:
+                # Create encrypted RBD storage class ONLY (CephFS not supported)
+                encrypted_rbd_sc = storageclass_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    encrypted=True,
+                )
+            except Exception as e:
+                log.error(f"Failed to create encrypted storage class: {e}")
+                log.warning("Falling back to default storage classes")
+                use_encrypted = False
+            else:
+                # Only execute if storage class creation succeeded
+                encrypted_storage_classes[constants.CEPHBLOCKPOOL] = encrypted_rbd_sc
+                log.info(
+                    f"✓ Created encrypted RBD storage class: {encrypted_rbd_sc.name}"
+                )
+
+                # IMPORTANT: CephFS encryption is NOT supported via storage class parameters
+                # CephFS can only use cluster-wide encryption (configured at StorageCluster level)
+                log.info(
+                    "NOTE: CephFS PVCs will use default storage class (no per-PVC encryption support)"
+                )
+                log.info(
+                    "      CephFS encryption requires cluster-wide encryption in StorageCluster"
+                )
 
         for interface, cfg in interface_configs.items():
             try:
                 log.info(f"Creating {num_pvcs} PVCs for {interface} interface...")
+
+                # Use encrypted storage class if available and encryption is enabled
+                storageclass = None
+                if use_encrypted and interface in encrypted_storage_classes:
+                    storageclass = encrypted_storage_classes[interface]
+                    log.info(f"Using encrypted storage class: {storageclass.name}")
+
                 pvcs = multi_pvc_factory(
                     interface=interface,
                     project=proj_obj,
+                    storageclass=storageclass,  # Pass encrypted SC if available
                     access_modes=cfg["access_modes"],
                     size=pvc_size,
                     num_of_pvc=num_pvcs,

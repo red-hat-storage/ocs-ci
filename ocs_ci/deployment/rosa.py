@@ -47,7 +47,7 @@ from ocs_ci.ocs.managedservice import (
 )
 from ocs_ci.ocs.resources import pvc
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class ROSAOCP(BaseOCPDeployment):

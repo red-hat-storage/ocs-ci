@@ -22,6 +22,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.operators import LocalStorageOperator
 from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -53,80 +54,21 @@ def setup_local_storage(storageclass):
 
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
-    ocp_ga_version = get_ocp_ga_version(ocp_version)
-    if not ocp_ga_version:
-        create_optional_operators_catalogsource_non_ga()
-    try:
-        get_lso_channel()
-    except CommandFailed as ex:
-        if "not found" in str(ex):
-            create_optional_operators_catalogsource_non_ga(force=True)
-        else:
-            raise
-
-    logger.info("Retrieving local-storage-operator data from yaml")
-    lso_data = list(
-        templating.load_yaml(constants.LOCAL_STORAGE_OPERATOR, multi_document=True)
-    )
-
-    # ensure namespace is correct
-    lso_namespace = config.ENV_DATA["local_storage_namespace"]
-    for data in lso_data:
-        if data["kind"] == "Namespace":
-            data["metadata"]["name"] = lso_namespace
-        else:
-            data["metadata"]["namespace"] = lso_namespace
-        if data["kind"] == "OperatorGroup":
-            data["spec"]["targetNamespaces"] = [lso_namespace]
-
-    # Update local-storage-operator subscription data with channel
-    for data in lso_data:
-        if data["kind"] == "Subscription":
-            data["spec"]["channel"] = get_lso_channel()
-        if not ocp_ga_version:
-            if data["kind"] == "Subscription":
-                data["spec"]["source"] = "optional-operators"
-
-    # Create temp yaml file and create local storage operator
-    logger.info(
-        "Creating temp yaml file with local-storage-operator data:\n %s", lso_data
-    )
-    lso_data_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="local_storage_operator", delete=False
-    )
-    image_source_policy = ocp.OCP(
-        kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
-    )
-    if not image_source_policy.is_exist(resource_name=lso_data_yaml.name):
-        templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
-        with open(lso_data_yaml.name, "r") as f:
-            logger.info(f.read())
-        logger.info("Creating local-storage-operator")
-        run_cmd(f"oc create -f {lso_data_yaml.name}")
-
-    local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
-    assert local_storage_operator.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
-        timeout=600,
-    ), "Local storage operator did not reach running phase"
+    lso_operator = LocalStorageOperator(create_catalog=True)
+    lso_operator.deploy()
 
     # Add disks for vSphere/RHV platform
     platform = config.ENV_DATA.get("platform").lower()
     lso_type = config.DEPLOYMENT.get("type")
 
-    if platform == constants.VSPHERE_PLATFORM:
-        add_disk_for_vsphere_platform()
-
-    if platform == constants.RHV_PLATFORM:
-        add_disk_for_rhv_platform()
+    add_disks_lso()
 
     if (ocp_version >= version.VERSION_4_6) and (ocs_version >= version.VERSION_4_6):
         # Pull local volume discovery yaml data
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
         lvd_data = templating.load_yaml(constants.LOCAL_VOLUME_DISCOVERY_YAML)
         # Set local-volume-discovery namespace
-        lvd_data["metadata"]["namespace"] = lso_namespace
+        lvd_data["metadata"]["namespace"] = lso_operator.namespace
 
         storage_node_names = get_compute_node_names(no_replace=True)
 
@@ -151,49 +93,19 @@ def setup_local_storage(storageclass):
         logger.info("Creating LocalVolumeDiscovery CR")
         run_cmd(f"oc create -f {lvd_data_yaml.name}")
 
-        # Pull local volume set yaml data
-        logger.info("Pulling LocalVolumeSet CR data from yaml")
-        lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
-
-        # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
-        # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
-        # HDD disk
-        if config.ENV_DATA.get(
-            "local_storage_allow_rotational_disks"
-        ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
-            logger.info(
-                "Adding Rotational for deviceMechanicalProperties spec"
-                " to detect HDD disk"
+        # Create LocalVolumeSet
+        if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+            # in case of partitioned OS disk on workers, create two separated LocalVolumeSets - one for disks and second
+            # for partitions
+            # create LVS for disks
+            create_local_volume_set(storage_node_names, storageclass, ["disk"])
+            # create LVS for partitions
+            create_local_volume_set(
+                storage_node_names, storageclass + "-part", ["part"]
             )
-            lvs_data["spec"]["deviceInclusionSpec"][
-                "deviceMechanicalProperties"
-            ].append("Rotational")
+        else:
+            create_local_volume_set(storage_node_names, storageclass)
 
-        # Update local volume set data with Worker node Names
-        logger.info(
-            "Updating LocalVolumeSet CR data with storage nodes Name: %s",
-            storage_node_names,
-        )
-        lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
-            "values"
-        ] = storage_node_names
-
-        # Set storage class
-        logger.info(
-            "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
-        )
-        lvs_data["spec"]["storageClassName"] = storageclass
-
-        # set volumeMode to Filesystem for MCG only deployment
-        if config.ENV_DATA["mcg_only_deployment"]:
-            lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
-
-        lvs_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="local_volume_set", delete=False
-        )
-        templating.dump_data_to_temp_yaml(lvs_data, lvs_data_yaml.name)
-        logger.info("Creating LocalVolumeSet CR")
-        run_cmd(f"oc create -f {lvs_data_yaml.name}")
     else:
         # Retrieve NVME device path ID for each worker node
         device_paths = get_device_paths(worker_names)
@@ -203,7 +115,7 @@ def setup_local_storage(storageclass):
         lv_data = templating.load_yaml(constants.LOCAL_VOLUME_YAML)
 
         # Set local-volume namespace
-        lv_data["metadata"]["namespace"] = lso_namespace
+        lv_data["metadata"]["namespace"] = lso_operator.namespace
 
         # Set storage class
         logger.info(
@@ -242,10 +154,89 @@ def setup_local_storage(storageclass):
     expected_pvs = len(worker_names) * storage_class_device_count
     if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
+        if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+            verify_pvs_created(expected_pvs, storageclass + "-part", False)
     else:
         verify_pvs_created(expected_pvs, storageclass)
 
 
+def add_disks_lso():
+    """
+    Add disks based on which platform we are running on
+    """
+    platform = config.ENV_DATA.get("platform").lower()
+    if platform == constants.VSPHERE_PLATFORM:
+        add_disk_for_vsphere_platform()
+
+    if platform == constants.RHV_PLATFORM:
+        add_disk_for_rhv_platform()
+
+
+def create_local_volume_set(storage_node_names, storageclass, device_types=None):
+    """
+    Create LocalVolumeSet based on the provided configuration
+
+    Args:
+        storage_node_names (list): list of compute node names
+        storageclass (str): storageClassName value to be used in
+            LocalVolume CR based on LOCAL_VOLUME_YAML
+        device_types (list): list of required device types (if None, no change is done in the template)
+
+    """
+
+    # Pull local volume set yaml data
+    logger.info("Pulling LocalVolumeSet CR data from yaml")
+    lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
+
+    # set LVS name
+    lvs_data["metadata"]["name"] = storageclass
+
+    # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+    # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+    # HDD disk
+    if config.ENV_DATA.get(
+        "local_storage_allow_rotational_disks"
+    ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
+        logger.info(
+            "Adding Rotational for deviceMechanicalProperties spec"
+            " to detect HDD disk"
+        )
+        lvs_data["spec"]["deviceInclusionSpec"]["deviceMechanicalProperties"].append(
+            "Rotational"
+        )
+
+    # Update local volume set data with Worker node Names
+    logger.info(
+        "Updating LocalVolumeSet CR data with storage nodes Name: %s",
+        storage_node_names,
+    )
+    lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
+        "values"
+    ] = storage_node_names
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
+    )
+    lvs_data["spec"]["storageClassName"] = storageclass
+
+    # set volumeMode to Filesystem for MCG only deployment
+    if config.ENV_DATA["mcg_only_deployment"]:
+        lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
+
+    # configure deviceTypes only to disk if partitioned_disk_on_workers (the part is configured in second LVS)
+    if device_types:
+        lvs_data["spec"]["deviceInclusionSpec"]["deviceTypes"] = device_types
+
+    lvs_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="local_volume_set", delete=False
+    )
+    templating.dump_data_to_temp_yaml(lvs_data, lvs_data_yaml.name)
+    logger.info("Creating LocalVolumeSet CR")
+    run_cmd(f"oc create -f {lvs_data_yaml.name}")
+
+
+# TODO: remove this function
 def create_optional_operators_catalogsource_non_ga(force=False):
     """
     Creating optional operators CatalogSource and ImageContentSourcePolicy
@@ -618,6 +609,8 @@ def lso_upgrade():
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
         if not catalog_source_created(catalogsource_name=constants.OPTIONAL_OPERATORS):
+            # TODO: We need to update this upgrade function and probably move to new
+            # operators.py module and start using it here as well.
             create_optional_operators_catalogsource_non_ga()
         else:
             logger.info(f"Catalog Source {constants.OPTIONAL_OPERATORS} already exists")

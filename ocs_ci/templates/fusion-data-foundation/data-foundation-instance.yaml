@@ -15,9 +15,12 @@ spec:
     value: Fusion
   - name: backingStorageType
     provided: true
-    value: Local
+    value: Dynamic
   - name: autoUpgrade
     provided: false
     value: "false"
+  - name: installPlanApproval
+    provided: true
+    value: Automatic
   serviceDefinition: data-foundation-service
   triggerUpdate: false

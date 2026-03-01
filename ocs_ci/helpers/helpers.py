@@ -43,6 +43,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NoRunningCephToolBoxException,
     ResourceNotFoundError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
@@ -54,8 +55,10 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.vsphere import VSPHERE
+from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    ceph_health_check,
     TimeoutSampler,
     ocsci_log_path,
     run_cmd,
@@ -107,6 +110,25 @@ def create_resource(do_reload=True, **kwargs):
     resource_name = kwargs.get("metadata").get("name")
     created_resource = ocs_obj.create(do_reload=do_reload)
     assert created_resource, f"Failed to create resource {resource_name}"
+    return ocs_obj
+
+
+def apply_resource(**kwargs):
+    """
+    Apply a resource. Safe for both create and update operations.
+
+    Args:
+        kwargs (dict): Dictionary of the OCS resource
+
+    Returns:
+        OCS: An OCS instance
+
+    Raises:
+        AssertionError: In case of any failure
+    """
+    ocs_obj = OCS(**kwargs)
+    kwargs.get("metadata").get("name")
+    ocs_obj.apply(**kwargs)
     return ocs_obj
 
 
@@ -309,7 +331,7 @@ def create_pod(
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
     if deployment:
-        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DEPLOY_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(f"test-{interface}", "pod")
@@ -318,6 +340,11 @@ def create_pod(
     if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        # Ensure selector field exists (defensive check for custom pod_dict_path)
+        if "selector" not in pod_data["spec"]:
+            pod_data["spec"]["selector"] = {}
+        if "matchLabels" not in pod_data["spec"]["selector"]:
+            pod_data["spec"]["selector"]["matchLabels"] = {}
         pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
@@ -461,9 +488,43 @@ def create_pod(
         logger.info(deployment_obj.name)
         deployment_name = deployment_obj.name
         label = f"name={deployment_name}"
+
+        # Determine how many pods to wait for based on PVC access mode and replica count
+        wait_resource_count = None
+        if pvc_name and replica_count > 1:
+            try:
+                # Get PVC object to check access mode
+                pvc_obj = pvc.PVC(name=pvc_name, namespace=namespace)
+                pvc_obj.reload()
+                pvc_access_mode = pvc_obj.get_pvc_access_mode
+
+                # For RWO volumes with multiple replicas, only one pod can be Running
+                # For RWX volumes, all replicas can be Running, so wait for all
+                if pvc_access_mode == constants.ACCESS_MODE_RWO:
+                    wait_resource_count = 1
+                    logger.info(
+                        f"PVC {pvc_name} has RWO access mode with {replica_count} replicas. "
+                        f"Waiting for 1 pod to be Running."
+                    )
+                # For RWX or other access modes, wait for all replicas (resource_count=None)
+                else:
+                    logger.info(
+                        f"PVC {pvc_name} has {pvc_access_mode} access mode with {replica_count} replicas. "
+                        f"Waiting for all pods to be Running."
+                    )
+            except Exception as ex:
+                # If we can't determine access mode, default to waiting for 1 pod
+                # to avoid timeout issues with RWO volumes
+                logger.warning(
+                    f"Could not determine PVC access mode for {pvc_name}: {ex}. "
+                    f"Defaulting to wait for 1 pod."
+                )
+                wait_resource_count = 1
+
         assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
+            resource_count=wait_resource_count,
             timeout=360,
             sleep=3,
         )
@@ -2836,6 +2897,60 @@ def wait_for_ct_pod_recovery():
     return True
 
 
+def ceph_health_check_with_toolbox_recovery(
+    namespace: str,
+    tries: int = 20,
+    delay: int = 30,
+    fix_ceph_health: bool = True,
+    update_jira: bool = True,
+    no_exception_if_jira_issue_updated: bool = False,
+) -> bool:
+    """
+    Perform ceph health check with automatic toolbox pod recovery.
+
+    If the ceph toolbox pod is not running (e.g., after node disruption tests),
+    this function will wait for the toolbox pod to recover before retrying.
+
+    Args:
+        namespace (str): Kubernetes namespace for ceph cluster.
+        tries (int): Number of retries for health check.
+        delay (int): Delay between retries in seconds.
+        fix_ceph_health (bool): Whether to attempt fixing ceph health issues.
+        update_jira (bool): Whether to update Jira on health issues.
+        no_exception_if_jira_issue_updated (bool): Skip exception if Jira was updated.
+
+    Returns:
+        bool: True if ceph health check passes.
+
+    Raises:
+        NoRunningCephToolBoxException: If toolbox pod doesn't recover.
+        CephHealthException: If ceph health check fails after retries.
+    """
+    try:
+        return ceph_health_check(
+            namespace=namespace,
+            tries=tries,
+            delay=delay,
+            fix_ceph_health=fix_ceph_health,
+            update_jira=update_jira,
+            no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+        )
+    except NoRunningCephToolBoxException:
+        logger.warning(
+            "Ceph toolbox pod not running. Waiting for recovery before retry..."
+        )
+        if wait_for_ct_pod_recovery():
+            return ceph_health_check(
+                namespace=namespace,
+                tries=tries,
+                delay=delay,
+                fix_ceph_health=fix_ceph_health,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
+        raise
+
+
 def label_worker_node(node_list, label_key, label_value):
     """
     Function to label worker node for running app pods on specific worker nodes.
@@ -3315,6 +3430,54 @@ def default_volumesnapshotclass(interface_type):
         kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
     )
     return OCS(**base_snapshot_class.data)
+
+
+def get_default_cluster_volumesnapshotclass():
+    """
+    Get the default VolumeSnapshotClass available in the OCS cluster.
+
+    This helper function retrieves the VolumeSnapshotClass that is marked as default
+    using the annotation 'snapshot.storage.kubernetes.io/is-default-class: "true"'.
+    If a driver is specified, it will return the default snapshot class for that driver.
+
+    Returns:
+        str: The name of the default VolumeSnapshotClass, or None if not found
+
+    Raises:
+        ResourceNotFoundError: If no default VolumeSnapshotClass is found
+
+    Examples:
+        >>> # Get the default volume snapshot class
+        >>> default_snapclass = get_default_volumesnapshotclass()
+        >>> print(default_snapclass)
+        'vpc-block-snapshot'
+    """
+    vsc_obj = ocp.OCP(kind=constants.VOLUMESNAPSHOTCLASS)
+
+    try:
+        volumesnapshotclasses = vsc_obj.get()
+    except Exception as e:
+        logger.error(f"Failed to get VolumeSnapshotClasses: {e}")
+        raise ResourceNotFoundError(
+            "Unable to retrieve VolumeSnapshotClasses from the cluster"
+        )
+
+    for vsc in volumesnapshotclasses.get("items", []):
+        annotations = vsc.get("metadata", {}).get("annotations", {})
+        is_default = (
+            annotations.get("snapshot.storage.kubernetes.io/is-default-class") == "true"
+        )
+
+        if is_default:
+            vsc_name = vsc["metadata"]["name"]
+            return vsc_name
+    else:
+        logger.error("No default VolumeSnapshotClass found in the cluster")
+        raise ResourceNotFoundError(
+            "No default VolumeSnapshotClass found in the cluster. "
+            "Please ensure at least one VolumeSnapshotClass has the annotation "
+            "'snapshot.storage.kubernetes.io/is-default-class: \"true\"'"
+        )
 
 
 def get_snapshot_content_obj(snap_obj):
@@ -4138,25 +4301,9 @@ def induce_mon_quorum_loss():
     # Wait for sometime after the mon crashes
     time.sleep(300)
 
-    # Check the operator log mon quorum lost
-    operator_logs = get_logs_rook_ceph_operator()
-    pattern = (
-        "op-mon: failed to check mon health. "
-        "failed to get mon quorum status: mon "
-        "quorum status failed: exit status 1"
-    )
-    logger.info(f"Check the operator log for the pattern : {pattern}")
-    if not re.search(pattern=pattern, string=operator_logs):
-        logger.error(
-            f"Pattern {pattern} couldn't find in operator logs. "
-            "Mon quorum may not have been lost after deleting "
-            "var/lib/ceph/mon. Please check"
-        )
-        raise UnexpectedBehaviour(
-            f"Pattern {pattern} not found in operator logs. "
-            "Maybe mon quorum not failed or  mon crash failed Please check"
-        )
-    logger.info(f"Pattern found: {pattern}. Mon quorum lost")
+    # Check the mon pods status to verify mon quorum lost
+    for mon in mon_pod_obj:
+        wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
     return mon_pod_obj_list, mon_pod_running[0], ceph_mon_daemon_id
 
@@ -4635,6 +4782,92 @@ def verify_quota_resource_exist(quota_name):
     ]
 
 
+def verify_substrings_in_string(output_string, expected_strings):
+    """
+    Verify all expected substrings are present in the output string
+
+    Args:
+        output_string (str): String to check
+        expected_strings (list): Expected substrings
+
+    Returns:
+        bool: True if all expected strings found, False otherwise
+
+    """
+    for expected_string in expected_strings:
+        if expected_string not in output_string:
+            logger.error(f"Expected string: {expected_string} not in {output_string}")
+            return False
+    return True
+
+
+def wait_for_quota_usage_update(
+    clusterresourcequota_obj,
+    quota_name,
+    quota_key,
+    expected_strings,
+    operation_description,
+    timeout=120,
+):
+    """
+    Wait for ClusterResourceQuota usage to update and verify expected strings
+
+    Args:
+        clusterresourcequota_obj (obj): ClusterResourceQuota OCP object
+        quota_name (str): Name of the quota resource
+        quota_key (str): Quota key to check (e.g., 'requests.storage')
+        expected_strings (list): Strings to verify (e.g., ['8Gi', '7Gi'])
+        operation_description (str): Operation description for logging
+        timeout (int): Timeout in seconds (default: 120)
+
+    Raises:
+        TimeoutExpiredError: If quota usage doesn't update within timeout
+
+    """
+    logger.info(f"Waiting for quota usage to reflect {operation_description}")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=clusterresourcequota_obj.get,
+        resource_name=quota_name,
+    )
+    for quota_resource in sample:
+        # Extract used and hard quota values from the resource
+        try:
+            used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+            hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+
+            # Get storage request values using the specified quota key
+            used_storage = used.get(quota_key, "0")
+            hard_storage = hard.get(quota_key, "0")
+
+            logger.info(
+                f"Quota usage for {quota_name}: "
+                f"used={used_storage}, hard={hard_storage}"
+            )
+
+            # Check if the expected values are present
+            quota_info = f"{used_storage} {hard_storage}"
+            if verify_substrings_in_string(
+                output_string=quota_info,
+                expected_strings=expected_strings,
+            ):
+                logger.info(
+                    f"Quota usage updated successfully after {operation_description}"
+                )
+                return
+        except (KeyError, AttributeError) as e:
+            logger.warning(f"Failed to parse quota resource: {e}")
+            continue
+    else:
+        err_str = (
+            f"Quota usage did not update to show {expected_strings} after {timeout} seconds "
+            f"for {operation_description}."
+        )
+        logger.error(err_str)
+        raise TimeoutExpiredError(err_str)
+
+
 def check_cluster_is_compact():
     existing_num_nodes = len(node.get_all_nodes())
     worker_n = node.get_worker_nodes()
@@ -5047,13 +5280,13 @@ def odf_cli_set_log_level(service, log_level, subsystem):
     """
     from pathlib import Path
 
-    if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
+    if not (Path(config.RUN["bin_dir"]) / "odf").exists():
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(
         f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
     )
-    cmd = f"odf-cli set ceph log-level {service} {subsystem} {log_level}"
+    cmd = f"odf set ceph log-level {service} {subsystem} {log_level}"
 
     logger.info(cmd)
     return exec_cmd(cmd, shell=True)
@@ -5463,11 +5696,10 @@ def upgrade_multus_holder_design():
         return
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
-        from ocs_ci.deployment.nmstate import NMStateInstaller
-
-        logger.info("Install NMState operator and create an instance")
-        nmstate_obj = NMStateInstaller()
-        nmstate_obj.running_nmstate()
+        nmstate_operator = NMStateOperator(
+            create_catalog=True,
+        )
+        nmstate_operator.deploy()
         configure_node_network_configuration_policy_on_all_worker_nodes()
     reset_all_osd_pods()
     enable_csi_disable_holder_pods()
@@ -6002,10 +6234,31 @@ def remove_toleration():
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
-    params = '[{"op": "remove", "path": "/spec/placement"}]'
-    result = storagecluster_obj.patch(params=params, format_type="json")
-    if not result:
-        logger.error("Failed to remove toleration from storagecluster")
+    try:
+        # Check if placement exists before trying to remove it
+        storagecluster_data = storagecluster_obj.get()
+        if "placement" in storagecluster_data.get("spec", {}):
+            params = '[{"op": "remove", "path": "/spec/placement"}]'
+            result = storagecluster_obj.patch(params=params, format_type="json")
+            if not result:
+                logger.error("Failed to remove toleration from storagecluster")
+                success = False
+            else:
+                logger.info(
+                    "Successfully removed placement section from storagecluster"
+                )
+        else:
+            logger.info(
+                "No placement section found in storagecluster, skipping removal"
+            )
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to remove placement from storagecluster: {e}. "
+            "This may be expected if placement was not previously set."
+        )
+        # Avoided to mark as failure since this might be expected
+    except Exception as e:
+        logger.error(f"Unexpected error removing placement from storagecluster: {e}")
         success = False
     logger.info("Remove tolerations from subscriptions")
 
@@ -6031,20 +6284,56 @@ def remove_toleration():
         )
         driver_list = ocp.get_all_resource_names_of_a_kind(kind=constants.DRIVER)
         for driver_name in driver_list:
-            params = (
-                '[{"op": "remove", "path": "/spec/controllerPlugin/tolerations"},'
-                '{"op": "remove", "path": "/spec/nodePlugin/tolerations"}]'
-            )
-            result = driver_obj.patch(
-                resource_name=driver_name, params=params, format_type="json"
-            )
-            if result:
-                logger.info(
-                    f"Successfully removed tolerations from CSI driver {driver_name}"
+            try:
+                # Check if tolerations exist before attempt to remove toleration
+                driver_data = driver_obj.get(resource_name=driver_name)
+                spec = driver_data.get("spec", {})
+                controller_plugin = spec.get("controllerPlugin") or {}
+                node_plugin = spec.get("nodePlugin") or {}
+
+                # Build patch command if paths exist
+                params = []
+                if (
+                    isinstance(controller_plugin, dict)
+                    and "tolerations" in controller_plugin
+                ):
+                    params.append(
+                        {"op": "remove", "path": "/spec/controllerPlugin/tolerations"}
+                    )
+                if isinstance(node_plugin, dict) and "tolerations" in node_plugin:
+                    params.append(
+                        {"op": "remove", "path": "/spec/nodePlugin/tolerations"}
+                    )
+
+                if params:
+                    result = driver_obj.patch(
+                        resource_name=driver_name,
+                        params=json.dumps(params),
+                        format_type="json",
+                    )
+                    if result:
+                        logger.info(
+                            f"Successfully removed tolerations from CSI driver {driver_name}"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to remove tolerations from CSI driver {driver_name}"
+                        )
+                        success = False
+                else:
+                    logger.info(
+                        f"No tolerations found in CSI driver {driver_name}, skipping removal"
+                    )
+            except CommandFailed as e:
+                # Handle case where patch fails (e.g., path doesn't exist)
+                logger.warning(
+                    f"Failed to remove tolerations from CSI driver {driver_name}: {e}. "
+                    "This may be expected if tolerations were not previously added."
                 )
-            else:
+                # Don't mark as failure since this might be expected in negative test cases
+            except Exception as e:
                 logger.error(
-                    f"Failed to remove tolerations from CSI driver {driver_name}"
+                    f"Unexpected error while removing tolerations from CSI driver {driver_name}: {e}"
                 )
                 success = False
 

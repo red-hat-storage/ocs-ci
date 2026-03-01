@@ -1,9 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad, resiliency
 from ocs_ci.resiliency.resiliency_helper import Resiliency
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
@@ -11,53 +11,16 @@ log = logging.getLogger(__name__)
 @green_squad
 @resiliency
 class TestPlatformFailureScenarios:
-    def _prepare_pvcs_and_workloads(
-        self, project_factory, multi_pvc_factory, resiliency_workload
-    ):
-        """
-        Create RBD and CephFS PVCs and start FIO workloads on them.
+    """
+    Test suite for validating ODF platform resiliency under various
+    platform failure scenarios while I/O workloads are actively running.
 
-        Returns:
-            list: List of workload objects
-        """
-        project = project_factory()
-        size = 10
-        fio_args = {"rw": "randwrite", "bs": "256k", "runtime": 7200}
-        interfaces = [constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL]
-
-        workloads = []
-        for interface in interfaces:
-            if interface == constants.CEPHFILESYSTEM:
-                access_modes = [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO]
-            else:
-                access_modes = [
-                    f"{constants.ACCESS_MODE_RWO}-Block",
-                    f"{constants.ACCESS_MODE_RWX}-Block",
-                ]
-            pvcs = multi_pvc_factory(
-                interface=interface,
-                project=project,
-                access_modes=access_modes,
-                size=size,
-                num_of_pvc=4,
-            )
-            for pvc in pvcs:
-                workload = resiliency_workload("FIO", pvc, fio_args=fio_args)
-                workload.start_workload()
-                workloads.append(workload)
-        return workloads
-
-    def _validate_and_cleanup_workloads(self, workloads):
-        """
-        Validate workload results and stop/cleanup all workloads.
-        """
-        for workload in workloads:
-            result = workload.get_fio_results()
-            assert (
-                "error" not in result.lower()
-            ), f"Workload {workload.deployment_name} failed after failure injection"
-
-        log.info("All workloads passed after failure injection.")
+    This test suite uses the workload_ops fixture which provides:
+    - Automated workload creation and management
+    - Background cluster operations
+    - Optional workload scaling
+    - Configuration via resiliency_tests_config.yaml
+    """
 
     @pytest.mark.parametrize(
         "failure_case",
@@ -85,29 +48,69 @@ class TestPlatformFailureScenarios:
         self,
         failure_case,
         platfrom_failure_scenarios,
-        project_factory,
-        multi_pvc_factory,
-        resiliency_workload,
+        workload_ops,
     ):
         """
-        Parametrized test that validates resiliency of the platform
-        against various failure scenarios while workloads are running.
+        Test that validates ODF platform resiliency against various failure
+        scenarios while I/O workloads are actively running.
+
+        This test uses the workload_ops fixture which automatically:
+        - Creates VDBENCH workloads on CephFS and RBD PVCs
+        - Starts background cluster operations
+        - Starts background scaling operations (if enabled in config)
+        - Validates and cleans up all resources
+
+        Configuration is loaded from resiliency_tests_config.yaml via:
+            pytest --ocsci-conf conf/ocsci/resiliency_tests_config.yaml ...
+
+        Steps:
+        1. Setup workloads using workload_ops fixture (automated)
+        2. Inject specific platform failure scenario
+        3. Wait for failure injection to complete
+        4. Validate workloads and cleanup (automated)
 
         Args:
-            failure_case (str): The failure method to inject.
+            failure_case: The failure method to inject (e.g., PLATFORM_INSTANCE_FAILURES)
+            platfrom_failure_scenarios: Fixture providing platform failure scenarios
+            workload_ops: WorkloadOps fixture for workload management
         """
         scenario = platfrom_failure_scenarios.get("SCENARIO_NAME")
         log.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
 
-        workloads = self._prepare_pvcs_and_workloads(
-            project_factory, multi_pvc_factory, resiliency_workload
+        resiliency_runner = None
+
+        try:
+            # Setup workloads (starts workloads, background ops, and scaling)
+            log.info("Setting up workloads and background operations")
+            workload_ops.setup_workloads()
+
+            # Start failure injection
+            log.info("Starting platform failure injection while workloads are running")
+            resiliency_runner = Resiliency(scenario, failure_method=failure_case)
+            resiliency_runner.start()
+
+            # Cleanup failure injection
+            resiliency_runner.cleanup()
+            resiliency_runner = None
+
+            # Validate and cleanup workloads
+            log.info("Validating and cleaning up workloads")
+            workload_ops.validate_and_cleanup()
+
+        except UnexpectedBehaviour as e:
+            log.error(f"Test execution failed: {e}")
+            raise
+        finally:
+            # Cleanup failure injection if not already done
+            if resiliency_runner:
+                try:
+                    resiliency_runner.cleanup()
+                except UnexpectedBehaviour as cleanup_e:
+                    log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
+
+        log.info(
+            "Test completed successfully - workloads and failure injection completed"
         )
-
-        resiliency_runner = Resiliency(scenario, failure_method=failure_case)
-        resiliency_runner.start()
-        resiliency_runner.cleanup()
-
-        self._validate_and_cleanup_workloads(workloads)
 
     @pytest.mark.parametrize(
         "failure_case",
@@ -133,27 +136,74 @@ class TestPlatformFailureScenarios:
         self,
         failure_case,
         platfrom_failure_scenarios,
-        project_factory,
-        multi_pvc_factory,
-        resiliency_workload,
+        workload_ops,
         run_platform_stress,
     ):
         """
-        Validates platform resiliency under stress conditions
-        like high CPU, memory, I/O, and network load.
-        Ensures workloads continue running during failure scenarios.
+        Test that validates ODF platform resiliency under stress conditions
+        like high CPU, memory, I/O, and network load while failure scenarios
+        are injected.
+
+        This test uses the workload_ops fixture which automatically:
+        - Creates VDBENCH workloads on CephFS and RBD PVCs
+        - Starts background cluster operations
+        - Starts background scaling operations (if enabled in config)
+        - Validates and cleans up all resources
+
+        Configuration is loaded from resiliency_tests_config.yaml via:
+            pytest --ocsci-conf conf/ocsci/resiliency_tests_config.yaml ...
+
+        Steps:
+        1. Setup workloads using workload_ops fixture (automated)
+        2. Start platform stress operations
+        3. Inject specific platform failure scenario
+        4. Wait for failure injection to complete
+        5. Validate workloads and cleanup (automated)
+
+        Args:
+            failure_case: The failure method to inject
+            platfrom_failure_scenarios: Fixture providing platform failure scenarios
+            workload_ops: WorkloadOps fixture for workload management
+            run_platform_stress: Fixture to run platform stress operations
         """
         scenario = platfrom_failure_scenarios.get("SCENARIO_NAME")
         log.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
 
-        workloads = self._prepare_pvcs_and_workloads(
-            project_factory, multi_pvc_factory, resiliency_workload
+        resiliency_runner = None
+
+        try:
+            # Setup workloads (starts workloads, background ops, and scaling)
+            log.info("Setting up workloads and background operations")
+            workload_ops.setup_workloads()
+
+            # Start platform stress
+            log.info("Starting platform stress operations")
+            run_platform_stress()
+
+            # Start failure injection
+            log.info("Starting platform failure injection under stress conditions")
+            resiliency_runner = Resiliency(scenario, failure_method=failure_case)
+            resiliency_runner.start()
+
+            # Cleanup failure injection
+            resiliency_runner.cleanup()
+            resiliency_runner = None
+
+            # Validate and cleanup workloads
+            log.info("Validating and cleaning up workloads")
+            workload_ops.validate_and_cleanup()
+
+        except UnexpectedBehaviour as e:
+            log.error(f"Test execution failed: {e}")
+            raise
+        finally:
+            # Cleanup failure injection if not already done
+            if resiliency_runner:
+                try:
+                    resiliency_runner.cleanup()
+                except UnexpectedBehaviour as cleanup_e:
+                    log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
+
+        log.info(
+            "Test completed successfully - workloads, stress, and failure injection completed"
         )
-
-        run_platform_stress()
-
-        resiliency_runner = Resiliency(scenario, failure_method=failure_case)
-        resiliency_runner.start()
-        resiliency_runner.cleanup()
-
-        self._validate_and_cleanup_workloads(workloads)

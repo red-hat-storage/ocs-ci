@@ -1,3 +1,5 @@
+from selenium.webdriver.common.by import By
+
 from ocs_ci.ocs.ui.helpers_ui import logger
 from ocs_ci.ocs.constants import ENCRYPTION_DASHBOARD_CONTEXT_MAP
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
@@ -50,12 +52,12 @@ class EncryptionModule(DataFoundationTabBar):
         # Extract headers and statuses
         enc_headers = [
             head
-            for head in root_element.find_elements_by_tag_name("h6")
+            for head in root_element.find_elements(By.TAG_NAME, "h6")
             if head.text in ENCRYPTION_DASHBOARD_CONTEXT_MAP
         ]
         enc_status = [
             svg
-            for svg in root_element.find_elements_by_tag_name("svg")
+            for svg in root_element.find_elements(By.TAG_NAME, "svg")
             if svg.get_attribute("color")
         ]
 

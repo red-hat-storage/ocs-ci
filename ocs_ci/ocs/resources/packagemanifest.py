@@ -263,11 +263,11 @@ class PackageManifest(OCP):
             TimeoutExpiredError: in case the resource not found in timeout
 
         """
+        resource_name = resource_name if resource_name else self.resource_name
         log.info(
             f"Waiting for a resource(s) of kind {self._kind}"
             f" identified by name '{resource_name}'"
         )
-        resource_name = resource_name if resource_name else self.resource_name
         self.check_name_is_specified(resource_name)
 
         for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=self.get):

@@ -10,6 +10,8 @@ import yaml
 from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.krkn_chaos.krkn_port_manager import KrknPortManager
+from ocs_ci.framework import config
+from ocs_ci.utility.ibmcloud import get_ibmcloud_cluster_region
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +67,16 @@ class KrKnRunner:
 
     def _validate_environment(self):
         """Validate the environment before running Krkn."""
+        # Check if Krkn venv python exists
+        # KRKN_RUN_CMD is data/krkn/run_kraken.py
+        # venv is at data/krkn/venv/bin/python
+        krkn_dir = os.path.dirname(KRKN_RUN_CMD)  # data/krkn
+        krkn_python = os.path.join(krkn_dir, "venv", "bin", "python")
+
+        if not os.path.exists(krkn_python):
+            log.error(f"Krkn venv python not found at: {krkn_python}")
+            return False
+
         # Check if Krkn run command exists
         if not os.path.exists(KRKN_RUN_CMD):
             log.error(f"Krkn run command not found at: {KRKN_RUN_CMD}")
@@ -492,8 +504,52 @@ class KrKnRunner:
                 "Could not extract kubeconfig_path from krkn config, krkn may fail"
             )
 
+        # Export IBM Cloud API key and endpoint if platform is IBM Cloud
+        # This is required for node scenarios on IBM Cloud
+        try:
+            platform = config.ENV_DATA.get("platform", "").lower()
+            if "ibm" in platform or "ibmcloud" in platform:
+                ibmcloud_auth = config.AUTH.get("ibmcloud", {})
+                api_key = ibmcloud_auth.get("api_key")
+                api_endpoint = ibmcloud_auth.get("api_endpoint")
+
+                if api_key:
+                    env["IBMC_APIKEY"] = api_key
+                    env["IC_API_KEY"] = (
+                        api_key  # Also set IC_API_KEY for backward compatibility
+                    )
+                    log.info(
+                        "Setting IBMC_APIKEY and IC_API_KEY environment variables for IBM Cloud"
+                    )
+                else:
+                    log.warning(
+                        "IBM Cloud platform detected but api_key not found in AUTH config"
+                    )
+
+                if api_endpoint:
+                    env["IBMC_URL"] = api_endpoint
+                    log.info(
+                        f"Setting IBMC_URL environment variable to: {api_endpoint}"
+                    )
+                else:
+                    ibmc_url = (
+                        f"https://{get_ibmcloud_cluster_region()}.iaas.cloud.ibm.com/v1"
+                    )
+                    env["IBMC_URL"] = ibmc_url
+                    log.info(
+                        f"No api_endpoint configured, using region-based IBMC_URL: {ibmc_url}"
+                    )
+        except Exception as e:
+            log.warning(f"Failed to set IBM Cloud credentials: {str(e)}")
+
+        # Use krkn venv python directly to run krkn
+        # KRKN_RUN_CMD is data/krkn/run_kraken.py
+        # venv is at data/krkn/venv/bin/python
+        krkn_dir = os.path.dirname(KRKN_RUN_CMD)
+        krkn_python = os.path.join(krkn_dir, "venv", "bin", "python")
+
         krkn_cmd = [
-            "python3",
+            krkn_python,
             KRKN_RUN_CMD,
             "--config",
             self.krkn_config,

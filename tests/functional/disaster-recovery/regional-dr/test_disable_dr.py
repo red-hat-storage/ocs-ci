@@ -60,7 +60,7 @@ class TestDisableDR:
             logger.info("Discovered apps")
             rdr_workload_discovered_apps = discovered_apps_dr_workload()[0]
             rdr_workloads.append(rdr_workload_discovered_apps)
-            drpc_discovered_apps = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
+            drpc_discovered_apps = DRPC(namespace=constants.DR_OPS_NAMESPACE)
             drpc_objs.append(drpc_discovered_apps)
             discovered_apps = True
 

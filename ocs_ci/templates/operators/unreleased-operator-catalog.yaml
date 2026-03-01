@@ -1,0 +1,14 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: #CATALOG_NAME_PLACEHOLDER
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc
+  image: # CATALOG_IMAGE_PLACEHOLDER
+  displayName: Unreleased Operator Catalog
+  publisher: Red Hat
+  updateStrategy:
+    registryPoll:
+      interval: 10m

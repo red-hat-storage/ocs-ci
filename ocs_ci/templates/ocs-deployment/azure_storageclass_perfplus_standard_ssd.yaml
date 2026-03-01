@@ -1,0 +1,16 @@
+---
+# Azure Performance Plus StorageClass - Standard SSD
+# For disks 513 GiB or larger with Performance Plus (StandardSSD_LRS)
+# See: https://learn.microsoft.com/en-us/azure/virtual-machines/disks-enable-performance
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ocs-disk-perfplus-sc
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: StandardSSD_LRS
+  cachingMode: ReadOnly
+  enablePerformancePlus: "true"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true

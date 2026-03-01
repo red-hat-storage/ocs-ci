@@ -31,6 +31,7 @@ dbglog() {
 # Expect base collection path as an exported variable
 # If it is not defined, use PWD instead
 BASE_COLLECTION_PATH=${1:-"$(pwd)"}
+mkdir -p $BASE_COLLECTION_PATH
 dbglog  "ceph commands for external cluster will be collected at ${BASE_COLLECTION_PATH}"
 
 KUBECONFIG=${2:-"~/.kube/config"}

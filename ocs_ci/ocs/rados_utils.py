@@ -11,6 +11,8 @@ from ocs_ci.utility.utils import exec_cmd, run_cmd
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility import version as version_module
+from ocs_ci.utility.jira import JiraHelper
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -419,6 +421,51 @@ def check_phase_of_rados_namespace(
             "-o=jsonpath='{.status.phase}'"
         )
         phase = run_cmd(cmd=check_radosns_phase_cmd)
+        # DFBUGS-5083 - report the issue and workaround
+        if (
+            required_phase == constants.STATUS_READY
+            and phase == constants.STATUS_PROGRESSING
+        ):
+            try:
+                odf_version = version_module.get_running_odf_version()
+            except Exception:
+                odf_version = version_module.get_ocs_version_from_csv()
+            ocp_version = version_module.get_semantic_ocp_running_version()
+            odf_registry_image = config.DEPLOYMENT.get("ocs_registry_image", "")
+            jenkins_build_url = config.RUN.get("jenkins_build_url", "")
+            base_logs_url = config.RUN.get("logs_url", "")
+            msg_lines = [
+                "*OCS-CI report*",
+                f"ODF version: {odf_version}",
+                f"OCP version: {ocp_version}",
+            ]
+            if odf_registry_image:
+                msg_lines.append(f"ODF registry image: {odf_registry_image}")
+            if jenkins_build_url:
+                msg_lines.append(f"Issue reproduced in job: {jenkins_build_url}")
+            if base_logs_url:
+                msg_lines.append(f"Logs collected here: {base_logs_url}")
+            msg = "\n".join(msg_lines)
+            try:
+                jira_issue_id = "DFBUGS-5083"
+                jira_helper = JiraHelper()
+                jira_issue = jira_helper.get_issue(jira_issue_id)
+                jira_issue_summary = jira_issue["fields"]["summary"]
+                logger.error(
+                    f"Hitting jira issue: {jira_issue_id} - {jira_issue_summary}"
+                )
+                jira_helper.add_comment(jira_issue_id, msg)
+            except Exception as ex:
+                logger.error(f"Failed to connect or comment to Jira: {ex}")
+            # workaround for DFBUGS-5083, restart rook-ceph-operator pod
+            logger.warning(
+                "Applying workaround for DFBUGS-5083 - restarting rook-ceph-operator pod"
+            )
+            pod.restart_pods_having_label(label=constants.OPERATOR_LABEL)
+            # wait 60 seconds to reconcile cephblockpoolradosnamespaces before next check
+            time.sleep(60)
+            phase = run_cmd(cmd=check_radosns_phase_cmd)
+        # end of DFBUGS-5083 - report the issue and workaround
         return phase == required_phase
 
 
