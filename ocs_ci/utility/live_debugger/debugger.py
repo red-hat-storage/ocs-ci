@@ -156,9 +156,11 @@ class LiveClusterDebugger:
 
         logger.info(
             f"Live debugger: investigating {test_name} "
-            f"(model={self.model}, budget=${self.max_budget_usd:.2f}, "
-            f"timeout={self.timeout}s)"
+            f"(model={self.model}, resolved_model={resolved_model}, "
+            f"budget=${self.max_budget_usd:.2f}, timeout={self.timeout}s, "
+            f"prompt_len={len(prompt)} chars)"
         )
+        logger.info(f"Live debugger command: {' '.join(cmd)}")
 
         try:
             proc = subprocess.run(
@@ -169,12 +171,17 @@ class LiveClusterDebugger:
                 timeout=self.timeout,
                 env=env,
             )
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
+            # Capture any partial output from the timed-out process
+            partial_stdout = (e.stdout or "")[:500] if e.stdout else ""
+            partial_stderr = (e.stderr or "")[:500] if e.stderr else ""
             result["error"] = (
                 f"Live debugger timed out after {self.timeout}s for {test_name}"
             )
             result["duration_seconds"] = time.time() - start
             logger.error(result["error"])
+            logger.error(f"Partial stdout on timeout: {partial_stdout}")
+            logger.error(f"Partial stderr on timeout: {partial_stderr}")
             return result
         except FileNotFoundError:
             result["error"] = "Claude Code CLI ('claude') not found"
