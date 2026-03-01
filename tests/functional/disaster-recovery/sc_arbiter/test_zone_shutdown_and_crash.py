@@ -462,7 +462,7 @@ class TestZoneShutdownsAndCrashes:
             "Immediate-Shutdown",
         ],
     )
-    def test_arbiter_and_zone_shutdow(
+    def test_arbiter_and_zone_shutdown(
         self,
         node_restart_teardown,
         node_drain_teardown,
