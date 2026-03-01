@@ -2633,9 +2633,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_delete_option": (
-        "//button[@role='menuitem'][normalize-space()='Delete Bucket'] | "
-        "//button[@role='menuitem'][normalize-space()='Delete'] | "
-        "//button[@tabindex='-1']",
+        "//button[@role='menuitem'][@id='Delete'] | "
+        "//button[@role='menuitem'][contains(normalize-space(),'Delete')]",
         By.XPATH,
     ),
     "bucket_confirm_button": (
