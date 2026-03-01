@@ -66,6 +66,10 @@ class LiveClusterDebugger:
         """
         Spawn ``claude -p`` to investigate a test failure on the live cluster.
 
+        Uses subprocess.Popen with streaming output so that Claude's progress
+        is logged in real-time to both a log file and the pytest console.
+        The final JSON result (from --output-format json) is parsed at the end.
+
         Args:
             test_name: Short test name (e.g. ``test_create_pvc``).
             test_nodeid: Full pytest node ID.
@@ -162,27 +166,80 @@ class LiveClusterDebugger:
         )
         logger.info(f"Live debugger command: {' '.join(cmd)}")
 
+        # Set up the streaming log file
+        safe_name = re.sub(r"[^\w\-.]", "_", test_name)
+        stream_log_path = None
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+            stream_log_path = os.path.join(
+                log_dir, f"{safe_name}_live_debug_stream.log"
+            )
+
+        # Use Popen for streaming output instead of subprocess.run
+        # This gives us real-time visibility into what Claude is doing
+        all_output = []
+        timed_out = False
+        proc = None
+
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
-                input=prompt,
-                capture_output=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.timeout,
                 env=env,
             )
-        except subprocess.TimeoutExpired as e:
-            # Capture any partial output from the timed-out process
-            partial_stdout = (e.stdout or "")[:500] if e.stdout else ""
-            partial_stderr = (e.stderr or "")[:500] if e.stderr else ""
-            result["error"] = (
-                f"Live debugger timed out after {self.timeout}s for {test_name}"
-            )
-            result["duration_seconds"] = time.time() - start
-            logger.error(result["error"])
-            logger.error(f"Partial stdout on timeout: {partial_stdout}")
-            logger.error(f"Partial stderr on timeout: {partial_stderr}")
-            return result
+
+            # Send prompt via stdin and close it
+            proc.stdin.write(prompt)
+            proc.stdin.close()
+
+            # Open stream log file if we have a log_dir
+            stream_log_file = None
+            if stream_log_path:
+                try:
+                    stream_log_file = open(stream_log_path, "w")
+                except OSError as e:
+                    logger.warning(f"Could not open stream log file: {e}")
+
+            # Read stdout line by line with timeout
+            deadline = time.time() + self.timeout
+            try:
+                for line in proc.stdout:
+                    line = line.rstrip("\n")
+                    all_output.append(line)
+
+                    # Write to stream log file
+                    if stream_log_file:
+                        stream_log_file.write(line + "\n")
+                        stream_log_file.flush()
+
+                    # Log progress lines to pytest console
+                    # Skip very long lines (likely JSON result) in console
+                    if len(line) < 500:
+                        logger.info(f"Live debugger [{test_name}]: {line}")
+
+                    # Check timeout
+                    if time.time() > deadline:
+                        timed_out = True
+                        logger.error(
+                            f"Live debugger timed out after {self.timeout}s "
+                            f"for {test_name} (collected {len(all_output)} lines)"
+                        )
+                        proc.kill()
+                        break
+            finally:
+                if stream_log_file:
+                    stream_log_file.close()
+
+            # Wait for process to finish (or confirm it was killed)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
         except FileNotFoundError:
             result["error"] = "Claude Code CLI ('claude') not found"
             result["duration_seconds"] = time.time() - start
@@ -196,25 +253,56 @@ class LiveClusterDebugger:
 
         result["duration_seconds"] = time.time() - start
 
-        if proc.returncode != 0:
-            stderr_text = proc.stderr.strip()[:500] if proc.stderr else ""
-            stdout_text = proc.stdout.strip()[:500] if proc.stdout else ""
+        # Combine all output
+        full_output = "\n".join(all_output)
+
+        if stream_log_path:
+            logger.info(f"Live debugger stream log: {stream_log_path}")
+
+        if timed_out:
             result["error"] = (
-                f"Claude Code exited with code {proc.returncode}: "
-                f"stderr={stderr_text} stdout={stdout_text}"
+                f"Live debugger timed out after {self.timeout}s for {test_name}. "
+                f"Collected {len(all_output)} lines before timeout."
             )
-            logger.error(result["error"])
-            # Log the command (without the full prompt) for debugging
-            cmd_summary = [c for c in cmd if c != prompt]
-            logger.error(f"Command was: {' '.join(cmd_summary)}")
+            # Still try to extract useful info from partial output
+            result["investigation"] = full_output
+            result["category"] = self._extract_category(full_output)
+            result["root_cause"] = self._extract_section(full_output, "ROOT CAUSE")
+            if log_dir:
+                self._save_results(result, test_name, log_dir)
             return result
 
-        # Parse the JSON response
-        try:
-            response = json.loads(proc.stdout)
-        except json.JSONDecodeError as e:
-            result["error"] = f"Failed to parse Claude response as JSON: {e}"
+        returncode = proc.returncode if proc else -1
+
+        if returncode != 0 and not timed_out:
+            stderr_text = ""
+            if proc and proc.stderr:
+                try:
+                    stderr_text = proc.stderr.read()[:500]
+                except Exception:
+                    pass
+            result["error"] = (
+                f"Claude Code exited with code {returncode}: "
+                f"stderr={stderr_text} stdout={full_output[:500]}"
+            )
             logger.error(result["error"])
+            logger.error(f"Command was: {' '.join(cmd)}")
+            return result
+
+        # Parse the JSON response — it's the complete output when using
+        # --output-format json (single JSON blob)
+        try:
+            response = json.loads(full_output)
+        except json.JSONDecodeError as e:
+            result["error"] = (
+                f"Failed to parse Claude response as JSON: {e}. "
+                f"Output length: {len(full_output)} chars"
+            )
+            logger.error(result["error"])
+            # Still save the raw output as investigation text
+            result["investigation"] = full_output
+            if log_dir:
+                self._save_results(result, test_name, log_dir)
             return result
 
         # Extract result text and metadata
