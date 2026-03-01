@@ -930,7 +930,11 @@ def pytest_runtest_makereport(item, call):
     # Record test failure in the AI analysis registry, but only when AI live
     # analysis is enabled. This avoids any overhead (import, item.fspath
     # resolution, dict writes) when the feature is off.
-    if rep.failed and rep.when == "call":
+    # We record failures from all phases (setup, call, teardown) so that
+    # setup/teardown failures are also analysed. record_test_failure() stores
+    # the phase and uses "call" entries to avoid overwriting a call-phase
+    # failure with a secondary teardown failure for the same test.
+    if rep.failed:
         try:
             from ocs_ci.ocs.must_gather.ai_analyzer import (
                 _is_ai_analysis_enabled,

@@ -331,6 +331,8 @@ The following files/directories are provided as context for this analysis:
 - **Test Name**: {test_name}
 - **Test Short Name**: {test_short_name}
 - **Test File**: {test_file_path if test_file_path else "unknown"}
+- **Failure Phase**: {failure_info.get("phase", "call")} \
+(setup = fixture setup failed; call = test assertion failed; teardown = cleanup failed)
 
 ## Failure Details
 ```
@@ -490,6 +492,11 @@ def _register_consolidated_result(
     """
     Register a completed per-test AI analysis result in the consolidated registry.
 
+    If an entry for the same test_name already exists (e.g. because the hook
+    fired for both the 'call' and 'teardown' phases of the same failing test),
+    the existing entry is replaced with the newer one so the test appears only
+    once in the final HTML report.
+
     Args:
         failure_info (dict): Test failure context dict.
         summary_content (str): The full AI summary text produced by Claude.
@@ -498,9 +505,10 @@ def _register_consolidated_result(
     """
     category = _parse_category_from_summary(summary_content)
     confidence = _parse_confidence_from_summary(summary_content)
+    test_name = failure_info.get("test_name", "unknown")
 
     entry = {
-        "test_name": failure_info.get("test_name", "unknown"),
+        "test_name": test_name,
         "test_short_name": failure_info.get("test_short_name", "unknown"),
         "category": category,
         "confidence": confidence,
@@ -511,6 +519,15 @@ def _register_consolidated_result(
     }
 
     with _consolidated_lock:
+        # Deduplicate: replace any existing entry for the same test nodeid
+        # so that teardown-phase re-triggers don't produce duplicate rows.
+        for i, existing in enumerate(_consolidated_results):
+            if existing.get("test_name") == test_name:
+                logger.debug(
+                    f"Replacing duplicate consolidated result for test: '{test_name}'"
+                )
+                _consolidated_results[i] = entry
+                return
         _consolidated_results.append(entry)
 
     logger.debug(
@@ -1178,22 +1195,41 @@ def record_test_failure(item, rep):
     Record a test failure in the module-level registry for AI analysis.
 
     This is called from the pytest_runtest_makereport hook in ocscilib.py
-    when a test call phase fails. It stores the failure context keyed by
-    the test nodeid so that collect_must_gather() can retrieve it via
-    _get_current_test_failure_info().
+    for any failing phase (setup, call, or teardown). It stores the failure
+    context keyed by the test nodeid so that trigger_ai_analysis_parallel()
+    can retrieve it via _get_current_test_failure_info().
+
+    Priority rule: a 'call' phase failure is never overwritten by a later
+    'teardown' failure for the same test. This ensures the primary test
+    assertion failure is preserved as the analysis context, while still
+    allowing setup and teardown-only failures to be recorded when no call
+    failure exists.
 
     The registry is keyed by the full pytest nodeid so that concurrent or
     sequential tests do not overwrite each other's failure records.
 
     Args:
         item: pytest item object (the test item that failed)
-        rep: pytest report object (the TestReport for the failed call)
+        rep: pytest report object (the TestReport for the failed phase)
     """
     if not rep.failed:
         return
 
     test_name = item.nodeid
     test_short_name = item.name
+    phase = rep.when  # "setup", "call", or "teardown"
+
+    with _registry_lock:
+        existing = _test_failure_registry.get(test_name)
+        # If a 'call' phase failure is already recorded, don't overwrite it
+        # with a secondary teardown failure — the call failure is the primary
+        # cause and gives Claude the most useful context.
+        if existing and existing.get("phase") == "call" and phase != "call":
+            logger.debug(
+                f"Skipping {phase} failure record for '{test_name}': "
+                f"call-phase failure already recorded (call takes priority)"
+            )
+            return
 
     # Resolve the absolute path to the test file.
     # item.fspath is a py.path.local object (absolute path to the test file).
@@ -1227,12 +1263,15 @@ def record_test_failure(item, rep):
         "test_file_path": test_file_path,
         "failure_repr": failure_repr,
         "log_file": log_file,
+        "phase": phase,  # "setup", "call", or "teardown"
     }
 
     with _registry_lock:
         _test_failure_registry[test_name] = failure_info
 
-    logger.debug(f"Recorded test failure in AI analysis registry: test='{test_name}'")
+    logger.debug(
+        f"Recorded {phase} failure in AI analysis registry: test='{test_name}'"
+    )
 
 
 def clear_test_failure(nodeid):
