@@ -469,8 +469,8 @@ class AbstractTopologyView(ABC, TopologySidebar):
             entities = self.get_elements(self.topology_loc["node_label"])
             entity_names = []
             for entity in entities:
-                text = entity.text
-                if not len(text):
+                text = entity.text or entity.get_attribute("textContent") or ""
+                if not len(text.strip()):
                     raise NoSuchElementException("Cannot read element text")
                 # with ODF 4.18 we sometimes see no D, N prefix in the name of entity. This is not confirmed visually
                 # so we make exception for this case, checking "\n" within text

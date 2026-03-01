@@ -30,7 +30,7 @@ from ocs_ci.ocs.ui.odf_topology import (
     get_node_names_of_the_pods_by_pattern,
 )
 from ocs_ci.ocs.ui.workload_ui import WorkloadUi
-from ocs_ci.ocs.ui.llm_tools.llm_helper import OllamaClient
+from ocs_ci.ocs.ui.llm_tools.llm_helper import get_llm_client
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
 from ocs_ci.helpers import helpers
@@ -144,7 +144,7 @@ class TestODFTopology(object):
 
     @tier3
     @polarion_id("OCS-4903")
-    def test_validate_topology_node_details(self, setup_ui_class):
+    def deprecated_test_validate_topology_node_details(self, setup_ui_class):
         """
         Test to validate ODF Topology node details
         BZ #2214023 fixed in 4.14.0-0.nightly-2023-09-02-132842
@@ -203,7 +203,7 @@ class TestODFTopology(object):
             )
 
     @tier3
-    @polarion_id("OCS-6171")
+    @polarion_id("OCS-4903")
     def test_validate_topology_node_details_llm(self, setup_ui_class):
         """
         Test to validate ODF Topology node details using LLM-based screen reading.
@@ -223,11 +223,11 @@ class TestODFTopology(object):
         8. Compare LLM-extracted details with CLI details
         9. Close sidebar
         """
-        llm_client = OllamaClient()
+        llm_client = get_llm_client()
         if not llm_client.is_available():
             pytest.skip(
-                "Ollama is not available or model is not pulled. "
-                "Start ollama and run 'ollama pull <model>' to enable this test."
+                "LLM backend is not available. "
+                "Configure llm_model in UI_SELENIUM settings to enable this test."
             )
 
         log_step("Get node names and pick random node")
@@ -280,8 +280,14 @@ class TestODFTopology(object):
             fields_to_check.append("instance_type")
 
         def normalize(text):
-            """Remove all whitespace for LLM OCR comparison."""
-            return "".join(str(text).strip().lower().split())
+            """
+            Normalise text for LLM OCR comparison.
+            Removes whitespace and punctuation characters that the LLM commonly
+            confuses (e.g. dot vs dash in instance types like bx2-16x64 → bx2.16x64).
+            """
+            import re
+
+            return re.sub(r"[\s\-_.:/]", "", str(text).strip().lower())
 
         mismatches = {}
         for field in fields_to_check:
