@@ -419,12 +419,16 @@ Output ONLY the summary report text. Do not include any preamble or meta-comment
 
 def _write_ai_summary(summary_content, test_log_dir, test_short_name):
     """
-    Write the AI analysis summary to a file in the test log directory.
+    Write the AI analysis summary to a Markdown file in the test log directory.
 
-    The file is named: {test_short_name}_AI_Summary.txt
+    The file is named: {test_short_name}_AI_Summary.md
+
+    Using .md extension so the file renders with formatting in GitHub, GitLab,
+    VS Code, and most CI artifact viewers. Note: browsers serve .md as plain
+    text unless a Markdown viewer extension is installed.
 
     Args:
-        summary_content (str): The AI-generated summary text.
+        summary_content (str): The AI-generated summary text (Markdown format).
         test_log_dir (str): Path to the test log directory.
         test_short_name (str): Short test name for the filename.
 
@@ -432,7 +436,7 @@ def _write_ai_summary(summary_content, test_log_dir, test_short_name):
         str: Path to the written summary file.
     """
     os.makedirs(test_log_dir, exist_ok=True)
-    summary_filename = f"{test_short_name}_AI_Summary.txt"
+    summary_filename = f"{test_short_name}_AI_Summary.md"
     summary_path = os.path.join(test_log_dir, summary_filename)
 
     with open(summary_path, "w") as f:
@@ -723,9 +727,20 @@ def generate_consolidated_html_report(output_path=None):
         summary_html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", summary_html)
         summary_html = summary_html.replace("\n", "<br>\n")
 
+        # Build a file:// link to the per-test .md summary (works when the
+        # HTML report is opened locally alongside the log directory)
+        md_path = r.get("summary_path", "")
+        md_link_html = ""
+        if md_path:
+            md_uri = "file://" + html.escape(md_path)
+            md_link_html = (
+                f'<a class="md-link" href="{md_uri}" target="_blank">'
+                f"&#128196; View raw .md</a>"
+            )
+
         test_sections_html += f"""
-        <div class="test-section" id="test-{idx}">
-          <div class="test-header">
+        <details class="test-section" id="test-{idx}">
+          <summary class="test-header">
             <span class="test-index">#{idx}</span>
             <span class="test-name">{html.escape(r['test_short_name'])}</span>
             <span class="badge" style="background:{cat_color}">{cat_label}</span>
@@ -734,10 +749,13 @@ def generate_consolidated_html_report(output_path=None):
             </span>
             <span class="duration-badge">&#9201; {duration}s</span>
             <span class="timestamp">{html.escape(r['timestamp'])}</span>
+          </summary>
+          <div class="test-nodeid">
+            {html.escape(r['test_name'])}
+            {md_link_html}
           </div>
-          <div class="test-nodeid">{html.escape(r['test_name'])}</div>
           <div class="summary-content">{summary_html}</div>
-        </div>
+        </details>
 """
 
     # Build cluster names list HTML
@@ -823,8 +841,16 @@ def generate_consolidated_html_report(output_path=None):
                       border-bottom: 2px solid #ecf0f1; }}
     .test-section {{ background: white; border-radius: 10px; margin-bottom: 18px;
                      box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow: hidden; }}
+    .test-section[open] > .test-header {{ border-bottom: 1px solid #ecf0f1; }}
     .test-header {{ display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
-                    padding: 14px 20px; background: #f8f9fa; border-bottom: 1px solid #ecf0f1; }}
+                    padding: 14px 20px; background: #f8f9fa; cursor: pointer;
+                    list-style: none; user-select: none; }}
+    .test-header::-webkit-details-marker {{ display: none; }}
+    .test-header::marker {{ display: none; }}
+    .test-header::before {{ content: "\\25B6"; font-size: 0.75em; color: #95a5a6;
+                            margin-right: 6px; transition: transform 0.2s ease; }}
+    .test-section[open] > .test-header::before {{ transform: rotate(90deg); }}
+    .test-header:hover {{ background: #f0f2f5; }}
     .test-index {{ font-weight: 700; color: #7f8c8d; font-size: 0.9em; min-width: 28px; }}
     .test-name {{ font-weight: 700; font-size: 1em; color: #2c3e50; flex: 1; min-width: 200px; }}
     .badge {{ display: inline-block; padding: 3px 10px; border-radius: 12px;
@@ -834,7 +860,11 @@ def generate_consolidated_html_report(output_path=None):
     .timestamp {{ font-size: 0.78em; color: #bdc3c7; margin-left: auto; white-space: nowrap; }}
     .test-nodeid {{ padding: 6px 20px; font-size: 0.78em; color: #95a5a6;
                     background: #fdfdfd; border-bottom: 1px solid #f0f0f0;
-                    font-family: monospace; word-break: break-all; }}
+                    font-family: monospace; word-break: break-all;
+                    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
+    .md-link {{ font-size: 0.85em; color: #3498db; text-decoration: none;
+                white-space: nowrap; font-family: sans-serif; }}
+    .md-link:hover {{ text-decoration: underline; }}
     .summary-content {{ padding: 18px 24px; font-size: 0.9em; line-height: 1.7;
                         white-space: pre-wrap; word-break: break-word; }}
     .summary-content strong {{ color: #2c3e50; }}
