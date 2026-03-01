@@ -2352,7 +2352,11 @@ validation_4_21 = {
 
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
-    "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
+    "node_label": (
+        "//*[contains(@class,'topology__node__label')"
+        " and not(contains(@class,'topology__node__label__'))]",
+        By.XPATH,
+    ),
     # status is in class name of the node_status_axis one from pf-m-warning / pf-m-danger / pf-m-success
     "node_status_class_axis": (
         "//*[contains(@class,'topology__node__label')]//*[contains(text(), '{}')]"
