@@ -386,14 +386,22 @@ generic_locators = {
         By.XPATH,
     ),
     "actions": (
-        '//button[@aria-label="Actions"]| //div[@data-test-id="details-actions"]//button[normalize-space()="Actions"]| '
+        '//div[@data-test-id="details-actions"]//button[normalize-space()="Actions"]| '
+        '//button[@aria-label="Actions"]| '
+        '//span[contains(@class,"c-menu-toggle__text") and text()="Actions"]/.. | '
         '//span[contains(@class,"c-dropdown__toggle-text") and text()="Actions"]/..',
         By.XPATH,
     ),
-    "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
+    "three_dots": (
+        '//button[@aria-label="Actions"] | '
+        '//button[@aria-label="Dropdown toggle"]',
+        By.XPATH,
+    ),
     "three_dots_specific_resource": (
-        "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions'] | "
-        "//tr[contains(., '{}')]//button[contains(@data-test, 'kebab-button')]",
+        "//tr[contains(., '{}')]//button[contains(@data-test, 'kebab-button')] | "
+        "//td[@data-label='Name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Dropdown toggle'] | "
+        "//td[@data-label='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Dropdown toggle'] | "
+        "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions']",
         By.XPATH,
     ),
     "resource_link": (
@@ -2619,10 +2627,14 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_action_button": (
+        "//button[@data-test='kebab-button'] | "
+        "//button[@aria-label='Dropdown toggle'] | "
         "//button[@aria-label='Kebab toggle']",
         By.XPATH,
     ),
     "bucket_delete_option": (
+        "//button[@role='menuitem'][normalize-space()='Delete Bucket'] | "
+        "//button[@role='menuitem'][normalize-space()='Delete'] | "
         "//button[@tabindex='-1']",
         By.XPATH,
     ),

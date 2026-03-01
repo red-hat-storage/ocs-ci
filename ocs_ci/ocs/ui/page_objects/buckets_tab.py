@@ -485,7 +485,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
                 try:
                     dialog = self.driver.find_element(
-                        By.CSS_SELECTOR, ".pf-v5-c-modal-box"
+                        By.CSS_SELECTOR, "[class*='c-modal-box']"
                     )
                     dialog.click()
                     time.sleep(0.5)
@@ -538,6 +538,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 # locator of three_dots btn aligned with the specific resource name
                 locator = (
                     f"//tr[contains(., '{resource_name}')]//button[@data-test='kebab-button'] | "
+                    f"//td[@data-label='Name' and normalize-space()='{resource_name}']"
+                    "/following-sibling::td//button[@aria-label='Dropdown toggle'] | "
                     f"//td[@data-label='Name' and normalize-space()='{resource_name}']"
                     "/following-sibling::td//button[@aria-label='Kebab toggle']",
                     By.XPATH,
