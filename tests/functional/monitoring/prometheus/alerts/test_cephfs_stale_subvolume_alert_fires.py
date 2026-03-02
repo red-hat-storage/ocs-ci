@@ -464,7 +464,6 @@ class TestCephFSStaleSubvolumeAlert:
         - No false alert disappearance
         """
 
-        alert_name = constants.ALERT_CEPHFS_STALE_SUBVOLUME
 
         # Step 1: Create stale CephFS subvolumes
         log.info("Creating stale CephFS subvolumes")
@@ -512,7 +511,16 @@ class TestCephFSStaleSubvolumeAlert:
             log.info(f"Started client pod {pod.name}")
 
         log.info("Allowing concurrent client IO to run")
-        time.sleep(60)
+        clients_running = False
+        for phases in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=lambda: [p.get().status.phase for p in client_pods],
+        ):
+            if all(phase == "Running" for phase in phases):
+                clients_running = True
+                break
+        assert clients_running, "Client pods did not reach Running state"
 
         # Step 4: Validate alert remains FIRING under multi-client load
         log.info(
