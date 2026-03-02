@@ -43,7 +43,6 @@ def check_subctl_cli():
         submariner = acm.Submariner()
         submariner.download_binary()
 
-
 @pytest.fixture()
 def cnv_custom_storage_class(request, storageclass_factory):
     """
