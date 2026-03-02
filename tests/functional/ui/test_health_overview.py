@@ -447,3 +447,71 @@ class TestHealthOverview(ManageTest):
             self.wait_for_health_score_change(
                 ALERT_MAP[alert_name] * expected_drop, baseline_score
             )
+
+    @tier2
+    @polarion_id("OCS-7731")
+    def test_health_score_with_blackbox_and_metrics_exporter_shutdown(
+        self, setup_ui_class, request
+    ):
+        """
+        Test to verify health score changes when shutting down and recover blackbox and ocs-metrics-exporter.
+        1. Get baseline health score
+        2. Shut down odf-blackbox-exporter and ocs-metrics-exporter by scaling deployments to 0 replicas
+        3. Measure health score after scaling down
+        4. Shut down odf-blackbox-exporter and ocs-metrics-exporter by scaling both deployments to 1 replica
+        5. Measure health score after scaling up
+        6. Verify health score recovers to baseline
+        """
+        ocp = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        df_overview = PageNavigator().nav_storage_data_foundation_overview_page()
+        df_overview.nav_health_view_checks()
+
+        deployment_labels = [
+            constants.BLACKBOX_POD_LABEL,
+            constants.OCS_METRICS_EXPORTER,
+        ]
+        deployments = [label.split("=")[1] for label in deployment_labels]
+        baseline_score = self.get_health_score_ui()
+        PageNavigator().take_screenshot("initial_overview_page")
+        logger.info(f"Baseline health score: {baseline_score}%")
+
+        for deployment in deployments:
+            logger.info(f"Scaling down {deployment} deployment to 0 replicas")
+            scale_cmd = (
+                f"scale deployment {deployment} "
+                f"--replicas=0 "
+                f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            )
+            ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+
+        logger.info("Waiting for 30 seconds for deployments to scale down")
+        time.sleep(30)
+
+        logger.info("Measuring health score after scaling down exporters")
+        health_score_after_scale_down = request.getfixturevalue("health_score")
+        logger.info(
+            f"Health score after scaling down: {health_score_after_scale_down}%"
+        )
+
+        for deployment in deployments:
+            logger.info(f"Scaling up {deployment} deployment to 1 replica")
+            scale_cmd = (
+                f"scale deployment {deployment} "
+                f"--replicas=1 "
+                f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            )
+            ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+
+        logger.info("Waiting for 30 seconds for deployments to scale up and stabilize")
+        time.sleep(30)
+        PageNavigator().refresh_page()
+        PageNavigator().take_screenshot("health_overview_page")
+
+        logger.info("Measuring health score after scaling up exporters")
+        health_score_after_scale_up = request.getfixturevalue("health_score")
+        logger.info(f"Health score after scaling up: {health_score_after_scale_up}%")
+
+        assert baseline_score == health_score_after_scale_up, (
+            f"Health score should decrease after scaling down exporters. "
+            f"Baseline: {baseline_score}%, Current: {health_score_after_scale_up}%"
+        )
