@@ -19,7 +19,7 @@ from ocs_ci.helpers.ceph_helpers import cleanup_stale_cephfs_subvolumes
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO, get_file_size
 
 log = logging.getLogger(__name__)
-
+x
 
 def create_stale_cephfs_subvolumes(
     storageclass_factory,
@@ -310,7 +310,13 @@ class TestCephFSStaleSubvolumeAlert:
                 params='{"spec":{"metadataServer":{"activeCount":2}}}',
                 format_type="merge",
             )
-            time.sleep(180)
+            for count in TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=lambda: cephfs_obj.get()["items"][0]["spec"]["metadataServer"]["activeCount"],
+            ):
+                if count == 2:
+                    break
             original_count = 2
 
         try:
@@ -320,7 +326,13 @@ class TestCephFSStaleSubvolumeAlert:
                 params='{"spec":{"metadataServer":{"activeCount":1}}}',
                 format_type="merge",
             )
-            time.sleep(120)
+            for count in TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=lambda: cephfs_obj.get()["items"][0]["spec"]["metadataServer"]["activeCount"],
+            ):
+                    if count == 1:
+                        break
             wait_and_validate_stale_subvolume_alert(api)
 
             log.info(f"Scaling CephFS MDS back to {original_count}")
@@ -329,7 +341,13 @@ class TestCephFSStaleSubvolumeAlert:
                 params=f'{{"spec":{{"metadataServer":{{"activeCount":{original_count}}}}}}}',
                 format_type="merge",
             )
-            time.sleep(120)
+            for count in TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=lambda: cephfs_obj.get()["items"][0]["spec"]["metadataServer"]["activeCount"],
+            ):
+                    if count == original_count:
+                        break
             wait_and_validate_stale_subvolume_alert(api)
 
         finally:
@@ -340,7 +358,13 @@ class TestCephFSStaleSubvolumeAlert:
                     params=f'{{"spec":{{"metadataServer":{{"activeCount":{initial_count}}}}}}}',
                     format_type="merge",
                 )
-                time.sleep(120)
+                for count in TimeoutSampler(
+                    timeout=300,
+                    sleep=10,
+                    func=lambda: cephfs_obj.get()["items"][0]["spec"]["metadataServer"]["activeCount"],
+                ):
+                        if count == initial_count:
+                            break
     
     @pytest.mark.polarion_id("OCS-7480")
     def test_stale_subvolume_alert_behavior_under_high_cluster_utilization(
@@ -378,7 +402,18 @@ class TestCephFSStaleSubvolumeAlert:
             benchmark_obj = BenchmarkOperatorFIO()
             benchmark_obj.setup_benchmark_fio(total_size=size)
             benchmark_obj.run_fio_benchmark_operator(is_completed=False)
-            time.sleep(300)
+            fio_running = False
+            for pods in TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=benchmark_obj.get_fio_pods,
+            ):
+                if pods:
+                    pod = pods[0]
+                    if pod.get().status.phase == "Running":
+                        fio_running = True
+                        break
+            assert fio_running, "FIO workload pod did not reach Running state"
 
             log.info("Benchmark-operator workload started; cluster under sustained load")
             log.info("Cluster utilization increased; validating stale alert stability under load")
