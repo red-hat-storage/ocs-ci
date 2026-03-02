@@ -3164,6 +3164,18 @@ external_systems = {
         "//button[@data-test='delete-action']",
         By.XPATH,
     ),
+    "scale_dashboard_link": (
+        "a[href*='scale.spectrum.ibm']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_operator_health": (
+        "div[data-item-id='Operator-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "scale_connection_health": (
+        "div[data-item-id='Connection-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
 }
 locators = {
     "4.21": {

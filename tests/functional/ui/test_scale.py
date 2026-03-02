@@ -34,6 +34,7 @@ class TestScaleConnection(object):
             password=config.ENV_DATA["scale_password"],
             filesystem_name="fs1",
         )
+        assert external_systems.scale_status_ok("scale_cluster_1")
 
     @ui
     @skipif_ibm_cloud_managed
