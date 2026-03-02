@@ -147,6 +147,7 @@ class LiveClusterDebugger:
             "-p",
             "--tools", "Bash,Read",
             "--dangerously-skip-permissions",
+            "--verbose",
             "--output-format", "stream-json",
             "--model", resolved_model,
             "--max-budget-usd", str(self.max_budget_usd),
