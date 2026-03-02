@@ -161,6 +161,44 @@ class LiveClusterDebugger:
         if kubeconfig:
             env["KUBECONFIG"] = kubeconfig
 
+        # Save prompt and debug file BEFORE running, for diagnostics
+        safe_name = re.sub(r"[^\w\-.]", "_", test_name)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+            # Save prompt for manual reproduction
+            prompt_path = os.path.join(
+                log_dir, f"{safe_name}_live_debug_prompt.txt"
+            )
+            try:
+                with open(prompt_path, "w") as f:
+                    f.write(prompt)
+            except OSError as e:
+                logger.warning(f"Could not save prompt: {e}")
+
+            # Add --debug-file so Claude Code writes internal debug logs
+            debug_log_path = os.path.join(
+                log_dir, f"{safe_name}_live_debug_claude_debug.log"
+            )
+            cmd.extend(["--debug-file", debug_log_path])
+
+            # Save reproduction script
+            repro_path = os.path.join(
+                log_dir, f"{safe_name}_live_debug_repro.sh"
+            )
+            try:
+                repro_lines = ["#!/bin/bash", "# Reproduction script"]
+                if kubeconfig:
+                    repro_lines.append(f"export KUBECONFIG={kubeconfig}")
+                repro_lines.append(
+                    f"time cat {prompt_path} | "
+                    + " ".join(cmd)
+                )
+                with open(repro_path, "w") as f:
+                    f.write("\n".join(repro_lines) + "\n")
+                os.chmod(repro_path, 0o755)
+            except OSError as e:
+                logger.warning(f"Could not save repro script: {e}")
+
         logger.info(
             f"Live debugger: investigating {test_name} "
             f"(model={self.model}, resolved_model={resolved_model}, "
@@ -189,6 +227,12 @@ class LiveClusterDebugger:
             logger.error(f"Partial stdout on timeout: {partial_stdout}")
             logger.error(f"Partial stderr on timeout: {partial_stderr}")
             if log_dir:
+                debug_log = os.path.join(
+                    log_dir, f"{safe_name}_live_debug_claude_debug.log"
+                )
+                logger.error(
+                    f"Check Claude debug log for details: {debug_log}"
+                )
                 self._save_results(result, test_name, log_dir)
             return result
         except FileNotFoundError:
@@ -206,8 +250,6 @@ class LiveClusterDebugger:
 
         # Save raw output to log file for debugging
         if log_dir:
-            safe_name = re.sub(r"[^\w\-.]", "_", test_name)
-            os.makedirs(log_dir, exist_ok=True)
             raw_log_path = os.path.join(
                 log_dir, f"{safe_name}_live_debug_raw.log"
             )
