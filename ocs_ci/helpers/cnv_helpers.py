@@ -680,20 +680,6 @@ def calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4, buffer=0.9):
     return cluster_vm_count, per_node_vm_count
 
 
-def generate_password(length=10):
-    alphabet = string.ascii_letters + string.digits + string.punctuation
-    while True:
-        pwd = "".join(secrets.choice(alphabet) for _ in range(length))
-        # enforce at least one of each category
-        if (
-            any(c.islower() for c in pwd)
-            and any(c.isupper() for c in pwd)
-            and any(c.isdigit() for c in pwd)
-            and any(c in string.punctuation for c in pwd)
-        ):
-            return pwd
-
-
 def generate_vm_password(length=10):
     """
     Generates a strong password for virtual machines with specified length.
