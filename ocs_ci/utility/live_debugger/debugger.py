@@ -134,7 +134,7 @@ class LiveClusterDebugger:
         model_aliases = {
             "opus": "claude-opus-4-6",
             "sonnet": "claude-sonnet-4-6",
-            "haiku": "claude-haiku-4-5-20251001",
+            "haiku": "claude-haiku-4-5",
         }
         resolved_model = model_aliases.get(self.model, self.model)
 
