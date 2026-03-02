@@ -450,16 +450,18 @@ def _write_ai_summary(summary_content, test_log_dir, test_short_name, token_usag
         out = token_usage.get("output_tokens", 0)
         cr = token_usage.get("cache_read_tokens", 0)
         cw = token_usage.get("cache_write_tokens", 0)
+        cost = token_usage.get("cost_usd", 0.0)
         content += (
             "\n\n---\n\n"
-            "## 🪙 Token Usage\n\n"
-            f"| Metric | Tokens |\n"
-            f"|--------|--------|\n"
+            "## 🪙 Token Usage & Cost\n\n"
+            f"| Metric | Value |\n"
+            f"|--------|-------|\n"
             f"| Input tokens | {inp:,} |\n"
             f"| Output tokens | {out:,} |\n"
             f"| Cache read tokens | {cr:,} |\n"
             f"| Cache write tokens | {cw:,} |\n"
             f"| **Total tokens** | **{total:,}** |\n"
+            f"| **Cost (USD)** | **${cost:.4f}** |\n"
         )
 
     with open(summary_path, "w") as f:
@@ -513,43 +515,53 @@ def _parse_confidence_from_summary(summary_content):
     return "Unknown"
 
 
-def _parse_token_usage(usage_dict):
+def _parse_token_usage(cli_json_response):
     """
-    Parse token usage from the Claude CLI JSON output's 'usage' field.
+    Parse token usage and cost from the Claude CLI JSON output.
 
-    The Claude CLI --output-format json response includes a 'usage' dict with:
-        input_tokens, cache_creation_input_tokens, cache_read_input_tokens,
-        output_tokens
+    The Claude CLI --output-format json response includes:
+        - top-level 'total_cost_usd' field
+        - 'usage' dict with: input_tokens, cache_creation_input_tokens,
+          cache_read_input_tokens, output_tokens
 
     Args:
-        usage_dict (dict): The 'usage' value from the Claude CLI JSON response.
+        cli_json_response (dict): The full JSON response from Claude CLI
+            (not just the 'usage' sub-dict).
 
     Returns:
         dict: Normalised token usage with keys:
             input_tokens (int), output_tokens (int),
             cache_read_tokens (int), cache_write_tokens (int),
-            total_tokens (int)
-        Returns all-zero dict if usage_dict is None or malformed.
+            total_tokens (int), cost_usd (float)
+        Returns all-zero dict if cli_json_response is None or malformed.
     """
-    if not usage_dict or not isinstance(usage_dict, dict):
+    if not cli_json_response or not isinstance(cli_json_response, dict):
         return {
             "input_tokens": 0,
             "output_tokens": 0,
             "cache_read_tokens": 0,
             "cache_write_tokens": 0,
             "total_tokens": 0,
+            "cost_usd": 0.0,
         }
+
+    usage_dict = cli_json_response.get("usage", {})
     input_tok = int(usage_dict.get("input_tokens", 0))
     output_tok = int(usage_dict.get("output_tokens", 0))
     cache_read = int(usage_dict.get("cache_read_input_tokens", 0))
     cache_write = int(usage_dict.get("cache_creation_input_tokens", 0))
     total = input_tok + output_tok + cache_read + cache_write
+
+    # Extract cost from top-level field (Claude CLI provides this directly)
+    cost_usd = float(cli_json_response.get("total_cost_usd", 0.0))
+
     return {
         "input_tokens": input_tok,
         "output_tokens": output_tok,
         "cache_read_tokens": cache_read,
         "cache_write_tokens": cache_write,
         "total_tokens": total,
+        "cost_usd": cost_usd,
     }
 
 
@@ -777,12 +789,13 @@ def generate_consolidated_html_report(output_path=None):
     logger.info("Collecting cluster version info for consolidated report...")
     versions = _collect_cluster_versions()
 
-    # Build category counts for pie chart and aggregate token usage across all tests
+    # Build category counts for pie chart and aggregate token usage + cost across all tests
     category_counts: dict = {}
     grand_input_tokens = 0
     grand_output_tokens = 0
     grand_cache_creation_tokens = 0
     grand_cache_read_tokens = 0
+    grand_total_cost_usd = 0.0
     for r in results:
         cat = r["category"]
         category_counts[cat] = category_counts.get(cat, 0) + 1
@@ -791,6 +804,7 @@ def generate_consolidated_html_report(output_path=None):
         grand_output_tokens += tok.get("output_tokens", 0)
         grand_cache_creation_tokens += tok.get("cache_write_tokens", 0)
         grand_cache_read_tokens += tok.get("cache_read_tokens", 0)
+        grand_total_cost_usd += tok.get("cost_usd", 0.0)
     grand_total_tokens = (
         grand_input_tokens
         + grand_output_tokens
@@ -829,14 +843,15 @@ def generate_consolidated_html_report(output_path=None):
                 f"&#128196; View raw .md</a>"
             )
 
-        # Build per-test token badge (shown only when token data is available)
+        # Build per-test token+cost badge (shown only when token data is available)
         token_badge_html = ""
         tok = r.get("token_usage") or {}
         test_total_tokens = tok.get("total_tokens", 0)
+        test_cost_usd = tok.get("cost_usd", 0.0)
         if test_total_tokens:
             token_badge_html = (
                 f'<span class="token-badge">'
-                f"&#129689; {test_total_tokens:,} tokens"
+                f"&#129689; {test_total_tokens:,} tokens (${test_cost_usd:.4f})"
                 f"</span>"
             )
 
@@ -883,7 +898,7 @@ def generate_consolidated_html_report(output_path=None):
                 f"<tr><td class='ver-label'>{html.escape(label)}</td>"
                 f"<td class='ver-value'>{html.escape(str(val))}</td></tr>\n"
             )
-    # Append total token usage row to the versions table when data is available
+    # Append total token usage + cost row to the versions table when data is available
     if grand_total_tokens:
         token_detail = (
             f"{grand_total_tokens:,} total"
@@ -891,9 +906,10 @@ def generate_consolidated_html_report(output_path=None):
             f" / {grand_output_tokens:,} out"
             f" / {grand_cache_creation_tokens:,} cache-write"
             f" / {grand_cache_read_tokens:,} cache-read)"
+            f" — ${grand_total_cost_usd:.4f} USD"
         )
         version_table_html += (
-            f"<tr><td class='ver-label'>&#129689; AI Tokens Used</td>"
+            f"<tr><td class='ver-label'>&#129689; AI Tokens & Cost</td>"
             f"<td class='ver-value token-ver-value'>"
             f"{html.escape(token_detail)}</td></tr>\n"
         )
@@ -1174,7 +1190,12 @@ def inject_ai_summaries_into_junit_xml(xml_path):
         duration = r["analysis_duration_s"]
         tok = r.get("token_usage") or {}
         total_tokens = tok.get("total_tokens", 0)
-        token_line = f"Tokens     : {total_tokens:,}\n" if total_tokens else ""
+        cost_usd = tok.get("cost_usd", 0.0)
+        token_line = (
+            f"Tokens     : {total_tokens:,} (${cost_usd:.4f} USD)\n"
+            if total_tokens
+            else ""
+        )
         return (
             f"\n{sep}\n"
             f"\U0001f916 AI FAILURE ANALYSIS\n"
@@ -1375,7 +1396,7 @@ def _run_claude_analysis(
             try:
                 cli_json = json.loads(raw_stdout)
                 summary_content = cli_json.get("result", "").strip()
-                token_usage = _parse_token_usage(cli_json.get("usage"))
+                token_usage = _parse_token_usage(cli_json)
                 logger.debug(
                     f"Token usage for '{test_short_name}': "
                     f"input={token_usage['input_tokens']} "
