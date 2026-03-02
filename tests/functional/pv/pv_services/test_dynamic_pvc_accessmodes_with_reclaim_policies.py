@@ -82,7 +82,6 @@ class TestDynamicPvc(ManageTest):
                 f"Failure string {failure_str} is not found in oc describe" f" command"
             )
 
-    @acceptance
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface_type", "reclaim_policy"],
@@ -97,9 +96,7 @@ class TestDynamicPvc(ManageTest):
             ),
             pytest.param(
                 *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
-                marks=[
-                    pytest.mark.polarion_id("OCS-533"),
-                ],
+                marks=[pytest.mark.polarion_id("OCS-533"), acceptance],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
@@ -111,9 +108,7 @@ class TestDynamicPvc(ManageTest):
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-                marks=[
-                    pytest.mark.polarion_id("OCS-526"),
-                ],
+                marks=[pytest.mark.polarion_id("OCS-526"), acceptance],
             ),
         ],
     )
@@ -230,7 +225,6 @@ class TestDynamicPvc(ManageTest):
             pod_obj=pod_obj2, file_name=file_name, original_md5sum=md5sum_pod1_data
         )
 
-    @acceptance
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface_type", "reclaim_policy"],
@@ -245,7 +239,7 @@ class TestDynamicPvc(ManageTest):
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-                marks=pytest.mark.polarion_id("OCS-529"),
+                marks=[pytest.mark.polarion_id("OCS-529"), acceptance],
             ),
         ],
     )
