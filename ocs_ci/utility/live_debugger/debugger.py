@@ -66,10 +66,10 @@ class LiveClusterDebugger:
         """
         Spawn ``claude -p`` to investigate a test failure on the live cluster.
 
-        Uses subprocess.Popen with ``--output-format stream-json`` so that
-        Claude's progress is logged in real-time to both a log file and the
-        pytest console. Each line of stdout is a JSON event (NDJSON format).
-        The final ``result`` event contains the investigation text and cost.
+        The prompt is passed via stdin and the response is captured as a
+        single JSON blob (``--output-format json``). This avoids the
+        ``--verbose`` flag which enables extended thinking and adds
+        significant per-turn latency on Vertex AI.
 
         Args:
             test_name: Short test name (e.g. ``test_create_pvc``).
@@ -140,15 +140,14 @@ class LiveClusterDebugger:
 
         # Build the command — prompt is passed via stdin to avoid
         # shell argument length limits on large prompts.
-        # Use stream-json so we get real-time NDJSON events instead of
-        # a single buffered JSON blob (which blocks all streaming).
+        # Use --output-format json (NOT stream-json) to avoid needing
+        # --verbose which enables extended thinking and adds latency.
         cmd = [
             "claude",
             "-p",
             "--tools", "Bash,Read",
             "--dangerously-skip-permissions",
-            "--verbose",
-            "--output-format", "stream-json",
+            "--output-format", "json",
             "--model", resolved_model,
             "--max-budget-usd", str(self.max_budget_usd),
         ]
@@ -170,99 +169,28 @@ class LiveClusterDebugger:
         )
         logger.info(f"Live debugger command: {' '.join(cmd)}")
 
-        # Set up the streaming log file
-        safe_name = re.sub(r"[^\w\-.]", "_", test_name)
-        stream_log_path = None
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-            stream_log_path = os.path.join(
-                log_dir, f"{safe_name}_live_debug_stream.log"
-            )
-
-        # Use Popen for streaming output with stream-json format.
-        # Each line is a JSON event (NDJSON). We parse events in real-time
-        # for logging and collect the final result event at the end.
-        stream_events = []
-        timed_out = False
-        proc = None
-        final_result_event = None
-
         try:
-            proc = subprocess.Popen(
+            proc = subprocess.run(
                 cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                input=prompt,
+                capture_output=True,
                 text=True,
+                timeout=self.timeout,
                 env=env,
             )
-
-            # Send prompt via stdin and close it
-            proc.stdin.write(prompt)
-            proc.stdin.close()
-
-            # Open stream log file if we have a log_dir
-            stream_log_file = None
-            if stream_log_path:
-                try:
-                    stream_log_file = open(stream_log_path, "w")
-                except OSError as e:
-                    logger.warning(f"Could not open stream log file: {e}")
-
-            # Read stdout line by line — each line is a JSON event
-            deadline = time.time() + self.timeout
-            try:
-                for raw_line in proc.stdout:
-                    raw_line = raw_line.rstrip("\n")
-                    if not raw_line:
-                        continue
-
-                    # Write raw NDJSON to stream log file
-                    if stream_log_file:
-                        stream_log_file.write(raw_line + "\n")
-                        stream_log_file.flush()
-
-                    # Parse the JSON event
-                    try:
-                        event = json.loads(raw_line)
-                    except json.JSONDecodeError:
-                        logger.debug(
-                            f"Live debugger [{test_name}]: "
-                            f"non-JSON line: {raw_line[:200]}"
-                        )
-                        continue
-
-                    stream_events.append(event)
-                    event_type = event.get("type", "")
-
-                    # Log human-readable progress based on event type
-                    self._log_stream_event(test_name, event)
-
-                    # Capture the final result event
-                    if event_type == "result":
-                        final_result_event = event
-
-                    # Check timeout
-                    if time.time() > deadline:
-                        timed_out = True
-                        logger.error(
-                            f"Live debugger timed out after {self.timeout}s "
-                            f"for {test_name} "
-                            f"(collected {len(stream_events)} events)"
-                        )
-                        proc.kill()
-                        break
-            finally:
-                if stream_log_file:
-                    stream_log_file.close()
-
-            # Wait for process to finish (or confirm it was killed)
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-
+        except subprocess.TimeoutExpired as e:
+            partial_stdout = (e.stdout or "")[:500] if e.stdout else ""
+            partial_stderr = (e.stderr or "")[:500] if e.stderr else ""
+            result["error"] = (
+                f"Live debugger timed out after {self.timeout}s for {test_name}"
+            )
+            result["duration_seconds"] = time.time() - start
+            logger.error(result["error"])
+            logger.error(f"Partial stdout on timeout: {partial_stdout}")
+            logger.error(f"Partial stderr on timeout: {partial_stderr}")
+            if log_dir:
+                self._save_results(result, test_name, log_dir)
+            return result
         except FileNotFoundError:
             result["error"] = "Claude Code CLI ('claude') not found"
             result["duration_seconds"] = time.time() - start
@@ -276,58 +204,55 @@ class LiveClusterDebugger:
 
         result["duration_seconds"] = time.time() - start
 
-        if stream_log_path:
-            logger.info(f"Live debugger stream log: {stream_log_path}")
-
-        # Reconstruct the investigation text from stream events
-        result_text = self._extract_result_from_stream(
-            stream_events, final_result_event
-        )
-
-        if timed_out:
-            result["error"] = (
-                f"Live debugger timed out after {self.timeout}s for {test_name}. "
-                f"Collected {len(stream_events)} events before timeout."
+        # Save raw output to log file for debugging
+        if log_dir:
+            safe_name = re.sub(r"[^\w\-.]", "_", test_name)
+            os.makedirs(log_dir, exist_ok=True)
+            raw_log_path = os.path.join(
+                log_dir, f"{safe_name}_live_debug_raw.log"
             )
-            # Still use whatever text we managed to collect
-            result["investigation"] = result_text
-            result["category"] = self._extract_category(result_text)
-            result["root_cause"] = self._extract_section(result_text, "ROOT CAUSE")
+            try:
+                with open(raw_log_path, "w") as f:
+                    f.write(f"=== STDOUT ({len(proc.stdout)} chars) ===\n")
+                    f.write(proc.stdout)
+                    f.write(f"\n=== STDERR ({len(proc.stderr)} chars) ===\n")
+                    f.write(proc.stderr)
+                logger.info(f"Live debugger raw log: {raw_log_path}")
+            except OSError as e:
+                logger.warning(f"Could not write raw log: {e}")
+
+        if proc.returncode != 0:
+            stderr_text = proc.stderr.strip()[:500] if proc.stderr else ""
+            stdout_text = proc.stdout.strip()[:500] if proc.stdout else ""
+            result["error"] = (
+                f"Claude Code exited with code {proc.returncode}: "
+                f"stderr={stderr_text} stdout={stdout_text}"
+            )
+            logger.error(result["error"])
+            logger.error(f"Command was: {' '.join(cmd)}")
             if log_dir:
                 self._save_results(result, test_name, log_dir)
             return result
 
-        returncode = proc.returncode if proc else -1
-
-        if returncode != 0:
-            stderr_text = ""
-            if proc and proc.stderr:
-                try:
-                    stderr_text = proc.stderr.read()[:500]
-                except Exception:
-                    pass
+        # Parse the JSON response
+        try:
+            response = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
             result["error"] = (
-                f"Claude Code exited with code {returncode}: "
-                f"stderr={stderr_text}"
+                f"Failed to parse Claude response as JSON: {e}. "
+                f"Output length: {len(proc.stdout)} chars"
             )
             logger.error(result["error"])
-            logger.error(f"Command was: {' '.join(cmd)}")
-            # Still save partial results if we have them
-            if result_text:
-                result["investigation"] = result_text
-                result["category"] = self._extract_category(result_text)
-                result["root_cause"] = self._extract_section(
-                    result_text, "ROOT CAUSE"
-                )
-                if log_dir:
-                    self._save_results(result, test_name, log_dir)
+            result["investigation"] = proc.stdout
+            if log_dir:
+                self._save_results(result, test_name, log_dir)
             return result
 
-        # Extract result text and metadata from the final result event
+        # Extract result text and metadata
+        result_text = response.get("result", "")
         result["investigation"] = result_text
-        if final_result_event:
-            result["cost_usd"] = final_result_event.get("total_cost_usd", 0.0)
-            result["num_turns"] = final_result_event.get("num_turns", 0)
+        result["cost_usd"] = response.get("total_cost_usd", 0.0)
+        result["num_turns"] = response.get("num_turns", 0)
 
         # Parse structured fields from the investigation narrative
         result["category"] = self._extract_category(result_text)
@@ -338,7 +263,7 @@ class LiveClusterDebugger:
         )
 
         # Safety audit -- check what commands were executed
-        commands = self._extract_commands_from_stream(stream_events)
+        commands = self._extract_commands_from_response(response)
         result["commands_executed"] = commands
         violations = audit_commands(commands)
         result["safety_violations"] = violations
@@ -409,89 +334,21 @@ class LiveClusterDebugger:
                 points.append(re.sub(r"^\d+\.\s*", "", line).strip())
         return points
 
-    def _log_stream_event(self, test_name, event):
-        """Log a human-readable summary of a stream-json event."""
-        event_type = event.get("type", "")
-        tag = f"Live debugger [{test_name}]"
-
-        if event_type == "assistant":
-            # Assistant message — extract text content blocks
-            message = event.get("message", {})
-            for block in message.get("content", []):
-                if block.get("type") == "text":
-                    text = block.get("text", "")
-                    # Log first 300 chars of text blocks
-                    for line in text.split("\n"):
-                        line = line.strip()
-                        if line:
-                            logger.info(f"{tag}: {line[:300]}")
-                elif block.get("type") == "tool_use":
-                    tool_name = block.get("name", "?")
-                    tool_input = block.get("input", {})
-                    if tool_name == "Bash":
-                        cmd = tool_input.get("command", "")
-                        logger.info(f"{tag}: [Bash] {cmd[:200]}")
-                    elif tool_name == "Read":
-                        path = tool_input.get("file_path", "")
-                        logger.info(f"{tag}: [Read] {path}")
-                    else:
-                        logger.info(f"{tag}: [Tool: {tool_name}]")
-
-        elif event_type == "tool_result":
-            # Tool result — just log that it completed (output can be huge)
-            tool_name = event.get("tool_name", "?")
-            logger.info(f"{tag}: [Result from {tool_name}]")
-
-        elif event_type == "result":
-            # Final result — log summary
-            cost = event.get("total_cost_usd", 0)
-            turns = event.get("num_turns", 0)
-            logger.info(
-                f"{tag}: Investigation complete "
-                f"(cost=${cost:.4f}, turns={turns})"
-            )
-
-        elif event_type == "system":
-            # System messages (init, etc.)
-            msg = event.get("message", "")
-            if msg:
-                logger.info(f"{tag}: [system] {str(msg)[:200]}")
-
-    def _extract_result_from_stream(self, stream_events, final_result_event):
-        """Extract the investigation text from stream events.
-
-        If we have a final ``result`` event, use its ``result`` field.
-        Otherwise, concatenate all assistant text blocks as a fallback
-        (useful when the process was killed before finishing).
-        """
-        if final_result_event:
-            return final_result_event.get("result", "")
-
-        # Fallback: collect all assistant text blocks
-        text_parts = []
-        for event in stream_events:
-            if event.get("type") == "assistant":
-                message = event.get("message", {})
-                for block in message.get("content", []):
-                    if block.get("type") == "text":
-                        text_parts.append(block.get("text", ""))
-        return "\n".join(text_parts)
-
-    def _extract_commands_from_stream(self, stream_events):
-        """Extract bash commands that Claude executed from stream events."""
+    def _extract_commands_from_response(self, response):
+        """Extract bash commands that Claude executed from the JSON response."""
         commands = []
-        for event in stream_events:
-            if event.get("type") != "assistant":
-                continue
-            message = event.get("message", {})
-            for block in message.get("content", []):
-                if (
-                    block.get("type") == "tool_use"
-                    and block.get("name") == "Bash"
-                ):
-                    cmd = block.get("input", {}).get("command", "")
-                    if cmd:
-                        commands.append(cmd)
+        result_text = response.get("result", "")
+        # Look for commands in code blocks within the result
+        for match in re.finditer(
+            r"```(?:bash|shell)?\s*\n(.*?)```", result_text, re.DOTALL
+        ):
+            for line in match.group(1).strip().split("\n"):
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    commands.append(line)
+        # Also look for $ prefixed commands
+        for match in re.finditer(r"^\$\s+(.+)$", result_text, re.MULTILINE):
+            commands.append(match.group(1).strip())
         return commands
 
     def _save_results(self, result, test_name, log_dir):
