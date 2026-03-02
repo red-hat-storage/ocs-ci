@@ -687,10 +687,10 @@ def generate_vm_password(length=10):
     one digit, and one punctuation symbol, with the rest filled randomly from all categories.
 
     Args:
-    length (int): The desired length of the password. Default is 10.
+        length (int): The desired length of the password. Default is 10.
 
     Returns:
-    str: A strong password meeting the criteria.
+        str: A strong password meeting the criteria.
     """
 
     lowercase_letters = string.ascii_lowercase
