@@ -1494,6 +1494,20 @@ acm_configuration_4_20 = {
     ),
 }
 
+acm_configuration_4_21 = {
+    "dr-status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "dr_status_button": ("//button[@data-test-id='dr-status-button']", By.XPATH),
+    "popover_text": ("//div[@data-test-id='popover-header']", By.XPATH),
+    "failover_phase_preparing": ("//li[@id='step-0']", By.XPATH),
+    "failover_phase_failover": ("//li[@id='step-1']", By.XPATH),
+    "failover_phase_restoring": ("//li[@id='step-2']", By.XPATH),
+    "failover_phase_clean_up": ("//li[@id='step-3']", By.XPATH),
+    "relocate_phase_preparing": ("//li[@id='step-0']", By.XPATH),
+    "relocate_phase_syncing": ("//li[@id='step-1']", By.XPATH),
+    "relocate_phase_restoring": ("//li[@id='step-2']", By.XPATH),
+    "relocate_phase_clean_up": ("//li[@id='step-3']", By.XPATH),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -3077,6 +3091,7 @@ locators = {
             **acm_configuration_4_19,
             **acm_page_nav_420,
             **acm_configuration_4_20,
+            **acm_configuration_4_21,
         },
         "validation": {
             **validation,
