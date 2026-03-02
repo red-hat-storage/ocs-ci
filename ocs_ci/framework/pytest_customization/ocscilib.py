@@ -1275,12 +1275,18 @@ def pytest_sessionfinish(session, exitstatus):
     Generate the consolidated AI failure analysis HTML report at the end of the
     pytest session (after all tests have run).
 
+    Also injects per-test AI summaries into the JUnit XML report (if
+    ``--junit-xml`` was passed) so that Jenkins / CI systems show the AI
+    analysis alongside the failure traceback when a user clicks on a failed
+    test.
+
     Only runs when ai_live_analysis is enabled in ENV_DATA config.
     """
     try:
         from ocs_ci.ocs.must_gather.ai_analyzer import (
             _is_ai_analysis_enabled,
             generate_consolidated_html_report,
+            inject_ai_summaries_into_junit_xml,
         )
 
         if not _is_ai_analysis_enabled():
@@ -1289,6 +1295,22 @@ def pytest_sessionfinish(session, exitstatus):
         report_path = generate_consolidated_html_report()
         if report_path:
             log.info(f"AI consolidated failure analysis report: {report_path}")
+
+        # Inject AI summaries into JUnit XML (for Jenkins / CI rendering)
+        try:
+            junit_xml_path = session.config.getoption("--junit-xml", default=None)
+            if junit_xml_path:
+                count = inject_ai_summaries_into_junit_xml(junit_xml_path)
+                if count:
+                    log.info(
+                        f"AI analysis injected into {count} test case(s) "
+                        f"in JUnit XML: {junit_xml_path}"
+                    )
+        except Exception:
+            log.debug(
+                "Failed to inject AI summaries into JUnit XML",
+                exc_info=True,
+            )
     except Exception:
         log.debug(
             "Failed to generate consolidated AI analysis report",

@@ -1084,6 +1084,167 @@ def generate_consolidated_html_report(output_path=None):
     return output_path
 
 
+def inject_ai_summaries_into_junit_xml(xml_path):
+    """
+    Post-process a JUnit XML report to append the AI analysis summary to each
+    failing test case's ``<system-out>`` element.
+
+    When Jenkins (or any CI system) renders the JUnit XML report and a user
+    clicks on a failed test, they see the original pytest failure traceback
+    followed by the AI analysis block in the "Standard Output" section, with
+    a clear ``====`` separator so the two sections are visually distinct.
+
+    The AI block appended to each failing ``<testcase>`` looks like::
+
+        ================================================================
+        🤖 AI FAILURE ANALYSIS
+        ================================================================
+        Category   : Product Bug
+        Confidence : High
+        Duration   : 42.3s
+        Tokens     : 12,345
+        ----------------------------------------------------------------
+        ## 1. Test Failure Summary
+        ...full Claude analysis text...
+        ================================================================
+        END AI FAILURE ANALYSIS
+        ================================================================
+
+    Matching between JUnit ``<testcase>`` elements and the in-memory
+    ``_consolidated_results`` registry is done by comparing the
+    ``classname::name`` pair (JUnit convention) against the stored pytest
+    nodeid, with a substring fallback so parametrised test names resolve.
+
+    The XML file is written back in-place.  If the file does not exist, or
+    ``junitparser`` is not importable, the function logs a warning and
+    returns 0 without raising.
+
+    Args:
+        xml_path (str): Absolute path to the JUnit XML file produced by
+            ``--junit-xml``.
+
+    Returns:
+        int: Number of test cases annotated, or 0 on failure / no matches.
+    """
+    if not xml_path or not os.path.isfile(xml_path):
+        logger.debug(f"inject_ai_summaries_into_junit_xml: XML not found: {xml_path}")
+        return 0
+
+    with _consolidated_lock:
+        results = list(_consolidated_results)
+
+    if not results:
+        logger.debug("inject_ai_summaries_into_junit_xml: no AI results to inject")
+        return 0
+
+    try:
+        from junitparser import JUnitXml, TestSuite, TestCase
+        from junitparser.junitparser import SystemOut
+    except ImportError:
+        logger.warning(
+            "junitparser not available; skipping AI summary injection into XML"
+        )
+        return 0
+
+    # Build a lookup: test_name (nodeid) -> result entry
+    result_by_name = {r["test_name"]: r for r in results}
+
+    def _find_result(classname, name):
+        """Return the matching result entry for a JUnit testcase, or None."""
+        # Strategy 1: reconstruct nodeid from classname + name
+        # JUnit classname may use '.' or '/' as path separators
+        for key in (
+            f"{classname}::{name}",
+            f"{classname.replace('.', '/')}::{name}",
+        ):
+            if key in result_by_name:
+                return result_by_name[key]
+        # Strategy 2: substring match — handles parametrised names
+        for r in results:
+            if name and name in r["test_name"]:
+                return r
+        return None
+
+    def _build_ai_block(r):
+        """Build the plain-text AI analysis block to embed in system-out."""
+        sep = "=" * 64
+        thin = "-" * 64
+        cat_label = _CATEGORY_LABELS.get(r["category"], r["category"])
+        conf = r["confidence"]
+        duration = r["analysis_duration_s"]
+        tok = r.get("token_usage") or {}
+        total_tokens = tok.get("total_tokens", 0)
+        token_line = f"Tokens     : {total_tokens:,}\n" if total_tokens else ""
+        return (
+            f"\n{sep}\n"
+            f"\U0001f916 AI FAILURE ANALYSIS\n"
+            f"{sep}\n"
+            f"Category   : {cat_label}\n"
+            f"Confidence : {conf}\n"
+            f"Duration   : {duration}s\n"
+            f"{token_line}"
+            f"{thin}\n"
+            f"{r['summary_content']}\n"
+            f"{sep}\n"
+            f"END AI FAILURE ANALYSIS\n"
+            f"{sep}\n"
+        )
+
+    annotated = 0
+    try:
+        xml = JUnitXml.fromfile(xml_path)
+
+        def _iter_suites(obj):
+            """Recursively yield TestSuite objects."""
+            if isinstance(obj, TestSuite):
+                yield obj
+            else:
+                for item in obj:
+                    yield from _iter_suites(item)
+
+        for suite in _iter_suites(xml):
+            for case in suite:
+                if not isinstance(case, TestCase):
+                    continue
+                # Only annotate cases that have a failure/error result
+                if not case.result:
+                    continue
+                r = _find_result(
+                    getattr(case, "classname", "") or "",
+                    getattr(case, "name", "") or "",
+                )
+                if r is None:
+                    continue
+
+                ai_block = _build_ai_block(r)
+
+                # Find existing <system-out> or create one
+                sysout = None
+                for child in case:
+                    if isinstance(child, SystemOut):
+                        sysout = child
+                        break
+                if sysout is None:
+                    sysout = SystemOut()
+                    case.append(sysout)
+
+                sysout.text = (sysout.text or "") + ai_block
+                annotated += 1
+
+        xml.write(xml_path)
+        logger.info(
+            f"Injected AI analysis into {annotated} test case(s) in XML: {xml_path}"
+        )
+    except Exception as e:
+        logger.warning(
+            f"Failed to inject AI summaries into JUnit XML ({xml_path}): {e}",
+            exc_info=True,
+        )
+        return 0
+
+    return annotated
+
+
 def _run_claude_analysis(
     failure_info,
     kubeconfig_entries,
