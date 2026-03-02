@@ -86,11 +86,6 @@ class ExternalSystems(ResourceList):
             username (str): username
             password (str): password
             filesystem_name (str): name of the filesystem
-
-        Returns:
-            "Success" if there was no alert raised
-            Text of the alert otherwise
-
         """
         self.connect_external_system()
         logger.info("Choose Scale option")
@@ -113,9 +108,9 @@ class ExternalSystems(ResourceList):
             alert_text = self.get_element_text(
                 locator=self.external_systems["alert_description"]
             )
-            return f"{alert_text}"
+            logger.warning(f"{alert_text}")
         except TimeoutError:
-            return "Success"
+            logger.info("No alerts when scale was connected")
 
     def connect_scale_filesystem(self, scale_name, filesystem_name):
         """
