@@ -353,6 +353,7 @@ UI_SELENIUM:
   ai_fallback: True
   llm_model: "claude:sonnet"
   llm_host: "http://localhost:11434" # Only for locally running llm server, using Ollama.
+  llm_screenshot_resolution: "1920,1400"
 
 # This section is related to performance tests which need Elasticsearch server
 PERF:

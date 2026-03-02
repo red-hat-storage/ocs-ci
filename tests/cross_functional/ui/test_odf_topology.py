@@ -248,15 +248,9 @@ class TestODFTopology(object):
         topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
         topology_tab.nodes_view.open_details_tab()
 
-        log_step("Take screenshots for LLM analysis")
-        screenshot_paths = topology_tab.nodes_view.take_screenshot_for_llm(
-            name_suffix="node_details"
-        )
-        logger.info(f"Screenshots saved: {screenshot_paths}")
-
-        log_step("Ask LLM to extract node details from screenshots")
+        log_step("Query LLM and validate node details (with retries)")
         prompt = (
-            "Read the node details panel on the right side of this screenshot. "
+            "Read the node details panel in this screenshot. "
             "Extract the exact text character by character. "
             "Do not guess or infer characters. "
             "Return the details as a JSON object with these keys: "
@@ -264,15 +258,7 @@ class TestODFTopology(object):
             "For addresses return a single string with all address lines joined by '; '. "
             "Only include fields that are visible in the panel."
         )
-        node_details_llm = llm_client.query_screenshot_json(screenshot_paths, prompt)
 
-        logger.info("LLM-extracted node details (raw JSON):")
-        for key, value in node_details_llm.items():
-            logger.info(f"  {key}: {value}")
-
-        topology_tab.nodes_view.close_sidebar()
-
-        log_step("Compare LLM-extracted details with CLI details")
         fields_to_check = ["name", "status", "role"]
         if node_details_cli.get("zone"):
             fields_to_check.append("zone")
@@ -280,54 +266,81 @@ class TestODFTopology(object):
             fields_to_check.append("instance_type")
 
         def normalize(text):
-            """
-            Normalise text for LLM OCR comparison.
-            Removes whitespace and punctuation characters that the LLM commonly
-            confuses (e.g. dot vs dash in instance types like bx2-16x64 → bx2.16x64).
-            """
             import re
 
             return re.sub(r"[\s\-_.:/]", "", str(text).strip().lower())
 
+        max_llm_attempts = 3
         mismatches = {}
-        for field in fields_to_check:
-            cli_val = str(node_details_cli.get(field, "")).strip().lower()
-            llm_val = str(node_details_llm.get(field, "")).strip().lower()
-            cli_norm = normalize(cli_val)
-            llm_norm = normalize(llm_val)
-
-            if cli_norm in llm_norm or llm_norm in cli_norm:
-                logger.info(
-                    f"  [PASS] {field}: CLI='{cli_val}' matches LLM='{llm_val}'"
-                )
-            else:
-                logger.error(f"  [FAIL] {field}: CLI='{cli_val}' != LLM='{llm_val}'")
-                mismatches[field] = {"cli": cli_val, "llm": llm_val}
-
-        cli_addresses = node_details_cli.get("addresses", "").lower()
-        llm_addresses = node_details_llm.get("addresses", "")
-        if isinstance(llm_addresses, dict):
-            llm_addr_str = "; ".join(
-                f"{k}: {v}" for k, v in llm_addresses.items()
-            ).lower()
-        else:
-            llm_addr_str = str(llm_addresses).lower()
-        logger.info(f"  CLI addresses: '{cli_addresses}'")
-        logger.info(f"  LLM addresses: '{llm_addr_str}'")
-
-        cli_hostname = normalize(node_details_cli.get("name", ""))
-        llm_addr_norm = normalize(llm_addr_str)
-        if cli_hostname and cli_hostname in llm_addr_norm:
-            logger.info(f"  [PASS] addresses contain node hostname '{cli_hostname}'")
-        elif cli_hostname:
-            logger.error(
-                f"  [FAIL] addresses do not contain node hostname "
-                f"'{cli_hostname}'. LLM addresses: '{llm_addr_str}'"
+        for attempt in range(1, max_llm_attempts + 1):
+            screenshot_paths = topology_tab.nodes_view.take_screenshot_for_llm(
+                name_suffix="node_details", region="right_side"
             )
-            mismatches["addresses"] = {
-                "cli": cli_addresses,
-                "llm": llm_addr_str,
-            }
+            logger.info(f"Screenshots saved: {screenshot_paths}")
+
+            node_details_llm = llm_client.query_screenshot_json(
+                screenshot_paths, prompt
+            )
+            logger.info(
+                f"LLM attempt {attempt}/{max_llm_attempts} "
+                f"extracted details: {node_details_llm}"
+            )
+
+            mismatches = {}
+            for field in fields_to_check:
+                cli_val = str(node_details_cli.get(field, "")).strip().lower()
+                llm_val = str(node_details_llm.get(field, "")).strip().lower()
+                cli_norm = normalize(cli_val)
+                llm_norm = normalize(llm_val)
+
+                if cli_norm in llm_norm or llm_norm in cli_norm:
+                    logger.info(
+                        f"  [PASS] {field}: CLI='{cli_val}' matches LLM='{llm_val}'"
+                    )
+                else:
+                    logger.error(
+                        f"  [FAIL] {field}: CLI='{cli_val}' != LLM='{llm_val}'"
+                    )
+                    mismatches[field] = {"cli": cli_val, "llm": llm_val}
+
+            cli_addresses = node_details_cli.get("addresses", "").lower()
+            llm_addresses = node_details_llm.get("addresses", "")
+            if isinstance(llm_addresses, dict):
+                llm_addr_str = "; ".join(
+                    f"{k}: {v}" for k, v in llm_addresses.items()
+                ).lower()
+            else:
+                llm_addr_str = str(llm_addresses).lower()
+            logger.info(f"  CLI addresses: '{cli_addresses}'")
+            logger.info(f"  LLM addresses: '{llm_addr_str}'")
+
+            cli_hostname = normalize(node_details_cli.get("name", ""))
+            llm_addr_norm = normalize(llm_addr_str)
+            if cli_hostname and cli_hostname in llm_addr_norm:
+                logger.info(
+                    f"  [PASS] addresses contain node hostname '{cli_hostname}'"
+                )
+            elif cli_hostname:
+                logger.error(
+                    f"  [FAIL] addresses do not contain node hostname "
+                    f"'{cli_hostname}'. LLM addresses: '{llm_addr_str}'"
+                )
+                mismatches["addresses"] = {
+                    "cli": cli_addresses,
+                    "llm": llm_addr_str,
+                }
+
+            if not mismatches:
+                logger.info(f"All fields matched on LLM attempt {attempt}")
+                break
+
+            if attempt < max_llm_attempts:
+                logger.warning(
+                    f"LLM attempt {attempt}/{max_llm_attempts} had "
+                    f"{len(mismatches)} mismatch(es), retrying..."
+                )
+
+        topology_tab.nodes_view.close_sidebar()
 
         if mismatches:
             mismatch_report = "\n".join(
@@ -336,6 +349,7 @@ class TestODFTopology(object):
             )
             pytest.fail(
                 f"Node details mismatch for '{random_node_name}' "
+                f"after {max_llm_attempts} LLM attempt(s) "
                 f"({len(mismatches)} field(s) differ):\n{mismatch_report}"
             )
 
