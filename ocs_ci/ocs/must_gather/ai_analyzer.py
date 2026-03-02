@@ -26,6 +26,7 @@ Test failure detection:
 
 import datetime
 import html
+import json
 import logging
 import os
 import re
@@ -417,7 +418,7 @@ Output ONLY the summary report text. Do not include any preamble or meta-comment
     return prompt
 
 
-def _write_ai_summary(summary_content, test_log_dir, test_short_name):
+def _write_ai_summary(summary_content, test_log_dir, test_short_name, token_usage=None):
     """
     Write the AI analysis summary to a Markdown file in the test log directory.
 
@@ -427,10 +428,13 @@ def _write_ai_summary(summary_content, test_log_dir, test_short_name):
     VS Code, and most CI artifact viewers. Note: browsers serve .md as plain
     text unless a Markdown viewer extension is installed.
 
+    A '## Token Usage' section is appended when token_usage is provided.
+
     Args:
         summary_content (str): The AI-generated summary text (Markdown format).
         test_log_dir (str): Path to the test log directory.
         test_short_name (str): Short test name for the filename.
+        token_usage (dict, optional): Token usage dict from _parse_token_usage().
 
     Returns:
         str: Path to the written summary file.
@@ -439,8 +443,27 @@ def _write_ai_summary(summary_content, test_log_dir, test_short_name):
     summary_filename = f"{test_short_name}_AI_Summary.md"
     summary_path = os.path.join(test_log_dir, summary_filename)
 
+    content = summary_content
+    if token_usage and isinstance(token_usage, dict):
+        total = token_usage.get("total_tokens", 0)
+        inp = token_usage.get("input_tokens", 0)
+        out = token_usage.get("output_tokens", 0)
+        cr = token_usage.get("cache_read_tokens", 0)
+        cw = token_usage.get("cache_write_tokens", 0)
+        content += (
+            "\n\n---\n\n"
+            "## 🪙 Token Usage\n\n"
+            f"| Metric | Tokens |\n"
+            f"|--------|--------|\n"
+            f"| Input tokens | {inp:,} |\n"
+            f"| Output tokens | {out:,} |\n"
+            f"| Cache read tokens | {cr:,} |\n"
+            f"| Cache write tokens | {cw:,} |\n"
+            f"| **Total tokens** | **{total:,}** |\n"
+        )
+
     with open(summary_path, "w") as f:
-        f.write(summary_content)
+        f.write(content)
 
     logger.info(f"AI analysis summary written to: {summary_path}")
     return summary_path
@@ -490,8 +513,52 @@ def _parse_confidence_from_summary(summary_content):
     return "Unknown"
 
 
+def _parse_token_usage(usage_dict):
+    """
+    Parse token usage from the Claude CLI JSON output's 'usage' field.
+
+    The Claude CLI --output-format json response includes a 'usage' dict with:
+        input_tokens, cache_creation_input_tokens, cache_read_input_tokens,
+        output_tokens
+
+    Args:
+        usage_dict (dict): The 'usage' value from the Claude CLI JSON response.
+
+    Returns:
+        dict: Normalised token usage with keys:
+            input_tokens (int), output_tokens (int),
+            cache_read_tokens (int), cache_write_tokens (int),
+            total_tokens (int)
+        Returns all-zero dict if usage_dict is None or malformed.
+    """
+    if not usage_dict or not isinstance(usage_dict, dict):
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "total_tokens": 0,
+        }
+    input_tok = int(usage_dict.get("input_tokens", 0))
+    output_tok = int(usage_dict.get("output_tokens", 0))
+    cache_read = int(usage_dict.get("cache_read_input_tokens", 0))
+    cache_write = int(usage_dict.get("cache_creation_input_tokens", 0))
+    total = input_tok + output_tok + cache_read + cache_write
+    return {
+        "input_tokens": input_tok,
+        "output_tokens": output_tok,
+        "cache_read_tokens": cache_read,
+        "cache_write_tokens": cache_write,
+        "total_tokens": total,
+    }
+
+
 def _register_consolidated_result(
-    failure_info, summary_content, summary_path, analysis_duration_s
+    failure_info,
+    summary_content,
+    summary_path,
+    analysis_duration_s,
+    token_usage=None,
 ):
     """
     Register a completed per-test AI analysis result in the consolidated registry.
@@ -506,6 +573,7 @@ def _register_consolidated_result(
         summary_content (str): The full AI summary text produced by Claude.
         summary_path (str): Path to the written summary file.
         analysis_duration_s (float): Time taken for the analysis in seconds.
+        token_usage (dict, optional): Token usage dict from _parse_token_usage().
     """
     category = _parse_category_from_summary(summary_content)
     confidence = _parse_confidence_from_summary(summary_content)
@@ -520,6 +588,14 @@ def _register_consolidated_result(
         "summary_path": summary_path,
         "analysis_duration_s": round(analysis_duration_s, 1),
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "token_usage": token_usage
+        or {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "total_tokens": 0,
+        },
     }
 
     with _consolidated_lock:
@@ -701,11 +777,26 @@ def generate_consolidated_html_report(output_path=None):
     logger.info("Collecting cluster version info for consolidated report...")
     versions = _collect_cluster_versions()
 
-    # Build category counts for pie chart
+    # Build category counts for pie chart and aggregate token usage across all tests
     category_counts: dict = {}
+    grand_input_tokens = 0
+    grand_output_tokens = 0
+    grand_cache_creation_tokens = 0
+    grand_cache_read_tokens = 0
     for r in results:
         cat = r["category"]
         category_counts[cat] = category_counts.get(cat, 0) + 1
+        tok = r.get("token_usage") or {}
+        grand_input_tokens += tok.get("input_tokens", 0)
+        grand_output_tokens += tok.get("output_tokens", 0)
+        grand_cache_creation_tokens += tok.get("cache_write_tokens", 0)
+        grand_cache_read_tokens += tok.get("cache_read_tokens", 0)
+    grand_total_tokens = (
+        grand_input_tokens
+        + grand_output_tokens
+        + grand_cache_creation_tokens
+        + grand_cache_read_tokens
+    )
 
     pie_labels = [_CATEGORY_LABELS.get(c, c) for c in category_counts]
     pie_data = list(category_counts.values())
@@ -738,6 +829,17 @@ def generate_consolidated_html_report(output_path=None):
                 f"&#128196; View raw .md</a>"
             )
 
+        # Build per-test token badge (shown only when token data is available)
+        token_badge_html = ""
+        tok = r.get("token_usage") or {}
+        test_total_tokens = tok.get("total_tokens", 0)
+        if test_total_tokens:
+            token_badge_html = (
+                f'<span class="token-badge">'
+                f"&#129689; {test_total_tokens:,} tokens"
+                f"</span>"
+            )
+
         test_sections_html += f"""
         <details class="test-section" id="test-{idx}">
           <summary class="test-header">
@@ -748,6 +850,7 @@ def generate_consolidated_html_report(output_path=None):
               Confidence: {html.escape(conf)}
             </span>
             <span class="duration-badge">&#9201; {duration}s</span>
+            {token_badge_html}
             <span class="timestamp">{html.escape(r['timestamp'])}</span>
           </summary>
           <div class="test-nodeid">
@@ -780,6 +883,20 @@ def generate_consolidated_html_report(output_path=None):
                 f"<tr><td class='ver-label'>{html.escape(label)}</td>"
                 f"<td class='ver-value'>{html.escape(str(val))}</td></tr>\n"
             )
+    # Append total token usage row to the versions table when data is available
+    if grand_total_tokens:
+        token_detail = (
+            f"{grand_total_tokens:,} total"
+            f" ({grand_input_tokens:,} in"
+            f" / {grand_output_tokens:,} out"
+            f" / {grand_cache_creation_tokens:,} cache-write"
+            f" / {grand_cache_read_tokens:,} cache-read)"
+        )
+        version_table_html += (
+            f"<tr><td class='ver-label'>&#129689; AI Tokens Used</td>"
+            f"<td class='ver-value token-ver-value'>"
+            f"{html.escape(token_detail)}</td></tr>\n"
+        )
 
     # Build legend items for pie chart
     legend_items_html = ""
@@ -857,6 +974,9 @@ def generate_consolidated_html_report(output_path=None):
               color: white; font-size: 0.78em; font-weight: 700; letter-spacing: 0.04em; }}
     .confidence-badge {{ opacity: 0.9; }}
     .duration-badge {{ font-size: 0.82em; color: #7f8c8d; white-space: nowrap; }}
+    .token-badge {{ font-size: 0.82em; color: #8e44ad; white-space: nowrap;
+                    background: #f5eef8; border-radius: 8px; padding: 2px 8px; }}
+    .token-ver-value {{ color: #8e44ad !important; font-size: 0.88em; }}
     .timestamp {{ font-size: 0.78em; color: #bdc3c7; margin-left: auto; white-space: nowrap; }}
     .test-nodeid {{ padding: 6px 20px; font-size: 0.78em; color: #95a5a6;
                     background: #fdfdfd; border-bottom: 1px solid #f0f0f0;
@@ -1038,6 +1158,8 @@ def _run_claude_analysis(
             "claude",
             "--print",  # non-interactive: print response and exit
             "--dangerously-skip-permissions",  # bypass all tool-use permission prompts
+            "--output-format",
+            "json",  # structured output: {type, result, usage{input_tokens,...}}
             "--allowedTools",
             allowed_tools,
         ]
@@ -1083,8 +1205,27 @@ def _run_claude_analysis(
                 f"stderr: {proc.stderr[:500] if proc.stderr else 'none'}"
             )
 
-        # Use stdout as the summary content; fall back to stderr if stdout is empty
-        summary_content = proc.stdout.strip()
+        # Parse JSON output: {type, result, usage{input_tokens, output_tokens, ...}}
+        # Fall back to raw stdout text if JSON parsing fails (e.g. older CLI).
+        raw_stdout = proc.stdout.strip()
+        summary_content = ""
+        token_usage = None
+        if raw_stdout:
+            try:
+                cli_json = json.loads(raw_stdout)
+                summary_content = cli_json.get("result", "").strip()
+                token_usage = _parse_token_usage(cli_json.get("usage"))
+                logger.debug(
+                    f"Token usage for '{test_short_name}': "
+                    f"input={token_usage['input_tokens']} "
+                    f"output={token_usage['output_tokens']} "
+                    f"total={token_usage['total_tokens']}"
+                )
+            except (json.JSONDecodeError, ValueError):
+                # Older CLI or unexpected format — treat stdout as plain text
+                logger.debug("Claude CLI output is not JSON; treating as plain text")
+                summary_content = raw_stdout
+
         if not summary_content:
             summary_content = (
                 f"AI Analysis could not be completed.\n"
@@ -1094,16 +1235,22 @@ def _run_claude_analysis(
             logger.warning("Claude produced no stdout output")
         else:
             analysis_duration = time.monotonic() - analysis_start
+            tok_str = (
+                f" | tokens={token_usage['total_tokens']:,}" if token_usage else ""
+            )
             logger.info(
                 "=" * 70
                 + f"\n[AI ANALYZER] COMPLETED — test: {test_short_name}"
                 + f"\n[AI ANALYZER] duration  : {analysis_duration:.1f}s"
                 + f"\n[AI ANALYZER] output    : {len(summary_content)} chars"
+                + tok_str
                 + "\n"
                 + "=" * 70
             )
 
-        summary_path = _write_ai_summary(summary_content, test_log_dir, test_short_name)
+        summary_path = _write_ai_summary(
+            summary_content, test_log_dir, test_short_name, token_usage=token_usage
+        )
         result_container[0] = summary_path
 
         # Register result in consolidated report registry
@@ -1113,6 +1260,7 @@ def _run_claude_analysis(
             summary_content=summary_content,
             summary_path=summary_path,
             analysis_duration_s=analysis_duration,
+            token_usage=token_usage,
         )
 
     except subprocess.TimeoutExpired:
