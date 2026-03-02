@@ -511,7 +511,6 @@ class TestHealthOverview(ManageTest):
         health_score_after_scale_up = request.getfixturevalue("health_score")
         logger.info(f"Health score after scaling up: {health_score_after_scale_up}%")
 
-        assert baseline_score == health_score_after_scale_up, (
-            f"Health score should decrease after scaling down exporters. "
-            f"Baseline: {baseline_score}%, Current: {health_score_after_scale_up}%"
-        )
+        assert (
+            baseline_score == health_score_after_scale_up
+        ), f"Baseline: {baseline_score}%, Current: {health_score_after_scale_up}%"
