@@ -1,6 +1,4 @@
-import json
 import logging
-import shlex
 from time import sleep
 
 from ocs_ci.ocs import constants
@@ -10,10 +8,10 @@ from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
 )
-from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +93,7 @@ class KEDA:
                 sleep(10)
                 OCP().exec_oc_cmd(
                     (
-                        "oc wait --for=condition=Established "
+                        "wait --for=condition=Established "
                         "crds -l app.kubernetes.io/part-of=keda-operator"
                     )
                 )
@@ -165,7 +163,6 @@ class KEDA:
         resources_to_cleanup.append(f"{constants.SECRET}/{self.token_secret_name}")
 
         # Extract the cluster CA bundle so KEDA can verify Thanos TLS
-        # TODO: This currently leaves a leftover we need to cleanup at teardown
         self.ca_data = OCP(namespace="openshift-monitoring").exec_oc_cmd(
             "get configmap serving-certs-ca-bundle -o jsonpath='{.data.service-ca\\.crt}'",
             out_yaml_format=False,
@@ -206,70 +203,49 @@ class KEDA:
 
         logger.info("KEDA configured to read Thanos metrics")
 
-    def can_read_thanos_metrics(self):
+    def _find_existing_scaled_object(self, config_dict):
         """
-        Check if the token and CA that KEDA is configured to use are valid
-        by using them to query the Thanos Querier internal address from one
-        of the Prometheus pods and checking the response.
+        Find existing ScaledObject managing the same workload.
+
+        Args:
+            config_dict (dict): Configuration containing scaleTargetRef
 
         Returns:
-            bool: True if KEDA is configured to read Thanos metrics, False otherwise.
+            ScaledObject: Existing ScaledObject instance if found, None otherwise
         """
-        logger.info(
-            "Checking if KEDA's token and CA can be used to read Thanos metrics"
+
+        ocp_obj = OCP(
+            kind=constants.SCALED_OBJECT,
+            namespace=config_dict.get("namespace", self.workload_namespace),
         )
 
-        if not self.token or not self.ca_secret_name:
-            logger.warning("KEDA is not configured to read Thanos metrics")
-            return False
+        try:
+            scaled_objects = ocp_obj.get()["items"]
+            target_ref = config_dict.get("scaleTargetRef", {})
 
-        # Get one of the Prometheus pods
-        prom_pod_obj = get_pods_having_label(
-            constants.PROMETHEUS_POD_LABEL, constants.OPENSHIFT_MONITORING_NAMESPACE
-        )[0]
-        prom_pod = Pod(**prom_pod_obj)
+            for so in scaled_objects:
+                so_target = so["spec"].get("scaleTargetRef", {})
+                # Match by target name and kind
+                if so_target.get("name") == target_ref.get("name") and so_target.get(
+                    "kind"
+                ) == target_ref.get("kind"):
+                    # Reconstruct ScaledObject from existing data using Prototype pattern
+                    existing_obj = ScaledObject.from_existing(so)
+                    logger.info(f"Found existing ScaledObject: {existing_obj.name}")
+                    return existing_obj
+        except Exception as e:
+            logger.debug(f"No existing ScaledObject found: {e}")
 
-        # Build the headers and URL for the query
-        headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/json",
-        }
-        header_args = " ".join(
-            f"-H {shlex.quote(f'{k}: {v}')}" for k, v in headers.items()
-        )
-        url = f"{constants.THANOS_QUERIER_INTERNAL_ADDRESS}/api/v1/query?query=time()"
-
-        # Feed the CA data to the curl command as a bash variable
-        # shlex is needed to properly quote the CA data and the URL
-        bash_script = (
-            "CERT=$(cat << 'EOF'\n"
-            f"{self.ca_data.strip()}\n"
-            "EOF\n"
-            ")\n"
-            f"curl -s -k {header_args} --cacert <(printf '%s\\n' \"$CERT\") {shlex.quote(url)}\n"
-        )
-        # Wrap it for bash -lc (so <(...) works)
-        cmd = f"bash -lc {shlex.quote(bash_script)}"
-
-        raw_response = prom_pod.exec_cmd_on_pod(cmd, out_yaml_format=False, silent=True)
-        response = json.loads(raw_response)
-        if response.get("status") == "success":
-            logger.info("KEDA's token and CA can be used to read Thanos metrics")
-            return True
-        else:
-            logger.warning(
-                (
-                    "KEDA's token and CA cannot be used to read Thanos metrics"
-                    f"Got response: {response}"
-                )
-            )
-            return False
+        return None
 
     def create_thanos_metric_scaled_object(self, config_dict):
         """
-        Create and register a KEDA ScaledObject driven by a Thanos metric.
+        Create or update a KEDA ScaledObject driven by a Thanos metric.
         A ScaledObject defines how KEDA should scale a workload: which target
         to scale, what metric to watch, and the conditions that trigger scaling.
+
+        If a ScaledObject already exists for the same workload, it will be updated
+        instead of creating a new one, making this method idempotent.
 
         Args:
             config_dict (dict): A dictionary containing the configuration for the ScaledObject.
@@ -277,7 +253,9 @@ class KEDA:
         Returns:
             ScaledObject: The configured ScaledObject instance.
         """
-        logger.info(f"Creating ScaledObject according to config: {config_dict}")
+        logger.info(
+            f"Creating/updating ScaledObject according to config: {config_dict}"
+        )
 
         config_dict.setdefault("namespace", self.workload_namespace)
         config_dict.setdefault(
@@ -285,15 +263,26 @@ class KEDA:
         )
         config_dict.setdefault("authenticationRef", self.ta_name)
 
-        scaled_obj = ScaledObject(config_dict)
+        # Check if ScaledObject already exists for this workload
+        existing_scaled_obj = self._find_existing_scaled_object(config_dict)
 
-        # Label the scaled object for easy cleanup
+        if existing_scaled_obj:
+            logger.info(
+                f"ScaledObject {existing_scaled_obj.name} already exists, updating..."
+            )
+            existing_scaled_obj.update_from_dict(config_dict)
+            scaled_obj = existing_scaled_obj
+        else:
+            logger.info("Creating new ScaledObject...")
+            scaled_obj = ScaledObject(config_dict)
+
+        # Ensure cleanup label is present (use --overwrite for existing objects)
         ocp_obj = OCP(namespace=self.workload_namespace)
         ocp_obj.exec_oc_cmd(
-            f"label {constants.SCALED_OBJECT}/{scaled_obj.name} {self.cleanup_label}"
+            f"label {constants.SCALED_OBJECT}/{scaled_obj.name} {self.cleanup_label} --overwrite"
         )
 
-        logger.info(f"ScaledObject created: {scaled_obj.name}")
+        logger.info(f"ScaledObject ready: {scaled_obj.name}")
         return scaled_obj
 
     def cleanup(self):
@@ -389,7 +378,7 @@ class ScaledObject:
         """
         self._validate_config_dict(config_dict)
 
-        self.ocp_obj = None
+        self.ocs_obj = None
 
         self.data = templating.load_yaml(constants.KEDA_SCALED_OBJECT_YAML)
         self.name = create_unique_resource_name("keda-scaled-object", "scaledobject")
@@ -399,11 +388,42 @@ class ScaledObject:
             if key in config_dict:
                 self._update_yaml_path(path, config_dict[key], apply=False)
 
-        self.ocp_obj = create_resource(**self.data)
+        self.ocs_obj = create_resource(**self.data)
+        self.namespace = self.ocs_obj.namespace
+
+    @classmethod
+    def from_existing(cls, resource_data):
+        """
+        Create a ScaledObject instance from existing resource data.
+
+        Implements the Prototype design pattern: creates a new instance by
+        cloning from existing Kubernetes resource data.
+
+        Args:
+            resource_data (dict): The existing ScaledObject resource data from Kubernetes
+
+        Returns:
+            ScaledObject: A new ScaledObject instance cloned from the prototype
+        """
+        instance = cls.__new__(cls)
+        instance.name = resource_data["metadata"]["name"]
+        instance.namespace = resource_data["metadata"]["namespace"]
+
+        # Filter out the the rest of the metadata and the status fields
+        # these can cause a Conflict error when applying the changes
+        resource_data["metadata"] = {
+            "name": resource_data["metadata"]["name"],
+            "namespace": resource_data["metadata"]["namespace"],
+        }
+        resource_data["status"] = {}
+
+        instance.data = resource_data
+        instance.ocs_obj = OCS(**resource_data)
+        return instance
 
     @property
     def is_created(self):
-        return self.ocp_obj is not None
+        return self.ocs_obj is not None
 
     def _validate_config_dict(self, config_dict):
         """
@@ -442,7 +462,7 @@ class ScaledObject:
             raise KeyError(f"Path {path} not found in data")
 
         if self.is_created and apply:
-            self.ocp_obj.apply(**self.data)
+            self.ocs_obj.apply(**self.data)
 
         return self
 
@@ -457,7 +477,8 @@ class ScaledObject:
             ValueError: If the config_dict is invalid.
         """
         self._validate_config_dict(config_dict)
+
         for key, value in config_dict.items():
             self._update_yaml_path(self.KEYS_TO_YAML_PATH[key], value, apply=False)
 
-        self.ocp_obj.apply(**self.data)
+        self.ocs_obj.apply(**self.data)

@@ -13,11 +13,13 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
+from ocs_ci.ocs.resources.pod import (
+    Pod,
+    get_pods_having_label,
+    wait_for_pods_by_label_count,
+)
 from ocs_ci.utility import templating
-from ocs_ci.ocs.ui.workload_ui import wait_for_container_status_ready
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +32,8 @@ class Warp(object):
     WARP measures GET and PUT performance from multiple clients against a MinIO cluster.
 
     """
+
+    WARP_POD_LABEL = "app=warppod"
 
     def __init__(self):
         """
@@ -99,12 +103,17 @@ class Warp(object):
         all_warp_pods = [
             Pod(**pod_info)
             for pod_info in get_pods_having_label(
-                label="app=warppod", namespace=self.pod_obj.namespace
+                label=self.WARP_POD_LABEL, namespace=self.pod_obj.namespace
             )
         ]
 
+        wait_for_pods_by_label_count(
+            label=self.WARP_POD_LABEL,
+            expected_count=replicas,
+            namespace=self.namespace,
+        )
         for con in all_warp_pods:
-            wait_for_container_status_ready(pod=con)
+            helpers.wait_for_all_containers_ready(pod=con)
 
         if multi_client:
             self.client_pods = [
@@ -133,6 +142,7 @@ class Warp(object):
         insecure=False,
         debug=False,
         workload_type="put",
+        clear_objects=False,
         kwargs=None,
     ):
         """
@@ -154,6 +164,7 @@ class Warp(object):
             insecure (Boolean): disable TLS certification verification
             debug (Boolean): Enable debug output
             workload_type (str): Type of workload to run (put, get, stat, mixed, etc.)
+            clear_objects (Boolean): Whether to delete objects from the bucket after the benchmark
             kwargs (dict): Additional keyword arguments to pass to the warp command
         """
 
@@ -166,6 +177,7 @@ class Warp(object):
         self.duration = duration if duration else self.duration["duration"]
         self.concurrent = concurrent if concurrent else self.concurrent["concurrent"]
         self.obj_size = obj_size if obj_size else self.obj_size["obj.size"]
+
         base_options = "".join(
             f"--duration={self.duration} "
             f"--host={self.host} "
@@ -174,20 +186,28 @@ class Warp(object):
             f"--debug={debug} "
             f"--access-key={self.access_key} "
             f"--secret-key={self.secret_key} "
-            f"--noclear --noprefix --concurrent={self.concurrent} "
+            f"--noprefix --concurrent={self.concurrent} "
             f"--obj.size={self.obj_size} "
             f"--bucket={self.bucket_name} "
             f"--analyze.out={self.output_file} "
+            f"{'--noclear ' if not clear_objects else ''}"
         )
 
         # Setup warp clients on warp client pods
         self.client_str = ""
         multi_client_options = ""
+        client_futures = []
         if multi_client:
             thread_exec = futures.ThreadPoolExecutor(max_workers=len(self.client_pods))
             for p in self.client_pods:
                 command = f"{self.warp_bin_dir} client"
-                thread_exec.submit(p.exec_cmd_on_pod, command=command, timeout=timeout)
+                fut = thread_exec.submit(
+                    p.exec_cmd_on_pod,
+                    command=command,
+                    out_yaml_format=False,
+                    timeout=timeout,
+                )
+                client_futures.append(fut)
             log.info("Wait for 5 seconds after the clients are started listening!")
             time.sleep(5)
             for client in self.client_ips:
@@ -206,6 +226,23 @@ class Warp(object):
 
         if validate:
             self.validate_warp_workload()
+
+        # Kill warp clients
+        if multi_client:
+            log.info("Killing warp clients")
+            for p in self.client_pods:
+                p.exec_cmd_on_pod(command="pkill warp", timeout=timeout)
+
+            log.info("Waiting for warp clients threads to finish")
+            for fut in client_futures:
+                try:
+                    fut.result(timeout=timeout)
+
+                # Ignoring the expected process-killed stderr
+                except CommandFailed as e:
+                    if "143" in str(e):
+                        log.info("Thread killed by signal 143")
+            log.info("Warp clients threads finished")
 
     def validate_warp_workload(self):
         """
@@ -228,7 +265,7 @@ class Warp(object):
         else:
             raise UnexpectedBehaviour(
                 f"Output file {self.output_file} is empty, "
-                "Warp workload doesn't run as expected..."
+                "Warp workload didn't run as expected..."
             )
 
     def cleanup(self, multi_client=False):
@@ -243,7 +280,15 @@ class Warp(object):
                 self.service_obj.delete()
         log.info("Deleting pods and deployment config")
         if self.pod_obj:
-            pod.delete_deployment_pods(self.pod_obj)
+            try:
+                ocp_obj = OCP(namespace=self.namespace)
+                ocp_obj.exec_oc_cmd(
+                    f"delete {constants.DEPLOYMENT} -l {self.WARP_POD_LABEL}"
+                )
+            except CommandFailed as e:
+                log.warning(
+                    f"Failed to delete deployment with label {self.WARP_POD_LABEL}: {e}"
+                )
         if self.pvc_obj:
             self.pvc_obj.delete()
 
@@ -263,6 +308,31 @@ class Warp(object):
         except CommandFailed as e:
             log.warning(f"Failed to get last report: {e}")
             return None
+
+    def get_last_avg_throughput(self):
+        """
+        Get the last average throughput from the warp workload runner
+
+        Returns:
+            float: The last average throughput from the warp workload runner
+
+        Raise:
+            UnexpectedBehaviour: if last report is empty.
+        """
+        last_report = self.get_last_report()
+
+        if last_report is None:
+            raise UnexpectedBehaviour(
+                "Last report is empty, Warp workload didn't run as expected..."
+            )
+
+        avg_throughput = (
+            pd.to_numeric(last_report["mb_per_sec"], errors="coerce")
+            .fillna(0)
+            .astype(float)
+            .mean()
+        )
+        return avg_throughput
 
 
 class WarpWorkloadRunner:
@@ -338,6 +408,7 @@ class WarpWorkloadRunner:
                         insecure=True,
                         validate=False,
                         multi_client=False,
+                        clear_objects=True,
                     )
                 except Exception as e:
                     log.warning(f"Warp workload iteration failed: {e}")
@@ -348,19 +419,45 @@ class WarpWorkloadRunner:
         self.thread.start()
         log.info("Warp workload thread started")
 
-    def stop(self):
-        """Stop the warp workload"""
+    def stop(self, timeout=300):
+        """
+        Stop the warp workload
+
+        Args:
+            timeout (int): Timeout for the stop operation (default: 300 seconds)
+        """
         if not self.stop_event:
             log.warning("Stop event is not set, cannot stop warp workload")
             return
 
-        if self.thread and self.thread.is_alive():
-            self.stop_event.set()
-
-            self.thread.join(timeout=120)
-            if self.thread.is_alive():
-                log.error("Warp workload thread is still alive after join")
-
-            log.info("Warp workload thread stopped")
-        else:
+        if not self.thread or not self.thread.is_alive():
             log.warning("Warp workload thread is not running")
+            return
+
+        log.info("Stopping warp workload thread...")
+        self.stop_event.set()
+        check_interval = 30  # Check every 30 seconds
+        start_time = time.time()
+
+        while self.thread.is_alive():
+            self.thread.join(timeout=check_interval)
+            elapsed = int(time.time() - start_time)
+
+            if self.thread.is_alive():
+                if elapsed >= timeout:
+                    log.error(
+                        f"Warp workload thread did not stop within {timeout}s. "
+                        f"Thread may not have stopped cleanly. Giving up after {elapsed}s."
+                    )
+                    break
+                log.warning(
+                    f"Warp workload thread still alive after {elapsed}s, "
+                    f"continuing to wait (max: {timeout}s)"
+                )
+
+        if self.thread.is_alive():
+            log.error("Warp workload thread is still running after stop attempt")
+        else:
+            log.info(
+                f"Warp workload thread stopped successfully after {int(time.time() - start_time)}s"
+            )

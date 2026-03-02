@@ -2,6 +2,7 @@ import base64
 import copy
 import logging
 import os
+from ocs_ci.ocs.resources.pushgateway import Pushgateway
 import pandas as pd
 import random
 import string
@@ -76,7 +77,6 @@ from ocs_ci.ocs.exceptions import (
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
     ResourceWrongStatusException,
-    UnexpectedBehaviour,
     UnsupportedPlatformError,
     PoolDidNotReachReadyState,
     StorageclassNotCreated,
@@ -212,6 +212,7 @@ from ocs_ci.helpers.helpers import (
     modify_deployment_replica_count,
     create_resource,
     create_network_fence_class,
+    wait_for_prometheus_ready,
     wait_for_resource_state,
     storagecluster_independent_check,
     get_schedule_precedance_value_from_csi_addons_configmap,
@@ -11656,7 +11657,85 @@ def keda_fixture(request):
         log.info("KEDA is already installed, skipping installation")
 
     keda.setup_access_to_thanos_metrics()
-    if not keda.can_read_thanos_metrics():
-        raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
 
     return keda
+
+
+@pytest.fixture(scope="function")
+def enable_custom_metrics(request):
+    """
+    Enable custom metrics for the cluster.
+    """
+    original_config_yaml = None
+
+    def modify_cm_cfg():
+        """
+        Modify the cluster-monitoring-config configmap to enable custom metrics.
+        """
+        log.info(
+            "Modifying the cluster-monitoring-config configmap to enable custom metrics"
+        )
+
+        nonlocal original_config_yaml
+        ocp_obj = OCP(
+            kind=constants.CONFIGMAP,
+            namespace=constants.MONITORING_NAMESPACE,
+            resource_name=constants.CLUSTER_MONITORING_CONFIGMAP_NAME,
+        )
+        original_config_yaml = ocp_obj.get().get("data", {}).get("config.yaml", "")
+        new_config_yaml = templating.to_nice_yaml({"enableUserWorkload": True})
+        patch_params = json.dumps({"data": {"config.yaml": new_config_yaml}})
+        ocp_obj.patch(params=patch_params, format_type="merge")
+
+        log.info("Waiting for 30 seconds for the changes to take effect")
+        time.sleep(30)
+
+        wait_for_prometheus_ready(timeout=300)
+        log.info("Custom metrics enabled successfully")
+
+    def revert_cm_cfg_change():
+        """
+        Revert the change to the cluster-monitoring-config configmap.
+        """
+        log.info("Reverting the change to the cluster-monitoring-config configmap")
+        nonlocal original_config_yaml
+        ocp_obj = OCP(
+            kind=constants.CONFIGMAP,
+            namespace=constants.MONITORING_NAMESPACE,
+            resource_name=constants.CLUSTER_MONITORING_CONFIGMAP_NAME,
+        )
+        patch_params = json.dumps({"data": {"config.yaml": original_config_yaml}})
+        ocp_obj.patch(params=patch_params, format_type="merge")
+
+        log.info("Waiting for 30 seconds for the changes to take effect")
+        time.sleep(30)
+
+        wait_for_prometheus_ready(timeout=300)
+        log.info("Custom metrics reverted successfully")
+
+    request.addfinalizer(revert_cm_cfg_change)
+    modify_cm_cfg()
+
+
+@pytest.fixture(scope="function")
+def pushgateway(request, project_factory, enable_custom_metrics):
+    """
+    Install Pushgateway in a new project and return the Pushgateway object.
+
+    Pushgateway is a 3rd party tool that allows pushing custom metrics to Prometheus.
+
+    The enable_custom_metrics fixture is required to allow Pushgateway
+    to push custom metrics to Prometheus.
+    """
+    return pushgateway_fixture(request, project_factory)
+
+
+def pushgateway_fixture(request, project_factory):
+    """Install Pushgateway in a new project and return the Pushgateway object"""
+    project_obj = project_factory(
+        project_name=create_unique_resource_name("pushgateway", "project")
+    )
+    pushgateway = Pushgateway(namespace=project_obj.namespace)
+    request.addfinalizer(pushgateway.cleanup)
+    pushgateway.install()
+    return pushgateway

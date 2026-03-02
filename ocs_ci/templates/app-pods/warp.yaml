@@ -33,3 +33,11 @@ spec:
         volumeMounts:
         - mountPath: /mnt
           name: warp-vol
+        readinessProbe:
+          exec:
+            command: ["true"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
