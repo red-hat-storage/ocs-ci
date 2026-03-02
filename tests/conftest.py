@@ -1123,7 +1123,7 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=No
                     raise
 
             try:
-                instance.ocp.wait_for_delete(instance.name, timeout=300)
+                instance.ocp.wait_for_delete(instance.name)
             except CommandFailed as wait_ex:
                 if "NotFound" in str(wait_ex) or skip_resource_not_found_error:
                     log.info(f"Resource {instance.name} already deleted or not found")

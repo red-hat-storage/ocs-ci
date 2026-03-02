@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads, tier2
 from ocs_ci.framework.testlib import E2ETest
@@ -442,6 +443,8 @@ class TestVmSnapshotClone(E2ETest):
             vm_clone_fixture,
             vm_snapshot_restore_fixture,
         )
+        log.info("Waiting for snapshot resources to settle before test end")
+        time.sleep(60)
 
     @pytest.mark.polarion_id("OCS-6321")
     def test_clone_of_restored_vm(
