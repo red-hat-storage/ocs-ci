@@ -28,13 +28,14 @@ log = logging.getLogger(__name__)
 
 def verify_odf_not_upgradeable(threading_lock):
     """
-    This Function Verifies ODFOperatorNotUpgradeable alert using PrometheusAPI
+    Verify ODFOperatorNotUpgradeable alert using PrometheusAPI.
 
     Args:
         threading_lock: Threading lock for Prometheus API calls
 
     Returns:
-        bool: True if ODFOperatorNotUpgradeable alert found otherwise False
+        tuple: (bool, list) - True and list of alerts if alert found,
+            False and empty list otherwise.
 
     """
     log.info("Verifying ODFOperatorNotUpgradeable alert is shown")
@@ -53,7 +54,7 @@ def verify_odf_not_upgradeable(threading_lock):
         if alerts:
             log.info(f"✓ Alert {alert_name} is firing as expected")
             log.info(f"Alert details: {alerts}")
-            return True
+            return True, alerts
         else:
             # Also check if alert exists in any state
             alerts_response = prometheus.get(
@@ -68,11 +69,48 @@ def verify_odf_not_upgradeable(threading_lock):
                             f"(state: {alert.get('state')})"
                         )
                         log.info(f"Alert details: {alert}")
-                        return True
-            return False
+                        return True, [alert]
+        return False, []
     except Exception as e:
         log.warning(f"Could not check for {alert_name} alert: {e}. ")
+        return False, []
+
+
+def verify_odf_not_upgradeable_runbook_link(alerts):
+    """
+    Verify ODFOperatorNotUpgradeable alert has the correct runbook link.
+
+    Args:
+        alerts (list): List of alert records from Prometheus API (e.g. from
+            verify_odf_not_upgradeable). Must contain at least one
+            ODFOperatorNotUpgradeable alert.
+
+    Returns:
+        bool: True if runbook_url annotation matches the expected runbook
+            URL for ODFOperatorNotUpgradeable, False otherwise.
+
+    """
+    if not alerts:
+        log.warning("No alerts provided for runbook link verification")
         return False
+    expected_runbook = constants.RUNBOOK_URL_ODFOPERATORNOTUPGRADABLE
+    for alert in alerts:
+        runbook_url = alert.get("annotations", {}).get("runbook_url", "")
+        if runbook_url == expected_runbook:
+            log.info(
+                "✓ ODFOperatorNotUpgradeable alert runbook link is correct: %s",
+                expected_runbook,
+            )
+            return True
+        if runbook_url:
+            log.warning(
+                "ODFOperatorNotUpgradeable runbook_url mismatch: expected %s, "
+                "got %s",
+                expected_runbook,
+                runbook_url,
+            )
+    log.warning("ODFOperatorNotUpgradeable alert has no or incorrect runbook_url")
+    return False
 
 
 @brown_squad
@@ -103,6 +141,7 @@ class TestODFUpgradePrecheckConditions(ManageTest):
         2. ODF OperatorCondition CR: Upgradeable=False, Reason: "CephClusterHealthNotOK"
         3. The operator being not Upgradeable should be shown as an Alert
            ODFOperatorNotUpgradeable
+        4. ODFOperatorNotUpgradeable alert has correct runbook_url link
 
         Args:
             mon_pod_down: Fixture that scales down one MON deployment
@@ -167,7 +206,8 @@ class TestODFUpgradePrecheckConditions(ManageTest):
             log.warning("⚠ ODF OperatorCondition check did not pass ")
 
         # Verify ODFOperatorNotUpgradeable alert is shown
-        alert_found = verify_odf_not_upgradeable(threading_lock)
+        alert_found, odf_alerts = verify_odf_not_upgradeable(threading_lock)
+        runbook_ok = verify_odf_not_upgradeable_runbook_link(odf_alerts)
 
         # Test Summary
         log.info("=" * 80)
@@ -183,6 +223,10 @@ class TestODFUpgradePrecheckConditions(ManageTest):
         log.info(
             f"  ODFOperatorNotUpgradeable Alert: " f"{'✓' if alert_found else '⚠'}"
         )
+        log.info(
+            f"  ODFOperatorNotUpgradeable Runbook Link: "
+            f"{'✓' if runbook_ok else '⚠'}"
+        )
         log.info("=" * 80)
 
         # Assertions for test validation
@@ -195,6 +239,9 @@ class TestODFUpgradePrecheckConditions(ManageTest):
             "'CephClusterHealthNotOK'"
         )
         assert alert_found, "ODFOperatorNotUpgradeable alert not found."
+        assert runbook_ok, (
+            "ODFOperatorNotUpgradeable alert runbook link is missing or " "incorrect."
+        )
 
         log.info(
             "Test completed: Upgrade should be blocked when Ceph health "
@@ -222,6 +269,7 @@ class TestODFUpgradePrecheckConditions(ManageTest):
            Reason: "StorageClusterNotReady"
         2. The operator being not Upgradeable should be shown as an Alert
            ODFOperatorNotUpgradeable
+        3. ODFOperatorNotUpgradeable alert has correct runbook_url link
 
         Args:
             storagecluster_to_progressing: Fixture that patches StorageCluster
@@ -274,7 +322,8 @@ class TestODFUpgradePrecheckConditions(ManageTest):
             log.warning("⚠ ODF OperatorCondition check did not pass ")
 
         # Verify ODFOperatorNotUpgradeable alert is shown
-        alert_found = verify_odf_not_upgradeable(threading_lock)
+        alert_found, odf_alerts = verify_odf_not_upgradeable(threading_lock)
+        runbook_ok = verify_odf_not_upgradeable_runbook_link(odf_alerts)
 
         # Summary
         log.info("=" * 80)
@@ -286,6 +335,10 @@ class TestODFUpgradePrecheckConditions(ManageTest):
         log.info(
             f"  ODFOperatorNotUpgradeable Alert: " f"{'✓' if alert_found else '⚠'}"
         )
+        log.info(
+            f"  ODFOperatorNotUpgradeable Runbook Link: "
+            f"{'✓' if runbook_ok else '⚠'}"
+        )
         log.info("=" * 80)
 
         # Assertions for test validation
@@ -294,6 +347,9 @@ class TestODFUpgradePrecheckConditions(ManageTest):
             "'StorageClusterNotReady'"
         )
         assert alert_found, "ODFOperatorNotUpgradeable alert not found."
+        assert runbook_ok, (
+            "ODFOperatorNotUpgradeable alert runbook link is missing or " "incorrect."
+        )
 
         log.info(
             "Test completed: Upgrade should be blocked when StorageCluster "
