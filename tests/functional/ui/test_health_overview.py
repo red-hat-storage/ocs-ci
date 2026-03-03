@@ -26,7 +26,7 @@ from ocs_ci.utility.templating import load_yaml
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.testlib import skipif_ocs_version
-
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +263,77 @@ class TestHealthOverview(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    def wait_for_deployment_ready_replicas(
+        self, deployment, expected_replicas, timeout=120
+    ):
+        """
+        Wait for a deployment's readyReplicas to reach the expected count using TimeoutSampler.
+        Args:
+            deployment (str): Name of the deployment
+            expected_replicas (int): Expected number of ready replicas
+            timeout (int): Timeout in seconds (default 120)
+        """
+        dep_ocp = OCP(
+            kind="Deployment", namespace=config.ENV_DATA.get("cluster_namespace")
+        )
+
+        logger.info(
+            f"Waiting for deployment '{deployment}' to have {expected_replicas} ready replica(s)"
+        )
+        for ready in TimeoutSampler(
+            timeout,
+            10,
+            lambda: (dep_ocp.get(resource_name=deployment).get("status") or {}).get(
+                "readyReplicas"
+            )
+            or 0,
+        ):
+            if ready == expected_replicas:
+                logger.info(
+                    f"Deployment '{deployment}' reached {expected_replicas} ready replica(s)"
+                )
+                return
+            logger.info(
+                f"Deployment '{deployment}' ready replicas: {ready}, "
+                f"waiting for {expected_replicas}"
+            )
+
+    @pytest.fixture
+    def scale_exporters_teardown(self, request):
+        """
+        Teardown fixture to scale odf-blackbox-exporter and ocs-metrics-exporter
+        back to 1 replica.
+        """
+
+        def finalizer():
+            if self.exporters_scaled_up:
+                logger.info(
+                    "[CLEANUP] Exporters already scaled up in test, skipping teardown"
+                )
+                return
+            logger.info(
+                "[CLEANUP] Exporters not scaled up in test, scaling up to 1 replica"
+            )
+            ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
+            deployment_labels = [
+                constants.BLACKBOX_POD_LABEL,
+                constants.OCS_METRICS_EXPORTER,
+            ]
+            deployments = [label.split("=")[1] for label in deployment_labels]
+            for deployment in deployments:
+                logger.info(
+                    f"[CLEANUP] Scaling up {deployment} deployment to 1 replica"
+                )
+                try:
+                    ocp.exec_oc_cmd(
+                        command=f"scale deployment {deployment} --replicas=1",
+                        out_yaml_format=False,
+                    )
+                except Exception as ex:
+                    logger.warning(f"[CLEANUP] Failed to scale up {deployment}: {ex}")
+
+        request.addfinalizer(finalizer)
+
     @tier1
     @polarion_id("OCS-7475")
     def test_health_overview_modal(
@@ -451,7 +522,7 @@ class TestHealthOverview(ManageTest):
     @tier2
     @polarion_id("OCS-7731")
     def test_health_score_with_blackbox_and_metrics_exporter_shutdown(
-        self, setup_ui_class, request
+        self, setup_ui_class, request, scale_exporters_teardown
     ):
         """
         Test to verify health score changes when shutting down and recover blackbox and ocs-metrics-exporter.
@@ -462,7 +533,8 @@ class TestHealthOverview(ManageTest):
         5. Measure health score after scaling up
         6. Verify health score recovers to baseline
         """
-        ocp = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        self.exporters_scaled_up = False
+        ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
         df_overview = PageNavigator().nav_storage_data_foundation_overview_page()
         df_overview.nav_health_view_checks()
 
@@ -477,15 +549,11 @@ class TestHealthOverview(ManageTest):
 
         for deployment in deployments:
             logger.info(f"Scaling down {deployment} deployment to 0 replicas")
-            scale_cmd = (
-                f"scale deployment {deployment} "
-                f"--replicas=0 "
-                f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-            )
+            scale_cmd = f"scale deployment {deployment} " f"--replicas=0 "
             ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
 
-        logger.info("Waiting for 30 seconds for deployments to scale down")
-        time.sleep(30)
+        for deployment in deployments:
+            self.wait_for_deployment_ready_replicas(deployment, expected_replicas=0)
 
         logger.info("Measuring health score after scaling down exporters")
         health_score_after_scale_down = request.getfixturevalue("health_score")
@@ -495,15 +563,12 @@ class TestHealthOverview(ManageTest):
 
         for deployment in deployments:
             logger.info(f"Scaling up {deployment} deployment to 1 replica")
-            scale_cmd = (
-                f"scale deployment {deployment} "
-                f"--replicas=1 "
-                f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-            )
+            scale_cmd = f"scale deployment {deployment} " f"--replicas=1 "
             ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
 
-        logger.info("Waiting for 30 seconds for deployments to scale up and stabilize")
-        time.sleep(30)
+        self.exporters_scaled_up = True
+        for deployment in deployments:
+            self.wait_for_deployment_ready_replicas(deployment, expected_replicas=1)
         PageNavigator().refresh_page()
         PageNavigator().take_screenshot("health_overview_page")
 
