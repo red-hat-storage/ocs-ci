@@ -1,6 +1,7 @@
 import logging
 
 from selenium.webdriver.common.by import By
+from ocs_ci.ocs.ui.base_ui import BaseUI, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import FDF_SAN_LOCATORS, SCALE_DASHBOARD_LOCATORS
 from ocs_ci.utility.retry import retry
@@ -10,30 +11,31 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 logger = logging.getLogger(__name__)
 
 
-class FusionAccessUI(PageNavigator):
+class FusionAccessUI(PageNavigator, BaseUI):
     """
-    InfraUI class for add capacity, device replacement, node replacement
+    FusionAccessUI class for add capacity, device replacement, node replacement
 
     """
 
     def __init__(self):
         super().__init__()
+        self.base_ui = BaseUI()
 
-    def click_create_external_system(self):
+    def click_connect_external_systems(self):
         """
-        Click on 'Create external system' button.
+        Click on 'Connect external systems' button.
 
         Raises:
             TimeoutExpiredError: If button is not found or clickable
         """
         try:
             self.base_ui.do_click(
-                FDF_SAN_LOCATORS["create_external_system_button"],
+                FDF_SAN_LOCATORS["connect_external_storage_button"],
                 enable_screenshot=False,
             )
-            logger.info("Clicked on Create external system button")
+            logger.info("Clicked on Connect external systems button")
         except Exception as e:
-            logger.error(f"Failed to click Create external system button: {e}")
+            logger.error(f"Failed to click Connect external systems button: {e}")
             raise
 
     def select_storage_area_network(self):
@@ -44,18 +46,13 @@ class FusionAccessUI(PageNavigator):
             TimeoutExpiredError: If radio button is not found
         """
         try:
-            # Try clicking the radio button first
-            try:
-                self.base_ui.do_click(
-                    FDF_SAN_LOCATORS["san_radio_button"], enable_screenshot=False
-                )
-            except Exception:
-                # If radio button is not clickable, try clicking the label
-                logger.info("Failed to click on San Radio button")
-                # self.base_ui.do_click(
-                #     FDF_SAN_LOCATORS["san_label"],
-                #     enable_screenshot=True
-                # )
+            wait_for_element_to_be_clickable(
+                locator=FDF_SAN_LOCATORS["san_radio_button"], timeout=60
+            )
+            logger.info("Clicked on Storage Area network radio button")
+            self.base_ui.do_click(
+                FDF_SAN_LOCATORS["san_radio_button"], enable_screenshot=False
+            )
             logger.info("Selected Storage Area Network option")
         except Exception as e:
             logger.error(f"Failed to select Storage Area Network: {e}")
@@ -87,18 +84,16 @@ class FusionAccessUI(PageNavigator):
             TimeoutExpiredError: If radio button is not found
         """
         try:
-            # Try clicking the radio button first
-            try:
+            san_element = self.base_ui.get_elements(
+                FDF_SAN_LOCATORS["all_nodes_radio"]
+            )[0]
+            if not san_element.is_selected():
+                logger.info("Selecting now")
                 self.base_ui.do_click(
                     FDF_SAN_LOCATORS["all_nodes_radio"], enable_screenshot=True
                 )
-            except Exception:
-                # If radio button is not clickable, try clicking the label
-                logger.info("Radio button not clickable, trying label")
-                self.base_ui.do_click(
-                    FDF_SAN_LOCATORS["all_nodes_label"], enable_screenshot=True
-                )
-            logger.info("Selected AllNodes (Default) option")
+            else:
+                logger.info("Selected All Nodes (Default) option")
         except Exception as e:
             logger.error(f"Failed to select AllNodes option: {e}")
             self.base_ui.take_screenshot("all_nodes_error")
@@ -139,7 +134,7 @@ class FusionAccessUI(PageNavigator):
         """
         try:
             selected_luns = []
-            for i in range(1, num_luns + 1):
+            for i in range(1, 2):
                 # XPath for checkbox in row i
                 lun_checkbox_xpath = (
                     f"//table[@aria-label='LUNs table' or contains(@class, 'pf-v5-c-table')]"

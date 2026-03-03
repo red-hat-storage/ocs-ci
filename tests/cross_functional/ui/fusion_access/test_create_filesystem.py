@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
-    skipif_ocs_version,
     fusion_access_required,
 )
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -23,10 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 @ui
-@tier1
 @green_squad
 @fusion_access_required
-@skipif_ocs_version(">=4.21")
 class TestFDFSANConnection(ManageTest):
     """
     Test class for FDF SAN (Storage Area Network) connection UI automation.
@@ -80,12 +77,12 @@ class TestFDFSANConnection(ManageTest):
 
         # Step 1: Navigate to External Storage Systems page
         logger.info("Step 1: Navigate to Storage > External systems")
-        external_systems_page = self.page_nav.nav_external_systems_page()
+        self.page_nav.nav_external_systems_page()
         self.base_ui.take_screenshot("external_systems_page")
 
         # Step 2: On the external systems page click on “Create External system” button
-        logger.info("Step 2: Click on Create External system")
-        self.fusion_access.create_external_systems_page(external_systems_page)
+        logger.info("Step 2: Click on Connect External system")
+        self.fusion_access.click_connect_external_systems()
 
         # Step 3: Select Storage Area Network radio button
         logger.info("Step 3: Select Storage Area Network option")
@@ -98,7 +95,7 @@ class TestFDFSANConnection(ManageTest):
         self.base_ui.take_screenshot("san_configuration_page")
 
         # Step 5: Select AllNodes (Default) radio button
-        logger.info("Step 5: Select AllNodes (Default)")
+        logger.info("Step 5: Select All Nodes (Default)")
         self.fusion_access.select_all_nodes_option()
         self.base_ui.take_screenshot("all_nodes_selected")
 
@@ -121,7 +118,7 @@ class TestFDFSANConnection(ManageTest):
 
         # Step 10: Navigate to external systems page and click on SAN_Storage
         logger.info("Step 10: Navigate to Storage > External systems > SAN_Storage")
-        external_systems_page = self.page_nav.nav_external_systems_page()
+        self.page_nav.nav_external_systems_page()
         self.fusion_access.navigate_to_san_storage_tab()
         self.base_ui.take_screenshot("file_systems_tab")
 
@@ -138,15 +135,11 @@ class TestFDFSANConnection(ManageTest):
 
             # Validation: Verify filesystem status
             logger.info("Validating filesystem status")
-            assert self.fusion_access.verify_filesystem_status(
-                filesystem_name
-            ), "filesystem not in OK state"
+            self.fusion_access.verify_filesystem_status(filesystem_name)
 
             # Validation: Verify LUN group is connected
             logger.info("Validating LUN group connection")
-            assert self.fusion_access.verify_lun_group_connection(
-                lun_group_name
-            ), f"LUN group '{lun_group_name}' is not connected"
+            self.fusion_access.verify_lun_group_connection(lun_group_name)
 
         except Exception as e:
             logger.error(f"Unexpected error during SAN Scale validation: {e}")

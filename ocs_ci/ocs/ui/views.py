@@ -901,22 +901,15 @@ page_nav_4_20 = {
 FDF_SAN_LOCATORS = {
     # Connect to external storage button on External Systems page
     "connect_external_storage_button": (
-        "//button[@data-test='connect-external-storage' or contains(text(), 'Connect to external storage')]",
-        By.XPATH,
-    ),
-    "create_external_system_button": (
-        "//button[@data-test='create-external-system' or contains(text(), 'Create External system')]",
+        "//button[@data-test='configure-external-systems' or contains(text(), 'Connect external systems')]",
         By.XPATH,
     ),
     # Storage Area Network radio button
-    "san_radio_button": ("//input[@type='radio' and (@id='san-storage')]", By.XPATH),
+    "san_radio_button": ("//label[@for='san-storage']", By.XPATH),
     # Next button in wizard
     "next_button": ("//button[contains(text(), 'Next')]", By.XPATH),
     # All nodes radio button
-    "all_nodes_radio": (
-        "//input[@type='radio' and (@id='use-all-nodes' or @value='All Nodes']",
-        By.XPATH,
-    ),
+    "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
     # LUN group name input field
     "lun_group_name_input": (
         "//input[@id='lunGroupName' or @name='lunGroupName' or @placeholder='Enter LUN group name']",
