@@ -192,7 +192,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
-    @skipif_ocs_version("<4.9")
+    @skipif_ocs_version(["<4.9", ">=4.19"])
     @tier2
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
