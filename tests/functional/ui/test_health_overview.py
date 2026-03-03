@@ -566,9 +566,9 @@ class TestHealthOverview(ManageTest):
             scale_cmd = f"scale deployment {deployment} " f"--replicas=1 "
             ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
 
-        self.exporters_scaled_up = True
         for deployment in deployments:
             self.wait_for_deployment_ready_replicas(deployment, expected_replicas=1)
+        self.exporters_scaled_up = True
         PageNavigator().refresh_page()
         PageNavigator().take_screenshot("health_overview_page")
 
