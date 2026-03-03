@@ -315,6 +315,8 @@ class TestVmSnapshotClone(E2ETest):
                         if False - function will create restore VM from cloned VM.
 
         """
+        cloned_vm = None
+        restored_vm = None
         try:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             log.info(f"{vm_obj.name} Source checksum: {source_csum}")
@@ -358,6 +360,20 @@ class TestVmSnapshotClone(E2ETest):
         except Exception as e:
             log.error(f"[{vm_obj.name}] Error during VM processing: {e}", exc_info=True)
             raise
+        finally:
+            for vm in [cloned_vm, restored_vm]:
+                if vm:
+                    try:
+                        log.info(f"Cleaning up VM {vm.name}")
+                        vm.stop()
+                    except Exception:
+                        pass
+                    try:
+                        vm.delete()
+                    except Exception as cleanup_err:
+                        log.warning(
+                            f"Failed to delete VM {vm.name}: {cleanup_err}"
+                        )
 
     def run_parallel_vm_clone_restore(
         self,
@@ -443,8 +459,6 @@ class TestVmSnapshotClone(E2ETest):
             vm_clone_fixture,
             vm_snapshot_restore_fixture,
         )
-        log.info("Waiting for snapshot resources to settle before test end")
-        time.sleep(60)
 
     @pytest.mark.polarion_id("OCS-6321")
     def test_clone_of_restored_vm(
