@@ -136,6 +136,14 @@ def assign_get_values(
             if name.startswith(defaults.SRE_BUILD_TEST_NAMESPACE):
                 log.debug(f"ignoring item: {constants.NAMESPACE} with name {name}")
                 continue
+        if item.get("kind") == constants.STORAGECLASS:
+            owner_refs = item.get("metadata", {}).get("ownerReferences", [])
+            if any(ref.get("kind") == "StorageClient" for ref in owner_refs):
+                name = item.get("metadata", {}).get("name", "")
+                log.debug(
+                    f"ignoring controller-owned StorageClass: {name}"
+                )
+                continue
         items_filtered.append(item)
 
     ignored = len(items) - len(items_filtered)
