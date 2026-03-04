@@ -22,12 +22,12 @@ interface_data = {
     constants.CEPHBLOCKPOOL: {
         "prov": "openshift-storage.rbd.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-rbdplugin",
-        "csi_name_pod": "openshift-storage.rbd.csi.ceph.com-nodeplugin",
+        "csi_name_pod": "openshift-storage.rbd.csi.ceph.com-ctrlplugin",
     },
     constants.CEPHFILESYSTEM: {
         "prov": "openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-cephfsplugin",
-        "csi_name_pod": "openshift-storage.cephfs.csi.ceph.com-nodeplugin",
+        "csi_name_pod": "openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
     },
 }
 
