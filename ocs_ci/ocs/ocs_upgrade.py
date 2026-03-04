@@ -573,9 +573,9 @@ class OCSUpgrade(object):
             exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
             log_step("Sleeping 60 seconds after applying tag mirror set.")
             time.sleep(60)
-            log_step("Waiting max 30 mins for master MCP to get updated")
+            log_step("Waiting max 50 mins for master MCP to get updated")
             exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
+                "oc wait --for=condition=Updated --timeout=50m mcp/master", timeout=3600
             )
             log_step("Waiting max 30 mins for worker MCP to get updated")
             exec_cmd(
