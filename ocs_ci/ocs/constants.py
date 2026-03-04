@@ -2721,6 +2721,9 @@ OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
 HCP_DEPLOYER_POLICY = os.path.join(
     TEMPLATE_DIR, "ocs-deployment", "provider-mode", "aws-hcp", "iam_role_policy.json"
 )
+HCP_DEPLOYER_IAM_ROLE = "aws-agent-deployer-role"
+HCP_DEPLOYER_IAM_POLICY = "aws-hcp-deployer-policy"
+HCP_OIDC_S3_SECRET = "hypershift-operator-oidc-provider-s3-credentials"
 
 
 # aws volume constants

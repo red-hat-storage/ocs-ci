@@ -28,6 +28,7 @@ from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hub_spoke import (
+    destroy_aws_hcp_clusters,
     hypershift_cluster_factory,
     get_autodistributed_storage_classes,
     skip_if_not_hcp_provider,
@@ -2230,6 +2231,17 @@ def cluster(
                     iscsi_teardown()
                 except Exception as ex:
                     log.error(f"Failed to teardown iSCSI: {ex}")
+            # Destroy AWS HCP hosted clusters before the management cluster.
+            # This terminates EC2 worker instances, cleans up VPCs, IAM roles,
+            # peering connections, and HostedCluster CRs.
+            try:
+                if ocsci_config.ENV_DATA["cluster_type"] == constants.HCI_PROVIDER:
+                    if not destroy_aws_hcp_clusters():
+                        log.error(
+                            "!!!!! Cluster teardown failed. Delete manually !!!!!"
+                        )
+            except Exception as ex:
+                log.error(f"Failed to destroy AWS HCP clusters: {ex}")
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
