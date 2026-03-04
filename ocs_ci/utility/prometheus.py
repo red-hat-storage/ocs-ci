@@ -135,14 +135,24 @@ def check_query_range_result_viafunction(
     # timestamps of values outside of both bad and good values list
     invalid_value_timestamps = []
 
-    # check that result contains expected number of metric data series
-    if exp_metric_num is not None and len(result) != exp_metric_num:
+    # Check that result contains at least the expected number of metric
+    # data series. During pod rollovers (e.g. upgrade), Prometheus may
+    # return extra series from both old and new pods for the same metric,
+    # so we allow len(result) >= exp_metric_num.
+    if exp_metric_num is not None and len(result) < exp_metric_num:
         msg = (
-            f"result doesn't contain {exp_metric_num} of series only, "
-            f"actual number data series is {len(result)}"
+            f"result contains fewer series than expected: "
+            f"{len(result)} < {exp_metric_num}"
         )
         logger.error(msg)
         is_result_ok = False
+    elif exp_metric_num is not None and len(result) > exp_metric_num:
+        logger.warning(
+            "result contains more series than expected: %d > %d "
+            "(may indicate pod rollover during query window)",
+            len(result),
+            exp_metric_num,
+        )
 
     for metric in result:
         name = metric["metric"]["__name__"]
