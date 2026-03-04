@@ -1654,9 +1654,9 @@ def get_provision_time(interface, pvc_name, status="start"):
 
     def find_events(name):
         patterns = [
-            f"provision.*{name}.*{operation}",
-            f'"Started".*PVC="{name}".*StorageClass=',
-            f'"Succeeded".*PVC="{name}".*StorageClass='
+            f'"Provisioning".*{pvc_name}',
+            f'"Started".*PVC="[^"]*{pvc_name}"',
+            f'"Succeeded".*PVC="[^"]*{pvc_name}"'
         ]
         # progressive fallback
         for n in range(1000, 5001, 1000):
