@@ -481,6 +481,7 @@ def workload_storageutilization_checksum_rbd(
         tmp_path,
         target_size=10,
         with_checksum=True,
+        retain_pv=False,
         threading_lock=threading_lock,
     )
     return measured_op
