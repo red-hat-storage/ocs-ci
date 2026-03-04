@@ -1659,18 +1659,32 @@ def get_provision_time(interface, pvc_name, status="start"):
     if isinstance(pvc_name, str):
         for i in logs:
             logger.info(f"iiii{i}")
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
-        mon_day = " ".join(stat[0].split(" ")[0:2])
-        stat = f"{this_year} {mon_day}"
+        matches = [
+            i for i in logs
+            if (re.search(f"provision.*{pvc_name}.*{operation}", i, re.IGNORECASE)
+            or re.search(f'Started.*PVC="{pvc_name}".*StorageClass=', i)
+            or re.search(f'Succeeded.*PVC="{pvc_name}".*StorageClass=',i))
+        ]
+        if matches:
+            mon_day = " ".join(stat[0].split(" ")[0:2])
+            stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
     if isinstance(pvc_name, list):
         all_stats = []
         for i in range(0, len(pvc_name)):
             name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
-            mon_day = " ".join(stat[0].split(" ")[0:2])
-            stat = f"{this_year} {mon_day}"
-            all_stats.append(stat)
+            matches = [
+                i for i in logs
+                if (
+                    re.search(f"provision.*{name}.*{operation}", i, re.IGNORECASE)
+                    or re.search(f'Started.*PVC="{name}".*StorageClass=', i)
+                    or re.search(f'Succeeded.*PVC="{name}".*StorageClass=', i)
+                )
+            ]
+            if matches:
+                mon_day = " ".join(stat[0].split(" ")[0:2])
+                stat = f"{this_year} {mon_day}"
+                all_stats.append(stat)
         all_stats = sorted(all_stats)
         if status.lower() == "end":
             stat = all_stats[-1]  # return the highest time
