@@ -1648,6 +1648,8 @@ def get_provision_time(interface, pvc_name, status="start"):
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    logger.info(pod_name[0])
+    logger.info(pod_name[1])
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
