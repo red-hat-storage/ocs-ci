@@ -87,6 +87,10 @@ html_static_path = ["_static"]
 master_doc = "index"
 source_suffix = [".rst", ".md"]
 
+# MyST parser configuration
+# Enable heading anchors for internal links (e.g., [text](#heading))
+myst_heading_anchors = 3  # Generate anchors for h1, h2, h3 headings
+
 
 # Based on this issue: https://github.com/readthedocs/readthedocs.org/issues/1139
 def run_apidoc(_):
