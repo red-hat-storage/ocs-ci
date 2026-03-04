@@ -45,6 +45,8 @@ def test_workload_with_checksum_rbd(
     tmp_path,
     project,
     fio_job_dict,
+    fio_pvc_dict,
+    fio_configmap_dict,
 ):
     """
     Test workload with checksum generation and immediate verification.
@@ -70,15 +72,19 @@ def test_workload_with_checksum_rbd(
     )
 
     # Now verify the checksum immediately in the same test
-    # The job will run sha1sum check on the same PVC
+    # The PVC "fio-target" still exists from the fixture with the data and checksum
+
+    # Modify the job to run sha1sum check instead of fio
     container = fio_job_dict["spec"]["template"]["spec"]["containers"][0]
     container["command"] = ["/usr/bin/sha1sum", "-c", "/mnt/target/fio.sha1sum"]
 
-    # Create verification job name to avoid conflicts
+    # Create verification job with a different name to avoid conflicts
     fio_job_dict["metadata"]["name"] = "fio-checksum-verify"
 
-    # Create the verification job
-    job_file = ObjectConfFile("fio-checksum-verify", [fio_job_dict], project, tmp_path)
+    # We need to include the configmap even though we're not using fio,
+    # because the job template references it
+    fio_objs = [fio_configmap_dict, fio_job_dict]
+    job_file = ObjectConfFile("fio-checksum-verify", fio_objs, project, tmp_path)
 
     # Deploy the verification job
     job_file.create()
