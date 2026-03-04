@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_ocs_version,
     skipif_external_mode,
+    runs_on_provider,
 )
 
 log = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class TestGetCommands:
         self.odf_cli_runner = odf_cli_setup
 
     @skipif_external_mode
+    @runs_on_provider
     @polarion_id("OCS-6237")
     def test_get_health(self):
         output = self.odf_cli_runner.run_get_health()
