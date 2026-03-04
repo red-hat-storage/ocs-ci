@@ -1628,6 +1628,82 @@ def set_image_lookup(image_name):
 
 def get_provision_time(interface, pvc_name, status="start"):
     """
+    Extract timestamp for PVC events from CSI provisioner logs.
+    Supports both old 'Provisioning' and new 'Started'/'Succeeded' formats.
+    Progressive fallback: start with last 1000 lines, expand up to 5000.
+    """
+
+    # Define the operation based on status
+    operation = "started"
+    if status.lower() == "end":
+        operation = "succeeded"
+
+    this_year = str(datetime.datetime.now().year)
+
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    logger.info("podnames")
+    logger.info(pod_name[0])
+    logger.info(pod_name[1])
+
+    # Get logs from both provisioner pods
+    logs1 = pod.get_pod_logs(pod_name[0], "csi-provisioner").split("\n")
+    logs2 = pod.get_pod_logs(pod_name[1], "csi-provisioner").split("\n")
+    logs = logs1 + logs2
+    logger.info(f"total logs loaded: {len(logs)}")
+
+    def find_events(name):
+        patterns = [
+            f"provision.*{name}.*{operation}",
+            f'"Started".*PVC="{name}".*StorageClass=',
+            f'"Succeeded".*PVC="{name}".*StorageClass='
+        ]
+        # progressive fallback
+        for n in range(1000, 5001, 1000):
+            recent = logs[-n:][::-1]
+            matches = [line for line in recent if any(re.search(p, line, re.IGNORECASE) for p in patterns)]
+            if matches:
+                results = []
+                for line in matches:
+                    try:
+                        mon_day = " ".join(line.split(" ")[0:2])
+                        results.append(f"{this_year} {mon_day}")
+                    except Exception:
+                        continue
+                return results
+        return []
+
+    # Handle single PVC
+    if isinstance(pvc_name, str):
+        events = find_events(pvc_name)
+        if not events:
+            logger.warning(f"No matching log line found for PVC {pvc_name}")
+            return None
+        stat = events[0]
+
+    # Handle list of PVCs
+    elif isinstance(pvc_name, list):
+        all_stats = []
+        for pvc in pvc_name:
+            events = find_events(pvc.name)
+            all_stats.extend(events)
+
+        if not all_stats:
+            logger.warning("No matching log lines found for any PVCs")
+            return None
+
+        all_stats = sorted(all_stats)
+        if status.lower() == "end":
+            stat = all_stats[-1]  # latest
+        elif status.lower() == "start":
+            stat = all_stats[0]  # earliest
+
+    return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
+
+
+'''
+def get_provision_time(interface, pvc_name, status="start"):
+    """
     Get the starting/ending creation time of a PVC based on provisioner logs
 
     Args:
@@ -1694,7 +1770,7 @@ def get_provision_time(interface, pvc_name, status="start"):
         elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
     return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
-
+'''
 
 def get_start_creation_time(interface, pvc_name):
     """
