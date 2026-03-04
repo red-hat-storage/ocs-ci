@@ -1911,7 +1911,7 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
 
     return pvc_dict
 
-
+'''
 def measure_pv_deletion_time_bulk(
     interface, pv_name_list, wait_time=60, return_log_times=False
 ):
@@ -2002,7 +2002,64 @@ def measure_pv_deletion_time_bulk(
             pv_dict[pv_name] = (start_tm, end_tm)
 
     return pv_dict
+    
+'''
 
+def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60, return_log_times=False):
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    time.sleep(wait_time)
+
+    loop_counter = 0
+    this_year = str(datetime.datetime.now().year)
+
+    while True:
+        logs1 = pod.get_pod_logs(pod_name[0], "csi-provisioner").splitlines()
+        logs2 = pod.get_pod_logs(pod_name[1], "csi-provisioner").splitlines()
+        logs = logs1 + logs2
+
+        pv_start = {}
+        pv_end = {}
+
+        for line in logs:
+            for pv in pv_name_list:
+                if pv not in pv_start and re.search(
+                    rf'"shouldDelete is true".*PV="{re.escape(pv)}"', line
+                ):
+                    pv_start[pv] = line
+
+                if re.search(
+                    rf'Volume deleted.*PV="{re.escape(pv)}"', line
+                ):
+                    pv_end[pv] = line
+
+        missing = [pv for pv in pv_name_list if pv not in pv_start or pv not in pv_end]
+
+        if missing:
+            logger.info(f"PV count without CSI delete log data {len(missing)}")
+            time.sleep(wait_time)
+            loop_counter += 1
+            if loop_counter >= 6:
+                raise UnexpectedBehaviour(f"No PV deletion data in CSI logs for {missing}")
+        else:
+            break
+
+    pv_dict = {}
+
+    for pv in pv_name_list:
+        # Extract start time
+        mon_day = " ".join(pv_start[pv].split(" ")[0:2])
+        start_tm = f"{this_year} {mon_day}"
+        start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
+
+        # Extract end time
+        mon_day = " ".join(pv_end[pv].split(" ")[0:2])
+        end_tm = f"{this_year} {mon_day}"
+        end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
+
+        total = end_time - start_time
+        pv_dict[pv] = (start_tm, end_tm) if return_log_times else total.total_seconds()
+
+    return pv_dict
 
 def get_start_deletion_time(interface, pv_name):
     """
