@@ -3,7 +3,13 @@ import re
 import pytest
 
 from ocs_ci.ocs.resources.pod import get_mon_pods
-from ocs_ci.framework.testlib import tier1, brown_squad, polarion_id, skipif_ocs_version
+from ocs_ci.framework.testlib import (
+    tier1,
+    brown_squad,
+    polarion_id,
+    skipif_ocs_version,
+    skipif_external_mode,
+)
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +22,7 @@ class TestGetCommands:
     def setup(self, odf_cli_setup):
         self.odf_cli_runner = odf_cli_setup
 
+    @skipif_external_mode
     @polarion_id("OCS-6237")
     def test_get_health(self):
         output = self.odf_cli_runner.run_get_health()
