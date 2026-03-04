@@ -1654,7 +1654,9 @@ def get_provision_time(interface, pvc_name, status="start"):
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
+    logger.info(f"length of logs{len(logs)}")
     logs = logs.split("\n")
+    logger.info(f"length of logs{len(logs)}")
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
         for i in logs:
@@ -1662,8 +1664,8 @@ def get_provision_time(interface, pvc_name, status="start"):
         matches = [
             i for i in logs
             if (re.search(f"provision.*{pvc_name}.*{operation}", i, re.IGNORECASE)
-            or re.search(f'Started.*PVC="{pvc_name}".*StorageClass=', i)
-            or re.search(f'Succeeded.*PVC="{pvc_name}".*StorageClass=',i))
+                or re.search(f'"Started".*PVC="{pvc_name}".*StorageClass=', i)
+                or re.search(f'"Succeeded".*PVC="{pvc_name}".*StorageClass=', i))
         ]
         if matches:
             mon_day = " ".join(stat[0].split(" ")[0:2])
@@ -1675,11 +1677,9 @@ def get_provision_time(interface, pvc_name, status="start"):
             name = pvc_name[i].name
             matches = [
                 i for i in logs
-                if (
-                    re.search(f"provision.*{name}.*{operation}", i, re.IGNORECASE)
-                    or re.search(f'Started.*PVC="{name}".*StorageClass=', i)
-                    or re.search(f'Succeeded.*PVC="{name}".*StorageClass=', i)
-                )
+                if (re.search(f"provision.*{pvc_name}.*{operation}", i, re.IGNORECASE)
+                    or re.search(f'"Started".*PVC="{pvc_name}".*StorageClass=', i)
+                    or re.search(f'"Succeeded".*PVC="{pvc_name}".*StorageClass=', i))
             ]
             if matches:
                 mon_day = " ".join(stat[0].split(" ")[0:2])
