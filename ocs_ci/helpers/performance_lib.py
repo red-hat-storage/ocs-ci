@@ -215,6 +215,7 @@ def read_csi_logs(log_names, container_name, start_time):
     ns_name = config.ENV_DATA["cluster_namespace"]
     logs = []
     for l in log_names:
+        logger.info(f"gl{l}")
         logs.append(
             run_oc_command(
                 f"logs {l} -c {container_name} --since-time={start_time}",
@@ -845,8 +846,9 @@ def pod_attach_csi_time(
         raise Exception("Cannot get volume handle")
 
     log_names = get_logfile_names(interface, provisioning=False)
+    logger.info(f"lgs{log_names}")
     logs = read_csi_logs(log_names, interface_data[interface]["csi_cnt"], start_time)
-
+    logger.info(f"lgss{logs}")
     logger.info(
         f"Looking for pod attach time for pv {pv_name} and volume handle {volume_handle}"
     )
