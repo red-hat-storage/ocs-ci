@@ -1653,7 +1653,9 @@ def get_provision_time(interface, pvc_name, status="start"):
     logger.info(pod_name[1])
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
+    logs = logs[-5000:]
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
+    logs = logs[-5000:]
     logger.info(f"length of logs{len(logs)}")
     logs = logs.split("\n")
     logger.info(f"length of logs{len(logs)}")
@@ -1668,7 +1670,7 @@ def get_provision_time(interface, pvc_name, status="start"):
                 or re.search(f'"Succeeded".*PVC="{pvc_name}".*StorageClass=', i))
         ]
         if matches:
-            mon_day = " ".join(stat[0].split(" ")[0:2])
+            mon_day = " ".join(matches[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
     if isinstance(pvc_name, list):
@@ -1682,7 +1684,7 @@ def get_provision_time(interface, pvc_name, status="start"):
                     or re.search(f'"Succeeded".*PVC="{pvc_name}".*StorageClass=', i))
             ]
             if matches:
-                mon_day = " ".join(stat[0].split(" ")[0:2])
+                mon_day = " ".join(matches[0].split(" ")[0:2])
                 stat = f"{this_year} {mon_day}"
                 all_stats.append(stat)
         all_stats = sorted(all_stats)
