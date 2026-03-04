@@ -634,15 +634,23 @@ class PrometheusAPI(object):
                     end_dt = datetime.utcfromtimestamp(end)
                     duration = end_dt - start_dt
                     exp_samples = duration.seconds / step
-                    if exp_samples - 1 <= sizes[0] <= exp_samples + 1:
-                        logger.debug("there are no holes in the data")
+                    tolerance = max(3, int(exp_samples * 0.05))
+                    if exp_samples - tolerance <= sizes[0] <= exp_samples + tolerance:
+                        logger.debug(
+                            "prometheus data has no significant holes "
+                            "(result size %d, expected %d, tolerance +-%d)",
+                            sizes[0],
+                            exp_samples,
+                            tolerance,
+                        )
                     else:
                         msg = "there are holes in prometheus data"
                         logger.error(
                             msg
-                            + ": result size is %d while expected sample size is %d +-1",
+                            + ": result size is %d while expected sample size is %d +-%d",
                             sizes[0],
                             exp_samples,
+                            tolerance,
                         )
                         raise ValueError(msg)
         # return actual result of the query
