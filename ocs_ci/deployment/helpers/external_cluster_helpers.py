@@ -622,10 +622,29 @@ def get_exporter_script_from_csv():
     """
     Get the external exporter script from the csv.
 
+    From ODF 4.19 the external mode script was removed from the CSV and is
+    shipped only in the ConfigMap (rook-ceph-external-cluster-script-config).
+    This function must not be used for ODF 4.19+; use get_exporter_script_from_configmap()
+    or get_exporter_script(use_configmap=True) instead.
+
     Returns:
         str: The exporter script from the csv
 
+    Raises:
+        ValueError: If running ODF version is 4.19 or above (script is no longer in CSV).
     """
+    # From 4.19 the script is only in ConfigMap; avoid KeyError on missing annotation
+    try:
+        odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
+    except Exception:
+        odf_running_version = version.get_semantic_ocs_version_from_config()
+    if odf_running_version >= version.VERSION_4_19:
+        raise ValueError(
+            "From ODF 4.19 the external mode script is no longer in the CSV; "
+            "it is shipped only in the ConfigMap rook-ceph-external-cluster-script-config. "
+            "Use get_exporter_script(use_configmap=True) or get_exporter_script_from_configmap()."
+        )
+
     ocs_version = version.get_semantic_ocs_version_from_config()
     operator_name = defaults.ROOK_CEPH_OPERATOR
 
@@ -644,14 +663,18 @@ def get_exporter_script_from_csv():
     for each_csv in ocs_operator_data["status"]["channels"]:
         if each_csv["currentCSV"] == csv_name:
             logger.info(f"exporter script for csv: {each_csv['currentCSV']}")
+            annotations = each_csv["currentCSVDesc"].get("annotations", {})
             if ocs_version >= version.VERSION_4_16:
-                exporter_script = each_csv["currentCSVDesc"]["annotations"][
-                    "externalClusterScript"
-                ]
+                exporter_script = annotations.get("externalClusterScript")
             else:
-                exporter_script = each_csv["currentCSVDesc"]["annotations"][
+                exporter_script = annotations.get(
                     "external.features.ocs.openshift.io/export-script"
-                ]
+                )
+            if not exporter_script:
+                raise ValueError(
+                    "CSV does not contain the external mode script annotation. "
+                    "On ODF 4.19+ the script is only in ConfigMap; use use_configmap=True."
+                )
             break
 
     return exporter_script
