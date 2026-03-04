@@ -5392,7 +5392,14 @@ def add_route_public_nad():
     """
     Add route section to network_attachment_definitions object
 
+    Note: Routes are not needed for VLAN-based multus deployments,
+    so this function will skip adding routes when multus_use_vlan is True.
     """
+    use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+    if use_vlan:
+        logger.info("VLAN mode enabled - skipping route addition for public NAD")
+        return
+
     nad_obj = get_network_attachment_definitions(
         nad_name=config.ENV_DATA.get("multus_public_net_name"),
         namespace=config.ENV_DATA.get("multus_public_net_namespace"),
@@ -5403,7 +5410,7 @@ def add_route_public_nad():
         {"dst": config.ENV_DATA["multus_destination_route"]}
     ]
     nad_config_dict_string = json.dumps(nad_config_dict)
-    logger.info("Creating Multus public network")
+    logger.info("Creating Multus public network with routes (shim mode)")
     if config.DEPLOYMENT.get("ipv6"):
         constants.MULTUS_PUBLIC_NET_YAML = constants.MULTUS_PUBLIC_NET_IPV6_YAML
     public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
@@ -5489,12 +5496,16 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
     """
     Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
 
+    Supports both traditional shim-based approach and VLAN-based approach.
+    Use multus_use_vlan config parameter to enable VLAN mode.
     """
 
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = node.get_worker_nodes()
     ip_version = "ipv4"
+    use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+
     if (
         config.DEPLOYMENT.get("ipv6")
         and config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
@@ -5503,37 +5514,162 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             constants.NODE_NETWORK_CONFIGURATION_POLICY_IPV6
         )
         ip_version = "ipv6"
+
     interface_num = 0
     for worker_node_name in worker_node_names:
-        node_network_configuration_policy = templating.load_yaml(
-            constants.NODE_NETWORK_CONFIGURATION_POLICY
-        )
+        # Determine which template to use based on VLAN mode
+        if use_vlan:
+            # VLAN-based approach: check if we need single or dual VLAN
+            create_public_net = config.ENV_DATA.get("multus_create_public_net", False)
+            create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net", False)
+
+            if create_public_net and create_cluster_net:
+                # Dual VLAN template
+                logger.info(f"Using dual VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL
+                )
+            elif create_public_net or create_cluster_net:
+                # Single VLAN template
+                logger.info(f"Using single VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN
+                )
+            else:
+                logger.warning("VLAN mode enabled but no networks configured to create")
+                continue
+        else:
+            # Traditional shim-based approach
+            node_network_configuration_policy = templating.load_yaml(
+                constants.NODE_NETWORK_CONFIGURATION_POLICY
+            )
 
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
-            worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
-                worker_node_name
-            ]
+            # Set node selector
             node_network_configuration_policy["spec"]["nodeSelector"][
                 "kubernetes.io/hostname"
             ] = worker_node_name
-            node_network_configuration_policy["metadata"]["name"] = (
-                worker_network_configuration["node_network_configuration_policy_name"]
-            )
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["ip"] = worker_network_configuration[
-                "node_network_configuration_policy_ip"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["prefix-length"] = worker_network_configuration[
-                "node_network_configuration_policy_prefix_length"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["routes"][
-                "config"
-            ][0]["destination"] = worker_network_configuration[
-                "node_network_configuration_policy_destination_route"
-            ]
+
+            if use_vlan:
+                # VLAN-based configuration for BAREMETAL
+                logger.info(
+                    f"Configuring VLAN interfaces for baremetal node {worker_node_name}"
+                )
+                create_public_net = config.ENV_DATA.get(
+                    "multus_create_public_net", False
+                )
+                create_cluster_net = config.ENV_DATA.get(
+                    "multus_create_cluster_net", False
+                )
+
+                if create_public_net and create_cluster_net:
+                    # Configure dual VLAN
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-networks-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration
+                    public_vlan_id = config.ENV_DATA.get(
+                        "multus_public_net_vlan_id", 201
+                    )
+                    public_base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = f"{public_base_interface}.{public_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = public_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = public_vlan_id
+
+                    # Cluster VLAN configuration
+                    cluster_vlan_id = config.ENV_DATA.get(
+                        "multus_cluster_net_vlan_id", 202
+                    )
+                    cluster_base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = f"{cluster_base_interface}.{cluster_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["vlan"]["base-iface"] = cluster_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["vlan"]["id"] = cluster_vlan_id
+
+                elif create_public_net:
+                    # Configure single VLAN for public network
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-public-net-vlan-{worker_node_name}"
+
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                elif create_cluster_net:
+                    # Configure single VLAN for cluster network
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-cluster-net-vlan-{worker_node_name}"
+
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                # Note: VLAN interfaces don't need IP addresses or routes
+                # The IP allocation happens via whereabouts in the NetworkAttachmentDefinition
+
+            else:
+                # Traditional shim-based configuration for BAREMETAL
+                worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+                    worker_node_name
+                ]
+                node_network_configuration_policy["metadata"]["name"] = (
+                    worker_network_configuration[
+                        "node_network_configuration_policy_name"
+                    ]
+                )
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
+                    "node_network_configuration_policy_ip"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
+                    "node_network_configuration_policy_prefix_length"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                    "config"
+                ][0]["destination"] = worker_network_configuration[
+                    "node_network_configuration_policy_destination_route"
+                ]
         elif config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
 
             node_network_configuration_policy["spec"]["nodeSelector"][

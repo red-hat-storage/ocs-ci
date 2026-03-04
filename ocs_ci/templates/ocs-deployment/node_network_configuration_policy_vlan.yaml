@@ -1,0 +1,21 @@
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: ceph-public-net-vlan-worker-node
+  namespace: openshift-storage
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+    kubernetes.io/hostname: worker-node
+  desiredState:
+    interfaces:
+      - name: enp1s0f1.201  # VLAN interface - will be templated
+        description: VLAN interface for OpenShift Data Foundation public Multus network
+        type: vlan
+        state: up
+        vlan:
+          base-iface: enp1s0f1  # Base physical interface - will be templated
+          id: 201  # VLAN ID - will be templated
+        ipv4:
+          enabled: false  # No IP on VLAN interface itself
+          dhcp: false
