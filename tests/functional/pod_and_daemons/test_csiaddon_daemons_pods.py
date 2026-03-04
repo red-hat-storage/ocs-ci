@@ -20,7 +20,6 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.daemonset import DaemonSet
-from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.helpers.helpers import verify_socket_on_node
 
 logger = logging.getLogger(__name__)
@@ -167,15 +166,22 @@ class TestCSIADDonDaemonset(ManageTest):
         """
         Verify that the CSI addon pods are running on each worker node
         step:
-        1. Get all worker nodes
+        1. Get all worker nodes (including master nodes that also have worker role)
         2. Get CSI addon daemonset pods
         3. Verify each worker node has a CSI addon pod
         """
         logger.info("Validating csi addon pods on each worker node")
         namespace = config.ENV_DATA["cluster_namespace"]
 
-        worker_nodes_names = get_worker_nodes()
-        logger.info(f"Current available worker nodes are {worker_nodes_names}")
+        # Get all nodes with worker role, including master nodes that also have worker role
+        # Skipping use of get_worker_nodes() which excludes master nodes in HCI provider clusters.
+        label = "node-role.kubernetes.io/worker"
+        ocp_node_obj = ocp.OCP(kind=constants.NODE)
+        nodes = ocp_node_obj.get(selector=label).get("items")
+        worker_nodes_names = [node.get("metadata").get("name") for node in nodes]
+        logger.info(
+            f"Current available worker nodes (including master nodes with worker role) are {worker_nodes_names}"
+        )
 
         csi_addon_pods = get_pods_having_label(
             constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
@@ -193,7 +199,7 @@ class TestCSIADDonDaemonset(ManageTest):
             csi_pod_running_node_name = pod_obj.get("spec").get("nodeName")
             assert csi_pod_running_node_name in worker_nodes_names, (
                 f"CSI addon pod {pod_obj['metadata']['name']} is running on "
-                f"node {csi_pod_running_nodes_name} which is not a worker node"
+                f"node {csi_pod_running_node_name} which is not a worker node"
             )
             csi_pod_running_nodes_name.append(csi_pod_running_node_name)
 
