@@ -1,0 +1,41 @@
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: ceph-public-net-vlan-worker-node
+  namespace: openshift-storage
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+    kubernetes.io/hostname: worker-node
+  desiredState:
+    interfaces:
+      # VLAN interface - NO IP (just for VLAN tagging)
+      - name: enp1s0f1.201  # VLAN interface - will be templated
+        description: VLAN interface for OpenShift Data Foundation public Multus network
+        type: vlan
+        state: up
+        vlan:
+          base-iface: enp1s0f1  # Base physical interface - will be templated
+          id: 201  # VLAN ID - will be templated
+        ipv4:
+          enabled: false  # Critical: No IP on base VLAN interface
+          dhcp: false
+      # Shim interface - HAS IP (for host-to-pod communication)
+      - name: odf-pub-shim  # Shim interface name - will be templated
+        description: Shim interface for host connectivity to ODF pods (solves macvlan hairpin problem)
+        type: mac-vlan
+        state: up
+        mac-vlan:
+          base-iface: enp1s0f1.201  # Built on top of VLAN interface - will be templated
+          mode: bridge
+          promiscuous: true
+        ipv4:
+          enabled: true
+          dhcp: false
+          address:
+            - ip: 192.168.20.5  # Static IP for shim - will be templated per node
+              prefix-length: 24  # /24 subnet to reach all Multus pod IPs
+    routes:
+      config:
+        - destination: 192.168.20.0/24  # Route to entire pod network - will be templated
+          next-hop-interface: odf-pub-shim  # Via shim interface - will be templated
