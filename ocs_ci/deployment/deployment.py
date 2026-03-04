@@ -942,7 +942,7 @@ class Deployment(object):
 
         Args:
             subscription_name (str): Subscription name pattern
-            namespace (str): Namespace name for checking subscription if None then default from ENV_data
+            namespace (str): Namespace name for checking subscription if None then default from ENV_DATA
 
         """
         if not namespace:
@@ -1104,10 +1104,18 @@ class Deployment(object):
                         node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
 
             if create_public_net:
-                nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
                 logger.info("Creating Multus public network")
-                if config.DEPLOYMENT.get("ipv6"):
+
+                # Determine which template to use
+                if use_vlan:
+                    nad_to_load = constants.MULTUS_PUBLIC_NET_VLAN_YAML
+                    logger.info("Using VLAN-based public network template")
+                elif config.DEPLOYMENT.get("ipv6"):
                     nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
+                else:
+                    nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+
                 public_net_data = templating.load_yaml(nad_to_load)
                 public_net_data["metadata"]["name"] = config.ENV_DATA.get(
                     "multus_public_net_name"
@@ -1117,17 +1125,57 @@ class Deployment(object):
                 )
                 public_net_config_str = public_net_data["spec"]["config"]
                 public_net_config_dict = json.loads(public_net_config_str)
-                public_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_public_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_public_net_range"
+
+                # Configure master interface
+                if use_vlan:
+                    # For VLAN mode, master is the VLAN interface
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get("multus_public_net_interface")
+                    vlan_interface = f"{base_interface}.{vlan_id}"
+                    public_net_config_dict["master"] = vlan_interface
+                    logger.info(
+                        f"Public network using VLAN interface: {vlan_interface}"
                     )
+                else:
+                    # For non-VLAN mode, master is the base interface
+                    public_net_config_dict["master"] = config.ENV_DATA.get(
+                        "multus_public_net_interface"
+                    )
+
+                # Configure IP range
+                if not config.DEPLOYMENT.get("ipv6"):
+                    if use_vlan and config.ENV_DATA.get("multus_public_net_ip_range"):
+                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_public_net_ip_range"
+                        )
+                    else:
+                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_public_net_range"
+                        )
                 else:
                     public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
                         "multus_public_ipv6_net_range"
                     )
+
+                # Configure IP range limits for VLAN mode
+                if use_vlan:
+                    # Add routes to shim network (critical for host-to-pod communication)
+                    # Default shim network is 192.168.252.0/24 (shim IPs assigned starting at .5)
+                    shim_network = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    if "routes" not in public_net_config_dict["ipam"]:
+                        public_net_config_dict["ipam"]["routes"] = []
+                    # Ensure route to shim network exists
+                    if not any(
+                        r.get("dst") == shim_network
+                        for r in public_net_config_dict["ipam"]["routes"]
+                    ):
+                        public_net_config_dict["ipam"]["routes"].append(
+                            {"dst": shim_network}
+                        )
+                    logger.info(f"Added route to shim network: {shim_network}")
+
                 public_net_config_dict["type"] = config.ENV_DATA.get(
                     "multus_public_net_type"
                 )
@@ -1142,14 +1190,19 @@ class Deployment(object):
                 run_cmd(f"oc create -f {public_net_yaml.name}")
 
             if create_cluster_net:
+                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
                 logger.info("Creating Multus cluster network")
-                if config.DEPLOYMENT.get("ipv6"):
-                    constants.MULTUS_CLUSTER_NET_YAML = (
-                        constants.MULTUS_CLUSTER_NET_IPV6_YAML
-                    )
-                cluster_net_data = templating.load_yaml(
-                    constants.MULTUS_CLUSTER_NET_YAML
-                )
+
+                # Determine which template to use
+                if use_vlan:
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_VLAN_YAML
+                    logger.info("Using VLAN-based cluster network template")
+                elif config.DEPLOYMENT.get("ipv6"):
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_IPV6_YAML
+                else:
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_YAML
+
+                cluster_net_data = templating.load_yaml(nad_to_load)
                 cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
                     "multus_cluster_net_name"
                 )
@@ -1158,23 +1211,57 @@ class Deployment(object):
                 )
                 cluster_net_config_str = cluster_net_data["spec"]["config"]
                 cluster_net_config_dict = json.loads(cluster_net_config_str)
-                cluster_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_cluster_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_cluster_net_range"
+
+                # Configure master interface
+                if use_vlan:
+                    # For VLAN mode, master is the VLAN interface
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get("multus_cluster_net_interface")
+                    vlan_interface = f"{base_interface}.{vlan_id}"
+                    cluster_net_config_dict["master"] = vlan_interface
+                    logger.info(
+                        f"Cluster network using VLAN interface: {vlan_interface}"
                     )
+                else:
+                    # For non-VLAN mode, master is the base interface
+                    cluster_net_config_dict["master"] = config.ENV_DATA.get(
+                        "multus_cluster_net_interface"
+                    )
+
+                # Configure IP range
+                if not config.DEPLOYMENT.get("ipv6"):
+                    if use_vlan and config.ENV_DATA.get("multus_cluster_net_ip_range"):
+                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_cluster_net_ip_range"
+                        )
+                    else:
+                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_cluster_net_range"
+                        )
                 else:
                     cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
                         "multus_cluster_ipv6_net_range"
                     )
+
+                # Configure IP range limits for VLAN mode
+                if use_vlan:
+                    if config.ENV_DATA.get("multus_cluster_net_ip_range_start"):
+                        cluster_net_config_dict["ipam"][
+                            "range_start"
+                        ] = config.ENV_DATA.get("multus_cluster_net_ip_range_start")
+                    if config.ENV_DATA.get("multus_cluster_net_ip_range_end"):
+                        cluster_net_config_dict["ipam"][
+                            "range_end"
+                        ] = config.ENV_DATA.get("multus_cluster_net_ip_range_end")
+                    # Remove routes for VLAN mode (not needed)
+                    cluster_net_config_dict["ipam"].pop("routes", None)
+
                 cluster_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_cluster_net_mode"
                 )
                 cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
                 cluster_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_public", delete=False
+                    mode="w+", prefix="multus_cluster", delete=False
                 )
                 templating.dump_data_to_temp_yaml(
                     cluster_net_data, cluster_net_yaml.name
