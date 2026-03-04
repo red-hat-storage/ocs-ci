@@ -1652,13 +1652,14 @@ def get_provision_time(interface, pvc_name, status="start"):
     logger.info(pod_name[0])
     logger.info(pod_name[1])
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
-    logs = logs[-5000:]
-    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
-    logs = logs[-5000:]
+    logs1 = pod.get_pod_logs(pod_name[0], "csi-provisioner").split("\n")
+    logs2 = pod.get_pod_logs(pod_name[1], "csi-provisioner").split("\n")
+
+    logs1 = logs1[-5000:]
+    logs2 = logs2[-5000:]
+    logs = logs1 + logs2
     logger.info(f"length of logs{len(logs)}")
-    logs = logs.split("\n")
-    logger.info(f"length of logs{len(logs)}")
+
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
         for i in logs:
