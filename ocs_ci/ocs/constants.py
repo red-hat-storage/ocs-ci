@@ -1606,6 +1606,8 @@ RUNBOOK_URL_ODFOPERATORNOTUPGRADABLE = (
     "https://github.com/openshift/runbooks/blob/master/alerts/"
     "openshift-container-storage-operator/ODFOperatorNotUpgradeable.md"
 )
+# Mandatory section headers for OpenShift runbook content (Meaning, Impact, etc.)
+RUNBOOK_MANDATORY_HEADERS = ["Meaning", "Impact", "Diagnosis", "Mitigation"]
 # ODF 4.21 new alerts
 ALERT_ODF_CORE_POD_RESTART = "ODFCorePodRestarted"
 ALERT_ODF_DISK_UTILIZATION_HIGH = "ODFDiskUtilizationHigh"

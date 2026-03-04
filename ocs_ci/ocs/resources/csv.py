@@ -2,6 +2,7 @@
 CSV related functionalities
 """
 
+import json
 import logging
 
 from ocs_ci.ocs import constants
@@ -134,26 +135,30 @@ def get_operator_csv_names(namespace=None):
     return ocs_csv_name, odf_csv_name
 
 
-def check_operatorcondition_upgradeable_false(
+def check_operatorcondition_upgradeable(
     operator_name,
     csv_name,
     namespace,
+    upgradeable_expected,
     timeout=300,
     reason=None,
     message_pattern=None,
 ):
     """
-    Check if OperatorCondition shows Upgradeable=False with specified reason.
+    Check if OperatorCondition shows Upgradeable with the expected status
+    (True or False), optionally matching reason and message.
 
     Args:
         operator_name (str): Name of the operator (for logging)
         csv_name (str): CSV name of the operator
         namespace (str): Namespace where OperatorCondition is located
+        upgradeable_expected (bool): If True, expect Upgradeable=True (e.g. after
+            override). If False, expect Upgradeable=False.
         timeout (int): Timeout in seconds to wait for condition
-        reason (str): Expected reason in OperatorCondition. If None, checks
-            for any reason when Upgradeable=False
-        message_pattern (str): Expected message pattern in OperatorCondition.
-            If None, only reason is checked
+        reason (str): Expected reason in OperatorCondition. If None, only
+            status is checked (any reason for False; any reason for True).
+        message_pattern (str): Expected message pattern. If None, only reason
+            (or status) is checked.
 
     Returns:
         bool: True if condition is met, False otherwise
@@ -161,23 +166,26 @@ def check_operatorcondition_upgradeable_false(
     """
     if not csv_name:
         log.warning(
-            f"Skipping {operator_name} OperatorCondition check - " "CSV name not found"
+            f"Skipping {operator_name} OperatorCondition check - CSV name not found"
         )
         return False
 
-    log.info(f"Checking {operator_name} OperatorCondition: {csv_name}")
+    expected_status = "True" if upgradeable_expected else "False"
+    log.info(
+        f"Checking {operator_name} OperatorCondition (Upgradeable={expected_status}): {csv_name}"
+    )
     operatorcondition = OCP(
         kind="OperatorCondition",
         namespace=namespace,
     )
 
     def _check_condition():
-        """Check if OperatorCondition shows Upgradeable=False"""
+        """Read OperatorCondition and verify Upgradeable matches expected."""
         oc_data = operatorcondition.get(resource_name=csv_name, dont_raise=True)
         if not oc_data:
             return False
 
-        # OperatorCondition can be a single item or list
+        # OperatorCondition API can return a list or a single resource
         items = (
             oc_data.get("items", [])
             if isinstance(oc_data, dict) and "items" in oc_data
@@ -199,19 +207,23 @@ def check_operatorcondition_upgradeable_false(
                         f"status: {status}, reason: {condition_reason}, "
                         f"message: {message}"
                     )
-                    if status == "False":
-                        # If reason is specified, check for it
-                        if reason:
-                            if reason in condition_reason:
-                                # If message_pattern is also specified, check it
-                                if message_pattern:
-                                    if message_pattern in message:
-                                        return True
-                                else:
-                                    return True
-                        else:
-                            # No specific reason expected, just check status
-                            return True
+                    # Validate status and optional reason/message
+                    if upgradeable_expected:
+                        if status != "True":
+                            return False
+                        if reason and reason not in condition_reason:
+                            return False
+                        if message_pattern and message_pattern not in message:
+                            return False
+                        return True
+                    else:
+                        if status != "False":
+                            return False
+                        if reason and reason not in condition_reason:
+                            return False
+                        if message_pattern and message_pattern not in message:
+                            return False
+                        return True
         return False
 
     sample = TimeoutSampler(
@@ -219,23 +231,77 @@ def check_operatorcondition_upgradeable_false(
         sleep=10,
         func=_check_condition,
     )
-
     try:
         if sample.wait_for_func_status(result=True):
             log.info(
-                f"{operator_name} OperatorCondition shows "
-                f"Upgradeable=False with reason '{reason}'"
+                f"{operator_name} OperatorCondition shows Upgradeable={expected_status} (reason={reason})"
             )
             return True
-        else:
-            log.warning(
-                f"{operator_name} OperatorCondition did not show "
-                "Upgradeable=False within timeout."
-            )
-            return False
+        log.warning(
+            f"{operator_name} OperatorCondition did not show Upgradeable={expected_status} within timeout"
+        )
+        return False
     except Exception as e:
+        # OperatorCondition may be missing or API may be temporarily unavailable
         log.warning(
             f"{operator_name} OperatorCondition may not be updated yet "
-            f"or not found: {e}."
+            f"or not found: {e}. Continuing with test."
         )
+        return False
+
+
+def apply_operatorcondition_upgrade_override(
+    csv_name,
+    namespace,
+    reason="ManualOverride",
+    message="Manually overriding upgradeable condition",
+):
+    """
+    Apply an override to OperatorCondition so Upgradeable is reported as True.
+    Used when cluster admin wants to allow upgrade despite operator reporting
+    Upgradeable=False (e.g. per runbook "Option 2: Override the condition").
+
+    Args:
+        csv_name (str): CSV name (OperatorCondition resource has same name)
+        namespace (str): Namespace where OperatorCondition is located
+        reason (str): Reason for the override (default: ManualOverride)
+        message (str): Message for the override condition
+
+    Returns:
+        bool: True if patch succeeded, False otherwise
+
+    """
+    if not csv_name:
+        log.warning("Cannot apply override: CSV name not found")
+        return False
+    operatorcondition = OCP(
+        kind="OperatorCondition",
+        namespace=namespace,
+    )
+    # OLM allows cluster admin to override Upgradeable via spec.overrides
+    # (see runbook "Option 2: Override the condition")
+    patch = {
+        "spec": {
+            "overrides": [
+                {
+                    "type": "Upgradeable",
+                    "status": "True",
+                    "reason": reason,
+                    "message": message,
+                }
+            ]
+        }
+    }
+    patch_str = json.dumps(patch)
+    try:
+        operatorcondition.exec_oc_cmd(
+            f"patch operatorcondition {csv_name} --type=merge -p '{patch_str}'",
+            out_yaml_format=False,
+        )
+        log.info(
+            f"Applied OperatorCondition upgrade override for {csv_name}: reason={reason}"
+        )
+        return True
+    except Exception as e:
+        log.warning(f"Failed to apply OperatorCondition override: {e}")
         return False
