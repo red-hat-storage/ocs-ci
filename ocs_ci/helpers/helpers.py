@@ -3344,15 +3344,21 @@ def get_pv_size(storageclass=None):
     ocp_obj = ocp.OCP(kind=constants.PV)
     pv_objs = ocp_obj.get()["items"]
     for pv_obj in pv_objs:
-        logger.info(
-            f"PV: {pv_obj.get('metadata', {}).get('name')} | "
-            f"PV SC: {pv_obj.get('spec', {}).get('storageClassName')} | "
-            f"Expected SC: {storageclass}"
-        )
-        if pv_obj["spec"]["storageClassName"] == storageclass:
-            return_list.append(pv_obj["spec"]["capacity"]["storage"])
-    return return_list
+        pv_name = pv_obj.get("metadata", {}).get("name", "")
 
+        logger.info(
+             f"PV: {pv_name} | "
+             f"PV SC: {pv_obj.get('spec', {}).get('storageClassName')} | "
+             f"Expected SC: {storageclass}"
+        )
+
+        # skip non local PVs
+        if not pv_name.startswith("local-pv"):
+            logger.info(f"Skipping PV: {pv_name}")
+            continue
+
+        if pv_obj.get("spec", {}).get("storageClassName") == storageclass:
+            return_list.append(pv_obj["spec"]["capacity"]["storage"])
 
 def get_pv_names():
     """
