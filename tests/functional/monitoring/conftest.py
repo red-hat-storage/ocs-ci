@@ -1169,10 +1169,8 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     with config.RunWithFirstConsumerConfigContextIfAvailable():
         client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
         logger.info(f"Client cluster key: {client_cluster}")
-        cluster_id = exec_cmd(
-            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-        ).stdout.decode("utf-8")
-        client_name = f"storageconsumer-{cluster_id}"
+        cluster_name = config.cluster_ctx.ENV_DATA.get("cluster_name")
+        client_name = f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
     client = storageconsumer.StorageConsumer(
         client_name, consumer_context=client_cluster
     )
