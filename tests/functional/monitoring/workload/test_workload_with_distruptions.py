@@ -18,17 +18,14 @@ This approach solves:
 """
 import logging
 import pytest
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     blue_squad,
     tier2,
-    pre_upgrade,
-    post_upgrade,
     skipif_managed_service,
     skipif_mcg_only,
     skipif_hci_provider_and_client,
 )
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import ocp
 from ocs_ci.ocs import fiojob
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 
@@ -45,8 +42,6 @@ def test_workload_with_checksum_rbd(
     tmp_path,
     project,
     fio_job_dict,
-    fio_pvc_dict,
-    fio_configmap_dict,
 ):
     """
     Test workload with checksum generation and immediate verification.
@@ -72,7 +67,8 @@ def test_workload_with_checksum_rbd(
     )
 
     # Now verify the checksum immediately in the same test
-    # The PVC "fio-target" still exists from the fixture with the data and checksum
+    # The PVC "fio-target" and configmap "fio-config" still exist from the fixture
+    # with the data and checksum
 
     # Modify the job to run sha1sum check instead of fio
     container = fio_job_dict["spec"]["template"]["spec"]["containers"][0]
@@ -81,10 +77,8 @@ def test_workload_with_checksum_rbd(
     # Create verification job with a different name to avoid conflicts
     fio_job_dict["metadata"]["name"] = "fio-checksum-verify"
 
-    # We need to include the configmap even though we're not using fio,
-    # because the job template references it
-    fio_objs = [fio_configmap_dict, fio_job_dict]
-    job_file = ObjectConfFile("fio-checksum-verify", fio_objs, project, tmp_path)
+    # Only create the job, not the configmap (it already exists from the fixture)
+    job_file = ObjectConfFile("fio-checksum-verify", [fio_job_dict], project, tmp_path)
 
     # Deploy the verification job
     job_file.create()
