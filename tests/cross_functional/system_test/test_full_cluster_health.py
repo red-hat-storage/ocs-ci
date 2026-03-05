@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
     magenta_squad,
+    ignore_leftovers,
 )
 from ocs_ci.helpers import sanity_helpers
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
@@ -36,6 +37,9 @@ from ocs_ci.ocs.cluster import (
 )
 
 
+# MON pod identity change (e.g. mon-c -> mon-d) and benchmark-operator PVs are expected after
+# node restarts and pod deletions
+@ignore_leftovers
 @magenta_squad
 class TestFullClusterHealth(PASTest):
     """
