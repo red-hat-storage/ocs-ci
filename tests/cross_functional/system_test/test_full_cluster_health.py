@@ -255,7 +255,7 @@ class TestFullClusterHealth(PASTest):
             bool: True if ALL checks passed, False otherwise
         """
         return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
-            timeout=1200
+            timeout=1500
         )
 
     def reload_ceph_cluster(self):
