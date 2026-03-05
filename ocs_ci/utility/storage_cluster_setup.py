@@ -183,6 +183,7 @@ class StorageClusterSetup(object):
             constants.BAREMETAL_PLATFORM,
             constants.HCI_BAREMETAL,
         ]:
+            logger.info("Setting Size <DEBUG>")
             pv_size_list = helpers.get_pv_size(
                 storageclass=constants.DEFAULT_STORAGECLASS_LSO
             )
