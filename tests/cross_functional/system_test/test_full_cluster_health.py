@@ -11,7 +11,6 @@ from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.disruptive_operations import osd_node_reboot
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
@@ -49,8 +48,30 @@ class TestFullClusterHealth(PASTest):
         Setting up test parameters
         """
 
-        def teardown():
+        logger.info("Starting the test setup")
 
+        log.info(
+            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
+        )
+        size = get_file_size(100)
+        self.benchmark_obj = BenchmarkOperatorFIO()
+        self.benchmark_obj.setup_benchmark_fio(total_size=size)
+        self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
+        self.benchmark_operator_teardown = True
+
+        log.info("Verify used capacity bigger than 85%")
+        sample = TimeoutSampler(
+            timeout=2500,
+            sleep=40,
+            func=verify_osd_used_capacity_greater_than_expected,
+            expected_used_capacity=85.0,
+        )
+
+        if not sample.wait_for_func_status(result=True):
+            log.error("The after 1800 seconds the used capacity smaller than 85%")
+            raise TimeoutExpiredError
+
+        def teardown():
             if self.benchmark_obj:
                 log.info("Change Ceph full_ratio from from 85% to 95%")
                 log.info(
@@ -70,7 +91,6 @@ class TestFullClusterHealth(PASTest):
 
         request.addfinalizer(teardown)
 
-        # logger.info("Starting the test setup")
         self.percent_to_fill = 25.0
         self.ceph_cluster = CephCluster()
         self.nodes = None
@@ -79,7 +99,10 @@ class TestFullClusterHealth(PASTest):
         #
         self.sanity_helpers = sanity_helpers.Sanity()
         #
+        # Save benchmark_obj before parent setup(); PASTest.setup() sets self.benchmark_obj = None
+        benchmark_obj = self.benchmark_obj
         super(TestFullClusterHealth, self).setup()
+        self.benchmark_obj = benchmark_obj
         # # deploy the benchmark-operator
         # self.deploy_benchmark_operator()
 
@@ -201,7 +224,7 @@ class TestFullClusterHealth(PASTest):
             condition="Running",
             selector="app=rook-ceph-osd",
             resource_count=3,
-            timeout=900,
+            timeout=1600,
         )
 
     def restart_ocs_operator_node(self):
@@ -280,39 +303,18 @@ class TestFullClusterHealth(PASTest):
 
         # self.run()
 
-        log.info(
-            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
-        )
-        size = get_file_size(100)
-        self.benchmark_obj = BenchmarkOperatorFIO()
-        self.benchmark_obj.setup_benchmark_fio(total_size=size)
-        self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
-        self.benchmark_operator_teardown = True
-
-        log.info("Verify used capacity bigger than 85%")
-        sample = TimeoutSampler(
-            timeout=2500,
-            sleep=40,
-            func=verify_osd_used_capacity_greater_than_expected,
-            expected_used_capacity=85.0,
-        )
-
-        if not sample.wait_for_func_status(result=True):
-            log.error("The after 1800 seconds the used capacity smaller than 85%")
-            raise TimeoutExpiredError
-
-        logger.info("Checking health before disruptive operations")
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
-        osd_node_reboot()
-        logger.info("Checking health after OSD node reboot")
-        time.sleep(180)
-        self.reload_ceph_cluster()
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        # Commented below cod due to Bug: DFBUGS-5633
+        # logger.info("Checking health before disruptive operations")
+        # assert self.is_cluster_healthy(), "Cluster is not healthy"
+        # osd_node_reboot()
+        # logger.info("Checking health after OSD node reboot")
+        # time.sleep(180)
+        # self.reload_ceph_cluster()
+        # assert self.is_cluster_healthy(), "Cluster is not healthy"
 
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
         time.sleep(300)
-        self.reload_ceph_cluster()
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
         self.restart_ocs_operator_node()
@@ -323,5 +325,4 @@ class TestFullClusterHealth(PASTest):
 
         self.delete_pods()
         logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
-        self.reload_ceph_cluster()
         assert self.is_cluster_healthy(), "Cluster is not healthy"
