@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.utility.utils import get_primary_nb_db_pod
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 @libtest

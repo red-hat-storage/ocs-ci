@@ -23,7 +23,7 @@ from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.templating import load_yaml
 from tempfile import NamedTemporaryFile
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 TIMEOUT = 90
 SLEEP = 3

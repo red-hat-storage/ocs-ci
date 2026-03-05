@@ -22,7 +22,7 @@ from ocs_ci.ocs.resources.csv import (
     get_csvs_start_with_prefix,
 )
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 FUSION_TEMPLATE_DIR = os.path.join(constants.TEMPLATE_DIR, "fusion-aas")
 

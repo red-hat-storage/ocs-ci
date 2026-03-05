@@ -15,7 +15,7 @@ from ocs_ci.utility.decorators import switch_to_provider_for_function
 from ocs_ci.ocs import constants
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 def get_vm_name(vm):

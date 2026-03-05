@@ -35,7 +35,7 @@ from ocs_ci.ocs.constants import (
 )
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 # default location of files with necessary GCP cluster details
