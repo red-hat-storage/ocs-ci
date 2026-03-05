@@ -52,6 +52,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -629,10 +630,11 @@ def validate_cluster_import(cluster_name, switch_ctx=None):
     return True
 
 
+@switch_to_orig_index_at_last
 def get_clusters_env():
     """
     Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup.
-    Function will switch to context index zero before returning
+
     Returns:
         dict: with clusters names, clusters kubeconfig locations
 
@@ -645,8 +647,6 @@ def get_clusters_env():
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
         clusters_env[f"cluster_name_{index}"] = config.ENV_DATA["cluster_name"]
-
-    config.switch_ctx(index=0)
 
     return clusters_env
 
