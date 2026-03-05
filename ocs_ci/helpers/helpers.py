@@ -3359,6 +3359,7 @@ def get_pv_size(storageclass=None):
 
         if pv_obj.get("spec", {}).get("storageClassName") == storageclass:
             return_list.append(pv_obj["spec"]["capacity"]["storage"])
+    return return_list
 
 def get_pv_names():
     """
