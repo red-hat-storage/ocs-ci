@@ -9,6 +9,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster, constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import (
     get_operator_pods,
     delete_pods,
@@ -23,7 +24,9 @@ from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
-OCP_POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+OCP_POD_OBJ = ocp.OCP(
+    kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+)
 
 # get storagecluster object
 storagecluster_obj = OCP(
@@ -38,14 +41,26 @@ def set_xattr_with_high_cpu_usage(
     request, pvc_factory, deployment_pod_factory, storageclass_factory
 ):
     """
-    This function facilitates
-    1. Create Pod and PVC with Cephfs, access mode RWX for setting extended atrributed
-       for multiple files in MDS server
-    2. Copy helper_scripts/check_xattr.py to deployment pod
-    3. Create pvc's and deployment pod's with Fedora image for running file creator IO for
-       increasing CPU utilization in the cluster.
-    4. Copy helper_scripts/file_creator_io.py to Fedora pods
-    5. Run file_creator_io.py on fedora pods
+    Fixture to set up extended attributes with high CPU usage for MDS xattr latency alert testing.
+
+    This fixture performs the following operations:
+    1. Creates a PVC with CephFS interface and RWX access mode for setting extended attributes
+       on multiple files in the MDS server
+    2. Creates a deployment pod on the active MDS node with service account and SCC policy
+    3. Copies helper_scripts/check_xattr.py to the deployment pod
+    4. Executes the check_xattr.py script to set extended attributes on multiple directories
+    5. Creates a storage class with SELinux security context for CephFS stress testing
+    6. Creates additional PVC and CephFS stress job to increase CPU utilization in the cluster
+    7. Submits the CephFS stress job with specified parallelism and file creation parameters
+
+    Args:
+        request: pytest request object for finalizer registration
+        pvc_factory: Factory fixture to create PVC objects
+        deployment_pod_factory: Factory fixture to create deployment pod objects
+        storageclass_factory: Factory fixture to create storage class objects
+
+    Yields:
+        None: This fixture sets up the environment and cleans up resources in finalizer
 
     """
     log.info("setting extented attributes value for multiple files in MDS server ")
@@ -68,14 +83,7 @@ def set_xattr_with_high_cpu_usage(
     sa_obj = helpers.create_serviceaccount(pvc_obj.project.namespace)
 
     helpers.add_scc_policy(sa_name=sa_obj.name, namespace=pvc_obj.project.namespace)
-    # pod_obj = helpers.create_pod(
-    #     interface_type=constants.CEPHFILESYSTEM,
-    #     pvc_name=pvc_obj.name,
-    #     namespace=pvc_obj.project.namespace,
-    #     sa_name=sa_name.name,
-    #     node_name=active_mds_node_name,
-    #     deployment=True,
-    # )
+
     pod_obj = deployment_pod_factory(
         interface=constants.CEPHFILESYSTEM,
         pvc=pvc_obj,
@@ -149,7 +157,7 @@ def set_xattr_with_high_cpu_usage(
         job_obj.delete(resource_name="cephfs-stress-job")
 
         pvc_obj1.delete()
-        pvc_obj1.wait_for_delete(resource_name=pvc_obj1.name)
+        pvc_obj1.ocp.wait_for_delete(resource_name=pvc_obj1.name)
         delete_released_pvs_in_sc(sc_name)
         log.info("All rsources cleaned up successully")
 
@@ -158,7 +166,19 @@ def set_xattr_with_high_cpu_usage(
 
 def MDSxattr_alert_values(threading_lock, timeout):
     """
-    This function validates the mds alert using prometheus api
+    Validate MDS xattr latency alert using Prometheus API.
+
+    This function checks for the CephXattrSetLatency alert in Prometheus and validates
+    its properties including message, description, runbook URL, severity, and state.
+
+    Args:
+        threading_lock: Threading lock object for thread-safe Prometheus API operations
+        timeout (int): Timeout in seconds to wait for the alert to appear
+
+    Returns:
+        bool: True if alert is validated successfully with all expected properties,
+              False if validation fails or alert is not found
+
     """
     MDSxattr_alert = constants.ALERT_MDSXATTR
 
@@ -195,7 +215,15 @@ def MDSxattr_alert_values(threading_lock, timeout):
 
 def initiate_alert_clearance():
     """
-    This function initiates the clerance of mds alert
+    Initiate clearance of MDS xattr latency alert by increasing MDS CPU resources.
+
+    This function patches the storage cluster to increase MDS CPU limits and requests
+    from default values to 16 CPUs, which helps clear the CephXattrSetLatency alert
+    by providing more resources to handle the xattr operations.
+
+    Returns:
+        None
+
     """
     log.info("Increase MDS CPU Resources")
 
@@ -209,11 +237,39 @@ def initiate_alert_clearance():
 @blue_squad
 @tier2
 class TestMdsXattrAlerts(E2ETest):
+    """
+    Test class for MDS xattr latency alert validation.
+
+    This test class validates the CephXattrSetLatency alert behavior under various
+    scenarios including normal operations, pod restarts, Prometheus failures,
+    MDS scale operations, and node restarts.
+
+    """
+
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
+        """
+        Teardown fixture to restore MDS CPU resources and clear memory usage.
+
+        This fixture is automatically used for all test methods in the class.
+        It restores MDS CPU resources to original values (2 CPUs) and gradually
+        brings down MDS memory usage after each test execution.
+
+        Args:
+            request: pytest request object for finalizer registration
+
+        Returns:
+            None
+
+        """
+
         def finalizer():
             """
-            This function will call a function to clear the mds memory usage gradually
+            Finalizer function to restore MDS resources and clear memory usage.
+
+            This function:
+            1. Patches the storage cluster to restore MDS CPU limits and requests to 2 CPUs
+            2. Calls cluster function to gradually bring down MDS memory usage
 
             """
             log.info("Setting MDS CPU Resources back to original values")
@@ -227,9 +283,26 @@ class TestMdsXattrAlerts(E2ETest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-7733")
     def test_mds_xattr_alert_triggered(
         self, set_xattr_with_high_cpu_usage, threading_lock
     ):
+        """
+        Test MDS xattr latency alert triggering and clearance.
+
+        This test validates that the CephXattrSetLatency alert is triggered when
+        extended attributes are set with high CPU usage, and verifies that the
+        alert clears after increasing MDS CPU resources.
+
+        Test Steps:
+            1. Set up extended attributes and file creation IO using fixture
+            2. Wait for CephXattrSetLatency alert to trigger (timeout: 1200s)
+            3. Validate alert properties (message, description, runbook, severity, state)
+            4. Initiate alert clearance by increasing MDS CPU resources to 16 CPUs
+            5. Wait for 600 seconds for load distribution
+            6. Verify alert is cleared within 300 seconds
+
+        """
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
         log.info(
@@ -247,9 +320,28 @@ class TestMdsXattrAlerts(E2ETest):
             label=constants.ALERT_MDSXATTR, measure_end_time=300, time_min=30
         )
 
+    @pytest.mark.polarion_id("OCS-7734")
     def test_alert_triggered_by_restarting_operator_and_metrics_pods(
         self, set_xattr_with_high_cpu_usage, threading_lock
     ):
+        """
+        Test MDS xattr latency alert persistence after restarting operator and metrics pods.
+
+        This test validates that the CephXattrSetLatency alert remains active and
+        can be re-validated after restarting the rook-operator pod and
+        ocs-metrics-exporter pod.
+
+        Test Steps:
+            1. Set up extended attributes and file creation IO using fixture
+            2. Wait for CephXattrSetLatency alert to trigger (timeout: 1200s)
+            3. Restart the rook-operator pod
+            4. Wait for rook-operator pod to reach Running state
+            5. Re-validate the alert after operator restart (timeout: 1200s)
+            6. Delete the ocs-metrics-exporter pod
+            7. Wait for ocs-metrics-exporter pod to come up (timeout: 600s)
+            8. Re-validate the alert after metrics exporter restart (timeout: 1200s)
+
+        """
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
@@ -290,14 +382,24 @@ class TestMdsXattrAlerts(E2ETest):
         log.info("Validating the alert after ocs-metrics-exporter pod restart")
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+    @pytest.mark.polarion_id("OCS-7735")
     def test_alert_after_recovering_prometheus_from_failures(
         self, set_xattr_with_high_cpu_usage, threading_lock
     ):
         """
-        This test function verifies the mds cache alert and fails the prometheus.
-        It also verifies the alert after recovering prometheus from failures.
+        Test MDS xattr latency alert persistence after Prometheus pod failures.
 
+        This test validates that the CephXattrSetLatency alert can be recovered
+        and re-validated after Prometheus pods are deleted and recreated.
+
+        Test Steps:
+            1. Set up extended attributes and file creation IO using fixture
+            2. Wait for CephXattrSetLatency alert to trigger (timeout: 1200s)
+            3. Delete all Prometheus pods to simulate failure
+            4. Wait for Prometheus pods to be recreated automatically
+            5. Re-validate the alert after Prometheus recovery (timeout: 300s)
         """
+
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
@@ -310,11 +412,27 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=300)
 
+    @pytest.mark.polarion_id("OCS-7736")
     def test_alert_after_active_mds_scaledown(
         self, set_xattr_with_high_cpu_usage, threading_lock
     ):
         """
-        This test function verifies the mds alert with active mds scale down and up
+        Test MDS xattr latency alert persistence after active MDS scale down and up.
+
+        This test validates that the CephXattrSetLatency alert remains active
+        after scaling down the active MDS deployment to 0 and scaling it back up to 1.
+
+        Test Steps:
+            1. Set up extended attributes and file creation IO using fixture
+            2. Wait for CephXattrSetLatency alert to trigger (timeout: 1200s)
+            3. Identify the active MDS daemon and its deployment
+            4. Scale down the active MDS deployment to 0 replicas
+            5. Wait for the active MDS pod to be deleted
+            6. Scale up the active MDS deployment back to 1 replica
+            7. Wait 60 seconds for MDS scale up to complete
+            8. Wait for all MDS pods to reach Running state
+            9. Re-validate the alert after MDS scale operations (timeout: 60s)
+
         """
 
         log.info(
@@ -346,11 +464,30 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=60)
 
+    @pytest.mark.polarion_id("OCS-7737")
     def test_alert_with_both_mds_scaledown(
         self, set_xattr_with_high_cpu_usage, threading_lock
     ):
         """
-        This test function verifies the mds alert with both active and standby mds scale down and up
+        Test MDS xattr latency alert persistence after both active and standby MDS scale down and up.
+
+        This test validates that the CephXattrSetLatency alert remains active
+        after scaling down both active and standby-replay MDS deployments to 0
+        and scaling them back up to 1.
+
+        Test Steps:
+            1. Set up extended attributes and file creation IO using fixture
+            2. Wait for CephXattrSetLatency alert to trigger (timeout: 1200s)
+            3. Identify active and standby-replay MDS daemons and their deployments
+            4. Scale down the active MDS deployment to 0 replicas
+            5. Wait for the active MDS pod to be deleted
+            6. Scale down the standby-replay MDS deployment to 0 replicas
+            7. Wait for the standby-replay MDS pod to be deleted
+            8. Scale up both MDS deployments back to 1 replica each
+            9. Wait 60 seconds for both MDS scale up operations to complete
+            10. Wait for all MDS pods to reach Running state
+            11. Re-validate the alert after MDS scale operations (timeout: 1200s)
+
         """
         log.info(
             "Setting extended attributes and file creation IO started in the background."
@@ -394,12 +531,29 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+    @pytest.mark.polarion_id("OCS-7738")
     def test_alert_with_mds_running_node_restart(
         self, set_xattr_with_high_cpu_usage, threading_lock, nodes
     ):
         """
-        This test function verifies the mds alert when the active mds running node is restart.
-        #"""
+        Test MDS xattr latency alert persistence after active MDS node restart.
+
+        This test validates that the CephXattrSetLatency alert remains active
+        after restarting the node where the active MDS pod is running.
+
+        Test Steps:
+            1. Set up extended attributes and file creation IO using fixture
+            2. Wait for CephXattrSetLatency alert to trigger (timeout: 1200s)
+            3. Identify the active MDS pod and its running node
+            4. Restart the node where active MDS is running
+            5. Wait for the node to reach Ready state (timeout: 420s)
+            6. Wait for MDS pods to be rescheduled and reach Running state
+            7. Re-validate the alert after node restart (timeout: 1200s)
+
+        Args:
+            nodes: Node fixture for performing node operations
+
+        """
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
