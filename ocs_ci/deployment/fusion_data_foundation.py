@@ -478,4 +478,5 @@ class CustomResourceDefinition(OCP):
             resource_name=resource_name,
             kind="CustomResourceDefinition",
             *args,
-            **kwargs,        )
+            **kwargs,
+        )
