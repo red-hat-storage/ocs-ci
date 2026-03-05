@@ -931,31 +931,26 @@ FDF_SAN_LOCATORS = {
 }
 
 SCALE_DASHBOARD_LOCATORS = {
-    # Dashboard health cards
+    # Scale dashboard health cards
     "scale_connection_green": (
-        "//div[@data-item-id='Connection-health-item']"
-        "//svg[@data-test='success-icon']",
         By.XPATH,
+        "//*[@data-test='Connection-health-item-icon']//*[@data-test='success-icon']",
     ),
     "scale_operator_green": (
-        "//div[@data-item-id='Operator-health-item']"
-        "//svg[@data-test='success-icon']",
         By.XPATH,
+        "//div[@data-item-id='Operator-health-item']//svg[@data-test='success-icon']",
     ),
-    # LUN group summary text (e.g. "3 LUN groups connected")
     "lun_groups_connected_summary": (
+        By.XPATH,
         "//*[contains(normalize-space(),'LUN groups connected')]",
-        By.XPATH,
     ),
-    # LUN group table
     "lun_group_row_by_name": (
-        "//table//tbody//tr[.//a[normalize-space()='{lun_group_name}']]",
         By.XPATH,
+        "//table//tbody//tr[.//a[normalize-space()='{lun_group_name}']]",
     ),
     "lun_group_status_ok_by_name": (
-        "//table//tbody//tr[.//a[normalize-space()='{lun_group_name}']]"
-        "//td//*[normalize-space()='OK' and contains(@class,'pf-m-success')]",
         By.XPATH,
+        "//tr[.//a[normalize-space()='{lun_group_name}']]//*[normalize-space()='OK']",
     ),
 }
 

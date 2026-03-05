@@ -199,7 +199,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Wait until the LUN group (filesystem) appears in the Scale Dashboard table.
         """
         try:
-            xpath, by = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
+            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
             locator = (
                 by,
                 xpath.format(lun_group_name=lun_group_name),
@@ -216,28 +216,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
             logger.warning(f"Waiting for filesystem creation: {e}")
             raise
 
-    def verify_filesystem_status(self, filesystem_name):
-        """
-        Verify that the filesystem (LUN group) status is OK (green).
-        """
-        try:
-            xpath, by = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
-            locator = (
-                by,
-                xpath.format(lun_group_name=filesystem_name),
-            )
-
-            assert self.base_ui.check_element_presence(
-                locator
-            ), f"Filesystem '{filesystem_name}' is not in OK state"
-
-            logger.info(f"Filesystem '{filesystem_name}' status verified: OK")
-
-        except Exception as e:
-            logger.error(f"Filesystem status verification failed: {e}")
-            self.base_ui.take_screenshot("filesystem_status_error")
-            raise
-
+    @retry(AssertionError, tries=20, delay=30)
     def verify_lun_group_connection(self, lun_group_name):
         """
         Verify Scale connection and LUN group health.
@@ -248,8 +227,8 @@ class FusionAccessUI(PageNavigator, BaseUI):
                 SCALE_DASHBOARD_LOCATORS["scale_connection_green"]
             ), "Scale dashboard connection is not green"
 
-            # LUN group row exists
-            xpath, by = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
+            # # LUN group row exists
+            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
             row_locator = (
                 by,
                 xpath.format(lun_group_name=lun_group_name),
@@ -260,7 +239,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
             ), f"LUN group '{lun_group_name}' not found"
 
             # LUN group status OK
-            xpath, by = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
+            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
             status_locator = (
                 by,
                 xpath.format(lun_group_name=lun_group_name),
@@ -276,4 +255,27 @@ class FusionAccessUI(PageNavigator, BaseUI):
         except Exception as e:
             logger.error(f"LUN group connection verification failed: {e}")
             self.base_ui.take_screenshot("lun_connection_error")
+            raise
+
+    @retry(AssertionError, tries=20, delay=30)
+    def verify_filesystem_status(self, filesystem_name):
+        """
+        Verify that the filesystem (LUN group) status is OK (green).
+        """
+        try:
+            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
+            locator = (
+                by,
+                xpath.format(lun_group_name=filesystem_name),
+            )
+
+            assert self.base_ui.check_element_presence(
+                locator
+            ), f"Filesystem '{filesystem_name}' is not in OK state"
+
+            logger.info(f"Filesystem '{filesystem_name}' status verified: OK")
+
+        except Exception as e:
+            logger.error(f"Filesystem status verification failed: {e}")
+            self.base_ui.take_screenshot("filesystem_status_error")
             raise

@@ -133,13 +133,13 @@ class TestFDFSANConnection(ManageTest):
             logger.info(f"File system created for LUN group: {filesystem_name}")
             self.base_ui.take_screenshot("filesystem_created")
 
-            # Validation: Verify filesystem status
-            logger.info("Validating filesystem status")
-            self.fusion_access.verify_filesystem_status(filesystem_name)
-
             # Validation: Verify LUN group is connected
             logger.info("Validating LUN group connection")
             self.fusion_access.verify_lun_group_connection(lun_group_name)
+
+            # Validation: Verify filesystem status
+            logger.info("Validating filesystem status")
+            self.fusion_access.verify_filesystem_status(filesystem_name)
 
         except Exception as e:
             logger.error(f"Unexpected error during SAN Scale validation: {e}")
