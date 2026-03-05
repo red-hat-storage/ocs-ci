@@ -24,8 +24,13 @@ ENV_DATA:
   multus_public_net_mode: 'bridge'
   multus_public_net_vlan_id: 201
   multus_public_net_ip_range: '192.168.20.0/24'
-  multus_public_net_ip_range_start: '192.168.20.10'
-  multus_public_net_ip_range_end: '192.168.20.250'
+  multus_public_net_ip_range_start: '192.168.20.10'  # Pod IPs start here
+  multus_public_net_ip_range_end: '192.168.20.250'    # Pod IPs end here
+
+  # Public Network Shim Settings (for host-to-pod communication)
+  multus_public_net_shim_name: 'odf-pub-shim'
+  multus_public_net_shim_network: '192.168.20.0/28'   # Shim network (IPs .0-.15 reserved)
+  # Note: Shim IPs are auto-assigned: .5 for first node, .6 for second, .7 for third
 
   # Cluster Network - Disabled
   multus_create_cluster_net: false

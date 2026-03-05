@@ -9,6 +9,7 @@ spec:
     kubernetes.io/hostname: worker-node
   desiredState:
     interfaces:
+      # VLAN interface - NO IP (just for VLAN tagging)
       - name: enp1s0f1.201  # VLAN interface - will be templated
         description: VLAN interface for OpenShift Data Foundation public Multus network
         type: vlan
@@ -17,5 +18,24 @@ spec:
           base-iface: enp1s0f1  # Base physical interface - will be templated
           id: 201  # VLAN ID - will be templated
         ipv4:
-          enabled: false  # No IP on VLAN interface itself
+          enabled: false  # Critical: No IP on base VLAN interface
           dhcp: false
+      # Shim interface - HAS IP (for host-to-pod communication)
+      - name: odf-pub-shim  # Shim interface name - will be templated
+        description: Shim interface for host connectivity to ODF pods (solves macvlan hairpin problem)
+        type: mac-vlan
+        state: up
+        mac-vlan:
+          base-iface: enp1s0f1.201  # Built on top of VLAN interface - will be templated
+          mode: bridge
+          promiscuous: true
+        ipv4:
+          enabled: true
+          dhcp: false
+          address:
+            - ip: 192.168.20.5  # Static IP for shim - will be templated per node
+              prefix-length: 28  # /28 subnet for shim network (192.168.20.0-15)
+    routes:
+      config:
+        - destination: 192.168.20.0/24  # Route to entire pod network - will be templated
+          next-hop-interface: odf-pub-shim  # Via shim interface - will be templated

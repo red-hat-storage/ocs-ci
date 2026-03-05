@@ -5392,13 +5392,10 @@ def add_route_public_nad():
     """
     Add route section to network_attachment_definitions object
 
-    Note: Routes are not needed for VLAN-based multus deployments,
-    so this function will skip adding routes when multus_use_vlan is True.
+    For VLAN mode with shim: Adds route to shim network for host-to-pod communication
+    For non-VLAN mode: Adds route as configured in multus_destination_route
     """
     use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
-    if use_vlan:
-        logger.info("VLAN mode enabled - skipping route addition for public NAD")
-        return
 
     nad_obj = get_network_attachment_definitions(
         nad_name=config.ENV_DATA.get("multus_public_net_name"),
@@ -5406,11 +5403,23 @@ def add_route_public_nad():
     )
     nad_config_str = nad_obj.data["spec"]["config"]
     nad_config_dict = json.loads(nad_config_str)
-    nad_config_dict["ipam"]["routes"] = [
-        {"dst": config.ENV_DATA["multus_destination_route"]}
-    ]
+
+    if use_vlan:
+        # For VLAN mode, add route to shim network
+        shim_network = config.ENV_DATA.get(
+            "multus_public_net_shim_network", "192.168.20.0/28"
+        )
+        nad_config_dict["ipam"]["routes"] = [{"dst": shim_network}]
+        logger.info(f"VLAN mode: Adding route to shim network: {shim_network}")
+    else:
+        # For traditional shim mode, use configured destination route
+        nad_config_dict["ipam"]["routes"] = [
+            {"dst": config.ENV_DATA["multus_destination_route"]}
+        ]
+        logger.info("Traditional shim mode: Adding configured routes")
+
     nad_config_dict_string = json.dumps(nad_config_dict)
-    logger.info("Creating Multus public network with routes (shim mode)")
+
     if config.DEPLOYMENT.get("ipv6"):
         constants.MULTUS_PUBLIC_NET_YAML = constants.MULTUS_PUBLIC_NET_IPV6_YAML
     public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
@@ -5568,16 +5577,17 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                         "name"
                     ] = f"ceph-networks-vlan-{worker_node_name}"
 
-                    # Public VLAN configuration
+                    # Public VLAN configuration (interface 0 - NO IP)
                     public_vlan_id = config.ENV_DATA.get(
                         "multus_public_net_vlan_id", 201
                     )
                     public_base_interface = config.ENV_DATA.get(
                         "multus_public_net_interface", "enp1s0f1"
                     )
+                    vlan_interface_name = f"{public_base_interface}.{public_vlan_id}"
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
-                    ][0]["name"] = f"{public_base_interface}.{public_vlan_id}"
+                    ][0]["name"] = vlan_interface_name
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
                     ][0]["vlan"]["base-iface"] = public_base_interface
@@ -5585,7 +5595,25 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                         "interfaces"
                     ][0]["vlan"]["id"] = public_vlan_id
 
-                    # Cluster VLAN configuration
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip = config.ENV_DATA.get(
+                        "multus_public_net_shim_ip",
+                        f"192.168.20.{5 + interface_num}",  # Default: 192.168.20.5, .6, .7
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Cluster VLAN configuration (interface 2 - NO IP)
                     cluster_vlan_id = config.ENV_DATA.get(
                         "multus_cluster_net_vlan_id", 202
                     )
@@ -5594,13 +5622,24 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                     )
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
-                    ][1]["name"] = f"{cluster_base_interface}.{cluster_vlan_id}"
+                    ][2]["name"] = f"{cluster_base_interface}.{cluster_vlan_id}"
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
-                    ][1]["vlan"]["base-iface"] = cluster_base_interface
+                    ][2]["vlan"]["base-iface"] = cluster_base_interface
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
-                    ][1]["vlan"]["id"] = cluster_vlan_id
+                    ][2]["vlan"]["id"] = cluster_vlan_id
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
 
                 elif create_public_net:
                     # Configure single VLAN for public network
@@ -5608,13 +5647,15 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                         "name"
                     ] = f"ceph-public-net-vlan-{worker_node_name}"
 
+                    # Public VLAN configuration (interface 0 - NO IP)
                     vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
                     base_interface = config.ENV_DATA.get(
                         "multus_public_net_interface", "enp1s0f1"
                     )
+                    vlan_interface_name = f"{base_interface}.{vlan_id}"
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
-                    ][0]["name"] = f"{base_interface}.{vlan_id}"
+                    ][0]["name"] = vlan_interface_name
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
                     ][0]["vlan"]["base-iface"] = base_interface
@@ -5622,8 +5663,39 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                         "interfaces"
                     ][0]["vlan"]["id"] = vlan_id
 
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip = config.ENV_DATA.get(
+                        "multus_public_net_shim_ip",
+                        f"192.168.20.{5 + interface_num}",  # Default: 192.168.20.5, .6, .7
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
                 elif create_cluster_net:
                     # Configure single VLAN for cluster network
+                    # Note: Cluster network does NOT need shim interface per Red Hat docs
+                    # (cluster network is pod-to-pod only, no host connectivity needed)
                     node_network_configuration_policy["metadata"][
                         "name"
                     ] = f"ceph-cluster-net-vlan-{worker_node_name}"
@@ -5642,8 +5714,11 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                         "interfaces"
                     ][0]["vlan"]["id"] = vlan_id
 
-                # Note: VLAN interfaces don't need IP addresses or routes
-                # The IP allocation happens via whereabouts in the NetworkAttachmentDefinition
+                    # No shim interface or routes needed for cluster network
+
+                # Increment interface_num for next node (for shim IP allocation)
+                if create_public_net:
+                    interface_num += 1
 
             else:
                 # Traditional shim-based configuration for BAREMETAL

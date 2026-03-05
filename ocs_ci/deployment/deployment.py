@@ -1446,8 +1446,22 @@ class Deployment(object):
                         public_net_config_dict["ipam"]["range_end"] = (
                             config.ENV_DATA.get("multus_public_net_ip_range_end")
                         )
-                    # Remove routes for VLAN mode (not needed)
-                    public_net_config_dict["ipam"].pop("routes", None)
+                    # Add routes to shim network (critical for host-to-pod communication)
+                    # Default shim network is 192.168.20.0/28 (IPs .0-.15 reserved for shims)
+                    shim_network = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.20.0/28"
+                    )
+                    if "routes" not in public_net_config_dict["ipam"]:
+                        public_net_config_dict["ipam"]["routes"] = []
+                    # Ensure route to shim network exists
+                    if not any(
+                        r.get("dst") == shim_network
+                        for r in public_net_config_dict["ipam"]["routes"]
+                    ):
+                        public_net_config_dict["ipam"]["routes"].append(
+                            {"dst": shim_network}
+                        )
+                    logger.info(f"Added route to shim network: {shim_network}")
 
                 public_net_config_dict["type"] = config.ENV_DATA.get(
                     "multus_public_net_type"
