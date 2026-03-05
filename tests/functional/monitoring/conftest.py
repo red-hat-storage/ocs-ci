@@ -24,7 +24,7 @@ from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
 from ocs_ci.utility.pagerduty import get_pagerduty_service_id
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, exec_cmd
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
