@@ -952,10 +952,39 @@ class BackgroundClusterOperations:
             log.info("Creating snapshots from workload PVCs")
             snapshots = []
             for pvc_obj in workload_pvcs:
+                if pvc_obj is None:
+                    log.debug("Skipping None PVC reference")
+                    continue
+                # Resolve to PVC instance if workload stored OCS (e.g. VdbenchWorkload.pvc)
+                if not hasattr(pvc_obj, "create_snapshot"):
+                    pvc_name = getattr(pvc_obj, "name", None)
+                    pvc_namespace = getattr(pvc_obj, "namespace", self.namespace)
+                    if pvc_name and pvc_namespace:
+                        try:
+                            resolved = pvc_helpers.get_pvc_objs(
+                                [pvc_name], namespace=pvc_namespace
+                            )
+                            if resolved:
+                                pvc_obj = resolved[0]
+                            else:
+                                log.warning(
+                                    f"Could not resolve PVC {pvc_name} in {pvc_namespace}, skipping"
+                                )
+                                continue
+                        except Exception as resolve_e:
+                            log.warning(
+                                f"Could not resolve PVC {pvc_name}: {resolve_e}, skipping"
+                            )
+                            continue
+                    else:
+                        log.warning(
+                            "PVC reference has no name/namespace, skipping snapshot"
+                        )
+                        continue
                 try:
                     pvc_obj.reload()
                     snapshot_obj = pvc_obj.create_snapshot(wait=True, timeout=180)
-                    snapshots.append(snapshot_obj)
+                    snapshots.append((snapshot_obj, pvc_obj))
                     self._resources_to_cleanup.append(snapshot_obj)
                     log.info(
                         f"Created snapshot {snapshot_obj.name} from PVC {pvc_obj.name}"
@@ -976,10 +1005,9 @@ class BackgroundClusterOperations:
             # Step 2: Restore PVCs from snapshots
             log.info("Restoring PVCs from snapshots")
             restored_pvcs = []
-            for idx, snapshot_obj in enumerate(snapshots):
+            for snapshot_obj, source_pvc in snapshots:
                 try:
                     # Get actual capacity from source PVC
-                    source_pvc = workload_pvcs[idx]
                     source_pvc.reload()
                     source_capacity = (
                         source_pvc.data.get("status", {})
@@ -1059,7 +1087,7 @@ class BackgroundClusterOperations:
                 except Exception as e:
                     log.error(f"Failed to cleanup restored PVCs: {e}")
 
-            for snapshot_obj in snapshots:
+            for snapshot_obj, _ in snapshots:
                 try:
                     snapshot_obj.delete()
                     snapshot_obj.ocp.wait_for_delete(
