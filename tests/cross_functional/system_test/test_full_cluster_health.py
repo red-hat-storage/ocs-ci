@@ -35,8 +35,9 @@ from ocs_ci.ocs.cluster import (
 )
 
 
-# MON pod identity change (e.g. mon-c -> mon-d) and benchmark-operator PVs are expected after
-# node restarts and pod deletions
+# Expected leftovers (ignore_leftovers) after disruptive steps in this test:
+#   - MON pod identity change (e.g. mon-c -> mon-d) after node restarts
+#   - Benchmark-operator PVs after pod deletions
 @ignore_leftovers
 @magenta_squad
 class TestFullClusterHealth(PASTest):
