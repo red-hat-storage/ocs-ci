@@ -25,7 +25,6 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 logger = logging.getLogger(__name__)
 
-log = logging.getLogger(__name__)
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 from ocs_ci.helpers.managed_services import (
@@ -59,7 +58,7 @@ class TestFullClusterHealth(PASTest):
         """
 
         logger.info("Starting the test setup")
-        log.info(
+        logger.info(
             "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
         )
         size = get_file_size(100)
@@ -68,7 +67,7 @@ class TestFullClusterHealth(PASTest):
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
         self.benchmark_operator_teardown = True
 
-        log.info("Verify used capacity bigger than 85%")
+        logger.info("Verify used capacity bigger than 85%")
         sample = TimeoutSampler(
             timeout=self.TIMEOUT_BENCHMARK_SETUP,
             sleep=40,
@@ -77,7 +76,7 @@ class TestFullClusterHealth(PASTest):
         )
 
         if not sample.wait_for_func_status(result=True):
-            log.error(
+            logger.error(
                 "After %s seconds the used capacity was still below 85%%",
                 self.TIMEOUT_BENCHMARK_SETUP,
             )
@@ -85,14 +84,14 @@ class TestFullClusterHealth(PASTest):
 
         def teardown():
             if self.benchmark_obj:
-                log.info("Change Ceph full_ratio from 85% to 95%")
-                log.info(
+                logger.info("Change Ceph full_ratio from 85% to 95%")
+                logger.info(
                     "Based on doc we need to change the ceph_full_ratio to 88%, but we run "
                     "many fio pods therefore, it may not be enough to increase by only 3%"
                 )
                 change_ceph_full_ratio(95)
 
-                log.info("Delete  benchmark-operator PVCs")
+                logger.info("Delete  benchmark-operator PVCs")
                 self.benchmark_obj.cleanup()
                 self.benchmark_operator_teardown = False
 
