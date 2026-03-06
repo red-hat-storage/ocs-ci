@@ -77,12 +77,15 @@ class TestFullClusterHealth(PASTest):
         )
 
         if not sample.wait_for_func_status(result=True):
-            log.error("The after 1800 seconds the used capacity smaller than 85%")
+            log.error(
+                "After %s seconds the used capacity was still below 85%%",
+                self.TIMEOUT_BENCHMARK_SETUP,
+            )
             raise TimeoutExpiredError
 
         def teardown():
             if self.benchmark_obj:
-                log.info("Change Ceph full_ratio from from 85% to 95%")
+                log.info("Change Ceph full_ratio from 85% to 95%")
                 log.info(
                     "Based on doc we need to change the ceph_full_ratio to 88%, but we run "
                     "many fio pods therefore, it may not be enough to increase by only 3%"
