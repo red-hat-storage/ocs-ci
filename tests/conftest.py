@@ -8463,7 +8463,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
                     sc_compression = futures[future]
                     try:
                         vm_obj = future.result()
-                    created_vms.append(vm_obj)
+                        created_vms.append(vm_obj)
                         run_fio(vm_obj)
                         if sc_compression == "aggressive":
                             vm_list_agg_compr.append(vm_obj)
