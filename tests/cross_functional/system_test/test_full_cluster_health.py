@@ -18,7 +18,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     ignore_leftovers,
 )
-from ocs_ci.helpers import sanity_helpers
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -104,14 +103,9 @@ class TestFullClusterHealth(PASTest):
 
         request.addfinalizer(teardown)
 
-        self.percent_to_fill = 25.0
         self.ceph_cluster = CephCluster()
         self.nodes = None
-        self.benchmark_name = "FIO"
-        self.client_pod_name = "fio-client"
-        #
-        self.sanity_helpers = sanity_helpers.Sanity()
-        #
+
         # Save benchmark_obj before parent setup(); PASTest.setup() sets self.benchmark_obj = None
         benchmark_obj = self.benchmark_obj
         super(TestFullClusterHealth, self).setup()
@@ -239,10 +233,6 @@ class TestFullClusterHealth(PASTest):
     def test_full_cluster_health(
         self,
         nodes,
-        pvc_factory,
-        pod_factory,
-        bucket_factory,
-        rgw_bucket_factory,
     ):
         """
         Verify that the cluster health is ok when the storage is ~85% full
