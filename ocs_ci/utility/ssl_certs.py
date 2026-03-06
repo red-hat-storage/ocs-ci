@@ -3,10 +3,12 @@ This module is used for generating custom SSL certificates.
 """
 
 import argparse
+import base64
 import logging
 import os
 import requests
 import tempfile
+import yaml
 
 from OpenSSL import crypto
 
@@ -315,6 +317,61 @@ def get_root_ca_cert():
     return ssl_ca_cert
 
 
+def update_kubeconfig_with_ca_cert(ca_cert_path):
+    """
+    Update kubeconfig file with the custom CA certificate authority data.
+    This allows users who download the kubeconfig from a shared location to
+    automatically trust the custom SSL certificate without additional configuration.
+
+    Args:
+        ca_cert_path (str): Path to the CA certificate file
+
+    """
+    if not ca_cert_path or not os.path.exists(ca_cert_path):
+        logger.warning(
+            f"CA certificate path '{ca_cert_path}' is not valid. "
+            "Skipping kubeconfig update."
+        )
+        return
+
+    kubeconfig_path = os.path.join(
+        config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+    )
+
+    if not os.path.exists(kubeconfig_path):
+        logger.warning(
+            f"Kubeconfig file '{kubeconfig_path}' does not exist. "
+            "Skipping kubeconfig update."
+        )
+        return
+
+    logger.info(
+        f"Updating kubeconfig '{kubeconfig_path}' with CA certificate "
+        f"from '{ca_cert_path}'"
+    )
+
+    with open(ca_cert_path, "rb") as ca_file:
+        ca_cert_data = ca_file.read()
+        ca_cert_base64 = base64.b64encode(ca_cert_data).decode("utf-8")
+
+    with open(kubeconfig_path, "r") as f:
+        kubeconfig = yaml.safe_load(f)
+
+    for cluster in kubeconfig.get("clusters", []):
+        cluster_data = cluster.get("cluster", {})
+        if "certificate-authority" in cluster_data:
+            del cluster_data["certificate-authority"]
+        cluster_data["certificate-authority-data"] = ca_cert_base64
+        logger.info(
+            f"Updated certificate-authority-data for cluster '{cluster.get('name', 'unknown')}'"
+        )
+
+    with open(kubeconfig_path, "w") as f:
+        yaml.dump(kubeconfig, f, default_flow_style=False)
+
+    logger.info("Kubeconfig updated successfully with CA certificate")
+
+
 def configure_custom_ingress_cert(
     skip_tls_verify=False, wait_for_machineconfigpool=True
 ):
@@ -416,6 +473,8 @@ def configure_custom_ingress_cert(
         wait_for_machineconfigpool_status(
             "all", timeout=1800, skip_tls_verify=skip_tls_verify
         )
+    if ssl_ca_cert:
+        update_kubeconfig_with_ca_cert(ssl_ca_cert)
 
 
 def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=True):
