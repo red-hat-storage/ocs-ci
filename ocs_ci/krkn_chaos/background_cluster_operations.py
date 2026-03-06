@@ -30,6 +30,7 @@ from collections import defaultdict
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.resources import job as job_helpers
 from ocs_ci.ocs import node as node_helpers
 from ocs_ci.ocs.exceptions import (
@@ -443,14 +444,13 @@ class BackgroundClusterOperations:
             log.info(f"Creating clone of PVC {workload_pvc.name}")
 
             # Determine clone YAML based on provisioner
-            if "rbd" in workload_pvc.provisioner:
+            provisioner = getattr(workload_pvc, "provisioner", "") or ""
+            if "rbd" in provisioner:
                 clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
-            elif "cephfs" in workload_pvc.provisioner:
+            elif "cephfs" in provisioner:
                 clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             else:
-                log.warning(
-                    f"Unsupported provisioner for clone: {workload_pvc.provisioner}"
-                )
+                log.warning(f"Unsupported provisioner for clone: {provisioner!r}")
                 return
 
             # Get actual capacity from source PVC (not converted size)
@@ -1105,14 +1105,15 @@ class BackgroundClusterOperations:
         Resolve workload PVC reference (OCS or PVC) to a PVC instance.
 
         Workloads like VdbenchWorkload store generic OCS objects which do not have
-        create_snapshot(); this helper returns a proper PVC instance for operations.
+        create_snapshot() or provisioner; this helper returns a proper PVC instance.
 
         Returns:
             PVC instance or None
         """
         if pvc_ref is None:
             return None
-        if hasattr(pvc_ref, "create_snapshot"):
+        # Only trust ref if it is actually a PVC (has provisioner, create_snapshot, etc.)
+        if isinstance(pvc_ref, PVC):
             return pvc_ref
         pvc_name = getattr(pvc_ref, "name", None)
         pvc_namespace = getattr(pvc_ref, "namespace", self.namespace)
@@ -1171,7 +1172,8 @@ class BackgroundClusterOperations:
         from ocs_ci.utility import templating
 
         # Determine interface type based on PVC provisioner
-        if "rbd" in pvc_obj.provisioner.lower():
+        provisioner = getattr(pvc_obj, "provisioner", "") or ""
+        if "rbd" in provisioner.lower():
             pod_dict_path = constants.CSI_RBD_POD_YAML
         else:
             pod_dict_path = constants.CSI_CEPHFS_POD_YAML
