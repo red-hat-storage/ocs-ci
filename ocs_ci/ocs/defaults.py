@@ -171,7 +171,8 @@ MUST_GATHER_UPSTREAM_TAG = "latest"
 MUST_GATHER_TIMEOUT = 3600
 
 # AI Live Analysis with MCP Server:
-AI_MCP_BASE_DIR = "/opt/claude"
+# Use ~/.claude/mcp/ as base directory (user-writable, no sudo required)
+AI_MCP_BASE_DIR = os.path.expanduser("~/.claude/mcp")
 AI_MCP_SERVER_REPO_URL = "https://github.com/shivamdurgbuns/ocs-ci-server.git"
 AI_MCP_SERVER_DIR = os.path.join(AI_MCP_BASE_DIR, "ocs-ci-server")
 AI_OCS_CI_REPO_URL = "https://github.com/red-hat-storage/ocs-ci.git"
