@@ -46,6 +46,12 @@ class TestFullClusterHealth(PASTest):
     Test Cluster health when storage is ~85%
     """
 
+    TIMEOUT_CEPH_MGR = 900
+    TIMEOUT_CEPH_MON = 900
+    TIMEOUT_CEPH_OSD = 1600
+    TIMEOUT_POD_RUNNING = 1500
+    TIMEOUT_BENCHMARK_SETUP = 2500
+
     @pytest.fixture(autouse=True)
     def setup(self, request, nodes):
         """
@@ -53,7 +59,6 @@ class TestFullClusterHealth(PASTest):
         """
 
         logger.info("Starting the test setup")
-
         log.info(
             "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
         )
@@ -65,7 +70,7 @@ class TestFullClusterHealth(PASTest):
 
         log.info("Verify used capacity bigger than 85%")
         sample = TimeoutSampler(
-            timeout=2500,
+            timeout=self.TIMEOUT_BENCHMARK_SETUP,
             sleep=40,
             func=verify_osd_used_capacity_greater_than_expected,
             expected_used_capacity=85.0,
@@ -93,6 +98,8 @@ class TestFullClusterHealth(PASTest):
 
             change_ceph_full_ratio(85)
 
+        logger.info("Benchmark setup completed. Cluster at ~85% capacity")
+
         request.addfinalizer(teardown)
 
         self.percent_to_fill = 25.0
@@ -107,59 +114,7 @@ class TestFullClusterHealth(PASTest):
         benchmark_obj = self.benchmark_obj
         super(TestFullClusterHealth, self).setup()
         self.benchmark_obj = benchmark_obj
-        # # deploy the benchmark-operator
-        # self.deploy_benchmark_operator()
-
-    # def run(self):
-    #     """
-    #
-    #     Run the test, and wait until it finished
-    #     """
-    #
-    #     self.deploy_and_wait_for_wl_to_start(timeout=900)
-    #     self.wait_for_wl_to_finish(sleep=300)
-    #
-    #     try:
-    #         if "Fio failed to execute" not in self.test_logs:
-    #             logger.info("FIO has completed successfully")
-    #     except IOError:
-    #         logger.warning("FIO failed to complete")
-    #
-    # def calculate_crd_data(self):
-    #     """
-    #     Getting the storage capacity and calculate pod count and pvc size
-    #
-    #     """
-    #
-    #     ceph_used_capacity_percent = get_percent_used_capacity()
-    #     logger.info(f"Ceph used capacity percent is {ceph_used_capacity_percent}%")
-    #
-    #     ceph_capacity = self.ceph_cluster.get_ceph_capacity()
-    #     logger.info(f"Total storage capacity is {ceph_capacity} GiB")
-    #
-    #     self.percent_to_fill = self.percent_to_fill - ceph_used_capacity_percent
-    #     logger.info(f"Percentage to fill is {self.percent_to_fill}%")
-    #
-    #     self.total_data_set = int(ceph_capacity * (int(self.percent_to_fill) / 100))
-    #     self.filesize = int(
-    #         self.crd_data["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
-    #     )
-    #
-    #     # Make sure that filesize>=10 and servers<=60
-    #     self.servers = 60
-    #     self.filesize = int(self.total_data_set / self.servers)
-    #     if self.filesize < 10:
-    #         self.filesize = 10
-    #         self.servers = int(self.total_data_set / self.filesize)
-    #
-    #     self.crd_data["spec"]["workload"]["args"]["filesize"] = f"{self.filesize}GiB"
-    #     self.crd_data["spec"]["workload"]["args"][
-    #         "storagesize"
-    #     ] = f"{int(self.total_data_set)}Gi"
-    #     self.crd_data["spec"]["workload"]["args"]["servers"] = self.servers
-    #     self.crd_data["spec"]["workload"]["args"]["bs"] = "1024KiB"
-    #     self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
-    #     self.crd_data["spec"]["workload"]["args"]["iodepth"] = 1
+        assert self.is_cluster_healthy(), "Cluster is not healthy"
 
     def delete_pods(self):
         """
@@ -216,19 +171,21 @@ class TestFullClusterHealth(PASTest):
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
         assert pod_obj.wait_for_resource(
-            condition="Running", selector="app=rook-ceph-mgr", timeout=900
+            condition="Running",
+            selector="app=rook-ceph-mgr",
+            timeout=self.TIMEOUT_CEPH_MGR,
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
             selector="app=rook-ceph-mon",
             resource_count=3,
-            timeout=900,
+            timeout=self.TIMEOUT_CEPH_MON,
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
             selector="app=rook-ceph-osd",
             resource_count=3,
-            timeout=1600,
+            timeout=self.TIMEOUT_CEPH_OSD,
         )
 
     def restart_ocs_operator_node(self):
@@ -255,19 +212,23 @@ class TestFullClusterHealth(PASTest):
             bool: True if ALL checks passed, False otherwise
         """
         return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
-            timeout=1500
+            timeout=self.TIMEOUT_POD_RUNNING
         )
 
     def reload_ceph_cluster(self):
         """
-        Refresh the Ceph cluster object state from the API (toolbox and other pods).
+        Refresh the Ceph cluster object state from the API.
 
-        Use after disruptive operations (node reboot, pod deletion) so
-        is_cluster_healthy() and ceph_not_health_error() use the current
-        ceph-rook-tools pod instead of a stale reference. Waits for toolbox
-        recovery first so the refreshed object gets the new running pod.
+        This method should be called after disruptive operations (node reboot,
+        pod deletion) to ensure health checks use current pod references instead
+        of stale ones. It waits for toolbox recovery before scanning.
+
+        Raises:
+            TimeoutExpiredError: If toolbox recovery times out
         """
-        wait_for_ct_pod_recovery()
+        assert (
+            wait_for_ct_pod_recovery()
+        ), "Ceph tools pod failed to come up on another node"
         self.ceph_cluster.scan_cluster()
         logger.debug("Ceph cluster object refreshed (toolbox and pod refs updated)")
 
@@ -295,17 +256,6 @@ class TestFullClusterHealth(PASTest):
 
         """
         self.nodes = nodes
-        #
-        # self.full_log_path = get_full_test_logs_path(cname=self)
-        # logger.info(f"Logs file path name is : {self.full_log_path}")
-
-        # logger.info("Create resource file for fio workload")
-        # self.crd_data = templating.load_yaml(constants.FIO_CR_YAML)
-        # self.calculate_crd_data()
-
-        # self.set_storageclass(interface=constants.CEPHBLOCKPOOL)
-
-        # self.run()
 
         # Commented below cod due to Bug: DFBUGS-5633
         # logger.info("Checking health before disruptive operations")
@@ -316,17 +266,20 @@ class TestFullClusterHealth(PASTest):
         # self.reload_ceph_cluster()
         # assert self.is_cluster_healthy(), "Cluster is not healthy"
 
+        logger.info("Starting MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
         time.sleep(300)
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
+        logger.info("Starting OCS operator node restart")
         self.restart_ocs_operator_node()
         logger.info("Checking health after OCS operator node restart")
         time.sleep(300)
         self.reload_ceph_cluster()
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
+        logger.info("Starting Rook, OSD, MGR & MON pods deletion")
         self.delete_pods()
         logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
         assert self.is_cluster_healthy(), "Cluster is not healthy"
