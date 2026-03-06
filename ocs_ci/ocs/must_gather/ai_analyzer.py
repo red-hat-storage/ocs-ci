@@ -230,51 +230,54 @@ def _generate_claude_settings():
 
 def _verify_claude_mcp():
     """
-    Verify Claude MCP server registration by running 'claude mcp add'.
+    Verify Claude MCP server configuration in settings.json.
 
-    Attempts to register the MCP server with Claude CLI. If the server is
-    already registered, treats it as success.
+    Since the MCP server is configured directly in settings.json (generated
+    from template), we just need to verify the settings file exists and
+    contains the server configuration.
 
     Returns:
-        bool: True if MCP server is registered, False otherwise.
+        bool: True if MCP server is configured, False otherwise.
     """
     try:
+        claude_settings_path = os.path.expanduser(
+            config.ENV_DATA.get(
+                "ai_claude_settings_path", defaults.AI_CLAUDE_SETTINGS_PATH
+            )
+        )
         mcp_server_name = config.ENV_DATA.get(
             "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
         )
 
-        logger.info(f"Verifying MCP server '{mcp_server_name}' registration")
+        logger.info(f"Verifying MCP server '{mcp_server_name}' configuration")
 
-        result = subprocess.run(
-            ["claude", "mcp", "add", mcp_server_name],
-            capture_output=True,
-            text=True,
-            timeout=30,
+        # Check if settings file exists
+        if not os.path.exists(claude_settings_path):
+            logger.error(f"Claude settings file not found at {claude_settings_path}")
+            return False
+
+        # Verify settings file contains MCP server configuration
+        with open(claude_settings_path, "r") as f:
+            settings = json.load(f)
+
+        if "mcpServers" not in settings:
+            logger.error("No mcpServers section in Claude settings")
+            return False
+
+        if mcp_server_name not in settings["mcpServers"]:
+            logger.error(f"MCP server '{mcp_server_name}' not found in Claude settings")
+            return False
+
+        logger.info(
+            f"MCP server '{mcp_server_name}' configured successfully in settings.json"
         )
+        return True
 
-        # Check if already exists (success case)
-        if "already exists" in result.stderr.lower():
-            logger.info(f"MCP server '{mcp_server_name}' already registered")
-            return True
-
-        if result.returncode == 0:
-            logger.info(f"MCP server '{mcp_server_name}' registered successfully")
-            return True
-
-        logger.warning(
-            f"Failed to register MCP server: {result.stderr}. "
-            "MCP may still work if already configured."
-        )
-        return False
-
-    except FileNotFoundError:
-        logger.warning(
-            "Claude CLI not found. MCP server registration skipped. "
-            "Ensure 'claude' is in PATH if MCP is required."
-        )
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in Claude settings file: {e}")
         return False
     except Exception as e:
-        logger.error(f"Error verifying MCP server registration: {e}")
+        logger.error(f"Error verifying MCP server configuration: {e}")
         return False
 
 
