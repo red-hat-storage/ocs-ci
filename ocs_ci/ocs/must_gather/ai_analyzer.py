@@ -37,6 +37,8 @@ import traceback
 from pathlib import Path
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility.templating import Templating
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,257 @@ _registry_lock = threading.Lock()
 #   analysis_duration_s, timestamp
 _consolidated_results: list = []
 _consolidated_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# MCP setup state tracking
+# ---------------------------------------------------------------------------
+# Ensures MCP setup runs only once per pytest session
+_mcp_setup_completed = False
+_mcp_setup_lock = threading.Lock()
+
+
+def _setup_mcp_repositories():
+    """
+    Clone or update MCP server and ocs-ci repositories for MCP server indexing.
+
+    Clones repositories if they don't exist, or pulls latest changes if they do.
+    Uses paths from defaults.py configuration.
+
+    Returns:
+        bool: True if setup successful, False otherwise.
+    """
+    try:
+        mcp_base_dir = config.ENV_DATA.get("ai_mcp_base_dir", defaults.AI_MCP_BASE_DIR)
+        mcp_server_url = config.ENV_DATA.get(
+            "ai_mcp_server_repo_url", defaults.AI_MCP_SERVER_REPO_URL
+        )
+        mcp_server_dir = config.ENV_DATA.get(
+            "ai_mcp_server_dir", defaults.AI_MCP_SERVER_DIR
+        )
+        ocs_ci_url = config.ENV_DATA.get(
+            "ai_ocs_ci_repo_url", defaults.AI_OCS_CI_REPO_URL
+        )
+        ocs_ci_dir = config.ENV_DATA.get("ai_ocs_ci_dir", defaults.AI_OCS_CI_DIR)
+
+        # Ensure base directory exists
+        os.makedirs(mcp_base_dir, exist_ok=True)
+
+        # Setup MCP server repository
+        if os.path.isdir(mcp_server_dir):
+            logger.info(
+                f"MCP server repo exists at {mcp_server_dir}, pulling latest changes"
+            )
+            try:
+                subprocess.run(
+                    ["git", "-C", mcp_server_dir, "pull"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                logger.info("MCP server repo updated successfully")
+            except subprocess.CalledProcessError as e:
+                logger.warning(
+                    f"Failed to update MCP server repo: {e.stderr}. "
+                    "Continuing with existing version."
+                )
+        else:
+            logger.info(f"Cloning MCP server from {mcp_server_url} to {mcp_server_dir}")
+            subprocess.run(
+                ["git", "clone", mcp_server_url, mcp_server_dir],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            logger.info("MCP server repo cloned successfully")
+
+        # Setup ocs-ci repository for MCP indexing
+        if os.path.isdir(ocs_ci_dir):
+            logger.info(f"OCS-CI repo exists at {ocs_ci_dir}, pulling latest changes")
+            try:
+                subprocess.run(
+                    ["git", "-C", ocs_ci_dir, "pull"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                logger.info("OCS-CI repo updated successfully")
+            except subprocess.CalledProcessError as e:
+                logger.warning(
+                    f"Failed to update OCS-CI repo: {e.stderr}. "
+                    "Continuing with existing version."
+                )
+        else:
+            logger.info(f"Cloning OCS-CI from {ocs_ci_url} to {ocs_ci_dir}")
+            subprocess.run(
+                ["git", "clone", ocs_ci_url, ocs_ci_dir],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            logger.info("OCS-CI repo cloned successfully")
+
+        return True
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to setup MCP repositories: {e.stderr}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error setting up MCP repositories: {e}")
+        return False
+
+
+def _generate_claude_settings():
+    """
+    Generate Claude settings.json from Jinja2 template.
+
+    Renders the settings.json.j2 template with MCP server paths and writes
+    it to ~/.claude/settings.json.
+
+    Returns:
+        bool: True if settings generated successfully, False otherwise.
+    """
+    try:
+        claude_settings_path = os.path.expanduser(
+            config.ENV_DATA.get(
+                "ai_claude_settings_path", defaults.AI_CLAUDE_SETTINGS_PATH
+            )
+        )
+        ocs_ci_dir = config.ENV_DATA.get("ai_ocs_ci_dir", defaults.AI_OCS_CI_DIR)
+        mcp_server_dir = config.ENV_DATA.get(
+            "ai_mcp_server_dir", defaults.AI_MCP_SERVER_DIR
+        )
+        mcp_server_name = config.ENV_DATA.get(
+            "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
+        )
+
+        # Ensure ~/.claude directory exists
+        claude_dir = os.path.dirname(claude_settings_path)
+        os.makedirs(claude_dir, exist_ok=True)
+
+        # Render template using ocs-ci Templating class
+        logger.info(f"Generating Claude settings at {claude_settings_path}")
+        templating = Templating(base_path=constants.TEMPLATE_DIR)
+
+        template_data = {
+            "ocs_ci_dir": ocs_ci_dir,
+            "mcp_server_dir": mcp_server_dir,
+            "mcp_server_name": mcp_server_name,
+        }
+
+        settings_content = templating.render_template(
+            "claude/settings.json.j2", template_data
+        )
+
+        # Write rendered content to settings file
+        with open(claude_settings_path, "w") as f:
+            f.write(settings_content)
+
+        logger.info("Claude settings generated successfully")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to generate Claude settings: {e}")
+        return False
+
+
+def _verify_claude_mcp():
+    """
+    Verify Claude MCP server registration by running 'claude mcp add'.
+
+    Attempts to register the MCP server with Claude CLI. If the server is
+    already registered, treats it as success.
+
+    Returns:
+        bool: True if MCP server is registered, False otherwise.
+    """
+    try:
+        mcp_server_name = config.ENV_DATA.get(
+            "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
+        )
+
+        logger.info(f"Verifying MCP server '{mcp_server_name}' registration")
+
+        result = subprocess.run(
+            ["claude", "mcp", "add", mcp_server_name],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        # Check if already exists (success case)
+        if "already exists" in result.stderr.lower():
+            logger.info(f"MCP server '{mcp_server_name}' already registered")
+            return True
+
+        if result.returncode == 0:
+            logger.info(f"MCP server '{mcp_server_name}' registered successfully")
+            return True
+
+        logger.warning(
+            f"Failed to register MCP server: {result.stderr}. "
+            "MCP may still work if already configured."
+        )
+        return False
+
+    except FileNotFoundError:
+        logger.warning(
+            "Claude CLI not found. MCP server registration skipped. "
+            "Ensure 'claude' is in PATH if MCP is required."
+        )
+        return False
+    except Exception as e:
+        logger.error(f"Error verifying MCP server registration: {e}")
+        return False
+
+
+def setup_mcp_for_session():
+    """
+    Setup MCP server and Claude configuration for the pytest session.
+
+    This function should be called once per pytest session (e.g., from a
+    session-scoped fixture in conftest.py). It:
+    1. Clones/updates MCP server and ocs-ci repositories
+    2. Generates Claude settings.json from template
+    3. Registers MCP server with Claude CLI
+
+    Thread-safe: Uses a lock to ensure setup runs only once even with
+    parallel test execution.
+
+    Returns:
+        bool: True if setup completed successfully, False otherwise.
+    """
+    global _mcp_setup_completed
+
+    with _mcp_setup_lock:
+        if _mcp_setup_completed:
+            logger.debug("MCP setup already completed, skipping")
+            return True
+
+        logger.info("Starting MCP setup for pytest session")
+
+        # Step 1: Setup repositories
+        if not _setup_mcp_repositories():
+            logger.error("MCP repository setup failed")
+            return False
+
+        # Step 2: Generate Claude settings
+        if not _generate_claude_settings():
+            logger.error("Claude settings generation failed")
+            return False
+
+        # Step 3: Verify MCP server registration
+        if not _verify_claude_mcp():
+            logger.warning(
+                "MCP server registration verification failed, but continuing"
+            )
+
+        _mcp_setup_completed = True
+        logger.info("MCP setup completed successfully")
+        return True
 
 
 def _is_ai_analysis_enabled():
@@ -289,22 +542,10 @@ def _build_claude_prompt(failure_info, kubeconfig_entries, ocsci_root, claude_md
             f"Please read this file first to understand what happened during the test.\n"
         )
 
-    # Build @-context references for Claude Code CLI.
-    # The @path syntax in the prompt text tells Claude to load the file/directory
-    # as context before processing the rest of the prompt.
-    # - @<test_file_path>  : the exact test source file that failed
-    # - @<ocsci_root>/ocs_ci  : OCS-CI library code (helpers, constants, fixtures)
-    # - @<ocsci_root>/tests   : test source tree
-    # - @<ocsci_root>/conf    : configuration schemas
-    # NOTE: data/ is intentionally excluded — it may contain auth keys and credentials.
-    context_refs = []
-    if test_file_path and os.path.isfile(test_file_path):
-        context_refs.append(f"@{test_file_path}")
-    for safe_subdir in ("ocs_ci", "tests", "conf"):
-        subdir_path = os.path.join(ocsci_root, safe_subdir)
-        if os.path.isdir(subdir_path):
-            context_refs.append(f"@{subdir_path}")
-    context_section = "\n".join(context_refs)
+    # Build MCP server instructions for code references
+    mcp_server_name = config.ENV_DATA.get(
+        "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
+    )
 
     prompt = f"""You are an expert in OpenShift Data Foundation (ODF), OpenShift Container \
 Platform (OCP), and Advanced Cluster Management (ACM) cluster management and analysis, with \
@@ -315,9 +556,37 @@ including its fixtures, helpers, and test patterns.
 You are performing a live read-only investigation of a Kubernetes/OpenShift \
 cluster after a test failure in the OCS-CI (OpenShift Container Storage CI) framework.
 
-## Context Files
-The following files/directories are provided as context for this analysis:
-{context_section}
+## OCS-CI Code Access via MCP Server
+**IMPORTANT**: For ALL code references, file lookups, and codebase exploration, you MUST use \
+the '{mcp_server_name}' MCP server tools. DO NOT use @-context syntax or direct file reads.
+
+The MCP server provides efficient, indexed access to the OCS-CI codebase with the following tools:
+- **list_modules**: List files/directories in the ocs-ci repository
+- **get_summary**: Get summary of Python files or classes with inheritance chains
+- **get_content**: Read file content with optional line ranges
+- **search_code**: Search for regex patterns in code files
+- **get_inheritance**: Get full inheritance chain with methods and conflicts
+- **find_test**: Find tests by name or pytest nodeid
+- **get_test_example**: Find example tests matching patterns or using specific fixtures
+- **get_deployment_module**: List deployment modules with descriptions
+- **get_resource_module**: List resource modules with descriptions
+- **get_helper_module**: List helper modules with descriptions
+- **get_utility_module**: List utility modules with descriptions
+- **get_conftest**: List all conftest.py files with descriptions
+- **get_conf_file**: List configuration files with descriptions
+
+**Usage Examples**:
+- To understand the failing test: `find_test` with test name, then `get_content` for the test file
+- To explore related code: `search_code` for relevant patterns, then `get_summary` for class overviews
+- To understand inheritance: `get_inheritance` for class hierarchy and method resolution
+- To find similar tests: `get_test_example` with patterns or fixture names
+- To explore modules: Use `get_*_module` tools to discover relevant helpers/resources
+
+**Key Test Information**:
+- Test file: {test_file_path if test_file_path else "unknown"}
+- Test name: {test_short_name}
+
+Start by using MCP tools to understand the test code and its dependencies before investigating the cluster.
 
 ## IMPORTANT CONSTRAINTS
 - You MUST NOT modify, delete, or create any cluster resources
@@ -348,8 +617,16 @@ Use the appropriate --kubeconfig flag when running oc/kubectl commands.
 ## OCS-CI Codebase Reference
 The OCS-CI codebase root is: {ocsci_root}
 The failing test source file is: {test_file_path if test_file_path else "unknown"}
-Use the @-context references above to read the test code and understand what the test was doing,
-which fixtures it uses, and what assertions it makes.
+
+**CRITICAL**: Use the '{mcp_server_name}' MCP server tools to explore the codebase:
+1. Start with `find_test` to locate the failing test
+2. Use `get_content` to read the test file and understand what it does
+3. Use `search_code` to find related code, fixtures, or helper functions
+4. Use `get_summary` to understand class structures and inheritance
+5. Use `get_test_example` to find similar tests for comparison
+
+DO NOT attempt to read files directly or use @-context syntax. The MCP server provides \
+efficient, indexed access to the entire codebase.
 
 ## Investigation Tasks
 Please perform the following investigation steps:
@@ -1321,20 +1598,44 @@ def _run_claude_analysis(
         # contain auth keys, pull-secrets, and other credentials.
         # Log directories (typically under /tmp or a user-specified log_dir)
         # are allowed for reading test artefacts.
+        #
+        # MCP server tools are included for efficient codebase access.
         log_dir = os.path.expanduser(config.RUN.get("log_dir", "/tmp"))
+        mcp_server_name = config.ENV_DATA.get(
+            "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
+        )
+
+        # MCP tools for ocs-ci codebase access (read-only, indexed)
+        mcp_tools = (
+            f"use_mcp_tool:{mcp_server_name}__list_modules,"
+            f"use_mcp_tool:{mcp_server_name}__get_summary,"
+            f"use_mcp_tool:{mcp_server_name}__get_content,"
+            f"use_mcp_tool:{mcp_server_name}__search_code,"
+            f"use_mcp_tool:{mcp_server_name}__get_inheritance,"
+            f"use_mcp_tool:{mcp_server_name}__find_test,"
+            f"use_mcp_tool:{mcp_server_name}__get_test_example,"
+            f"use_mcp_tool:{mcp_server_name}__get_deployment_module,"
+            f"use_mcp_tool:{mcp_server_name}__get_resource_module,"
+            f"use_mcp_tool:{mcp_server_name}__get_helper_module,"
+            f"use_mcp_tool:{mcp_server_name}__get_utility_module,"
+            f"use_mcp_tool:{mcp_server_name}__get_conftest,"
+            f"use_mcp_tool:{mcp_server_name}__get_conf_file"
+        )
+
         allowed_tools = (
+            # Kubernetes/OpenShift read-only commands
             "Bash(oc get*),Bash(oc describe*),Bash(oc logs*),"
             "Bash(oc status*),Bash(oc explain*),Bash(oc adm top*),"
             "Bash(kubectl get*),Bash(kubectl describe*),Bash(kubectl logs*),"
-            f"Bash(cat {ocsci_root}/ocs_ci/*),Bash(cat {ocsci_root}/tests/*),"
-            f"Bash(cat {ocsci_root}/conf/*),Bash(cat {log_dir}/*),"
-            f"Bash(ls {ocsci_root}/ocs_ci*),Bash(ls {ocsci_root}/tests*),"
-            f"Bash(ls {ocsci_root}/conf*),Bash(ls {log_dir}*),"
-            f"Bash(find {ocsci_root}/ocs_ci *),Bash(find {ocsci_root}/tests *),"
-            f"Bash(find {ocsci_root}/conf *),Bash(find {log_dir} *),"
-            f"Bash(grep * {ocsci_root}/ocs_ci/*),Bash(grep * {ocsci_root}/tests/*),"
+            # File system read operations (scoped to safe paths)
+            f"Bash(cat {log_dir}/*),"
+            f"Bash(ls {log_dir}*),"
+            f"Bash(find {log_dir} *),"
             f"Bash(grep * {log_dir}/*),"
-            "Read,Glob,Grep,LS"
+            # Built-in Claude tools
+            "Read,Glob,Grep,LS,"
+            # MCP server tools for codebase access
+            f"{mcp_tools}"
         )
         cmd = [
             "claude",
@@ -1367,19 +1668,45 @@ def _run_claude_analysis(
         )
         logger.info(f"Claude CLI timeout: {timeout}s")
 
-        # Pass the prompt via stdin (input=) rather than as a positional argument.
-        # When --allowedTools contains Bash(*) patterns, the Claude CLI argument
-        # parser misinterprets the positional prompt that follows it and reports
-        # "Input must be provided either through stdin or as a prompt argument".
-        # Passing via stdin avoids this parsing ambiguity entirely.
-        proc = subprocess.run(
-            cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=ocsci_root,
+        # Set GCP credentials environment variable for Claude CLI
+        gcp_creds_path = os.path.expanduser(
+            config.ENV_DATA.get(
+                "ai_gcp_credentials_path", defaults.AI_GCP_CREDENTIALS_PATH
+            )
         )
+        original_gcp_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
+        if os.path.isfile(gcp_creds_path):
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_creds_path
+            logger.debug(f"Set GOOGLE_APPLICATION_CREDENTIALS={gcp_creds_path}")
+        else:
+            logger.debug(
+                f"GCP credentials file not found at {gcp_creds_path}, "
+                "proceeding without setting GOOGLE_APPLICATION_CREDENTIALS"
+            )
+
+        try:
+            # Pass the prompt via stdin (input=) rather than as a positional argument.
+            # When --allowedTools contains Bash(*) patterns, the Claude CLI argument
+            # parser misinterprets the positional prompt that follows it and reports
+            # "Input must be provided either through stdin or as a prompt argument".
+            # Passing via stdin avoids this parsing ambiguity entirely.
+            proc = subprocess.run(
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=ocsci_root,
+            )
+        finally:
+            # Restore original GOOGLE_APPLICATION_CREDENTIALS value
+            if original_gcp_creds is not None:
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = original_gcp_creds
+                logger.debug("Restored original GOOGLE_APPLICATION_CREDENTIALS")
+            elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+                del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+                logger.debug("Unset GOOGLE_APPLICATION_CREDENTIALS")
 
         if proc.returncode != 0:
             logger.warning(

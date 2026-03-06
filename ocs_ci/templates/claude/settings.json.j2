@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read({{ ocs_ci_dir }}/*)",
+      "Read({{ mcp_server_dir }}/*)"
+    ]
+  },
+  "autoApprove": [
+    {
+      "tool": "mcp__{{ mcp_server_name }}__*"
+    }
+  ]
+}
