@@ -1,4 +1,18 @@
 {
+  "mcpServers": {
+    "{{ mcp_server_name }}": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "{{ mcp_server_dir }}",
+        "run",
+        "ocs-ci-server"
+      ],
+      "env": {
+        "OCS_CI_PATH": "{{ ocs_ci_dir }}"
+      }
+    }
+  },
   "permissions": {
     "allow": [
       "Read({{ ocs_ci_dir }}/*)",
