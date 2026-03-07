@@ -510,12 +510,6 @@ class AcmAddClusters(AcmPageNavigator):
                     else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
                 )
 
-                if (
-                    submariner_channel == "0.22"
-                    and config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM
-                ):
-                    log.info("Temp Fix Until we have 0.22.1")
-                    submariner_channel = "0.21"
                 channel_name = "stable-" + submariner_channel
                 subscription_config = {
                     "source": "submariner-catalogsource",
