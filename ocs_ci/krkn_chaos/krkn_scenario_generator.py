@@ -3,6 +3,46 @@ from jinja2 import Environment, FileSystemLoader
 from ocs_ci.ocs.constants import KRKN_SCENARIO_TEMPLATE
 
 
+# Signal name to number mapping for container kill scenarios
+SIGNAL_MAP = {
+    "SIGTERM": 15,
+    "SIGKILL": 9,
+    "SIGINT": 2,
+    "SIGHUP": 1,
+}
+
+
+def convert_signal_to_number(signal):
+    """Convert signal name to signal number.
+
+    Args:
+        signal (str or int): Signal name (e.g., "SIGKILL", "SIGTERM") or number (e.g., 9, "9", 15)
+
+    Returns:
+        int: Signal number as integer
+
+    Examples:
+        >>> convert_signal_to_number("SIGKILL")
+        9
+        >>> convert_signal_to_number("SIGTERM")
+        15
+        >>> convert_signal_to_number("9")
+        9
+        >>> convert_signal_to_number(9)
+        9
+    """
+    # If it's already an integer, return as-is
+    if isinstance(signal, int):
+        return signal
+    # If it's a string representing a number, convert to int
+    if isinstance(signal, str) and signal.isdigit():
+        return int(signal)
+    # Convert signal name to number
+    if isinstance(signal, str):
+        return SIGNAL_MAP.get(signal.upper(), signal)
+    return signal
+
+
 class TemplateWriter:
     """Generates YAML from Jinja2 templates."""
 
@@ -718,13 +758,15 @@ class ContainerScenarios:
                 # Build default scenarios directly
                 # OSD is placed at the end to ensure it executes last in container kill scenarios
                 default_namespace = namespace or "openshift-storage"
+                # Convert signal name to number
+                kill_signal_number = convert_signal_to_number(kill_signal)
                 scenarios = [
                     {
                         "name": f"nodeplugin_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
                         "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "CephFS Node Plugin",
@@ -734,7 +776,7 @@ class ContainerScenarios:
                         "namespace": default_namespace,
                         "label_selector": "app=rook-ceph-mgr",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "MGR",
@@ -744,7 +786,7 @@ class ContainerScenarios:
                         "namespace": default_namespace,
                         "label_selector": "app=openshift-storage.rbd.csi.ceph.com-nodeplugin",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "RBD Node Plugin",
@@ -754,7 +796,7 @@ class ContainerScenarios:
                         "namespace": default_namespace,
                         "label_selector": "app=rook-ceph-rgw",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "RGW (RADOS Gateway)",
@@ -764,7 +806,7 @@ class ContainerScenarios:
                         "namespace": default_namespace,
                         "label_selector": "app=noobaa",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "NooBaa",
@@ -774,7 +816,7 @@ class ContainerScenarios:
                         "namespace": default_namespace,
                         "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "CephFS Control Plugin",
@@ -784,7 +826,7 @@ class ContainerScenarios:
                         "namespace": default_namespace,
                         "label_selector": "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "RBD Control Plugin",
@@ -794,12 +836,19 @@ class ContainerScenarios:
                         "namespace": default_namespace,
                         "label_selector": "app=rook-ceph-osd",
                         "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
                         "expected_recovery_time": wait_duration // 2,
                         "description": "OSD",
                     },
                 ]
+            else:
+                # Convert kill_signal to number in each provided scenario
+                for scenario in scenarios:
+                    if "kill_signal" in scenario:
+                        scenario["kill_signal"] = convert_signal_to_number(
+                            scenario["kill_signal"]
+                        )
 
             config = {"scenarios": scenarios}
             return ContainerScenarios._create_container_scenario(
@@ -817,10 +866,13 @@ class ContainerScenarios:
                     "Either pod_name or label_selector must be provided for single scenario"
                 )
 
+            # Convert signal name to number
+            kill_signal_number = convert_signal_to_number(kill_signal)
+
             config = {
                 "namespace": namespace,
                 "container_name": container_name,
-                "kill_signal": kill_signal,
+                "kill_signal": kill_signal_number,
                 "instance_count": instance_count,
                 "wait_duration": wait_duration,
                 **_get_pod_selector_config(pod_name, label_selector),
