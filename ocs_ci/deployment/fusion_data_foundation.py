@@ -234,7 +234,7 @@ class FusionDataFoundationDeployment:
         fusion_version = version.get_semantic_version(fusion_version, True)
 
         # Storage configuration method changed in Fusion 2.11
-        if fusion_version < version.VERSION_2_11:
+        if fusion_version < version.VERSION_2_11 or config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
             self.create_odfcluster()
             # Mute MON_NETSPLIT for arbiter deployments to avoid:
             # https://issues.redhat.com/browse/DFBUGS-4521
