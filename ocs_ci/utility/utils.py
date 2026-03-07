@@ -1046,6 +1046,35 @@ def get_url_content(url, **kwargs):
     return r.content
 
 
+def convert_github_blob_url_to_raw(link):
+    """
+    Convert a GitHub blob URL to raw content URL (for any owner/repo/branch).
+
+    Args:
+        link (str): GitHub URL like
+            https://github.com/owner/repo/blob/branch/path/to/file.md
+
+    Returns:
+        str: Raw URL like
+            https://raw.githubusercontent.com/owner/repo/branch/path/to/file.md
+            If the link does not match the GitHub blob pattern, returns the
+            original link unchanged (e.g. already raw or non-GitHub).
+
+    """
+    pattern = (
+        r"https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/"
+        r"blob/(?P<branch>[^/]+)/(?P<path>.+)"
+    )
+    match = re.match(pattern, link)
+    if match:
+        owner = match.group("owner")
+        repo = match.group("repo")
+        branch = match.group("branch")
+        path = match.group("path")
+        return f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
+    return link
+
+
 def expose_ocp_version(version):
     """
     This helper function exposes latest nightly version or GA version of OCP.
