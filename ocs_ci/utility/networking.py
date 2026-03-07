@@ -287,8 +287,12 @@ def create_drs_machine_config():
 
     If the MachineConfig '99-br-storage-nmstate-worker' already exists,
     this function will skip creation and return early.
+
+    After creating the MachineConfig, this function waits for all worker nodes
+    to be updated. The timeout is calculated as 9 minutes per worker node.
     """
     from ocs_ci.ocs.resources.machineconfig import machineconfig_exists
+    from ocs_ci.utility.utils import TimeoutSampler
 
     mc_name = "99-br-storage-nmstate-worker"
     if machineconfig_exists(mc_name):
@@ -315,6 +319,34 @@ def create_drs_machine_config():
     with config.RunWithProviderConfigContextIfAvailable():
         machineconfigurations_obj = OCS(**machineconfigurations_yaml)
         machineconfigurations_obj.apply(**machineconfigurations_yaml)
+
+        # Wait for all worker nodes to be updated
+        worker_nodes = get_worker_nodes()
+        num_workers = len(worker_nodes)
+        timeout = num_workers * 9 * 60  # 9 minutes per worker node in seconds
+
+        logger.info(
+            "Waiting for all %s worker nodes to be updated (timeout: %s seconds)",
+            num_workers,
+            timeout,
+        )
+
+        mcp_ocp = OCP(kind=constants.MACHINECONFIGPOOL, resource_name="worker")
+
+        for sample in TimeoutSampler(timeout=timeout, sleep=30, func=mcp_ocp.get):
+            status = sample.get("status", {})
+            machine_count = status.get("machineCount", 0)
+            updated_machine_count = status.get("updatedMachineCount", 0)
+
+            logger.info(
+                "MachineConfigPool worker status: MACHINECOUNT=%s, UPDATEDMACHINECOUNT=%s",
+                machine_count,
+                updated_machine_count,
+            )
+
+            if machine_count == updated_machine_count and machine_count > 0:
+                logger.info("All worker nodes have been updated successfully")
+                break
 
 
 def create_drs_nad(cluster_name):
