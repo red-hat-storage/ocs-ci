@@ -1,0 +1,54 @@
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: ceph-networks-vlan-worker-node
+  namespace: openshift-storage
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+    kubernetes.io/hostname: worker-node
+  desiredState:
+    interfaces:
+      # Public network VLAN - NO IP
+      - name: enp1s0f1.201  # VLAN interface for public network - will be templated
+        description: VLAN interface for OpenShift Data Foundation public Multus network
+        type: vlan
+        state: up
+        vlan:
+          base-iface: enp1s0f1  # Base physical interface - will be templated
+          id: 201  # Public VLAN ID - will be templated
+        ipv4:
+          enabled: false
+          dhcp: false
+      # Public network Shim - HAS IP (for host-to-pod communication)
+      - name: odf-pub-shim  # Public shim interface - will be templated
+        description: Shim interface for host connectivity to ODF public network pods
+        type: mac-vlan
+        state: up
+        mac-vlan:
+          base-iface: enp1s0f1.201  # Built on public VLAN - will be templated
+          mode: bridge
+          promiscuous: true
+        ipv4:
+          enabled: true
+          dhcp: false
+          address:
+            - ip: 192.168.20.5  # Static IP for public shim - will be templated per node
+              prefix-length: 28  # /28 subnet (192.168.20.0-15)
+      # Cluster network VLAN - NO IP
+      - name: enp1s0f1.202  # VLAN interface for cluster network - will be templated
+        description: VLAN interface for OpenShift Data Foundation cluster Multus network
+        type: vlan
+        state: up
+        vlan:
+          base-iface: enp1s0f1  # Base physical interface - will be templated
+          id: 202  # Cluster VLAN ID - will be templated
+        ipv4:
+          enabled: false
+          dhcp: false
+      # Cluster network does NOT need shim (per Red Hat docs - pod-to-pod only)
+    routes:
+      config:
+        # Route to public network via shim
+        - destination: 192.168.20.0/24  # Route to public pod network - will be templated
+          next-hop-interface: odf-pub-shim  # Via public shim - will be templated
