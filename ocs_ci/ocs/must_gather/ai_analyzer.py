@@ -190,9 +190,12 @@ def _generate_claude_settings():
                 "ai_claude_settings_path", defaults.AI_CLAUDE_SETTINGS_PATH
             )
         )
-        ocs_ci_dir = config.ENV_DATA.get("ai_ocs_ci_dir", defaults.AI_OCS_CI_DIR)
-        mcp_server_dir = config.ENV_DATA.get(
-            "ai_mcp_server_dir", defaults.AI_MCP_SERVER_DIR
+        # Expand ~ in paths before passing to template so Claude CLI can use them
+        ocs_ci_dir = os.path.expanduser(
+            config.ENV_DATA.get("ai_ocs_ci_dir", defaults.AI_OCS_CI_DIR)
+        )
+        mcp_server_dir = os.path.expanduser(
+            config.ENV_DATA.get("ai_mcp_server_dir", defaults.AI_MCP_SERVER_DIR)
         )
         mcp_server_name = config.ENV_DATA.get(
             "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
@@ -221,6 +224,12 @@ def _generate_claude_settings():
             f.write(settings_content)
 
         logger.info("Claude settings generated successfully")
+        logger.info(
+            f"MCP server configured with expanded paths:\n"
+            f"  - MCP server dir: {mcp_server_dir}\n"
+            f"  - OCS-CI dir: {ocs_ci_dir}\n"
+            f"  - Server name: {mcp_server_name}"
+        )
         return True
 
     except Exception as e:
@@ -1710,6 +1719,39 @@ def _run_claude_analysis(
             elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
                 del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
                 logger.debug("Unset GOOGLE_APPLICATION_CREDENTIALS")
+
+        # Log Claude CLI stderr for debugging (contains MCP server startup messages)
+        if proc.stderr:
+            logger.debug(f"Claude CLI stderr output:\n{proc.stderr}")
+
+            # Check for MCP server connection indicators
+            stderr_lower = proc.stderr.lower()
+            mcp_server_name = config.ENV_DATA.get(
+                "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
+            )
+
+            # MCP server runs in stdio mode - Claude CLI starts it on-demand
+            # Look for indicators that the server process was started
+            mcp_indicators = [
+                mcp_server_name.lower(),  # Server name appears in startup messages
+                "mcp",  # Generic MCP references
+                "starting server",
+                "connected",
+            ]
+            mcp_mentioned = any(
+                indicator in stderr_lower for indicator in mcp_indicators
+            )
+
+            if mcp_mentioned:
+                logger.info(
+                    f"✓ MCP server '{mcp_server_name}' activity detected in Claude CLI stderr"
+                )
+            else:
+                logger.warning(
+                    f"✗ No MCP server activity detected in Claude CLI stderr. "
+                    f"Server '{mcp_server_name}' may not have started correctly. "
+                    "Check ~/.claude/settings.json and ensure 'uv' is in PATH."
+                )
 
         if proc.returncode != 0:
             logger.warning(
