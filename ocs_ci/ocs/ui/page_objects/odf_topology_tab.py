@@ -18,7 +18,9 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.node import get_node_names
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.base_ui import BaseUI, logger
+from pathlib import Path
+
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, _crop_screenshot
 from ocs_ci.ocs.ui.odf_topology import TopologyUiStr, OdfTopologyHelper
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
@@ -26,6 +28,24 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 )
 from ocs_ci.ocs.ui.workload_ui import WorkloadUi
 from ocs_ci.utility.retry import retry
+
+SIDEBAR_SCROLL_JS = """
+var sidebar = document.querySelector('.odf-topology__sidebar');
+if (sidebar) {
+    sidebar.scrollTop = sidebar.scrollHeight / 2;
+    return true;
+}
+return false;
+"""
+
+SIDEBAR_SCROLL_RESET_JS = """
+var sidebar = document.querySelector('.odf-topology__sidebar');
+if (sidebar) {
+    sidebar.scrollTop = 0;
+    return true;
+}
+return false;
+"""
 
 
 class TopologySidebar(BaseUI):
@@ -35,6 +55,65 @@ class TopologySidebar(BaseUI):
 
     def __init__(self):
         BaseUI.__init__(self)
+
+    def take_screenshot_for_llm(self, name_suffix="", region=None):
+        """
+        Takes two screenshots to capture the full ODF topology sidebar content.
+
+        Overrides BaseUI.take_screenshot_for_llm to handle the scrollable sidebar
+        panel in ODF topology. The sidebar (div.odf-topology__sidebar) has a fixed
+        height and overflows — a single viewport screenshot cuts off lower fields
+        like addresses, annotations, and creation timestamp.
+
+        This method temporarily resizes the window to the resolution set in
+        ``UI_SELENIUM.llm_screenshot_resolution``, takes one screenshot at the
+        current scroll position, scrolls the sidebar halfway down and takes a
+        second screenshot, then restores the original window size.
+
+        Args:
+            name_suffix (str): Optional suffix for the screenshot filename.
+            region (str): Optional region to crop (``"right_side"`` or
+                ``"left_side"``).  Passed to :func:`_crop_screenshot`.
+
+        Returns:
+            list: List of absolute paths to the saved screenshot files
+                (typically two: top and bottom of the sidebar).
+        """
+
+        original_size = self.driver.get_window_size()
+        llm_res = config.UI_SELENIUM.get("llm_screenshot_resolution", "1920,1400")
+        llm_w, llm_h = (int(v) for v in llm_res.split(","))
+        self.driver.set_window_size(llm_w, llm_h)
+        time.sleep(0.5)
+
+        try:
+            top_suffix = f"{name_suffix}_top_llm" if name_suffix else "top_llm"
+            self.take_screenshot(name_suffix=top_suffix)
+            screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+            screenshot_top = str(screenshots[-1])
+            if region:
+                _crop_screenshot(screenshot_top, region)
+
+            scrolled = self.driver.execute_script(SIDEBAR_SCROLL_JS)
+            if scrolled:
+                logger.info("Scrolled sidebar panel to bottom for second screenshot")
+                time.sleep(0.5)
+                bottom_suffix = (
+                    f"{name_suffix}_bottom_llm" if name_suffix else "bottom_llm"
+                )
+                self.take_screenshot(name_suffix=bottom_suffix)
+                screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+                screenshot_bottom = str(screenshots[-1])
+                if region:
+                    _crop_screenshot(screenshot_bottom, region)
+                self.driver.execute_script(SIDEBAR_SCROLL_RESET_JS)
+                return [screenshot_top, screenshot_bottom]
+
+            logger.info("No scrollable sidebar found, using single screenshot")
+            return [screenshot_top]
+        finally:
+            self.driver.set_window_size(original_size["width"], original_size["height"])
+            time.sleep(0.3)
 
     def is_alert_tab_present(self) -> bool:
         """
@@ -410,8 +489,8 @@ class AbstractTopologyView(ABC, TopologySidebar):
             entities = self.get_elements(self.topology_loc["node_label"])
             entity_names = []
             for entity in entities:
-                text = entity.text
-                if not len(text):
+                text = entity.text or entity.get_attribute("textContent") or ""
+                if not len(text.strip()):
                     raise NoSuchElementException("Cannot read element text")
                 # with ODF 4.18 we sometimes see no D, N prefix in the name of entity. This is not confirmed visually
                 # so we make exception for this case, checking "\n" within text
