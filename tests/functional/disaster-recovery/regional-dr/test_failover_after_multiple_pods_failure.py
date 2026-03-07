@@ -37,12 +37,7 @@ class TestFailoverAfterMultiplePodsFailure:
 
     """
 
-    def test_failover_after_multiple_pods_failure(
-        self,
-        dr_workload,
-        scale_deployments,
-        node_restart_teardown,
-    ):
+    def test_failover_after_multiple_pods_failure(self, dr_workload, scale_deployments):
         """
         Tests to verify application failover between managed clusters when multiple deployments are scaled down on the
         primary managed cluster.
@@ -143,6 +138,7 @@ class TestFailoverAfterMultiplePodsFailure:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         logger.info("Calling fixture to scale up deployments")
