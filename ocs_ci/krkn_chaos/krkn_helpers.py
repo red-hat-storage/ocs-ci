@@ -2276,18 +2276,35 @@ class ValidationHelper(BaseScenarioHelper):
 
         self.log.info(f"✅ Strength test validation passed for {component_name}")
 
-    def handle_krkn_command_failure(self, error, component_name, test_type="chaos"):
+    def handle_krkn_command_failure(
+        self, error, component_name, test_type="chaos", health_helper=None
+    ):
         """
         Handle Krkn command execution failures with detailed logging.
+        Before reporting, checks for Ceph crashes if health_helper is provided.
 
         Args:
             error (Exception): The exception that occurred
             component_name (str): Name of the component
             test_type (str): Type of test
+            health_helper (CephHealthHelper, optional): If provided, checks for
+                Ceph crashes before reporting and includes result in the failure message.
         """
+        ceph_crash_details = ""
+        if health_helper is not None:
+            no_crashes, ceph_crash_details = health_helper.check_ceph_crashes(
+                component_name, test_type
+            )
+            if not no_crashes and ceph_crash_details:
+                self.log.error(
+                    f"Ceph crash check (before reporting failure): {ceph_crash_details}"
+                )
+
         error_msg = (
             f"Krkn {test_type} command failed for {component_name}: {str(error)}"
         )
+        if ceph_crash_details:
+            error_msg += f"\nCeph crash check: {ceph_crash_details}"
         self.log.error(f"❌ {error_msg}")
 
         # Log additional context if available

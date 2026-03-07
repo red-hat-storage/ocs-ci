@@ -229,7 +229,10 @@ class TestKrKnHogChaosScenarios:
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
-                e, node_type, "multi-stress hog chaos"
+                e,
+                node_type,
+                "multi-stress hog chaos",
+                health_helper=health_helper,
             )
             raise
         except Exception as e:
@@ -435,7 +438,10 @@ class TestKrKnHogChaosScenarios:
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
-                e, stress_level, f"{stress_level} cluster strength testing"
+                e,
+                stress_level,
+                f"{stress_level} cluster strength testing",
+                health_helper=health_helper,
             )
             raise
         except Exception as e:
