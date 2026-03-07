@@ -125,6 +125,7 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 
+        self.page_has_loaded()
         self.do_click(self.bucket_tab["management_tab"])
 
         logger.info("Navigated to lifecycle rules page")
