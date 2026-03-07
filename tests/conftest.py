@@ -1276,12 +1276,49 @@ def storageclass_factory_fixture(
         return sc_obj
 
     def finalizer():
-        """
-        Delete the storageclass
-        """
         for instance in instances:
-            instance.delete()
-            instance.ocp.wait_for_delete(instance.name, timeout=120)
+            _delete_storageclass_with_retry(instance)
+
+    def _delete_storageclass_with_retry(instance, max_attempts=3, wait_timeout=20):
+        for attempt in range(max_attempts):
+            try:
+                sc_data = instance.ocp.get(resource_name=instance.name)
+            except CommandFailed as ex:
+                if "NotFound" in str(ex):
+                    return
+                raise
+
+            if sc_data.get("metadata", {}).get("ownerReferences"):
+                try:
+                    instance.ocp.patch(
+                        resource_name=instance.name,
+                        params='{"metadata": {"ownerReferences": null}}',
+                        format_type="merge",
+                    )
+                except CommandFailed:
+                    log.warning(
+                        f"Failed to clear ownerReferences from "
+                        f"StorageClass {instance.name}"
+                    )
+
+            instance.ocp.delete(resource_name=instance.name)
+            try:
+                instance.ocp.wait_for_delete(
+                    instance.name, timeout=wait_timeout
+                )
+                return
+            except TimeoutError:
+                if attempt < max_attempts - 1:
+                    log.warning(
+                        f"StorageClass {instance.name} was recreated by "
+                        f"a controller after deletion "
+                        f"(attempt {attempt + 1}/{max_attempts}), retrying"
+                    )
+
+        log.warning(
+            f"StorageClass {instance.name} could not be permanently "
+            f"deleted after {max_attempts} attempts"
+        )
 
     request.addfinalizer(finalizer)
     return factory
