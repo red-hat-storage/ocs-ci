@@ -83,7 +83,7 @@ class PVC(OCS):
         data = dict()
         data["api_version"] = self.api_version
         data["kind"] = "PersistentVolume"
-        data["metadata"] = {"name": self.backed_pv, "namespace": self.namespace}
+        data["metadata"] = {"name": self.backed_pv}
         pv_obj = OCS(**data)
         pv_obj.ocp.cluster_kubeconfig = self.ocp.cluster_kubeconfig
         pv_obj.reload()
