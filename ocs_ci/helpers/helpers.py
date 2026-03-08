@@ -6340,6 +6340,34 @@ def remove_toleration():
     return success
 
 
+def wait_for_reclaimspace_cronjob_annotation(pvc_obj, timeout=120):
+    """
+    Wait for the CSI addons controller to create the ReclaimSpaceCronJob and add
+    its name to the PVC annotation (reclaimspace.csiaddons.openshift.io/cronjob).
+
+    Args:
+        pvc_obj (object): PersistentVolumeClaim (PVC) object.
+        timeout (int): Max seconds to wait (default 120).
+
+    Raises:
+        TimeoutExpiredError: If the annotation is not present within timeout.
+    """
+    cronjob_annotation_key = "reclaimspace.csiaddons.openshift.io/cronjob"
+
+    def check():
+        pvc_obj.reload()
+        annotations = (pvc_obj.data.get("metadata") or {}).get("annotations") or {}
+        return annotations.get(cronjob_annotation_key)
+
+    for cron_job_name in TimeoutSampler(timeout=timeout, sleep=5, func=check):
+        if cron_job_name:
+            logger.info(
+                f"ReclaimSpaceCronJob annotation found for PVC '{pvc_obj.name}'"
+            )
+            return
+    # Unreachable: TimeoutSampler raises TimeoutExpiredError when timeout is reached
+
+
 def get_reclaimspacecronjob_for_pvc(pvc_obj):
     """
     Retrieve the ReclaimSpaceCronJob object associated with a given PVC.
@@ -6390,6 +6418,9 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
 
     for pvc_obj in pvc_objs:
         logger.info(f"{action} ReclaimSpace operation for PVC '{pvc_obj.name}'")
+
+        # Wait for CSI addons to create ReclaimSpaceCronJob and set PVC annotation
+        wait_for_reclaimspace_cronjob_annotation(pvc_obj)
 
         # Retrieve the associated CronJob object
         cron_obj = get_reclaimspacecronjob_for_pvc(pvc_obj)
