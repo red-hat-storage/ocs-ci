@@ -81,11 +81,111 @@ _mcp_setup_completed = False
 _mcp_setup_lock = threading.Lock()
 
 
+def _setup_python_venv():
+    """
+    Setup Python 3.12+ virtual environment for MCP server.
+
+    Creates a venv at ~/.claude/mcp/venv with Python 3.12 or higher.
+    If venv exists, verifies Python version is 3.12+.
+
+    Returns:
+        bool: True if venv setup successful, False otherwise.
+    """
+    try:
+        venv_dir = config.ENV_DATA.get("ai_mcp_venv_dir", defaults.AI_MCP_VENV_DIR)
+        python_path = os.path.join(venv_dir, "bin/python")
+
+        # Check if venv already exists and has correct Python version
+        if os.path.exists(python_path):
+            try:
+                result = subprocess.run(
+                    [python_path, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                version_str = result.stdout.strip()
+                logger.info(f"Existing venv Python version: {version_str}")
+
+                # Extract version number (e.g., "Python 3.12.1" -> (3, 12, 1))
+                match = re.search(r"Python (\d+)\.(\d+)\.(\d+)", version_str)
+                if match:
+                    major, minor, _ = map(int, match.groups())
+                    if major == 3 and minor >= 12:
+                        logger.info(
+                            f"Python venv at {venv_dir} is already set up with Python 3.{minor}+"
+                        )
+                        return True
+                    else:
+                        logger.warning(
+                            f"Existing venv has Python {major}.{minor}, need 3.12+. "
+                            "Removing and recreating..."
+                        )
+                        shutil.rmtree(venv_dir)
+            except Exception as e:
+                logger.warning(f"Could not verify existing venv: {e}. Recreating...")
+                shutil.rmtree(venv_dir, ignore_errors=True)
+
+        # Find Python 3.12+ on system
+        python_cmd = None
+        for cmd in ["python3.12", "python3.13", "python3.14", "python3"]:
+            try:
+                result = subprocess.run(
+                    [cmd, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                version_str = result.stdout.strip()
+                match = re.search(r"Python (\d+)\.(\d+)\.(\d+)", version_str)
+                if match:
+                    major, minor, _ = map(int, match.groups())
+                    if major == 3 and minor >= 12:
+                        python_cmd = cmd
+                        logger.info(f"Found {version_str} at {cmd}")
+                        break
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                continue
+
+        if not python_cmd:
+            logger.error(
+                "Could not find Python 3.12+ on system. "
+                "Please install Python 3.12 or higher."
+            )
+            return False
+
+        # Create venv
+        logger.info(f"Creating Python venv at {venv_dir} using {python_cmd}")
+        subprocess.run(
+            [python_cmd, "-m", "venv", venv_dir],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        logger.info(f"Python venv created successfully at {venv_dir}")
+
+        # Verify venv was created correctly
+        if not os.path.exists(python_path):
+            logger.error(f"Venv creation failed: {python_path} does not exist")
+            return False
+
+        return True
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to setup Python venv: {e.stderr}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error setting up Python venv: {e}")
+        return False
+
+
 def _setup_mcp_repositories():
     """
     Clone or update MCP server and ocs-ci repositories for MCP server indexing.
 
     Clones repositories if they don't exist, or pulls latest changes if they do.
+    Also sets up Python 3.12+ venv for the MCP server.
     Uses paths from defaults.py configuration.
 
     Returns:
@@ -106,6 +206,13 @@ def _setup_mcp_repositories():
 
         # Ensure base directory exists
         os.makedirs(mcp_base_dir, exist_ok=True)
+
+        # Setup Python 3.12+ venv first
+        if not _setup_python_venv():
+            logger.error(
+                "Failed to setup Python venv, MCP server may not work correctly"
+            )
+            return False
 
         # Setup MCP server repository
         if os.path.isdir(mcp_server_dir):
