@@ -131,7 +131,7 @@ DEPLOYMENT:
   enable_nested_virtualization: False # Enable nested virtualization on the cluster nodes
   host_network: False # Use host network for ODF pods, propagates to spec of StorageCluster. Mandatory for Hub/Spoke deployments.
   enable_data_replication_separation: False # separates client data path from data replication
-  
+
 
 # Section for reporting configuration
 REPORTING:
@@ -349,6 +349,8 @@ UI_SELENIUM:
   headless: True
   screenshot: True
   ignore_ssl: True
+  ai_fallback: True
+  llm_model: "claude:sonnet"
 
 # This section is related to performance tests which need Elasticsearch server
 PERF:
