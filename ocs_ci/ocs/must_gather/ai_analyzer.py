@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -176,20 +177,22 @@ def _setup_mcp_repositories():
 
 def _generate_claude_settings():
     """
-    Generate Claude settings.json from Jinja2 template.
+    Generate MCP configuration file from Jinja2 template.
 
-    Renders the settings.json.j2 template with MCP server paths and writes
-    it to ~/.claude/settings.json.
+    Renders the mcp.json.j2 template with MCP server paths and writes
+    it to ~/.mcp.json (persistent template), then copies to ocsci_root/.mcp.json
+    (ephemeral working copy).
 
     Returns:
-        bool: True if settings generated successfully, False otherwise.
+        bool: True if MCP config generated successfully, False otherwise.
     """
     try:
-        claude_settings_path = os.path.expanduser(
-            config.ENV_DATA.get(
-                "ai_claude_settings_path", defaults.AI_CLAUDE_SETTINGS_PATH
-            )
+        # Get paths
+        mcp_template_path = os.path.expanduser(
+            config.ENV_DATA.get("ai_mcp_template_path", defaults.AI_MCP_TEMPLATE_PATH)
         )
+        mcp_working_path = os.path.join(OCSCI_ROOT, ".mcp.json")
+
         # Expand ~ in paths before passing to template so Claude CLI can use them
         ocs_ci_dir = os.path.expanduser(
             config.ENV_DATA.get("ai_ocs_ci_dir", defaults.AI_OCS_CI_DIR)
@@ -200,81 +203,88 @@ def _generate_claude_settings():
         mcp_server_name = config.ENV_DATA.get(
             "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
         )
-
-        # Ensure ~/.claude directory exists
-        claude_dir = os.path.dirname(claude_settings_path)
-        os.makedirs(claude_dir, exist_ok=True)
+        python_path = config.ENV_DATA.get("ai_python_path", defaults.AI_PYTHON_PATH)
 
         # Render template using ocs-ci Templating class
-        logger.info(f"Generating Claude settings at {claude_settings_path}")
+        logger.info(f"Generating MCP template at {mcp_template_path}")
         templating = Templating(base_path=constants.TEMPLATE_DIR)
 
         template_data = {
             "ocs_ci_dir": ocs_ci_dir,
             "mcp_server_dir": mcp_server_dir,
             "mcp_server_name": mcp_server_name,
+            "python_path": python_path,
         }
 
-        settings_content = templating.render_template(
-            "claude/settings.json.j2", template_data
-        )
+        mcp_content = templating.render_template("claude/mcp.json.j2", template_data)
 
-        # Write rendered content to settings file
-        with open(claude_settings_path, "w") as f:
-            f.write(settings_content)
+        # Write rendered content to persistent template file
+        with open(mcp_template_path, "w") as f:
+            f.write(mcp_content)
+        logger.info(f"MCP template written to {mcp_template_path}")
 
-        logger.info("Claude settings generated successfully")
+        # Copy to working directory (ocsci_root)
+        shutil.copy2(mcp_template_path, mcp_working_path)
+        logger.info(f"MCP config copied to {mcp_working_path}")
+
+        logger.info("MCP configuration generated successfully")
         logger.info(
             f"MCP server configured with expanded paths:\n"
             f"  - MCP server dir: {mcp_server_dir}\n"
             f"  - OCS-CI dir: {ocs_ci_dir}\n"
-            f"  - Server name: {mcp_server_name}"
+            f"  - Server name: {mcp_server_name}\n"
+            f"  - Python path: {python_path}"
         )
         return True
 
     except Exception as e:
-        logger.error(f"Failed to generate Claude settings: {e}")
+        logger.error(f"Failed to generate MCP configuration: {e}")
         return False
 
 
 def _verify_claude_mcp():
     """
-    Verify Claude MCP server configuration in settings.json.
+    Verify MCP configuration files exist.
 
-    Since the MCP server is configured directly in settings.json (generated
-    from template), we just need to verify the settings file exists and
-    contains the server configuration.
+    Checks that both the persistent template (~/.mcp.json) and the working
+    copy (ocsci_root/.mcp.json) exist and contain valid MCP server configuration.
 
     Returns:
-        bool: True if MCP server is configured, False otherwise.
+        bool: True if MCP configuration is valid, False otherwise.
     """
     try:
-        claude_settings_path = os.path.expanduser(
-            config.ENV_DATA.get(
-                "ai_claude_settings_path", defaults.AI_CLAUDE_SETTINGS_PATH
-            )
+        mcp_template_path = os.path.expanduser(
+            config.ENV_DATA.get("ai_mcp_template_path", defaults.AI_MCP_TEMPLATE_PATH)
         )
+        mcp_working_path = os.path.join(OCSCI_ROOT, ".mcp.json")
         mcp_server_name = config.ENV_DATA.get(
             "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
         )
 
         logger.info(f"Verifying MCP server '{mcp_server_name}' configuration")
 
-        # Check if settings file exists
-        if not os.path.exists(claude_settings_path):
-            logger.error(f"Claude settings file not found at {claude_settings_path}")
+        # Check if template file exists
+        if not os.path.exists(mcp_template_path):
+            logger.error(f"MCP template file not found at {mcp_template_path}")
             return False
 
-        # Verify settings file contains MCP server configuration
-        with open(claude_settings_path, "r") as f:
-            settings = json.load(f)
-
-        if "mcpServers" not in settings:
-            logger.error("No mcpServers section in Claude settings")
+        # Check if working copy exists
+        if not os.path.exists(mcp_working_path):
+            logger.error(f"MCP working file not found at {mcp_working_path}")
             return False
 
-        if mcp_server_name not in settings["mcpServers"]:
-            logger.error(f"MCP server '{mcp_server_name}' not found in Claude settings")
+        # Verify working file contains MCP server configuration
+        with open(mcp_working_path, "r") as f:
+            mcp_config = json.load(f)
+
+        if "mcpServers" not in mcp_config:
+            logger.error("No mcpServers section in MCP configuration")
+            return False
+
+        if mcp_server_name not in mcp_config["mcpServers"]:
+            logger.error(
+                f"MCP server '{mcp_server_name}' not found in MCP configuration"
+            )
             return False
 
         logger.info(
@@ -1655,6 +1665,8 @@ def _run_claude_analysis(
             "--dangerously-skip-permissions",  # bypass all tool-use permission prompts
             "--output-format",
             "json",  # structured output: {type, result, usage{input_tokens,...}}
+            "--add-dir",
+            ocsci_root,  # Load MCP config from ocsci_root/.mcp.json
             "--allowedTools",
             allowed_tools,
         ]

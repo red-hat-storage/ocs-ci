@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "{{ mcp_server_name }}": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "{{ mcp_server_dir }}",
+        "run",
+        "--python",
+        "{{ python_path }}",
+        "server.py",
+        "--repo-path",
+        "{{ ocs_ci_dir }}"
+      ],
+      "env": {
+        "OCS_CI_PATH": "{{ ocs_ci_dir }}"
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Read({{ ocs_ci_dir }}/*)",
+      "Read({{ mcp_server_dir }}/*)"
+    ]
+  },
+  "autoApprove": [
+    {
+      "tool": "mcp__{{ mcp_server_name }}__*"
+    }
+  ]
+}
