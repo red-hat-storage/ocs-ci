@@ -6244,7 +6244,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
-                    f"Could not delete block pool {instances.name} from UI."
+                    f"Could not delete block pool {instance.name} from UI."
                     " Deleted from CLI"
                 )
 
