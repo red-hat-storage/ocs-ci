@@ -177,10 +177,12 @@ AI_MCP_SERVER_REPO_URL = "https://github.com/shivamdurgbuns/ocs-ci-server.git"
 AI_MCP_SERVER_DIR = os.path.join(AI_MCP_BASE_DIR, "ocs-ci-server")
 AI_OCS_CI_REPO_URL = "https://github.com/red-hat-storage/ocs-ci.git"
 AI_OCS_CI_DIR = os.path.join(AI_MCP_BASE_DIR, "ocs-ci")
+AI_MCP_VENV_DIR = os.path.join(AI_MCP_BASE_DIR, "venv")
 AI_MCP_TEMPLATE_PATH = os.path.expanduser("~/.mcp.json")
 AI_GCP_CREDENTIALS_PATH = os.path.expanduser("~/.gcp/gcp-auth.json")
 AI_MCP_SERVER_NAME = "ocs-ci-server"
-AI_PYTHON_PATH = "python3"
+# Full path to Python 3.12+ in MCP venv (will be created if doesn't exist)
+AI_PYTHON_PATH = os.path.join(AI_MCP_BASE_DIR, "venv/bin/python")
 
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
