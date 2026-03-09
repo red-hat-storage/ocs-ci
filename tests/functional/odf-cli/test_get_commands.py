@@ -36,6 +36,7 @@ class TestGetCommands:
         self.validate_mgr_pods(output)
 
     @skipif_external_mode
+    @runs_on_provider
     @polarion_id("OCS-6238")
     def test_get_mon_endpoint(self):
         result = self.odf_cli_runner.run_get_mon_endpoint()
