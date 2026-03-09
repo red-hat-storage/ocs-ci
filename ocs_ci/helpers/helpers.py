@@ -68,7 +68,6 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.utils import convert_device_size
 
-
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
@@ -1676,12 +1675,16 @@ def get_provision_time(interface, pvc_name, status="start"):
         patterns = [
             f'"Provisioning".*{pvc_name}',
             f'"Started".*PVC="[^"]*{pvc_name}"',
-            f'"Succeeded".*PVC="[^"]*{pvc_name}"'
+            f'"Succeeded".*PVC="[^"]*{pvc_name}"',
         ]
         # Handling via progressive fallback since side car log level is enabled to 5
         for n in range(1000, 5001, 1000):
             recent = logs[-n:][::-1]
-            matches = [line for line in recent if any(re.search(p, line, re.IGNORECASE) for p in patterns)]
+            matches = [
+                line
+                for line in recent
+                if any(re.search(p, line, re.IGNORECASE) for p in patterns)
+            ]
             if matches:
                 results = []
                 for line in matches:

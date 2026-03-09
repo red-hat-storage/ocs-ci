@@ -615,7 +615,6 @@ def calculate_operation_time(name, times):
 
 
 def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op="all"):
-
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
 
@@ -677,7 +676,9 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                         ) or re.search(f'Started.*PVC="[^"]*/{re.escape(name)}"', line):
 
                             if results[name]["create"]["start"] is None:
-                                results[name]["create"]["start"] = extruct_timestamp_from_log(line)
+                                results[name]["create"]["start"] = (
+                                    extruct_timestamp_from_log(line)
+                                )
 
                         if (
                             re.search(f"provision.*{name}.*succeeded", line)
@@ -687,28 +688,27 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                         ):
 
                             if results[name]["create"]["end"] is None:
-                                results[name]["create"]["end"] = extruct_timestamp_from_log(line)
+                                results[name]["create"]["end"] = (
+                                    extruct_timestamp_from_log(line)
+                                )
 
-                                results[name]["create"]["time"] = calculate_operation_time(
-                                    name, results[name]["create"]
+                                results[name]["create"]["time"] = (
+                                    calculate_operation_time(
+                                        name, results[name]["create"]
+                                    )
                                 )
 
                     # For delete operation
                     if op in ["all", "delete"]:
 
                         # Delete start
-                        if (
-                            re.search(
-                                f'"shouldDelete is true".*PV="{re.escape(pv_name)}"', line
-                            )
-                            or re.search(
-                                f'"Started".*PV="{re.escape(pv_name)}"', line
-                            )
-                        ):
+                        if re.search(
+                            f'"shouldDelete is true".*PV="{re.escape(pv_name)}"', line
+                        ) or re.search(f'"Started".*PV="{re.escape(pv_name)}"', line):
 
                             if results[name]["delete"]["start"] is None:
-                                results[name]["delete"]["start"] = extruct_timestamp_from_log(
-                                    line
+                                results[name]["delete"]["start"] = (
+                                    extruct_timestamp_from_log(line)
                                 )
 
                         if re.search(
@@ -717,12 +717,14 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                         ):
 
                             if results[name]["delete"]["end"] is None:
-                                results[name]["delete"]["end"] = extruct_timestamp_from_log(
-                                    line
+                                results[name]["delete"]["end"] = (
+                                    extruct_timestamp_from_log(line)
                                 )
 
-                                results[name]["delete"]["time"] = calculate_operation_time(
-                                    name, results[name]["delete"]
+                                results[name]["delete"]["time"] = (
+                                    calculate_operation_time(
+                                        name, results[name]["delete"]
+                                    )
                                 )
 
     # Getting times from CSI log - if needed
@@ -747,42 +749,46 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
 
                         if f"Req-ID: {pv_name} GRPC call:" in line:
                             if results[name]["csi_create"]["start"] is None:
-                                results[name]["csi_create"]["start"] = extruct_timestamp_from_log(
-                                    line
+                                results[name]["csi_create"]["start"] = (
+                                    extruct_timestamp_from_log(line)
                                 )
 
                         if f"Req-ID: {pv_name} GRPC response:" in line:
                             if results[name]["csi_create"]["end"] is None:
-                                results[name]["csi_create"]["end"] = extruct_timestamp_from_log(
-                                    line
+                                results[name]["csi_create"]["end"] = (
+                                    extruct_timestamp_from_log(line)
                                 )
 
-                                results[name]["csi_create"]["time"] = calculate_operation_time(
-                                    name, results[name]["csi_create"]
+                                results[name]["csi_create"]["time"] = (
+                                    calculate_operation_time(
+                                        name, results[name]["csi_create"]
+                                    )
                                 )
 
                     if op in ["all", "delete"]:
 
-                        if 'GRPC call' in line and 'DeleteVolume' in line:
+                        if "GRPC call" in line and "DeleteVolume" in line:
 
                             if results[name]["csi_delete"]["start"] is None:
-                                results[name]["csi_delete"]["start"] = extruct_timestamp_from_log(
-                                    line
+                                results[name]["csi_delete"]["start"] = (
+                                    extruct_timestamp_from_log(line)
                                 )
 
-                        if 'GRPC response' in line:
+                        if "GRPC response" in line:
 
                             if (
                                 results[name]["csi_delete"]["start"] is not None
                                 and results[name]["csi_delete"]["end"] is None
                             ):
 
-                                results[name]["csi_delete"]["end"] = extruct_timestamp_from_log(
-                                    line
+                                results[name]["csi_delete"]["end"] = (
+                                    extruct_timestamp_from_log(line)
                                 )
 
-                                results[name]["csi_delete"]["time"] = calculate_operation_time(
-                                    name, results[name]["csi_delete"]
+                                results[name]["csi_delete"]["time"] = (
+                                    calculate_operation_time(
+                                        name, results[name]["csi_delete"]
+                                    )
                                 )
 
     logger.debug(f"All results are : {json.dumps(results, indent=3)}")
