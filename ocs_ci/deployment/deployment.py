@@ -192,6 +192,7 @@ from ocs_ci.utility.utils import (
     get_acm_mce_build_tag,
     apply_oadp_workaround,
     mute_mon_netsplit,
+    get_client_type_by_name,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -3238,21 +3239,34 @@ class MultiClusterDROperatorsDeploy(object):
             mode="w+", prefix="mirror_peer", delete=False
         )
         # Update all the participating clusters in mirror_peer_yaml
-        non_acm_clusters = get_non_acm_cluster_config()
-        primary = get_primary_cluster_config()
-        non_acm_clusters.remove(primary)
-        for cluster in non_acm_clusters:
-            logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            current_dr_clusters_list = [
+                (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                    if get_client_type_by_name(cluster_name=item) == "kubevirt"
+                    else item
+                )
+                for item in dr_cluster_relations[0]
+            ]
+        else:
+            non_acm_clusters = get_non_acm_cluster_config()
+            primary = get_primary_cluster_config()
+            non_acm_clusters.remove(primary)
+            for cluster in non_acm_clusters:
+                logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+            current_dr_clusters_list = [
+                primary.ENV_DATA["cluster_name"],
+                non_acm_clusters[0].ENV_DATA["cluster_name"],
+            ]
         index = -1
         # First entry should be the primary cluster
         # in the mirror peer
         for cluster_entry in mirror_peer_data["spec"]["items"]:
             if index == -1:
-                cluster_entry["clusterName"] = primary.ENV_DATA["cluster_name"]
+                cluster_entry["clusterName"] = current_dr_clusters_list[0]
             else:
-                cluster_entry["clusterName"] = non_acm_clusters[index].ENV_DATA[
-                    "cluster_name"
-                ]
+                cluster_entry["clusterName"] = current_dr_clusters_list[1]
             index += 1
 
         # Use unique cluster name to easily identify the managed clusters
