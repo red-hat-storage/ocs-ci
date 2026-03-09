@@ -1646,6 +1646,7 @@ def set_image_lookup(image_name):
     status = ocp_obj.exec_oc_cmd(command)
     return status
 
+
 def get_provision_time(interface, pvc_name, status="start"):
     """
     Get the starting/ending creation time of a PVC based on provisioner logs
@@ -1703,8 +1704,8 @@ def get_provision_time(interface, pvc_name, status="start"):
     # For list of PVCs
     elif isinstance(pvc_name, list):
         all_stats = []
-        for pvc in pvc_name:
-            events = find_events(pvc.name)
+        for pvc_i in pvc_name:
+            events = find_events(pvc_i.name)
             all_stats.extend(events)
 
         if not all_stats:
@@ -1712,12 +1713,13 @@ def get_provision_time(interface, pvc_name, status="start"):
             return None
 
         all_stats = sorted(all_stats)
-        if status.lower() == "end": # return the highest time
+        if status.lower() == "end":  # return the highest time
             stat = all_stats[-1]
-        elif status.lower() == "start": # return the lowest time
+        elif status.lower() == "start":  # return the lowest time
             stat = all_stats[0]
 
     return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
+
 
 def get_start_creation_time(interface, pvc_name):
     """

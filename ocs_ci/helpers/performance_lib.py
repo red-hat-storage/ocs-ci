@@ -668,7 +668,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                     name = pvc_name[i].name
                     pv_name = pvc_name[i].backed_pv
 
-                    #For create operation
+                    # For create operation
                     if op in ["all", "create"]:
 
                         if (
