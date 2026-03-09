@@ -3,6 +3,7 @@ Test cases for ODF upgrade pre-check conditions.
 """
 
 import logging
+import re
 
 import pytest
 
@@ -14,11 +15,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
 )
 from ocs_ci.framework.testlib import ManageTest
-from ocs_ci.utility.utils import run_ceph_health_cmd
+from ocs_ci.utility.utils import (
+    run_ceph_health_cmd,
+    get_url_content,
+    convert_github_blob_url_to_raw,
+)
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.ocs.resources.csv import (
     get_operator_csv_names,
-    check_operatorcondition_upgradeable_false,
+    check_operatorcondition_upgradeable,
+    apply_operatorcondition_upgrade_override,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
@@ -98,19 +104,58 @@ def verify_odf_not_upgradeable_runbook_link(alerts):
         runbook_url = alert.get("annotations", {}).get("runbook_url", "")
         if runbook_url == expected_runbook:
             log.info(
-                "✓ ODFOperatorNotUpgradeable alert runbook link is correct: %s",
-                expected_runbook,
+                f"✓ ODFOperatorNotUpgradeable alert runbook link is correct: "
+                f"{expected_runbook}"
             )
             return True
         if runbook_url:
             log.warning(
-                "ODFOperatorNotUpgradeable runbook_url mismatch: expected %s, "
-                "got %s",
-                expected_runbook,
-                runbook_url,
+                f"ODFOperatorNotUpgradeable runbook_url mismatch: expected "
+                f"{expected_runbook}, got {runbook_url}"
             )
     log.warning("ODFOperatorNotUpgradeable alert has no or incorrect runbook_url")
     return False
+
+
+def verify_runbook_content(blob_url, alert_name, mandatory_headers=None):
+    """
+    Fetch runbook from URL and verify it contains alert name and mandatory
+    section headers (Meaning, Impact, Diagnosis, Mitigation).
+
+    Args:
+        blob_url (str): Runbook URL (blob or raw)
+        alert_name (str): Expected alert name in runbook (e.g. in title)
+        mandatory_headers (list): Section headers that must appear as "## X".
+            Defaults to constants.RUNBOOK_MANDATORY_HEADERS.
+
+    Returns:
+        bool: True if runbook content is valid, False otherwise.
+
+    """
+    if mandatory_headers is None:
+        mandatory_headers = constants.RUNBOOK_MANDATORY_HEADERS
+    raw_url = convert_github_blob_url_to_raw(blob_url)
+    try:
+        content = get_url_content(raw_url, timeout=30)
+    except Exception as e:
+        log.warning(f"Failed to fetch runbook from {raw_url}: {e}")
+        return False
+    # get_url_content returns bytes; decode for string checks
+    if isinstance(content, bytes):
+        content = content.decode("utf-8")
+    if not content or alert_name not in content:
+        log.warning(f"Runbook does not contain alert name {alert_name}")
+        return False
+    # Require OpenShift runbook sections (## Meaning, ## Impact, etc.)
+    for header in mandatory_headers:
+        if not re.search(rf"##\s+{re.escape(header)}\s", content):
+            log.warning(f"Runbook missing mandatory section: ## {header}")
+            return False
+    log.info(
+        f"Runbook content valid: alert {alert_name} and headers "
+        f"{mandatory_headers} present"
+    )
+    return True
 
 
 @brown_squad
@@ -177,19 +222,21 @@ class TestODFUpgradePrecheckConditions(ManageTest):
         log.info(f"ODF CSV name: {odf_csv_name}")
 
         # Check OCS OperatorCondition with specific reason
-        ocs_condition_met = check_operatorcondition_upgradeable_false(
+        ocs_condition_met = check_operatorcondition_upgradeable(
             operator_name="OCS",
             csv_name=ocs_csv_name,
             namespace=namespace,
+            upgradeable_expected=False,
             reason="CephClusterHealthNotOK",
             message_pattern="CephCluster health is HEALTH_WARN.",
         )
 
         # Check ODF OperatorCondition with specific reason
-        odf_condition_met = check_operatorcondition_upgradeable_false(
+        odf_condition_met = check_operatorcondition_upgradeable(
             operator_name="ODF",
             csv_name=odf_csv_name,
             namespace=namespace,
+            upgradeable_expected=False,
             reason="CephClusterHealthNotOK",
             message_pattern="CephCluster health is HEALTH_WARN.",
         )
@@ -308,10 +355,11 @@ class TestODFUpgradePrecheckConditions(ManageTest):
         log.info(f"ODF CSV name: {odf_csv_name}")
 
         # Check ODF OperatorCondition with specific reason
-        odf_condition_met = check_operatorcondition_upgradeable_false(
+        odf_condition_met = check_operatorcondition_upgradeable(
             operator_name="ODF",
             csv_name=odf_csv_name,
             namespace=namespace,
+            upgradeable_expected=False,
             reason="StorageClusterNotReady",
         )
 
@@ -354,4 +402,106 @@ class TestODFUpgradePrecheckConditions(ManageTest):
         log.info(
             "Test completed: Upgrade should be blocked when StorageCluster "
             "is not in Ready state"
+        )
+
+    @pytest.mark.polarion_id("OCS-7423")
+    def test_runbook_validity_and_override_restores_upgradeable(
+        self, mon_pod_down, threading_lock
+    ):
+        """
+        Verify ODFOperatorNotUpgradeable runbook validity and that applying
+        the override (instruct patch) makes ODF OperatorCondition report
+        Upgradeable=True. Ceph WARN state is cleaned up in teardown via
+        mon_pod_down fixture.
+
+        Steps:
+        1. Cause Ceph HEALTH_WARN (mon_pod_down fixture scales down one MON).
+        2. Verify ODFOperatorNotUpgradeable alert and runbook link.
+        3. Verify runbook content (mandatory sections and alert name).
+        4. Apply OperatorCondition upgrade override (runbook Option 2).
+        5. Verify ODF OperatorCondition shows Upgradeable=True with override
+           reason/message.
+
+        Expected Result:
+        1. Alert and runbook link are correct.
+        2. Runbook contains alert name and sections: Meaning, Impact,
+           Diagnosis, Mitigation.
+        3. After override, OperatorCondition shows Upgradeable=True with
+           reason/message related to override.
+        4. Teardown: MON is scaled back up (mon_pod_down fixture) so Ceph
+           returns to healthy state.
+
+        Args:
+            mon_pod_down: Fixture that scales down one MON and restores it
+                in teardown (cleans up Ceph WARN state).
+            threading_lock: Threading lock for Prometheus API calls.
+
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # Step 1: Ceph HEALTH_WARN (handled by mon_pod_down fixture)
+        log.info("Step 1: MON scaled down to cause HEALTH_WARN (handled by fixture)")
+        health_status = run_ceph_health_cmd(namespace=namespace, detail=True)
+        log.info("Ceph health status: %s", health_status)
+        assert (
+            "WARN" in health_status or "HEALTH_WARN" in health_status
+        ), "Expected HEALTH_WARN from mon_pod_down setup"
+
+        # Step 2: Verify alert and runbook link
+        log.info("Step 2: Verifying ODFOperatorNotUpgradeable alert and runbook link")
+        alert_found, odf_alerts = verify_odf_not_upgradeable(threading_lock)
+        assert alert_found, "ODFOperatorNotUpgradeable alert not found."
+        runbook_link_ok = verify_odf_not_upgradeable_runbook_link(odf_alerts)
+        assert (
+            runbook_link_ok
+        ), "ODFOperatorNotUpgradeable alert runbook link is missing or incorrect."
+
+        # Step 3: Verify runbook content (validity)
+        log.info(
+            "Step 3: Verifying runbook content (mandatory sections and alert name)"
+        )
+        runbook_content_ok = verify_runbook_content(
+            blob_url=constants.RUNBOOK_URL_ODFOPERATORNOTUPGRADABLE,
+            alert_name=constants.ALERT_ODFOPERATORNOTUPGRADABLE,
+        )
+        assert runbook_content_ok, (
+            "ODFOperatorNotUpgradeable runbook content invalid: missing alert "
+            "name or mandatory sections (Meaning, Impact, Diagnosis, Mitigation)."
+        )
+
+        # Step 4: Apply OperatorCondition upgrade override (runbook instruct)
+        _, odf_csv_name = get_operator_csv_names(namespace=namespace)
+        assert odf_csv_name, "ODF CSV name not found"
+        override_reason = "ManualOverride"
+        override_message = "Manually overriding upgradeable condition"
+        override_ok = apply_operatorcondition_upgrade_override(
+            csv_name=odf_csv_name,
+            namespace=namespace,
+            reason=override_reason,
+            message=override_message,
+        )
+        assert override_ok, "Failed to apply OperatorCondition upgrade override"
+
+        # Step 5: Verify ODF OperatorCondition shows Upgradeable=True
+        log.info(
+            "Step 5: Verifying ODF OperatorCondition shows Upgradeable=True "
+            "after override"
+        )
+        upgradeable_true_ok = check_operatorcondition_upgradeable(
+            operator_name="ODF",
+            csv_name=odf_csv_name,
+            namespace=namespace,
+            upgradeable_expected=True,
+            timeout=600,
+            reason=override_reason,
+            message_pattern=override_message,
+        )
+        assert upgradeable_true_ok, (
+            f"ODF OperatorCondition should show Upgradeable=True with reason "
+            f"{override_reason} and message related to override after override."
+        )
+
+        log.info(
+            "Test completed: Runbook validity and override behavior verified; "
+            "teardown will restore MON and clear Ceph WARN state."
         )
