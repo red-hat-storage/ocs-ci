@@ -24,6 +24,9 @@ class TestScaleConnection(object):
     @skipif_ocs_version("<4.20")
     @black_squad
     def test_connect_scale(self, setup_ui_class):
+        """
+        Test connecting Scale cluster as External system
+        """
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
         external_systems.connect_scale(
@@ -42,6 +45,9 @@ class TestScaleConnection(object):
     @skipif_ocs_version("<4.21")
     @black_squad
     def test_add_delete_filesystem(self, setup_ui_class):
+        """
+        Test connecting an additional filesystem when a scale cluster is connected
+        """
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
         external_systems.connect_scale_filesystem(
@@ -50,3 +56,20 @@ class TestScaleConnection(object):
         external_systems.delete_scale_filesystem(
             scale_name="test-scale", filesystem_name="additional_filesystem_1"
         )
+
+    @ui
+    @skipif_ibm_cloud_managed
+    @tier2
+    @skipif_ocs_version("<4.20")
+    @black_squad
+    def test_disconnect_scale(self, setup_ui_class):
+        """
+        Test that disconnecting scale removes it from External systems page
+        """
+        scale_connect_obj = PageNavigator()
+        external_systems = scale_connect_obj.nav_external_systems_page()
+        assert external_systems.scale_present_on_page(scale_name="scale_cluster_1")
+        external_systems.disconnect_scale(
+            scale_name="scale_cluster_1",
+        )
+        assert not external_systems.scale_present_on_page(scale_name="scale_cluster_1")

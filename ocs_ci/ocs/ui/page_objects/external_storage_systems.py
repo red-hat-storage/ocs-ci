@@ -6,6 +6,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 )
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.utility.utils import exec_cmd
 
 
 class ExternalSystems(ResourceList):
@@ -40,8 +41,7 @@ class ExternalSystems(ResourceList):
     def connect_external_system(self):
         """
         Click Connect external systems button.
-        It looks different depending on whether an external system
-        is already connected or not
+
         """
         logger.info("Click Connect external system")
         self.do_click(locator=self.external_systems["connect_external_system"])
@@ -111,6 +111,61 @@ class ExternalSystems(ResourceList):
             logger.warning(f"{alert_text}")
         except TimeoutError:
             logger.info("No alerts when scale was connected")
+
+    def scale_present_on_page(self, scale_name):
+        """
+        Check that scale connection with the given name
+        is present on External Systems page
+
+        Args:
+            scale_name (str): scale connection name
+        """
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        try:
+            self.wait_for_element_to_be_present(
+                locator=self.external_systems["scale_dashboard_link"]
+            )
+            logger.info(f"{scale_name} found on External Systems page")
+            return True
+        except TimeoutError:
+            logger.info(f"{scale_name} not found on External Systems page")
+            return False
+
+    def disconnect_scale(self, scale_name):
+        """
+        Removing a connection to scale is going to be possible in UI
+        but now it's only done via CLI
+        """
+        logger.info(f"Deleting connection to {scale_name}")
+        delete_cmd = "oc delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
+        exec_cmd(delete_cmd)
+        assert not self.scale_present_on_page(scale_name)
+
+    def scale_status_ok(self, scale_name):
+        """
+        Check the status of the scale operator and connection
+
+        Args:
+            scale_name (str): name of the scale cluster
+
+        Returns:
+            True if Operator status and Connection status are Healthy
+            False othewise
+
+        """
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        self.do_click(locator=self.external_systems["scale_dashboard_link"])
+        operator_status = self.get_element_text(
+            locator=self.external_systems["scale_operator_health"]
+        )
+        logger.info(f"Scale operator status: {operator_status}")
+        connection_status = self.get_element_text(
+            locator=self.external_systems["scale_connection_health"]
+        )
+        logger.info(f"Scale connection status: {connection_status}")
+        if operator_status == "Healthy" and connection_status == "Healthy":
+            return True
+        return False
 
     def connect_scale_filesystem(self, scale_name, filesystem_name):
         """
