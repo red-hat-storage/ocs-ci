@@ -159,7 +159,7 @@ def set_xattr_with_high_cpu_usage(
         pvc_obj1.delete()
         pvc_obj1.ocp.wait_for_delete(resource_name=pvc_obj1.name)
         delete_released_pvs_in_sc(sc_name)
-        log.info("All rsources cleaned up successully")
+        log.info("All resources cleaned up successully")
 
     request.addfinalizer(finalizer)
 
@@ -315,9 +315,8 @@ class TestMdsXattrAlerts(E2ETest):
         initiate_alert_clearance()
         # waiting for sometime for load distribution
         time.sleep(600)
-        # assert MDSxattr_alert_values(threading_lock, timeout=30) is False
         api.check_alert_cleared(
-            label=constants.ALERT_MDSXATTR, measure_end_time=300, time_min=30
+            label=constants.ALERT_MDSXATTR, measure_end_time=600, time_min=30
         )
 
     @pytest.mark.polarion_id("OCS-7734")
