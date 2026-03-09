@@ -263,6 +263,7 @@ class TestFullClusterHealth(PASTest):
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
         time.sleep(300)
+        self.reload_ceph_cluster()
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
         logger.info("Starting OCS operator node restart")
