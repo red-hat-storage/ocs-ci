@@ -921,6 +921,73 @@ def _parse_confidence_from_summary(summary_content):
     return "Unknown"
 
 
+def _detect_mcp_tool_usage(cli_json_response, mcp_server_name):
+    """
+    Detect if MCP tools were used in Claude's response.
+
+    Checks the Claude CLI JSON response for evidence of MCP tool usage.
+    The response may contain tool_calls or similar fields indicating which
+    tools were invoked during the analysis.
+
+    Args:
+        cli_json_response (dict): The full JSON response from Claude CLI
+        mcp_server_name (str): Name of the MCP server (e.g., "ocs-ci-server")
+
+    Returns:
+        dict: MCP usage information with keys:
+            - used (bool): Whether MCP tools were used
+            - tool_calls (list): List of MCP tool names that were called
+            - call_count (int): Number of MCP tool calls
+    """
+    mcp_usage = {
+        "used": False,
+        "tool_calls": [],
+        "call_count": 0,
+    }
+
+    if not cli_json_response or not isinstance(cli_json_response, dict):
+        return mcp_usage
+
+    # Check for tool usage in various possible locations in the response
+    # Claude CLI may include this in different formats depending on version
+
+    # Check in 'result' field (may contain tool call references)
+    result = cli_json_response.get("result", "")
+    if isinstance(result, str):
+        # Look for MCP tool call patterns in the result text
+        # MCP tools are called as: use_mcp_tool:server_name__tool_name
+        mcp_pattern = f"use_mcp_tool:{mcp_server_name}__"
+        if mcp_pattern in result.lower():
+            mcp_usage["used"] = True
+            # Extract tool names from result
+            import re
+
+            pattern = rf"use_mcp_tool:{re.escape(mcp_server_name)}__(\w+)"
+            matches = re.findall(pattern, result, re.IGNORECASE)
+            mcp_usage["tool_calls"] = list(set(matches))  # Unique tool names
+            mcp_usage["call_count"] = len(matches)
+
+    # Check for explicit tool_use or tool_calls fields (if Claude CLI provides them)
+    for field in ["tool_use", "tool_calls", "tools_used"]:
+        if field in cli_json_response:
+            tools = cli_json_response[field]
+            if isinstance(tools, list):
+                for tool in tools:
+                    tool_name = ""
+                    if isinstance(tool, dict):
+                        tool_name = tool.get("name", "") or tool.get("tool", "")
+                    elif isinstance(tool, str):
+                        tool_name = tool
+
+                    if mcp_server_name.lower() in tool_name.lower():
+                        mcp_usage["used"] = True
+                        if tool_name not in mcp_usage["tool_calls"]:
+                            mcp_usage["tool_calls"].append(tool_name)
+                            mcp_usage["call_count"] += 1
+
+    return mcp_usage
+
+
 def _parse_token_usage(cli_json_response):
     """
     Parse token usage and cost from the Claude CLI JSON output.
@@ -1718,6 +1785,13 @@ def _run_claude_analysis(
             failure_info, kubeconfig_entries, ocsci_root, claude_md_path
         )
 
+        # Log the generated prompt for debugging
+        logger.info("=" * 70)
+        logger.info("[AI ANALYZER] Generated Prompt:")
+        logger.info("=" * 70)
+        logger.info(prompt)
+        logger.info("=" * 70)
+
         # Build the claude CLI command.
         # --print: non-interactive/autonomous mode (prints output and exits)
         # --allowedTools: restrict to read-only tools only.
@@ -1840,14 +1914,16 @@ def _run_claude_analysis(
                 logger.debug("Unset GOOGLE_APPLICATION_CREDENTIALS")
 
         # Log Claude CLI stderr for debugging (contains MCP server startup messages)
+        mcp_server_active = False
+        mcp_server_name = config.ENV_DATA.get(
+            "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
+        )
+
         if proc.stderr:
             logger.debug(f"Claude CLI stderr output:\n{proc.stderr}")
 
             # Check for MCP server connection indicators
             stderr_lower = proc.stderr.lower()
-            mcp_server_name = config.ENV_DATA.get(
-                "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
-            )
 
             # MCP server runs in stdio mode - Claude CLI starts it on-demand
             # Look for indicators that the server process was started
@@ -1857,11 +1933,11 @@ def _run_claude_analysis(
                 "starting server",
                 "connected",
             ]
-            mcp_mentioned = any(
+            mcp_server_active = any(
                 indicator in stderr_lower for indicator in mcp_indicators
             )
 
-            if mcp_mentioned:
+            if mcp_server_active:
                 logger.info(
                     f"✓ MCP server '{mcp_server_name}' activity detected in Claude CLI stderr"
                 )
@@ -1883,17 +1959,32 @@ def _run_claude_analysis(
         raw_stdout = proc.stdout.strip()
         summary_content = ""
         token_usage = None
+        mcp_usage = None
         if raw_stdout:
             try:
                 cli_json = json.loads(raw_stdout)
                 summary_content = cli_json.get("result", "").strip()
                 token_usage = _parse_token_usage(cli_json)
+                mcp_usage = _detect_mcp_tool_usage(cli_json, mcp_server_name)
+
                 logger.debug(
                     f"Token usage for '{test_short_name}': "
                     f"input={token_usage['input_tokens']} "
                     f"output={token_usage['output_tokens']} "
                     f"total={token_usage['total_tokens']}"
                 )
+
+                # Log MCP tool usage if detected
+                if mcp_usage and mcp_usage["used"]:
+                    logger.info(
+                        f"[AI ANALYZER] MCP tools used: {mcp_usage['call_count']} calls"
+                    )
+                    for tool_call in mcp_usage["tool_calls"]:
+                        logger.debug(f"  - {tool_call}")
+                elif mcp_server_active:
+                    logger.warning(
+                        "[AI ANALYZER] MCP server started but no tool calls detected"
+                    )
             except (json.JSONDecodeError, ValueError):
                 # Older CLI or unexpected format — treat stdout as plain text
                 logger.debug("Claude CLI output is not JSON; treating as plain text")
