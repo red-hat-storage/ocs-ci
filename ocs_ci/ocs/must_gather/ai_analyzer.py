@@ -1818,7 +1818,9 @@ def _run_claude_analysis(
         logger.info(
             f"Prompt size estimates:\n"
             f"  System prompt (cached): ~{int(system_tokens_est):,} tokens\n"
-            f"  User message (per-test): ~{int(user_tokens_est):,} tokens"
+            f"  User message (per-test): ~{int(user_tokens_est):,} tokens\n"
+            f"[CACHE DEBUG] System prompt hash: {hash(system_prompt)}\n"
+            f"[CACHE DEBUG] System prompt length: {len(system_prompt)} chars"
         )
 
         # Build allowed tools (existing code)
@@ -1851,6 +1853,8 @@ def _run_claude_analysis(
             "Read,Glob,Grep,LS,"
             f"{mcp_tools}"
         )
+
+        logger.info(f"[CACHE DEBUG] Allowed tools hash: {hash(allowed_tools)}")
 
         # Build command with system prompt
         cmd = [
