@@ -806,6 +806,24 @@ class PVKeyrotation(KeyRotation):
             pvc.reload()
 
         log.info("Completed key rotation state changes for all specified PVCs.")
+
+        # Restart CSI Addons controller manager so it picks up the state change
+        namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+        try:
+            from ocs_ci.ocs.resources import pod as pod_module
+
+            log.info("Restarting CSI Addons controller manager pods...")
+            pod_module.restart_pods_having_label(
+                label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+                namespace=namespace,
+            )
+            log.info("CSI Addons controller manager pods restarted.")
+        except Exception as e:
+            log.warning(
+                f"Could not restart CSI Addons controller manager: {e}. "
+                "Controller may still pick up state change via watch."
+            )
+
         return True
 
     def reset_keyrotation_baseline(self):

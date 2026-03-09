@@ -6344,12 +6344,6 @@ def wait_for_reclaimspace_cronjob_annotation(pvc_obj, timeout=120):
     """
     Wait for the CSI addons controller to create the ReclaimSpaceCronJob.
 
-    Waits for either:
-    - The controller to set the cronjob name on the PVC annotation
-      (reclaimspace.csiaddons.openshift.io/cronjob), or
-    - The ReclaimSpaceCronJob CRD to exist by naming convention
-      ({pvc_name}-reclaimspace). Some controllers do not set the annotation.
-
     Args:
         pvc_obj (object): PersistentVolumeClaim (PVC) object.
         timeout (int): Max seconds to wait (default 120).
@@ -6474,6 +6468,26 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
             )
 
         cron_obj.patch(params=suspend_patch, format_type="json")
+
+    # Restart CSI Addons controller manager so it picks up the state change
+    namespace = (
+        pvc_objs[0].namespace
+        if pvc_objs
+        else config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+    )
+    try:
+        logger.info("Restarting CSI Addons controller manager pods...")
+        pod.restart_pods_having_label(
+            label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+            namespace=namespace,
+        )
+        logger.info("CSI Addons controller manager pods restarted.")
+    except Exception as e:
+        logger.warning(
+            "Could not restart CSI Addons controller manager: %s. "
+            "Controller may still pick up state change via watch.",
+            e,
+        )
 
     return True
 
