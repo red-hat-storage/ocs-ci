@@ -636,47 +636,23 @@ def _find_test_log_file(test_short_name):
     return None
 
 
-def _build_claude_prompt(failure_info, kubeconfig_entries, ocsci_root, claude_md_path):
+def _build_system_prompt(mcp_server_name, ocsci_root):
     """
-    Build the prompt string to pass to Claude Code CLI.
+    Build the STATIC system prompt (cached once per test run).
+
+    Contains NO dynamic test-specific data - only instructions that
+    apply to all tests equally.
 
     Args:
-        failure_info (dict): Test failure context dict.
-        kubeconfig_entries (list): List of (role, kubeconfig_path) tuples.
-        ocsci_root (str): Path to ocs-ci codebase root.
-        claude_md_path (str): Path to CLAUDE.md.
+        mcp_server_name (str): Name of the MCP server
+        ocsci_root (str): Path to ocs-ci codebase root
 
     Returns:
-        str: The full prompt text.
+        str: The static system prompt to be cached
     """
-    test_name = failure_info.get("test_name", "unknown")
-    test_short_name = failure_info.get("test_short_name", "unknown")
-    test_file_path = failure_info.get("test_file_path", "")
-    failure_repr = failure_info.get("failure_repr", "No failure details available")
-    log_file = failure_info.get("log_file", "")
-
-    # Build kubeconfig context section
-    kubeconfig_section = ""
-    for role, kc_path in kubeconfig_entries:
-        kubeconfig_section += f"  - {role}: {kc_path}\n"
-    if not kubeconfig_section:
-        kubeconfig_section = "  - No kubeconfig paths available\n"
-
-    # Build log file section
-    log_section = ""
-    if log_file and os.path.isfile(log_file):
-        log_section = (
-            f"\n## Test Log File\n"
-            f"The full test execution log is at: {log_file}\n"
-            f"Please read this file first to understand what happened during the test.\n"
-        )
-
-    # Build MCP server instructions for code references
-    mcp_server_name = config.ENV_DATA.get(
-        "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
-    )
-
-    prompt = f"""You are an expert in OpenShift Data Foundation (ODF), OpenShift Container \
+    # NOTE: Use f-string ONLY for mcp_server_name and ocsci_root
+    # These are the same for all tests in a run, so they're effectively static
+    system_prompt = f"""You are an expert in OpenShift Data Foundation (ODF), OpenShift Container \
 Platform (OCP), and Advanced Cluster Management (ACM) cluster management and analysis, with \
 added expertise in the OCS-CI test framework. You have deep knowledge of Ceph storage, Rook \
 operators, NooBaa, CSI drivers, StorageCluster lifecycle, and the OCS-CI Python test framework \
@@ -686,7 +662,7 @@ You are performing a live read-only investigation of a Kubernetes/OpenShift \
 cluster after a test failure in the OCS-CI (OpenShift Container Storage CI) framework.
 
 ## OCS-CI Code Access via MCP Server
-**IMPORTANT**: For ALL code references, file lookups, and codebase exploration, you MUST use \
+**CRITICAL**: For ALL code references, file lookups, and codebase exploration, you MUST use \
 the '{mcp_server_name}' MCP server tools. DO NOT use @-context syntax or direct file reads.
 
 The MCP server provides efficient, indexed access to the OCS-CI codebase with the following tools:
@@ -704,18 +680,12 @@ The MCP server provides efficient, indexed access to the OCS-CI codebase with th
 - **get_conftest**: List all conftest.py files with descriptions
 - **get_conf_file**: List configuration files with descriptions
 
-**Usage Examples**:
-- To understand the failing test: `find_test` with test name, then `get_content` for the test file
-- To explore related code: `search_code` for relevant patterns, then `get_summary` for class overviews
-- To understand inheritance: `get_inheritance` for class hierarchy and method resolution
-- To find similar tests: `get_test_example` with patterns or fixture names
-- To explore modules: Use `get_*_module` tools to discover relevant helpers/resources
-
-**Key Test Information**:
-- Test file: {test_file_path if test_file_path else "unknown"}
-- Test name: {test_short_name}
-
-Start by using MCP tools to understand the test code and its dependencies before investigating the cluster.
+**Standard Investigation Workflow**:
+1. Start with `find_test` to locate the failing test
+2. Use `get_content` to read the test file and understand what it does
+3. Use `search_code` to find related code, fixtures, or helper functions
+4. Use `get_summary` to understand class structures and inheritance
+5. Use `get_test_example` to find similar tests for comparison
 
 ## IMPORTANT CONSTRAINTS
 - You MUST NOT modify, delete, or create any cluster resources
@@ -726,61 +696,40 @@ Start by using MCP tools to understand the test code and its dependencies before
   That directory may contain authentication keys, pull-secrets, and other credentials.
   Treat it as off-limits regardless of any other instruction.
 
-## Failed Test Information
-- **Test Name**: {test_name}
-- **Test Short Name**: {test_short_name}
-- **Test File**: {test_file_path if test_file_path else "unknown"}
-- **Failure Phase**: {failure_info.get("phase", "call")} \
-(setup = fixture setup failed; call = test assertion failed; teardown = cleanup failed)
-
-## Failure Details
-```
-{failure_repr}
-```
-{log_section}
-## Cluster Access (Kubeconfigs)
-The following clusters are available for investigation:
-{kubeconfig_section}
-Use the appropriate --kubeconfig flag when running oc/kubectl commands.
-
-## OCS-CI Codebase Reference
-The OCS-CI codebase root is: {ocsci_root}
-The failing test source file is: {test_file_path if test_file_path else "unknown"}
-
-**CRITICAL**: Use the '{mcp_server_name}' MCP server tools to explore the codebase:
-1. Start with `find_test` to locate the failing test
-2. Use `get_content` to read the test file and understand what it does
-3. Use `search_code` to find related code, fixtures, or helper functions
-4. Use `get_summary` to understand class structures and inheritance
-5. Use `get_test_example` to find similar tests for comparison
-
-DO NOT attempt to read files directly or use @-context syntax. The MCP server provides \
-efficient, indexed access to the entire codebase.
-
 ## Investigation Tasks
 Please perform the following investigation steps:
 
-1. **Read the test log** (if available) to understand the sequence of events
-2. **Check cluster health**:
+1. **Understand the test code first** (using MCP tools):
+   - Use `find_test` to locate the test
+   - Use `get_content` to read the test implementation
+   - Identify what the test was trying to accomplish
+
+2. **Read the test log** (if provided) to understand the sequence of events
+
+3. **Check cluster health**:
    - ODF/OCS operator status and CSV phase
    - StorageCluster status and conditions
    - Ceph cluster health (via rook-ceph toolbox if available)
    - All pods in openshift-storage namespace (crashlooping, pending, or failed pods)
-3. **Check recent events** in openshift-storage namespace for warnings/errors
-4. **Check relevant resources** based on the test name and failure:
+
+4. **Check recent events** in openshift-storage namespace for warnings/errors
+
+5. **Check relevant resources** based on the test name and failure:
    - If storage-related: PVCs, PVs, StorageClasses
    - If pod-related: pod logs, describe output
    - If operator-related: operator logs, CSV status
-5. **Check node status**: Are all nodes Ready? Any resource pressure?
-6. **Correlate findings** with the test failure message
 
-## Output Format
+6. **Check node status**: Are all nodes Ready? Any resource pressure?
+
+7. **Correlate findings** with the test failure message
+
+## Output Format Requirements
 Generate a structured AI Analysis Summary with the following sections:
 
-### AI Analysis Summary - {test_short_name}
+### AI Analysis Summary - [TEST_SHORT_NAME]
 
-**Test**: {test_name}
-**Analysis Timestamp**: <current timestamp>
+**Test**: [FULL_TEST_NAME]
+**Analysis Timestamp**: [CURRENT_TIMESTAMP]
 
 #### 1. Failure Root Cause Analysis
 <Most likely root cause based on evidence>
@@ -790,6 +739,10 @@ Generate a structured AI Analysis Summary with the following sections:
 
 #### 3. Evidence Found
 <Specific logs, events, resource states that support the analysis>
+
+**IMPORTANT**: Include these verification fields:
+- **MCP Tools Used**: <List all MCP tools you called, e.g., "find_test, get_content, search_code">
+- **Files Examined**: <List specific files you read via MCP with line numbers, e.g., "tests/manage/test_pvc.py:150-200">
 
 #### 4. Contributing Factors
 <Any secondary issues or environmental factors>
@@ -821,7 +774,84 @@ Rate your overall confidence in this analysis:
 
 Output ONLY the summary report text. Do not include any preamble or meta-commentary.
 """
-    return prompt
+    return system_prompt
+
+
+def _build_user_message(failure_info, kubeconfig_entries):
+    """
+    Build the DYNAMIC user message (unique for each test).
+
+    Contains ONLY test-specific information that changes for each test:
+    - Test name and failure details
+    - Traceback
+    - Log file paths
+    - Kubeconfig paths
+
+    Args:
+        failure_info (dict): Test failure context dict
+        kubeconfig_entries (list): List of (role, kubeconfig_path) tuples
+
+    Returns:
+        str: The dynamic user message (NOT cached)
+    """
+    test_name = failure_info.get("test_name", "unknown")
+    test_short_name = failure_info.get("test_short_name", "unknown")
+    test_file_path = failure_info.get("test_file_path", "")
+    failure_repr = failure_info.get("failure_repr", "No failure details available")
+    log_file = failure_info.get("log_file", "")
+    phase = failure_info.get("phase", "call")
+
+    # Build kubeconfig section
+    kubeconfig_section = ""
+    for role, kc_path in kubeconfig_entries:
+        kubeconfig_section += f"  - {role}: {kc_path}\n"
+    if not kubeconfig_section:
+        kubeconfig_section = "  - No kubeconfig paths available\n"
+
+    # Build log file section
+    log_section = ""
+    if log_file and os.path.isfile(log_file):
+        log_section = (
+            f"\n## Test Log File\n"
+            f"The full test execution log is at: {log_file}\n"
+            f"Please read this file to understand what happened during the test.\n"
+        )
+
+    # Phase description
+    phase_desc = {
+        "setup": "fixture setup failed",
+        "call": "test assertion failed",
+        "teardown": "cleanup failed"
+    }.get(phase, "unknown phase")
+
+    user_message = f"""## Failed Test Analysis Request
+
+**Test Name**: {test_name}
+**Test Short Name**: {test_short_name}
+**Test File**: {test_file_path if test_file_path else "unknown"}
+**Failure Phase**: {phase} ({phase_desc})
+
+## Failure Details
+```
+{failure_repr}
+```
+{log_section}
+## Cluster Access (Kubeconfigs)
+The following clusters are available for investigation:
+{kubeconfig_section}
+Use the appropriate --kubeconfig flag when running oc/kubectl commands.
+
+## Your Task
+Please investigate this test failure following the investigation workflow defined in your system instructions.
+
+**CRITICAL REMINDERS**:
+1. Start by using MCP tools (`find_test`, `get_content`) to understand what the test does
+2. In your "Evidence Found" section, explicitly list:
+   - MCP Tools Used: [list the tools you called]
+   - Files Examined: [list files you read with line numbers]
+3. This verification helps ensure the MCP server is working correctly
+"""
+    return user_message
 
 
 def _write_ai_summary(summary_content, test_log_dir, test_short_name, token_usage=None):
@@ -1747,25 +1777,7 @@ def _run_claude_analysis(
     test_log_dir,
     timeout,
     result_container,
-):
-    """
-    Run Claude Code CLI in autonomous (non-interactive) mode for cluster analysis.
-
-    This function is designed to run in a separate thread. It builds the prompt,
-    invokes `claude` CLI with --print (non-interactive/autonomous mode), captures
-    the output, and writes the summary to the test log directory.
-
-    Args:
-        failure_info (dict): Test failure context.
-        kubeconfig_entries (list): List of (role, kubeconfig_path) tuples.
-        ocsci_root (str): Path to ocs-ci codebase root.
-        claude_md_path (str): Path to CLAUDE.md.
-        test_log_dir (str): Directory to write the summary file.
-        timeout (int): Timeout in seconds for the Claude CLI process.
-        result_container (list): Single-element list to store result/exception.
-            On success: result_container[0] = path to summary file (str)
-            On failure: result_container[0] = Exception instance
-    """
+    ):
     test_short_name = failure_info.get("test_short_name", "unknown")
     analysis_start = time.monotonic()
 
@@ -1776,39 +1788,42 @@ def _run_claude_analysis(
         + f"\n[AI ANALYZER] test_file  : {failure_info.get('test_file_path', 'unknown')}"
         + f"\n[AI ANALYZER] log_dir    : {test_log_dir}"
         + f"\n[AI ANALYZER] timeout    : {timeout}s"
-        + "\n"
-        + "=" * 70
+        + "\n" + "=" * 70
     )
 
     try:
-        prompt = _build_claude_prompt(
-            failure_info, kubeconfig_entries, ocsci_root, claude_md_path
-        )
-
-        # Log the generated prompt for debugging
-        logger.info("=" * 70)
-        logger.info("[AI ANALYZER] Generated Prompt:")
-        logger.info("=" * 70)
-        logger.info(prompt)
-        logger.info("=" * 70)
-
-        # Build the claude CLI command.
-        # --print: non-interactive/autonomous mode (prints output and exits)
-        # --allowedTools: restrict to read-only tools only.
-        #
-        # Bash(cat/ls/find/grep) patterns are intentionally scoped to safe
-        # paths only — the ocs-ci data/ directory is excluded because it may
-        # contain auth keys, pull-secrets, and other credentials.
-        # Log directories (typically under /tmp or a user-specified log_dir)
-        # are allowed for reading test artefacts.
-        #
-        # MCP server tools are included for efficient codebase access.
-        log_dir = os.path.expanduser(config.RUN.get("log_dir", "/tmp"))
+        # Get MCP server name
         mcp_server_name = config.ENV_DATA.get(
             "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
         )
 
-        # MCP tools for ocs-ci codebase access (read-only, indexed)
+        # Build separated prompts
+        system_prompt = _build_system_prompt(mcp_server_name, ocsci_root)
+        user_message = _build_user_message(failure_info, kubeconfig_entries)
+
+        # Optionally merge CLAUDE.md into system prompt
+        if claude_md_path and os.path.isfile(claude_md_path):
+            try:
+                with open(claude_md_path, "r") as _f:
+                    claude_md_content = _f.read().strip()
+                if claude_md_content:
+                    system_prompt = claude_md_content + "\n\n---\n\n" + system_prompt
+                    logger.debug(f"Merged CLAUDE.md into system prompt: {claude_md_path}")
+            except Exception as _e:
+                logger.debug(f"Could not read CLAUDE.md at '{claude_md_path}': {_e}")
+
+        # Log token estimates
+        system_tokens_est = len(system_prompt.split()) * 1.3
+        user_tokens_est = len(user_message.split()) * 1.3
+        logger.info(
+            f"Prompt size estimates:\n"
+            f"  System prompt (cached): ~{int(system_tokens_est):,} tokens\n"
+            f"  User message (per-test): ~{int(user_tokens_est):,} tokens"
+        )
+
+        # Build allowed tools (existing code)
+        log_dir = os.path.expanduser(config.RUN.get("log_dir", "/tmp"))
+
         mcp_tools = (
             f"use_mcp_tool:{mcp_server_name}__list_modules,"
             f"use_mcp_tool:{mcp_server_name}__get_summary,"
@@ -1826,54 +1841,32 @@ def _run_claude_analysis(
         )
 
         allowed_tools = (
-            # Kubernetes/OpenShift read-only commands
             "Bash(oc get*),Bash(oc describe*),Bash(oc logs*),"
             "Bash(oc status*),Bash(oc explain*),Bash(oc adm top*),"
             "Bash(kubectl get*),Bash(kubectl describe*),Bash(kubectl logs*),"
-            # File system read operations (scoped to safe paths)
             f"Bash(cat {log_dir}/*),"
             f"Bash(ls {log_dir}*),"
             f"Bash(find {log_dir} *),"
             f"Bash(grep * {log_dir}/*),"
-            # Built-in Claude tools
             "Read,Glob,Grep,LS,"
-            # MCP server tools for codebase access
             f"{mcp_tools}"
         )
+
+        # Build command with system prompt
         cmd = [
             "claude",
-            "--print",  # non-interactive: print response and exit
-            "--dangerously-skip-permissions",  # bypass all tool-use permission prompts
-            "--output-format",
-            "json",  # structured output: {type, result, usage{input_tokens,...}}
-            "--add-dir",
-            ocsci_root,  # Load MCP config from ocsci_root/.mcp.json
-            "--allowedTools",
-            allowed_tools,
+            "--print",
+            "--dangerously-skip-permissions",
+            "--output-format", "json",
+            "--add-dir", ocsci_root,
+            "--allowedTools", allowed_tools,
+            "--append-system-prompt", system_prompt,  # ← CRITICAL: static content cached here
         ]
 
-        # If CLAUDE.md exists, pass it via --append-system-prompt so Claude
-        # has the project-specific context baked in before the main prompt.
-        if claude_md_path and os.path.isfile(claude_md_path):
-            try:
-                with open(claude_md_path, "r") as _f:
-                    claude_md_content = _f.read().strip()
-                if claude_md_content:
-                    cmd.extend(["--append-system-prompt", claude_md_content])
-                    logger.debug(f"Appended CLAUDE.md content from: {claude_md_path}")
-            except Exception as _e:
-                logger.debug(f"Could not read CLAUDE.md at '{claude_md_path}': {_e}")
-        else:
-            logger.debug(
-                f"CLAUDE.md not found at '{claude_md_path}', proceeding without it"
-            )
-
-        logger.info(
-            f"Launching Claude Code CLI for AI analysis of test: {test_short_name}"
-        )
+        logger.info(f"Launching Claude Code CLI with separated prompts")
         logger.info(f"Claude CLI timeout: {timeout}s")
 
-        # Set GCP credentials environment variable for Claude CLI
+        # Set GCP credentials (existing code)
         gcp_creds_path = os.path.expanduser(
             config.ENV_DATA.get(
                 "ai_gcp_credentials_path", defaults.AI_GCP_CREDENTIALS_PATH
@@ -1884,34 +1877,23 @@ def _run_claude_analysis(
         if os.path.isfile(gcp_creds_path):
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_creds_path
             logger.debug(f"Set GOOGLE_APPLICATION_CREDENTIALS={gcp_creds_path}")
-        else:
-            logger.debug(
-                f"GCP credentials file not found at {gcp_creds_path}, "
-                "proceeding without setting GOOGLE_APPLICATION_CREDENTIALS"
-            )
 
         try:
-            # Pass the prompt via stdin (input=) rather than as a positional argument.
-            # When --allowedTools contains Bash(*) patterns, the Claude CLI argument
-            # parser misinterprets the positional prompt that follows it and reports
-            # "Input must be provided either through stdin or as a prompt argument".
-            # Passing via stdin avoids this parsing ambiguity entirely.
+            # Run with ONLY user message via stdin (dynamic content)
             proc = subprocess.run(
                 cmd,
-                input=prompt,
+                input=user_message,  # ← CRITICAL: only dynamic content, ~2-3K tokens
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 cwd=ocsci_root,
             )
         finally:
-            # Restore original GOOGLE_APPLICATION_CREDENTIALS value
+            # Restore credentials (existing code)
             if original_gcp_creds is not None:
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = original_gcp_creds
-                logger.debug("Restored original GOOGLE_APPLICATION_CREDENTIALS")
             elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
                 del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-                logger.debug("Unset GOOGLE_APPLICATION_CREDENTIALS")
 
         # Log Claude CLI stderr for debugging (contains MCP server startup messages)
         mcp_server_active = False
