@@ -5687,6 +5687,153 @@ def verify_csi_holder_pods_do_not_exist():
         )
 
 
+def setup_multus_networking(patch_storage_cluster=False):
+    """
+    Set up Multus networking: deploy NMState (if needed), create NADs,
+    set promiscuous mode, and optionally patch an existing StorageCluster.
+
+    Can be called during initial deployment or post-install.
+
+    Args:
+        patch_storage_cluster (bool): If True, patch the running StorageCluster
+            with Multus network config (post-install case). If False, skip the
+            patch (initial deploy case where SC spec is built before creation).
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
+    create_public_net = config.ENV_DATA["multus_create_public_net"]
+    create_cluster_net = config.ENV_DATA["multus_create_cluster_net"]
+
+    # Deploy NMState operator and configure node network policies
+    if create_public_net and ocs_version >= version.VERSION_4_16:
+        nmstate_operator = NMStateOperator(
+            create_catalog=True,
+        )
+        nmstate_operator.deploy()
+        configure_node_network_configuration_policy_on_all_worker_nodes()
+
+    # Set promiscuous mode on interfaces for non-baremetal platforms
+    interfaces = set()
+    if create_public_net:
+        interfaces.add(config.ENV_DATA["multus_public_net_interface"])
+    if create_cluster_net:
+        interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
+    worker_nodes = node.get_worker_nodes()
+    node_obj = ocp.OCP(kind="node")
+    platform = config.ENV_DATA.get("platform").lower()
+    if platform not in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
+        for wnode in worker_nodes:
+            for interface in interfaces:
+                ip_link_cmd = f"ip link set promisc on {interface}"
+                node_obj.exec_oc_debug_cmd(
+                    node=wnode, cmd_list=[ip_link_cmd], namespace="default"
+                )
+
+    # Create public NetworkAttachmentDefinition
+    if create_public_net:
+        nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+        logger.info("Creating Multus public network")
+        if config.DEPLOYMENT.get("ipv6"):
+            nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
+        public_net_data = templating.load_yaml(nad_to_load)
+        public_net_data["metadata"]["name"] = config.ENV_DATA.get(
+            "multus_public_net_name"
+        )
+        public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+            "multus_public_net_namespace"
+        )
+        public_net_config_str = public_net_data["spec"]["config"]
+        public_net_config_dict = json.loads(public_net_config_str)
+        public_net_config_dict["master"] = config.ENV_DATA.get(
+            "multus_public_net_interface"
+        )
+        if not config.DEPLOYMENT.get("ipv6"):
+            public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_public_net_range"
+            )
+        else:
+            public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_public_ipv6_net_range"
+            )
+        public_net_config_dict["type"] = config.ENV_DATA.get("multus_public_net_type")
+        public_net_config_dict["mode"] = config.ENV_DATA.get("multus_public_net_mode")
+        public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
+        public_net_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multus_public", delete=False
+        )
+        templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
+        run_cmd(f"oc create -f {public_net_yaml.name}")
+
+    # Create cluster NetworkAttachmentDefinition
+    if create_cluster_net:
+        logger.info("Creating Multus cluster network")
+        if config.DEPLOYMENT.get("ipv6"):
+            constants.MULTUS_CLUSTER_NET_YAML = constants.MULTUS_CLUSTER_NET_IPV6_YAML
+        cluster_net_data = templating.load_yaml(constants.MULTUS_CLUSTER_NET_YAML)
+        cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
+            "multus_cluster_net_name"
+        )
+        cluster_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+            "multus_cluster_net_namespace"
+        )
+        cluster_net_config_str = cluster_net_data["spec"]["config"]
+        cluster_net_config_dict = json.loads(cluster_net_config_str)
+        cluster_net_config_dict["master"] = config.ENV_DATA.get(
+            "multus_cluster_net_interface"
+        )
+        if not config.DEPLOYMENT.get("ipv6"):
+            cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_cluster_net_range"
+            )
+        else:
+            cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_cluster_ipv6_net_range"
+            )
+        cluster_net_config_dict["mode"] = config.ENV_DATA.get("multus_cluster_net_mode")
+        cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
+        cluster_net_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multus_cluster", delete=False
+        )
+        templating.dump_data_to_temp_yaml(cluster_net_data, cluster_net_yaml.name)
+        run_cmd(f"oc create -f {cluster_net_yaml.name}")
+
+    # Patch the running StorageCluster with Multus network config
+    if patch_storage_cluster:
+        from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+        logger.info("Patching StorageCluster with Multus network configuration")
+        public_net_name = config.ENV_DATA["multus_public_net_name"]
+        public_net_namespace = config.ENV_DATA["multus_public_net_namespace"]
+        cluster_net_name = config.ENV_DATA["multus_cluster_net_name"]
+        cluster_net_namespace = config.ENV_DATA["multus_cluster_net_namespace"]
+
+        selector_data = {}
+        if create_public_net:
+            selector_data["public"] = f"{public_net_namespace}/{public_net_name}"
+        if create_cluster_net:
+            selector_data["cluster"] = f"{cluster_net_namespace}/{cluster_net_name}"
+
+        patch = {
+            "spec": {
+                "network": {
+                    "provider": "multus",
+                    "selectors": selector_data,
+                }
+            }
+        }
+
+        sc = get_storage_cluster()
+        resource_name = sc.get()["items"][0]["metadata"]["name"]
+        sc.patch(
+            resource_name=resource_name,
+            params=json.dumps(patch),
+            format_type="merge",
+        )
+        logger.info(
+            f"StorageCluster patched with Multus configuration: {selector_data}"
+        )
+
+
 def upgrade_multus_holder_design():
     """
     Upgrade  multus holder design from ODF4.15 to ODF4.16
