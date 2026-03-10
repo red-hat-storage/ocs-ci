@@ -216,9 +216,7 @@ class LocatorFallback:
             "╔══════════════════════════════════════════════════════════════╗\n"
             "║           AI LOCATOR FALLBACK ACTIVATED                      ║\n"
             "╚══════════════════════════════════════════════════════════════╝\n"
-            f"  Selector : {selector}\n"
-            f"  Type     : {by_type}\n"
-            f"  Action   : {action}"
+            f"  selector={selector}  by={by_type}  action={action}"
         )
 
         # use cached updated if available and matching current locator
@@ -229,12 +227,9 @@ class LocatorFallback:
             cached_by_type = cached["new_by_type"]
             if self._validate_locator(cached_selector, cached_by_type):
                 logger.info(
-                    "\n"
-                    "╔══════════════════════════════════════════════════════════════╗\n"
-                    "║           AI FALLBACK: CACHE HIT                             ║\n"
-                    "╚══════════════════════════════════════════════════════════════╝\n"
-                    f"  Cached selector : {cached_selector}\n"
-                    f"  Cached type     : {cached_by_type}"
+                    "[AI_FALLBACK] cache_hit selector=%s by=%s",
+                    cached_selector,
+                    cached_by_type,
                 )
                 return cached_selector, cached_by_type
             else:
@@ -271,17 +266,13 @@ class LocatorFallback:
 
         self._log_cost(cost_before)
         logger.warning(
-            "\n"
-            "╔══════════════════════════════════════════════════════════════╗\n"
-            "║           AI FALLBACK: FAILED                                ║\n"
-            "╚══════════════════════════════════════════════════════════════╝\n"
-            f"  Could not find replacement for: {selector}"
+            "[AI_FALLBACK] failed — no replacement found for selector=%s", selector
         )
         return None
 
     def _try_stage_1(self, selector, by_type, action, url, raw_html):
         """Stage 1: DOM-only LLM query."""
-        logger.info("AI Fallback Stage 1: DOM-only analysis")
+        logger.info("[AI_FALLBACK] stage=1 (DOM-only) selector=%s", selector)
         cleaned_html = self._strip_dom(raw_html, DOM_MAX_CHARS_STAGE_1)
 
         prompt = STAGE_1_PROMPT.format(
@@ -306,24 +297,22 @@ class LocatorFallback:
         new_selector, new_by_type = parsed
         if self._validate_locator(new_selector, new_by_type):
             logger.info(
-                "\n"
-                "╔══════════════════════════════════════════════════════════════╗\n"
-                "║           AI FALLBACK: STAGE 1 SUCCESS                       ║\n"
-                "╚══════════════════════════════════════════════════════════════╝\n"
-                f"  New selector : {new_selector}\n"
-                f"  New type     : {new_by_type}"
+                "[AI_FALLBACK] stage=1 success new_selector=%s new_by=%s",
+                new_selector,
+                new_by_type,
             )
             return new_selector, new_by_type
 
         logger.info(
-            f"Stage 1: LLM locator did not match exactly one element: "
-            f"{new_selector} ({new_by_type})"
+            "[AI_FALLBACK] stage=1 no_match selector=%s by=%s",
+            new_selector,
+            new_by_type,
         )
         return None
 
     def _try_stage_2(self, selector, by_type, action, url, raw_html):
         """Stage 2: DOM + screenshot LLM query."""
-        logger.info("AI Fallback Stage 2: DOM + screenshot analysis")
+        logger.info("[AI_FALLBACK] stage=2 (DOM+screenshot) selector=%s", selector)
         cleaned_html = self._strip_dom(raw_html, DOM_MAX_CHARS_STAGE_2)
 
         screenshot_path = self._capture_screenshot()
@@ -353,18 +342,16 @@ class LocatorFallback:
         new_selector, new_by_type = parsed
         if self._validate_locator(new_selector, new_by_type):
             logger.info(
-                "\n"
-                "╔══════════════════════════════════════════════════════════════╗\n"
-                "║           AI FALLBACK: STAGE 2 SUCCESS                       ║\n"
-                "╚══════════════════════════════════════════════════════════════╝\n"
-                f"  New selector : {new_selector}\n"
-                f"  New type     : {new_by_type}"
+                "[AI_FALLBACK] stage=2 success new_selector=%s new_by=%s",
+                new_selector,
+                new_by_type,
             )
             return (new_selector, new_by_type)
 
         logger.info(
-            f"Stage 2: LLM locator did not match exactly one element: "
-            f"{new_selector} ({new_by_type})"
+            "[AI_FALLBACK] stage=2 no_match selector=%s by=%s",
+            new_selector,
+            new_by_type,
         )
         return None
 
@@ -409,15 +396,13 @@ class LocatorFallback:
             ocsci_config.UI_SELENIUM["ai_fallback_session_cost"] = session_cost
             ocsci_config.UI_SELENIUM["ai_fallback_session_requests"] = session_requests
             logger.info(
-                "\n"
-                "╔══════════════════════════════════════════════════════════════╗\n"
-                "║           AI FALLBACK: COST REPORT                           ║\n"
-                "╚══════════════════════════════════════════════════════════════╝\n"
-                f"  This attempt   : ${attempt_cost:.4f} ({requests_made} request(s))\n"
-                f"  Test cumulative: ${self.total_cost_usd:.4f} "
-                f"({self.total_requests} total request(s))\n"
-                f"  Session total  : ${session_cost:.4f} "
-                f"({session_requests} total request(s))"
+                "[AI_FALLBACK] cost attempt=$%.4f/%d_req  cumulative=$%.4f/%d_req  session=$%.4f/%d_req",
+                attempt_cost,
+                requests_made,
+                self.total_cost_usd,
+                self.total_requests,
+                session_cost,
+                session_requests,
             )
 
     def log_cost_summary(self):
@@ -429,12 +414,9 @@ class LocatorFallback:
         """
         if self.total_requests > 0:
             logger.info(
-                "\n"
-                "╔══════════════════════════════════════════════════════════════╗\n"
-                "║           AI FALLBACK: FINAL COST SUMMARY                    ║\n"
-                "╚══════════════════════════════════════════════════════════════╝\n"
-                f"  Total cost    : ${self.total_cost_usd:.4f}\n"
-                f"  Total requests: {self.total_requests}"
+                "[AI_FALLBACK] final_summary cost=$%.4f requests=%d",
+                self.total_cost_usd,
+                self.total_requests,
             )
 
     def _cache_result(self, cache_key, old_selector, old_by_type, new_locator, url):
@@ -450,4 +432,4 @@ class LocatorFallback:
         }
         self._cache = cache
         self._save_cache()
-        logger.info(f"AI fallback result cached: {self._get_cache_path()}")
+        logger.info("[AI_FALLBACK] cached result path=%s", self._get_cache_path())

@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 import requests
 
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.ocs import defaults
 
 logger = logging.getLogger(__name__)
 
@@ -331,10 +332,26 @@ class ClaudeClient(LLMClient):
             logger.warning(f"Claude CLI check failed: {e}")
             return False
 
+    # Well-known paths for GCP credential files (checked in order)
+    _GCP_CREDENTIAL_PATHS = (
+        "/opt/claude/auth/gcp-auth.json",
+        defaults.AI_GCP_CREDENTIALS_PATH,
+    )
+
+    # Shell file installed by the claude-code Ansible role with Vertex env vars
+    _CLAUDE_ENV_FILE = "/etc/profile.d/claude-code.sh"
+
     def _build_env(self):
         """
         Returns a copy of the current environment with Claude interactive-mode
-        variables removed, so the CLI behaves as a plain subprocess writing to stdout.
+        variables removed, so the CLI behaves as a plain subprocess writing to
+        stdout.
+
+        When Vertex AI env vars (``CLAUDE_CODE_USE_VERTEX``,
+        ``GOOGLE_APPLICATION_CREDENTIALS``, etc.) are missing — which happens
+        when Jenkins runs builds without sourcing ``/etc/profile.d/`` — this
+        method sources the env file written by the ``claude-code`` Ansible role
+        and fills in any gaps.
         """
         env = os.environ.copy()
 
@@ -349,10 +366,53 @@ class ClaudeClient(LLMClient):
             if p not in current_entries:
                 env["PATH"] = p + ":" + env["PATH"]
 
+        # --- Vertex AI / GCP credential injection ---
+        # Jenkins SSH agents often don't source /etc/profile.d/, so the vars
+        # set by the claude-code Ansible role may be absent.  Parse the env
+        # file and inject any missing variables.
+        if os.path.isfile(self._CLAUDE_ENV_FILE):
+            self._inject_env_from_file(env, self._CLAUDE_ENV_FILE)
+
+        # Fallback: if GOOGLE_APPLICATION_CREDENTIALS is still not set, try
+        # well-known file paths so the GCP SDK can find credentials.
+        if "GOOGLE_APPLICATION_CREDENTIALS" not in env:
+            for cred_path in self._GCP_CREDENTIAL_PATHS:
+                if os.path.isfile(cred_path):
+                    env["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
+                    logger.debug(
+                        "Set GOOGLE_APPLICATION_CREDENTIALS=%s (fallback)", cred_path
+                    )
+                    break
+
         for key in self._CLAUDE_ENV_VARS:
             env.pop(key, None)
 
         return env
+
+    @staticmethod
+    def _inject_env_from_file(env, filepath):
+        """
+        Parse ``export KEY="VALUE"`` lines from *filepath* and set any keys
+        that are missing from *env*.
+        """
+        try:
+            with open(filepath) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line.startswith("export "):
+                        continue
+                    # export KEY="VALUE"  or  export KEY=VALUE
+                    rest = line[len("export ") :]
+                    if "=" not in rest:
+                        continue
+                    key, _, value = rest.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in env:
+                        env[key] = value
+                        logger.debug("Injected %s from %s", key, filepath)
+        except OSError:
+            logger.debug("Could not read env file %s", filepath, exc_info=True)
 
     def _resolve_claude_bin(self):
         """Returns the absolute path to the claude binary."""

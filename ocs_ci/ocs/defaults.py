@@ -170,6 +170,9 @@ MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
 MUST_GATHER_TIMEOUT = 3600
 
+# AI / Claude Code defaults:
+AI_GCP_CREDENTIALS_PATH = os.path.expanduser("~/.gcp/gcp-auth.json")
+
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
 
