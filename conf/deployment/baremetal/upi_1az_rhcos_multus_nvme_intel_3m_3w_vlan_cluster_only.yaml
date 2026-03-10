@@ -27,8 +27,6 @@ ENV_DATA:
   multus_cluster_net_mode: 'bridge'
   multus_cluster_net_vlan_id: 202
   multus_cluster_net_ip_range: '192.168.30.0/24'
-  multus_cluster_net_ip_range_start: '192.168.30.10'
-  multus_cluster_net_ip_range_end: '192.168.30.250'
 
 REPORTING:
   polarion:

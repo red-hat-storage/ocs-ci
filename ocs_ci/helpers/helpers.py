@@ -5392,10 +5392,11 @@ def add_route_public_nad():
     """
     Add route section to network_attachment_definitions object
 
-    For VLAN mode with shim: Adds route to shim network for host-to-pod communication
-    For non-VLAN mode: Adds route as configured in multus_destination_route
+    Adds route to shim network for host-to-pod communication in VLAN mode.
+    The shim network is configured via 'multus_public_net_shim_network' ENV_DATA
+    parameter (default: 192.168.252.0/24). This route enables communication between
+    baremetal hosts and pods attached to the public Multus network.
     """
-    use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
 
     nad_obj = get_network_attachment_definitions(
         nad_name=config.ENV_DATA.get("multus_public_net_name"),
@@ -5404,19 +5405,11 @@ def add_route_public_nad():
     nad_config_str = nad_obj.data["spec"]["config"]
     nad_config_dict = json.loads(nad_config_str)
 
-    if use_vlan:
-        # For VLAN mode, add route to shim network
-        shim_network = config.ENV_DATA.get(
-            "multus_public_net_shim_network", "192.168.20.0/28"
-        )
-        nad_config_dict["ipam"]["routes"] = [{"dst": shim_network}]
-        logger.info(f"VLAN mode: Adding route to shim network: {shim_network}")
-    else:
-        # For traditional shim mode, use configured destination route
-        nad_config_dict["ipam"]["routes"] = [
-            {"dst": config.ENV_DATA["multus_destination_route"]}
-        ]
-        logger.info("Traditional shim mode: Adding configured routes")
+    shim_network = config.ENV_DATA.get(
+        "multus_public_net_shim_network", "192.168.252.0/24"
+    )
+    nad_config_dict["ipam"]["routes"] = [{"dst": shim_network}]
+    logger.info(f"VLAN mode: Adding route to shim network: {shim_network}")
 
     nad_config_dict_string = json.dumps(nad_config_dict)
 
@@ -5499,6 +5492,39 @@ def delete_csi_holder_pods():
         for csi_pod_obj in csi_pod_objs:
             csi_pod_obj.delete()
         schedule_nodes([worker_node_name])
+
+
+def ip_from_subnet_offset(subnet: str, offset: int) -> str:
+    """
+    Return an IP address from a subnet offset from the network address.
+
+    The function takes a subnet in CIDR notation and returns the IP address
+    obtained by adding the given offset to the subnet's network address.
+
+    Args:
+        subnet (str): Subnet in CIDR notation (e.g. "192.168.252.0/24").
+        offset (int): Number of IP addresses to add to the network address.
+
+    Returns:
+        str: The resulting IP address as a string.
+
+    Raises:
+        ValueError: If the subnet is invalid or the resulting IP is outside
+            of the subnet range.
+
+    Example:
+        ip_from_subnet_offset("192.168.252.0/24", 5)
+        '192.168.252.5'
+        ip_from_subnet_offset("192.168.252.16/28", 5)
+        '192.168.252.21'
+    """
+    network = ipaddress.ip_network(subnet)
+
+    ip = network.network_address + offset
+    if ip not in network:
+        raise ValueError(f"Offset {offset} is outside of subnet {subnet}")
+
+    return str(ip)
 
 
 def configure_node_network_configuration_policy_on_all_worker_nodes():
@@ -5599,10 +5625,10 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                     shim_name = config.ENV_DATA.get(
                         "multus_public_net_shim_name", "odf-pub-shim"
                     )
-                    shim_ip = config.ENV_DATA.get(
-                        "multus_public_net_shim_ip",
-                        f"192.168.20.{5 + interface_num}",  # Default: 192.168.20.5, .6, .7
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
                     )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
                     ][1]["name"] = shim_name
@@ -5667,10 +5693,10 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                     shim_name = config.ENV_DATA.get(
                         "multus_public_net_shim_name", "odf-pub-shim"
                     )
-                    shim_ip = config.ENV_DATA.get(
-                        "multus_public_net_shim_ip",
-                        f"192.168.20.{5 + interface_num}",  # Default: 192.168.20.5, .6, .7
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
                     )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
                     node_network_configuration_policy["spec"]["desiredState"][
                         "interfaces"
                     ][1]["name"] = shim_name
@@ -5721,7 +5747,7 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
                     interface_num += 1
 
             else:
-                # Traditional shim-based configuration for BAREMETAL
+                # Traditional shim-based configuration for BAREMETAL without VLANs
                 worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
                     worker_node_name
                 ]

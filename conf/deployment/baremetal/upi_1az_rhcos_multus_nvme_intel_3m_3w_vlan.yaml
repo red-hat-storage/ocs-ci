@@ -19,39 +19,28 @@ ENV_DATA:
   multus_create_public_net: true
   multus_public_net_interface: 'enp1s0f1'  # Base physical interface
   multus_public_net_namespace: 'openshift-storage'
-  multus_public_net_type: 'macvlan'  # Can be 'macvlan' or 'bridge'
+  multus_public_net_type: 'macvlan'
   multus_public_net_mode: 'bridge'
 
   # Public Network VLAN Settings
   multus_public_net_vlan_id: 201  # VLAN ID for public network
   multus_public_net_ip_range: '192.168.20.0/24'
-  multus_public_net_ip_range_start: '192.168.20.10'  # Pod IPs start here
-  multus_public_net_ip_range_end: '192.168.20.250'    # Pod IPs end here
 
   # Public Network Shim Settings (for host-to-pod communication)
   multus_public_net_shim_name: 'odf-pub-shim'
-  multus_public_net_shim_network: '192.168.20.0/28'   # Shim network (IPs .0-.15 reserved)
+  multus_public_net_shim_network: '192.168.252.0/24'   # Shim network
   # Note: Shim IPs are auto-assigned: .5 for first node, .6 for second, .7 for third
-  # To override per-node shim IPs, set multus_public_net_shim_ip in config
 
   # Cluster Network Configuration
   multus_create_cluster_net: true
   multus_cluster_net_interface: 'enp1s0f1'  # Base physical interface
   multus_cluster_net_namespace: 'openshift-storage'
-  multus_cluster_net_type: 'macvlan'  # Can be 'macvlan' or 'bridge'
+  multus_cluster_net_type: 'macvlan'
   multus_cluster_net_mode: 'bridge'
 
   # Cluster Network VLAN Settings
   multus_cluster_net_vlan_id: 202  # VLAN ID for cluster network
   multus_cluster_net_ip_range: '192.168.30.0/24'
-  multus_cluster_net_ip_range_start: '192.168.30.10'
-  multus_cluster_net_ip_range_end: '192.168.30.250'
-
-  # Optional: Use Linux bridge instead of macvlan for host-to-pod communication
-  # Set to true if you need host-to-pod communication
-  # multus_use_bridge: false
-  # multus_public_net_bridge_name: 'odf-pub-br'
-  # multus_cluster_net_bridge_name: 'odf-cluster-br'
 
 REPORTING:
   polarion:

@@ -33,7 +33,7 @@ spec:
           enabled: true
           dhcp: false
           address:
-            - ip: 192.168.20.5  # Static IP for shim - will be templated per node
+            - ip: 192.168.252.5  # Static IP for shim - will be templated per node
               prefix-length: 24  # /24 subnet to reach all Multus pod IPs
     routes:
       config:

@@ -1213,7 +1213,7 @@ class Deployment(object):
 
         Args:
             subscription_name (str): Subscription name pattern
-            namespace (str): Namespace name for checking subscription if None then default from ENV_data
+            namespace (str): Namespace name for checking subscription if None then default from ENV_DATA
 
         """
         if not namespace:
@@ -1438,18 +1438,10 @@ class Deployment(object):
 
                 # Configure IP range limits for VLAN mode
                 if use_vlan:
-                    if config.ENV_DATA.get("multus_public_net_ip_range_start"):
-                        public_net_config_dict["ipam"]["range_start"] = (
-                            config.ENV_DATA.get("multus_public_net_ip_range_start")
-                        )
-                    if config.ENV_DATA.get("multus_public_net_ip_range_end"):
-                        public_net_config_dict["ipam"]["range_end"] = (
-                            config.ENV_DATA.get("multus_public_net_ip_range_end")
-                        )
                     # Add routes to shim network (critical for host-to-pod communication)
-                    # Default shim network is 192.168.20.0/28 (IPs .0-.15 reserved for shims)
+                    # Default shim network is 192.168.252.0/24 (shim IPs assigned starting at .5)
                     shim_network = config.ENV_DATA.get(
-                        "multus_public_net_shim_network", "192.168.20.0/28"
+                        "multus_public_net_shim_network", "192.168.252.0/24"
                     )
                     if "routes" not in public_net_config_dict["ipam"]:
                         public_net_config_dict["ipam"]["routes"] = []

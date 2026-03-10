@@ -33,7 +33,7 @@ spec:
           enabled: true
           dhcp: false
           address:
-            - ip: 192.168.20.5  # Static IP for public shim - will be templated per node
+            - ip: 192.168.252.5  # Static IP for public shim - will be templated per node
               prefix-length: 24  # /24 subnet to reach all Multus pod IPs
       # Cluster network VLAN - NO IP
       - name: enp1s0f1.202  # VLAN interface for cluster network - will be templated
