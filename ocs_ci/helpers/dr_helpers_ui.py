@@ -922,6 +922,89 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
     return True
 
 
+def remove_drprotection_for_discovered_vm_via_ui(
+    acm_obj,
+    vm,
+    managed_cluster_name,
+    namespace,
+):
+    """
+    Remove DR protection from a single discovered VM via the ACM Fleet Virtualization UI.
+
+    Works for both Standalone and Shared protection types:
+    - Standalone: removes the VM's protection and its associated DRPC entirely.
+    - Shared: removes only this VM from its shared DRPC group; the DRPC and other
+      VMs enrolled in the same group remain protected.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        vm (object): The VM workload object whose DR protection should be removed
+        managed_cluster_name (str): Name of the managed cluster where the VM runs
+        namespace (str): Namespace of the VM workload
+
+    Returns:
+        True if the removal completed successfully
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    if acm_obj.check_element_presence(
+        (
+            acm_loc["modal_dialog_close_button"][1],
+            acm_loc["modal_dialog_close_button"][0],
+        ),
+        timeout=10,
+    ):
+        log.info("Modal dialog box found, closing it..")
+        acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+
+    log.info("Look for 'All Clusters'")
+    all_clusters = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["all-clusters"], expected_text="All clusters"
+    )
+    assert all_clusters, "'All Clusters' not found on the VMs page"
+
+    log.info(f"Select cluster '{managed_cluster_name}' and namespace '{namespace}'")
+    acm_obj.do_click(
+        format_locator(acm_loc["managed-cluster-name"], managed_cluster_name)
+    )
+    acm_obj.do_click(
+        format_locator(acm_loc["cnv-workload-namespace"], namespace),
+        enable_screenshot=True,
+    )
+    log.info(f"Click on VM '{vm.vm_name}'")
+    acm_obj.do_click(
+        format_locator(acm_loc["cnv-vm-name"], vm.vm_name),
+        enable_screenshot=True,
+    )
+
+    log.info("Click Actions -> Manage disaster recovery")
+    acm_obj.do_click(acm_loc["vm-actions"], enable_screenshot=True)
+    acm_obj.do_click(acm_loc["manage-dr"], enable_screenshot=True)
+
+    log.info("Click 'Remove protection'")
+    acm_obj.do_click(acm_loc["remove-vm-protection"], enable_screenshot=True)
+
+    log.info("Confirm removal")
+    acm_obj.do_click(acm_loc["confirm-remove-protection"], enable_screenshot=True)
+
+    log.info("Verify removal confirmation message")
+    conf_msg = acm_obj.get_element_text(acm_loc["remove-protection-conf-msg"])
+    log.info(f"Removal confirmation message: {conf_msg}")
+    assert (
+        "removed" in conf_msg.lower()
+    ), f"Unexpected removal confirmation message: '{conf_msg}'"
+
+    log.info("Close the dialog")
+    acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
+
+    log.info(
+        f"DR protection successfully removed from VM '{vm.vm_name}' "
+        f"in namespace '{namespace}'"
+    )
+    return True
+
+
 def navigate_using_fleet_virtualization(acm_obj):
     """
     Starting ACM 2.15, VMs page from the ACM console has been removed and is integrated

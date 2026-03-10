@@ -1453,6 +1453,20 @@ acm_configuration_4_19 = {
     "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
     "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
+    # Locators for removing DR protection from an enrolled VM via UI
+    # TODO: Verify these locators against the actual ACM UI before running
+    "remove-vm-protection": (
+        "//button[normalize-space()='Remove protection']",
+        By.XPATH,
+    ),
+    "confirm-remove-protection": (
+        "//button[normalize-space()='Remove']",
+        By.XPATH,
+    ),
+    "remove-protection-conf-msg": (
+        "//h4[contains(text(),'Protection removed')]",
+        By.XPATH,
+    ),
 }
 
 acm_configuration_4_20 = {
