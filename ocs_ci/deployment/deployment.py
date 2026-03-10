@@ -51,7 +51,7 @@ from ocs_ci.helpers.dr_helpers import (
     create_service_exporter,
     is_cg_enabled,
     validate_storage_cluster_peer_state,
-    verify_volsync,
+    # verify_volsync,
     validate_drpolicy_grouping,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
@@ -3407,13 +3407,20 @@ class MultiClusterDROperatorsDeploy(object):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
         # Update DR cluster name and s3profile name
-        dr_policy_hub_data["spec"]["drClusters"][
-            0
-        ] = get_primary_cluster_config().ENV_DATA["cluster_name"]
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+        if dr_cluster_relations:
+            primary_managed_cluster = (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{primary_cluster_name}"
+                if get_client_type_by_name(cluster_name=primary_cluster_name)
+                else primary_cluster_name
+            )
+        else:
+            primary_managed_cluster = primary_cluster_name
+        dr_policy_hub_data["spec"]["drClusters"][0] = primary_managed_cluster
         # Fill in for the rest of the non-acm clusters
         # index 0 is filled by primary
         index = 1
-        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
         # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
         # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
         # in multiclient configuration and provider cluster contexts will also be present.
@@ -3435,9 +3442,16 @@ class MultiClusterDROperatorsDeploy(object):
                 == get_primary_cluster_config().ENV_DATA["cluster_name"]
             ) or is_recovery_cluster(cluster):
                 continue
-            dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
-                "cluster_name"
-            ]
+            secondary_cluster_name = cluster.ENV_DATA["cluster_name"]
+            if dr_cluster_relations:
+                secondary_managed_cluster = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{secondary_cluster_name}"
+                    if get_client_type_by_name(cluster_name=secondary_cluster_name)
+                    else secondary_cluster_name
+                )
+            else:
+                secondary_managed_cluster = secondary_cluster_name
+            dr_policy_hub_data["spec"]["drClusters"][index] = secondary_managed_cluster
         ibm_cloud_managed = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
@@ -3956,7 +3970,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         if odf_running_version >= version.VERSION_4_19:
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
-            verify_volsync()
+            # Skip volsync check until submariner issue is fixed
+            # verify_volsync()
 
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
