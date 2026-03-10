@@ -646,7 +646,7 @@ HYPERCONVERGED_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
 )
 HYPERCONVERGED_CRD = "hyperconvergeds.hco.kubevirt.io"
-
+MACHINESET_KIND = "machinesets.machine.openshift.io"
 
 # CNV deployment constants
 CNV_NAMESPACE = "openshift-cnv"
@@ -678,6 +678,7 @@ VOLUME_IMPORT_SOURCE = "VolumeImportSource"
 VM_VOLUME_PVC = "PVC"
 VM_VOLUME_DV = "DV"
 VM_VOLUME_DVT = "DVT"
+VM_DATAVOLUME = "DataVolume"
 
 # CNV VM source images:
 CNV_FEDORA_SOURCE = "docker://quay.io/containerdisks/fedora:latest"
@@ -1505,6 +1506,7 @@ RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
 RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
+RDR_VM_PROTECTION_LABEL = "ramendr.openshift.io/k8s-resource-selector"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -1600,6 +1602,10 @@ ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
 ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
 ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
 ALERT_ODFOPERATORNOTUPGRADABLE = "ODFOperatorNotUpgradeable"
+RUNBOOK_URL_ODFOPERATORNOTUPGRADABLE = (
+    "https://github.com/openshift/runbooks/blob/master/alerts/"
+    "openshift-container-storage-operator/ODFOperatorNotUpgradeable.md"
+)
 # ODF 4.21 new alerts
 ALERT_ODF_CORE_POD_RESTART = "ODFCorePodRestarted"
 ALERT_ODF_DISK_UTILIZATION_HIGH = "ODFDiskUtilizationHigh"
@@ -2715,6 +2721,9 @@ OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
 HCP_DEPLOYER_POLICY = os.path.join(
     TEMPLATE_DIR, "ocs-deployment", "provider-mode", "aws-hcp", "iam_role_policy.json"
 )
+HCP_DEPLOYER_IAM_ROLE = "aws-agent-deployer-role"
+HCP_DEPLOYER_IAM_POLICY = "aws-hcp-deployer-policy"
+HCP_OIDC_S3_SECRET = "hypershift-operator-oidc-provider-s3-credentials"
 
 
 # aws volume constants

@@ -6124,9 +6124,10 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
         else:
             param = (
-                f'"all": {tolerations}, "api-server": {tolerations}, "csi-plugin": {tolerations}, '
-                f'"csi-provisioner": {tolerations}, "mds": {tolerations}, "metrics-exporter": {tolerations}, '
-                f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}'
+                f'"all": {tolerations}, "api-server": {tolerations}, "blackbox-exporter": {tolerations}, '
+                f'"csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, "mds": {tolerations}, '
+                f'"metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, "rgw": {tolerations}, '
+                f'"toolbox": {tolerations}'
             )
             param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 

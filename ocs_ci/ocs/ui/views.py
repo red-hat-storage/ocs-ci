@@ -1494,6 +1494,26 @@ acm_configuration_4_20 = {
     ),
 }
 
+acm_configuration_4_21 = {
+    "vm-actions": ('//button[@data-test="actions-dropdown"]', By.XPATH),
+    "dr-policy": (
+        "//button[@aria-label='Typeahead single select']",
+        By.XPATH,
+    ),
+    "select-policy": (
+        "//div[@id='dr-policy-dropdown']",
+        By.XPATH,
+    ),
+    "vm-page-next-btn": (
+        "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Next')]",
+        By.XPATH,
+    ),
+    "assign": (
+        "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Assign')]",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -1526,6 +1546,23 @@ add_capacity = {
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+}
+
+attach_storage = {
+    "storage_cluster_actions": (
+        '[data-test-id="details-actions"] button[data-test="kebab-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "attach_storage_button": ("ATTACH_STORAGE", By.ID),
+    "device_class_input": ("device-class", By.ID),
+    "type_block_btn": ("type-block", By.ID),
+    "type_fs_btn": ("type-filesystem", By.ID),
+    "pool_name_input": ("pool-name", By.ID),
+    "select_replication_dropdown": ("replica-dropdown", By.ID),
+    "replication_2": ("//button[contains(., '2-way Replication')]", By.XPATH),
+    "replication_3": ("//button[contains(., '3-way Replication')]", By.XPATH),
+    "new_sc_name_input": ("attach-storage-storageclass-name", By.ID),
+    "confirm_action_btn": ('[data-test-id="confirm-action"]', By.CSS_SELECTOR),
 }
 
 add_capacity_4_11 = {
@@ -1894,6 +1931,7 @@ validation = {
         "button[data-test='horizontal-link-Block and File']",
         By.CSS_SELECTOR,
     ),
+    "storage_cluster_title": ('[data-test-id="resource-title"]', By.CSS_SELECTOR),
 }
 
 validation_4_7 = {
@@ -3077,6 +3115,7 @@ locators = {
             **acm_configuration_4_19,
             **acm_page_nav_420,
             **acm_configuration_4_20,
+            **acm_configuration_4_21,
         },
         "validation": {
             **validation,
@@ -3100,6 +3139,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
+        "attach_storage": attach_storage,
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},

@@ -3,10 +3,12 @@ This module is used for generating custom SSL certificates.
 """
 
 import argparse
+import base64
 import logging
 import os
 import requests
 import tempfile
+import yaml
 
 from OpenSSL import crypto
 
@@ -315,6 +317,99 @@ def get_root_ca_cert():
     return ssl_ca_cert
 
 
+def update_kubeconfig_with_ca_cert(skip_tls_verify=False):
+    """
+    Update kubeconfig file with the kube-apiserver CA certificate authority data.
+    This extracts the CA certificate from the cluster's kube-apiserver-server-ca
+    configmap and embeds it in the kubeconfig. This allows users who download
+    the kubeconfig from a shared location to automatically trust the API server
+    certificate without additional configuration.
+
+    Args:
+        skip_tls_verify (bool): True if allow skipping TLS verification
+
+    """
+    kubeconfig_path = os.path.join(
+        config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+    )
+
+    if not os.path.exists(kubeconfig_path):
+        logger.warning(
+            f"Kubeconfig file '{kubeconfig_path}' does not exist. "
+            "Skipping kubeconfig CA update."
+        )
+        return
+
+    logger.info(
+        f"Updating kubeconfig '{kubeconfig_path}' with kube-apiserver CA certificate"
+    )
+
+    try:
+        ignore_tls = "--insecure-skip-tls-verify " if skip_tls_verify else ""
+        cmd = (
+            f"oc get configmap -n openshift-kube-apiserver kube-apiserver-server-ca {ignore_tls}"
+            "-o jsonpath='{.data.ca-bundle\\.crt}'"
+        )
+        result = exec_cmd(cmd)
+        ca_bundle = result.stdout.decode("utf-8").strip()
+
+        if not ca_bundle or "BEGIN CERTIFICATE" not in ca_bundle:
+            logger.warning(
+                "Failed to extract CA certificate from cluster. "
+                "The configmap may not exist or is empty."
+            )
+            return
+
+        lines = ca_bundle.split("\n")
+        first_cert_lines = []
+        cert_count = 0
+        in_cert = False
+
+        for line in lines:
+            if "BEGIN CERTIFICATE" in line:
+                cert_count += 1
+                in_cert = True
+
+            if cert_count == 1 and in_cert:
+                first_cert_lines.append(line)
+
+            if "END CERTIFICATE" in line and cert_count == 1:
+                break
+
+        if not first_cert_lines:
+            logger.warning("Failed to extract first certificate from CA bundle")
+            return
+
+        first_cert = "\n".join(first_cert_lines)
+        ca_cert_base64 = base64.b64encode(first_cert.encode("utf-8")).decode("utf-8")
+
+        with open(kubeconfig_path, "r") as f:
+            kubeconfig = yaml.safe_load(f)
+
+        for cluster in kubeconfig.get("clusters", []):
+            cluster_data = cluster.get("cluster", {})
+            if "certificate-authority" in cluster_data:
+                del cluster_data["certificate-authority"]
+            cluster_data["certificate-authority-data"] = ca_cert_base64
+            logger.info(
+                f"Updated certificate-authority-data for cluster '{cluster.get('name', 'unknown')}'"
+            )
+
+        with open(kubeconfig_path, "w") as f:
+            yaml.dump(kubeconfig, f, default_flow_style=False)
+
+        logger.info(
+            "Kubeconfig updated successfully with kube-apiserver CA certificate"
+        )
+
+    except Exception as e:
+        logger.warning(
+            f"Failed to update kubeconfig with CA certificate: {e}. "
+            "This is not critical, but users may need to use --insecure-skip-tls-verify "
+            "when using this kubeconfig."
+        )
+
+
 def configure_custom_ingress_cert(
     skip_tls_verify=False, wait_for_machineconfigpool=True
 ):
@@ -412,10 +507,14 @@ def configure_custom_ingress_cert(
         '--type=merge -p \'{"spec":{"defaultCertificate": {"name": "ocs-cert"}}}\''
     )
     exec_cmd(cmd)
+
     if wait_for_machineconfigpool:
         wait_for_machineconfigpool_status(
             "all", timeout=1800, skip_tls_verify=skip_tls_verify
         )
+
+    if ssl_ca_cert:
+        update_kubeconfig_with_ca_cert(skip_tls_verify=skip_tls_verify)
 
 
 def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=True):

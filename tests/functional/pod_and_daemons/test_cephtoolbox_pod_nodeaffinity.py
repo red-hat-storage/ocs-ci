@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
     polarion_id,
     runs_on_provider,
+    skipif_external_mode,
 )
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.node import (
@@ -66,6 +67,7 @@ class TestCephtoolboxPod:
         request.addfinalizer(finalizer)
 
     @tier1
+    @skipif_external_mode
     @polarion_id("OCS-6086")
     def test_node_affinity_to_ceph_toolbox_pod(self):
         """

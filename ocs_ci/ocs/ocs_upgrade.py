@@ -419,7 +419,16 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 count=rgw_count,
             )
     if upgrade_version >= parse_version("4.6"):
-        verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
+        skip_metrics_exporter = upgrade_version >= parse_version(
+            "4.21"
+        ) and config.DEPLOYMENT.get("external_mode")
+        if not skip_metrics_exporter:
+            verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
+        else:
+            log.info(
+                "Skipping ocs-metrics-exporter upgrade verification for ODF 4.21 "
+                "external mode deployment due to bug DFBUGS-5811"
+            )
 
 
 class OCSUpgrade(object):
@@ -735,9 +744,9 @@ class OCSUpgrade(object):
             exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
             log_step("Sleeping 60 seconds after applying tag mirror set.")
             time.sleep(60)
-            log_step("Waiting max 30 mins for master MCP to get updated")
+            log_step("Waiting max 50 mins for master MCP to get updated")
             exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
+                "oc wait --for=condition=Updated --timeout=50m mcp/master", timeout=3600
             )
             log_step("Waiting max 30 mins for worker MCP to get updated")
             exec_cmd(
