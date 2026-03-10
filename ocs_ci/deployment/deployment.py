@@ -51,7 +51,7 @@ from ocs_ci.helpers.dr_helpers import (
     create_service_exporter,
     is_cg_enabled,
     validate_storage_cluster_peer_state,
-    # verify_volsync,
+    verify_volsync,
     validate_drpolicy_grouping,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
@@ -3970,8 +3970,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         if odf_running_version >= version.VERSION_4_19:
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
-            # Skip volsync check until submariner issue is fixed
-            # verify_volsync()
+            verify_volsync()
 
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
