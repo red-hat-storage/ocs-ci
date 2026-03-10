@@ -1857,6 +1857,8 @@ def _run_claude_analysis(
         logger.info(f"[CACHE DEBUG] Allowed tools hash: {hash(allowed_tools)}")
 
         # Build command with system prompt
+        # Add CLAUDE_VERBOSE=1 to the environment for verbose Claude output
+        os.environ["CLAUDE_VERBOSE"] = "1"
         cmd = [
             "claude",
             "--print",
@@ -1904,6 +1906,21 @@ def _run_claude_analysis(
         mcp_server_name = config.ENV_DATA.get(
             "ai_mcp_server_name", defaults.AI_MCP_SERVER_NAME
         )
+
+        # Redirect verbose output to a file under test_log_dir
+        verbose_log_path = os.path.join(test_log_dir, "claude_cli_verbose.log")
+        try:
+            with open(verbose_log_path, "w", encoding="utf-8") as vf:
+                if proc.stdout:
+                    vf.write("=== stdout ===\n")
+                    vf.write(proc.stdout)
+                    vf.write("\n")
+                if proc.stderr:
+                    vf.write("=== stderr ===\n")
+                    vf.write(proc.stderr)
+            logger.info(f"Claude CLI verbose output written to: {verbose_log_path}")
+        except OSError as e:
+            logger.warning(f"Could not write Claude verbose log to {verbose_log_path}: {e}")
 
         if proc.stderr:
             logger.debug(f"Claude CLI stderr output:\n{proc.stderr}")
