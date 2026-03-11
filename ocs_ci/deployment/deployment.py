@@ -293,6 +293,16 @@ class Deployment(object):
                 logger.warning("OCP cluster is already running, skipping installation")
             else:
                 try:
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        > version.VERSION_4_21
+                    ):
+                        logger.info(
+                            "setting environment variable OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY to true"
+                        )
+                        os.environ[
+                            "OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY"
+                        ] = "true"
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
                 except Exception as e:
