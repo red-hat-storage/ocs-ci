@@ -313,7 +313,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
 
     """
     # Get all worker nodes for CSI nodeplugin count (they run on all workers, not just storage-labeled)
-    all_worker_nodes = get_worker_nodes()
+    all_worker_nodes = get_worker_nodes(skip_master_nodes=False)
     number_of_all_worker_nodes = len(all_worker_nodes)
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     if not (
