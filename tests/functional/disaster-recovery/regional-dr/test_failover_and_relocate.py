@@ -11,6 +11,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
+    validate_failover_relocate_status_ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -200,6 +201,14 @@ class TestFailoverAndRelocate:
                     failover_or_preferred_cluster=secondary_cluster_name,
                     workload_type=wl.workload_type,
                 )
+                config.switch_acm_ctx()
+                validate_failover_relocate_status_ui(
+                    acm_obj,
+                    workload_name=wl.workload_name,
+                    primary_cluster_name=primary_cluster_name,
+                    target_cluster_name=secondary_cluster_name,
+                    action=constants.ACTION_FAILOVER,
+                )
             else:
                 # Failover action via CLI
                 dr_helpers.failover(
@@ -320,6 +329,14 @@ class TestFailoverAndRelocate:
                     failover_or_preferred_cluster=primary_cluster_name,
                     action=constants.ACTION_RELOCATE,
                     workload_type=wl.workload_type,
+                )
+                config.switch_acm_ctx()
+                validate_failover_relocate_status_ui(
+                    acm_obj,
+                    workload_name=wl.workload_name,
+                    primary_cluster_name=secondary_cluster_name,
+                    target_cluster_name=primary_cluster_name,
+                    action=constants.ACTION_RELOCATE,
                 )
             else:
                 # Relocate action via CLI

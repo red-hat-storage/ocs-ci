@@ -1507,6 +1507,8 @@ RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
 RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
 RDR_VM_PROTECTION_LABEL = "ramendr.openshift.io/k8s-resource-selector"
+DR_POPOVER_MESSAGE_FAILOVER = "FailingOver application to"
+DR_POPOVER_MESSAGE_RELOCATE = "Relocating application to"
 
 # constants
 RBD_INTERFACE = "rbd"

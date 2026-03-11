@@ -1512,6 +1512,18 @@ acm_configuration_4_21 = {
         "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Assign')]",
         By.XPATH,
     ),
+    "dr-status": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "dr_status_button": ("//button[@data-test-id='dr-status-button']", By.XPATH),
+    "popover_text": ("//div[@data-test-id='popover-header']", By.XPATH),
+    "failover_phase_preparing": ("//li[@id='step-0']", By.XPATH),
+    "failover_phase_failover": ("//li[@id='step-1']", By.XPATH),
+    "failover_phase_restoring": ("//li[@id='step-2']", By.XPATH),
+    "failover_phase_clean_up": ("//li[@id='step-3']", By.XPATH),
+    "relocate_phase_preparing": ("//li[@id='step-0']", By.XPATH),
+    "relocate_phase_syncing": ("//li[@id='step-1']", By.XPATH),
+    "relocate_phase_restoring": ("//li[@id='step-2']", By.XPATH),
+    "relocate_phase_clean_up": ("//li[@id='step-3']", By.XPATH),
+
 }
 
 add_capacity = {
