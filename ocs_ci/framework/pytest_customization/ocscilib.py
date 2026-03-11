@@ -845,20 +845,20 @@ def pytest_collection_modifyitems(session, config, items):
                 f"\nTest name length: {length} characters (exceeds limit of {MAX_TEST_NAME_LENGTH})\n"
                 f"Test name: {test_name}\n"
                 f"Full path: {nodeid}\n"
-                f"{'-'*80}"
+                f"{'-' * 80}"
             )
 
         # Combine all details into one message
         full_error_message = (
-            f"\n{'='*80}\n"
+            f"\n{'=' * 80}\n"
             f"ERROR: Found {len(long_test_names)} test(s) with names exceeding "
             f"{MAX_TEST_NAME_LENGTH} characters.\n"
             f"Long test names cause issues with data upload and reporting.\n"
-            f"{'='*80}" + "".join(error_details) + f"\n{'='*80}\n"
+            f"{'=' * 80}" + "".join(error_details) + f"\n{'=' * 80}\n"
             f"Test collection failed: {len(long_test_names)} test(s) have names "
             f"exceeding {MAX_TEST_NAME_LENGTH} characters.\n"
             f"Please shorten the parametrization names or test function names.\n"
-            f"{'='*80}"
+            f"{'=' * 80}"
         )
 
         # Exit with the complete error message
@@ -927,6 +927,24 @@ def pytest_runtest_makereport(item, call):
             "use .stop_gracefully if you want logs collected"
         )
         return
+    # Record test failure in the AI analysis registry, but only when AI live
+    # analysis is enabled. This avoids any overhead (import, item.fspath
+    # resolution, dict writes) when the feature is off.
+    # We record failures from all phases (setup, call, teardown) so that
+    # setup/teardown failures are also analysed. record_test_failure() stores
+    # the phase and uses "call" entries to avoid overwriting a call-phase
+    # failure with a secondary teardown failure for the same test.
+    if rep.failed:
+        try:
+            from ocs_ci.ocs.must_gather.ai_analyzer import (
+                _is_ai_analysis_enabled,
+                record_test_failure,
+            )
+
+            if _is_ai_analysis_enabled():
+                record_test_failure(item, rep)
+        except Exception:
+            log.debug("Failed to record test failure for AI analysis", exc_info=True)
 
     # we only look at actual failing test calls, not setup/teardown
     # Don't collect must-gather for deployment here since its already
@@ -988,6 +1006,26 @@ def pytest_runtest_makereport(item, call):
                         f"Collecting logs since: {since_time_str} (5 min buffer before test start)"
                     )
 
+                # Spawn AI analysis in parallel with log collection (if enabled)
+                _ai_thread = None
+                try:
+                    from ocs_ci.ocs.must_gather.ai_analyzer import (
+                        _is_ai_analysis_enabled,
+                        _get_current_test_failure_info,
+                        trigger_ai_analysis_parallel,
+                    )
+
+                    if _is_ai_analysis_enabled():
+                        _failure_info = _get_current_test_failure_info()
+                        if _failure_info:
+                            log.info(
+                                "AI live analysis enabled. Spawning Claude analysis "
+                                f"for test: {_failure_info.get('test_name', 'unknown')}"
+                            )
+                            _ai_thread = trigger_ai_analysis_parallel(_failure_info)
+                except Exception:
+                    log.debug("Failed to spawn AI analysis thread", exc_info=True)
+
                 utils.collect_ocs_logs(
                     dir_name=test_case_name,
                     ocp=ocp_logs_collection,
@@ -999,6 +1037,21 @@ def pytest_runtest_makereport(item, call):
                     timeout=timeout,
                     since_time=since_time_str,
                 )
+
+                # Wait for AI analysis thread to complete
+                if _ai_thread is not None:
+                    try:
+                        log.info("Waiting for AI analysis thread to complete...")
+                        _ai_thread.join()
+                        _result = _ai_thread.__dict__.get("result_container", [None])[0]
+                        if isinstance(_result, Exception):
+                            log.warning(f"AI analysis completed with error: {_result}")
+                        elif isinstance(_result, str):
+                            log.info(f"AI analysis summary written to: {_result}")
+                        else:
+                            log.warning("AI analysis thread completed with no result")
+                    except Exception:
+                        log.debug("Error waiting for AI analysis thread", exc_info=True)
         except Exception:
             log.exception("Failed to collect OCS logs")
 
@@ -1215,3 +1268,51 @@ def pytest_runtest_teardown(item):
             mon = ocs_ci.utility.memory.mon
             if mon and mon.is_alive():
                 mon.cancel()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """
+    Generate the consolidated AI failure analysis HTML report at the end of the
+    pytest session (after all tests have run).
+
+    Also injects per-test AI summaries into the JUnit XML report (if
+    ``--junit-xml`` was passed) so that Jenkins / CI systems show the AI
+    analysis alongside the failure traceback when a user clicks on a failed
+    test.
+
+    Only runs when ai_live_analysis is enabled in ENV_DATA config.
+    """
+    try:
+        from ocs_ci.ocs.must_gather.ai_analyzer import (
+            _is_ai_analysis_enabled,
+            generate_consolidated_html_report,
+            inject_ai_summaries_into_junit_xml,
+        )
+
+        if not _is_ai_analysis_enabled():
+            return
+
+        report_path = generate_consolidated_html_report()
+        if report_path:
+            log.info(f"AI consolidated failure analysis report: {report_path}")
+
+        # Inject AI summaries into JUnit XML (for Jenkins / CI rendering)
+        try:
+            junit_xml_path = session.config.getoption("--junit-xml", default=None)
+            if junit_xml_path:
+                count = inject_ai_summaries_into_junit_xml(junit_xml_path)
+                if count:
+                    log.info(
+                        f"AI analysis injected into {count} test case(s) "
+                        f"in JUnit XML: {junit_xml_path}"
+                    )
+        except Exception:
+            log.debug(
+                "Failed to inject AI summaries into JUnit XML",
+                exc_info=True,
+            )
+    except Exception:
+        log.debug(
+            "Failed to generate consolidated AI analysis report",
+            exc_info=True,
+        )
