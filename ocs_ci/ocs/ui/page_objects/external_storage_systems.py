@@ -139,6 +139,8 @@ class ExternalSystems(ResourceList):
         logger.info(f"Deleting connection to {scale_name}")
         delete_cmd = "oc delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
         exec_cmd(delete_cmd)
+        delete_secret_cmd = f"oc delete secret {scale_name}-user-details-secret"
+        exec_cmd(delete_secret_cmd)
         assert not self.scale_present_on_page(scale_name)
 
     def scale_status_ok(self, scale_name):

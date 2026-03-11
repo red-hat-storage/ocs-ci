@@ -511,11 +511,11 @@ class PageNavigator(BaseUI):
 
         logger.info("Navigate to External Storage Systems Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.page_has_loaded(retries=120)
         self.do_click(
             locator=self.page_nav["external_systems_page"],
             enable_screenshot=False,
         )
+        self.page_has_loaded(retries=120)
         return ExternalSystems()
 
     def nav_to_attach_storage_page(self):
