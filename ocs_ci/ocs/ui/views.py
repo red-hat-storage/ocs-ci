@@ -3243,6 +3243,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
+        "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
     },
