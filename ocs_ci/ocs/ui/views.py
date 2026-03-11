@@ -1582,13 +1582,15 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//span[text()='Actions']/.. | //button[@data-test='kebab-button']",
+        "//button[@data-test='storage-pool-kebab-button'] | //button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
+    "title_pool_details_page": ("//title[@data-telemetry='Details']", By.XPATH),
 }
 block_pool_4_13 = {
     "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
@@ -1682,8 +1684,9 @@ block_pool = {
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
     "status_text_in_pool": (
         "//div[contains(@class, '-c-card__body')]//span[@data-test='status-text']",
