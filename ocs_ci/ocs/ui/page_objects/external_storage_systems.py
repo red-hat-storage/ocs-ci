@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.exceptions import TimeoutException
 
 
 class ExternalSystems(ResourceList):
@@ -103,13 +104,13 @@ class ExternalSystems(ResourceList):
         try:
             self.wait_for_element_to_be_present(
                 locator=self.external_systems["alert_description"],
-                timeout=30,
+                timeout=10,
             )
             alert_text = self.get_element_text(
                 locator=self.external_systems["alert_description"]
             )
             logger.warning(f"{alert_text}")
-        except TimeoutError:
+        except TimeoutException:
             logger.info("No alerts when scale was connected")
 
     def scale_present_on_page(self, scale_name):
@@ -127,7 +128,7 @@ class ExternalSystems(ResourceList):
             )
             logger.info(f"{scale_name} found on External Systems page")
             return True
-        except TimeoutError:
+        except TimeoutException:
             logger.info(f"{scale_name} not found on External Systems page")
             return False
 
