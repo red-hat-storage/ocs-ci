@@ -1118,7 +1118,8 @@ class VSPHEREUPI(VSPHEREBASE):
                         timeout=3600,
                     )
                 except (CommandFailed, TimeoutExpired) as e:
-                    if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    err = str(e)
+                    if constants.GATHER_BOOTSTRAP_PATTERN in err or "timed out" in err:
                         try:
                             gather_bootstrap()
                         except Exception as ex:
