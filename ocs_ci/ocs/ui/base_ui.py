@@ -615,6 +615,51 @@ class BaseUI:
             screenshots_folder=self.screenshots_folder, name_suffix=name_suffix
         )
 
+    def take_screenshot_for_llm(self, name_suffix="", region=None):
+        """
+        Takes a screenshot for LLM-based UI analysis and returns the file path.
+
+        This base implementation captures a single viewport screenshot. Subclasses
+        that operate on scrollable panels (e.g. TopologySidebar) should override
+        this method to capture additional screenshots after scrolling, so the LLM
+        receives the full content of the panel.
+
+        The window is temporarily resized to the resolution configured in
+        ``UI_SELENIUM.llm_screenshot_resolution`` (default ``"1920,1400"``)
+        before the screenshot and restored afterwards so that the LLM always
+        receives a consistent, high-resolution image regardless of the current
+        browser window size.
+
+        Args:
+            name_suffix (str): Optional suffix for the screenshot filename.
+            region (str): Optional region to crop. ``"right_side"`` keeps the
+                right half, ``"left_side"`` keeps the left half. ``None`` keeps
+                the full viewport.
+
+        Returns:
+            list: List of absolute paths to the saved screenshot files.
+        """
+        driver = SeleniumDriver()
+        original_size = driver.get_window_size()
+        llm_res = ocsci_config.UI_SELENIUM.get("llm_screenshot_resolution", "1920,1400")
+        llm_w, llm_h = (int(v) for v in llm_res.split(","))
+        driver.set_window_size(llm_w, llm_h)
+        time.sleep(0.5)
+
+        try:
+            suffix = f"{name_suffix}_llm" if name_suffix else "llm"
+            take_screenshot(
+                screenshots_folder=self.screenshots_folder, name_suffix=suffix
+            )
+            screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+            path = str(screenshots[-1])
+            if region:
+                _crop_screenshot(path, region)
+            return [path]
+        finally:
+            driver.set_window_size(original_size["width"], original_size["height"])
+            time.sleep(0.3)
+
     def copy_dom(self, name_suffix: str = ""):
         """
         Get page source of the webpage
@@ -831,6 +876,48 @@ def take_screenshot(name_suffix: str = "", screenshots_folder=None):
     logger.debug(f"Creating screenshot: {filename}")
     SeleniumDriver().save_screenshot(filename)
     time.sleep(0.5)
+
+
+def _crop_screenshot(path, region):
+    """
+    Crops a screenshot in-place to the specified region using the browser
+    Canvas API so no external image library is required.
+
+    Args:
+        path (str): Absolute path to the PNG file.
+        region (str): ``"right_side"`` or ``"left_side"``.
+    """
+    import base64
+
+    if region not in ("right_side", "left_side"):
+        logger.warning(f"Unknown region '{region}', keeping full screenshot")
+        return
+
+    with open(path, "rb") as fh:
+        img_b64 = base64.b64encode(fh.read()).decode()
+
+    js = """
+    var region = arguments[0];
+    var imgData = arguments[1];
+    var callback = arguments[arguments.length - 1];
+    var img = new Image();
+    img.onload = function() {
+        var canvas = document.createElement('canvas');
+        var w = img.width, h = img.height;
+        var sx = 0, sw = w;
+        if (region === 'right_side') { sx = Math.floor(w / 2); sw = w - sx; }
+        else if (region === 'left_side') { sw = Math.floor(w / 2); }
+        canvas.width = sw;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, sx, 0, sw, h, 0, 0, sw, h);
+        callback(canvas.toDataURL('image/png').split(',')[1]);
+    };
+    img.src = 'data:image/png;base64,' + imgData;
+    """
+    cropped_b64 = SeleniumDriver().execute_async_script(js, region, img_b64)
+    with open(path, "wb") as fh:
+        fh.write(base64.b64decode(cropped_b64))
+    logger.info(f"Cropped screenshot to '{region}': {path}")
 
 
 def garbage_collector_webdriver():
