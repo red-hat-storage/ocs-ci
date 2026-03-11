@@ -4976,20 +4976,25 @@ def get_module_ip(terraform_state_file, module):
 
         # Auto-detect terraform state file format
         # Newer terraform versions use "resources", older versions use "modules"
-        if "resources" in obj or config.ENV_DATA.get("folder_structure"):
+        if "resources" in obj:
             resources = obj["resources"]
             log.debug(f"Extracting module information for {module}")
-            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            log.debug(f"Resources in {terraform_state_file}: {resources}")
+
             for resource in resources:
                 if resource.get("module") == module and resource.get("mode") == "data":
                     for each_resource in resource["instances"]:
                         resource_body = each_resource["attributes"]["body"]
                         ips.append(resource_body.split('"')[3])
+
+            return ips
+
         elif "modules" in obj:
             modules = obj["modules"]
             target_module = module.split("_")[1]
             log.debug(f"Extracting module information for {module}")
             log.debug(f"Modules in {terraform_state_file}: {modules}")
+
             for each_module in modules:
                 if target_module in each_module["path"]:
                     return each_module["outputs"]["ip_addresses"]["value"]
@@ -4998,8 +5003,7 @@ def get_module_ip(terraform_state_file, module):
                 f"Terraform state file {terraform_state_file} does not contain "
                 "'resources' or 'modules' key. Unable to extract module information."
             )
-
-        return ips
+    return ips
 
 
 def set_aws_region(region=None):
