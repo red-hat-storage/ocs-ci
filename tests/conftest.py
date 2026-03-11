@@ -11043,6 +11043,35 @@ def enable_reclaimspace_on_storageclass():
     return factory
 
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_mcp_for_ai_analysis():
+    """
+    Setup MCP server and Claude configuration for AI live analysis.
+
+    This fixture runs once per pytest session and sets up:
+    1. MCP server repository (clones/updates)
+    2. OCS-CI repository for MCP indexing (clones/updates)
+    3. Claude settings.json from Jinja2 template
+    4. MCP server registration with Claude CLI
+
+    Only runs if ai_live_analysis is enabled in ENV_DATA.
+    """
+    from ocs_ci.ocs.must_gather import ai_analyzer
+
+    if not ai_analyzer._is_ai_analysis_enabled():
+        log.debug("AI live analysis disabled, skipping MCP setup")
+        return
+
+    log.info("Setting up MCP for AI live analysis")
+    success = ai_analyzer.setup_mcp_for_session()
+
+    if not success:
+        log.warning(
+            "MCP setup failed. AI analysis may not work correctly. "
+            "Check logs for details."
+        )
+
+
 class BaseStorageClassPrecedenceTest(ABC):
     """
     Base class for storage class precedence tests.
