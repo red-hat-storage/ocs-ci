@@ -2215,7 +2215,7 @@ class Deployment(object):
             logger.warning(f"Ceph health check failed with {err}")
             if "clock skew detected" in err:
                 logger.info(
-                    f"Changing NTP on compute nodes to" f" {constants.RH_NTP_CLOCK}"
+                    f"Changing NTP on cluster nodes to {constants.RH_NTP_CLOCK}"
                 )
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()

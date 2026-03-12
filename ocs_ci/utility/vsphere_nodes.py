@@ -150,12 +150,27 @@ def update_ntp_and_restart_chrony(node, server=None):
 
 def update_ntp_compute_nodes():
     """
-    Updates NTP server on all compute nodes
+    Updates NTP server on all compute nodes.
+    In compact mode (worker_replicas == 0), updates master nodes instead.
     """
     ntp_server = config.ENV_DATA.get("ntp_server")
-    if config.ENV_DATA["deployment_type"] == "upi":
-        compute_nodes = get_node_ips_from_module(constants.COMPUTE_MODULE)
+
+    # Check for compact mode deployment (no worker nodes)
+    worker_replicas = config.ENV_DATA.get("worker_replicas", 3)
+    is_compact_mode = worker_replicas == 0
+
+    if is_compact_mode:
+        logger.info("Compact mode detected, updating NTP on master nodes")
+        if config.ENV_DATA["deployment_type"] == "upi":
+            nodes = get_node_ips_from_module(constants.CONTROL_PLANE)
+        else:
+            nodes = get_node_ips(node_type="master")
     else:
-        compute_nodes = get_node_ips()
-    for compute in compute_nodes:
-        update_ntp_and_restart_chrony(compute, server=ntp_server)
+        logger.info("Updating NTP on compute nodes")
+        if config.ENV_DATA["deployment_type"] == "upi":
+            nodes = get_node_ips_from_module(constants.COMPUTE_MODULE)
+        else:
+            nodes = get_node_ips(node_type="worker")
+
+    for node in nodes:
+        update_ntp_and_restart_chrony(node, server=ntp_server)
