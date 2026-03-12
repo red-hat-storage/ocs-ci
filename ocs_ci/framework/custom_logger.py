@@ -17,6 +17,7 @@ Usage:
     logger.test_step("Create PVC")
     logger.assertion("PVC status: expected='Bound', actual='Bound'")
     logger.ai_data("Failure prediction: 85% probability")
+
 """
 
 import inspect
@@ -47,6 +48,7 @@ def increment_step(module_name):
 
     Returns:
         int: The new step number
+
     """
     with _step_counts_lock:
         _step_counts[module_name] = _step_counts.get(module_name, 0) + 1
@@ -62,6 +64,7 @@ def get_current_step(module_name):
 
     Returns:
         int: Current step number (0 if not yet incremented)
+
     """
     with _step_counts_lock:
         return _step_counts.get(module_name, 0)
@@ -74,6 +77,7 @@ def reset_step_counts(module_name=None):
     Args:
         module_name (str, optional): Name of specific module to reset.
             If None, resets all counters.
+
     """
     with _step_counts_lock:
         if module_name:
@@ -92,6 +96,7 @@ class OCSCILogger(logging.Logger):
     - test_step(): Log test steps with automatic numbering
     - assertion(): Log test assertions and validations
     - ai_data(): Log AI/ML metrics and predictions
+
     """
 
     def __init__(self, name, level=logging.NOTSET):
@@ -101,6 +106,7 @@ class OCSCILogger(logging.Logger):
         Args:
             name (str): Logger name
             level (int): Logging level
+
         """
         super().__init__(name, level)
         self._module_name = name
@@ -120,6 +126,7 @@ class OCSCILogger(logging.Logger):
         Example:
             logger.test_step("Create PVC")
             # Output: "test_pvc_creation --- 1 --- Create PVC"
+
         """
         if self.isEnabledFor(TEST_STEP):
             # Get calling function name (matches log_step behavior)
@@ -149,6 +156,7 @@ class OCSCILogger(logging.Logger):
 
         Example:
             logger.assertion("PVC status: expected='Bound', actual='Bound'")
+
         """
         if self.isEnabledFor(ASSERTION):
             self._log(ASSERTION, message, args, **kwargs)
@@ -159,6 +167,7 @@ class OCSCILogger(logging.Logger):
 
         This level is below DEBUG (5 < 10) and requires explicit enabling.
         Use for AI/ML metrics, predictions, model information, and analysis data.
+        To see AI_DATA logs, set log level to 5 or use --log-cli-level=5
 
         Args:
             message (str): AI/ML data description
@@ -166,12 +175,8 @@ class OCSCILogger(logging.Logger):
             **kwargs: Additional logging kwargs (exc_info, extra, etc.)
 
         Example:
-            logger.ai_data(
-                "Prediction: failure_risk=0.85, model='v2.3', confidence=0.95"
-            )
+            logger.ai_data("Prediction: failure_risk=0.85, model='v2.3', confidence=0.95")
 
-        Note:
-            To see AI_DATA logs, set log level to 5 or use --log-cli-level=5
         """
         if self.isEnabledFor(AI_DATA):
             self._log(AI_DATA, message, args, **kwargs)
