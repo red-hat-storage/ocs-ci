@@ -471,25 +471,6 @@ def scale_deployment(deployment_name, replicas):
 
     scale(deployment_name, replicas)
     logger.info(f"Deployment '{deployment_name}' scaled successfully")
-
-# Test execution flow
-def test_multiple_pvcs(self):
-    """Test creating multiple PVCs concurrently"""
-    pvc_count = 10
-
-    logger.info(f"Starting concurrent PVC creation test (count: {pvc_count})")
-
-    logger.info("Creating PVCs...")
-    pvcs = [create_pvc(f"test-pvc-{i}", size="1Gi") for i in range(pvc_count)]
-
-    logger.info("Waiting for all PVCs to be bound...")
-    all_bound = wait_for_all_pvcs_bound(pvcs, timeout=300)
-    assert all_bound, "Not all PVCs reached Bound state"
-
-    logger.info("Cleaning up PVCs...")
-    delete_pvcs(pvcs)
-
-    logger.info("Test completed successfully")
 ```
 
 **Output:**
