@@ -118,8 +118,10 @@ class ExternalSystems(ResourceList):
         Args:
             scale_name (str): scale connection name
         """
-        self.do_send_keys(self.external_systems["filter"], scale_name)
+        logger.info(f"Checking if {scale_name} is present")
         try:
+            self.do_clear(self.external_systems["filter"])
+            self.do_send_keys(self.external_systems["filter"], scale_name)
             self.wait_for_element_to_be_present(
                 locator=self.external_systems["scale_dashboard_link"]
             )
@@ -155,6 +157,7 @@ class ExternalSystems(ResourceList):
             False othewise
 
         """
+        self.do_clear(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
         self.do_click(locator=self.external_systems["scale_dashboard_link"])
         operator_status = self.get_element_text(
@@ -178,6 +181,7 @@ class ExternalSystems(ResourceList):
             filesystem_name (str): name of the additional filesystem
         """
         logger.info(f"Filtering connections to find {scale_name}")
+        self.do_clear(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
         self.do_click(locator=self.external_systems["actions_button"])
         self.do_click(locator=self.external_systems["add_filesystem"])
@@ -195,6 +199,7 @@ class ExternalSystems(ResourceList):
             scale_name (str): name of the scale cluster
             filesystem_name (str): name of the  filesystem
         """
+        self.do_clear(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
         self.do_click(locator=self.external_systems["scale_link"])
         self.do_click(
