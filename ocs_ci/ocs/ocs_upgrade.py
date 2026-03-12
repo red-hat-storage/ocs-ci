@@ -419,9 +419,10 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 count=rgw_count,
             )
     if upgrade_version >= parse_version("4.6"):
-        skip_metrics_exporter = upgrade_version >= parse_version(
-            "4.21"
-        ) and config.DEPLOYMENT.get("external_mode")
+        skip_metrics_exporter = upgrade_version >= parse_version("4.21") and (
+            config.DEPLOYMENT.get("external_mode")
+            or config.ENV_DATA.get("mcg_only_deployment")
+        )
         if not skip_metrics_exporter:
             verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
         else:
