@@ -101,7 +101,9 @@ class ExternalSystems(ResourceList):
         self.do_send_keys(self.external_systems["filesystem_name"], filesystem_name)
         logger.info("Click Connect Scale")
         self.scroll_into_view(locator=self.external_systems["connect_scale_final"])
-        self.do_click(locator=self.external_systems["connect_scale_final"])
+        self.do_click(
+            locator=self.external_systems["connect_scale_final"], enable_screenshot=True
+        )
         logger.info("Connect Scale button clicked")
 
     def scale_present_on_page(self, scale_name):
@@ -169,9 +171,11 @@ class ExternalSystems(ResourceList):
             scale_name (str): name of the scale cluster
             filesystem_name (str): name of the additional filesystem
         """
+        logger.info(f"Filtering connections to find {scale_name}")
         self.do_send_keys(self.external_systems["filter"], scale_name)
         self.do_click(locator=self.external_systems["actions_button"])
         self.do_click(locator=self.external_systems["add_filesystem"])
+        logger.info(f"Adding remote filesystem {filesystem_name}")
         self.do_send_keys(
             self.external_systems["filesystem_name_input"], filesystem_name
         )

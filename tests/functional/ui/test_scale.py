@@ -34,7 +34,7 @@ class TestScaleConnection(object):
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
         external_systems.connect_scale(
-            system_name="SCALE_CONNECTION_NAME",
+            system_name=SCALE_CONNECTION_NAME,
             endpoint=config.ENV_DATA["scale_endpoint"],
             port="443",
             username=config.ENV_DATA["scale_username"],
@@ -42,7 +42,7 @@ class TestScaleConnection(object):
             filesystem_name=FILESYSTEM_1,
         )
         external_systems = scale_connect_obj.nav_external_systems_page()
-        assert external_systems.scale_status_ok("SCALE_CONNECTION_NAME")
+        assert external_systems.scale_status_ok(SCALE_CONNECTION_NAME)
 
     @ui
     @skipif_ibm_cloud_managed
