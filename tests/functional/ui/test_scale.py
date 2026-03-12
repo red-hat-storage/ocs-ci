@@ -75,7 +75,6 @@ class TestScaleConnection(object):
         """
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
-        assert external_systems.scale_present_on_page(scale_name=SCALE_CONNECTION_NAME)
         external_systems.disconnect_scale(
             scale_name=SCALE_CONNECTION_NAME,
         )

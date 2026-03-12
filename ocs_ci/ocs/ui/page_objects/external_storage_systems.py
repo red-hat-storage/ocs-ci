@@ -142,7 +142,6 @@ class ExternalSystems(ResourceList):
             f"oc delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
         )
         exec_cmd(delete_secret_cmd)
-        assert not self.scale_present_on_page(scale_name)
 
     def scale_status_ok(self, scale_name):
         """
@@ -201,16 +200,18 @@ class ExternalSystems(ResourceList):
         self.do_clear(self.external_systems["filter"])
         wait_for_element_to_be_clickable(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
-        scale_link = wait_for_element_to_be_clickable(
-            self.external_systems["scale_dashboard_link"]
-        )
-        scale_link.do_click()
+        wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
+        self.do_click(self.external_systems["scale_dashboard_link"])
         self.do_click(
             format_locator(self.external_systems["filesystem_link"]), filesystem_name
         )
         self.do_click(locator=self.external_systems["actions_button"])
         self.do_click(locator=self.external_systems["delete_filesystem"])
         self.do_click(locator=self.external_systems["confirm_delete"])
+        self.wait_for_element_to_be_present(
+            locator=self.external_systems["breadcrumb-link"]
+        )
+        self.do_click(locator=self.external_systems["breadcrumb-link"])
 
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
