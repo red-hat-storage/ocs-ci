@@ -18,6 +18,7 @@ import yaml
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
 from ocs_ci.deployment.helpers import storage_class
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -192,7 +193,6 @@ from ocs_ci.utility.utils import (
     get_acm_mce_build_tag,
     apply_oadp_workaround,
     mute_mon_netsplit,
-    get_client_type_by_name,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -3244,7 +3244,7 @@ class MultiClusterDROperatorsDeploy(object):
             current_dr_clusters_list = [
                 (
                     f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
-                    if get_client_type_by_name(cluster_name=item) == "kubevirt"
+                    if is_hosted_cluster(cluster_name=item)
                     else item
                 )
                 for item in dr_cluster_relations[0]
@@ -3412,7 +3412,7 @@ class MultiClusterDROperatorsDeploy(object):
         if dr_cluster_relations:
             primary_managed_cluster = (
                 f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{primary_cluster_name}"
-                if get_client_type_by_name(cluster_name=primary_cluster_name)
+                if is_hosted_cluster(cluster_name=primary_cluster_name)
                 else primary_cluster_name
             )
         else:
@@ -3446,7 +3446,7 @@ class MultiClusterDROperatorsDeploy(object):
             if dr_cluster_relations:
                 secondary_managed_cluster = (
                     f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{secondary_cluster_name}"
-                    if get_client_type_by_name(cluster_name=secondary_cluster_name)
+                    if is_hosted_cluster(cluster_name=secondary_cluster_name)
                     else secondary_cluster_name
                 )
             else:
