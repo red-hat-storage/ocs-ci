@@ -7,7 +7,6 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import exec_cmd
-from ocs_ci.ocs.exceptions import TimeoutException
 
 
 class ExternalSystems(ResourceList):
@@ -119,15 +118,15 @@ class ExternalSystems(ResourceList):
             scale_name (str): scale connection name
         """
         logger.info(f"Checking if {scale_name} is present")
-        try:
-            self.do_clear(self.external_systems["filter"])
-            self.do_send_keys(self.external_systems["filter"], scale_name)
-            self.wait_for_element_to_be_present(
-                locator=self.external_systems["scale_dashboard_link"]
-            )
+        find_element = self.wait_until_expected_text_is_found(
+            locator=self.external_systems["scale_dashboard_link"],
+            expected_text=scale_name,
+            timeout=20,
+        )
+        if find_element:
             logger.info(f"{scale_name} found on External Systems page")
             return True
-        except TimeoutException:
+        else:
             logger.info(f"{scale_name} not found on External Systems page")
             return False
 
@@ -200,9 +199,10 @@ class ExternalSystems(ResourceList):
             filesystem_name (str): name of the  filesystem
         """
         self.do_clear(self.external_systems["filter"])
+        wait_for_element_to_be_clickable(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
         scale_link = wait_for_element_to_be_clickable(
-            self.external_systems["scale_link"]
+            self.external_systems["scale_dashboard_link"]
         )
         scale_link.do_click()
         self.do_click(
