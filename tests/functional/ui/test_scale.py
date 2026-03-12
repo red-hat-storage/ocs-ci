@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import black_squad
 
 logger = logging.getLogger(__name__)
 
-SCALE_CONNECTION_NAME = "scale_cluster_1"
+SCALE_CONNECTION_NAME = "scale-cluster-1"
 FILESYSTEM_1 = "fs1"
 FILESYSTEM_2 = "fs2"
 
