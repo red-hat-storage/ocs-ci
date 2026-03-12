@@ -39,11 +39,7 @@ class VSPHERENode(object):
         # Configure jump host for disconnected/proxy deployments
         jump_host = (
             config.DEPLOYMENT.get("ssh_jump_host")
-            if (
-                config.DEPLOYMENT.get("disconnected")
-                or config.DEPLOYMENT.get("proxy")
-                or config.DEPLOYMENT.get("ipv6")
-            )
+            if (config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"))
             else None
         )
         if jump_host and not jump_host.get("private_key"):
@@ -169,18 +165,26 @@ def update_ntp_compute_nodes():
     """
     ntp_server = config.ENV_DATA.get("ntp_server")
 
+    # In disconnected mode, use disconnected_ntp_server if defined
+    if config.DEPLOYMENT.get("disconnected") and config.ENV_DATA.get(
+        "disconnected_ntp_server"
+    ):
+        ntp_server = config.ENV_DATA.get("disconnected_ntp_server")
+
     # Check for compact mode deployment (no worker nodes)
     worker_replicas = config.ENV_DATA.get("worker_replicas", 3)
     is_compact_mode = worker_replicas == 0
 
     if is_compact_mode:
-        logger.info("Compact mode detected, updating NTP on master nodes")
+        logger.info(
+            f"Compact mode detected, updating NTP on master nodes to {ntp_server}"
+        )
         if config.ENV_DATA["deployment_type"] == "upi":
             nodes = get_node_ips_from_module(constants.CONTROL_PLANE)
         else:
             nodes = get_node_ips(node_type="master")
     else:
-        logger.info("Updating NTP on compute nodes")
+        logger.info(f"Updating NTP on compute nodes to {ntp_server}")
         if config.ENV_DATA["deployment_type"] == "upi":
             nodes = get_node_ips_from_module(constants.COMPUTE_MODULE)
         else:
