@@ -407,11 +407,13 @@ TEST_STEP 5 - Cleanup test resources
 
 **When to use:**
 - Successful operations
-- Progress updates
+- High-level progress milestones (starting, completion, major checkpoints)
 - State changes
 - Resource creation/deletion (successful)
 - Configuration details
 - Most day-to-day logging
+
+**Note:** Use DEBUG for iteration-level details within loops. INFO should mark the start, completion, or major milestones of an operation, not each iteration.
 
 **Examples:**
 
@@ -427,7 +429,7 @@ def create_pvc(name, size, sc_name):
     logger.info(f"PVC '{name}' created successfully")
     return pvc
 
-# Progress updates
+# High-level progress milestones
 def wait_for_pods_ready(namespace, timeout=300):
     logger.info(
         f"Waiting for all pods in namespace '{namespace}' to be ready "
@@ -439,16 +441,21 @@ def wait_for_pods_ready(namespace, timeout=300):
         pods = get_pods(namespace)
         ready_count = sum(1 for p in pods if p.is_ready())
 
-        logger.info(
-            f"Pod readiness: {ready_count}/{len(pods)} pods ready"
+        # Use DEBUG for iteration details
+        logger.debug(
+            f"Pod readiness check: {ready_count}/{len(pods)} pods ready"
         )
 
         if ready_count == len(pods):
-            logger.info("All pods ready")
+            logger.info(f"All {len(pods)} pods ready")
             return True
 
         time.sleep(10)
 
+    logger.warning(
+        f"Timeout waiting for pods in '{namespace}': "
+        f"{ready_count}/{len(pods)} ready after {timeout}s"
+    )
     return False
 
 # Configuration
@@ -478,11 +485,14 @@ def scale_deployment(deployment_name, replicas):
 INFO - Creating PVC 'test-pvc-rbd': size=10Gi, storage_class=ocs-storagecluster-ceph-rbd
 INFO - PVC 'test-pvc-rbd' created successfully
 INFO - Waiting for all pods in namespace 'openshift-storage' to be ready (timeout: 300s)
-INFO - Pod readiness: 8/12 pods ready
-INFO - Pod readiness: 12/12 pods ready
-INFO - All pods ready
+INFO - All 12 pods ready
 INFO - Configuring cluster monitoring
 INFO - Retention period: 7 days
+INFO - Storage size: 100Gi
+INFO - Storage class: ocs-storagecluster-ceph-rbd
+INFO - Cluster monitoring configured successfully
+INFO - Scaling deployment 'rook-ceph-mon': 3 -> 5 replicas
+INFO - Deployment 'rook-ceph-mon' scaled successfully
 ```
 
 ---
@@ -494,8 +504,10 @@ INFO - Retention period: 7 days
 - Variable values during debugging
 - API request/response details
 - Detailed resource states
-- Loop iterations
+- Iteration-level details within loops (not completion/start)
 - Helper function internals
+
+**Note:** Use DEBUG for per-iteration updates in loops. Use INFO to mark when the overall operation starts or completes.
 
 **Examples:**
 
@@ -547,9 +559,12 @@ def calculate_required_nodes(capacity_gb, node_size_gb):
 
     return final_count
 
-# Loop iteration details
+# Iteration-level details (use INFO for start/completion, DEBUG for iterations)
 def wait_for_resource(resource_name, desired_state, timeout=300):
-    logger.debug(f"Starting wait loop: resource={resource_name}, state={desired_state}, timeout={timeout}")
+    logger.info(
+        f"Waiting for resource '{resource_name}' to reach '{desired_state}' "
+        f"(timeout: {timeout}s)"
+    )
 
     start_time = time.time()
     iteration = 0
@@ -558,18 +573,25 @@ def wait_for_resource(resource_name, desired_state, timeout=300):
         iteration += 1
         current_state = get_resource_state(resource_name)
 
+        # DEBUG for each iteration
         logger.debug(
             f"Wait iteration {iteration}: current_state={current_state}, "
             f"elapsed={int(time.time() - start_time)}s"
         )
 
         if current_state == desired_state:
-            logger.debug(f"Resource reached desired state after {iteration} iterations")
+            logger.info(
+                f"Resource '{resource_name}' reached '{desired_state}' "
+                f"after {int(time.time() - start_time)}s"
+            )
             return True
 
         time.sleep(5)
 
-    logger.debug(f"Timeout after {iteration} iterations")
+    logger.warning(
+        f"Timeout waiting for resource '{resource_name}': "
+        f"expected='{desired_state}', actual='{current_state}', timeout={timeout}s"
+    )
     return False
 
 # Detailed resource state
@@ -1121,6 +1143,36 @@ def retry_operation(max_attempts=3):
                     f"Operation failed after {max_attempts} attempts: {e}"
                 )
                 raise
+```
+
+### Pattern: Iteration Logging
+
+Use INFO for start/completion, DEBUG for iteration details:
+
+```python
+def wait_for_condition(condition_func, timeout=300):
+    """Wait for condition with proper iteration logging"""
+
+    logger.info(f"Waiting for condition (timeout: {timeout}s)")
+
+    start_time = time.time()
+    iteration = 0
+
+    while time.time() - start_time < timeout:
+        iteration += 1
+
+        # DEBUG for each iteration
+        logger.debug(f"Checking condition (iteration {iteration})")
+
+        if condition_func():
+            elapsed = int(time.time() - start_time)
+            logger.info(f"Condition met after {elapsed}s")
+            return True
+
+        time.sleep(5)
+
+    logger.warning(f"Condition not met after {timeout}s")
+    return False
 ```
 
 ### Pattern: Conditional Logging
