@@ -151,6 +151,8 @@ def setup_local_storage(storageclass):
     elif platform == constants.VSPHERE_PLATFORM:
         # extra_disks is used in vSphere attach_disk() method
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
+        if config.DEPLOYMENT.get("deploy_multiple_device_classes"):
+            storage_class_device_count *= 2
     expected_pvs = len(worker_names) * storage_class_device_count
     if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
@@ -456,6 +458,13 @@ def add_disk_for_vsphere_platform():
                 config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
                 ssd=ssd_disk,
             )
+            if config.DEPLOYMENT.get("deploy_multiple_device_classes"):
+                logger.info("Attaching additional disks for the second device class")
+                vsphere_base.attach_disk(
+                    config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
+                    config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
+                    ssd=ssd_disk,
+                )
 
         if lso_type == constants.DIRECTPATH:
             logger.info(f"LSO Deployment type: {constants.DIRECTPATH}")

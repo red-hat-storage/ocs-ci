@@ -315,6 +315,25 @@ class StorageClusterSetup(object):
             )["hostNetwork"] = False
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
+        if (
+            config.DEPLOYMENT.get("deploy_multiple_device_classes")
+            and self.local_storage
+            and self.platform == constants.VSPHERE_PLATFORM
+        ):
+            second_device_class = constants.DEFAULT_STORAGECLASS_LSO + "-1"
+            logger.info(
+                "Adding second device set '%s' to the StorageCluster",
+                second_device_class,
+            )
+            deviceset_data_2 = deepcopy(deviceset_data)
+            deviceset_data_2["name"] = second_device_class
+            deviceset_data_2["deviceClass"] = second_device_class
+            deviceset_data_2["deviceType"] = "SSD"
+            deviceset_data_2["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = "1"
+            cluster_data["spec"]["storageDeviceSets"].append(deviceset_data_2)
+
         if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
             pv_size_list = helpers.get_pv_size(
                 storageclass=constants.DEFAULT_STORAGECLASS_LSO + "-part"
