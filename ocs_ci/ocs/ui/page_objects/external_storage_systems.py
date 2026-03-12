@@ -1,5 +1,5 @@
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ui.base_ui import logger
+from ocs_ci.ocs.ui.base_ui import logger, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
@@ -201,7 +201,10 @@ class ExternalSystems(ResourceList):
         """
         self.do_clear(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
-        self.do_click(locator=self.external_systems["scale_link"])
+        scale_link = wait_for_element_to_be_clickable(
+            self.external_systems["scale_link"]
+        )
+        scale_link.do_click()
         self.do_click(
             format_locator(self.external_systems["filesystem_link"]), filesystem_name
         )
