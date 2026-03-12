@@ -100,18 +100,9 @@ class ExternalSystems(ResourceList):
         self.do_send_keys(self.external_systems["scale_password"], password)
         self.do_send_keys(self.external_systems["filesystem_name"], filesystem_name)
         logger.info("Click Connect Scale")
+        self.scroll_into_view(locator=self.external_systems["connect_scale_final"])
         self.do_click(locator=self.external_systems["connect_scale_final"])
-        try:
-            self.wait_for_element_to_be_present(
-                locator=self.external_systems["alert_description"],
-                timeout=10,
-            )
-            alert_text = self.get_element_text(
-                locator=self.external_systems["alert_description"]
-            )
-            logger.warning(f"{alert_text}")
-        except TimeoutException:
-            logger.info("No alerts when scale was connected")
+        logger.info("Connect Scale button clicked")
 
     def scale_present_on_page(self, scale_name):
         """

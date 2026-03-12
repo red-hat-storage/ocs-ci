@@ -37,6 +37,7 @@ class TestScaleConnection(object):
             password=config.ENV_DATA["scale_password"],
             filesystem_name="fs1",
         )
+        external_systems = scale_connect_obj.nav_external_systems_page()
         assert external_systems.scale_status_ok("scale_cluster_1")
 
     @ui
