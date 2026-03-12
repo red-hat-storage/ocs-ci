@@ -3141,8 +3141,8 @@ external_systems = {
         By.ID,
     ),
     "filesystem_name_input": (
-        "remote-file-system-name",
-        By.ID,
+        "input[name='remoteFileSystemName']",
+        By.CSS_SELECTOR,
     ),
     "add_button": (
         "//footer//button[contains(text(), 'Add')]",
