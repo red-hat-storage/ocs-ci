@@ -4,9 +4,9 @@ import time
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    black_squad,
+    red_squad,
     rgw,
-    runs_on_provider,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.framework.testlib import (
     tier1,
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 @ui
 @rgw
-@black_squad
-@runs_on_provider
+@red_squad
+@skipif_hci_provider_and_client
 class TestRGWBucketUI:
     """
     Test RGW bucket operations via the Object Browser UI.
@@ -34,8 +34,8 @@ class TestRGWBucketUI:
 
     @tier1
     @post_upgrade
-    @pytest.mark.polarion_id("OCS-XXXX")
-    def test_navigate_to_rgw_object_browser(self, setup_ui_class_factory):
+    @pytest.mark.polarion_id("OCS-7746")
+    def test_navigate_to_rgw_object_browser(self, setup_ui_class):
         """
         Verify navigation to the RGW object browser and bucket list loading.
 
@@ -48,7 +48,6 @@ class TestRGWBucketUI:
         """
         if not get_rgw_pods():
             pytest.skip("No RGW pods running on this cluster")
-        setup_ui_class_factory()
         bucket_ui = BucketsTab()
         obj_storage = bucket_ui.nav_object_storage_page()
 
@@ -62,8 +61,8 @@ class TestRGWBucketUI:
         logger.info(f"RGW bucket list loaded with {len(buckets)} buckets")
 
     @tier1
-    @pytest.mark.polarion_id("OCS-XXXX")
-    def test_create_rgw_bucket(self, setup_ui_class_factory):
+    @pytest.mark.polarion_id("OCS-7743")
+    def test_create_rgw_bucket(self, setup_ui_class):
         """
         Create an S3 bucket via the RGW provider.
 
@@ -76,7 +75,6 @@ class TestRGWBucketUI:
         """
         if not get_rgw_pods():
             pytest.skip("No RGW pods running on this cluster")
-        setup_ui_class_factory()
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page(provider=constants.S3_PROVIDER_RGW_INTERNAL)
 
@@ -90,9 +88,9 @@ class TestRGWBucketUI:
             bucket_name in buckets
         ), f"Bucket '{bucket_name}' not found in RGW bucket list: {buckets}"
 
-    @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
-    def test_list_rgw_buckets(self, setup_ui_class_factory):
+    @tier1
+    @pytest.mark.polarion_id("OCS-7744")
+    def test_list_rgw_buckets(self, setup_ui_class):
         """
         Verify RGW buckets are displayed correctly.
 
@@ -105,7 +103,6 @@ class TestRGWBucketUI:
         """
         if not get_rgw_pods():
             pytest.skip("No RGW pods running on this cluster")
-        setup_ui_class_factory()
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page(provider=constants.S3_PROVIDER_RGW_INTERNAL)
 
@@ -121,8 +118,8 @@ class TestRGWBucketUI:
         logger.info(f"Found {len(buckets)} RGW buckets: {buckets}")
 
     @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
-    def test_delete_rgw_bucket(self, setup_ui_class_factory):
+    @pytest.mark.polarion_id("OCS-7745")
+    def test_delete_rgw_bucket(self, setup_ui_class):
         """
         Delete an RGW bucket via the UI.
 
@@ -134,7 +131,6 @@ class TestRGWBucketUI:
         """
         if not get_rgw_pods():
             pytest.skip("No RGW pods running on this cluster")
-        setup_ui_class_factory()
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page(provider=constants.S3_PROVIDER_RGW_INTERNAL)
 
