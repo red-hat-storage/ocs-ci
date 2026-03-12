@@ -3176,6 +3176,10 @@ external_systems = {
         "div[data-item-id='Connection-health-item'] title",
         By.CSS_SELECTOR,
     ),
+    "breadcrumb-link": (
+        "a[data-test-id='breadcrumb-link-0']",
+        By.CSS_SELECTOR,
+    ),
 }
 locators = {
     "4.21": {

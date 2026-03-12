@@ -41,8 +41,10 @@ class TestScaleConnection(object):
             password=config.ENV_DATA["scale_password"],
             filesystem_name=FILESYSTEM_1,
         )
-        external_systems = scale_connect_obj.nav_external_systems_page()
-        assert external_systems.scale_status_ok(SCALE_CONNECTION_NAME)
+        assert external_systems.scale_present_on_page(SCALE_CONNECTION_NAME)
+        # checking status temporarily disabled
+        # until https://issues.redhat.com/browse/DFBUGS-4352 is fixed
+        # assert external_systems.scale_status_ok(SCALE_CONNECTION_NAME)
 
     @ui
     @skipif_ibm_cloud_managed

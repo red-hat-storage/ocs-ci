@@ -105,6 +105,10 @@ class ExternalSystems(ResourceList):
             locator=self.external_systems["connect_scale_final"], enable_screenshot=True
         )
         logger.info("Connect Scale button clicked")
+        self.wait_for_element_to_be_present(
+            locator=self.external_systems["breadcrumb-link"]
+        )
+        self.do_click(locator=self.external_systems["breadcrumb-link"])
 
     def scale_present_on_page(self, scale_name):
         """
@@ -133,7 +137,9 @@ class ExternalSystems(ResourceList):
         logger.info(f"Deleting connection to {scale_name}")
         delete_cmd = "oc delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
         exec_cmd(delete_cmd)
-        delete_secret_cmd = f"oc delete secret {scale_name}-user-details-secret"
+        delete_secret_cmd = (
+            f"oc delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
+        )
         exec_cmd(delete_secret_cmd)
         assert not self.scale_present_on_page(scale_name)
 
