@@ -39,7 +39,7 @@ From highest to lowest severity:
 | **ERROR** | 40 | `logger.error()` | Test failures, exceptions, errors |
 | **WARNING** | 30 | `logger.warning()` | Deprecations, retries, potential issues |
 | **ASSERTION** | 27 | `logger.assertion()` | Test validations and assertions |
-| **STEP** | 25 | `logger.step()` | Major test workflow phases |
+| **TEST_STEP** | 25 | `logger.test_step()` | Major test workflow phases |
 | **INFO** | 20 | `logger.info()` | General progress, operations |
 | **DEBUG** | 10 | `logger.debug()` | Detailed diagnostic info |
 | **AI_DATA** | 5 | `logger.ai_data()` | ML predictions, metrics, analysis |
@@ -275,7 +275,7 @@ ASSERTION - Capacity usage: measured=73.5%, expected=75%, tolerance=±5%, passed
 
 ---
 
-### STEP (25) - Test Workflow Phases
+### TEST_STEP (25) - Test Workflow Phases
 
 **When to use:**
 - Major phases in test execution
@@ -295,24 +295,24 @@ ASSERTION - Capacity usage: measured=73.5%, expected=75%, tolerance=±5%, passed
 def test_pvc_snapshot_restore(self):
     """Test PVC snapshot creation and restoration"""
 
-    logger.step("Create source PVC and write test data")
+    logger.test_step("Create source PVC and write test data")
     source_pvc = create_pvc(size="5Gi")
     write_test_data(source_pvc, pattern="random", size="1Gi")
     original_checksum = calculate_checksum(source_pvc)
 
-    logger.step("Create volume snapshot")
+    logger.test_step("Create volume snapshot")
     snapshot = create_snapshot(source_pvc)
     wait_for_snapshot_ready(snapshot, timeout=300)
 
-    logger.step("Restore snapshot to new PVC")
+    logger.test_step("Restore snapshot to new PVC")
     restored_pvc = restore_from_snapshot(snapshot, size="5Gi")
     wait_for_pvc_bound(restored_pvc, timeout=300)
 
-    logger.step("Verify data integrity in restored PVC")
+    logger.test_step("Verify data integrity in restored PVC")
     restored_checksum = calculate_checksum(restored_pvc)
     assert original_checksum == restored_checksum, "Data mismatch after restore"
 
-    logger.step("Cleanup test resources")
+    logger.test_step("Cleanup test resources")
     delete_pvc(restored_pvc)
     delete_snapshot(snapshot)
     delete_pvc(source_pvc)
@@ -321,84 +321,84 @@ def test_pvc_snapshot_restore(self):
 def setup_method(self):
     """Setup test environment"""
 
-    logger.step("Create dedicated test namespace")
+    logger.test_step("Create dedicated test namespace")
     self.namespace = create_namespace(name="test-mcg")
 
-    logger.step("Deploy MCG resources")
+    logger.test_step("Deploy MCG resources")
     deploy_mcg_components(namespace=self.namespace)
 
-    logger.step("Configure S3 test credentials")
+    logger.test_step("Configure S3 test credentials")
     self.s3_creds = create_s3_credentials()
 
 def teardown_method(self):
     """Cleanup test environment"""
 
-    logger.step("Delete test buckets and objects")
+    logger.test_step("Delete test buckets and objects")
     cleanup_s3_resources(self.s3_creds)
 
-    logger.step("Remove MCG resources")
+    logger.test_step("Remove MCG resources")
     delete_mcg_components(namespace=self.namespace)
 
-    logger.step("Delete test namespace")
+    logger.test_step("Delete test namespace")
     delete_namespace(self.namespace)
 
 # Deployment stages
 def deploy_ocp_cluster(self):
     """Deploy OpenShift cluster"""
 
-    logger.step("Generate cluster installation manifests")
+    logger.test_step("Generate cluster installation manifests")
     generate_manifests(cluster_name=self.cluster_name)
 
-    logger.step("Deploy bootstrap node")
+    logger.test_step("Deploy bootstrap node")
     deploy_bootstrap_node()
 
-    logger.step("Deploy control plane nodes")
+    logger.test_step("Deploy control plane nodes")
     deploy_control_plane(node_count=3)
 
-    logger.step("Wait for bootstrap complete")
+    logger.test_step("Wait for bootstrap complete")
     wait_for_bootstrap_complete(timeout=1800)
 
-    logger.step("Deploy worker nodes")
+    logger.test_step("Deploy worker nodes")
     deploy_worker_nodes(node_count=3)
 
-    logger.step("Finalize cluster installation")
+    logger.test_step("Finalize cluster installation")
     finalize_installation()
 
 # Complex multi-phase test
 def test_cluster_upgrade(self):
     """Test ODF cluster upgrade from 4.15 to 4.16"""
 
-    logger.step("Verify pre-upgrade cluster health")
+    logger.test_step("Verify pre-upgrade cluster health")
     verify_cluster_health()
     verify_all_pods_running()
 
-    logger.step("Backup current cluster configuration")
+    logger.test_step("Backup current cluster configuration")
     backup = create_cluster_backup()
 
-    logger.step("Update operator subscription channel")
+    logger.test_step("Update operator subscription channel")
     update_subscription(channel="stable-4.16")
 
-    logger.step("Monitor operator upgrade progress")
+    logger.test_step("Monitor operator upgrade progress")
     wait_for_operator_upgrade(timeout=1800)
 
-    logger.step("Wait for all pods to be updated")
+    logger.test_step("Wait for all pods to be updated")
     wait_for_pod_rollout_complete(timeout=1800)
 
-    logger.step("Verify post-upgrade cluster health")
+    logger.test_step("Verify post-upgrade cluster health")
     verify_cluster_health()
     verify_storage_functionality()
 
-    logger.step("Run post-upgrade validation suite")
+    logger.test_step("Run post-upgrade validation suite")
     run_smoke_tests()
 ```
 
 **Output:**
 ```
-STEP 1 - Create source PVC and write test data
-STEP 2 - Create volume snapshot
-STEP 3 - Restore snapshot to new PVC
-STEP 4 - Verify data integrity in restored PVC
-STEP 5 - Cleanup test resources
+TEST_STEP 1 - Create source PVC and write test data
+TEST_STEP 2 - Create volume snapshot
+TEST_STEP 3 - Restore snapshot to new PVC
+TEST_STEP 4 - Verify data integrity in restored PVC
+TEST_STEP 5 - Cleanup test resources
 ```
 
 ---
@@ -722,7 +722,7 @@ AI_DATA - Scale recommendation: add 2 nodes (confidence=94.2%)
 
 ### Test Files (`tests/`)
 
-Tests should use STEP and ASSERTION liberally to make test flow clear:
+Tests should use TEST_STEP and ASSERTION liberally to make test flow clear:
 
 ```python
 import logging
@@ -750,24 +750,24 @@ class TestPVCLifecycle(ManageTest):
         """
         pvc_name = "test-pvc-lifecycle"
 
-        logger.step("Create PVC with RBD storage class")
+        logger.test_step("Create PVC with RBD storage class")
         pvc = create_pvc(
             name=pvc_name,
             size="10Gi",
             storage_class="ocs-storagecluster-ceph-rbd"
         )
 
-        logger.step("Verify PVC reaches Bound state")
+        logger.test_step("Verify PVC reaches Bound state")
         pvc.reload()
         logger.assertion(
             f"PVC status: expected='Bound', actual='{pvc.status}'"
         )
         assert pvc.status == "Bound", f"PVC not bound: {pvc.status}"
 
-        logger.step("Delete PVC")
+        logger.test_step("Delete PVC")
         delete_pvc(pvc)
 
-        logger.step("Verify PVC is removed from cluster")
+        logger.test_step("Verify PVC is removed from cluster")
         deleted = verify_pvc_deleted(pvc_name, timeout=60)
         logger.assertion(
             f"PVC deletion: pvc={pvc_name}, deleted={deleted}"
@@ -777,7 +777,7 @@ class TestPVCLifecycle(ManageTest):
 
 ### Deployment Code (`ocs_ci/deployment/`)
 
-Deployment code should use STEP for major phases, INFO for progress:
+Deployment code should use TEST_STEP for major phases, INFO for progress:
 
 ```python
 import logging
@@ -792,20 +792,20 @@ class OCPDeployment:
     def deploy(self):
         """Deploy OpenShift cluster"""
 
-        logger.step("Validate deployment prerequisites")
+        logger.test_step("Validate deployment prerequisites")
         self._validate_prerequisites()
 
-        logger.step("Generate installation manifests")
+        logger.test_step("Generate installation manifests")
         manifest_dir = self._generate_manifests()
         logger.info(f"Manifests generated in: {manifest_dir}")
 
-        logger.step("Deploy infrastructure")
+        logger.test_step("Deploy infrastructure")
         self._deploy_infrastructure()
 
-        logger.step("Bootstrap cluster")
+        logger.test_step("Bootstrap cluster")
         self._bootstrap_cluster()
 
-        logger.step("Complete installation")
+        logger.test_step("Complete installation")
         self._complete_installation()
 
         logger.info("Cluster deployment completed successfully")
@@ -1093,7 +1093,7 @@ def complex_operation():
     """Example of progressive logging"""
 
     # High-level phase
-    logger.step("Execute complex operation")
+    logger.test_step("Execute complex operation")
 
     # Operation details
     logger.info("Starting sub-operation A")
@@ -1210,16 +1210,16 @@ def test_multiple_iterations(self):
         # Reset step counter for clean numbering
         reset_step_counts(__name__)
 
-        logger.step("Setup iteration resources")
+        logger.test_step("Setup iteration resources")
         setup_resources()
 
-        logger.step("Run iteration workload")
+        logger.test_step("Run iteration workload")
         run_workload()
 
-        logger.step("Validate iteration results")
+        logger.test_step("Validate iteration results")
         validate_results()
 
-        logger.step("Cleanup iteration resources")
+        logger.test_step("Cleanup iteration resources")
         cleanup_resources()
 ```
 
@@ -1227,16 +1227,16 @@ def test_multiple_iterations(self):
 
 ## Anti-Patterns to Avoid
 
-### ❌ Don't: Excessive STEP Usage
+### ❌ Don't: Excessive TEST_STEP Usage
 
 ```python
 # TOO GRANULAR - clutters logs
 def test_bad_example(self):
-    logger.step("Import libraries")  # ❌
-    logger.step("Define variables")  # ❌
-    logger.step("Create PVC object")  # ❌
+    logger.test_step("Import libraries")  # ❌
+    logger.test_step("Define variables")  # ❌
+    logger.test_step("Create PVC object")  # ❌
     pvc = PVC()
-    logger.step("Set PVC name")  # ❌
+    logger.test_step("Set PVC name")  # ❌
     pvc.name = "test"
 ```
 
@@ -1244,10 +1244,10 @@ def test_bad_example(self):
 
 ```python
 def test_good_example(self):
-    logger.step("Create and configure PVC")
+    logger.test_step("Create and configure PVC")
     pvc = PVC(name="test", size="10Gi")
 
-    logger.step("Deploy PVC to cluster")
+    logger.test_step("Deploy PVC to cluster")
     pvc.create()
 ```
 
@@ -1256,14 +1256,14 @@ def test_good_example(self):
 ```python
 # Redundant with function name
 def deploy_cluster(self):
-    logger.step("Deploy cluster")  # ❌ Adds no info
+    logger.test_step("Deploy cluster")  # ❌ Adds no info
 ```
 
 ✅ **Do:** Add specific details
 
 ```python
 def deploy_cluster(self):
-    logger.step("Deploy 3-node cluster with ODF storage")  # ✅
+    logger.test_step("Deploy 3-node cluster with ODF storage")  # ✅
 ```
 
 ### ❌ Don't: Logging Secrets
@@ -1487,7 +1487,7 @@ except Exception as e:
 def test_cluster_upgrade(self):
     """Test cluster upgrade with comprehensive error handling"""
 
-    logger.step("Start cluster upgrade")
+    logger.test_step("Start cluster upgrade")
 
     try:
         # Pre-upgrade validation
@@ -1609,7 +1609,7 @@ def test_function_logging(caplog):
 
     # Verify log levels
     assert any(
-        record.levelname == "STEP" and "Deploy resources" in record.message
+        record.levelname == "TEST_STEP" and "Deploy resources" in record.message
         for record in caplog.records
     )
 ```
@@ -1622,7 +1622,7 @@ def test_function_logging(caplog):
 
 | Scenario | Level | Method |
 |----------|-------|--------|
-| Test phase starts | STEP | `logger.step()` |
+| Test phase starts | TEST_STEP | `logger.test_step()` |
 | Assertion check | ASSERTION | `logger.assertion()` |
 | Resource created successfully | INFO | `logger.info()` |
 | Operation progress update | INFO | `logger.info()` |
@@ -1644,7 +1644,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Custom levels
-logger.step("Major test phase")
+logger.test_step("Major test phase")
 logger.assertion("expected='X', actual='Y'")
 logger.ai_data("ML prediction: ...")
 
@@ -1675,7 +1675,7 @@ if logger.isEnabledFor(logging.DEBUG):
 
 ## Summary
 
-1. **Use the right level**: STEP for phases, ASSERTION for validations, INFO for progress, DEBUG for details
+1. **Use the right level**: TEST_STEP for phases, ASSERTION for validations, INFO for progress, DEBUG for details
 2. **Use logger.exception()**: Always use in exception handlers to automatically capture tracebacks
 3. **Be specific**: Include context, values, and outcomes in log messages
 4. **Think about the reader**: Your logs should tell the story of what happened
