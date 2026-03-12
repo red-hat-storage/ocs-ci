@@ -404,13 +404,15 @@ class ClaudeCodeBackend(AIBackend):
                 f"stdout: {result.stdout[:500]}"
             )
 
-        # Log cost and turns
+        # Log cost, turns, and session_id
         cost = response.get("total_cost_usd")
         num_turns = response.get("num_turns")
+        session_id = response.get("session_id")
         if cost is not None:
             logger.info(
                 f"Claude Code agentic call cost: ${cost:.4f} "
-                f"({num_turns} turns, context={context})"
+                f"({num_turns} turns, session_id={session_id}, "
+                f"context={context})"
             )
 
         # Extract classification JSON from the result text
@@ -425,22 +427,33 @@ class ClaudeCodeBackend(AIBackend):
 
     @staticmethod
     def _extract_json(text: str) -> dict:
-        """Extract JSON classification from Claude's result text."""
+        """Extract JSON classification dict from Claude's result text."""
+        candidates = []
+
         # Try JSON in code blocks first
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if match:
+        for match in re.finditer(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL):
             try:
-                return json.loads(match.group(1))
+                parsed = json.loads(match.group(1))
+                if isinstance(parsed, dict) and "category" in parsed:
+                    return parsed
+                candidates.append(parsed)
             except json.JSONDecodeError:
                 pass
 
-        # Try to find a JSON object in the text
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
+        # Try to find JSON objects in the text
+        for match in re.finditer(r"\{[^{}]*\}", text, re.DOTALL):
             try:
-                return json.loads(match.group(0))
+                parsed = json.loads(match.group(0))
+                if isinstance(parsed, dict) and "category" in parsed:
+                    return parsed
+                candidates.append(parsed)
             except json.JSONDecodeError:
                 pass
+
+        # Fall back to any dict we found
+        for c in candidates:
+            if isinstance(c, dict):
+                return c
 
         raise AIBackendError(
             f"Could not extract classification JSON from agentic result: "

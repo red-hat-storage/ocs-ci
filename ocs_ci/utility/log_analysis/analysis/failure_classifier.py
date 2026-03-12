@@ -185,7 +185,7 @@ class FailureClassifier:
                 if self.cache:
                     self.cache.put(sig, analysis_dict)
 
-            except AIBackendError as e:
+            except Exception as e:
                 ai_call_count += 1  # Count failed calls toward the limit
                 logger.warning(
                     f"AI classification failed for {representative.name}: {e}"
@@ -231,8 +231,9 @@ class FailureClassifier:
         if not self.failed_logs_dir:
             return ""
 
-        # Sanitize test name: replace brackets from parameterized tests
-        safe_name = test_name.replace("[", "-").replace("]", "")
+        # URL-encode brackets from parameterized test names
+        # e.g., test_raw_block_pv[Retain] -> test_raw_block_pv%5bRetain%5d
+        safe_name = test_name.replace("[", "%5b").replace("]", "%5d")
         base = self.failed_logs_dir.rstrip("/")
         url = f"{base}/{safe_name}_ocs_logs"
         logger.debug(f"Must-gather URL for {test_name}: {url}")
