@@ -12,6 +12,10 @@ from ocs_ci.framework.pytest_customization.marks import black_squad
 
 logger = logging.getLogger(__name__)
 
+SCALE_CONNECTION_NAME = "scale_cluster_1"
+FILESYSTEM_1 = "fs1"
+FILESYSTEM_2 = "fs2"
+
 
 class TestScaleConnection(object):
     """
@@ -30,15 +34,15 @@ class TestScaleConnection(object):
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
         external_systems.connect_scale(
-            system_name="scale_cluster_1",
+            system_name="SCALE_CONNECTION_NAME",
             endpoint=config.ENV_DATA["scale_endpoint"],
             port="443",
             username=config.ENV_DATA["scale_username"],
             password=config.ENV_DATA["scale_password"],
-            filesystem_name="fs1",
+            filesystem_name=FILESYSTEM_1,
         )
         external_systems = scale_connect_obj.nav_external_systems_page()
-        assert external_systems.scale_status_ok("scale_cluster_1")
+        assert external_systems.scale_status_ok("SCALE_CONNECTION_NAME")
 
     @ui
     @skipif_ibm_cloud_managed
@@ -52,10 +56,10 @@ class TestScaleConnection(object):
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
         external_systems.connect_scale_filesystem(
-            scale_name="test-scale", filesystem_name="additional_filesystem_1"
+            scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
         )
         external_systems.delete_scale_filesystem(
-            scale_name="test-scale", filesystem_name="additional_filesystem_1"
+            scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
         )
 
     @ui
@@ -69,8 +73,10 @@ class TestScaleConnection(object):
         """
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
-        assert external_systems.scale_present_on_page(scale_name="scale_cluster_1")
+        assert external_systems.scale_present_on_page(scale_name=SCALE_CONNECTION_NAME)
         external_systems.disconnect_scale(
-            scale_name="scale_cluster_1",
+            scale_name=SCALE_CONNECTION_NAME,
         )
-        assert not external_systems.scale_present_on_page(scale_name="scale_cluster_1")
+        assert not external_systems.scale_present_on_page(
+            scale_name=SCALE_CONNECTION_NAME
+        )
