@@ -1,0 +1,172 @@
+{
+  "_comment": "Catalog of all krknctl-supported scenarios (quay.io/krkn-chaos/krkn-hub). Use with plan.json via depends_on. Run 'krknctl describe <name>' for full env schema.",
+
+  "application-outages": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "600",
+      "NAMESPACE": "{{ namespace }}",
+      "POD_SELECTOR": "{{ pod_selector | default('<Pods to target. For example \"{app: foo}\">') }}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    }
+  },
+
+  "chaos-recommender": {
+    "image": "quay.io/krkn-chaos/krkn-hub:chaos-recommender",
+    "name": "chaos-recommender",
+    "env": {
+      "KRKN_DEBUG": "False"
+    }
+  },
+
+  "container-scenarios": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "{{ container_name | default('') }}",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "60",
+      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
+      "NAMESPACE": "{{ namespace }}"
+    }
+  },
+
+  "dummy-scenario": {
+    "image": "quay.io/krkn-chaos/krkn-hub:dummy-scenario",
+    "name": "dummy-scenario",
+    "env": {
+      "END": "10",
+      "EXIT_STATUS": "0"
+    }
+  },
+
+  "network-chaos": {
+    "image": "quay.io/krkn-chaos/krkn-hub:network-chaos",
+    "name": "network-chaos",
+    "env": {
+      "DURATION": "300",
+      "EGRESS": "{bandwidth: 100mbit}",
+      "EXECUTION": "parallel",
+      "INSTANCE_COUNT": "1",
+      "INTERFACES": "[]",
+      "LABEL_SELECTOR": "node-role.kubernetes.io/worker",
+      "NETWORK_PARAMS": "{{ network_params | default('') }}",
+      "NODE_NAME": "{{ node_name | default('') }}",
+      "TARGET_NODE_AND_INTERFACE": "{{ target_node_interface | default('') }}",
+      "TRAFFIC_TYPE": "{{ traffic_type | default('ingress') }}",
+      "WAIT_DURATION": "300"
+    }
+  },
+
+  "node-cpu-hog": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-cpu-hog",
+    "name": "node-cpu-hog",
+    "env": {
+      "NAMESPACE": "{{ namespace }}",
+      "NODE_CPU_CORE": "{{ node_cpu_core | default('2') }}",
+      "NODE_CPU_PERCENTAGE": "{{ node_cpu_percentage | default('95') }}",
+      "NODE_SELECTORS": "{{ node_selector | default('node-role.kubernetes.io/worker') }}",
+      "TOTAL_CHAOS_DURATION": "{{ duration | default('80') }}"
+    }
+  },
+
+  "node-io-hog": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-io-hog",
+    "name": "node-io-hog",
+    "env": {
+      "IO_BLOCK_SIZE": "1m",
+      "IO_WORKERS": "5",
+      "IO_WRITE_BYTES": "10m",
+      "NAMESPACE": "{{ namespace }}",
+      "NODE_SELECTORS": "{{ node_selector | default('node-role.kubernetes.io/worker') }}",
+      "TOTAL_CHAOS_DURATION": "{{ duration | default('60') }}"
+    }
+  },
+
+  "node-memory-hog": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-memory-hog",
+    "name": "node-memory-hog",
+    "env": {
+      "MEMORY_CONSUMPTION_PERCENTAGE": "{{ memory_percentage | default('90%') }}",
+      "NAMESPACE": "{{ namespace }}",
+      "NODE_SELECTORS": "{{ node_selector | default('node-role.kubernetes.io/worker') }}",
+      "NUMBER_OF_WORKERS": "{{ workers | default('1') }}",
+      "TOTAL_CHAOS_DURATION": "{{ duration | default('80') }}"
+    }
+  },
+
+  "node-network-filter": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-network-filter",
+    "name": "node-network-filter",
+    "env": {
+      "NAMESPACE": "{{ namespace }}",
+      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
+      "KRKN_DEBUG": "False"
+    }
+  },
+
+  "pod-network-chaos": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-chaos",
+    "name": "pod-network-chaos",
+    "env": {
+      "EGRESS_PORTS": "[]",
+      "INGRESS_PORTS": "[]",
+      "INSTANCE_COUNT": "1",
+      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
+      "NAMESPACE": "{{ namespace }}",
+      "TEST_DURATION": "120",
+      "TRAFFIC_TYPE": "[ingress,egress]",
+      "WAIT_DURATION": "300"
+    }
+  },
+
+  "pod-network-filter": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-filter",
+    "name": "pod-network-filter",
+    "env": {
+      "NAMESPACE": "{{ namespace }}",
+      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
+      "KRKN_DEBUG": "False"
+    }
+  },
+
+  "pod-scenarios": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "KILL_TIMEOUT": "180",
+      "NAMESPACE": "{{ namespace }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ pod_label | default(label_selector) }}",
+      "WAIT_DURATION": "1"
+    }
+  },
+
+  "service-disruption-scenarios": {
+    "image": "quay.io/krkn-chaos/krkn-hub:service-disruption-scenarios",
+    "name": "service-disruption-scenarios",
+    "env": {
+      "DELETE_COUNT": "1",
+      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
+      "NAMESPACE": "{{ namespace }}",
+      "RUNS": "1"
+    }
+  },
+
+  "syn-flood": {
+    "image": "quay.io/krkn-chaos/krkn-hub:syn-flood",
+    "name": "syn-flood",
+    "env": {
+      "NAMESPACE": "{{ namespace }}",
+      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
+      "DURATION": "60",
+      "KRKN_DEBUG": "False"
+    }
+  }
+}

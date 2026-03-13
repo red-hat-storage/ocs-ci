@@ -89,6 +89,7 @@ def generate_random_plan_file(
         "namespace": namespace,
         "pod_selector": pod_selector,
         "label_selector": label_selector,
+        "pod_label": label_selector,
         "workers": number_of_workers,
         **kwargs,
     }
@@ -99,6 +100,13 @@ def generate_random_plan_file(
     template = Template(template_content)
     rendered = template.render(**context)
 
+    rendered_stripped = rendered.strip() if rendered else ""
+    if not rendered_stripped:
+        raise ValueError(
+            f"Krknctl plan template rendered to empty content. "
+            f"Template path: {KRKNCTL_PLAN_TEMPLATE}. "
+            "Ensure the template file exists and contains valid Jinja2 that outputs JSON."
+        )
     plan_data = json.loads(rendered)
 
     # Remove excluded scenarios (top-level keys that are scenario names)
