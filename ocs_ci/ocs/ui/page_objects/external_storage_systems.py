@@ -211,6 +211,7 @@ class ExternalSystems(ResourceList):
         self.wait_for_element_to_be_present(
             locator=self.external_systems["breadcrumb-link"]
         )
+        wait_for_element_to_be_clickable(self.external_systems["breadcrumb-link"])
         self.do_click(locator=self.external_systems["breadcrumb-link"])
 
 
