@@ -474,9 +474,19 @@ class StorageClusterSetup(object):
                 db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
             )
             create_external_pgsql_secret()
-            cluster_data["spec"]["multiCloudGateway"] = {
-                "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
-            }
+            merge_dict(
+                cluster_data,
+                {
+                    "spec": {
+                        "multiCloudGateway": {
+                            "externalPgConfig": {
+                                "pgSecretName": constants.NOOBAA_POSTGRES_SECRET
+                            }
+                        }
+                    }
+                },
+            )
+            config.ENV_DATA.set("noobaa_db_backup_enabled", False)
         # Add NooBaa DB backup configuration if enabled
         if config.ENV_DATA.get("noobaa_db_backup_enabled"):
             log_step("Adding NooBaa DB backup configuration to StorageCluster")
@@ -493,18 +503,22 @@ class StorageClusterSetup(object):
                 "noobaa_db_backup_snapshot_class",
                 constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
             )
-            if config.ENV_DATA.get("mcg_only_deployment"):
-                snapshot_class = helpers.get_default_cluster_volumesnapshotclass()
-
-            cluster_data["spec"]["multiCloudGateway"] = {
-                "dbBackup": {
-                    "schedule": schedule_cron_interval,
-                    "volumeSnapshot": {
-                        "maxSnapshots": max_snapshots,
-                        "volumeSnapshotClass": snapshot_class,
-                    },
+            merge_dict(
+                cluster_data,
+                {
+                    "spec": {
+                        "multiCloudGateway": {
+                            "dbBackup": {
+                                "schedule": schedule_cron_interval,
+                                "volumeSnapshot": {
+                                    "maxSnapshots": max_snapshots,
+                                    "volumeSnapshotClass": snapshot_class,
+                                },
+                            },
+                        }
+                    }
                 },
-            }
+            )
             logger.info(
                 f"NooBaa DB backup configuration added to StorageCluster: "
                 f"schedule={schedule_cron_interval}, "
