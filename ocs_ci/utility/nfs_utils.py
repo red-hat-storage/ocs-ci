@@ -14,7 +14,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
-from ocs_ci.utility.utils import convert_device_size
+from ocs_ci.utility.utils import convert_device_size, exec_cmd
 from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
@@ -195,6 +195,64 @@ def create_nfs_load_balancer_service(
         return host_ip
     else:
         log.error("host details unavailable")
+
+
+def update_etc_hosts_on_nfs_client(con, hostname):
+    """
+    Resolve an NFS LB hostname from within the cluster and update /etc/hosts
+    on the NFS client VM.
+
+    IBM Cloud VPC Load Balancer hostnames (*.lb.appdomain.cloud) are only
+    resolvable from within the same VPC. When the NFS client VM is in a
+    different VPC, DNS resolution fails and mounts hang. This function resolves
+    the hostname by exec-ing on the node where the NFS pod runs, then writes
+    the result into /etc/hosts on the client VM so mounts succeed.
+
+    This must be called after the LB service is created and after establishing
+    the SSH connection to the NFS client VM. It is safe to call on every
+    reconnect since it removes stale entries before writing new ones.
+
+    Args:
+        con (Connection): SSH connection to the NFS client VM
+        hostname (str): NFS LB hostname to resolve and add to /etc/hosts
+
+    """
+    nfs_pods = pod.get_all_pods(
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        selector=["rook-ceph-nfs"],
+    )
+    if not nfs_pods:
+        log.warning("No NFS pods found, skipping /etc/hosts update on NFS client VM")
+        return
+
+    nfs_node = nfs_pods[0].get()["spec"]["nodeName"]
+    log.info("Resolving %s from cluster node %s", hostname, nfs_node)
+
+    result = exec_cmd(
+        f"oc debug node/{nfs_node} --to-namespace=default "
+        f"-- chroot /host getent hosts {hostname}",
+        timeout=120,
+    )
+    lb_ips = [
+        line.split()[0]
+        for line in result.stdout.decode().strip().splitlines()
+        if line.strip()
+    ]
+    if not lb_ips:
+        log.warning(
+            "Could not resolve %s from within the cluster, "
+            "skipping /etc/hosts update",
+            hostname,
+        )
+        return
+
+    log.info("Resolved %s to %s", hostname, lb_ips)
+
+    # Escape dots so sed treats them as literals, not regex wildcards
+    escaped_hostname = hostname.replace(".", r"\.")
+    con.exec_cmd(f"sed -i '/{escaped_hostname}/d' /etc/hosts")
+    con.exec_cmd(f"echo '{lb_ips[0]} {hostname}' >> /etc/hosts")
+    log.info("Updated /etc/hosts on NFS client VM: %s %s", lb_ips[0], hostname)
 
 
 def delete_nfs_load_balancer_service(
