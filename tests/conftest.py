@@ -8027,8 +8027,11 @@ def discovered_apps_dr_workload_cnv(request):
     request.addfinalizer(teardown)
     return factory
 
+
 @pytest.fixture()
-def all_dr_workloads(dr_workload, discovered_apps_dr_workload, discovered_apps_dr_workload_cnv):
+def all_dr_workloads(
+    dr_workload, discovered_apps_dr_workload, discovered_apps_dr_workload_cnv
+):
     """
     Combined fixture that provides access to all three DR workload fixtures:
     - dr_workload: Setup Busybox workload for DR setup
@@ -8048,19 +8051,18 @@ def all_dr_workloads(dr_workload, discovered_apps_dr_workload, discovered_apps_d
         def test_example(all_dr_workloads):
             # Create basic DR workload
             workload = all_dr_workloads['dr_workload']()
-            
+
             # Create discovered apps workload
             discovered_workload = all_dr_workloads['discovered_apps'](kubeobject=2)
-            
+
             # Create CNV discovered apps workload
             cnv_workload = all_dr_workloads['discovered_apps_cnv'](pvc_vm=1)
     """
     return {
-        'dr_workload': dr_workload,
-        'discovered_apps': discovered_apps_dr_workload,
-        'discovered_apps_cnv': discovered_apps_dr_workload_cnv,
+        "dr_workload": dr_workload,
+        "discovered_apps": discovered_apps_dr_workload,
+        "discovered_apps_cnv": discovered_apps_dr_workload_cnv,
     }
-
 
 
 @pytest.fixture(scope="class")
