@@ -1,6 +1,8 @@
 import pytest
 import os
+import subprocess
 import tarfile
+import time
 import fauxfactory
 import yaml
 import logging
@@ -223,21 +225,78 @@ def krknctl_setup():
     log.info("Making krknctl binary executable: %s", krknctl_binary)
     os.chmod(krknctl_binary, 0o755)
 
-    log.info("Enabling and starting podman service")
-    for service_name in ("podman", "podman.socket"):
+    # Enable and start podman so krknctl can run scenarios in containers.
+    # Use sudo so this works when the test runs as a non-root user (e.g. jenkins).
+    # Enable both podman.socket and podman.service so the API is available to krknctl.
+    log.info("Enabling and starting podman (socket and service) via sudo")
+    podman_ok = False
+    for service_name in ("podman.socket", "podman"):
         try:
-            run_cmd(f"systemctl enable --now {service_name}", timeout=30)
-            run_cmd(f"systemctl is-active --quiet {service_name}", timeout=5)
-            log.info("Podman service '%s' is enabled and running", service_name)
-            break
+            run_cmd(f"sudo systemctl enable --now {service_name}", timeout=30)
+            run_cmd(f"sudo systemctl is-active --quiet {service_name}", timeout=5)
+            log.info("Podman '%s' is enabled and running", service_name)
+            podman_ok = True
         except (CommandFailed, Exception) as e:
-            log.debug("Service '%s' not available or failed: %s", service_name, e)
-            continue
-    else:
+            log.debug("Could not enable/start %s: %s", service_name, e)
+    if not podman_ok:
         log.warning(
-            "Could not enable/start podman or podman.socket; "
+            "Could not enable/start podman.socket or podman; "
             "krknctl may require podman to be running."
         )
+
+    # krknctl runs scenarios in containers; require podman or docker to be usable.
+    container_runtime_ok = False
+    for runtime, check_cmd in (("podman", "podman info"), ("docker", "docker info")):
+        if runtime == "podman":
+            for service_name in ("podman.socket", "podman"):
+                try:
+                    run_cmd(f"sudo systemctl start {service_name}", timeout=15)
+                    log.info("Started podman: %s", service_name)
+                except (CommandFailed, Exception) as e:
+                    log.debug("Could not start %s: %s", service_name, e)
+        try:
+            run_cmd(check_cmd, timeout=15, ignore_error=False)
+            log.info("Container runtime '%s' is available for krknctl", runtime)
+            container_runtime_ok = True
+            break
+        except (CommandFailed, Exception) as e:
+            log.debug("Container runtime '%s' not available: %s", runtime, e)
+            continue
+    if not container_runtime_ok:
+        pytest.skip(
+            "Neither podman nor docker is available or usable. "
+            "krknctl requires a container runtime to run chaos scenarios. "
+            "Install podman or docker and ensure the service is running (e.g. systemctl start podman)."
+        )
+
+    # krknctl expects a container API socket (DOCKER_HOST). For rootless podman, start the
+    # user's podman API service so the socket exists and set DOCKER_HOST for krknctl subprocesses.
+    if os.geteuid() != 0:
+        xdg_runtime = os.environ.get("XDG_RUNTIME_DIR") or os.path.join(
+            "/run", "user", str(os.getuid())
+        )
+        rootless_socket = os.path.join(xdg_runtime, "podman", "podman.sock")
+        if not os.path.exists(rootless_socket):
+            try:
+                log.info("Starting rootless podman system service for krknctl")
+                _proc = subprocess.Popen(
+                    ["podman", "system", "service", "--time=3600"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=os.environ.copy(),
+                )
+                for _ in range(10):
+                    time.sleep(0.5)
+                    if os.path.exists(rootless_socket):
+                        break
+                if not os.path.exists(rootless_socket):
+                    _proc.terminate()
+                    log.warning("Rootless podman socket did not appear")
+            except Exception as e:
+                log.debug("Could not start rootless podman service: %s", e)
+        if os.path.exists(rootless_socket):
+            os.environ["DOCKER_HOST"] = f"unix://{rootless_socket}"
+            log.info("Set DOCKER_HOST=%s for krknctl", os.environ["DOCKER_HOST"])
 
 
 @pytest.fixture(scope="session")

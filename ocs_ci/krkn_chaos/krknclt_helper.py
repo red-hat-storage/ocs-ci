@@ -11,7 +11,7 @@ import string
 from jinja2 import Template
 
 from ocs_ci.ocs.constants import (
-    DATA_DIR,
+    KRKN_OUTPUT_DIR,
     KRKNCTL_PLAN_TEMPLATE,
     # Component label constants used by krkn tests (rook-ceph + noobaa only, no 419 CSI)
     OSD_APP_LABEL,
@@ -45,12 +45,12 @@ def generate_random_plan_file(
 ):
     """
     Generate a new scenario plan file for krknctl by rendering the jinja template
-    and saving it in the ocs-ci data folder with a random name.
+    and saving it under the krkn output directory with a random name.
 
     Reads the template at ocs_ci/krkn_chaos/template/scenarios/keknctl/plan.json.j2,
     fills it with random selectors and the given context, optionally excludes
-    scenarios, appends a random suffix to each scenario name, and writes the
-    result to data/plan_<random>.json.
+    scenarios, appends a random suffix to each scenario key, and writes the
+    result to {KRKN_OUTPUT_DIR}/plan_<random>.json (same location as other krkn output).
 
     Args:
         namespace (str): Target namespace for chaos scenarios. Defaults to
@@ -78,11 +78,13 @@ def generate_random_plan_file(
 
     exclude_scenarios = exclude_scenarios or []
 
-    # Random values for selectors and workers
+    # Random values for selectors and workers.
+    # Use key=value form for label selectors (e.g. app=rook-ceph-mon).
+    # POD_SELECTOR format for application-outages: "{app: rook-ceph-mgr}" (space after colon).
     pod_app = random.choice(CEPH_APP_SELECTORS)
     label_app = random.choice(CEPH_APP_SELECTORS)
     pod_selector = f"{{app: {pod_app}}}"
-    label_selector = label_app
+    label_selector = f"app={label_app}"
     number_of_workers = str(random.randint(1, 6))
 
     context = {
@@ -117,20 +119,30 @@ def generate_random_plan_file(
             del plan_data[key]
             log.debug("Excluded scenario from plan: %s", key)
 
-    # Random suffix for scenario names (e.g. pod-scenarios_xyzsj)
+    # Append random suffix to scenario keys (e.g. node-memory-hog -> node-memory-hog_xyzsj).
+    # The "name" field inside each scenario stays unchanged (krknctl uses it as scenario type).
     name_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=5))
-
-    for scenario_key, scenario_obj in list(plan_data.items()):
+    suffixed_plan = {}
+    key_mapping = {}  # old_key -> new_key for updating depends_on
+    for scenario_key, scenario_obj in plan_data.items():
         if scenario_key.startswith("_"):
-            continue
-        if isinstance(scenario_obj, dict) and "name" in scenario_obj:
-            original_name = scenario_obj["name"]
-            scenario_obj["name"] = f"{original_name}_{name_suffix}"
+            suffixed_plan[scenario_key] = scenario_obj
+        else:
+            new_key = f"{scenario_key}_{name_suffix}"
+            key_mapping[scenario_key] = new_key
+            suffixed_plan[new_key] = scenario_obj
+    # Update depends_on to reference suffixed keys (e.g. "root" -> "root_xyzsj")
+    for scenario_obj in suffixed_plan.values():
+        if isinstance(scenario_obj, dict) and "depends_on" in scenario_obj:
+            dep = scenario_obj["depends_on"]
+            if dep in key_mapping:
+                scenario_obj["depends_on"] = key_mapping[dep]
+    plan_data = suffixed_plan
 
-    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
     file_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
     plan_filename = f"plan_{file_suffix}.json"
-    plan_path = os.path.join(DATA_DIR, plan_filename)
+    plan_path = os.path.join(KRKN_OUTPUT_DIR, plan_filename)
 
     with open(plan_path, "w") as f:
         json.dump(plan_data, f, indent=2)

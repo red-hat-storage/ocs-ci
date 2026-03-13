@@ -920,6 +920,7 @@ class KrKnctlRunner:
         self,
         krknctl_binary=None,
         kubeconfig=None,
+        use_sudo=True,
         **global_flags,
     ):
         """
@@ -928,6 +929,8 @@ class KrKnctlRunner:
                 {KRKNCTL}/krknctl.
             kubeconfig (str): Path to kubeconfig. If None, uses KUBECONFIG env
                 or cluster path from config.
+            use_sudo (bool): If True, run krknctl via sudo so it can use the
+                rootful podman socket (e.g. /run/podman/podman.sock). Default True.
             **global_flags: Optional global flags for krknctl (e.g.
                 private_registry="quay.io",
                 private_registry_username="user",
@@ -938,6 +941,7 @@ class KrKnctlRunner:
             krknctl_binary = os.path.join(KRKNCTL, "krknctl")
         self.krknctl_binary = krknctl_binary
         self.kubeconfig = kubeconfig
+        self.use_sudo = use_sudo
         self.global_flags = {
             k: v for k, v in global_flags.items() if k in self.GLOBAL_FLAGS
         }
@@ -988,7 +992,11 @@ class KrKnctlRunner:
             raise ValueError(
                 f"Unknown subcommand '{subcommand}'. Must be one of {self.SUBCOMMANDS}"
             )
-        cmd = [self.krknctl_binary]
+        cmd = []
+        if self.use_sudo:
+            cmd.extend(["sudo", "-E", self.krknctl_binary])
+        else:
+            cmd.append(self.krknctl_binary)
 
         if self.kubeconfig is not None:
             cmd.extend(["--kubeconfig", self.kubeconfig])

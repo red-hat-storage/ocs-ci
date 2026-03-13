@@ -1,5 +1,16 @@
 {
-  "_comment": "Catalog of all krknctl-supported scenarios (quay.io/krkn-chaos/krkn-hub). Use with plan.json via depends_on. Run 'krknctl describe <name>' for full env schema.",
+  "_comment": {
+    "_comment": "Catalog of krknctl scenarios. Each node needs depends_on (string) except the root. Run 'krknctl describe <name>' for env schema."
+  },
+
+  "root": {
+    "image": "quay.io/krkn-chaos/krkn-hub:dummy-scenario",
+    "name": "dummy-scenario",
+    "env": {
+      "END": "10",
+      "EXIT_STATUS": "0"
+    }
+  },
 
   "application-outages": {
     "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
@@ -8,10 +19,11 @@
       "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
       "DURATION": "600",
       "NAMESPACE": "{{ namespace }}",
-      "POD_SELECTOR": "{{ pod_selector | default('<Pods to target. For example \"{app: foo}\">') }}",
+      "POD_SELECTOR": "{{ pod_selector | default('{app: rook-ceph-mgr}') }}",
       "WAIT_DURATION": "60",
       "KRKN_DEBUG": "False"
-    }
+    },
+    "depends_on": "root"
   },
 
   "chaos-recommender": {
@@ -19,7 +31,8 @@
     "name": "chaos-recommender",
     "env": {
       "KRKN_DEBUG": "False"
-    }
+    },
+    "depends_on": "root"
   },
 
   "container-scenarios": {
@@ -32,7 +45,8 @@
       "EXPECTED_RECOVERY_TIME": "60",
       "LABEL_SELECTOR": "{{ label_selector | default('') }}",
       "NAMESPACE": "{{ namespace }}"
-    }
+    },
+    "depends_on": "root"
   },
 
   "dummy-scenario": {
@@ -41,7 +55,8 @@
     "env": {
       "END": "10",
       "EXIT_STATUS": "0"
-    }
+    },
+    "depends_on": "root"
   },
 
   "network-chaos": {
@@ -53,13 +68,14 @@
       "EXECUTION": "parallel",
       "INSTANCE_COUNT": "1",
       "INTERFACES": "[]",
-      "LABEL_SELECTOR": "node-role.kubernetes.io/worker",
-      "NETWORK_PARAMS": "{{ network_params | default('') }}",
+      "LABEL_SELECTOR": "node-role.kubernetes.io/worker=",
+      "NETWORK_PARAMS": "{{ network_params | default('{latency: 50ms, loss: 0.02}') }}",
       "NODE_NAME": "{{ node_name | default('') }}",
-      "TARGET_NODE_AND_INTERFACE": "{{ target_node_interface | default('') }}",
-      "TRAFFIC_TYPE": "{{ traffic_type | default('ingress') }}",
+      "TARGET_NODE_AND_INTERFACE": "{{ target_node_interface | default('{worker-0: [ens5]}') }}",
+      "TRAFFIC_TYPE": "{{ traffic_type | default('egress') }}",
       "WAIT_DURATION": "300"
-    }
+    },
+    "depends_on": "root"
   },
 
   "node-cpu-hog": {
@@ -69,9 +85,10 @@
       "NAMESPACE": "{{ namespace }}",
       "NODE_CPU_CORE": "{{ node_cpu_core | default('2') }}",
       "NODE_CPU_PERCENTAGE": "{{ node_cpu_percentage | default('95') }}",
-      "NODE_SELECTORS": "{{ node_selector | default('node-role.kubernetes.io/worker') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
       "TOTAL_CHAOS_DURATION": "{{ duration | default('80') }}"
-    }
+    },
+    "depends_on": "root"
   },
 
   "node-io-hog": {
@@ -82,9 +99,10 @@
       "IO_WORKERS": "5",
       "IO_WRITE_BYTES": "10m",
       "NAMESPACE": "{{ namespace }}",
-      "NODE_SELECTORS": "{{ node_selector | default('node-role.kubernetes.io/worker') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
       "TOTAL_CHAOS_DURATION": "{{ duration | default('60') }}"
-    }
+    },
+    "depends_on": "root"
   },
 
   "node-memory-hog": {
@@ -93,20 +111,28 @@
     "env": {
       "MEMORY_CONSUMPTION_PERCENTAGE": "{{ memory_percentage | default('90%') }}",
       "NAMESPACE": "{{ namespace }}",
-      "NODE_SELECTORS": "{{ node_selector | default('node-role.kubernetes.io/worker') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
       "NUMBER_OF_WORKERS": "{{ workers | default('1') }}",
       "TOTAL_CHAOS_DURATION": "{{ duration | default('80') }}"
-    }
+    },
+    "depends_on": "root"
   },
 
   "node-network-filter": {
     "image": "quay.io/krkn-chaos/krkn-hub:node-network-filter",
     "name": "node-network-filter",
     "env": {
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
       "NAMESPACE": "{{ namespace }}",
-      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
-      "KRKN_DEBUG": "False"
-    }
+      "INSTANCE_COUNT": "1",
+      "EXECUTION": "parallel",
+      "INGRESS": "true",
+      "EGRESS": "true",
+      "PORTS": "{{ node_network_filter_ports | default('8080,8443') }}",
+      "PROTOCOLS": "{{ node_network_filter_protocols | default('tcp') }}",
+      "TOTAL_CHAOS_DURATION": "{{ duration | default('60') }}"
+    },
+    "depends_on": "root"
   },
 
   "pod-network-chaos": {
@@ -121,7 +147,8 @@
       "TEST_DURATION": "120",
       "TRAFFIC_TYPE": "[ingress,egress]",
       "WAIT_DURATION": "300"
-    }
+    },
+    "depends_on": "root"
   },
 
   "pod-network-filter": {
@@ -129,9 +156,16 @@
     "name": "pod-network-filter",
     "env": {
       "NAMESPACE": "{{ namespace }}",
-      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
-      "KRKN_DEBUG": "False"
-    }
+      "POD_SELECTOR": "{{ label_selector | default('app=rook-ceph-osd') }}",
+      "INSTANCE_COUNT": "1",
+      "EXECUTION": "parallel",
+      "INGRESS": "true",
+      "EGRESS": "true",
+      "PORTS": "{{ pod_network_filter_ports | default('8080,8443') }}",
+      "PROTOCOLS": "{{ pod_network_filter_protocols | default('tcp') }}",
+      "TOTAL_CHAOS_DURATION": "{{ duration | default('60') }}"
+    },
+    "depends_on": "root"
   },
 
   "pod-scenarios": {
@@ -145,7 +179,8 @@
       "NAME_PATTERN": ".*",
       "POD_LABEL": "{{ pod_label | default(label_selector) }}",
       "WAIT_DURATION": "1"
-    }
+    },
+    "depends_on": "root"
   },
 
   "service-disruption-scenarios": {
@@ -156,7 +191,8 @@
       "LABEL_SELECTOR": "{{ label_selector | default('') }}",
       "NAMESPACE": "{{ namespace }}",
       "RUNS": "1"
-    }
+    },
+    "depends_on": "root"
   },
 
   "syn-flood": {
@@ -164,9 +200,11 @@
     "name": "syn-flood",
     "env": {
       "NAMESPACE": "{{ namespace }}",
-      "LABEL_SELECTOR": "{{ label_selector | default('') }}",
-      "DURATION": "60",
-      "KRKN_DEBUG": "False"
-    }
+      "TARGET_SERVICE_LABEL": "{{ label_selector | default('app=rook-ceph-osd') }}",
+      "TARGET_PORT": "{{ syn_flood_target_port | default('8080') }}",
+      "TOTAL_CHAOS_DURATION": "{{ duration | default('60') }}",
+      "NUMBER_OF_PODS": "{{ syn_flood_number_of_pods | default('2') }}"
+    },
+    "depends_on": "root"
   }
 }
