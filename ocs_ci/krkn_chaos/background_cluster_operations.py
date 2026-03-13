@@ -31,6 +31,8 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
 from ocs_ci.ocs.resources import job as job_helpers
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs import node as node_helpers
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
@@ -908,7 +910,7 @@ class BackgroundClusterOperations:
             num_pvcs = min(3, len(self.workloads))
             log.info(f"Will check up to {num_pvcs} workloads for PVCs")
 
-            # Collect PVCs from workloads
+            # Collect PVCs from workloads (coerce OCS → PVC for snapshot APIs)
             workload_pvcs = []
             for idx, workload in enumerate(self.workloads[:num_pvcs]):
                 log.debug(
@@ -919,18 +921,23 @@ class BackgroundClusterOperations:
                     f"has_pvc={hasattr(workload, 'pvc')}"
                 )
 
+                raw_list = []
                 if hasattr(workload, "pvc_objs"):
-                    pvc_list = workload.pvc_objs[:1]  # Take first PVC
-                    workload_pvcs.extend(pvc_list)
-                    log.debug(f"  → Found {len(pvc_list)} PVCs in pvc_objs")
+                    raw_list = workload.pvc_objs[:1]  # Take first PVC
+                    log.debug(f"  → Found {len(raw_list)} raw refs in pvc_objs")
                 elif hasattr(workload, "pvc_obj"):
-                    workload_pvcs.append(workload.pvc_obj)
-                    log.debug("  → Found 1 PVC in pvc_obj")
+                    raw_list = [workload.pvc_obj]
+                    log.debug("  → Found 1 raw ref in pvc_obj")
                 elif hasattr(workload, "pvc"):
-                    workload_pvcs.append(workload.pvc)
-                    log.debug("  → Found 1 PVC in pvc")
+                    raw_list = [workload.pvc]
+                    log.debug("  → Found 1 raw ref in pvc")
                 else:
                     log.debug("  → No PVC attributes found")
+
+                for raw in raw_list:
+                    coerced = self._coerce_workload_pvc_to_pvc_instance(raw)
+                    if coerced is not None:
+                        workload_pvcs.append(coerced)
 
             if not workload_pvcs:
                 log.warning(
@@ -954,7 +961,10 @@ class BackgroundClusterOperations:
                         f"Created snapshot {snapshot_obj.name} from PVC {pvc_obj.name}"
                     )
                 except Exception as e:
-                    log.error(f"Failed to create snapshot from PVC {pvc_obj.name}: {e}")
+                    pvc_name = getattr(pvc_obj, "name", None) if pvc_obj else None
+                    log.error(
+                        f"Failed to create snapshot from PVC {pvc_name or '(unknown)'}: {e}"
+                    )
                     continue
 
             if not snapshots:
@@ -1069,6 +1079,39 @@ class BackgroundClusterOperations:
     # Helper Methods
     # ==========================================================================
 
+    def _coerce_workload_pvc_to_pvc_instance(self, pvc_obj):
+        """
+        Normalize a workload PVC reference to :class:`~ocs_ci.ocs.resources.pvc.PVC`.
+
+        Some paths hand back plain :class:`~ocs_ci.ocs.resources.ocs.OCS` objects for
+        ``kind=PersistentVolumeClaim``; snapshot/clone helpers require the ``PVC``
+        subclass (``create_snapshot``, ``resize_pvc``, etc.).
+        """
+        if pvc_obj is None:
+            return None
+        if isinstance(pvc_obj, PVC):
+            return pvc_obj
+        if isinstance(pvc_obj, OCS) and getattr(pvc_obj, "kind", None) == (
+            "PersistentVolumeClaim"
+        ):
+            try:
+                if hasattr(pvc_obj, "reload"):
+                    pvc_obj.reload()
+                return PVC(**pvc_obj.data)
+            except Exception as err:
+                log.warning(
+                    "Could not coerce OCS to PVC (name=%s): %s",
+                    getattr(pvc_obj, "name", "?"),
+                    err,
+                )
+                return None
+        log.debug(
+            "Skipping non-PVC workload reference: type=%s kind=%s",
+            type(pvc_obj).__name__,
+            getattr(pvc_obj, "kind", None),
+        )
+        return None
+
     def _get_random_workload_pvc(self, provisioner_type: Optional[str] = None):
         """
         Get a random workload PVC.
@@ -1093,11 +1136,14 @@ class BackgroundClusterOperations:
                 continue
 
             for pvc_obj in workload_pvcs:
+                coerced = self._coerce_workload_pvc_to_pvc_instance(pvc_obj)
+                if coerced is None:
+                    continue
                 if provisioner_type:
-                    if provisioner_type in pvc_obj.provisioner:
-                        pvcs.append(pvc_obj)
+                    if provisioner_type in coerced.provisioner:
+                        pvcs.append(coerced)
                 else:
-                    pvcs.append(pvc_obj)
+                    pvcs.append(coerced)
 
         return random.choice(pvcs) if pvcs else None
 

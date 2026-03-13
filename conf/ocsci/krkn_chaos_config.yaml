@@ -33,6 +33,8 @@ ENV_DATA:
       # NOTE: Only RBD (Ceph Block) PVCs support encryption via storage class
       #       CephFS PVCs do NOT support per-PVC encryption (cluster-wide only)
       use_encrypted_pvc: false  # Set to true to use encrypted RBD PVCs with encrypted storage class
+      # Cron schedule for keyrotation.csiaddons.openshift.io/schedule on encrypted RBD StorageClass
+      PV_ENCRYPTION_KEYROTATION_SCHEDULE: "*/3 * * * *"
 
       # Common workload parameters
       threads: 16

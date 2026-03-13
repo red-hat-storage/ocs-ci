@@ -918,7 +918,7 @@ class NodeScenarios:
     Supported cloud types:
         - aws: Amazon Web Services
         - azure: Microsoft Azure
-        - ibm: IBM Cloud
+        - ibmcloud: IBM Cloud
         - bm: BareMetal
         - vmware: VMware vSphere
 
@@ -938,7 +938,7 @@ class NodeScenarios:
     # Cloud type constants
     CLOUD_AWS = "aws"
     CLOUD_AZURE = "azure"
-    CLOUD_IBM = "ibm"
+    CLOUD_IBM = "ibmcloud"
     CLOUD_BAREMETAL = "bm"
     CLOUD_VMWARE = "vmware"
 
@@ -1001,7 +1001,7 @@ class NodeScenarios:
 
         Args:
             scenario_dir (str): Directory to write the YAML file.
-            cloud_type (str): Cloud provider type (aws, azure, ibm, bm, vmware).
+            cloud_type (str): Cloud provider type (aws, azure, ibmcloud, bm, vmware).
             scenarios (list, optional): List of scenario dicts for multiple scenarios.
                 Each dict can have all the parameters below.
             actions (list, optional): List of actions for single scenario mode

@@ -3800,7 +3800,8 @@ KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
 # Krkn supported cloud types for node scenarios
 KRKN_CLOUD_AWS = "aws"
 KRKN_CLOUD_AZURE = "azure"
-KRKN_CLOUD_IBM = "ibm"
+# krknctl / krkn-hub node-scenarios validate CLOUD_TYPE against ibmcloud (not "ibm")
+KRKN_CLOUD_IBM = "ibmcloud"
 KRKN_CLOUD_BAREMETAL = "bm"
 KRKN_CLOUD_VMWARE = "vmware"
 
@@ -3815,6 +3816,15 @@ KRKN_STOP_KUBELET = "stop_kubelet_scenario"
 KRKN_STOP_START_KUBELET = "stop_start_kubelet_scenario"
 KRKN_RESTART_KUBELET = "restart_kubelet_scenario"
 KRKN_NODE_CRASH = "node_crash_scenario"
+
+# krknclt chaos constants
+KRKNCTL_BINARY_TAR = (
+    "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.10.20-beta-linux-amd64.tar.gz"
+)
+KRKNCTL = os.path.join(DATA_DIR, "krknctl")
+KRKNCTL_PLAN_TEMPLATE = os.path.join(
+    KRKN_SCENARIO_TEMPLATE_DIR, "scenarios", "keknctl", "plan.json.j2"
+)
 
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
 RBD_CSI_ADDONS_PLUGIN_DIR = (
