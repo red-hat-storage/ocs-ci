@@ -208,11 +208,6 @@ class ExternalSystems(ResourceList):
         self.do_click(locator=self.external_systems["actions_button"])
         self.do_click(locator=self.external_systems["delete_filesystem"])
         self.do_click(locator=self.external_systems["confirm_delete"])
-        self.wait_for_element_to_be_present(
-            locator=self.external_systems["breadcrumb-link"]
-        )
-        wait_for_element_to_be_clickable(self.external_systems["breadcrumb-link"])
-        self.do_click(locator=self.external_systems["breadcrumb-link"])
 
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):

@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     tier2,
     skipif_ibm_cloud_managed,
+    polarion_id,
 )
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import black_squad
@@ -28,6 +29,7 @@ class TestScaleConnection(object):
     @tier2
     @skipif_ocs_version("<4.20")
     @black_squad
+    @polarion_id("OCS-7757")
     def test_connect_scale(self, setup_ui_class):
         """
         Test connecting Scale cluster as External system
@@ -52,9 +54,11 @@ class TestScaleConnection(object):
     @tier2
     @skipif_ocs_version("<4.21")
     @black_squad
+    @polarion_id("OCS-7758")
     def test_add_delete_filesystem(self, setup_ui_class):
         """
         Test connecting an additional filesystem when a scale cluster is connected
+        and then deleting it
         """
         scale_connect_obj = PageNavigator()
         external_systems = scale_connect_obj.nav_external_systems_page()
@@ -70,6 +74,7 @@ class TestScaleConnection(object):
     @tier2
     @skipif_ocs_version("<4.20")
     @black_squad
+    @polarion_id("OCS-7759")
     def test_disconnect_scale(self, setup_ui_class):
         """
         Test that disconnecting scale removes it from External systems page
