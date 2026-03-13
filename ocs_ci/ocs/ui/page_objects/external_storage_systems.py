@@ -5,7 +5,6 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
 )
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
-from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import exec_cmd
 
 
@@ -202,9 +201,7 @@ class ExternalSystems(ResourceList):
         self.do_send_keys(self.external_systems["filter"], scale_name)
         wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
         self.do_click(self.external_systems["scale_dashboard_link"])
-        self.do_click(
-            format_locator(self.external_systems["filesystem_link"]), filesystem_name
-        )
+        self.do_click(self.external_systems["filesystem_link"], filesystem_name)
         self.do_click(locator=self.external_systems["actions_button"])
         self.do_click(locator=self.external_systems["delete_filesystem"])
         self.do_click(locator=self.external_systems["confirm_delete"])

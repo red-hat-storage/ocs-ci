@@ -1,4 +1,5 @@
 import logging
+import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.framework.testlib import (
@@ -78,6 +79,7 @@ class TestScaleConnection(object):
         external_systems.disconnect_scale(
             scale_name=SCALE_CONNECTION_NAME,
         )
+        time.sleep(10)
         assert not external_systems.scale_present_on_page(
             scale_name=SCALE_CONNECTION_NAME
         )
