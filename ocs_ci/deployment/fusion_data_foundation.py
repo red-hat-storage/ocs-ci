@@ -75,8 +75,8 @@ class FusionDataFoundationDeployment:
             self.setup_fdf_pre_release_deployment()
 
         self.create_fdf_service_cr()
-        self.verify_fdf_installation()
         wait_for_install_plan_and_approve(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        self.verify_fdf_installation()
         if not self.fdf_skip_storage_setup:
             self.setup_storage()
 
