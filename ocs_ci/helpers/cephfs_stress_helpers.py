@@ -315,7 +315,7 @@ class CephFSStressTestManager:
     def pause_background_checks(self):
         """
         Pause background verification checks temporarily.
-        
+
         This is useful during intentional disruptions (e.g., node failures, pod restarts)
         where verification failures are expected and should not fail the test.
         """
@@ -329,7 +329,7 @@ class CephFSStressTestManager:
     def resume_background_checks(self):
         """
         Resume background verification checks after they were paused.
-        
+
         Should be called after cluster has recovered from intentional disruptions
         and is expected to be in a healthy state.
         """
@@ -356,10 +356,9 @@ class CephFSStressTestManager:
         logger.info(f"Monitor Loop Started (Interval: {interval_minutes}m)")
 
         while not self.stop_event.is_set():
-            # Check stop_event before running checks
             if self.stop_event.is_set():
                 break
-                
+
             try:
                 self._run_cluster_health_checks()
                 self._run_strict_verifications()
@@ -367,16 +366,14 @@ class CephFSStressTestManager:
                 logger.error(
                     f"Unexpected error in background checks loop: {e}", exc_info=True
                 )
-            
-            # Check stop_event again before sleeping
+
             if self.stop_event.is_set():
                 break
-                
+
             logger.info(
                 f"Pausing for {interval_minutes} minutes before the next round "
                 "of periodic cluster and verification checks"
             )
-            # Convert minutes to seconds for wait()
             interval_seconds = interval_minutes * 60
             if self.stop_event.wait(timeout=interval_seconds):
                 break
@@ -432,10 +429,9 @@ class CephFSStressTestManager:
                             "Verification checks were paused mid-execution - stopping verifications"
                         )
                         return
-        
+
                 func_name = verification_func.__name__
                 logger.debug(f"Running verification: {func_name}")
-                # Pass self to verification functions so they can check pause status
                 result = verification_func(stress_manager=self)
                 if result is False:
                     logger.error(f"Verification {func_name} returned False")
@@ -540,12 +536,12 @@ def check_ceph_health(stress_manager=None):
 
     """
     # Check if verifications are paused (for in-progress checks)
-    if stress_manager and hasattr(stress_manager, 'checks_paused'):
+    if stress_manager and hasattr(stress_manager, "checks_paused"):
         with stress_manager.verification_lock:
             if stress_manager.checks_paused:
                 logger.info("Ceph health check skipped - verifications are paused")
                 return True
-    
+
     logger.info(
         "\n=================================================="
         "\n             VERIFICATION CHECK: Ceph health      "
@@ -560,7 +556,7 @@ def verify_openshift_storage_ns_pods_in_running_state(stress_manager=None):
     """
     Verifies that all pods in the openshift-storage namespace are in a 'Running' state.
     Retries on CommandFailed, then raises PodsNotRunningError if verification fails after all retries.
-    
+
     Args:
         stress_manager: CephFSStressTestManager instance to check pause status
 
@@ -569,18 +565,23 @@ def verify_openshift_storage_ns_pods_in_running_state(stress_manager=None):
 
     """
     # Check if verifications are paused (for in-progress checks)
-    if stress_manager and hasattr(stress_manager, 'checks_paused'):
+    if stress_manager and hasattr(stress_manager, "checks_paused"):
         with stress_manager.verification_lock:
             if stress_manager.checks_paused:
-                logger.info("Pods running state check skipped - verifications are paused")
+                logger.info(
+                    "Pods running state check skipped - verifications are paused"
+                )
                 return True
+
     @retry(CommandFailed, tries=3, delay=60, backoff=1)
     def _check_pods_running():
         # Re-check pause status during retries
-        if stress_manager and hasattr(stress_manager, 'checks_paused'):
+        if stress_manager and hasattr(stress_manager, "checks_paused"):
             with stress_manager.verification_lock:
                 if stress_manager.checks_paused:
-                    logger.info("Pods running state check skipped during retry - verifications are paused")
+                    logger.info(
+                        "Pods running state check skipped during retry - verifications are paused"
+                    )
                     return True
         logger.info(
             "\n===================================================="
@@ -588,15 +589,18 @@ def verify_openshift_storage_ns_pods_in_running_state(stress_manager=None):
             "\n===================================================="
             "\n"
         )
-        result = check_pods_in_running_state(namespace=config.ENV_DATA["cluster_namespace"])
+        result = check_pods_in_running_state(
+            namespace=config.ENV_DATA["cluster_namespace"]
+        )
         if not result:
-            # Raise CommandFailed to trigger retry
             raise CommandFailed(
                 "Not all Pods in the openshift-storage are in Running state"
             )
-        logger.info("All the Pods in the openshift-storage namespace are in Running state")
+        logger.info(
+            "All the Pods in the openshift-storage namespace are in Running state"
+        )
         return True
-    
+
     try:
         return _check_pods_running()
     except CommandFailed as e:
@@ -637,7 +641,7 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
     It checks for two conditions:
     1. Pods have not been restarted
     2. Pods have not been OOMKilled
-    
+
     Args:
         stress_manager: CephFSStressTestManager instance to check pause status
 
@@ -646,21 +650,23 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
 
     """
     # Check if verifications are paused (for in-progress checks)
-    if stress_manager and hasattr(stress_manager, 'checks_paused'):
+    if stress_manager and hasattr(stress_manager, "checks_paused"):
         with stress_manager.verification_lock:
             if stress_manager.checks_paused:
                 logger.info("Pods health check skipped - verifications are paused")
                 return True
-            
+
     @retry(CommandFailed, tries=3, delay=60, backoff=1)
     def _check_pods_health():
         # Re-check pause status during retries
-        if stress_manager and hasattr(stress_manager, 'checks_paused'):
+        if stress_manager and hasattr(stress_manager, "checks_paused"):
             with stress_manager.verification_lock:
                 if stress_manager.checks_paused:
-                    logger.info("Pods health check skipped during retry - verifications are paused")
+                    logger.info(
+                        "Pods health check skipped during retry - verifications are paused"
+                    )
                     return True
-                
+
         logger.info(
             "\n===================================================="
             "\n VERIFICATION CHECK: Openshift-storage pods health  "
@@ -681,13 +687,19 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
 
             for item in pod_obj.get().get("status").get("containerStatuses"):
                 container_name = item.get("name")
-                if not validate_pod_oomkilled(pod_name=pod_name, container=container_name):
-                    oomkilled_pods.append(f"Pod: {pod_name}, Container: {container_name}")
+                if not validate_pod_oomkilled(
+                    pod_name=pod_name, container=container_name
+                ):
+                    oomkilled_pods.append(
+                        f"Pod: {pod_name}, Container: {container_name}"
+                    )
 
         if pod_restarts or oomkilled_pods:
             logger.error("Openshift-storage pods health check verification failed")
             if pod_restarts:
-                logger.error(f"Found {len(pod_restarts)} restarted pods: {pod_restarts}")
+                logger.error(
+                    f"Found {len(pod_restarts)} restarted pods: {pod_restarts}"
+                )
             if oomkilled_pods:
                 logger.error(
                     f"Found {len(oomkilled_pods)} OOMKilled containers: {oomkilled_pods}"
@@ -700,7 +712,7 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
             "All pods in the openshift-storage namespace are healthy (no restarts or OOMs)"
         )
         return True
-    
+
     try:
         return _check_pods_health()
     except CommandFailed as e:
