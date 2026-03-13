@@ -428,7 +428,8 @@ higher priority).
 * `infra_availability_policy` - similar to clusters.<cluster name>.cp_availability_policy but applied to the infra nodes of Agent hosted cluster
 * `disable_default_sources` - similar to clusters.<cluster name>.disable_default_sources but applied to the Agent hosted cluster
 * `auto_repair` - similar to clusters.<cluster name>.auto_repair but applied to the Agent hosted cluster
-* * `ntp_server` - NTP server to use in compute nodes in case of mon skew detected in ceph health during deployment
+* `ntp_server` - NTP server to use in compute nodes in case of mon skew detected in ceph health during deployment
+* `disconnected_ntp_server` - NTP server to use in compute nodes in case of mon skew detected in ceph health during deployment for disconnected/proxy mode deployments
 * `sno` - explicitly mark single node cluster
 * `iscsi_target_ip` - The IP of iscsi server
 * `iscsi_target_username`- The username for authenticating with the iSCSI target.
