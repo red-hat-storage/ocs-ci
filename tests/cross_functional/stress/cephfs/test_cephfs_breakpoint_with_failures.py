@@ -22,10 +22,11 @@ logger = logging.getLogger(__name__)
 
 @magenta_squad
 @stress
-class TestCephfsStressWithFailures(E2ETest): 
+class TestCephfsStressWithFailures(E2ETest):
     """
     CephFS stress test with comprehensive component failures
     """
+
     def test_cephfs_breakpoint_with_failures(
         self,
         project_factory,
@@ -61,8 +62,8 @@ class TestCephfsStressWithFailures(E2ETest):
 
         """
         CHECKS_RUNNER_INTERVAL_MINUTES = 30
-        JOB_STATUS_CHECK_INTERVAL = 60  
-        REBALANCE_WAIT_TIME = 300 
+        JOB_STATUS_CHECK_INTERVAL = 60
+        REBALANCE_WAIT_TIME = 300
         HEALTH_CHECK_WAIT_TIME = 180
         POWER_ON_WAIT_TIME = 420
 
@@ -140,12 +141,12 @@ class TestCephfsStressWithFailures(E2ETest):
                         f"Detected completion of iteration {completed_iterations}\n"
                         f"Will now induce failures for ALL components: {CEPH_COMPONENTS}\n"
                     )
-                                        
+
                     logger.info(
                         "Pausing background verification checks during failure injection..."
                     )
                     stress_mgr.pause_background_checks()
-                    
+
                     for component in CEPH_COMPONENTS:
                         logger.info(
                             f"Inducing ALL failures for component: {component.upper()}\n"
@@ -160,15 +161,11 @@ class TestCephfsStressWithFailures(E2ETest):
                             POWER_ON_WAIT_TIME,
                             cephfs_stress_job_obj,
                         )
-                        logger.info(
-                            f"Completed all failures for {component.upper()}\n"
-                        )
-                    
+                        logger.info(f"Completed all failures for {component.upper()}\n")
                     logger.info(
                         "Resuming background verification checks after failure recovery..."
                     )
                     stress_mgr.resume_background_checks()
-                    
                     last_checked_iteration = completed_iterations
 
                     logger.info(
@@ -215,9 +212,7 @@ class TestCephfsStressWithFailures(E2ETest):
                 if matches:
                     pod_max = max(int(match) for match in matches)
                     max_iteration = max(max_iteration, pod_max)
-                    logger.debug(
-                        f"Pod {job_pod.name} completed iteration {pod_max}"
-                    )
+                    logger.debug(f"Pod {job_pod.name} completed iteration {pod_max}")
 
             except Exception as e:
                 logger.warning(f"Failed to get logs from pod {job_pod.name}: {e}")
@@ -254,9 +249,7 @@ class TestCephfsStressWithFailures(E2ETest):
         active_pod = disruption.resource_obj[0]
         logger.info(f"Active {component} pod: {active_pod.name}")
 
-        logger.info(
-            f"\n--- Failure 1/4: Restarting node for {component} pod ---"
-        )
+        logger.info(f"\n--- Failure 1/4: Restarting node for {component} pod ---")
         self._restart_node_with_pod(active_pod, nodes, component)
         self._wait_for_rebalance_and_health_check(
             component, rebalance_wait, health_check_wait
@@ -267,9 +260,7 @@ class TestCephfsStressWithFailures(E2ETest):
         disruption = Disruptions()
         disruption.set_resource(component)
 
-        logger.info(
-            f"\n--- Failure 2/4: Restarting operator and plugin pods ---"
-        )
+        logger.info("\n--- Failure 2/4: Restarting operator and plugin pods ---")
         self._restart_operator_and_plugin_pods()
         self._wait_for_rebalance_and_health_check(
             component, rebalance_wait, health_check_wait
@@ -284,9 +275,7 @@ class TestCephfsStressWithFailures(E2ETest):
         logger.info(
             f"\n--- Failure 3/4: Abruptly powering off node for {component} pod ---"
         )
-        self._power_off_and_on_node(
-            active_pod, nodes_util, component, power_on_wait
-        )
+        self._power_off_and_on_node(active_pod, nodes_util, component, power_on_wait)
         self._wait_for_rebalance_and_health_check(
             component, rebalance_wait, health_check_wait
         )
