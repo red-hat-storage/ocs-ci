@@ -1,3 +1,4 @@
+import ipaddress
 import pytest
 import logging
 import time
@@ -342,8 +343,11 @@ class TestNfsEnable(ManageTest):
 
         con = __make_connection()
         hostname_add = getattr(self, "hostname_add", None)
-        if hostname_add and not hostname_add[0].isdigit():
-            nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
+        if hostname_add:
+            try:
+                ipaddress.ip_address(hostname_add)
+            except ValueError:
+                nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
         return con
 
     @tier1
