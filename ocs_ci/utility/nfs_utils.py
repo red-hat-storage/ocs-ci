@@ -246,11 +246,14 @@ def update_etc_hosts_on_nfs_client(con, hostname):
         ignore_error=True,
     ):
         if sample and sample.stdout:
-            lb_ips = [
-                line.split()[0]
-                for line in sample.stdout.decode().strip().splitlines()
-                if line.strip()
-            ]
+            try:
+                lb_ips = [
+                    line.split()[0]
+                    for line in sample.stdout.decode().strip().splitlines()
+                    if line.strip()
+                ]
+            except (UnicodeDecodeError, AttributeError) as e:
+                log.warning("Failed to decode getent output: %s", e)
         if lb_ips:
             break
         log.info("Could not resolve %s yet, retrying in 15s...", hostname)
