@@ -600,7 +600,6 @@ def verify_openshift_storage_ns_pods_in_running_state(stress_manager=None):
     try:
         return _check_pods_running()
     except CommandFailed as e:
-        # All retries exhausted, raise the appropriate domain exception
         raise PodsNotRunningError(str(e))
 
 
@@ -693,7 +692,6 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
                 logger.error(
                     f"Found {len(oomkilled_pods)} OOMKilled containers: {oomkilled_pods}"
                 )
-            # Raise CommandFailed to trigger retry
             raise CommandFailed(
                 "Openshift-storage pods health check verification failed"
             )
@@ -706,7 +704,6 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
     try:
         return _check_pods_health()
     except CommandFailed as e:
-        # All retries exhausted, raise the appropriate domain exception
         raise PodStabilityError(str(e))
 
 
