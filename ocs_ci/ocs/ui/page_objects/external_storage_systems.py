@@ -202,7 +202,7 @@ class ExternalSystems(ResourceList):
         self.do_send_keys(self.external_systems["filter"], scale_name)
         wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
         self.do_click(self.external_systems["scale_dashboard_link"])
-        self.do_send_keys(
+        self.do_click(
             format_locator(self.external_systems["filesystem_link"], filesystem_name)
         )
         self.do_click(locator=self.external_systems["actions_button"])
