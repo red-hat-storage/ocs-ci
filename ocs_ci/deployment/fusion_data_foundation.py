@@ -16,7 +16,7 @@ from ocs_ci.framework import config
 
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
@@ -76,7 +76,10 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-        wait_for_install_plan_and_approve(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        try:
+            wait_for_install_plan_and_approve(constants.OPENSHIFT_STORAGE_NAMESPACE, 5 * 60)
+        except TimeoutExpiredError:
+            logger.warning("Timeout waiting for install plan approval. Continuing execution...")
         if not self.fdf_skip_storage_setup:
             wait_for_storageclusters_crd()
             self.setup_storage()
