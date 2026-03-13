@@ -25,6 +25,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.operators import LocalStorageOperator
+from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
 import time
 from ocs_ci.utility.utils import (
@@ -75,6 +76,7 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
+        wait_for_install_plan_and_approve(constants.OPENSHIFT_STORAGE_NAMESPACE)
         if not self.fdf_skip_storage_setup:
             self.setup_storage()
 
