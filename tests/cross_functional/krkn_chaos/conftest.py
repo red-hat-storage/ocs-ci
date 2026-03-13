@@ -10,12 +10,70 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper
+from ocs_ci.ocs import constants
 
 from contextlib import suppress
 
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Generic Krkn chaos test lifecycle fixture (autouse for all tests in this dir)
+# =============================================================================
+# Add any shared setup/teardown for krkn chaos tests here (e.g. crash archiving,
+# baseline checks, final reporting). This runs once per test.
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def krkn_chaos_test_lifecycle(request):
+    """
+    Common lifecycle for all Krkn chaos tests in this directory.
+
+    - At test start: archive any existing Ceph crashes so the test starts from a clean baseline.
+    - finalizer: check for Ceph crashes introduced during the test; log them and raise AssertionError if any are found.
+
+    Extend this fixture's setup/finalizer when adding more shared behavior for
+    krkn chaos tests.
+    """
+    # ----- Setup: run at beginning of test -----
+    try:
+        ceph_status = CephStatusTool()
+        ceph_status.archive_ceph_crashes()
+        log.info(
+            "Krkn chaos test lifecycle: archived pre-existing Ceph crashes (baseline)"
+        )
+    except Exception as e:
+        log.warning(
+            "Krkn chaos test lifecycle: could not archive pre-existing Ceph crashes: %s",
+            e,
+        )
+
+    # ----- Finalizer: run after test (pass or fail) -----
+    def _krkn_chaos_finalizer():
+        try:
+            health_helper = CephHealthHelper(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            no_crashes, crash_details = health_helper.check_ceph_crashes(
+                None, "chaos test"
+            )
+            if not no_crashes and crash_details:
+                log.error("Ceph crashes detected during chaos test:\n%s", crash_details)
+                raise AssertionError(crash_details)
+        except AssertionError:
+            raise
+        except Exception as e:
+            log.warning(
+                "Krkn chaos test lifecycle: could not run Ceph crash finalizer: %s",
+                e,
+            )
+
+    request.addfinalizer(_krkn_chaos_finalizer)
 
 
 @pytest.fixture(scope="session")

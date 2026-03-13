@@ -1029,7 +1029,7 @@ class HogScenarioHelper(BaseScenarioHelper):
         super().__init__(scenario_dir, namespace)
 
     def create_cpu_hog_scenario(
-        self, duration=None, namespace=None, node_selector=None
+        self, duration=None, namespace=None, node_selector=None, output_name=None
     ):
         """Create CPU hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
@@ -1041,15 +1041,17 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "cpu_hog.yaml"
         return HogScenarios.cpu_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
     def create_memory_hog_scenario(
-        self, duration=None, namespace=None, node_selector=None
+        self, duration=None, namespace=None, node_selector=None, output_name=None
     ):
         """Create memory hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
@@ -1059,14 +1061,18 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "memory_hog.yaml"
         return HogScenarios.memory_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
-    def create_io_hog_scenario(self, duration=None, namespace=None, node_selector=None):
+    def create_io_hog_scenario(
+        self, duration=None, namespace=None, node_selector=None, output_name=None
+    ):
         """Create IO hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
         target_namespace = namespace or "default"
@@ -1075,28 +1081,54 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "io_hog.yaml"
         return HogScenarios.io_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
-    def create_strength_test_scenarios(self, stress_level="high", duration=None):
-        """Create hog scenarios for strength testing."""
+    def create_strength_test_scenarios(
+        self, stress_level="high", duration=None, node_selector=None
+    ):
+        """Create hog scenarios for strength testing.
+
+        Each scenario is written to a unique file to avoid overwriting (e.g.
+        cpu_hog_strength_0.yaml, memory_hog_strength_1.yaml). Pass node_selector
+        to target worker vs master nodes (e.g. when running multi-stress test).
+        """
         stress_config = self.get_stress_config(stress_level)
         base_duration = duration or self.DEFAULT_TEST_DURATION
 
         scenarios = []
 
-        # Create multiple hog scenarios based on stress level
+        # Default to worker nodes when no selector provided
+        default_node_selector = "node-role.kubernetes.io/worker="
+        selector = node_selector or default_node_selector
+
+        # Create multiple hog scenarios with unique filenames to avoid overwriting
         for i in range(stress_config["multiplier"]):
             test_duration = min(300, base_duration * (i + 1))  # Capped at 5 minutes
+            suffix = f"{stress_level}_{i}"
             scenarios.extend(
                 [
-                    self.create_cpu_hog_scenario(duration=test_duration),
-                    self.create_memory_hog_scenario(duration=test_duration),
-                    self.create_io_hog_scenario(duration=test_duration),
+                    self.create_cpu_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"cpu_hog_{suffix}.yaml",
+                    ),
+                    self.create_memory_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"memory_hog_{suffix}.yaml",
+                    ),
+                    self.create_io_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"io_hog_{suffix}.yaml",
+                    ),
                 ]
             )
 
@@ -2276,18 +2308,35 @@ class ValidationHelper(BaseScenarioHelper):
 
         self.log.info(f"✅ Strength test validation passed for {component_name}")
 
-    def handle_krkn_command_failure(self, error, component_name, test_type="chaos"):
+    def handle_krkn_command_failure(
+        self, error, component_name, test_type="chaos", health_helper=None
+    ):
         """
         Handle Krkn command execution failures with detailed logging.
+        Before reporting, checks for Ceph crashes if health_helper is provided.
 
         Args:
             error (Exception): The exception that occurred
             component_name (str): Name of the component
             test_type (str): Type of test
+            health_helper (CephHealthHelper, optional): If provided, checks for
+                Ceph crashes before reporting and includes result in the failure message.
         """
+        ceph_crash_details = ""
+        if health_helper is not None:
+            no_crashes, ceph_crash_details = health_helper.check_ceph_crashes(
+                component_name, test_type
+            )
+            if not no_crashes and ceph_crash_details:
+                self.log.error(
+                    f"Ceph crash check (before reporting failure): {ceph_crash_details}"
+                )
+
         error_msg = (
             f"Krkn {test_type} command failed for {component_name}: {str(error)}"
         )
+        if ceph_crash_details:
+            error_msg += f"\nCeph crash check: {ceph_crash_details}"
         self.log.error(f"❌ {error_msg}")
 
         # Log additional context if available

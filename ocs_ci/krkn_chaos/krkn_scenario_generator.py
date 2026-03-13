@@ -104,12 +104,13 @@ class HogScenarios:
         workers="",
         image="quay.io/krkn-chaos/krkn-hog",
         namespace="default",
-        cpu_load_percentage=90,
+        cpu_load_percentage=95,
         cpu_method="all",
         node_name=None,
         node_selector=None,
         number_of_nodes="",
         taints=None,
+        output_name="cpu_hog.yaml",
     ):
         """Generates CPU hog YAML.
 
@@ -119,12 +120,14 @@ class HogScenarios:
             workers (str): Worker configuration (default: "").
             image (str): Container image for the hog (default: "quay.io/krkn-chaos/krkn-hog").
             namespace (str): Target namespace (default: "default").
-            cpu_load_percentage (int): CPU load percentage (default: 90).
+            cpu_load_percentage (int): CPU load percentage (default: 95).
             cpu_method (str): CPU load method (default: "all").
             node_name (str, optional): Specific node name to target.
             node_selector (dict, optional): Node selector dictionary.
             number_of_nodes (int): Number of nodes to target (default: 1).
             taints (list, optional): List of taints to apply (default: empty string if None).
+            output_name (str): Output filename (default: "cpu_hog.yaml"). Use unique names
+                when generating multiple scenarios to avoid overwriting.
 
         Returns:
             str: Path to the generated YAML file.
@@ -142,7 +145,7 @@ class HogScenarios:
             **_get_selector_config(node_name, node_selector),
         }
         return HogScenarios._create_hog(
-            scenario_dir, "cpu-hog.yml.j2", hog_data, "cpu_hog.yaml"
+            scenario_dir, "cpu-hog.yml.j2", hog_data, output_name
         )
 
     @staticmethod
@@ -160,6 +163,7 @@ class HogScenarios:
         node_selector=None,
         number_of_nodes="",
         taints=None,
+        output_name="io_hog.yaml",
     ):
         """Generates IO hog YAML.
 
@@ -177,6 +181,8 @@ class HogScenarios:
             node_selector (dict, optional): Node selector dictionary.
             number_of_nodes (int): Number of nodes to target (default: 3).
             taints (list, optional): List of taints to apply (default: empty string if None).
+            output_name (str): Output filename (default: "io_hog.yaml"). Use unique names
+                when generating multiple scenarios to avoid overwriting.
 
         Returns:
             str: Path to the generated YAML file.
@@ -197,7 +203,7 @@ class HogScenarios:
             **_get_selector_config(node_name, node_selector),
         }
         return HogScenarios._create_hog(
-            scenario_dir, "io-hog.yml.j2", hog_data, "io_hog.yaml"
+            scenario_dir, "io-hog.yml.j2", hog_data, output_name
         )
 
     @staticmethod
@@ -207,11 +213,12 @@ class HogScenarios:
         workers="",
         image="quay.io/krkn-chaos/krkn-hog",
         namespace="default",
-        memory_vm_bytes="90%",
+        memory_vm_bytes="95%",
         node_name=None,
         node_selector=None,
         number_of_nodes="",
         taints=None,
+        output_name="memory_hog.yaml",
     ):
         """Generates Memory hog YAML.
 
@@ -221,11 +228,13 @@ class HogScenarios:
             workers (str): Worker configuration (default: "").
             image (str): Container image for the hog (default: "quay.io/krkn-chaos/krkn-hog").
             namespace (str): Target namespace (default: "default").
-            memory_vm_bytes (str): Memory usage in bytes or percentage (default: "90%").
+            memory_vm_bytes (str): Memory usage in bytes or percentage (default: "95%").
             node_name (str, optional): Specific node name to target.
             node_selector (dict, optional): Node selector dictionary.
             number_of_nodes (int): Number of nodes to target (default: 3).
             taints (list, optional): List of taints to apply (default: empty string if None).
+            output_name (str): Output filename (default: "memory_hog.yaml"). Use unique names
+                when generating multiple scenarios to avoid overwriting.
 
         Returns:
             str: Path to the generated YAML file.
@@ -242,7 +251,7 @@ class HogScenarios:
             **_get_selector_config(node_name, node_selector),
         }
         return HogScenarios._create_hog(
-            scenario_dir, "memory-hog.yml.j2", hog_data, "memory_hog.yaml"
+            scenario_dir, "memory-hog.yml.j2", hog_data, output_name
         )
 
 
