@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import faulthandler
 import os
 import re
@@ -13,6 +14,13 @@ from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 from ocs_ci.utility import utils
 
+# Import the XML fix function
+try:
+    from scripts.python.xml.fix_junit import fix_xml_file
+except ImportError:
+    # Fallback if import fails
+    fix_xml_file = None
+
 
 kill_counter = 0
 
@@ -24,6 +32,21 @@ def signal_term_handler(sig, frame):
     logdir = os.path.expanduser(framework.config.RUN["log_dir"])
     with open(os.path.join(logdir, "traceback.log"), "w") as f:
         faulthandler.dump_traceback(file=f)
+
+    # Try to find junit-xml path from command line arguments
+    junit_xml_path = None
+    for i, arg in enumerate(sys.argv):
+        if arg == "--junit-xml" and i + 1 < len(sys.argv):
+            junit_xml_path = sys.argv[i + 1]
+            break
+        elif arg.startswith("--junit-xml="):
+            junit_xml_path = arg.split("=", 1)[1]
+            break
+
+    if junit_xml_path and fix_xml_file:
+        # Register the fix function to run after pytest exits
+        atexit.register(fix_xml_file, junit_xml_path)
+
     global kill_counter
     if kill_counter:
         print("Second attempt to SIGTERM, exiting process with RC: 143")
