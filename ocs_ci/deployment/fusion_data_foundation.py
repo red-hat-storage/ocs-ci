@@ -76,10 +76,10 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
+        wait_for_install_plan_and_approve(constants.OPENSHIFT_STORAGE_NAMESPACE)
         if not self.fdf_skip_storage_setup:
             self.setup_storage()
-        wait_for_install_plan_and_approve(constants.OPENSHIFT_STORAGE_NAMESPACE)
-        wait_for_storageclusters_crd()
+            wait_for_storageclusters_crd()
 
     def ensure_lso_installed(self):
         """
