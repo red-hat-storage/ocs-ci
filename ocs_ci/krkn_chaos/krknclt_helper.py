@@ -1,5 +1,10 @@
 """
-Helper functions for krknctl chaos testing.
+Krkctl plan generation for chaos testing.
+
+The plan template (plan.json.j2) matches the workable krknctl plan format: each
+scenario key is "scenario_name_{{ suffix }}" and depends_on is "root_{{ suffix }}".
+PlanGenerator parses the Jinja template, fills parameters, and writes the plan file;
+the instance holds the plan file path after generation.
 """
 
 import json
@@ -13,7 +18,6 @@ from jinja2 import Template
 from ocs_ci.ocs.constants import (
     KRKN_OUTPUT_DIR,
     KRKNCTL_PLAN_TEMPLATE,
-    # Component label constants used by krkn tests (rook-ceph + noobaa only, no 419 CSI)
     OSD_APP_LABEL,
     MON_APP_LABEL,
     MGR_APP_LABEL,
@@ -25,7 +29,6 @@ from ocs_ci.ocs.constants import (
 
 log = logging.getLogger(__name__)
 
-# App names derived from krkn component labels (app= value); excludes 419 CSI app labels
 KRKN_APP_LABEL_CONSTANTS = (
     OSD_APP_LABEL,
     MON_APP_LABEL,
@@ -37,124 +40,209 @@ KRKN_APP_LABEL_CONSTANTS = (
 )
 CEPH_APP_SELECTORS = [label.split("=", 1)[1] for label in KRKN_APP_LABEL_CONSTANTS]
 
+# Base scenario names in the template (keys are "name_{{ suffix }}" in output).
+KRKNCTL_PLAN_SCENARIO_KEYS = (
+    "root",
+    "application-outages",
+    "container-scenarios",
+    "network-chaos",
+    "node-cpu-hog",
+    "node-io-hog",
+    "node-memory-hog",
+    "node-network-filter",
+    "pod-network-chaos",
+    "pod-network-filter",
+    "pod-scenarios",
+    "service-disruption-scenarios",
+    "syn-flood",
+)
+
+ROOT_SCENARIO_KEY = "root"
+
+
+def _full_key(base_name, suffix):
+    """Plan key for a scenario: base_name_suffix (e.g. application-outages_5j6t5)."""
+    return f"{base_name}_{suffix}"
+
+
+class PlanGenerator:
+    """
+    Generates krknctl plan JSON files from the Jinja template.
+
+    Holds scenario names and exposes one method that parses the template,
+    fills parameters, applies exclusions/overrides, and writes the plan file.
+    After generate() is called, plan_path is set to the written file location.
+    """
+
+    # Scenario names defined in the plan template (same as KRKNCTL_PLAN_SCENARIO_KEYS).
+    SCENARIO_NAMES = KRKNCTL_PLAN_SCENARIO_KEYS
+
+    def __init__(
+        self,
+        namespace="openshift-storage",
+        exclude_scenarios=None,
+        scenario_overrides=None,
+        use_random_selectors=True,
+        **template_vars,
+    ):
+        self.namespace = namespace
+        self.exclude_scenarios = exclude_scenarios or []
+        self.scenario_overrides = scenario_overrides or {}
+        self.use_random_selectors = use_random_selectors
+        self.template_vars = template_vars
+        self.plan_path = None
+        self._suffix = None
+
+    def generate(self):
+        """
+        Parse the Jinja template, fill parameters, apply exclusions and overrides,
+        write the plan file, and set self.plan_path to the written path.
+
+        Returns:
+            str: Absolute path to the generated plan JSON file.
+        """
+        if not os.path.isfile(KRKNCTL_PLAN_TEMPLATE):
+            raise FileNotFoundError(
+                f"krknctl plan template not found at {KRKNCTL_PLAN_TEMPLATE}"
+            )
+
+        self._suffix = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=5)
+        )
+
+        if self.use_random_selectors:
+            pod_app = random.choice(CEPH_APP_SELECTORS)
+            label_app = random.choice(CEPH_APP_SELECTORS)
+            pod_selector = f"{{app: {pod_app}}}"
+            label_selector = f"app={label_app}"
+            workers = str(random.randint(1, 6))
+        else:
+            pod_selector = self.template_vars.get("pod_selector", "")
+            label_selector = self.template_vars.get("label_selector", "")
+            workers = self.template_vars.get("workers", "1")
+
+        context = {
+            "suffix": self._suffix,
+            "namespace": self.namespace,
+            "pod_selector": pod_selector,
+            "label_selector": label_selector,
+            "pod_label": label_selector,
+            "workers": workers,
+        }
+        context.update(self.template_vars)
+
+        with open(KRKNCTL_PLAN_TEMPLATE, "r") as f:
+            template = Template(f.read())
+        rendered = template.render(**context)
+        rendered_stripped = rendered.strip() if rendered else ""
+        if not rendered_stripped:
+            raise ValueError(
+                f"Plan template rendered to empty. Path: {KRKNCTL_PLAN_TEMPLATE}"
+            )
+        plan_data = json.loads(rendered)
+
+        self._remove_excluded(plan_data)
+        self._warn_if_root_excluded(plan_data)
+        self._apply_overrides(plan_data)
+
+        os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
+        dir_suffix = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=8)
+        )
+        plan_dir = os.path.join(KRKN_OUTPUT_DIR, dir_suffix)
+        os.makedirs(plan_dir, exist_ok=True)
+        file_suffix = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=8)
+        )
+        self.plan_path = os.path.join(plan_dir, f"plan_{file_suffix}.json")
+        with open(self.plan_path, "w") as f:
+            json.dump(plan_data, f, indent=2)
+
+        log.info(
+            "Generated krknctl plan: %s (namespace=%s, suffix=%s, exclude=%s)",
+            self.plan_path,
+            self.namespace,
+            self._suffix,
+            self.exclude_scenarios,
+        )
+        return os.path.abspath(self.plan_path)
+
+    def _remove_excluded(self, plan_data):
+        excluded_set = set(self.exclude_scenarios)
+        for base in excluded_set:
+            key = _full_key(base, self._suffix)
+            if key in plan_data:
+                del plan_data[key]
+                log.debug("Excluded scenario from plan: %s", base)
+
+    def _warn_if_root_excluded(self, plan_data):
+        if ROOT_SCENARIO_KEY not in self.exclude_scenarios:
+            return
+        root_key = _full_key(ROOT_SCENARIO_KEY, self._suffix)
+        remaining = [k for k in plan_data if not k.startswith("_") and k != root_key]
+        if remaining:
+            log.warning(
+                "Root scenario is excluded but %s remain; DAG may be invalid (depends_on root).",
+                remaining,
+            )
+
+    def _apply_overrides(self, plan_data):
+        if not self.scenario_overrides:
+            return
+        for base_name, overrides in self.scenario_overrides.items():
+            key = _full_key(base_name, self._suffix)
+            if key not in plan_data or not isinstance(plan_data[key], dict):
+                log.warning(
+                    "scenario_overrides key %s not in plan, skipping", base_name
+                )
+                continue
+            scenario = plan_data[key]
+            if "env" in overrides and isinstance(overrides["env"], dict):
+                env = scenario.setdefault("env", {})
+                for k, v in overrides["env"].items():
+                    env[k] = str(v)
+                    log.debug("Override %s env %s = %s", base_name, k, v)
+
+
+def generate_plan_file(
+    namespace="openshift-storage",
+    exclude_scenarios=None,
+    scenario_overrides=None,
+    use_random_selectors=True,
+    **template_vars,
+):
+    """
+    Generate a krknctl plan JSON file from the Jinja template.
+
+    Uses PlanGenerator: parses template, fills parameters, writes file.
+    Returns the plan file path.
+    """
+    generator = PlanGenerator(
+        namespace=namespace,
+        exclude_scenarios=exclude_scenarios,
+        scenario_overrides=scenario_overrides,
+        use_random_selectors=use_random_selectors,
+        **template_vars,
+    )
+    return generator.generate()
+
 
 def generate_random_plan_file(
     namespace="openshift-storage",
     exclude_scenarios=None,
+    scenario_overrides=None,
     **kwargs,
 ):
     """
-    Generate a new scenario plan file for krknctl by rendering the jinja template
-    and saving it under the krkn output directory with a random name.
+    Generate a plan file with random pod/label selectors.
 
-    Reads the template at ocs_ci/krkn_chaos/template/scenarios/keknctl/plan.json.j2,
-    fills it with random selectors and the given context, optionally excludes
-    scenarios, appends a random suffix to each scenario key, and writes the
-    result to {KRKN_OUTPUT_DIR}/plan_<random>.json (same location as other krkn output).
-
-    Args:
-        namespace (str): Target namespace for chaos scenarios. Defaults to
-            "openshift-storage".
-        exclude_scenarios (list): Scenario keys to exclude from the plan
-            (e.g. ["dummy-scenario", "chaos-recommender"]). Excluded entries
-            are removed from the generated plan.
-        **kwargs: Optional template variables to override (e.g. duration,
-            node_selector). If not provided, pod_selector, label_selector, and
-            workers are set randomly as below.
-
-    Template variables set by this function (unless overridden by kwargs):
-        - namespace: "openshift-storage"
-        - pod_selector: "{app: <random from CEPH_APP_SELECTORS (all krkn component app names)>}"
-        - label_selector: random from same list
-        - workers: random int between 1 and 6 (for node-memory-hog NUMBER_OF_WORKERS)
-
-    Returns:
-        str: Absolute path to the generated plan JSON file.
+    Convenience wrapper: creates PlanGenerator with use_random_selectors=True
+    and returns the plan path.
     """
-    if not os.path.isfile(KRKNCTL_PLAN_TEMPLATE):
-        raise FileNotFoundError(
-            f"krknctl plan template not found at {KRKNCTL_PLAN_TEMPLATE}"
-        )
-
-    exclude_scenarios = exclude_scenarios or []
-
-    # Random values for selectors and workers.
-    # Use key=value form for label selectors (e.g. app=rook-ceph-mon).
-    # POD_SELECTOR format for application-outages: "{app: rook-ceph-mgr}" (space after colon).
-    pod_app = random.choice(CEPH_APP_SELECTORS)
-    label_app = random.choice(CEPH_APP_SELECTORS)
-    pod_selector = f"{{app: {pod_app}}}"
-    label_selector = f"app={label_app}"
-    number_of_workers = str(random.randint(1, 6))
-
-    context = {
-        "namespace": namespace,
-        "pod_selector": pod_selector,
-        "label_selector": label_selector,
-        "pod_label": label_selector,
-        "workers": number_of_workers,
+    return generate_plan_file(
+        namespace=namespace,
+        exclude_scenarios=exclude_scenarios,
+        scenario_overrides=scenario_overrides,
+        use_random_selectors=True,
         **kwargs,
-    }
-
-    with open(KRKNCTL_PLAN_TEMPLATE, "r") as f:
-        template_content = f.read()
-
-    template = Template(template_content)
-    rendered = template.render(**context)
-
-    rendered_stripped = rendered.strip() if rendered else ""
-    if not rendered_stripped:
-        raise ValueError(
-            f"Krknctl plan template rendered to empty content. "
-            f"Template path: {KRKNCTL_PLAN_TEMPLATE}. "
-            "Ensure the template file exists and contains valid Jinja2 that outputs JSON."
-        )
-    plan_data = json.loads(rendered)
-
-    # Remove excluded scenarios (top-level keys that are scenario names)
-    for key in list(plan_data.keys()):
-        if key.startswith("_"):
-            continue
-        if key in exclude_scenarios:
-            del plan_data[key]
-            log.debug("Excluded scenario from plan: %s", key)
-
-    # Append random suffix to scenario keys (e.g. node-memory-hog -> node-memory-hog_xyzsj).
-    # The "name" field inside each scenario stays unchanged (krknctl uses it as scenario type).
-    name_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=5))
-    suffixed_plan = {}
-    key_mapping = {}  # old_key -> new_key for updating depends_on
-    for scenario_key, scenario_obj in plan_data.items():
-        if scenario_key.startswith("_"):
-            suffixed_plan[scenario_key] = scenario_obj
-        else:
-            new_key = f"{scenario_key}_{name_suffix}"
-            key_mapping[scenario_key] = new_key
-            suffixed_plan[new_key] = scenario_obj
-    # Update depends_on to reference suffixed keys (e.g. "root" -> "root_xyzsj")
-    for scenario_obj in suffixed_plan.values():
-        if isinstance(scenario_obj, dict) and "depends_on" in scenario_obj:
-            dep = scenario_obj["depends_on"]
-            if dep in key_mapping:
-                scenario_obj["depends_on"] = key_mapping[dep]
-    plan_data = suffixed_plan
-
-    os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
-    file_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-    plan_filename = f"plan_{file_suffix}.json"
-    plan_path = os.path.join(KRKN_OUTPUT_DIR, plan_filename)
-
-    with open(plan_path, "w") as f:
-        json.dump(plan_data, f, indent=2)
-
-    log.info(
-        "Generated krknctl plan file: %s (namespace=%s, pod_selector=%s, "
-        "label_selector=%s, workers=%s, excluded=%s)",
-        plan_path,
-        namespace,
-        pod_selector,
-        label_selector,
-        number_of_workers,
-        exclude_scenarios,
     )
-    return os.path.abspath(plan_path)

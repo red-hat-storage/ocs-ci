@@ -1321,6 +1321,97 @@ class KrKnctlRunner:
             **flags,
         )
 
+    def random_background(
+        self,
+        plan_path,
+        log_path=None,
+        alerts_profile=None,
+        exit_on_error=False,
+        graph_dump=None,
+        max_parallel=None,
+        metrics_profile=None,
+        number_of_scenarios=None,
+        echo_to_log=True,
+        **extra_flags,
+    ):
+        """
+        Start krknctl random run in a background process. Stdout/stderr are
+        streamed to a log file and optionally echoed to the test log in real
+        time so long-running runs are easy to monitor. Caller polls the
+        returned process and runs cleanup when it exits.
+
+        Args:
+            plan_path (str): Path to the plan JSON file.
+            log_path (str): Path to the log file. If None, uses
+                <dirname(plan_path)>/krknctl.log.
+            alerts_profile: Optional --alerts-profile.
+            exit_on_error: Optional --exit-on-error.
+            graph_dump: Optional --graph-dump.
+            max_parallel: Optional --max-parallel.
+            metrics_profile: Optional --metrics-profile.
+            number_of_scenarios: Optional --number-of-scenarios.
+            echo_to_log (bool): If True (default), stream each line to log.info
+                so test output shows krknctl progress in real time.
+            **extra_flags: Any other flags for random run.
+
+        Returns:
+            tuple: (process, log_path). process is subprocess.Popen; poll with
+                process.poll() (None = still running). log_path is the log file path.
+        """
+        if log_path is None:
+            log_path = os.path.join(os.path.dirname(plan_path), "krknctl.log")
+        flags = dict(extra_flags)
+        if alerts_profile is not None and str(alerts_profile).strip():
+            flags["alerts_profile"] = alerts_profile
+        if exit_on_error:
+            flags["exit_on_error"] = True
+        if graph_dump is not None and str(graph_dump).strip():
+            flags["graph_dump"] = graph_dump
+        if max_parallel is not None:
+            flags["max_parallel"] = max_parallel
+        if metrics_profile is not None and str(metrics_profile).strip():
+            flags["metrics_profile"] = metrics_profile
+        if number_of_scenarios is not None:
+            flags["number_of_scenarios"] = number_of_scenarios
+        cmd = self._build_cmd("random", "run", plan_path, **flags)
+        log.info(
+            "Starting krknctl in background (output -> %s): %s",
+            log_path,
+            shlex.join(cmd),
+        )
+        os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=self._env(),
+            bufsize=1,
+        )
+
+        def _stream_stdout(proc, path, echo):
+            """Read process stdout line by line; write to file and optionally to log."""
+            with open(path, "w") as f:
+                try:
+                    for line in iter(proc.stdout.readline, b""):
+                        text = line.decode("utf-8", errors="replace").rstrip()
+                        f.write(text + "\n")
+                        f.flush()
+                        if echo and text:
+                            log.info("[krknctl] %s", text)
+                except (ValueError, OSError):
+                    pass
+                finally:
+                    proc.stdout.close()
+
+        reader = threading.Thread(
+            target=_stream_stdout,
+            args=(process, log_path, echo_to_log),
+            name="krknctl-log-reader",
+            daemon=True,
+        )
+        reader.start()
+        return process, log_path
+
     def list_scenarios(self, *args, timeout=60, ignore_error=False, **flags):
         """
         List available or running scenarios: krknctl list [flags].
