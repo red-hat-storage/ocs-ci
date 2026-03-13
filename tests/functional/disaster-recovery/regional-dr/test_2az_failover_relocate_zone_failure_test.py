@@ -67,7 +67,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
         """
         primary_cluster_down = True  # Always bring down primary cluster during failover
-        
+
         logger.info(
             f"Starting test with pvc_interface={pvc_interface}, "
             f"primary_cluster_down={primary_cluster_down}"
@@ -77,8 +77,8 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # Step 1: Deploy 2 GitOps/Subscription Apps
         # ========================================
         logger.info("Deploying 2 GitOps/Subscription apps")
-        gitops_workload_1 = all_dr_workloads['dr_workload']()
-        gitops_workload_2 = all_dr_workloads['dr_workload']()
+        gitops_workload_1 = all_dr_workloads["dr_workload"]()
+        gitops_workload_2 = all_dr_workloads["dr_workload"]()
         gitops_workloads = [gitops_workload_1, gitops_workload_2]
         logger.info(f"Deployed {len(gitops_workloads)} GitOps workloads")
 
@@ -86,11 +86,8 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # Step 2: Deploy 2 Discovered Apps
         # ========================================
         logger.info("Deploying 2 Discovered apps")
-        discovered_workloads = all_dr_workloads['discovered_apps'](
-            kubeobject=2,
-            recipe=0,
-            pvc_interface=pvc_interface,
-            multi_ns=False
+        discovered_workloads = all_dr_workloads["discovered_apps"](
+            kubeobject=2, recipe=0, pvc_interface=pvc_interface, multi_ns=False
         )
         logger.info(f"Deployed {len(discovered_workloads)} Discovered apps")
 
@@ -100,12 +97,12 @@ class Test2AZFailoverAndRelocateZoneFailure:
         cnv_workloads = []
         if pvc_interface == constants.CEPHBLOCKPOOL:
             logger.info("Deploying 2 CNV apps (RBD only)")
-            cnv_workloads = all_dr_workloads['discovered_apps_cnv'](
+            cnv_workloads = all_dr_workloads["discovered_apps_cnv"](
                 pvc_vm=2,
                 custom_sc=False,
                 dr_protect=True,
                 shared_drpc_protection=False,
-                vm_type=constants.VM_VOLUME_PVC
+                vm_type=constants.VM_VOLUME_PVC,
             )
             logger.info(f"Deployed {len(cnv_workloads)} CNV workloads")
         else:
@@ -120,16 +117,18 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # ========================================
         for idx, workload in enumerate(all_workloads, 1):
             workload_type = (
-                "GitOps" if workload in gitops_workloads
-                else "Discovered" if workload in discovered_workloads
-                else "CNV"
+                "GitOps"
+                if workload in gitops_workloads
+                else "Discovered" if workload in discovered_workloads else "CNV"
             )
-            logger.info(f"Processing workload {idx}/{len(all_workloads)} - Type: {workload_type}")
+            logger.info(
+                f"Processing workload {idx}/{len(all_workloads)} - Type: {workload_type}"
+            )
 
             # Get workload details
             workload_namespace = workload.workload_namespace
             is_discovered_app = workload in (discovered_workloads + cnv_workloads)
-            
+
             if is_discovered_app:
                 resource_name = workload.discovered_apps_placement_name
             else:
@@ -162,7 +161,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 discovered_apps=is_discovered_app,
                 resource_name=resource_name,
             )
-            
+
             wait_time = 2 * scheduling_interval
             logger.info(f"Waiting {wait_time} minutes for IOs to complete")
             sleep(wait_time * 60)
@@ -176,13 +175,19 @@ class Test2AZFailoverAndRelocateZoneFailure:
             # ========================================
             # Step 5: Failover to Secondary Cluster
             # ========================================
-            logger.info(f"Starting failover for workload {idx} to {secondary_cluster_name}")
+            logger.info(
+                f"Starting failover for workload {idx} to {secondary_cluster_name}"
+            )
 
             if primary_cluster_down:
                 # Stop primary cluster nodes
                 config.switch_to_cluster_by_name(primary_cluster_name)
-                logger.info(f"Stopping nodes on primary cluster: {primary_cluster_name}")
-                nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
+                logger.info(
+                    f"Stopping nodes on primary cluster: {primary_cluster_name}"
+                )
+                nodes_multicluster[primary_cluster_index].stop_nodes(
+                    primary_cluster_nodes
+                )
                 logger.info("Primary cluster nodes stopped")
 
             # Perform failover via CLI
@@ -211,12 +216,18 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 namespace=workload_namespace,
                 timeout=720,
             )
-            logger.info(f"Workload {idx} successfully failed over to {secondary_cluster_name}")
+            logger.info(
+                f"Workload {idx} successfully failed over to {secondary_cluster_name}"
+            )
 
             # Restart primary cluster if it was stopped
             if primary_cluster_down:
-                logger.info(f"Starting nodes on primary cluster: {primary_cluster_name}")
-                nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
+                logger.info(
+                    f"Starting nodes on primary cluster: {primary_cluster_name}"
+                )
+                nodes_multicluster[primary_cluster_index].start_nodes(
+                    primary_cluster_nodes
+                )
                 config.switch_to_cluster_by_name(primary_cluster_name)
                 wait_for_nodes_status(timeout=900)
                 ceph_health_check()
@@ -225,7 +236,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
             # ========================================
             # Step 6: Relocate back to Primary Cluster
             # ========================================
-            logger.info(f"Starting relocate for workload {idx} back to {primary_cluster_name}")
+            logger.info(
+                f"Starting relocate for workload {idx} back to {primary_cluster_name}"
+            )
 
             # Wait before relocate
             sleep(scheduling_interval * 60)
@@ -256,7 +269,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 namespace=workload_namespace,
                 timeout=720,
             )
-            logger.info(f"Workload {idx} successfully relocated back to {primary_cluster_name}")
+            logger.info(
+                f"Workload {idx} successfully relocated back to {primary_cluster_name}"
+            )
 
             # Verify data integrity for CNV workloads
             if workload in cnv_workloads:
@@ -266,4 +281,3 @@ class Test2AZFailoverAndRelocateZoneFailure:
         logger.info(
             f"Successfully completed failover and relocate for all {len(all_workloads)} workloads"
         )
-
