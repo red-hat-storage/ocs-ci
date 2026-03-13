@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 class FusionDataFoundationDeployment:
     def __init__(self):
-        self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
+        self.pre_release = str(config.DEPLOYMENT.get("fdf_pre_release", False)).lower() == "true"
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
         self.fdf_skip_storage_setup = config.DEPLOYMENT.get(
