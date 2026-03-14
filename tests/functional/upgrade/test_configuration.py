@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 
@@ -149,5 +150,6 @@ def test_update_strategy_config_change(
     ds_obj = DaemonSet(
         resource_name=daemonset, namespace=config.ENV_DATA["cluster_namespace"]
     )
+    time.sleep(10)
     results = ds_obj.get_update_strategy()
     assert str(expected_value) == str(results["rollingUpdate"]["maxUnavailable"])
