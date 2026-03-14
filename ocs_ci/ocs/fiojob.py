@@ -367,6 +367,7 @@ def workload_fio_storageutilization(
     target_percentage=None,
     target_size=None,
     with_checksum=False,
+    retain_pv=False,
     keep_fio_data=False,
     minimal_time=480,
     throw_skip=True,
@@ -408,9 +409,11 @@ def workload_fio_storageutilization(
         target_size (int): target size of the PVC for fio to use, eg. 10 means
             a request for fio to write 10GiB of data
         with_checksum (bool): if true, sha1 checksum of the data written by
-            fio is stored on the volume, and reclaim policy of the volume is
-            changed to ``Retain`` so that the volume is not removed during test
-            teardown for later verification runs
+            fio is stored on the volume
+        retain_pv (bool): if true, reclaim policy of the volume is changed to
+            ``Retain`` and the volume is labeled so that it is not removed
+            during test teardown for later verification runs. Only effective
+            when with_checksum is True.
         keep_fio_data (bool): If true, keep the fio data after the fio
             storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
@@ -593,7 +596,7 @@ def workload_fio_storageutilization(
             logger.info("Storage for the PVC was not yet reclaimed enough.")
         return result
 
-    if with_checksum:
+    if with_checksum and retain_pv:
         # Let's get the name of the PV via the PVC.
         ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=project.namespace)
         pvc_data = ocp_pvc.get()
@@ -625,9 +628,9 @@ def workload_fio_storageutilization(
         label = f"fixture={fixture_name}"
         ocp_pv.add_label(pv_name, label)
     else:
-        # Without checksum, we just need to make sure that data were deleted
-        # and wait for this to happen to avoid conflicts with tests executed
-        # right after this one.
+        # Without checksum or when not retaining PV, we just need to make
+        # sure that data were deleted and wait for this to happen to avoid
+        # conflicts with tests executed right after this one.
         if not keep_fio_data:
             delete_fio_data(fio_job_file, is_storage_reclaimed)
         else:
