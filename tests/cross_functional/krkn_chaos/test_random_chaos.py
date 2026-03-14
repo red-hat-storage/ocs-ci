@@ -3,7 +3,7 @@ Test suite for krknctl random chaos scenarios.
 
 Flow: generate plan -> start workload and background cluster ops -> run krknctl
 random chaos in background (output to log file) -> poll every 3 min until exit ->
-stop workload and background ops, cleanup -> Ceph health check.
+stop workload and background ops, cleanup. Ceph crash check via fixture.
 """
 
 import logging
@@ -11,13 +11,12 @@ import os
 import time
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, polarion_id
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnctlRunner
 from ocs_ci.krkn_chaos.krknclt_helper import PlanGenerator
-from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper, ValidationHelper
+from ocs_ci.krkn_chaos.krkn_helpers import ValidationHelper
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
 log = logging.getLogger(__name__)
@@ -56,13 +55,15 @@ class TestKrKnctlRandomChaos:
         Run krknctl random chaos with a generated plan and workload validation.
 
         Flow:
-        1. Resolve kubeconfig; skip if not found.
-        2. Generate random plan file (before workload).
-        3. Start workload and background cluster operations.
-        4. Run krknctl random run in background; redirect output to krknctl.log.
-        5. Poll every 3 minutes until krknctl process exits.
-        6. Once krknctl ends: stop workload and background ops, cleanup.
-        7. Check Ceph health (no crashes).
+        1. Generate random plan file (before workload).
+        2. Start workload and background cluster operations.
+        3. Run krknctl random run in background; redirect output to krknctl.log.
+        4. Poll every 3 minutes until krknctl process exits.
+        5. Once krknctl ends: stop workload and background ops, cleanup.
+        Ceph crash check is done by krkn_chaos_test_lifecycle fixture (autouse).
+
+        Kubeconfig is set by krknctl_setup (KUBECONFIG env and ~/.kube/config);
+        KrKnctlRunner uses config when kubeconfig is not passed.
 
         Args:
             krknctl_setup: Session fixture for krknctl binary and podman.
@@ -74,21 +75,6 @@ class TestKrKnctlRandomChaos:
             f"max_parallel={max_parallel}",
             max_parallel=max_parallel,
         )
-
-        # Resolve kubeconfig path
-        cluster_path = config.ENV_DATA.get("cluster_path")
-        kubeconfig_location = config.RUN.get("kubeconfig_location", "auth/kubeconfig")
-        kubeconfig_path = None
-        if cluster_path:
-            kubeconfig_path = os.path.join(cluster_path, kubeconfig_location)
-            if not os.path.exists(kubeconfig_path):
-                kubeconfig_path = config.RUN.get("kubeconfig")
-        if not kubeconfig_path:
-            kubeconfig_path = config.RUN.get("kubeconfig")
-        if not kubeconfig_path or not os.path.exists(kubeconfig_path):
-            pytest.skip(
-                "Kubeconfig not found; set cluster_path or RUN.kubeconfig for krknctl"
-            )
 
         # Generate random plan file (before workload)
         log.info("Generating random plan file (exclude=%s)", DEFAULT_EXCLUDE_SCENARIOS)
@@ -107,7 +93,7 @@ class TestKrKnctlRandomChaos:
 
         # Run krknctl random chaos in background; redirect output to log file
         log_path = os.path.join(os.path.dirname(plan_path), "krknctl.log")
-        runner = KrKnctlRunner(kubeconfig=kubeconfig_path)
+        runner = KrKnctlRunner()
         process, _ = runner.random_background(
             plan_path,
             log_path=log_path,
@@ -154,16 +140,6 @@ class TestKrKnctlRandomChaos:
                 "krknctl-random",
                 "krknctl random chaos",
             )
-
-        # Ceph health check
-        health_helper = CephHealthHelper(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        no_crashes, crash_details = health_helper.check_ceph_crashes(
-            "krknctl-random",
-            "krknctl random chaos",
-        )
-        assert no_crashes, crash_details
 
         log.info(
             "krknctl random chaos test completed successfully (max_parallel=%s)",
