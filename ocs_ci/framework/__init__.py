@@ -554,6 +554,26 @@ class MultiClusterConfig:
                 switch_index = config.cur_index
             super().__init__(switch_index)
 
+    @staticmethod
+    def run_with_provider_context_if_available(func):
+        """
+        Decorator that runs the function using the Provider config if it exists.
+        If no Provider config is found, the function runs with the current config.
+
+        Args:
+            func (callable): Function to decorate.
+
+        Returns:
+            callable: Wrapped function.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with config.RunWithProviderConfigContextIfAvailable():
+                return func(*args, **kwargs)
+
+        return wrapper
+
     class RunWithFirstConsumerConfigContextIfAvailable(RunWithConfigContext):
         """
         Context manager that makes sure that a given code block is executed on First consumer.
