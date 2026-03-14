@@ -287,12 +287,15 @@ def create_drs_machine_config():
 
     If the MachineConfig '99-br-storage-nmstate-worker' already exists,
     this function will skip creation and return early.
+
+    After creating the MachineConfig, this function waits for all worker nodes
+    to be updated. The timeout is calculated as 9 minutes per worker node.
     """
     from ocs_ci.ocs.resources.machineconfig import machineconfig_exists
 
     mc_name = "99-br-storage-nmstate-worker"
     if machineconfig_exists(mc_name):
-        logger.info("MachineConfig %s already exists, skipping creation", mc_name)
+        logger.info(f"MachineConfig {mc_name} already exists, skipping creation")
         return
 
     interfaces_path = os.path.join(
@@ -316,6 +319,50 @@ def create_drs_machine_config():
         machineconfigurations_obj = OCS(**machineconfigurations_yaml)
         machineconfigurations_obj.apply(**machineconfigurations_yaml)
 
+        # Wait for all worker nodes to be updated
+        worker_nodes = get_worker_nodes()
+        num_workers = len(worker_nodes)
+        timeout = num_workers * 9 * 60  # 9 minutes per worker node in seconds
+
+        logger.info(
+            f"Waiting for all {num_workers} worker nodes to be updated (timeout: {timeout} seconds)"
+        )
+
+        # Use wait_for_resource to properly wait for MachineConfigPool to be updated
+        # This checks the UPDATED column (condition) rather than status.updatedMachineCount
+        mcp_ocp = OCP(kind=constants.MACHINECONFIGPOOL, resource_name="worker")
+
+        # First wait for the pool to start updating (UPDATING=True)
+        logger.info("Waiting for MachineConfigPool to start updating")
+        mcp_ocp.wait_for_resource(
+            resource_count=1,
+            condition="True",
+            column="UPDATING",
+            sleep=5,
+            timeout=120,
+        )
+
+        # Now wait for the pool to be fully updated (UPDATED=True)
+        logger.info("Waiting for MachineConfigPool to be fully updated")
+        mcp_ocp.wait_for_resource(
+            resource_count=1,
+            condition="True",
+            column="UPDATED",
+            sleep=60,
+            timeout=timeout,
+        )
+
+        # Also check that the pool is not degraded
+        mcp_ocp.wait_for_resource(
+            resource_count=1,
+            condition="False",
+            column="DEGRADED",
+            sleep=10,
+            timeout=120,
+        )
+
+        logger.info("All worker nodes have been updated successfully")
+
 
 def create_drs_nad(cluster_name):
     """
@@ -333,10 +380,10 @@ def create_drs_nad(cluster_name):
     # Check if namespace exists, create if it doesn't
     ocp_ns = OCP(kind="namespace")
     if not ocp_ns.is_exist(resource_name=namespace):
-        logger.info("Namespace %s does not exist, creating it", namespace)
+        logger.info(f"Namespace {namespace} does not exist, creating it")
         ocp_ns.new_project(namespace)
     else:
-        logger.info("Namespace %s already exists", namespace)
+        logger.info(f"Namespace {namespace} already exists")
 
     nad_path = os.path.join(constants.TEMPLATE_DEPLOYMENT_DIR, "drs_nad.yaml")
     nad_yaml = load_yaml(nad_path)
