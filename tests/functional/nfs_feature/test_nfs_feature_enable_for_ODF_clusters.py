@@ -1,3 +1,4 @@
+import ipaddress
 import pytest
 import logging
 import time
@@ -42,7 +43,6 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
 from ocs_ci.utility.nfs_utils import provisioner_selectors
-
 
 log = logging.getLogger(__name__)
 # Error message to look in a command output
@@ -323,6 +323,12 @@ class TestNfsEnable(ManageTest):
     def get_nfs_client_connection(self, re_try=True):
         """
         Create connection to NFS Client VM.
+
+        After establishing the SSH connection, if the NFS LB endpoint is a
+        hostname (not a raw IP), the hostname is resolved from within the
+        cluster and /etc/hosts on the client VM is updated. This is required
+        when the NFS client VM is in a different VPC from the OpenShift cluster
+        and cannot resolve IBM Cloud VPC LB hostnames via its DNS servers.
         """
         log.info("Connecting to nfs client test VM")
         tries = 3 if re_try else 1
@@ -335,7 +341,14 @@ class TestNfsEnable(ManageTest):
                 private_key=self.nfs_client_private_key,
             )
 
-        return __make_connection()
+        con = __make_connection()
+        hostname_add = getattr(self, "hostname_add", None)
+        if hostname_add:
+            try:
+                ipaddress.ip_address(hostname_add)
+            except ValueError:
+                nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
+        return con
 
     @tier1
     @polarion_id("OCS-4269")
