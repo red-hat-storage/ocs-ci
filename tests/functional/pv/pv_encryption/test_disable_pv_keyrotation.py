@@ -150,6 +150,9 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
         ), "Failed to recreate key rotation cronjobs after re-enabling."
         log.info("Key rotation cronjobs successfully recreated and active.")
 
+        # Reset baseline to capture keys after re-enabling, before waiting for rotation
+        self.pv_keyrotation_obj.reset_keyrotation_baseline()
+
         # Verify key rotation cronjobs are recreated and keys are rotated
         assert self.pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(
             self.pvc_objs
@@ -189,6 +192,9 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
             self.pvc_objs, disable=False
         )
         log.info("Key rotation re-enabled for specific PVCs.")
+
+        # Reset baseline to capture keys after re-enabling, before waiting for rotation
+        self.pv_keyrotation_obj.reset_keyrotation_baseline()
 
         # Verify key rotation cronjobs are recreated
         assert self.pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(
