@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import re
 import pytest
@@ -42,7 +43,10 @@ class TestGetCommands:
         output = result.stdout.decode().strip()
         assert output, "Mon endpoint not found in output"
         # Validate the format of the mon endpoint output
-        endpoint_pattern = r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+,?)+$"
+        # Supports both IPv4 (ip:port) and IPv6 ([ip]:port) formats
+        ipv4_ep = r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+"
+        ipv6_ep = r"\[[0-9a-fA-F:]+\]:\d+"
+        endpoint_pattern = rf"^(({ipv4_ep}|{ipv6_ep}),?)+$"
         assert re.match(
             endpoint_pattern, output
         ), f"Invalid mon endpoint format: {output}"
@@ -51,23 +55,27 @@ class TestGetCommands:
         mon_pods = get_mon_pods()
         expected_mon_count = len(mon_pods)
 
-        # Check that we have the correct number of endpoints
-        endpoints = output.strip().split(",")
+        # Split endpoints — handle both IPv4 (a.b.c.d:port,) and
+        # IPv6 ([addr]:port,) by splitting on the pattern "],"|","
+        endpoints = re.split(r"(?<=\d),", output.strip())
         assert (
             len(endpoints) == expected_mon_count
         ), f"Expected {expected_mon_count} mon endpoints, but found {len(endpoints)}"
 
         # Validate each endpoint
         for endpoint in endpoints:
-            ip, port = endpoint.split(":")
+            if endpoint.startswith("["):
+                # IPv6 format: [addr]:port
+                addr_str, port_str = endpoint.rsplit(":", 1)
+                addr_str = addr_str.strip("[]")
+                ipaddress.IPv6Address(addr_str)
+            else:
+                # IPv4 format: addr:port
+                addr_str, port_str = endpoint.rsplit(":", 1)
+                ipaddress.IPv4Address(addr_str)
             assert (
-                1 <= int(port) <= 65535
+                1 <= int(port_str) <= 65535
             ), f"Invalid port number in endpoint: {endpoint}"
-            octets = ip.split(".")
-            assert len(octets) == 4, f"Invalid IP address in endpoint: {endpoint}"
-            assert all(
-                0 <= int(octet) <= 255 for octet in octets
-            ), f"Invalid IP address in endpoint: {endpoint}"
 
     def validate_mon_pods(self, output):
         mon_pods = [
