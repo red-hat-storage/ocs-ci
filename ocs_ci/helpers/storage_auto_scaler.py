@@ -104,7 +104,7 @@ def wait_for_auto_scaler_status(
 
 
 def generate_fixed_scaling_threshold(
-    fix_capacity_to_fillup: int = 240,
+    fix_capacity_to_fillup: int = 280,
     max_scaling_threshold: int = 35,
 ) -> int:
     """
