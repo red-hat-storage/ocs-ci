@@ -165,6 +165,7 @@ class FusionDataFoundationDeployment:
             logger.info("Retrieving imageDigest")
             cmd = f"skopeo inspect docker://{fdf_registry}/{fdf_catalog_name}:{fdf_image_tag} --authfile {pull_secret}"
             catalog_data = run_cmd(cmd)
+            catalog_data = run_cmd(cmd)
             fdf_image_digest = json.loads(catalog_data).get("Digest")
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
             config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
