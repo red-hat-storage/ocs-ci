@@ -72,6 +72,16 @@ APPLICATION_OUTAGES_INCLUDE_SCENARIOS = (
     "application-outages",
 )
 
+# Comprehensive service disruption: root + application-outages, pod-scenarios,
+# container-scenarios, and service-disruption-scenarios (each expanded per label).
+COMPREHENSIVE_SERVICE_DISRUPTION_INCLUDE_SCENARIOS = (
+    ROOT_SCENARIO_KEY,
+    "application-outages",
+    "pod-scenarios",
+    "container-scenarios",
+    "service-disruption-scenarios",
+)
+
 # App labels used when expanding application-outages (one node per label).
 # Use KRKN_APP_LABEL_CONSTANTS so application-outage covers OSD, MON, MGR, MDS, RGW, operator, Noobaa.
 APPLICATION_OUTAGES_APP_LABELS = KRKN_APP_LABEL_CONSTANTS
@@ -190,6 +200,10 @@ class PlanGenerator:
             if self.label_selectors:
                 if "application-outages" in self.include_scenarios:
                     self._expand_application_outages_by_labels(plan_data)
+                if "pod-scenarios" in self.include_scenarios:
+                    self._expand_pod_scenarios_by_labels(plan_data)
+                if "container-scenarios" in self.include_scenarios:
+                    self._expand_container_scenarios_by_labels(plan_data)
                 if "service-disruption-scenarios" in self.include_scenarios:
                     self._expand_service_disruption_by_labels(plan_data)
         else:
@@ -256,11 +270,61 @@ class PlanGenerator:
             plan_data[new_key] = node
             log.debug("Added application-outages node for label: %s", label)
 
+    def _expand_pod_scenarios_by_labels(self, plan_data):
+        """
+        Replace the single pod-scenarios node with one node per label in
+        label_selectors, each with its own POD_LABEL. Keys become
+        pod-scenarios_<short_slug>_<suffix>.
+        """
+        base_key = _full_key("pod-scenarios", self._suffix)
+        if base_key not in plan_data:
+            log.warning(
+                "pod-scenarios key %s not in plan; skip expand by labels",
+                base_key,
+            )
+            return
+        template_node = plan_data.pop(base_key)
+        root_key = _full_key(ROOT_SCENARIO_KEY, self._suffix)
+        for label in self.label_selectors:
+            node = copy.deepcopy(template_node)
+            node.setdefault("env", {})["POD_LABEL"] = label
+            if "depends_on" in node:
+                node["depends_on"] = root_key
+            short_slug = _label_to_short_slug(label)
+            new_key = f"pod-scenarios_{short_slug}_{self._suffix}"
+            plan_data[new_key] = node
+            log.debug("Added pod-scenarios node for label: %s", label)
+
+    def _expand_container_scenarios_by_labels(self, plan_data):
+        """
+        Replace the single container-scenarios node with one node per label in
+        label_selectors, each with its own LABEL_SELECTOR. Keys become
+        container-scenarios_<short_slug>_<suffix>.
+        """
+        base_key = _full_key("container-scenarios", self._suffix)
+        if base_key not in plan_data:
+            log.warning(
+                "container-scenarios key %s not in plan; skip expand by labels",
+                base_key,
+            )
+            return
+        template_node = plan_data.pop(base_key)
+        root_key = _full_key(ROOT_SCENARIO_KEY, self._suffix)
+        for label in self.label_selectors:
+            node = copy.deepcopy(template_node)
+            node.setdefault("env", {})["LABEL_SELECTOR"] = label
+            if "depends_on" in node:
+                node["depends_on"] = root_key
+            short_slug = _label_to_short_slug(label)
+            new_key = f"container-scenarios_{short_slug}_{self._suffix}"
+            plan_data[new_key] = node
+            log.debug("Added container-scenarios node for label: %s", label)
+
     def _expand_service_disruption_by_labels(self, plan_data):
         """
         Replace the single service-disruption-scenarios node with one node per label
         in label_selectors, each with its own LABEL_SELECTOR. Keys become
-        service-disruption-scenarios_<slug>_<suffix> for readability.
+        service-disruption-scenarios_<short_slug>_<suffix>.
         """
         base_key = _full_key("service-disruption-scenarios", self._suffix)
         if base_key not in plan_data:
@@ -270,11 +334,14 @@ class PlanGenerator:
             )
             return
         template_node = plan_data.pop(base_key)
+        root_key = _full_key(ROOT_SCENARIO_KEY, self._suffix)
         for label in self.label_selectors:
             node = copy.deepcopy(template_node)
             node.setdefault("env", {})["LABEL_SELECTOR"] = label
-            slug = _label_to_slug(label)
-            new_key = f"service-disruption-scenarios_{slug}_{self._suffix}"
+            if "depends_on" in node:
+                node["depends_on"] = root_key
+            short_slug = _label_to_short_slug(label)
+            new_key = f"service-disruption-scenarios_{short_slug}_{self._suffix}"
             plan_data[new_key] = node
             log.debug("Added service-disruption node for label: %s", label)
 
