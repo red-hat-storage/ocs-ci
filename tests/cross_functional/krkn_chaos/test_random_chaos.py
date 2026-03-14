@@ -15,7 +15,11 @@ from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, pola
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnctlRunner
-from ocs_ci.krkn_chaos.krknclt_helper import PlanGenerator
+from ocs_ci.krkn_chaos.krknclt_helper import (
+    KRKN_APP_LABEL_CONSTANTS,
+    PlanGenerator,
+    SERVICE_DISRUPTION_INCLUDE_SCENARIOS,
+)
 from ocs_ci.krkn_chaos.krkn_helpers import ValidationHelper
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
@@ -143,5 +147,120 @@ class TestKrKnctlRandomChaos:
 
         log.info(
             "krknctl random chaos test completed successfully (max_parallel=%s)",
+            max_parallel,
+        )
+
+
+@green_squad
+@chaos
+class TestKrKnctlServiceDisruption:
+    """
+    Test suite for krknctl service-disruption-scenarios with each app label.
+
+    Generates a plan containing only root + service-disruption-scenarios,
+    parametrized over KRKN_APP_LABEL_CONSTANTS. Same flow as random chaos:
+    workload setup, krknctl random run in background, poll, cleanup.
+    """
+
+    @pytest.mark.parametrize(
+        "max_parallel",
+        [2, 3, 4],
+        ids=["max-parallel-2", "max-parallel-3", "max-parallel-4"],
+    )
+    @pytest.mark.parametrize(
+        "label_selector",
+        KRKN_APP_LABEL_CONSTANTS,
+        ids=[label.split("=", 1)[1] for label in KRKN_APP_LABEL_CONSTANTS],
+    )
+    @polarion_id("OCS-7342")
+    def test_random_service_disruption(
+        self,
+        krknctl_setup,
+        workload_ops,
+        label_selector,
+        max_parallel,
+    ):
+        """
+        Run krknctl service-disruption-scenarios for one app label.
+
+        Flow:
+        1. Generate plan with only root + service-disruption-scenarios and LABEL_SELECTOR=label_selector.
+        2. Start workload and background cluster operations.
+        3. Run krknctl random run in background; poll until exit.
+        4. Validate and cleanup workloads. Ceph crash check via fixture.
+        """
+        log_test_start(
+            "service disruption", f"{label_selector} max_parallel={max_parallel}"
+        )
+
+        # Generate plan: only service-disruption-scenarios for this label
+        generator = PlanGenerator(
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            include_scenarios=SERVICE_DISRUPTION_INCLUDE_SCENARIOS,
+            use_random_selectors=False,
+            label_selector=label_selector,
+            scenario_overrides={
+                "service-disruption-scenarios": {
+                    "env": {"LABEL_SELECTOR": label_selector}
+                },
+            },
+        )
+        generator.generate()
+        plan_path = generator.plan_path
+        log.info("Using plan file: %s (label_selector=%s)", plan_path, label_selector)
+
+        log.info("Setting up workloads for service disruption test")
+        workload_ops.setup_workloads()
+
+        log_path = os.path.join(os.path.dirname(plan_path), "krknctl.log")
+        runner = KrKnctlRunner()
+        process, _ = runner.random_background(
+            plan_path,
+            log_path=log_path,
+            max_parallel=max_parallel,
+        )
+        log.info(
+            "krknctl started in background; log file: %s",
+            log_path,
+        )
+
+        poll_interval = 180
+        while process.poll() is None:
+            log.info(
+                "krknctl still running (log: %s); next check in %s s",
+                log_path,
+                poll_interval,
+            )
+            time.sleep(poll_interval)
+        returncode = process.returncode
+        log.info("krknctl process ended with returncode=%s", returncode)
+
+        if returncode != 0:
+            log.error(
+                "krknctl service disruption failed (returncode=%s). Check log: %s",
+                returncode,
+                log_path,
+            )
+            try:
+                workload_ops.validate_and_cleanup()
+            except (UnexpectedBehaviour, CommandFailed) as cleanup_ex:
+                log.warning("Workload cleanup after chaos failure: %s", cleanup_ex)
+            raise CommandFailed(
+                f"krknctl service disruption failed with returncode={returncode}. Log: {log_path}"
+            )
+
+        try:
+            workload_ops.validate_and_cleanup()
+            log.info("Workloads validated and cleaned up successfully")
+        except (UnexpectedBehaviour, CommandFailed) as e:
+            ValidationHelper().handle_workload_validation_failure(
+                e,
+                "krknctl-service-disruption",
+                "krknctl service disruption",
+            )
+
+        log.info(
+            "service disruption test completed successfully (label_selector=%s, max_parallel=%s)",
+            label_selector,
             max_parallel,
         )

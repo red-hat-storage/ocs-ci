@@ -59,6 +59,12 @@ KRKNCTL_PLAN_SCENARIO_KEYS = (
 
 ROOT_SCENARIO_KEY = "root"
 
+# Plan with only root + service-disruption-scenarios (for test_random_service_disruption).
+SERVICE_DISRUPTION_INCLUDE_SCENARIOS = (
+    ROOT_SCENARIO_KEY,
+    "service-disruption-scenarios",
+)
+
 
 def _full_key(base_name, suffix):
     """Plan key for a scenario: base_name_suffix (e.g. application-outages_5j6t5)."""
@@ -80,12 +86,16 @@ class PlanGenerator:
     def __init__(
         self,
         namespace="openshift-storage",
+        include_scenarios=None,
         exclude_scenarios=None,
         scenario_overrides=None,
         use_random_selectors=True,
         **template_vars,
     ):
         self.namespace = namespace
+        self.include_scenarios = (
+            include_scenarios  # None or list; takes precedence over exclude
+        )
         self.exclude_scenarios = exclude_scenarios or []
         self.scenario_overrides = scenario_overrides or {}
         self.use_random_selectors = use_random_selectors
@@ -141,8 +151,11 @@ class PlanGenerator:
             )
         plan_data = json.loads(rendered)
 
-        self._remove_excluded(plan_data)
-        self._warn_if_root_excluded(plan_data)
+        if self.include_scenarios:
+            self._keep_only_included(plan_data)
+        else:
+            self._remove_excluded(plan_data)
+            self._warn_if_root_excluded(plan_data)
         self._apply_overrides(plan_data)
 
         os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
@@ -159,13 +172,25 @@ class PlanGenerator:
             json.dump(plan_data, f, indent=2)
 
         log.info(
-            "Generated krknctl plan: %s (namespace=%s, suffix=%s, exclude=%s)",
+            "Generated krknctl plan: %s (namespace=%s, suffix=%s, include=%s, exclude=%s)",
             self.plan_path,
             self.namespace,
             self._suffix,
+            self.include_scenarios,
             self.exclude_scenarios,
         )
         return os.path.abspath(self.plan_path)
+
+    def _keep_only_included(self, plan_data):
+        """Keep only scenarios in include_scenarios (and _comment keys). Root must be in include_scenarios if needed."""
+        include_set = set(self.include_scenarios)
+        for k in list(plan_data.keys()):
+            if k.startswith("_"):
+                continue
+            base = k.rsplit("_", 1)[0] if "_" in k else k
+            if base not in include_set:
+                del plan_data[k]
+                log.debug("Removed scenario (not in include list): %s", base)
 
     def _remove_excluded(self, plan_data):
         excluded_set = set(self.exclude_scenarios)
@@ -206,6 +231,7 @@ class PlanGenerator:
 
 def generate_plan_file(
     namespace="openshift-storage",
+    include_scenarios=None,
     exclude_scenarios=None,
     scenario_overrides=None,
     use_random_selectors=True,
@@ -215,10 +241,13 @@ def generate_plan_file(
     Generate a krknctl plan JSON file from the Jinja template.
 
     Uses PlanGenerator: parses template, fills parameters, writes file.
+    When include_scenarios is set, only those scenarios (plus root if listed) are kept;
+    otherwise exclude_scenarios is used to remove scenarios.
     Returns the plan file path.
     """
     generator = PlanGenerator(
         namespace=namespace,
+        include_scenarios=include_scenarios,
         exclude_scenarios=exclude_scenarios,
         scenario_overrides=scenario_overrides,
         use_random_selectors=use_random_selectors,
@@ -229,6 +258,7 @@ def generate_plan_file(
 
 def generate_random_plan_file(
     namespace="openshift-storage",
+    include_scenarios=None,
     exclude_scenarios=None,
     scenario_overrides=None,
     **kwargs,
@@ -241,6 +271,7 @@ def generate_random_plan_file(
     """
     return generate_plan_file(
         namespace=namespace,
+        include_scenarios=include_scenarios,
         exclude_scenarios=exclude_scenarios,
         scenario_overrides=scenario_overrides,
         use_random_selectors=True,
