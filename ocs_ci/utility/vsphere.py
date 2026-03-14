@@ -622,7 +622,8 @@ class VSPHERE(object):
         WaitForTasks(tasks, self._si)
 
         if wait:
-            for ips in TimeoutSampler(240, 3, self.get_vms_ips, vms):
+            wait_time = config.DEPLOYMENT.get("vsphere_vm_start_timeout", 240)
+            for ips in TimeoutSampler(wait_time, 3, self.get_vms_ips, vms):
                 logger.info(
                     f"Waiting for VMs {[vm.name for vm in vms]} to power on "
                     f"based on network connectivity. Current VMs IPs: {ips}"
