@@ -12,6 +12,7 @@ import logging
 import os
 import random
 import string
+import copy
 
 from jinja2 import Template
 
@@ -71,6 +72,13 @@ def _full_key(base_name, suffix):
     return f"{base_name}_{suffix}"
 
 
+def _label_to_slug(label_selector):
+    """Convert label_selector like 'app=rook-ceph-osd' to a short slug 'rook-ceph-osd'."""
+    if "=" in label_selector:
+        return label_selector.split("=", 1)[1].replace(".", "-")
+    return label_selector.replace(".", "-")
+
+
 class PlanGenerator:
     """
     Generates krknctl plan JSON files from the Jinja template.
@@ -90,6 +98,7 @@ class PlanGenerator:
         exclude_scenarios=None,
         scenario_overrides=None,
         use_random_selectors=True,
+        label_selectors=None,
         **template_vars,
     ):
         self.namespace = namespace
@@ -99,6 +108,7 @@ class PlanGenerator:
         self.exclude_scenarios = exclude_scenarios or []
         self.scenario_overrides = scenario_overrides or {}
         self.use_random_selectors = use_random_selectors
+        self.label_selectors = label_selectors  # list of label strings; expands service-disruption per label
         self.template_vars = template_vars
         self.plan_path = None
         self._suffix = None
@@ -153,6 +163,11 @@ class PlanGenerator:
 
         if self.include_scenarios:
             self._keep_only_included(plan_data)
+            if (
+                self.label_selectors
+                and "service-disruption-scenarios" in self.include_scenarios
+            ):
+                self._expand_service_disruption_by_labels(plan_data)
         else:
             self._remove_excluded(plan_data)
             self._warn_if_root_excluded(plan_data)
@@ -191,6 +206,29 @@ class PlanGenerator:
             if base not in include_set:
                 del plan_data[k]
                 log.debug("Removed scenario (not in include list): %s", base)
+
+    def _expand_service_disruption_by_labels(self, plan_data):
+        """
+        Replace the single service-disruption-scenarios node with one node per label
+        in label_selectors, each with its own LABEL_SELECTOR. Keys become
+        service-disruption-scenarios_<slug>_<suffix> for readability.
+        """
+
+        base_key = _full_key("service-disruption-scenarios", self._suffix)
+        if base_key not in plan_data:
+            log.warning(
+                "service-disruption-scenarios key %s not in plan; skip expand by labels",
+                base_key,
+            )
+            return
+        template_node = plan_data.pop(base_key)
+        for label in self.label_selectors:
+            node = copy.deepcopy(template_node)
+            node.setdefault("env", {})["LABEL_SELECTOR"] = label
+            slug = _label_to_slug(label)
+            new_key = f"service-disruption-scenarios_{slug}_{self._suffix}"
+            plan_data[new_key] = node
+            log.debug("Added service-disruption node for label: %s", label)
 
     def _remove_excluded(self, plan_data):
         excluded_set = set(self.exclude_scenarios)

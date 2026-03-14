@@ -155,10 +155,10 @@ class TestKrKnctlRandomChaos:
 @chaos
 class TestKrKnctlServiceDisruption:
     """
-    Test suite for krknctl service-disruption-scenarios with each app label.
+    Test suite for krknctl service-disruption-scenarios across all app labels.
 
-    Generates a plan containing only root + service-disruption-scenarios,
-    parametrized over KRKN_APP_LABEL_CONSTANTS. Same flow as random chaos:
+    Generates a single plan containing root + one service-disruption-scenarios
+    node per label in KRKN_APP_LABEL_CONSTANTS. Same flow as random chaos:
     workload setup, krknctl random run in background, poll, cleanup.
     """
 
@@ -167,47 +167,41 @@ class TestKrKnctlServiceDisruption:
         [2, 3, 4],
         ids=["max-parallel-2", "max-parallel-3", "max-parallel-4"],
     )
-    @pytest.mark.parametrize(
-        "label_selector",
-        KRKN_APP_LABEL_CONSTANTS,
-        ids=[label.split("=", 1)[1] for label in KRKN_APP_LABEL_CONSTANTS],
-    )
     @polarion_id("OCS-7342")
     def test_random_service_disruption(
         self,
         krknctl_setup,
         workload_ops,
-        label_selector,
         max_parallel,
     ):
         """
-        Run krknctl service-disruption-scenarios for one app label.
+        Run krknctl service-disruption-scenarios for all app labels in one plan.
 
         Flow:
-        1. Generate plan with only root + service-disruption-scenarios and LABEL_SELECTOR=label_selector.
+        1. Generate plan with root + one service-disruption-scenarios node per label (KRKN_APP_LABEL_CONSTANTS).
         2. Start workload and background cluster operations.
         3. Run krknctl random run in background; poll until exit.
         4. Validate and cleanup workloads. Ceph crash check via fixture.
         """
         log_test_start(
-            "service disruption", f"{label_selector} max_parallel={max_parallel}"
+            "service disruption",
+            f"all_labels max_parallel={max_parallel}",
         )
 
-        # Generate plan: only service-disruption-scenarios for this label
+        # Generate plan: one service-disruption-scenarios node per label
         generator = PlanGenerator(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             include_scenarios=SERVICE_DISRUPTION_INCLUDE_SCENARIOS,
             use_random_selectors=False,
-            label_selector=label_selector,
-            scenario_overrides={
-                "service-disruption-scenarios": {
-                    "env": {"LABEL_SELECTOR": label_selector}
-                },
-            },
+            label_selectors=list(KRKN_APP_LABEL_CONSTANTS),
         )
         generator.generate()
         plan_path = generator.plan_path
-        log.info("Using plan file: %s (label_selector=%s)", plan_path, label_selector)
+        log.info(
+            "Using plan file: %s (labels=%s)",
+            plan_path,
+            [label.split("=", 1)[1] for label in KRKN_APP_LABEL_CONSTANTS],
+        )
 
         log.info("Setting up workloads for service disruption test")
         workload_ops.setup_workloads()
@@ -260,7 +254,6 @@ class TestKrKnctlServiceDisruption:
             )
 
         log.info(
-            "service disruption test completed successfully (label_selector=%s, max_parallel=%s)",
-            label_selector,
+            "service disruption test completed successfully (all labels, max_parallel=%s)",
             max_parallel,
         )
