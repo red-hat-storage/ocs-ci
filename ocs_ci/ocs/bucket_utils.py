@@ -2188,7 +2188,7 @@ def patch_replication_policy_to_bucket(
 
 
 @config.run_with_provider_context_if_available
-def update_replication_policy(bucket_name, replication_policy_dict):
+def update_replication_policy(bucket_name, replication_policy_dict, **kwargs):
     """
     Updates the replication policy of a bucket
 
@@ -2196,6 +2196,14 @@ def update_replication_policy(bucket_name, replication_policy_dict):
         bucket_name (str): The name of the bucket to update
         replication_policy_dict (dict): A dictionary containing the new replication
         policy
+
+    Optional Args passed as kwargs:
+        verify_health (bool): Whether to verify the health of the bucket after updating the replication policy.
+        Requires an ObjectBucket instance to be passed in as as the bucket_obj argument.
+
+        bucket_obj (ObjectBucket): The bucket object for verifying the health of the bucket.
+        verify_health_timeout (int): The timeout in seconds to wait for the bucket to reach a healthy state.
+
     """
     replication_policy_patch_dict = {
         "spec": {
@@ -2213,6 +2221,17 @@ def update_replication_policy(bucket_name, replication_policy_dict):
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=bucket_name,
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+
+    # Optional health verification
+    verify_health = kwargs.get("verify_health", False)
+    bucket_obj = kwargs.get("bucket_obj", None)
+    timeout = kwargs.get("verify_health_timeout", 120)
+    if verify_health and bucket_obj:
+        # Import here to avoid circular import
+        from ocs_ci.ocs.resources.objectbucket import ObjectBucket
+
+        if isinstance(bucket_obj, ObjectBucket):
+            bucket_obj.verify_health(timeout=timeout)
 
 
 @config.run_with_provider_context_if_available
