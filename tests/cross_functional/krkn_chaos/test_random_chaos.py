@@ -16,9 +16,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnctlRunner
 from ocs_ci.krkn_chaos.krknclt_helper import (
-    KRKN_APP_LABEL_CONSTANTS,
+    APPLICATION_OUTAGES_APP_LABELS,
+    APPLICATION_OUTAGES_INCLUDE_SCENARIOS,
     PlanGenerator,
-    SERVICE_DISRUPTION_INCLUDE_SCENARIOS,
 )
 from ocs_ci.krkn_chaos.krkn_helpers import ValidationHelper
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
@@ -155,11 +155,12 @@ class TestKrKnctlRandomChaos:
 @chaos
 class TestKrKnctlServiceDisruption:
     """
-    Test suite for krknctl service-disruption-scenarios across all app labels.
+    Test suite for krknctl application-outages across all app labels.
 
-    Generates a single plan containing root + one service-disruption-scenarios
-    node per label in KRKN_APP_LABEL_CONSTANTS. Same flow as random chaos:
-    workload setup, krknctl random run in background, poll, cleanup.
+    Generates a single plan containing root + one application-outages node per
+    label in APPLICATION_OUTAGES_APP_LABELS (i.e. KRKN_APP_LABEL_CONSTANTS;
+    POD_SELECTOR per label). Same flow as
+    random chaos: workload setup, krknctl random run in background, poll, cleanup.
     """
 
     @pytest.mark.parametrize(
@@ -175,10 +176,10 @@ class TestKrKnctlServiceDisruption:
         max_parallel,
     ):
         """
-        Run krknctl service-disruption-scenarios for all app labels in one plan.
+        Run krknctl application-outages for all app labels in one plan.
 
         Flow:
-        1. Generate plan with root + one service-disruption-scenarios node per label (KRKN_APP_LABEL_CONSTANTS).
+        1. Generate plan with root + one application-outages node per label (APPLICATION_OUTAGES_APP_LABELS).
         2. Start workload and background cluster operations.
         3. Run krknctl random run in background; poll until exit.
         4. Validate and cleanup workloads. Ceph crash check via fixture.
@@ -188,19 +189,19 @@ class TestKrKnctlServiceDisruption:
             f"all_labels max_parallel={max_parallel}",
         )
 
-        # Generate plan: one service-disruption-scenarios node per label
+        # Generate plan: root + one application-outages node per label (POD_SELECTOR each)
         generator = PlanGenerator(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            include_scenarios=SERVICE_DISRUPTION_INCLUDE_SCENARIOS,
+            include_scenarios=APPLICATION_OUTAGES_INCLUDE_SCENARIOS,
             use_random_selectors=False,
-            label_selectors=list(KRKN_APP_LABEL_CONSTANTS),
+            label_selectors=list(APPLICATION_OUTAGES_APP_LABELS),
         )
         generator.generate()
         plan_path = generator.plan_path
         log.info(
             "Using plan file: %s (labels=%s)",
             plan_path,
-            [label.split("=", 1)[1] for label in KRKN_APP_LABEL_CONSTANTS],
+            [label.split("=", 1)[1] for label in APPLICATION_OUTAGES_APP_LABELS],
         )
 
         log.info("Setting up workloads for service disruption test")
