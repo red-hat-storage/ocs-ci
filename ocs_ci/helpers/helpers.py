@@ -68,7 +68,6 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.utils import convert_device_size
 
-
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
@@ -1661,38 +1660,67 @@ def get_provision_time(interface, pvc_name, status="start"):
         datetime object: Time of PVC(s) creation
 
     """
-    # Define the status that need to retrieve
-    operation = "started"
-    if status.lower() == "end":
-        operation = "succeeded"
-
     this_year = str(datetime.datetime.now().year)
+
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
-    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
 
-    logs = logs.split("\n")
-    # Extract the time for the one PVC provisioning
+    # Get logs from both provisioner pods
+    logs1 = pod.get_pod_logs(pod_name[0], "csi-provisioner").split("\n")
+    logs2 = pod.get_pod_logs(pod_name[1], "csi-provisioner").split("\n")
+    logs = logs1 + logs2
+    logger.info(f"total logs loaded: {len(logs)}")
+
+    def find_events(name):
+        patterns = [
+            f'"Provisioning".*{pvc_name}',
+            f'"Started".*PVC="[^"]*{pvc_name}"',
+            f'"Succeeded".*PVC="[^"]*{pvc_name}"',
+        ]
+        # Handling via progressive fallback since side car log level is enabled to 5
+        for n in range(1000, 5001, 1000):
+            recent = logs[-n:][::-1]
+            matches = [
+                line
+                for line in recent
+                if any(re.search(p, line, re.IGNORECASE) for p in patterns)
+            ]
+            if matches:
+                results = []
+                for line in matches:
+                    try:
+                        mon_day = " ".join(line.split(" ")[0:2])
+                        results.append(f"{this_year} {mon_day}")
+                    except Exception:
+                        continue
+                return results
+        return []
+
+    # For single PVC
     if isinstance(pvc_name, str):
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
-        mon_day = " ".join(stat[0].split(" ")[0:2])
-        stat = f"{this_year} {mon_day}"
-    # Extract the time for the list of PVCs provisioning
-    if isinstance(pvc_name, list):
+        events = find_events(pvc_name)
+        if not events:
+            logger.warning(f"No matching log line found for PVC {pvc_name}")
+            return None
+        stat = events[0]
+
+    # For list of PVCs
+    elif isinstance(pvc_name, list):
         all_stats = []
-        for i in range(0, len(pvc_name)):
-            name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
-            mon_day = " ".join(stat[0].split(" ")[0:2])
-            stat = f"{this_year} {mon_day}"
-            all_stats.append(stat)
+        for pvc_i in pvc_name:
+            events = find_events(pvc_i.name)
+            all_stats.extend(events)
+
+        if not all_stats:
+            logger.warning("No matching log lines found for any PVCs")
+            return None
+
         all_stats = sorted(all_stats)
-        if status.lower() == "end":
-            stat = all_stats[-1]  # return the highest time
-        elif status.lower() == "start":
-            stat = all_stats[0]  # return the lowest time
+        if status.lower() == "end":  # return the highest time
+            stat = all_stats[-1]
+        elif status.lower() == "start":  # return the lowest time
+            stat = all_stats[0]
+
     return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
 
 
