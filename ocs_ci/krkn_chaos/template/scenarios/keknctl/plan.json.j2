@@ -58,7 +58,7 @@
       "NODE_CPU_CORE": "2",
       "NODE_CPU_PERCENTAGE": "95",
       "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
-      "TOTAL_CHAOS_DURATION": "80"
+      "TOTAL_CHAOS_DURATION": "180"
     },
     "depends_on": "root_{{ suffix }}"
   },
@@ -71,7 +71,7 @@
       "IO_WRITE_BYTES": "10m",
       "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
       "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
-      "TOTAL_CHAOS_DURATION": "60"
+      "TOTAL_CHAOS_DURATION": "180"
     },
     "depends_on": "root_{{ suffix }}"
   },
@@ -83,7 +83,7 @@
       "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
       "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
       "NUMBER_OF_WORKERS": "{{ workers | default('4') }}",
-      "TOTAL_CHAOS_DURATION": "80"
+      "TOTAL_CHAOS_DURATION": "180"
     },
     "depends_on": "root_{{ suffix }}"
   },
@@ -99,7 +99,7 @@
       "EGRESS": "true",
       "PORTS": "8080,8443",
       "PROTOCOLS": "tcp",
-      "TOTAL_CHAOS_DURATION": "60"
+      "TOTAL_CHAOS_DURATION": "180"
     },
     "depends_on": "root_{{ suffix }}"
   },
@@ -112,7 +112,7 @@
       "INSTANCE_COUNT": "1",
       "LABEL_SELECTOR": "{{ label_selector | default('app=rook-ceph-osd') }}",
       "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
-      "TEST_DURATION": "120",
+      "TEST_DURATION": "180",
       "TRAFFIC_TYPE": "[ingress,egress]",
       "WAIT_DURATION": "300"
     },
@@ -130,7 +130,7 @@
       "EGRESS": "true",
       "PORTS": "8080,8443",
       "PROTOCOLS": "tcp",
-      "TOTAL_CHAOS_DURATION": "60"
+      "TOTAL_CHAOS_DURATION": "180"
     },
     "depends_on": "root_{{ suffix }}"
   },
@@ -166,7 +166,7 @@
       "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
       "TARGET_SERVICE_LABEL": "{{ label_selector | default('app=rook-ceph-osd') }}",
       "TARGET_PORT": "8080",
-      "TOTAL_CHAOS_DURATION": "60",
+      "TOTAL_CHAOS_DURATION": "180",
       "NUMBER_OF_PODS": "2"
     },
     "depends_on": "root_{{ suffix }}"
