@@ -1,5 +1,8 @@
 import pytest
 import os
+import subprocess
+import tarfile
+import time
 import fauxfactory
 import yaml
 import logging
@@ -7,9 +10,11 @@ from ocs_ci.ocs.constants import (
     KRKN_DIR,
     KRKN_CHAOS_DIR,
     KRKN_CHAOS_SCENARIO_DIR,
+    KRKNCTL_BINARY_TAR,
+    KRKNCTL,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, download_with_retries
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper
 from ocs_ci.ocs import constants
@@ -173,6 +178,125 @@ def krkn_setup():
     log.info("  - Krkn directory: %s", KRKN_DIR)
     log.info("  - Krkn venv: %s", krkn_venv)
     log.info("  - Krkn run script: %s", krkn_run_script)
+
+
+@pytest.fixture(scope="session")
+def krknctl_setup():
+    """
+    Set up krknctl binary and podman for krknctl chaos testing.
+
+    1. Download the krknctl tar from KRKNCTL_BINARY_TAR and extract it into
+       the ocs_ci data directory (KRKNCTL). The tar contains only the
+       krknctl binary, so it can be run from data/krknctl/krknctl.
+    2. Make the krknctl binary executable.
+    3. Enable and start the podman service so it is running.
+
+    This fixture does not return anything.
+    """
+    os.makedirs(KRKNCTL, exist_ok=True)
+
+    tar_filename = os.path.basename(KRKNCTL_BINARY_TAR)
+    tar_path = os.path.join(KRKNCTL, tar_filename)
+    krknctl_binary = os.path.join(KRKNCTL, "krknctl")
+
+    if os.path.exists(krknctl_binary):
+        log.info("Removing existing krknctl binary at %s", krknctl_binary)
+        os.remove(krknctl_binary)
+
+    if not os.path.exists(tar_path):
+        log.info("Downloading krknctl binary from %s", KRKNCTL_BINARY_TAR)
+        downloaded = download_with_retries(KRKNCTL_BINARY_TAR, tar_path)
+        if not downloaded:
+            raise CommandFailed(
+                f"Failed to download krknctl tar from {KRKNCTL_BINARY_TAR}"
+            )
+    else:
+        log.info("Using existing krknctl tar at %s", tar_path)
+
+    log.info("Extracting krknctl tar into %s", KRKNCTL)
+    with tarfile.open(tar_path, "r:gz") as tf:
+        tf.extractall(path=KRKNCTL)
+
+    if not os.path.isfile(krknctl_binary):
+        raise CommandFailed(
+            f"krknctl binary not found at {krknctl_binary} after extracting {tar_path}"
+        )
+
+    log.info("Making krknctl binary executable: %s", krknctl_binary)
+    os.chmod(krknctl_binary, 0o755)
+
+    # Enable and start podman so krknctl can run scenarios in containers.
+    # Use sudo so this works when the test runs as a non-root user (e.g. jenkins).
+    # Enable both podman.socket and podman.service so the API is available to krknctl.
+    log.info("Enabling and starting podman (socket and service) via sudo")
+    podman_ok = False
+    for service_name in ("podman.socket", "podman"):
+        try:
+            run_cmd(f"sudo systemctl enable --now {service_name}", timeout=30)
+            run_cmd(f"sudo systemctl is-active --quiet {service_name}", timeout=5)
+            log.info("Podman '%s' is enabled and running", service_name)
+            podman_ok = True
+        except (CommandFailed, Exception) as e:
+            log.debug("Could not enable/start %s: %s", service_name, e)
+    if not podman_ok:
+        log.warning(
+            "Could not enable/start podman.socket or podman; "
+            "krknctl may require podman to be running."
+        )
+
+    # krknctl runs scenarios in containers; require podman or docker to be usable.
+    container_runtime_ok = False
+    for runtime, check_cmd in (("podman", "podman info"), ("docker", "docker info")):
+        if runtime == "podman":
+            for service_name in ("podman.socket", "podman"):
+                try:
+                    run_cmd(f"sudo systemctl start {service_name}", timeout=15)
+                    log.info("Started podman: %s", service_name)
+                except (CommandFailed, Exception) as e:
+                    log.debug("Could not start %s: %s", service_name, e)
+        try:
+            run_cmd(check_cmd, timeout=15, ignore_error=False)
+            log.info("Container runtime '%s' is available for krknctl", runtime)
+            container_runtime_ok = True
+            break
+        except (CommandFailed, Exception) as e:
+            log.debug("Container runtime '%s' not available: %s", runtime, e)
+            continue
+    if not container_runtime_ok:
+        pytest.skip(
+            "Neither podman nor docker is available or usable. "
+            "krknctl requires a container runtime to run chaos scenarios. "
+            "Install podman or docker and ensure the service is running (e.g. systemctl start podman)."
+        )
+
+    # krknctl expects a container API socket (DOCKER_HOST). For rootless podman, start the
+    # user's podman API service so the socket exists and set DOCKER_HOST for krknctl subprocesses.
+    if os.geteuid() != 0:
+        xdg_runtime = os.environ.get("XDG_RUNTIME_DIR") or os.path.join(
+            "/run", "user", str(os.getuid())
+        )
+        rootless_socket = os.path.join(xdg_runtime, "podman", "podman.sock")
+        if not os.path.exists(rootless_socket):
+            try:
+                log.info("Starting rootless podman system service for krknctl")
+                _proc = subprocess.Popen(
+                    ["podman", "system", "service", "--time=3600"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=os.environ.copy(),
+                )
+                for _ in range(10):
+                    time.sleep(0.5)
+                    if os.path.exists(rootless_socket):
+                        break
+                if not os.path.exists(rootless_socket):
+                    _proc.terminate()
+                    log.warning("Rootless podman socket did not appear")
+            except Exception as e:
+                log.debug("Could not start rootless podman service: %s", e)
+        if os.path.exists(rootless_socket):
+            os.environ["DOCKER_HOST"] = f"unix://{rootless_socket}"
+            log.info("Set DOCKER_HOST=%s for krknctl", os.environ["DOCKER_HOST"])
 
 
 @pytest.fixture(scope="session")

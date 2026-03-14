@@ -1,0 +1,174 @@
+{
+  "_comment": {
+    "_comment": "Catalog of krknctl scenarios. Each node needs depends_on (string) except the root. Run 'krknctl describe <name>' for env schema."
+  },
+  "root_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:dummy-scenario",
+    "name": "dummy-scenario",
+    "env": {
+      "END": "10",
+      "EXIT_STATUS": "0"
+    }
+  },
+  "application-outages_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "600",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{{ pod_selector | default('{app: rook-ceph-mgr}') }}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "container-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "60",
+      "LABEL_SELECTOR": "{{ label_selector | default('app=rook-ceph-osd') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "network-chaos_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:network-chaos",
+    "name": "network-chaos",
+    "env": {
+      "DURATION": "300",
+      "EGRESS": "{bandwidth: 100mbit}",
+      "EXECUTION": "parallel",
+      "INSTANCE_COUNT": "1",
+      "LABEL_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TRAFFIC_TYPE": "egress",
+      "WAIT_DURATION": "300"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-cpu-hog_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-cpu-hog",
+    "name": "node-cpu-hog",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_CPU_CORE": "2",
+      "NODE_CPU_PERCENTAGE": "95",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-io-hog_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-io-hog",
+    "name": "node-io-hog",
+    "env": {
+      "IO_BLOCK_SIZE": "1m",
+      "IO_WORKERS": "5",
+      "IO_WRITE_BYTES": "10m",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-memory-hog_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-memory-hog",
+    "name": "node-memory-hog",
+    "env": {
+      "MEMORY_CONSUMPTION_PERCENTAGE": "90%",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "NUMBER_OF_WORKERS": "{{ workers | default('4') }}",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-network-filter_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-network-filter",
+    "name": "node-network-filter",
+    "env": {
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "INSTANCE_COUNT": "1",
+      "EXECUTION": "parallel",
+      "INGRESS": "true",
+      "EGRESS": "true",
+      "PORTS": "8080,8443",
+      "PROTOCOLS": "tcp",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-network-chaos_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-chaos",
+    "name": "pod-network-chaos",
+    "env": {
+      "EGRESS_PORTS": "[]",
+      "INGRESS_PORTS": "[]",
+      "INSTANCE_COUNT": "1",
+      "LABEL_SELECTOR": "{{ label_selector | default('app=rook-ceph-osd') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TEST_DURATION": "180",
+      "TRAFFIC_TYPE": "[ingress,egress]",
+      "WAIT_DURATION": "300"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-network-filter_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-filter",
+    "name": "pod-network-filter",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{{ label_selector | default('app=rook-ceph-osd') }}",
+      "INSTANCE_COUNT": "1",
+      "EXECUTION": "parallel",
+      "INGRESS": "true",
+      "EGRESS": "true",
+      "PORTS": "8080,8443",
+      "PROTOCOLS": "tcp",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "KILL_TIMEOUT": "180",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ pod_label | default('app=rook-ceph-osd') }}",
+      "WAIT_DURATION": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "service-disruption-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:service-disruption-scenarios",
+    "name": "service-disruption-scenarios",
+    "env": {
+      "DELETE_COUNT": "1",
+      "LABEL_SELECTOR": "{{ label_selector | default('app=rook-ceph-osd') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "RUNS": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "syn-flood_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:syn-flood",
+    "name": "syn-flood",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TARGET_SERVICE_LABEL": "{{ label_selector | default('app=rook-ceph-osd') }}",
+      "TARGET_PORT": "8080",
+      "TOTAL_CHAOS_DURATION": "180",
+      "NUMBER_OF_PODS": "2"
+    },
+    "depends_on": "root_{{ suffix }}"
+  }
+}
