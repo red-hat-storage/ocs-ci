@@ -33,7 +33,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import TimeoutSampler, mask_secrets
 from time import sleep
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class OBC(object):

@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
     ms_provider_required,
 )
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 @yellow_squad

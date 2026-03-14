@@ -26,7 +26,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 def link_spec_volume(spec_dict, volume_name, pvc_name):

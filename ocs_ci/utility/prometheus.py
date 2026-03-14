@@ -15,7 +15,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutIterator
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 # TODO(fbalak): if ignore_more_occurences is set to False then tests are flaky.
