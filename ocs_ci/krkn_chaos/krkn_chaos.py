@@ -1403,6 +1403,16 @@ class KrKnctlRunner:
                 finally:
                     proc.stdout.close()
 
+        def _heartbeat(proc, path, interval=60):
+            """Log periodically while krknctl is still running so monitoring is visible."""
+            while proc.poll() is None:
+                time.sleep(interval)
+                if proc.poll() is None:
+                    log.info(
+                        "krknctl is still running (monitoring; log file: %s)",
+                        path,
+                    )
+
         reader = threading.Thread(
             target=_stream_stdout,
             args=(process, log_path, echo_to_log),
@@ -1410,6 +1420,13 @@ class KrKnctlRunner:
             daemon=True,
         )
         reader.start()
+        heartbeat = threading.Thread(
+            target=_heartbeat,
+            args=(process, log_path),
+            name="krknctl-heartbeat",
+            daemon=True,
+        )
+        heartbeat.start()
         return process, log_path
 
     def list_scenarios(self, *args, timeout=60, ignore_error=False, **flags):
