@@ -235,7 +235,7 @@ class PlanGenerator:
         """
         Replace the single application-outages node with one node per label in
         label_selectors, each with its own POD_SELECTOR. Keys become
-        application-outages_<short_slug> (e.g. application-outages_osd).
+        application-outages_<short_slug>_<suffix> (e.g. application-outages_osd_xxyyzz).
         """
         base_key = _full_key("application-outages", self._suffix)
         if base_key not in plan_data:
@@ -252,7 +252,7 @@ class PlanGenerator:
             if "depends_on" in node:
                 node["depends_on"] = root_key
             short_slug = _label_to_short_slug(label)
-            new_key = f"application-outages_{short_slug}"
+            new_key = f"application-outages_{short_slug}_{self._suffix}"
             plan_data[new_key] = node
             log.debug("Added application-outages node for label: %s", label)
 
