@@ -5,6 +5,7 @@ from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import generic_locators
 from ocs_ci.utility.utils import get_running_ocp_version
+from ocs_ci.ocs.exceptions import TimeoutException
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
 from ocs_ci.utility import version
@@ -59,6 +60,13 @@ class PvcUI(PageNavigator):
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
+
+        # Choose With Form if given the choice
+        try:
+            logger.info("Choose With form if given the choice")
+            self.do_click(self.pvc_loc["pvc_create_with_form"])
+        except TimeoutException:
+            logger.info("Proceed to PVC creation")
 
         logger.info("Click on Storage Class selection")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
