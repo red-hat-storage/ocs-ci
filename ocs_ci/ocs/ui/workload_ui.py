@@ -436,27 +436,49 @@ def compare_mem_usage(
 
 def wait_for_container_status_ready(pod: Pod):
     """
-    Wait for container of the pod move to Running state
-    :param pod: a pod object of the pod which container is to be checked
-    :return: status of the container
+    Wait for all containers of the pod to move to ready state.
+
+    :param pod: a pod object of the pod whose containers are to be checked
+    :return: True if all containers are ready within timeout, False otherwise
     """
-    logger.info(f"Wait for container of the pod {pod.name} move to Running state")
+    logger.info(f"Wait for all containers of the pod {pod.name} to be ready")
 
     def do_wait_for_container_status_ready(pod_obj: Pod, timeout=300):
-        logger.info(f"Waiting for container status ready for {timeout}s")
+        logger.info(
+            f"Waiting for all containers in pod {pod_obj.name} to be ready for {timeout}s"
+        )
         start_time = time.time()
-        while (
-            pod_obj.get()["status"]["containerStatuses"][0]["ready"] is False
-            and time.time() - start_time < timeout
-        ):
-            logger.info("Waiting for container status ready")
+        all_ready = False
+        while not all_ready and (time.time() - start_time < timeout):
+            pod_status = pod_obj.get().get("status") or {}
+            container_statuses = pod_status.get("containerStatuses") or []
+            if not container_statuses:
+                logger.info("No container statuses yet, waiting...")
+                time.sleep(5)
+                continue
+            container_names = [cs.get("name", "?") for cs in container_statuses]
+            all_ready = all(cs.get("ready", False) for cs in container_statuses)
+            if all_ready:
+                logger.info(
+                    f"All container(s) in pod {pod_obj.name} are ready: {container_names}"
+                )
+                return True
+            not_ready = [
+                cs.get("name", "?")
+                for cs in container_statuses
+                if not cs.get("ready", False)
+            ]
+            logger.info(
+                f"Waiting for container(s) to be ready in pod {pod_obj.name}: {not_ready}"
+            )
             time.sleep(5)
-        return pod_obj.get()["status"]["containerStatuses"][0]["ready"]
+        return False
 
     retry(
         CommandFailed,
         text_in_exception="can't read container state of deployment",
-        func=do_wait_for_container_status_ready,
+    )(
+        do_wait_for_container_status_ready
     )(pod)
 
 
