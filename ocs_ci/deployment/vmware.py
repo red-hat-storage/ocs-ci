@@ -1062,6 +1062,111 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"cluster --type merge --patch {patch}"
             )
 
+        def get_nodes_missing_provider_id(self):
+            """
+            Get nodes that are missing their providerID.
+
+            Returns:
+                dict: Map of node name -> node object for nodes without
+                    providerID set, or empty dict if all nodes have it.
+            """
+            kubeconfig = self.kubeconfig
+            nodes_json = json.loads(
+                run_cmd(f"oc --kubeconfig {kubeconfig} get nodes -o json")
+            )
+
+            nodes_missing_provider_id = {}
+            for node in nodes_json["items"]:
+                node_name = node["metadata"]["name"]
+                if not node.get("spec", {}).get("providerID"):
+                    nodes_missing_provider_id[node_name] = node
+
+            if not nodes_missing_provider_id:
+                logger.info("All nodes already have providerID set")
+            else:
+                logger.info(
+                    f"Nodes missing providerID: "
+                    f"{list(nodes_missing_provider_id.keys())}"
+                )
+
+            return nodes_missing_provider_id
+
+        def set_provider_id_and_remove_taint(self, nodes_missing_provider_id):
+            """
+            Set providerID on nodes and remove the CCM uninitialized taint.
+
+            When multiple VMs share the same name across different resource
+            pools in the same vCenter datacenter, the vSphere Cloud Controller
+            Manager fails to initialize nodes because its name-based VM lookup
+            returns multiple results. This leaves the node with the taint
+            ``node.cloudprovider.kubernetes.io/uninitialized=true:NoSchedule``
+            and no ``providerID`` set.
+
+            This method queries vSphere for VM UUIDs (scoped to the cluster's
+            resource pool), patches the providerID on the given nodes, and
+            removes the uninitialized taint.
+
+            Args:
+                nodes_missing_provider_id (dict): Map of node name -> node
+                    object for nodes that need providerID patched.
+            """
+            vsphere = VSPHERE(
+                config.ENV_DATA["vsphere_server"],
+                config.ENV_DATA["vsphere_user"],
+                config.ENV_DATA["vsphere_password"],
+            )
+            pool = config.ENV_DATA["cluster_name"]
+            dc = config.ENV_DATA["vsphere_datacenter"]
+            cluster = config.ENV_DATA["vsphere_cluster"]
+
+            vms = vsphere.get_all_vms_in_pool(pool, dc, cluster)
+            if not vms:
+                logger.warning(
+                    f"No VMs found in resource pool '{pool}', "
+                    "skipping providerID patching"
+                )
+                return
+
+            kubeconfig = self.kubeconfig
+
+            patched_nodes = []
+            for vm in vms:
+                vm_name = vm.name
+                if vm_name in nodes_missing_provider_id:
+                    vm_uuid = vm.config.uuid
+                    provider_id = f"vsphere://{vm_uuid}"
+                    logger.info(
+                        f"Patching node '{vm_name}' with " f"providerID '{provider_id}'"
+                    )
+                    patch = f'{{"spec": {{"providerID": "{provider_id}"}}}}'
+                    run_cmd(
+                        f"oc --kubeconfig {kubeconfig} patch node "
+                        f"{vm_name} -p '{patch}'"
+                    )
+                    logger.info(f"Successfully patched providerID on node '{vm_name}'")
+                    patched_nodes.append(vm_name)
+
+            # Remove the CCM uninitialized taint from patched nodes
+            for node_name in patched_nodes:
+                node_data = nodes_missing_provider_id[node_name]
+                taints = node_data.get("spec", {}).get("taints", [])
+                has_ccm_taint = any(
+                    t.get("key") == constants.CCM_UNINITIALIZED_TAINT for t in taints
+                )
+                if has_ccm_taint:
+                    logger.info(
+                        f"Removing '{constants.CCM_UNINITIALIZED_TAINT}' "
+                        f"taint from node '{node_name}'"
+                    )
+                    run_cmd(
+                        f"oc --kubeconfig {kubeconfig} adm taint node "
+                        f"{node_name} "
+                        f"{constants.CCM_UNINITIALIZED_TAINT}-"
+                    )
+                    logger.info(
+                        f"Successfully removed taint from " f"node '{node_name}'"
+                    )
+
         def deploy(self, log_cli_level="DEBUG"):
             """
             Deployment specific to OCP cluster on this platform
@@ -1212,6 +1317,18 @@ class VSPHEREUPI(VSPHEREBASE):
                     )
 
                     vsphere.add_interface_to_compute_vms()
+
+                # Patch providerID on nodes that are missing it.
+                # The vSphere CCM sets providerID by looking up VMs by name,
+                # which fails when multiple VMs share the same name across
+                # different resource pools in the same datacenter. Setting
+                # providerID explicitly makes the CCM use UUID-based lookup
+                # and avoids the "Multiple VMs found" error that leaves the
+                # node tainted with NoSchedule.
+                nodes_missing = self.get_nodes_missing_provider_id()
+                if nodes_missing:
+                    self.set_provider_id_and_remove_taint(nodes_missing)
+
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
