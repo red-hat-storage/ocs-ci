@@ -6578,9 +6578,46 @@ def remove_toleration():
     return success
 
 
+def wait_for_reclaimspace_cronjob_annotation(pvc_obj, timeout=120):
+    """
+    Wait for the CSI addons controller to create the ReclaimSpaceCronJob.
+
+    Args:
+        pvc_obj (object): PersistentVolumeClaim (PVC) object.
+        timeout (int): Max seconds to wait (default 120).
+
+    Raises:
+        TimeoutExpiredError: If neither annotation nor CRD is found within timeout.
+    """
+    cronjob_annotation_key = "reclaimspace.csiaddons.openshift.io/cronjob"
+    default_cronjob_name = f"{pvc_obj.name}-reclaimspace"
+
+    def check():
+        pvc_obj.reload()
+        annotations = (pvc_obj.data.get("metadata") or {}).get("annotations") or {}
+        cron_job_name = annotations.get(cronjob_annotation_key) or default_cronjob_name
+        cronjob_obj = OCP(
+            kind=constants.RECLAIMSPACECRONJOB,
+            namespace=pvc_obj.namespace,
+            resource_name=cron_job_name,
+        )
+        if cronjob_obj.is_exist():
+            return True
+        return None
+
+    for _ in TimeoutSampler(timeout=timeout, sleep=5, func=check):
+        if _:
+            logger.info(f"ReclaimSpaceCronJob found for PVC '{pvc_obj.name}'")
+            return
+    # Unreachable: TimeoutSampler raises TimeoutExpiredError when timeout is reached
+
+
 def get_reclaimspacecronjob_for_pvc(pvc_obj):
     """
     Retrieve the ReclaimSpaceCronJob object associated with a given PVC.
+
+    Uses the PVC annotation (reclaimspace.csiaddons.openshift.io/cronjob) when set.
+    If the annotation is missing, falls back to naming convention: {pvc_name}-reclaimspace.
 
     Args:
         pvc_obj (object): PersistentVolumeClaim (PVC) object.
@@ -6589,28 +6626,42 @@ def get_reclaimspacecronjob_for_pvc(pvc_obj):
         object: OCP object representing the ReclaimSpaceCronJob associated with the PVC.
 
     Raises:
-        ValueError: If the PVC does not have the required annotation for ReclaimSpaceCronJob.
+        ValueError: If the CronJob CRD cannot be found (no annotation and no CRD by name).
     """
     # Reload PVC object if annotations are missing
-    if "annotations" not in pvc_obj.data["metadata"]:
+    if "annotations" not in pvc_obj.data.get("metadata", {}):
         pvc_obj.reload()
 
-    # Retrieve the CronJob name from annotations
-    cron_job_name = pvc_obj.data["metadata"]["annotations"].get(
-        "reclaimspace.csiaddons.openshift.io/cronjob"
-    )
+    annotations = (pvc_obj.data.get("metadata") or {}).get("annotations") or {}
+    cron_job_name = annotations.get("reclaimspace.csiaddons.openshift.io/cronjob")
+
     if not cron_job_name:
-        logger.error(f"PVC '{pvc_obj.name}' lacks annotation for reclaimspace cronjob.")
-        raise ValueError("PVC has no annotation for reclaimspace cronjob")
+        logger.warning(
+            f"PVC '{pvc_obj.name}' lacks reclaimspace cronjob annotation. "
+            "Trying naming convention '{pvc_name}-reclaimspace'."
+        )
+        cron_job_name = f"{pvc_obj.name}-reclaimspace"
 
-    logger.info(f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'")
+    logger.info(
+        f"Looking for ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'"
+    )
 
-    # Create and return the CronJob object
-    return OCP(
+    cronjob_obj = OCP(
         kind=constants.RECLAIMSPACECRONJOB,
         namespace=pvc_obj.namespace,
         resource_name=cron_job_name,
     )
+
+    if not cronjob_obj.is_exist():
+        logger.error(
+            f"ReclaimSpaceCronJob '{cron_job_name}' does not exist for PVC '{pvc_obj.name}'"
+        )
+        raise ValueError(
+            f"PVC has no annotation for reclaimspace cronjob and CRD '{cron_job_name}' not found"
+        )
+
+    logger.info(f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'")
+    return cronjob_obj
 
 
 def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
@@ -6628,6 +6679,9 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
 
     for pvc_obj in pvc_objs:
         logger.info(f"{action} ReclaimSpace operation for PVC '{pvc_obj.name}'")
+
+        # Wait for CSI addons to create ReclaimSpaceCronJob and set PVC annotation
+        wait_for_reclaimspace_cronjob_annotation(pvc_obj)
 
         # Retrieve the associated CronJob object
         cron_obj = get_reclaimspacecronjob_for_pvc(pvc_obj)
@@ -6652,6 +6706,26 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
             )
 
         cron_obj.patch(params=suspend_patch, format_type="json")
+
+    # Restart CSI Addons controller manager so it picks up the state change
+    namespace = (
+        pvc_objs[0].namespace
+        if pvc_objs
+        else config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+    )
+    try:
+        logger.info("Restarting CSI Addons controller manager pods...")
+        pod.restart_pods_having_label(
+            label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+            namespace=namespace,
+        )
+        logger.info("CSI Addons controller manager pods restarted.")
+    except Exception as e:
+        logger.warning(
+            "Could not restart CSI Addons controller manager: %s. "
+            "Controller may still pick up state change via watch.",
+            e,
+        )
 
     return True
 
