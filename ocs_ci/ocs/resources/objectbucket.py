@@ -475,8 +475,7 @@ class MCGS3Bucket(ObjectBucket):
         except botocore.exceptions.ClientError as e:
             if e.response["Error"]["Code"] == "BucketAlreadyOwnedByYou":
                 logger.info(f"Bucket {self.name} already exists")
-            else:
-                raise e
+            raise e
 
     def internal_delete(self):
         """
