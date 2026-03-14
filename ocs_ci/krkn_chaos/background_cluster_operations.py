@@ -30,6 +30,7 @@ from collections import defaultdict
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.resources import job as job_helpers
 from ocs_ci.ocs import node as node_helpers
 from ocs_ci.ocs.exceptions import (
@@ -443,14 +444,13 @@ class BackgroundClusterOperations:
             log.info(f"Creating clone of PVC {workload_pvc.name}")
 
             # Determine clone YAML based on provisioner
-            if "rbd" in workload_pvc.provisioner:
+            provisioner = getattr(workload_pvc, "provisioner", "") or ""
+            if "rbd" in provisioner:
                 clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
-            elif "cephfs" in workload_pvc.provisioner:
+            elif "cephfs" in provisioner:
                 clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             else:
-                log.warning(
-                    f"Unsupported provisioner for clone: {workload_pvc.provisioner}"
-                )
+                log.warning(f"Unsupported provisioner for clone: {provisioner!r}")
                 return
 
             # Get actual capacity from source PVC (not converted size)
@@ -921,13 +921,15 @@ class BackgroundClusterOperations:
 
                 if hasattr(workload, "pvc_objs"):
                     pvc_list = workload.pvc_objs[:1]  # Take first PVC
-                    workload_pvcs.extend(pvc_list)
+                    workload_pvcs.extend(p for p in pvc_list if p is not None)
                     log.debug(f"  → Found {len(pvc_list)} PVCs in pvc_objs")
                 elif hasattr(workload, "pvc_obj"):
-                    workload_pvcs.append(workload.pvc_obj)
+                    if workload.pvc_obj is not None:
+                        workload_pvcs.append(workload.pvc_obj)
                     log.debug("  → Found 1 PVC in pvc_obj")
                 elif hasattr(workload, "pvc"):
-                    workload_pvcs.append(workload.pvc)
+                    if workload.pvc is not None:
+                        workload_pvcs.append(workload.pvc)
                     log.debug("  → Found 1 PVC in pvc")
                 else:
                     log.debug("  → No PVC attributes found")
@@ -945,16 +947,46 @@ class BackgroundClusterOperations:
             log.info("Creating snapshots from workload PVCs")
             snapshots = []
             for pvc_obj in workload_pvcs:
+                if pvc_obj is None:
+                    log.debug("Skipping None PVC reference")
+                    continue
+                # Resolve to PVC instance if workload stored OCS (e.g. VdbenchWorkload.pvc)
+                if not hasattr(pvc_obj, "create_snapshot"):
+                    pvc_name = getattr(pvc_obj, "name", None)
+                    pvc_namespace = getattr(pvc_obj, "namespace", self.namespace)
+                    if pvc_name and pvc_namespace:
+                        try:
+                            resolved = pvc_helpers.get_pvc_objs(
+                                [pvc_name], namespace=pvc_namespace
+                            )
+                            if resolved:
+                                pvc_obj = resolved[0]
+                            else:
+                                log.warning(
+                                    f"Could not resolve PVC {pvc_name} in {pvc_namespace}, skipping"
+                                )
+                                continue
+                        except Exception as resolve_e:
+                            log.warning(
+                                f"Could not resolve PVC {pvc_name}: {resolve_e}, skipping"
+                            )
+                            continue
+                    else:
+                        log.warning(
+                            "PVC reference has no name/namespace, skipping snapshot"
+                        )
+                        continue
                 try:
                     pvc_obj.reload()
                     snapshot_obj = pvc_obj.create_snapshot(wait=True, timeout=180)
-                    snapshots.append(snapshot_obj)
+                    snapshots.append((snapshot_obj, pvc_obj))
                     self._resources_to_cleanup.append(snapshot_obj)
                     log.info(
                         f"Created snapshot {snapshot_obj.name} from PVC {pvc_obj.name}"
                     )
                 except Exception as e:
-                    log.error(f"Failed to create snapshot from PVC {pvc_obj.name}: {e}")
+                    pvc_name = getattr(pvc_obj, "name", None) or "unknown"
+                    log.error(f"Failed to create snapshot from PVC {pvc_name}: {e}")
                     continue
 
             if not snapshots:
@@ -966,10 +998,9 @@ class BackgroundClusterOperations:
             # Step 2: Restore PVCs from snapshots
             log.info("Restoring PVCs from snapshots")
             restored_pvcs = []
-            for idx, snapshot_obj in enumerate(snapshots):
+            for snapshot_obj, source_pvc in snapshots:
                 try:
                     # Get actual capacity from source PVC
-                    source_pvc = workload_pvcs[idx]
                     source_pvc.reload()
                     source_capacity = (
                         source_pvc.data.get("status", {})
@@ -1049,7 +1080,7 @@ class BackgroundClusterOperations:
                 except Exception as e:
                     log.error(f"Failed to cleanup restored PVCs: {e}")
 
-            for snapshot_obj in snapshots:
+            for snapshot_obj, _ in snapshots:
                 try:
                     snapshot_obj.delete()
                     snapshot_obj.ocp.wait_for_delete(
@@ -1068,6 +1099,31 @@ class BackgroundClusterOperations:
     # ==========================================================================
     # Helper Methods
     # ==========================================================================
+
+    def _resolve_to_pvc(self, pvc_ref):
+        """
+        Resolve workload PVC reference (OCS or PVC) to a PVC instance.
+
+        Workloads like VdbenchWorkload store generic OCS objects which do not have
+        create_snapshot() or provisioner; this helper returns a proper PVC instance.
+
+        Returns:
+            PVC instance or None
+        """
+        if pvc_ref is None:
+            return None
+        # Only trust ref if it is actually a PVC (has provisioner, create_snapshot, etc.)
+        if isinstance(pvc_ref, PVC):
+            return pvc_ref
+        pvc_name = getattr(pvc_ref, "name", None)
+        pvc_namespace = getattr(pvc_ref, "namespace", self.namespace)
+        if not pvc_name or not pvc_namespace:
+            return None
+        try:
+            resolved = pvc_helpers.get_pvc_objs([pvc_name], namespace=pvc_namespace)
+            return resolved[0] if resolved else None
+        except Exception:
+            return None
 
     def _get_random_workload_pvc(self, provisioner_type: Optional[str] = None):
         """
@@ -1093,11 +1149,16 @@ class BackgroundClusterOperations:
                 continue
 
             for pvc_obj in workload_pvcs:
+                if pvc_obj is None:
+                    continue
+                resolved = self._resolve_to_pvc(pvc_obj)
+                if resolved is None:
+                    continue
                 if provisioner_type:
-                    if provisioner_type in pvc_obj.provisioner:
-                        pvcs.append(pvc_obj)
+                    if provisioner_type in getattr(resolved, "provisioner", ""):
+                        pvcs.append(resolved)
                 else:
-                    pvcs.append(pvc_obj)
+                    pvcs.append(resolved)
 
         return random.choice(pvcs) if pvcs else None
 
@@ -1111,7 +1172,8 @@ class BackgroundClusterOperations:
         from ocs_ci.utility import templating
 
         # Determine interface type based on PVC provisioner
-        if "rbd" in pvc_obj.provisioner.lower():
+        provisioner = getattr(pvc_obj, "provisioner", "") or ""
+        if "rbd" in provisioner.lower():
             pod_dict_path = constants.CSI_RBD_POD_YAML
         else:
             pod_dict_path = constants.CSI_CEPHFS_POD_YAML

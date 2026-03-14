@@ -48,6 +48,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     HogScenarios,
     PodScenarios,
     NodeScenarios,
+    convert_signal_to_number,
 )
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 from ocs_ci.framework import config
@@ -349,6 +350,9 @@ class ContainerScenarioHelper(BaseScenarioHelper):
         if components is None:
             components = self.DEFAULT_COMPONENTS
 
+        # Convert signal name to number
+        kill_signal_number = convert_signal_to_number(kill_signal)
+
         scenarios = []
         for component in components:
             # Use parent class method to get label selector
@@ -363,7 +367,7 @@ class ContainerScenarioHelper(BaseScenarioHelper):
                 "namespace": namespace,
                 "label_selector": label_selector,
                 "container_name": container_name,
-                "kill_signal": kill_signal,
+                "kill_signal": kill_signal_number,
                 "count": count,
                 "expected_recovery_time": expected_recovery_time,
                 "description": component["description"],
