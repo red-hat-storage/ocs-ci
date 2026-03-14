@@ -176,6 +176,29 @@ def create_cluster(cluster_name, version_str, region):
         wait_operator_roles(prefix)
         cmd += f" --operator-roles-prefix {prefix} "
         cmd += " --hosted-cp "
+        installer_role_arn = (
+            f"arn:aws:iam::{aws_account_id}:role/"
+            f"{account_roles_prefix}-HCP-ROSA-Installer-Role"
+        )
+        support_role_arn = (
+            f"arn:aws:iam::{aws_account_id}:role/"
+            f"{account_roles_prefix}-HCP-ROSA-Support-Role"
+        )
+        worker_role_arn = (
+            f"arn:aws:iam::{aws_account_id}:role/"
+            f"{account_roles_prefix}-HCP-ROSA-Worker-Role"
+        )
+        cmd += (
+            f" --role-arn {installer_role_arn}"
+            f" --support-role-arn {support_role_arn}"
+            f" --worker-iam-role-arn {worker_role_arn}"
+        )
+        logger.info(
+            f"Explicit IAM role ARNs for cluster '{cluster_name}': "
+            f"installer={installer_role_arn}, "
+            f"support={support_role_arn}, "
+            f"worker={worker_role_arn}"
+        )
 
     log_step("Running create rosa cluster command")
     utils.run_cmd(cmd, timeout=create_timeout)
