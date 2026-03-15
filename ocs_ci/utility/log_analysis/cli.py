@@ -83,6 +83,12 @@ def main(argv=None):
         help="Directory for caching analysis results",
     )
     parser.add_argument(
+        "--cache-ttl",
+        type=int,
+        default=720,
+        help="Cache time-to-live in hours (default: 720 = 30 days)",
+    )
+    parser.add_argument(
         "--max-budget-usd",
         type=float,
         default=0.50,
@@ -176,6 +182,7 @@ def main(argv=None):
             max_budget_usd=args.max_budget_usd,
             max_failures=args.max_failures,
             cache_dir=args.cache_dir,
+            cache_ttl=args.cache_ttl,
             known_issues_file=args.known_issues_file,
             no_jira=args.no_jira,
             record_history=args.record_history,

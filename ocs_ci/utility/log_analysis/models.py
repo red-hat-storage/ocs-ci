@@ -113,6 +113,8 @@ class FailureAnalysis:
     matched_known_issues: list = field(default_factory=list)
     suggested_jira_issues: list = field(default_factory=list)
     recommended_action: str = ""
+    session_id: str = ""
+    session_file: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -128,6 +130,8 @@ class FailureAnalysis:
             "matched_known_issues": self.matched_known_issues,
             "suggested_jira_issues": self.suggested_jira_issues,
             "recommended_action": self.recommended_action,
+            "session_id": self.session_id,
+            "session_file": self.session_file,
         }
 
     @staticmethod

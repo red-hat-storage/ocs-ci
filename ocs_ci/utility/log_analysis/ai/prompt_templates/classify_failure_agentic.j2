@@ -20,132 +20,170 @@ the must-gather data collected at the time of failure.
 ```
 {% endif %}
 
+{% if test_log_url %}
+## Per-Test Log Directory
+The full test log is available at: `{{ test_log_url }}`
+Use `curl -sk` to fetch specific log files if you need more context than the excerpts above.
+{% endif %}
+
 ## Must-Gather Investigation
 
 You have access to the must-gather data collected when this test failed.
-Use `curl -sk` to explore the HTTP directory listings and fetch specific files.
+The paths below have been pre-resolved — go directly to the data.
 
-**Must-gather base URL**: `{{ must_gather_url }}`
+{% if mg_type == "local" %}
+### Access Method: Local Files
+The must-gather has been extracted to the local filesystem. Use `cat`, `head`, `tail`, `grep` to read files.
 
-### Directory Structure
+**OCS must-gather data**: `{{ ocs_mg }}`
+{% if ocp_mg %}
+**OCP must-gather data**: `{{ ocp_mg }}`
+{% endif %}
+**Cluster ID**: `{{ cluster_id }}`
+{% elif mg_type == "http" %}
+### Access Method: HTTP
+Use `curl -sk` to fetch files from the HTTP server.
 
-The base URL contains a cluster ID directory (e.g. `j049vu1ip6cs33uba/`). Inside it:
+**OCS must-gather data**: `{{ ocs_mg }}`
+{% if ocp_mg %}
+**OCP must-gather data**: `{{ ocp_mg }}`
+{% endif %}
+**Cluster ID**: `{{ cluster_id }}`
+{% endif %}
+
+### Directory Structure (relative to the OCS data path above)
 
 ```
-<cluster_id>/
-  ocs_must_gather/                        ← START HERE (ODF/Ceph data)
-    event-filter.html
-    must-gather.logs
-    <quay-io-image-sha256-hash>/          ← Main data directory (long hash name)
-      ceph/                               ← Ceph cluster data
-        must_gather_commands/             ← Ceph CLI outputs (KEY DATA)
-          ceph_status
-          ceph_health_detail
-          ceph_osd_tree
-          ceph_osd_df
-          ceph_osd_dump
-          ceph_df_detail
-          ceph_pg_stat
-          ceph_mon_stat
-          ceph_fs_status
-          ceph_log_last_10000_debug_cluster
-          ...
-        must_gather_commands_json_output/  ← Same commands in JSON format
-        namespaces/openshift-storage/     ← ODF pods in ceph context
-        logs/                             ← Ceph daemon logs
-      ceph_logs/                          ← Per-node Ceph logs
-        ceph_daemon_log_<node>/
-        crash_<node>/
-        csi_log_<node>/
-        journal_<node>/
-      namespaces/                         ← Kubernetes resources
-        openshift-storage/                ← ODF namespace resources
-          pods/                           ← Pod yamls and logs
-            <pod-name>/
-              <pod-name>.yaml             ← Pod describe output
-              <container-name>/
-                <container-name>/
-                  logs/
-                    current.log           ← Current container log
-                    previous.log          ← Previous container log (if restarted)
-          core/                           ← ConfigMaps, Secrets, Services, PVCs
-          apps/                           ← Deployments, StatefulSets
-          operators.coreos.com/           ← OLM resources
-          oc_output/                      ← oc get output summaries
-        openshift-operators/
-        all/
-      noobaa/                             ← NooBaa-specific data
-        namespaces/
-        raw_output/
-        cluster-scoped-resources/
-      cluster-scoped-resources/           ← Cluster-wide ODF resources
-        storage.k8s.io/                   ← StorageClasses, CSI drivers
-      csidriver/                          ← CSI driver info
-
-  ocp_must_gather/                        ← ONLY IF NEEDED (OCP/infra data)
-    <quay-io-image-sha256-hash>/
-      nodes/                              ← Node info per node
-        <node-name>/                      ← journalctl, kubelet logs
-      cluster-scoped-resources/           ← Cluster-wide resources
-      namespaces/                         ← System namespace resources
-      etcd_info/                          ← etcd health
-      host_service_logs/                  ← Systemd service logs
-      network_logs/                       ← Network diagnostics
-      monitoring/                         ← Prometheus/alerting data
+ceph/                               ← Ceph cluster data
+  must_gather_commands/             ← Ceph CLI outputs (KEY DATA)
+    ceph_status
+    ceph_health_detail
+    ceph_osd_tree
+    ceph_osd_df
+    ceph_osd_dump
+    ceph_df_detail
+    ceph_pg_stat
+    ceph_mon_stat
+    ceph_fs_status
+    ceph_log_last_10000_debug_cluster
+    ...
+  must_gather_commands_json_output/  ← Same commands in JSON format
+  namespaces/openshift-storage/     ← ODF pods in ceph context
+  logs/                             ← Ceph daemon logs
+ceph_logs/                          ← Per-node Ceph logs
+  ceph_daemon_log_<node>/
+  crash_<node>/
+  csi_log_<node>/
+  journal_<node>/
+namespaces/                         ← Kubernetes resources
+  openshift-storage/                ← ODF namespace resources
+    pods/                           ← Pod yamls and logs
+      <pod-name>/
+        <pod-name>.yaml             ← Pod describe output
+        <container-name>/
+          <container-name>/
+            logs/
+              current.log           ← Current container log
+              previous.log          ← Previous container log (if restarted)
+    core/                           ← ConfigMaps, Secrets, Services, PVCs
+    apps/                           ← Deployments, StatefulSets
+    operators.coreos.com/           ← OLM resources
+    oc_output/                      ← oc get output summaries
+  openshift-operators/
+  all/
+noobaa/                             ← NooBaa-specific data
+  namespaces/
+  raw_output/
+  cluster-scoped-resources/
+cluster-scoped-resources/           ← Cluster-wide ODF resources
+  storage.k8s.io/                   ← StorageClasses, CSI drivers
+csidriver/                          ← CSI driver info
 ```
+
+{% if ocp_mg %}
+**OCP must-gather** (only if needed for infrastructure issues):
+```
+nodes/                              ← Node info per node
+  <node-name>/                      ← journalctl, kubelet logs
+cluster-scoped-resources/           ← Cluster-wide resources
+host_service_logs/                  ← Systemd service logs
+network_logs/                       ← Network diagnostics
+monitoring/                         ← Prometheus/alerting data
+```
+{% endif %}
 
 ### Investigation Strategy
 
-**Step 1**: Navigate to the data. List the base URL, find the cluster ID directory,
-then list `ocs_must_gather/` to find the `quay-io-*` image directory:
-```
-curl -sk '{{ must_gather_url }}/' | grep -oP '<a href="\K[^"]+' | grep -v '^[?/]'
-```
-
-**Step 2**: Based on the traceback, investigate the relevant must-gather data.
-Be targeted — don't fetch everything. Follow the evidence chain.
+Based on the traceback, go directly to the relevant data:
 
 **Ceph/storage issues** → Check these first:
-- `ceph/must_gather_commands/ceph_status` — overall cluster health
-- `ceph/must_gather_commands/ceph_health_detail` — detailed health warnings
-- `ceph/must_gather_commands/ceph_osd_tree` — OSD topology and status
-- `ceph/must_gather_commands/ceph_osd_df` — OSD disk usage
-- `ceph/must_gather_commands/ceph_df_detail` — pool usage
+{% if mg_type == "local" %}
+- `cat {{ ocs_mg }}/ceph/must_gather_commands/ceph_status`
+- `cat {{ ocs_mg }}/ceph/must_gather_commands/ceph_health_detail`
+- `cat {{ ocs_mg }}/ceph/must_gather_commands/ceph_osd_tree`
+{% elif mg_type == "http" %}
+- `curl -sk '{{ ocs_mg }}/ceph/must_gather_commands/ceph_status'`
+- `curl -sk '{{ ocs_mg }}/ceph/must_gather_commands/ceph_health_detail'`
+- `curl -sk '{{ ocs_mg }}/ceph/must_gather_commands/ceph_osd_tree'`
+{% endif %}
 
 **Pod/operator failures** → Check pod logs:
-- `namespaces/openshift-storage/pods/<pod-name>/` — find the pod
-- `<pod>/<container>/<container>/logs/current.log` — container log
-- `<pod>/<pod>.yaml` — pod describe (status, events, conditions)
+{% if mg_type == "local" %}
+- `ls {{ ocs_mg }}/namespaces/openshift-storage/pods/` — find the pod
+- `tail -100 <pod>/<container>/<container>/logs/current.log` — container log
+{% elif mg_type == "http" %}
+- `curl -sk '{{ ocs_mg }}/namespaces/openshift-storage/pods/'` — find the pod
+- `curl -sk '<pod-url>/<container>/<container>/logs/current.log' | tail -100`
+{% endif %}
 
 **NooBaa issues** → Check noobaa-specific data:
-- `noobaa/` directory has dedicated NooBaa diagnostics
-- `namespaces/openshift-storage/pods/noobaa-core-0/` — NooBaa core pod logs
-- `namespaces/openshift-storage/pods/noobaa-db-pg-cluster-*/` — DB pod logs
+{% if mg_type == "local" %}
+- `ls {{ ocs_mg }}/noobaa/` — NooBaa diagnostics
+{% elif mg_type == "http" %}
+- `curl -sk '{{ ocs_mg }}/noobaa/'` — NooBaa diagnostics
+{% endif %}
 
 **CSI/PVC issues** → Check:
-- `cluster-scoped-resources/storage.k8s.io/` — StorageClasses
-- `csidriver/` — CSI driver status
-- `namespaces/openshift-storage/core/` — PVC/PV resources
+{% if mg_type == "local" %}
+- `ls {{ ocs_mg }}/cluster-scoped-resources/storage.k8s.io/`
+{% elif mg_type == "http" %}
+- `curl -sk '{{ ocs_mg }}/cluster-scoped-resources/storage.k8s.io/'`
+{% endif %}
 
-**Step 3**: If the OCS data suggests an **infrastructure issue** (node down, resource exhaustion,
-network problems), also investigate `ocp_must_gather/`:
-- `nodes/<node-name>/` — node status, kubelet logs, journalctl
-- `cluster-scoped-resources/` — cluster-wide resource status
-- `host_service_logs/` — systemd service issues
-- `network_logs/` — network diagnostics
+{% if ui_logs %}
+## UI Test Logs
+This is a **UI test**. DOM snapshots and screenshots are available:
+- **DOM snapshots**: `{{ ui_logs.dom_url }}/`
+{% if ui_logs.dom_files %}  Files: {{ ui_logs.dom_files | join(', ') }}{% endif %}
+- **Screenshots**: `{{ ui_logs.screenshots_url }}/`
+{% if ui_logs.screenshot_files %}  Files: {{ ui_logs.screenshot_files | join(', ') }}{% endif %}
 
-### Rules
-- Use ONLY `curl -sk` for fetching. No wget, no writing files.
-- Parse HTML directory listings to navigate. Links look like `<a href="filename">`.
-- Use `grep`, `head`, `tail` to filter large outputs. Pod logs can be huge.
-- Be targeted — follow the evidence from the traceback, don't dump everything.
-- If a URL returns 404, skip it and try alternatives.
+Use `curl -sk` to fetch DOM HTML files for error messages or UI state at the time of failure.
+{% endif %}
+
+### Efficiency Rules
+- **Go directly to the data.** The paths above are pre-resolved — no need to navigate directories.
+- Use `head`, `tail`, `grep` to filter large outputs. Do NOT dump entire pod logs.
+- If you see the same warning/error repeating, stop after 2-3 occurrences — do not keep fetching.
+- Focus on the evidence chain from the traceback. Be targeted, not exhaustive.
+- If a file returns 404 or is empty, skip it and try alternatives.
+{% if mg_type == "http" %}
+- Parse HTML directory listings to find entries. Links look like `<a href="filename">`.
+{% endif %}
 
 ## Your Task
 
 1. Analyze the traceback to understand what failed
 2. Investigate the must-gather data to find the root cause
-3. Classify the failure into exactly ONE category:
+3. In the **evidence** array, each entry must have TWO parts:
+   your interpretation/explanation FOLLOWED BY the actual log quote with source file.
+   Format: `<your explanation> — <source_file>: '<quoted log line(s)>'`
+   Examples:
+   - `Ceph cluster has degraded OSDs causing I/O failures — ceph_health_detail: 'HEALTH_WARN 1 osds down; Degraded data redundancy: 24/72 objects degraded'`
+   - `NooBaa block store failing to verify replicated blocks — noobaa-core-0/current.log: 'Block data must be a buffer' (27069 occurrences)`
+   - `BackingStore secret was deleted during test execution — events.yaml: 'BackingStore Secret "secret-cldmgr-aws-..." not found or deleted'`
+   Always include both your analysis AND the real log text you found.
+4. Classify the failure into exactly ONE category:
 
    - **product_bug** — A bug in ODF/OCS/Ceph/NooBaa/Rook product code
    - **test_bug** — A bug in the test code or test framework
@@ -167,8 +205,8 @@ Your response MUST end with exactly this format — no narrative text after it:
     "confidence": <0.0 to 1.0>,
     "root_cause_summary": "<one paragraph explaining the root cause based on your investigation>",
     "evidence": [
-        "<specific finding 1 from must-gather>",
-        "<specific finding 2>",
+        "<your explanation> — <source_file>: '<quoted log line>'",
+        "<another finding explanation> — <source_file>: '<quoted log line>'",
         "..."
     ],
     "recommended_action": "<what should be done about this failure>"

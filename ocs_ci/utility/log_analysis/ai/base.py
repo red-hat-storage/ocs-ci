@@ -24,7 +24,9 @@ class AIBackend(ABC):
         traceback: str,
         log_excerpt: str,
         infra_context: str = "",
-        must_gather_url: str = "",
+        must_gather_info: dict = None,
+        test_log_url: str = "",
+        ui_logs: dict = None,
     ) -> dict:
         """
         Classify a test failure into a category.
@@ -37,7 +39,16 @@ class AIBackend(ABC):
             traceback: Full Python traceback
             log_excerpt: Extracted error/warning lines from test log
             infra_context: Ceph/OSD/pod info from must-gather
-            must_gather_url: HTTP URL to test's must-gather base dir for agentic investigation
+            must_gather_info: Pre-resolved must-gather paths dict with keys:
+                mg_type: "local" | "http" | "none"
+                mg_base: local path or HTTP URL to the data dir
+                ocs_mg: path/URL to ocs_must_gather data dir
+                ocp_mg: path/URL to ocp_must_gather data dir
+                cluster_id: cluster ID string
+            test_log_url: Direct URL to the per-test log directory
+            ui_logs: UI logs info dict (only for UI tests) with keys:
+                dom_url: URL to DOM snapshots directory
+                screenshots_url: URL to screenshots directory
 
         Returns:
             dict with keys:
@@ -71,6 +82,11 @@ class AIBackend(ABC):
     def requires_budget_limit(self) -> bool:
         """Whether this backend should be subject to max_failures limiting."""
         return True
+
+    @property
+    def total_cost_usd(self) -> float:
+        """Total cost accumulated across all calls. Override in subclasses."""
+        return 0.0
 
     def is_available(self) -> bool:
         """

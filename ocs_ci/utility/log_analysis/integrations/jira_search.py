@@ -87,12 +87,13 @@ class JiraSearchIntegration:
             The same list, with suggested_jira_issues populated
         """
         if not self.is_available():
-            logger.info("Jira integration not available, skipping enrichment")
+            logger.debug("Jira integration not available, skipping enrichment")
             return failure_analyses
 
         # Group by unique search terms to avoid duplicate queries
         search_cache = {}
         enriched_count = 0
+        search_count = 0
 
         for fa in failure_analyses:
             if fa.category not in SEARCHABLE_CATEGORIES:
@@ -100,7 +101,6 @@ class JiraSearchIntegration:
 
             # Skip if already has linked Jira issues from known-issue matching
             if fa.matched_known_issues:
-                # Enrich existing known issue references with details
                 self._enrich_known_issues(fa)
                 continue
 
@@ -110,6 +110,8 @@ class JiraSearchIntegration:
 
             if search_key in search_cache:
                 fa.suggested_jira_issues = list(search_cache[search_key])
+                if fa.suggested_jira_issues:
+                    enriched_count += 1
                 continue
 
             try:
@@ -117,18 +119,20 @@ class JiraSearchIntegration:
                 if not jql:
                     continue
 
+                search_count += 1
                 results = self.jira.search_issues(jql, max_results=self.max_results)
                 search_cache[search_key] = results
                 fa.suggested_jira_issues = list(results)
                 if results:
                     enriched_count += 1
-                    logger.debug(
-                        f"Found {len(results)} Jira issues for {fa.test_result.name}"
-                    )
             except Exception as e:
-                logger.warning(f"Jira search failed for {fa.test_result.name}: {e}")
+                logger.debug(f"Jira search failed for {fa.test_result.name}: {e}")
 
-        logger.info(f"Jira enrichment complete: {enriched_count} failures linked")
+        if search_count > 0:
+            logger.info(
+                f"Jira: {search_count} searches, "
+                f"{enriched_count} failures linked to existing bugs"
+            )
         return failure_analyses
 
     def _enrich_known_issues(self, fa: FailureAnalysis):
@@ -150,46 +154,50 @@ class JiraSearchIntegration:
 
     def _build_search_key(self, fa: FailureAnalysis) -> str:
         """Build a cache key for deduplicating Jira searches."""
+        # Key on product/component keywords rather than test name
+        rc_keywords = self._extract_root_cause_keywords(fa.root_cause_summary) if fa.root_cause_summary else []
         exception_type = self._extract_exception_type(fa)
+        if rc_keywords:
+            return f"{':'.join(rc_keywords[:3])}:{exception_type}"
         if exception_type:
-            return f"{exception_type}:{fa.test_result.classname}"
+            return exception_type
         return fa.test_result.name
 
     def _build_jql(self, fa: FailureAnalysis) -> str:
         """
         Build a JQL query from failure analysis.
 
-        Strategy:
-        1. Search by exception type + test class in summary/description
-        2. Fall back to test name keywords
+        Strategy: Focus on product/component keywords from the root cause
+        analysis and exception type — these match ODF bugs better than
+        test names which are test-framework specific.
         """
         project_clause = self._project_clause()
-        exception_type = self._extract_exception_type(fa)
 
-        # Build search terms
+        # Build search terms — prioritize product/component keywords
         search_terms = []
 
+        # Root cause keywords are the best signal for product bugs
+        if fa.root_cause_summary:
+            rc_keywords = self._extract_root_cause_keywords(fa.root_cause_summary)
+            search_terms.extend(rc_keywords[:4])
+
+        # Exception type as secondary signal
+        exception_type = self._extract_exception_type(fa)
         if exception_type:
-            # Clean up exception type for search
             clean_type = exception_type.split(".")[-1]
             search_terms.append(clean_type)
 
-        # Extract meaningful keywords from test name
-        test_keywords = self._extract_test_keywords(fa.test_result.name)
-        if test_keywords:
-            search_terms.extend(test_keywords[:3])
-
-        # Add root cause keywords if available
-        if fa.root_cause_summary:
-            rc_keywords = self._extract_root_cause_keywords(fa.root_cause_summary)
-            search_terms.extend(rc_keywords[:2])
+        # Only fall back to test name if no product keywords found
+        if not search_terms:
+            test_keywords = self._extract_test_keywords(fa.test_result.name)
+            if test_keywords:
+                search_terms.extend(test_keywords[:3])
 
         if not search_terms:
             return ""
 
         # Build text search clause
         text_query = " ".join(search_terms)
-        # Escape JQL special characters
         text_query = text_query.replace('"', '\\"')
 
         # Only search open or recently resolved issues

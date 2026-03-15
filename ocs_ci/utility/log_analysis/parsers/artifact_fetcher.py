@@ -28,6 +28,7 @@ class ArtifactManifest:
     timing_csv: Optional[str] = None
     test_logs_dir: Optional[str] = None
     failed_logs_dir: Optional[str] = None
+    ui_logs_dir: Optional[str] = None
     deploy_log: Optional[str] = None
     all_files: list = field(default_factory=list)
 
@@ -87,6 +88,8 @@ class ArtifactFetcher:
                 manifest.test_logs_dir = f
             elif name.startswith("failed_testcase_ocs_logs_"):
                 manifest.failed_logs_dir = f
+            elif name.startswith("ui_logs_dir_"):
+                manifest.ui_logs_dir = f
 
         # Pick the first config that parses as a valid dict
         # (last run in multi-run dirs may be empty/truncated)
@@ -117,7 +120,8 @@ class ArtifactFetcher:
             f"Found: junit_xml={'yes' if manifest.junit_xml else 'no'}, "
             f"config={'yes' if manifest.config_yaml else 'no'}, "
             f"test_logs={'yes' if manifest.test_logs_dir else 'no'}, "
-            f"failed_logs={'yes' if manifest.failed_logs_dir else 'no'}"
+            f"failed_logs={'yes' if manifest.failed_logs_dir else 'no'}, "
+            f"ui_logs={'yes' if manifest.ui_logs_dir else 'no'}"
         )
 
         return manifest

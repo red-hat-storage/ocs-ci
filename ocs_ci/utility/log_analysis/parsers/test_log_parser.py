@@ -45,6 +45,19 @@ CMD_ERROR_PATTERNS = [
 ]
 CMD_ERROR_RE = re.compile("|".join(CMD_ERROR_PATTERNS))
 
+# Noisy lines that match ERROR/WARNING keywords but are just YAML field names
+# or Kubernetes resource dumps — not actual errors
+NOISE_PATTERNS = [
+    r"terminationMessagePolicy:\s*FallbackToLogsOnError",
+    r"priorityClassName:\s*system-\w+-critical",
+    r"failureThreshold:\s*\d+",
+    r"failureDomain:\s*\w+",
+    r"reason:\s*Error$",
+    r"v4-0-config-user-template-error",
+    r"replicasPerFailureDomain:\s*\d+",
+]
+NOISE_RE = re.compile("|".join(NOISE_PATTERNS))
+
 
 class TestLogParser:
     """Extract relevant failure context from per-test log files."""
@@ -134,9 +147,11 @@ class TestLogParser:
         return "\n\n".join(sections)
 
     def _extract_errors(self, lines: list) -> list:
-        """Extract ERROR and WARNING level log lines."""
+        """Extract ERROR and WARNING level log lines, filtering noise."""
         errors = []
         for line in lines:
+            if NOISE_RE.search(line):
+                continue
             match = LOG_LINE_RE.match(line)
             if match:
                 level = match.group(3)

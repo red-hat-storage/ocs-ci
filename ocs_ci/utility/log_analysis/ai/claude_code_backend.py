@@ -102,6 +102,7 @@ class ClaudeCodeBackend(AIBackend):
         self.model = model
         self.max_budget_usd = max_budget_usd
         self.save_prompts_dir = save_prompts_dir
+        self._total_cost = 0.0
         self.jinja_env = Environment(
             loader=FileSystemLoader(PROMPT_TEMPLATES_DIR),
             trim_blocks=True,
@@ -112,6 +113,10 @@ class ClaudeCodeBackend(AIBackend):
         """Check if claude CLI is installed and accessible."""
         return shutil.which("claude") is not None
 
+    @property
+    def total_cost_usd(self) -> float:
+        return self._total_cost
+
     def classify_failure(
         self,
         test_name: str,
@@ -121,14 +126,16 @@ class ClaudeCodeBackend(AIBackend):
         traceback: str,
         log_excerpt: str = "",
         infra_context: str = "",
-        must_gather_url: str = "",
+        must_gather_info: dict = None,
+        test_log_url: str = "",
+        ui_logs: dict = None,
     ) -> dict:
         """Classify a test failure using Claude Code CLI.
 
-        When must_gather_url is provided, uses agentic mode with Bash tool
-        so Claude can curl the must-gather HTTP directory to investigate.
+        When must_gather_info indicates available must-gather data,
+        uses agentic mode with Bash tool so Claude can investigate.
         """
-        if must_gather_url:
+        if must_gather_info and must_gather_info.get("mg_type") != "none":
             return self._classify_agentic(
                 test_name=test_name,
                 test_class=test_class,
@@ -136,7 +143,9 @@ class ClaudeCodeBackend(AIBackend):
                 squad=squad,
                 traceback=traceback,
                 log_excerpt=log_excerpt,
-                must_gather_url=must_gather_url,
+                must_gather_info=must_gather_info,
+                test_log_url=test_log_url,
+                ui_logs=ui_logs,
             )
 
         template = self.jinja_env.get_template("classify_failure.j2")
@@ -169,9 +178,11 @@ class ClaudeCodeBackend(AIBackend):
         squad: str,
         traceback: str,
         log_excerpt: str,
-        must_gather_url: str,
+        must_gather_info: dict,
+        test_log_url: str = "",
+        ui_logs: dict = None,
     ) -> dict:
-        """Classify using agentic mode — Claude investigates must-gather via curl."""
+        """Classify using agentic mode — Claude investigates must-gather."""
         template = self.jinja_env.get_template("classify_failure_agentic.j2")
         prompt = template.render(
             test_name=test_name,
@@ -180,10 +191,22 @@ class ClaudeCodeBackend(AIBackend):
             squad=squad or "Unknown",
             traceback=traceback,
             log_excerpt=self._truncate(log_excerpt, 6000),
-            must_gather_url=must_gather_url.rstrip("/"),
+            mg_type=must_gather_info.get("mg_type", "none"),
+            ocs_mg=must_gather_info.get("ocs_mg", ""),
+            ocp_mg=must_gather_info.get("ocp_mg", ""),
+            cluster_id=must_gather_info.get("cluster_id", ""),
+            test_log_url=test_log_url,
+            ui_logs=ui_logs,
         )
 
-        result = self._call_claude_agentic(prompt, context=test_name)
+        # Local must-gather needs Read tool; HTTP needs Bash for curl
+        allowed_tools = "Bash"
+        if must_gather_info.get("mg_type") == "local":
+            allowed_tools = "Bash,Read"
+
+        result = self._call_claude_agentic(
+            prompt, context=test_name, allowed_tools=allowed_tools
+        )
 
         return {
             "category": result.get("category", "unknown"),
@@ -191,6 +214,8 @@ class ClaudeCodeBackend(AIBackend):
             "root_cause_summary": result.get("root_cause_summary", ""),
             "evidence": result.get("evidence", []),
             "recommended_action": result.get("recommended_action", ""),
+            "session_id": result.get("session_id", ""),
+            "session_text": result.get("session_text", ""),
         }
 
     def generate_run_summary(
@@ -319,14 +344,17 @@ class ClaudeCodeBackend(AIBackend):
                     f"result: {result_text[:500]}"
                 )
 
-        # Log cost if available
+        # Accumulate cost
         cost = response.get("total_cost_usd")
         if cost is not None:
-            logger.info(f"Claude Code call cost: ${cost:.4f}")
+            self._total_cost += cost
+            logger.debug(f"Claude Code call cost: ${cost:.4f}")
 
         return structured
 
-    def _call_claude_agentic(self, prompt: str, context: str = "") -> dict:
+    def _call_claude_agentic(
+        self, prompt: str, context: str = "", allowed_tools: str = "Bash"
+    ) -> dict:
         """
         Call claude CLI in agentic mode with Bash tool for must-gather investigation.
 
@@ -351,7 +379,7 @@ class ClaudeCodeBackend(AIBackend):
             "--output-format",
             "json",
             "--allowedTools",
-            "Bash",
+            allowed_tools,
             "--dangerously-skip-permissions",
             "--model",
             self.model,
@@ -404,15 +432,15 @@ class ClaudeCodeBackend(AIBackend):
                 f"stdout: {result.stdout[:500]}"
             )
 
-        # Log cost, turns, and session_id
+        # Accumulate cost
         cost = response.get("total_cost_usd")
         num_turns = response.get("num_turns")
-        session_id = response.get("session_id")
+        session_id = response.get("session_id", "")
         if cost is not None:
-            logger.info(
+            self._total_cost += cost
+            logger.debug(
                 f"Claude Code agentic call cost: ${cost:.4f} "
-                f"({num_turns} turns, session_id={session_id}, "
-                f"context={context})"
+                f"({num_turns} turns, context={context})"
             )
 
         # Extract classification JSON from the result text
@@ -423,7 +451,10 @@ class ClaudeCodeBackend(AIBackend):
                 f"(subtype={response.get('subtype')}, num_turns={num_turns})"
             )
 
-        return self._extract_json(result_text)
+        classification = self._extract_json(result_text)
+        classification["session_id"] = session_id
+        classification["session_text"] = result_text
+        return classification
 
     @staticmethod
     def _extract_json(text: str) -> dict:

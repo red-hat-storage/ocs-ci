@@ -148,7 +148,8 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
     cache = None
     if kwargs.get("cache_enabled", True) and ai_backend != "none":
         cache_dir = kwargs.get("cache_dir", "~/.ocs-ci/analysis_cache")
-        cache = AnalysisCache(cache_dir=cache_dir)
+        cache_ttl = kwargs.get("cache_ttl", 720)
+        cache = AnalysisCache(cache_dir=cache_dir, ttl_hours=cache_ttl)
 
     # Run classification pipeline
     classifier = FailureClassifier(
@@ -158,6 +159,9 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
         skip_ai_for_known=True,
         max_failures=kwargs.get("max_failures", 30),
         failed_logs_dir=manifest.failed_logs_dir if ai_backend != "none" else None,
+        test_logs_dir=manifest.test_logs_dir if ai_backend != "none" else None,
+        ui_logs_dir=manifest.ui_logs_dir if ai_backend != "none" else None,
+        run_id=run_metadata.run_id,
     )
 
     failure_analyses = classifier.classify_failures(
@@ -179,7 +183,7 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
             )
             jira_integration.enrich_analyses(failure_analyses)
         except Exception as e:
-            logger.warning(f"Jira integration failed (non-fatal): {e}")
+            logger.debug(f"Jira integration failed (non-fatal): {e}")
 
     # Generate AI-powered run summary if using an AI backend
     if ai_backend != "none" and failure_analyses:

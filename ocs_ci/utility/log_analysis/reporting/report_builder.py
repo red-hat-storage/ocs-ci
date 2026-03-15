@@ -25,6 +25,7 @@ class ReportBuilder:
             trim_blocks=True,
             lstrip_blocks=True,
         )
+        self.jinja_env.filters["basename"] = lambda path: os.path.basename(path) if path else ""
 
     def build(self, run_analysis: RunAnalysis, fmt: str = "markdown") -> str:
         """

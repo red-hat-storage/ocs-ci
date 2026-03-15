@@ -87,7 +87,9 @@ class AnthropicBackend(AIBackend):
         traceback: str,
         log_excerpt: str = "",
         infra_context: str = "",
-        must_gather_url: str = "",
+        must_gather_info: dict = None,
+        test_log_url: str = "",
+        ui_logs: dict = None,
     ) -> dict:
         """Classify a test failure using Anthropic API."""
         template = self.jinja_env.get_template("classify_failure.j2")

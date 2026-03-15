@@ -115,7 +115,7 @@ for fa in result.failure_analyses:
 
 1. **Regex matching** (instant, free) -- checks the traceback against a built-in set of known issue patterns (e.g., `DFBUGS-2781` for Prometheus mgr module crashes). If matched, the failure is classified as `known_issue` and AI is skipped.
 
-2. **Cache lookup** (instant, free) -- failures are fingerprinted by exception type and normalized traceback hash. If an identical failure was classified recently (within 7 days by default), the cached result is reused.
+2. **Cache lookup** (instant, free) -- failures are fingerprinted by exception type and normalized traceback hash. If an identical failure was classified recently (within 30 days by default), the cached result is reused.
 
 3. **AI classification** (costs money, takes a few seconds) -- the traceback, test log excerpt, and infrastructure context are sent to Claude, which returns a structured classification with category, confidence score, root cause summary, evidence, and recommended action.
 
@@ -163,7 +163,7 @@ AI classification costs money. The module has several safeguards:
 
 - **Known issues bypass AI** -- regex-matched failures skip AI entirely (free)
 - **Signature deduplication** -- failures with identical tracebacks share one AI call. A run with 40 failures but only 10 unique tracebacks makes 10 AI calls, not 40.
-- **Caching** -- results cached for 7 days. Re-analyzing the same run is free.
+- **Caching** -- results cached for 30 days (configurable via `--cache-ttl`). Re-analyzing the same run is free.
 - **Budget cap** -- `--max-budget-usd 0.50` (default) limits spend per AI call
 - **Failure limit** -- `--max-failures 30` (default) caps total AI calls per run
 
@@ -197,6 +197,7 @@ python -m ocs_ci.utility.log_analysis.cli <source> [options]
 | `--limit` | all | Limit total number of failures to process (for debugging) |
 | `--squad` | all | Only analyze failures from a specific squad (e.g., `brown_squad`, `green_squad`) |
 | `--cache-dir` | `~/.ocs-ci/analysis_cache` | Cache directory |
+| `--cache-ttl` | `720` | Cache time-to-live in hours (default: 30 days) |
 | `--known-issues-file` | none | Path to YAML file with additional known issue patterns |
 | `--record-history` | off | Save results to history store for cross-run analysis |
 | `--history-dir` | `~/.ocs-ci/analysis_history` | History store directory |

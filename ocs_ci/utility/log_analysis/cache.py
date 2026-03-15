@@ -20,7 +20,7 @@ class AnalysisCache:
     """File-based cache for failure analysis results."""
 
     def __init__(
-        self, cache_dir: str = "~/.ocs-ci/analysis_cache", ttl_hours: int = 168
+        self, cache_dir: str = "~/.ocs-ci/analysis_cache", ttl_hours: int = 720
     ):
         """
         Args:
