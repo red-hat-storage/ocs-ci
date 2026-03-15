@@ -6,7 +6,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 )
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs import ocp
 
 
 class ExternalSystems(ResourceList):
@@ -137,11 +137,11 @@ class ExternalSystems(ResourceList):
         """
         logger.info(f"Deleting connection to {scale_name}")
         delete_cmd = "oc delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
-        exec_cmd(delete_cmd)
+        ocp.OCP().exec_oc_cmd(delete_cmd)
         delete_secret_cmd = (
             f"oc delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
         )
-        exec_cmd(delete_secret_cmd)
+        ocp.OCP().exec_oc_cmd(delete_secret_cmd)
 
     def scale_status_ok(self, scale_name):
         """

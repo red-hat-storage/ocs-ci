@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_ibm_cloud_managed,
     polarion_id,
     fdf_required,
+    runs_on_provider,
 )
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import black_squad
@@ -20,9 +21,13 @@ FILESYSTEM_1 = "fs1"
 FILESYSTEM_2 = "fs2"
 
 
+@fdf_required
+@runs_on_provider
 class TestScaleConnection(object):
     """
     Test connecting Scale cluster
+
+    To be executed on FDF only
     """
 
     @ui
@@ -30,7 +35,6 @@ class TestScaleConnection(object):
     @tier2
     @skipif_ocs_version("<4.20")
     @black_squad
-    @fdf_required
     @polarion_id("OCS-7757")
     def test_connect_scale(self, setup_ui_class):
         """
@@ -56,7 +60,6 @@ class TestScaleConnection(object):
     @tier2
     @skipif_ocs_version("<4.21")
     @black_squad
-    @fdf_required
     @polarion_id("OCS-7758")
     def test_add_delete_filesystem(self, setup_ui_class):
         """
@@ -73,7 +76,6 @@ class TestScaleConnection(object):
         )
 
     @ui
-    @fdf_required
     @skipif_ibm_cloud_managed
     @tier2
     @skipif_ocs_version("<4.20")
