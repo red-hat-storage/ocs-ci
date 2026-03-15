@@ -325,13 +325,18 @@ class StorageClusterSetup(object):
                 "Adding second device set '%s' to the StorageCluster",
                 second_device_class,
             )
+            second_device_type = config.ENV_DATA.get(
+                "second_device_type", defaults.DEVICE_TYPE
+            )
+            second_device_size = config.ENV_DATA.get("second_device_size")
+            storage = f"{second_device_size}Gi" if second_device_size else "1"
             deviceset_data_2 = deepcopy(deviceset_data)
             deviceset_data_2["name"] = second_device_class
             deviceset_data_2["deviceClass"] = second_device_class
-            deviceset_data_2["deviceType"] = "SSD"
+            deviceset_data_2["deviceType"] = second_device_type
             deviceset_data_2["dataPVCTemplate"]["spec"]["resources"]["requests"][
                 "storage"
-            ] = "1"
+            ] = storage
             cluster_data["spec"]["storageDeviceSets"].append(deviceset_data_2)
 
         if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
