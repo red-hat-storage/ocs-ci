@@ -39,7 +39,9 @@ logger = logging.getLogger(__name__)
 
 class FusionDataFoundationDeployment:
     def __init__(self):
-        self.pre_release = str(config.DEPLOYMENT.get("fdf_pre_release", False)).lower() == "true"
+        self.pre_release = (
+            str(config.DEPLOYMENT.get("fdf_pre_release", False)).lower() == "true"
+        )
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
         self.fdf_skip_storage_setup = config.DEPLOYMENT.get(
@@ -77,9 +79,13 @@ class FusionDataFoundationDeployment:
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         try:
-            wait_for_install_plan_and_approve(constants.OPENSHIFT_STORAGE_NAMESPACE, 5 * 60)
+            wait_for_install_plan_and_approve(
+                constants.OPENSHIFT_STORAGE_NAMESPACE, 5 * 60
+            )
         except TimeoutExpiredError:
-            logger.warning("Timeout waiting for install plan approval. Continuing execution...")
+            logger.warning(
+                "Timeout waiting for install plan approval. Continuing execution..."
+            )
         if not self.fdf_skip_storage_setup:
             wait_for_storageclusters_crd()
             self.setup_storage()
@@ -239,7 +245,10 @@ class FusionDataFoundationDeployment:
         fusion_version = version.get_semantic_version(fusion_version, True)
 
         # Storage configuration method changed in Fusion 2.11
-        if fusion_version < version.VERSION_2_11 or config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL:
+        if (
+            fusion_version < version.VERSION_2_11
+            or config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL
+        ):
             self.create_odfcluster()
             # Mute MON_NETSPLIT for arbiter deployments to avoid:
             # https://issues.redhat.com/browse/DFBUGS-4521

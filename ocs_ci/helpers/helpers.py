@@ -3349,6 +3349,7 @@ def get_pv_size(storageclass=None):
             return_list.append(pv_obj["spec"]["capacity"]["storage"])
     return return_list
 
+
 def get_pv_names():
     """
     Get Pv names
