@@ -456,6 +456,75 @@ def config_has_hosted_odf_image(cluster_name):
     return version_exists
 
 
+def is_fdf_on_provider():
+    """
+    Check if FDF (Fusion Data Foundation) is installed on the management/provider cluster
+    by examining the odf-operator CSV displayName for 'Fusion'.
+
+    Returns:
+        bool: True if FDF is installed, False otherwise
+
+    """
+    ocp_obj = OCP(
+        kind=constants.CLUSTER_SERVICE_VERSION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    try:
+        csvs = ocp_obj.get(all_namespaces=False)
+        for csv in csvs.get("items", []):
+            name = csv.get("metadata", {}).get("name", "")
+            if name.startswith("odf-operator"):
+                display_name = csv.get("spec", {}).get("displayName", "")
+                if "Fusion" in display_name:
+                    logger.info(
+                        f"FDF detected on provider: {name} displayName='{display_name}'"
+                    )
+                    return True
+    except CommandFailed as e:
+        logger.warning(f"Failed to check for FDF on provider: {e}")
+    return False
+
+
+_fdf_catalog_image_cache = None
+
+
+def get_fdf_catalog_image():
+    """
+    Get the FDF CatalogSource image from the management cluster.
+    Result is cached to avoid redundant API calls across HostedFDF instances.
+
+    Returns:
+        str: The full image reference (with digest) from the FDF CatalogSource
+
+    Raises:
+        ValueError: If the CatalogSource is not found or has no image
+
+    """
+    global _fdf_catalog_image_cache
+    if _fdf_catalog_image_cache:
+        return _fdf_catalog_image_cache
+
+    ocp_obj = OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    try:
+        catsrc = ocp_obj.get(resource_name=defaults.FUSION_CATALOG_NAME)
+    except CommandFailed as e:
+        raise ValueError(
+            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' not found "
+            f"on management cluster: {e}"
+        )
+    image = catsrc.get("spec", {}).get("image", "")
+    if not image:
+        raise ValueError(
+            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' has no image in spec"
+        )
+    logger.info(f"FDF CatalogSource image from provider: {image}")
+    _fdf_catalog_image_cache = image
+    return image
+
+
 def storage_installation_requested(cluster_name):
     """
     Check if the storage client installation was requested in the config
@@ -1093,29 +1162,42 @@ class HostedClients(HyperShiftBase):
                         "Continuing with deployment, but network connectivity may fail"
                     )
 
-        # stage 4 deploy ODF on all hosted clusters if not already deployed
-        log_step("Deploy ODF client on hosted OCP clusters")
+        # stage 4 deploy ODF/FDF client on all hosted clusters if not already deployed
+        fdf_on_provider = is_fdf_on_provider()
+        if fdf_on_provider:
+            logger.info(
+                "FDF detected on provider, will deploy FDF Client on spoke clusters"
+            )
+        log_step("Deploy storage client on hosted OCP clusters")
         for cluster_name in cluster_names:
 
             if not config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping ODF deployment"
+                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping deployment"
                 )
                 continue
 
-            logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
-            hosted_odf = HostedODF(cluster_name)
+            if fdf_on_provider:
+                logger.info(f"Setup FDF client on hosted OCP cluster '{cluster_name}'")
+                hosted_odf = HostedFDF(cluster_name)
+            else:
+                logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
+                hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
 
-        # stage 5 verify ODF client is installed on all hosted clusters
+        # stage 5 verify ODF/FDF client is installed on all hosted clusters
         odf_installed = []
-        log_step("Verify ODF client is installed on all hosted OCP clusters")
+        log_step("Verify storage client is installed on all hosted OCP clusters")
         for cluster_name in cluster_names:
             if config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
+                    f"Validate storage client operator installed on hosted OCP cluster '{cluster_name}'"
                 )
-                hosted_odf = HostedODF(cluster_name)
+                hosted_odf = (
+                    HostedFDF(cluster_name)
+                    if fdf_on_provider
+                    else HostedODF(cluster_name)
+                )
                 if not hosted_odf.odf_client_installed():
                     hosted_odf.exec_oc_cmd(
                         "delete catalogsource --all -n openshift-marketplace"
@@ -1134,7 +1216,11 @@ class HostedClients(HyperShiftBase):
                 logger.info(
                     f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
                 )
-                hosted_odf = HostedODF(cluster_name)
+                hosted_odf = (
+                    HostedFDF(cluster_name)
+                    if fdf_on_provider
+                    else HostedODF(cluster_name)
+                )
 
                 client_installed = hosted_odf.setup_storage_client_converged(
                     storage_consumer_name=f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
@@ -7289,6 +7375,148 @@ class HostedODF(HypershiftHostedOCP, SpokeODF):
         """
         HypershiftHostedOCP.__init__(self, name)
         SpokeODF.__init__(self, name)
+
+
+class HostedFDF(HypershiftHostedOCP, SpokeODF):
+    """
+    Class for managing Hosted FDF (Fusion Data Foundation) client clusters.
+    When FDF is installed on the management/provider cluster, this class
+    deploys the FDF Client operator on hosted spoke clusters using the
+    FDF CatalogSource image from the management cluster.
+    """
+
+    FDF_CATALOGSOURCE_NAME = defaults.FUSION_CATALOG_NAME
+
+    def __init__(self, name: str):
+        HypershiftHostedOCP.__init__(self, name)
+        SpokeODF.__init__(self, name)
+        self.catsrc_image = get_fdf_catalog_image()
+
+    @kubeconfig_exists_decorator
+    def create_catalog_source(self, reapply=False, odf_version_tag=None):
+        """
+        Create FDF CatalogSource on the spoke cluster using the same image
+        as the management cluster's FDF CatalogSource.
+        """
+        catalog_source_name = self.FDF_CATALOGSOURCE_NAME
+        ocp_obj = OCP(
+            kind=constants.CATSRC,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        if ocp_obj.check_resource_existence(
+            timeout=10,
+            resource_name=catalog_source_name,
+            should_exist=True,
+        ):
+            logger.info(f"FDF CatalogSource '{catalog_source_name}' already exists")
+            if not reapply:
+                return True
+
+        catalog_source_data = templating.load_yaml(
+            constants.PROVIDER_MODE_CATALOGSOURCE
+        )
+        catalog_source_data["metadata"]["name"] = catalog_source_name
+        catalog_source_data["spec"]["image"] = self.catsrc_image
+        catalog_source_data["spec"]["displayName"] = "Data Foundation Catalog"
+        catalog_source_data["spec"]["publisher"] = "IBM"
+
+        catalog_source_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_catalog_source", delete=False
+        )
+        templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_file.name)
+
+        try:
+            self.exec_oc_cmd(f"apply -f {catalog_source_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during FDF CatalogSource creation: {e}")
+            return False
+
+        ocs_client_catsrc = CatalogSource(
+            resource_name=catalog_source_name,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        try:
+            ocs_client_catsrc.wait_for_state("READY")
+        except (TimeoutExpiredError, ResourceWrongStatusException) as e:
+            logger.error(f"Error during FDF CatalogSource readiness wait: {e}")
+            return False
+
+        return ocp_obj.check_resource_existence(
+            timeout=10,
+            resource_name=catalog_source_name,
+            should_exist=True,
+        )
+
+    @kubeconfig_exists_decorator
+    def catalog_source_exists(self):
+        """
+        Check if the FDF CatalogSource exists on the spoke cluster.
+        """
+        ocp_obj = OCP(
+            kind=constants.CATSRC,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp_obj.check_resource_existence(
+            timeout=self.timeout_check_resources_exist_sec,
+            resource_name=self.FDF_CATALOGSOURCE_NAME,
+            should_exist=True,
+        )
+
+    @kubeconfig_exists_decorator
+    def create_subscription(self):
+        """
+        Create subscription for FDF Client operator, sourcing from the FDF CatalogSource.
+        """
+        if self.subscription_exists():
+            logger.info("FDF Client Subscription already exists")
+            return
+
+        subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
+        subscription_data["metadata"]["namespace"] = self.namespace_client
+        subscription_data["spec"]["source"] = self.FDF_CATALOGSOURCE_NAME
+
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+        )
+        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        version_semantic = version.get_semantic_version(hosted_odf_version)
+        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
+        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+
+        subscription_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_subscription", delete=False
+        )
+        templating.dump_data_to_temp_yaml(subscription_data, subscription_file.name)
+
+        self.exec_oc_cmd(f"apply -f {subscription_file.name}", timeout=120)
+        return self.subscription_exists()
+
+    def do_deploy(self):
+        """
+        Deploy FDF Client on hosted OCP cluster.
+        """
+        if self.odf_csv_installed():
+            logger.info(
+                "FDF Client CSV exists, assuming FDF client is already installed"
+            )
+            return
+
+        logger.info(f"Deploying FDF client on hosted OCP cluster '{self.name}'")
+        self.create_ns()
+
+        logger.info("Creating FDF client operator group")
+        self.create_operator_group()
+
+        logger.info("Creating FDF client catalog source")
+        self.create_catalog_source()
+
+        logger.info("Creating FDF client subscription")
+        self.create_subscription()
 
 
 @skip_if_not_hcp_provider

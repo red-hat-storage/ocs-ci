@@ -201,6 +201,13 @@ class StorageClusterSetup(object):
             ] = f"{device_size}Gi"
 
         # set storage class to OCS default on current platform
+        if not config.ENV_DATA.get("storage_class"):
+            resolved_sc = storage_class.get_storageclass()
+            if resolved_sc:
+                logger.info(
+                    f"No storage_class in config, resolved from platform: {resolved_sc}"
+                )
+                config.ENV_DATA["storage_class"] = resolved_sc
         if config.ENV_DATA.get("storage_class"):
             deviceset_data["dataPVCTemplate"]["spec"]["storageClassName"] = (
                 config.ENV_DATA["storage_class"]
