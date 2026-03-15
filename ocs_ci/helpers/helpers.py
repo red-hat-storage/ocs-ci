@@ -3344,7 +3344,8 @@ def get_pv_size(storageclass=None):
     ocp_obj = ocp.OCP(kind=constants.PV)
     pv_objs = ocp_obj.get()["items"]
     for pv_obj in pv_objs:
-        if pv_obj["spec"]["storageClassName"] == storageclass:
+        pv_sc = pv_obj.get("spec", {}).get("storageClassName")
+        if pv_sc and pv_sc == storageclass:
             return_list.append(pv_obj["spec"]["capacity"]["storage"])
     return return_list
 
