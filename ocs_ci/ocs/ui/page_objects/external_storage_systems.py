@@ -136,10 +136,10 @@ class ExternalSystems(ResourceList):
         but now it's only done via CLI
         """
         logger.info(f"Deleting connection to {scale_name}")
-        delete_cmd = "oc delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
+        delete_cmd = "delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
         ocp.OCP().exec_oc_cmd(delete_cmd)
         delete_secret_cmd = (
-            f"oc delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
+            f"delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
         )
         ocp.OCP().exec_oc_cmd(delete_secret_cmd)
 
