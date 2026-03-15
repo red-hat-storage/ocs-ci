@@ -1,3 +1,5 @@
 ---
 DEPLOYMENT:
   fdf_cluster: true
+ENV_DATA:
+  scale_endpoint: '10.1.161.190'
