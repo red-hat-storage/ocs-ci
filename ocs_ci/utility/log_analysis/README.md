@@ -8,7 +8,7 @@ This module automates that process. Given a test run (either a remote log URL or
 
 1. **Parses** JUnit XML results and extracts all failures
 2. **Matches** failures against known issue regex patterns (instant, no cost)
-3. **Classifies** remaining failures using AI (Claude) into categories: `product_bug`, `test_bug`, `infra_issue`, `flaky_test`, or `unknown` — when must-gather data is available, Claude autonomously investigates Ceph status, pod logs, and cluster state via the HTTP artifacts
+3. **Classifies** remaining failures using AI (Claude) into categories: `product_bug`, `test_bug`, `infra_issue`, `flaky_test`, or `unknown` — when must-gather data is available, the pipeline pre-resolves all paths and Claude investigates Ceph status, pod logs, and cluster state directly
 4. **Searches Jira** for existing bugs that match each failure
 5. **Tracks history** across runs to detect flaky tests and regressions
 6. **Generates reports** in Markdown, JSON, or HTML
@@ -109,7 +109,7 @@ for fa in result.failure_analyses:
 
 ### The Analysis Pipeline
 
-**Step 1: Parse.** The module fetches artifacts from the log directory (supports both HTTP URLs like `magna002.ceph.redhat.com` and local paths). It parses JUnit XML for test results, the run config YAML for environment metadata (platform, OCS version, etc.), and optionally per-test log files for additional error context.
+**Step 1: Parse.** The module fetches artifacts from the log directory (supports both HTTP URLs like `magna002.ceph.redhat.com` and local paths). It parses JUnit XML for test results, the run config YAML for environment metadata (platform, OCS version, etc.), and per-test log files for additional error context. Log excerpts are filtered to remove noise lines (YAML field names like `error_count:`, `warning_count:` that falsely match ERROR/WARNING patterns).
 
 **Step 2: Classify.** Each failure goes through a three-tier classification pipeline:
 
@@ -119,18 +119,37 @@ for fa in result.failure_analyses:
 
 3. **AI classification** (costs money, takes a few seconds) -- the traceback, test log excerpt, and infrastructure context are sent to Claude, which returns a structured classification with category, confidence score, root cause summary, evidence, and recommended action.
 
-**Must-gather investigation.** When must-gather artifacts are available on the log server (under `failed_testcase_ocs_logs_*/`), the Claude Code backend switches to **agentic mode**. Instead of a single prompt-and-response, Claude gets access to `curl` and autonomously explores the must-gather HTTP directory:
+**Must-gather investigation.** When must-gather artifacts are available on the log server (under `failed_testcase_ocs_logs_*/`), the Claude Code backend switches to **agentic mode**. Before calling Claude, the pipeline pre-resolves all paths to eliminate directory navigation overhead:
+
+1. **Pre-resolution** — The pipeline navigates the must-gather directory structure upfront (cluster ID, `quay-io-*` hash directory), so Claude receives direct paths to the data. If only a `tar.gz` archive is available, it's automatically downloaded and extracted to `~/.ocs-ci/must_gather_cache/`.
+2. **Test log URLs** — The per-test log directory URL is computed from the test classname and passed directly.
+3. **UI test detection** — For UI tests, the pipeline checks if DOM snapshots and screenshots exist (under `ui_logs_dir_*/`) and passes those URLs. For non-UI tests, this section is omitted entirely.
+
+With all paths pre-resolved, Claude goes straight to the evidence:
 
 1. Starts with **OCS must-gather** — checks Ceph status, health details, OSD tree, operator pod logs, and namespace resources
 2. If it suspects an **infrastructure issue**, it also explores the **OCP must-gather** — node conditions, kubelet logs, etcd health, network diagnostics
+3. For **UI tests** — examines DOM snapshots and screenshots for error messages and UI state
 
-This produces significantly more accurate classifications because Claude can correlate the traceback with the actual cluster state at the time of failure. Agentic calls are slower (3-10 minutes) and cost more (~$0.50-$1.50 per failure) but provide evidence-based root cause analysis.
+Evidence entries include both the AI's interpretation and the actual log line that supports it:
+```
+Ceph cluster has degraded OSDs — ceph_health_detail: 'HEALTH_WARN 1 osds down; Degraded data redundancy'
+```
+
+This produces significantly more accurate classifications because Claude can correlate the traceback with the actual cluster state at the time of failure. Agentic calls are slower (3-10 minutes) and cost more (~$0.50-$1.50 per failure) but provide evidence-based root cause analysis with quoted log lines.
 
 If must-gather data is not available, classification falls back to the standard non-agentic mode using only the traceback and test log excerpts.
 
+**Session recording.** Every agentic investigation is automatically saved to `~/.ocs-ci/recorded_sessions/`. The transcript includes Claude's full tool call chain — every `cat`, `curl`, `grep` command and its output — so you can review exactly what data Claude examined and how it reached its conclusion. Session files are linked from the report.
+
+**Console summary.** At the end of classification, a summary line reports total elapsed time and cost:
+```
+Classification complete in 12.3min, $4.56: 8 AI calls, 2 cache hits, 3 known issues
+```
+
 **Step 3: Enrich.** Classified failures are enriched with:
 
-- **Jira search results** -- JQL queries built from the exception type and test name, searching projects like DFBUGS, RHSTOR, OCSQE for matching open bugs
+- **Jira search results** -- JQL queries built from product/component keywords in the root cause analysis (e.g., ceph, osd, noobaa, pvc), searching projects like DFBUGS, RHSTOR, OCSQE for matching bugs
 - **Cross-run context** -- if history is enabled, each failure is annotated with flakiness rate and regression status from previous runs
 
 ### Classification Categories
@@ -458,10 +477,12 @@ fa.test_result.traceback     # Full traceback string
 fa.category                  # FailureCategory.PRODUCT_BUG
 fa.confidence                # 0.85
 fa.root_cause_summary        # "The RBD space reclaim job timed out because..."
-fa.evidence                  # ["Ceph OSD was in backfill state", ...]
+fa.evidence                  # ["AI explanation — source: 'quoted log line'", ...]
 fa.recommended_action        # "Check Ceph cluster health and OSD status"
 fa.matched_known_issues      # ["DFBUGS-2781"] if regex-matched
 fa.suggested_jira_issues     # [{"key": "DFBUGS-5678", "summary": "...", ...}]
+fa.session_id                # "abc123..." Claude session ID (agentic mode)
+fa.session_file              # "/home/user/.ocs-ci/recorded_sessions/run_session_test.txt"
 ```
 
 ### Report generation
