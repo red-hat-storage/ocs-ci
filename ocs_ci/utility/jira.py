@@ -37,7 +37,7 @@ class JiraHelper:
         )
 
         log.debug(f"Initializing Jira: {self.url}")
-        self.jira = Jira(url=self.url, token=self.token, cloud=True)
+        self.jira = Jira(url=self.url, token=self.token, cloud=False)
 
     @staticmethod
     def _load_from_file(path: str) -> dict:
@@ -75,6 +75,65 @@ class JiraHelper:
         """
         log.debug(f"Fetching Jira issue {issue_key}")
         return self.jira.issue(issue_key)
+
+    def get_issue_summary(self, issue_key: str) -> dict:
+        """
+        Return a compact summary of a Jira issue.
+
+        Args:
+            issue_key (str): The key of the Jira issue e.g. 'DFBUGS-2781'
+
+        Returns:
+            dict: Compact issue summary with key, summary, status, assignee, priority
+
+        """
+        issue = self.get_issue(issue_key)
+        fields = issue.get("fields", {})
+        return {
+            "key": issue.get("key", issue_key),
+            "summary": fields.get("summary", ""),
+            "status": (fields.get("status") or {}).get("name", "Unknown"),
+            "assignee": (fields.get("assignee") or {}).get("displayName", "Unassigned"),
+            "priority": (fields.get("priority") or {}).get("name", "None"),
+            "url": f"{self.url}/browse/{issue_key}",
+        }
+
+    def search_issues(self, jql: str, max_results: int = 10) -> list:
+        """
+        Search Jira using JQL query.
+
+        Args:
+            jql (str): JQL query string
+            max_results (int): Maximum number of results to return
+
+        Returns:
+            list: List of compact issue dicts (key, summary, status, assignee, priority, url)
+
+        """
+        log.debug(f"JQL search: {jql}")
+        try:
+            response = self.jira.jql(jql, limit=max_results)
+        except Exception as e:
+            log.warning(f"JQL search failed: {e}")
+            return []
+
+        results = []
+        for issue in response.get("issues", []):
+            fields = issue.get("fields", {})
+            results.append(
+                {
+                    "key": issue.get("key", ""),
+                    "summary": fields.get("summary", ""),
+                    "status": (fields.get("status") or {}).get("name", "Unknown"),
+                    "assignee": (fields.get("assignee") or {}).get(
+                        "displayName", "Unassigned"
+                    ),
+                    "priority": (fields.get("priority") or {}).get("name", "None"),
+                    "url": f"{self.url}/browse/{issue.get('key', '')}",
+                }
+            )
+        log.debug(f"JQL search returned {len(results)} results")
+        return results
 
     def add_comment(self, issue_key: str, text: str):
         """
