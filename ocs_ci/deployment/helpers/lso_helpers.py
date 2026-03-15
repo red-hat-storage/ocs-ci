@@ -453,16 +453,24 @@ def add_disk_for_vsphere_platform():
             if config.ENV_DATA.get("hdd_disks"):
                 ssd_disk = False
             logger.info(f"LSO Deployment type: {constants.VMDK}")
+            device_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+            provision_type = config.DEPLOYMENT.get(
+                "provision_type", constants.VM_DISK_TYPE
+            )
+
             vsphere_base.attach_disk(
-                config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
-                config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
+                device_size,
+                provision_type,
                 ssd=ssd_disk,
             )
             if config.DEPLOYMENT.get("deploy_multiple_device_classes"):
                 logger.info("Attaching additional disks for the second device class")
+                second_device_size = config.ENV_DATA.get(
+                    "second_device_size", device_size
+                )
                 vsphere_base.attach_disk(
-                    config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
-                    config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
+                    second_device_size,
+                    provision_type,
                     ssd=ssd_disk,
                 )
 
