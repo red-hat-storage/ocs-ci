@@ -245,6 +245,12 @@ class FusionDataFoundationDeployment:
             logger.info("Storage configuration for Fusion 2.11 or greater")
             if self.lso_enabled:
                 add_disks_lso()
+            # Ensure storage class is resolved and stored in config before
+            # StorageCluster creation. The property setter populates
+            # config.ENV_DATA["storage_class"] which StorageClusterSetup
+            # reads to set storageClassName on the dataPVCTemplate.
+            sc = self.storage_class
+            logger.info(f"Resolved storage class for StorageCluster: {sc}")
             clustersetup = StorageClusterSetup()
             if self.lso_enabled:
                 create_lvs_resource(self.storage_class, self.storage_class)
