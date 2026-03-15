@@ -234,16 +234,9 @@ def ocs_install_verification(
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
     exporter_pod_count = len(get_nodes_where_ocs_pods_running())
-    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    storage_cluster = StorageCluster(
-        resource_name=storage_cluster_name,
-        namespace=namespace,
-    )
     pod = OCP(kind=constants.POD, namespace=namespace)
     if not external:
-        osd_count = int(
-            storage_cluster.data["spec"]["storageDeviceSets"][0]["count"]
-        ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
+        osd_count = get_osd_count()
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
@@ -1975,8 +1968,9 @@ def get_osd_count():
     sc_data = sc.get().get("items")[0]
     if sc_data["spec"].get("externalStorage", {}).get("enable"):
         return 0
-    return int(sc_data["spec"]["storageDeviceSets"][0]["count"]) * int(
-        sc.get().get("items")[0]["spec"]["storageDeviceSets"][0]["replica"]
+    return sum(
+        int(ds["count"]) * int(ds["replica"])
+        for ds in sc_data["spec"]["storageDeviceSets"]
     )
 
 
@@ -1996,12 +1990,13 @@ def get_deviceset_count():
     Get storageDeviceSets count  from storagecluster
 
     Returns:
-        int: storageDeviceSets count
+        int: Total count across all storageDeviceSets
 
     """
     sc = get_storage_cluster()
-    return int(
-        sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("count")
+    return sum(
+        int(ds.get("count", 0))
+        for ds in sc.get()["items"][0]["spec"]["storageDeviceSets"]
     )
 
 
