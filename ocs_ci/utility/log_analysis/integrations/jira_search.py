@@ -155,7 +155,11 @@ class JiraSearchIntegration:
     def _build_search_key(self, fa: FailureAnalysis) -> str:
         """Build a cache key for deduplicating Jira searches."""
         # Key on product/component keywords rather than test name
-        rc_keywords = self._extract_root_cause_keywords(fa.root_cause_summary) if fa.root_cause_summary else []
+        rc_keywords = (
+            self._extract_root_cause_keywords(fa.root_cause_summary)
+            if fa.root_cause_summary
+            else []
+        )
         exception_type = self._extract_exception_type(fa)
         if rc_keywords:
             return f"{':'.join(rc_keywords[:3])}:{exception_type}"

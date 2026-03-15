@@ -25,7 +25,9 @@ class ReportBuilder:
             trim_blocks=True,
             lstrip_blocks=True,
         )
-        self.jinja_env.filters["basename"] = lambda path: os.path.basename(path) if path else ""
+        self.jinja_env.filters["basename"] = lambda path: (
+            os.path.basename(path) if path else ""
+        )
 
     def build(self, run_analysis: RunAnalysis, fmt: str = "markdown") -> str:
         """
@@ -60,9 +62,7 @@ class ReportBuilder:
     def build_html(self, run_analysis: RunAnalysis) -> str:
         """Build HTML report by converting Markdown to rendered HTML."""
         md_content = self.build_markdown(run_analysis)
-        return self._md_to_html(
-            md_content, title="OCS-CI Log Analysis Report"
-        )
+        return self._md_to_html(md_content, title="OCS-CI Log Analysis Report")
 
     def _md_to_html(self, md_content: str, title: str = "Report") -> str:
         """
@@ -106,9 +106,7 @@ class ReportBuilder:
 </body>
 </html>"""
 
-    def build_jira_comment(
-        self, fa: FailureAnalysis, run_url: str = ""
-    ) -> str:
+    def build_jira_comment(self, fa: FailureAnalysis, run_url: str = "") -> str:
         """
         Build a Jira comment from a failure analysis.
 
@@ -140,9 +138,7 @@ class ReportBuilder:
         md_content = template.render(report=trend_report)
 
         if fmt == "html":
-            return self._md_to_html(
-                md_content, title="OCS-CI Cross-Run Trend Analysis"
-            )
+            return self._md_to_html(md_content, title="OCS-CI Cross-Run Trend Analysis")
 
         return md_content
 

@@ -134,9 +134,7 @@ class TestLogParser:
             )
 
         if parsed["ceph_health"]:
-            sections.append(
-                "=== CEPH HEALTH ===\n" + parsed["ceph_health"]
-            )
+            sections.append("=== CEPH HEALTH ===\n" + parsed["ceph_health"])
 
         if parsed["tail"]:
             sections.append(
@@ -164,7 +162,7 @@ class TestLogParser:
 
     def _extract_tail(self, lines: list) -> list:
         """Extract last N lines of the log."""
-        return lines[-self.MAX_TAIL_LINES:]
+        return lines[-self.MAX_TAIL_LINES :]
 
     def _extract_ceph_health(self, lines: list) -> list:
         """Extract lines related to Ceph health checks."""

@@ -123,9 +123,11 @@ class MustGatherParser:
 
         mode = "r:gz" if isinstance(source, str) else "r:*"
 
-        with tarfile.open(name=source if isinstance(source, str) else None,
-                          fileobj=source if not isinstance(source, str) else None,
-                          mode=mode) as tar:
+        with tarfile.open(
+            name=source if isinstance(source, str) else None,
+            fileobj=source if not isinstance(source, str) else None,
+            mode=mode,
+        ) as tar:
             for member in tar.getmembers():
                 if not member.isfile():
                     continue
@@ -139,7 +141,9 @@ class MustGatherParser:
                     f = tar.extractfile(member)
                     if f is None:
                         continue
-                    content = f.read(MAX_CHARS_PER_FILE).decode("utf-8", errors="replace")
+                    content = f.read(MAX_CHARS_PER_FILE).decode(
+                        "utf-8", errors="replace"
+                    )
                     f.close()
                 except (KeyError, IOError, UnicodeDecodeError) as e:
                     logger.debug(f"Skipping {member.name}: {e}")
@@ -160,11 +164,15 @@ class MustGatherParser:
 
         if "health" in path_lower or "status" in path_lower:
             if "ceph" in path_lower:
-                result["ceph_health"] += f"\n--- {os.path.basename(path)} ---\n{content}\n"
+                result[
+                    "ceph_health"
+                ] += f"\n--- {os.path.basename(path)} ---\n{content}\n"
         elif "osd" in path_lower:
             result["osd_info"] += f"\n--- {os.path.basename(path)} ---\n{content}\n"
         elif "crash" in path_lower:
-            result["crash_reports"] += f"\n--- {os.path.basename(path)} ---\n{content}\n"
+            result[
+                "crash_reports"
+            ] += f"\n--- {os.path.basename(path)} ---\n{content}\n"
         elif "event" in path_lower:
             result["pod_events"] += f"\n--- {os.path.basename(path)} ---\n{content}\n"
 

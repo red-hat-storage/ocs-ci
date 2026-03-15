@@ -13,9 +13,7 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import tarfile
-import tempfile
 import time
 from typing import Optional
 
@@ -24,7 +22,6 @@ import requests
 from ocs_ci.utility.log_analysis.ai.base import AIBackend
 from ocs_ci.utility.log_analysis.analysis.known_issues import KnownIssuesMatcher
 from ocs_ci.utility.log_analysis.cache import AnalysisCache
-from ocs_ci.utility.log_analysis.exceptions import AIBackendError
 from ocs_ci.utility.log_analysis.models import (
     FailureAnalysis,
     FailureCategory,
@@ -215,7 +212,8 @@ class FailureClassifier:
                 session_text = analysis_dict.pop("session_text", "")
                 if session_text:
                     session_file = self._save_session(
-                        representative.name, session_text,
+                        representative.name,
+                        session_text,
                         analysis_dict.get("session_id", ""),
                     )
                     analysis_dict["session_file"] = session_file
@@ -292,9 +290,7 @@ class FailureClassifier:
     def _list_http_dir(self, url: str) -> list:
         """List entries in an HTTP directory listing. Returns list of names."""
         try:
-            resp = self.http_session.get(
-                url.rstrip("/") + "/", timeout=15
-            )
+            resp = self.http_session.get(url.rstrip("/") + "/", timeout=15)
             if resp.status_code != 200:
                 return []
             return re.findall(r'<a href="([^"?/][^"]*)"', resp.text)
@@ -333,9 +329,7 @@ class FailureClassifier:
         if not cluster_entries:
             return {"mg_type": "none"}
 
-        has_ocs_dir = any(
-            e.rstrip("/") == "ocs_must_gather" for e in cluster_entries
-        )
+        has_ocs_dir = any(e.rstrip("/") == "ocs_must_gather" for e in cluster_entries)
         has_tar = any(e.endswith(".tar.gz") for e in cluster_entries)
 
         if has_ocs_dir:
@@ -343,16 +337,32 @@ class FailureClassifier:
             return self._resolve_extracted_mg(cluster_url, cluster_id)
 
         if has_tar:
-            # Only tar.gz — download and extract locally
-            tar_name = next(e for e in cluster_entries if e.endswith(".tar.gz"))
-            tar_url = f"{cluster_url}/{tar_name}"
-            return self._extract_mg_tarball(
-                tar_url, test_name, cluster_id
+            # Download and extract tar.gz archives locally
+            ocs_tar = next(
+                (e for e in cluster_entries if e == "ocs_must_gather.tar.gz"),
+                None,
             )
+            ocp_tar = next(
+                (e for e in cluster_entries if e == "ocp_must_gather.tar.gz"),
+                None,
+            )
+            if not ocs_tar:
+                # Fallback: pick any tar.gz
+                ocs_tar = next(
+                    (e for e in cluster_entries if e.endswith(".tar.gz")),
+                    None,
+                )
+            if ocs_tar:
+                tar_url = f"{cluster_url}/{ocs_tar}"
+                ocp_tar_url = f"{cluster_url}/{ocp_tar}" if ocp_tar else ""
+                return self._extract_mg_tarball(
+                    tar_url,
+                    test_name,
+                    cluster_id,
+                    ocp_tar_url=ocp_tar_url,
+                )
 
-        logger.debug(
-            f"Must-gather at {cluster_url} has no ocs_must_gather/ or tar.gz"
-        )
+        logger.debug(f"Must-gather at {cluster_url} has no ocs_must_gather/ or tar.gz")
         return {"mg_type": "none"}
 
     def _resolve_extracted_mg(self, cluster_url: str, cluster_id: str) -> dict:
@@ -397,42 +407,42 @@ class FailureClassifier:
         }
 
     def _extract_mg_tarball(
-        self, tar_url: str, test_name: str, cluster_id: str
+        self,
+        tar_url: str,
+        test_name: str,
+        cluster_id: str,
+        ocp_tar_url: str = "",
     ) -> dict:
-        """Download and extract a must-gather tar.gz to local disk."""
+        """Download and extract must-gather tar.gz archives to local disk."""
         safe_test = re.sub(r"[^\w\-]", "_", test_name)[:80]
-        extract_dir = os.path.join(
-            MG_CACHE_DIR, self.run_id, safe_test
-        )
+        extract_dir = os.path.join(MG_CACHE_DIR, self.run_id, safe_test)
         os.makedirs(extract_dir, exist_ok=True)
         self._mg_cleanup_paths.append(extract_dir)
 
-        tar_path = os.path.join(extract_dir, "must_gather.tar.gz")
+        # Download and extract each archive
+        for url, label in [(tar_url, "ocs"), (ocp_tar_url, "ocp")]:
+            if not url:
+                continue
+            tar_path = os.path.join(extract_dir, f"{label}_must_gather.tar.gz")
+            try:
+                logger.info(f"Downloading {label} must-gather tar.gz for {test_name}")
+                resp = self.http_session.get(url, timeout=120, stream=True)
+                resp.raise_for_status()
+                with open(tar_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
 
-        try:
-            logger.info(
-                f"Downloading must-gather tar.gz for {test_name} "
-                f"({tar_url})"
-            )
-            resp = self.http_session.get(tar_url, timeout=120, stream=True)
-            resp.raise_for_status()
-            with open(tar_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                logger.info(
+                    f"Extracting {label} must-gather to {extract_dir} "
+                    f"({os.path.getsize(tar_path) / 1024 / 1024:.1f} MB)"
+                )
+                with tarfile.open(tar_path, "r:gz") as tar:
+                    tar.extractall(path=extract_dir)
 
-            logger.info(
-                f"Extracting must-gather to {extract_dir} "
-                f"({os.path.getsize(tar_path) / 1024 / 1024:.1f} MB)"
-            )
-            with tarfile.open(tar_path, "r:gz") as tar:
-                tar.extractall(path=extract_dir)
+                os.remove(tar_path)
 
-            # Remove the tar.gz after extraction
-            os.remove(tar_path)
-
-        except Exception as e:
-            logger.warning(f"Failed to download/extract must-gather: {e}")
-            return {"mg_type": "none"}
+            except Exception as e:
+                logger.warning(f"Failed to download/extract {label} must-gather: {e}")
 
         # Find the extracted data directories
         ocs_mg_path = self._find_local_mg_dir(extract_dir, "ocs_must_gather")
@@ -545,9 +555,7 @@ class FailureClassifier:
             "screenshot_files": screenshots_entries,
         }
 
-    def _save_session(
-        self, test_name: str, session_text: str, session_id: str
-    ) -> str:
+    def _save_session(self, test_name: str, session_text: str, session_id: str) -> str:
         """Save the full agentic session transcript to a readable text file.
 
         Finds the Claude Code JSONL session file by session_id, converts it
@@ -555,8 +563,6 @@ class FailureClassifier:
 
         Returns the file path, or empty string on failure.
         """
-        import json as _json
-
         os.makedirs(SESSIONS_DIR, exist_ok=True)
         safe_name = re.sub(r"[^\w\-]", "_", test_name)[:80]
         filename = f"{self.run_id}_session_record_{safe_name}.txt"
@@ -591,9 +597,7 @@ class FailureClassifier:
         if not os.path.isdir(claude_dir):
             return ""
         for project_dir in os.listdir(claude_dir):
-            candidate = os.path.join(
-                claude_dir, project_dir, f"{session_id}.jsonl"
-            )
+            candidate = os.path.join(claude_dir, project_dir, f"{session_id}.jsonl")
             if os.path.isfile(candidate):
                 return candidate
         return ""
