@@ -66,6 +66,25 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
     parser = JUnitResultParser()
     test_results = parser.parse_from_string(xml_content)
 
+    # Enrich metadata from JUnit suite properties (they have fuller versions)
+    sp = parser.suite_properties
+    if sp:
+        # Prefer full nightly OCP version from JUnit over short YAML version
+        rp_ocp = sp.get("rp_ocp_version", "")
+        if rp_ocp and len(rp_ocp) > len(run_metadata.ocp_version):
+            run_metadata.ocp_version = rp_ocp
+        # Prefer OCS build (e.g. "4.21.0-110") over bare version
+        rp_build = sp.get("rp_ocs_build", "")
+        if rp_build:
+            run_metadata.ocs_build = rp_build
+        # Use registry tag for OCS version if it's richer (e.g. "4.21.0-110.konflux")
+        rp_tag = sp.get("rp_ocs_registry_tag", "")
+        if rp_tag and len(rp_tag) > len(run_metadata.ocs_version):
+            run_metadata.ocs_version = rp_tag
+        # Fill launch name if missing
+        if not run_metadata.launch_name:
+            run_metadata.launch_name = sp.get("rp_launch_name", "")
+
     # Build run analysis
     run_analysis = RunAnalysis(
         run_url=source,

@@ -55,6 +55,7 @@ class JUnitResultParser:
         """Parse an ElementTree root into TestResult objects."""
         results = []
         self.suite_timestamp = ""
+        self.suite_properties = {}
 
         # Handle both <testsuites><testsuite>... and <testsuite>... formats
         if root.tag == "testsuites":
@@ -70,6 +71,9 @@ class JUnitResultParser:
                 self.suite_timestamp = testsuite.get("timestamp", "")
             # Extract testsuite-level properties
             suite_props = self._extract_properties(testsuite)
+            # Keep the richest suite properties (most rp_ keys)
+            if len(suite_props) > len(self.suite_properties):
+                self.suite_properties = suite_props
 
             for testcase in testsuite.findall("testcase"):
                 result = self._parse_testcase(testcase, suite_props)
