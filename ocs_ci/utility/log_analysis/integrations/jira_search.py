@@ -15,7 +15,7 @@ from ocs_ci.utility.log_analysis.models import FailureAnalysis, FailureCategory
 logger = logging.getLogger(__name__)
 
 # Jira projects to search in, ordered by relevance
-DEFAULT_PROJECTS = ["DFBUGS", "RHSTOR", "OCSQE"]
+DEFAULT_PROJECTS = ["DFBUGS"]
 
 # Max JQL results per query
 DEFAULT_MAX_RESULTS = 5
