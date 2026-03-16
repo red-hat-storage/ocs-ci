@@ -218,6 +218,7 @@ python -m ocs_ci.utility.log_analysis.cli <source> [options]
 | `--cache-dir` | `~/.ocs-ci/analysis_cache` | Cache directory |
 | `--cache-ttl` | `720` | Cache time-to-live in hours (default: 30 days) |
 | `--known-issues-file` | none | Path to YAML file with additional known issue patterns |
+| `--sessions-dir` | `~/.ocs-ci/recorded_sessions` | Directory for recorded session transcripts |
 | `--record-history` | off | Save results to history store for cross-run analysis |
 | `--history-dir` | `~/.ocs-ci/analysis_history` | History store directory |
 | `--save-prompts` | off | Save AI prompts to `~/.ocs-ci/prompts/<run_id>/` for debugging |
@@ -379,6 +380,7 @@ All settings under `LOG_ANALYSIS:` in the ocs-ci config:
 | `cache_dir` | `"~/.ocs-ci/analysis_cache"` | Cache directory |
 | `jira_search_enabled` | `true` | Search Jira for matching bugs |
 | `jira_projects` | `["DFBUGS"]` | Jira projects to search |
+| `sessions_dir` | `"~/.ocs-ci/recorded_sessions"` | Recorded session transcripts directory |
 | `history_dir` | `"~/.ocs-ci/analysis_history"` | Run history directory |
 | `ci_post_hook_enabled` | `false` | Enable CI post-session hook |
 | `ci_report_format` | `"all"` | CI report format: `json`, `markdown`, `html`, `both`, or `all` |
