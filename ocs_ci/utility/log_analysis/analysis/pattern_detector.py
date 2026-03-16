@@ -57,6 +57,7 @@ class TrendReport:
 
     period: str = ""
     runs_analyzed: int = 0
+    run_details: list = field(default_factory=list)
     pass_rate_trend: list = field(default_factory=list)
     category_trend: dict = field(default_factory=dict)
     top_flaky_tests: list = field(default_factory=list)
@@ -68,6 +69,7 @@ class TrendReport:
         return {
             "period": self.period,
             "runs_analyzed": self.runs_analyzed,
+            "run_details": self.run_details,
             "pass_rate_trend": self.pass_rate_trend,
             "category_trend": self.category_trend,
             "top_flaky_tests": [t.to_dict() for t in self.top_flaky_tests],
@@ -286,19 +288,38 @@ class PatternDetector:
         timestamps = [r.timestamp for r in self.history]
         period = f"{timestamps[-1][:10]} to {timestamps[0][:10]}"
 
-        # Pass rate trend (newest first in self.history, reverse for chronological)
-        pass_rate_trend = []
+        # Build run details (chronological order)
+        run_details = []
         for record in reversed(self.history):
             total_decisive = record.passed + record.failed + record.error
             rate = record.passed / total_decisive if total_decisive > 0 else 0.0
-            pass_rate_trend.append(
+            run_details.append(
                 {
                     "timestamp": record.timestamp[:10],
-                    "pass_rate": round(rate, 3),
+                    "run_id": record.run_id,
+                    "launch_name": record.launch_name,
+                    "jenkins_url": record.jenkins_url,
+                    "run_url": record.run_url,
+                    "platform": record.platform,
+                    "ocs_version": record.ocs_version,
                     "total": record.total_tests,
+                    "passed": record.passed,
                     "failed": record.failed + record.error,
+                    "skipped": record.skipped,
+                    "pass_rate": round(rate, 3),
                 }
             )
+
+        # Pass rate trend (from run_details)
+        pass_rate_trend = [
+            {
+                "timestamp": rd["timestamp"],
+                "pass_rate": rd["pass_rate"],
+                "total": rd["total"],
+                "failed": rd["failed"],
+            }
+            for rd in run_details
+        ]
 
         # Category distribution trend
         category_trend = defaultdict(list)
@@ -370,6 +391,7 @@ class PatternDetector:
         return TrendReport(
             period=period,
             runs_analyzed=len(self.history),
+            run_details=run_details,
             pass_rate_trend=pass_rate_trend,
             category_trend=dict(category_trend),
             top_flaky_tests=flaky_tests[:20],

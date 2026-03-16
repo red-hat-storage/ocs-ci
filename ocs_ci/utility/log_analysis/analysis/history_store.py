@@ -24,6 +24,9 @@ class RunRecord:
     platform: str = ""
     ocs_version: str = ""
     ocs_build: str = ""
+    run_id: str = ""
+    launch_name: str = ""
+    jenkins_url: str = ""
     total_tests: int = 0
     passed: int = 0
     failed: int = 0
@@ -43,6 +46,9 @@ class RunRecord:
             platform=data.get("platform", ""),
             ocs_version=data.get("ocs_version", ""),
             ocs_build=data.get("ocs_build", ""),
+            run_id=data.get("run_id", ""),
+            launch_name=data.get("launch_name", ""),
+            jenkins_url=data.get("jenkins_url", ""),
             total_tests=data.get("total_tests", 0),
             passed=data.get("passed", 0),
             failed=data.get("failed", 0),
@@ -99,6 +105,9 @@ class RunRecord:
             platform=run_analysis.run_metadata.platform,
             ocs_version=run_analysis.run_metadata.ocs_version,
             ocs_build=run_analysis.run_metadata.ocs_build,
+            run_id=run_analysis.run_metadata.run_id,
+            launch_name=run_analysis.run_metadata.launch_name,
+            jenkins_url=run_analysis.run_metadata.jenkins_url,
             total_tests=run_analysis.total_tests,
             passed=run_analysis.passed,
             failed=run_analysis.failed,

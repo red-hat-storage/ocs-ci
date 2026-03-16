@@ -401,23 +401,21 @@ LOG_ANALYSIS:
   # Model to use (sonnet/opus/haiku)
   model: "sonnet"
   # Max spend per AI classification call in USD
-  max_budget_usd: 0.50
+  max_budget_usd: 1.00
   # Max unique failures to analyze with AI per run
-  max_failures_to_analyze: 30
+  max_failures_to_analyze: 100
   # Skip AI for regex-matched known issues
-  skip_ai_for_known_issues: true
+  skip_ai_for_known_issues: false
   # File-based cache for analysis results
   cache_enabled: true
-  cache_dir: "~/.ocs-ci/analysis_cache"
+  cache_dir: "/mnt/ocsci-jenkins/log_analysis/4_21_cache_dir"
   # Jira integration
   jira_search_enabled: true
   jira_projects:
     - "DFBUGS"
-    - "RHSTOR"
-    - "OCSQE"
-  # Cross-run history tracking
+   # Cross-run history tracking
   history_dir: "~/.ocs-ci/analysis_history"
   # CI/CD post-session hook (opt-in)
-  ci_post_hook_enabled: false
-  # Output format for CI hook reports: "json", "markdown", or "both"
-  ci_report_format: "both"
+  ci_post_hook_enabled: true
+  # Output format for CI hook reports: "json", "markdown", "html", "both", or "all"
+  ci_report_format: "all"

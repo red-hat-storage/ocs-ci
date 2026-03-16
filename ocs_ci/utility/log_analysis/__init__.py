@@ -81,9 +81,11 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
         rp_tag = sp.get("rp_ocs_registry_tag", "")
         if rp_tag and len(rp_tag) > len(run_metadata.ocs_version):
             run_metadata.ocs_version = rp_tag
-        # Fill launch name if missing
-        if not run_metadata.launch_name:
-            run_metadata.launch_name = sp.get("rp_launch_name", "")
+        # Prefer rp_launch_name — it includes the test tier (e.g. tier1)
+        # while REPORTING.display_name only has the deployment flavour
+        rp_launch = sp.get("rp_launch_name", "")
+        if rp_launch:
+            run_metadata.launch_name = rp_launch
 
     # Build run analysis
     run_analysis = RunAnalysis(

@@ -5,6 +5,18 @@
 
 ---
 
+{% if report.run_details %}
+## Analyzed Runs
+
+| # | Date | Flavour | Platform | OCS Version | Pass Rate | P | F | S | Links |
+|---|------|---------|----------|-------------|-----------|---|---|---|-------|
+{% for rd in report.run_details | reverse %}
+| {{ loop.index }} | {{ rd.timestamp }} | {{ rd.launch_name or 'N/A' }} | {{ rd.platform or 'N/A' }} | {{ rd.ocs_version or 'N/A' }} | {{ "%.0f"|format(rd.pass_rate * 100) }}% | {{ rd.passed }} | {{ rd.failed }} | {{ rd.skipped }} | {% if rd.jenkins_url %}[Jenkins]({{ rd.jenkins_url }}){% endif %}{% if rd.jenkins_url and rd.run_url %} / {% endif %}{% if rd.run_url %}[Logs]({{ rd.run_url }}){% endif %} |
+{% endfor %}
+
+---
+
+{% endif %}
 ## Pass Rate Trend
 
 | Date | Pass Rate | Total | Failed |

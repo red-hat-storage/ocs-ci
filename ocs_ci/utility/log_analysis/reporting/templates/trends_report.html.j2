@@ -167,6 +167,58 @@ body {
   </div>
 </div>
 
+{% if report.run_details %}
+<!-- Runs Table -->
+<div class="card">
+  <h2>Analyzed Runs <span class="count-badge" style="background:#e0f2fe;color:#0284c7">{{ report.run_details | length }}</span></h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date</th>
+          <th>Flavour</th>
+          <th>Platform</th>
+          <th>OCS Version</th>
+          <th>Pass Rate</th>
+          <th>P</th>
+          <th>F</th>
+          <th>S</th>
+          <th>Links</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rd in report.run_details | reverse %}
+        <tr>
+          <td style="color:var(--text-secondary)">{{ loop.index }}</td>
+          <td style="white-space:nowrap">{{ rd.timestamp }}</td>
+          <td class="test-name" style="max-width:320px" title="{{ rd.launch_name }}">{{ rd.launch_name or 'N/A' }}</td>
+          <td>{{ rd.platform or 'N/A' }}</td>
+          <td style="font-size:12px">{{ rd.ocs_version or 'N/A' }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="health-bar-bg" style="width:50px">
+                <div class="health-bar-fill" style="width:{{ (rd.pass_rate * 100) | round }}%;background:{% if rd.pass_rate >= 0.9 %}var(--green){% elif rd.pass_rate >= 0.7 %}var(--orange){% else %}var(--red){% endif %}"></div>
+              </div>
+              <span style="font-weight:600;font-size:12px">{{ "%.0f" | format(rd.pass_rate * 100) }}%</span>
+            </div>
+          </td>
+          <td style="color:var(--green);font-weight:600">{{ rd.passed }}</td>
+          <td style="color:var(--red);font-weight:600">{{ rd.failed }}</td>
+          <td style="color:var(--gray)">{{ rd.skipped }}</td>
+          <td style="white-space:nowrap;font-size:12px">
+            {% if rd.jenkins_url %}<a href="{{ rd.jenkins_url }}" style="color:var(--accent);text-decoration:none" title="Jenkins">Jenkins</a>{% endif %}
+            {% if rd.jenkins_url and rd.run_url %} &middot; {% endif %}
+            {% if rd.run_url %}<a href="{{ rd.run_url }}" style="color:var(--accent);text-decoration:none" title="Logs">Logs</a>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- Charts Row -->
 <div class="chart-row">
   <div class="chart-card">

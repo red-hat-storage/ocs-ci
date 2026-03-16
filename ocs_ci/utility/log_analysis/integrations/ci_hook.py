@@ -73,21 +73,28 @@ def pytest_sessionfinish(session, exitstatus):
 
         # Generate reports
         builder = ReportBuilder()
-        report_format = la_config.get("ci_report_format", "both")
+        report_format = la_config.get("ci_report_format", "all")
 
-        if report_format in ("json", "both"):
+        if report_format in ("json", "both", "all"):
             json_path = os.path.join(log_dir, "ai_analysis_report.json")
             json_report = builder.build(run_analysis, fmt="json")
             with open(json_path, "w") as f:
                 f.write(json_report)
             log.info(f"AI analysis JSON report: {json_path}")
 
-        if report_format in ("markdown", "both"):
+        if report_format in ("markdown", "both", "all"):
             md_path = os.path.join(log_dir, "ai_analysis_report.md")
             md_report = builder.build(run_analysis, fmt="markdown")
             with open(md_path, "w") as f:
                 f.write(md_report)
             log.info(f"AI analysis Markdown report: {md_path}")
+
+        if report_format in ("html", "all"):
+            html_path = os.path.join(log_dir, "ai_analysis_report.html")
+            html_report = builder.build(run_analysis, fmt="html")
+            with open(html_path, "w") as f:
+                f.write(html_report)
+            log.info(f"AI analysis HTML report: {html_path}")
 
         # Log summary stats
         classified = sum(
