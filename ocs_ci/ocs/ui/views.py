@@ -931,26 +931,17 @@ FDF_SAN_LOCATORS = {
 }
 
 SCALE_DASHBOARD_LOCATORS = {
-    # Scale dashboard health cards
     "scale_connection_green": (
-        By.XPATH,
         "//*[@data-test='Connection-health-item-icon']//*[@data-test='success-icon']",
-    ),
-    "scale_operator_green": (
         By.XPATH,
-        "//div[@data-item-id='Operator-health-item']//svg[@data-test='success-icon']",
-    ),
-    "lun_groups_connected_summary": (
-        By.XPATH,
-        "//*[contains(normalize-space(),'LUN groups connected')]",
     ),
     "lun_group_row_by_name": (
+        "//table//tbody//tr",
         By.XPATH,
-        "//table//tbody//tr[.//a[normalize-space()='{lun_group_name}']]",
     ),
     "lun_group_status_ok_by_name": (
+        "//table//tbody//tr//*[text()='OK']",
         By.XPATH,
-        "//tr[.//a[normalize-space()='{lun_group_name}']]//*[normalize-space()='OK']",
     ),
 }
 

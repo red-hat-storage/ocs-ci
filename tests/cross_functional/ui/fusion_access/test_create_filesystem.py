@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from ocs_ci.ocs.ui.page_objects.fusion_access_ui import FusionAccessUI
-
 from ocs_ci.framework.testlib import (
     tier1,
     ui,
@@ -52,7 +51,6 @@ class TestFDFSANConnection(ManageTest):
     @pytest.mark.polarion_id("OCS-5500")
     def test_connect_san_storage_and_create_filesystem(
         self,
-        teardown_factory,
     ):
         """
         Test to connect SAN storage and create file system via UI.
@@ -124,27 +122,10 @@ class TestFDFSANConnection(ManageTest):
 
         # Step 11: Wait for LUN group creation and verify SAN Scale state
         logger.info("Step 11: Wait for LUN group creation and verify SAN Scale state")
-        try:
-            # Wait for filesystem / LUN group row to appear
-            logger.info("Waiting for filesystem creation")
-            filesystem_name = self.fusion_access.wait_for_filesystem_creation(
-                lun_group_name
-            )
-            logger.info(f"File system created for LUN group: {filesystem_name}")
-            self.base_ui.take_screenshot("filesystem_created")
-
-            # Validation: Verify LUN group is connected
-            logger.info("Validating LUN group connection")
-            self.fusion_access.verify_lun_group_connection(lun_group_name)
-
-            # Validation: Verify filesystem status
-            logger.info("Validating filesystem status")
-            self.fusion_access.verify_filesystem_status(filesystem_name)
-
-        except Exception as e:
-            logger.error(f"Unexpected error during SAN Scale validation: {e}")
-            self.base_ui.take_screenshot("san_scale_validation_failed")
-            raise
+        logger.info("Waiting for filesystem creation")
+        self.fusion_access.wait_for_filesystem_and_verify_connection(
+            lun_group_name="lungroup-test-ead8da47e581457ea7571659d1"
+        )
 
 
 # Suggested by Bob

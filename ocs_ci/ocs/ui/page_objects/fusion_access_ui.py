@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class FusionAccessUI(PageNavigator, BaseUI):
     """
-    FusionAccessUI class for add capacity, device replacement, node replacement
+    FusionAccessUI class implements san connection and lun group management
 
     """
 
@@ -28,53 +28,28 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Raises:
             TimeoutExpiredError: If button is not found or clickable
         """
-        try:
-            self.base_ui.do_click(
-                FDF_SAN_LOCATORS["connect_external_storage_button"],
-                enable_screenshot=False,
-            )
-            logger.info("Clicked on Connect external systems button")
-        except Exception as e:
-            logger.error(f"Failed to click Connect external systems button: {e}")
-            raise
+        self.base_ui.do_click(FDF_SAN_LOCATORS["connect_external_storage_button"])
+        logger.info("Clicked on Connect external systems button")
 
     def select_storage_area_network(self):
         """
         Select Storage Area Network radio button.
 
-        Raises:
-            TimeoutExpiredError: If radio button is not found
         """
-        try:
-            wait_for_element_to_be_clickable(
-                locator=FDF_SAN_LOCATORS["san_radio_button"], timeout=60
-            )
-            logger.info("Clicked on Storage Area network radio button")
-            self.base_ui.do_click(
-                FDF_SAN_LOCATORS["san_radio_button"], enable_screenshot=False
-            )
-            logger.info("Selected Storage Area Network option")
-        except Exception as e:
-            logger.error(f"Failed to select Storage Area Network: {e}")
-            self.base_ui.take_screenshot("san_selection_error")
-            raise
+
+        wait_for_element_to_be_clickable(
+            locator=FDF_SAN_LOCATORS["san_radio_button"], timeout=60
+        )
+        self.base_ui.do_click(FDF_SAN_LOCATORS["san_radio_button"])
+        logger.info("Selected Storage Area Network option")
 
     def click_next_button(self):
         """
         Click the Next button to proceed.
 
-        Raises:
-            TimeoutExpiredError: If Next button is not found or clickable
         """
-        try:
-            self.base_ui.do_click(
-                FDF_SAN_LOCATORS["next_button"], enable_screenshot=False
-            )
-            logger.info("Clicked Next button")
-        except Exception as e:
-            logger.error(f"Failed to click Next button: {e}")
-            self.base_ui.take_screenshot("next_button_error")
-            raise
+        self.base_ui.do_click(FDF_SAN_LOCATORS["next_button"])
+        logger.info("Clicked Next button")
 
     def select_all_nodes_option(self):
         """
@@ -83,21 +58,21 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Raises:
             TimeoutExpiredError: If radio button is not found
         """
-        try:
-            san_element = self.base_ui.get_elements(
-                FDF_SAN_LOCATORS["all_nodes_radio"]
-            )[0]
-            if not san_element.is_selected():
-                logger.info("Selecting now")
-                self.base_ui.do_click(
-                    FDF_SAN_LOCATORS["all_nodes_radio"], enable_screenshot=True
-                )
-            else:
-                logger.info("Selected All Nodes (Default) option")
-        except Exception as e:
-            logger.error(f"Failed to select AllNodes option: {e}")
-            self.base_ui.take_screenshot("all_nodes_error")
-            raise
+
+        elements = self.base_ui.get_elements(FDF_SAN_LOCATORS["all_nodes_radio"])
+
+        if not elements:
+            raise TimeoutExpiredError("AllNodes radio button not found")
+
+        san_element = elements[0]
+
+        if not san_element.is_selected():
+            logger.info("Selecting All Nodes option")
+            self.base_ui.do_click(
+                FDF_SAN_LOCATORS["all_nodes_radio"], enable_screenshot=True
+            )
+        else:
+            logger.info("All Nodes (Default) option already selected")
 
     def enter_lun_group_name(self, lun_group_name):
         """
@@ -109,22 +84,17 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Raises:
             TimeoutExpiredError: If text field is not found
         """
-        try:
-            self.base_ui.do_send_keys(
-                FDF_SAN_LOCATORS["lun_group_name_input"], lun_group_name
-            )
-            logger.info(f"Entered LUN group name: {lun_group_name}")
-        except Exception as e:
-            logger.error(f"Failed to enter LUN group name: {e}")
-            self.base_ui.take_screenshot("lun_name_error")
-            raise
+        self.base_ui.do_send_keys(
+            FDF_SAN_LOCATORS["lun_group_name_input"], lun_group_name
+        )
+        logger.info(f"Entered LUN group name: {lun_group_name}")
 
-    def select_luns_from_table(self, num_luns=2):
+    def select_luns_from_table(self, num_luns=1):
         """
         Select a subset of LUNs from the available LUNs table.
 
         Args:
-            num_luns (int): Number of LUNs to select (default: 2)
+            num_luns (int): Number of LUNs to select (default: 1)
 
         Returns:
             list: List of selected LUN identifiers
@@ -132,49 +102,36 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Raises:
             TimeoutExpiredError: If LUN table is not found
         """
-        try:
-            selected_luns = []
-            for i in range(1, 2):
-                # XPath for checkbox in row i
-                lun_checkbox_xpath = (
-                    f"//table[@aria-label='LUNs table' or contains(@class, 'pf-v5-c-table')]"
-                    f"//tbody//tr[{i}]//input[@type='checkbox']"
-                )
-                lun_checkbox_locator = (lun_checkbox_xpath, By.XPATH)
-                self.base_ui.do_click(lun_checkbox_locator, enable_screenshot=False)
+        selected_luns = []
+        for i in range(1, num_luns + 1):
+            # XPath for checkbox in row i
+            lun_checkbox_xpath = (
+                f"//table[@aria-label='LUNs table' or contains(@class, 'pf-v5-c-table')]"
+                f"//tbody//tr[{i}]//input[@type='checkbox']"
+            )
+            lun_checkbox_locator = (lun_checkbox_xpath, By.XPATH)
+            self.base_ui.do_click(lun_checkbox_locator)
 
-                # XPath for LUN identifier in column 2 of row i
-                lun_id_xpath = (
-                    f"//table[@aria-label='LUNs table' or contains(@class, 'pf-v5-c-table__text')]"
-                    f"//tbody//tr[{i}]//td[2]"
-                )
-                lun_id_locator = (lun_id_xpath, By.XPATH)
-                lun_id = self.base_ui.get_element_text(lun_id_locator)
-                selected_luns.append(lun_id)
-                logger.info(f"Selected LUN: {lun_id}")
+            # XPath for LUN identifier in column 2 of row i
+            lun_id_xpath = (
+                f"//table[@aria-label='LUNs table' or contains(@class, 'pf-v5-c-table__text')]"
+                f"//tbody//tr[{i}]//td[2]"
+            )
+            lun_id_locator = (lun_id_xpath, By.XPATH)
+            lun_id = self.base_ui.get_element_text(lun_id_locator)
+            selected_luns.append(lun_id)
+            logger.info(f"Selected LUN: {lun_id}")
 
-            return selected_luns
-        except Exception as e:
-            logger.error(f"Failed to select LUNs: {e}")
-            self.base_ui.take_screenshot("lun_selection_error")
-            raise
+        return selected_luns
 
     def click_connect_and_create(self):
         """
         Click the 'Connect and Create' button.
 
-        Raises:
-            TimeoutExpiredError: If button is not found or clickable
         """
-        try:
-            self.base_ui.do_click(
-                FDF_SAN_LOCATORS["connect_and_create_button"], enable_screenshot=True
-            )
-            logger.info("Clicked Connect and Create button")
-        except Exception as e:
-            logger.error(f"Failed to click Connect and Create: {e}")
-            self.base_ui.take_screenshot("connect_create_error")
-            raise
+        self.base_ui.do_click(
+            FDF_SAN_LOCATORS["connect_and_create_button"], enable_screenshot=True
+        )
 
     def navigate_to_san_storage_tab(self):
         """
@@ -183,99 +140,41 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Raises:
             TimeoutExpiredError: If tab is not found
         """
-        try:
-            self.base_ui.do_click(
-                FDF_SAN_LOCATORS["san_storage_link"], enable_screenshot=True
-            )
-            logger.info("Navigated to storage san dashboard")
-        except Exception as e:
-            logger.error(f"Failed to navigate to storage san dashboard: {e}")
-            self.base_ui.take_screenshot("navigation_error")
-            raise
+        self.base_ui.do_click(
+            FDF_SAN_LOCATORS["san_storage_link"], enable_screenshot=True
+        )
+        logger.info("Navigated to storage san dashboard")
 
-    @retry(TimeoutExpiredError, tries=20, delay=30, backoff=1)
-    def wait_for_filesystem_creation(self, lun_group_name, timeout=600):
+    @retry((AssertionError, TimeoutExpiredError), tries=20, delay=30)
+    def wait_for_filesystem_and_verify_connection(self, lun_group_name):
         """
-        Wait until the LUN group (filesystem) appears in the Scale Dashboard table.
+        Wait for filesystem and verify connection
+
+        Args:
+            lun_group_name (str): Name for the LUN group
+
         """
-        try:
-            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
-            locator = (
-                by,
-                xpath.format(lun_group_name=lun_group_name),
-            )
-            if self.base_ui.check_element_presence(locator=locator, timeout=timeout):
-                logger.info(f"LUN group / filesystem '{lun_group_name}' found")
-                return lun_group_name
 
-            raise TimeoutExpiredError(
-                f"LUN group '{lun_group_name}' not found within timeout"
-            )
+        # 1. Check Connection (Standard Swap)
+        path, strategy = SCALE_DASHBOARD_LOCATORS["scale_connection_green"]
+        assert self.base_ui.check_element_presence(
+            (strategy, path), timeout=20
+        ), "Scale dashboard connection is not green"
 
-        except Exception as e:
-            logger.warning(f"Waiting for filesystem creation: {e}")
-            raise
+        # 2. Check for the SPECIFIC LUN group row
+        path_row, strategy_row = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
+        specific_row_xpath = f"{path_row}[contains(., '{lun_group_name}')]"
 
-    @retry(AssertionError, tries=20, delay=30)
-    def verify_lun_group_connection(self, lun_group_name):
-        """
-        Verify Scale connection and LUN group health.
-        """
-        try:
-            # Dashboard connection must be green
-            assert self.base_ui.check_element_presence(
-                SCALE_DASHBOARD_LOCATORS["scale_connection_green"]
-            ), "Scale dashboard connection is not green"
+        assert self.base_ui.check_element_presence(
+            (strategy_row, specific_row_xpath), timeout=20
+        ), f"LUN group '{lun_group_name}' not found in the table"
 
-            # # LUN group row exists
-            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
-            row_locator = (
-                by,
-                xpath.format(lun_group_name=lun_group_name),
-            )
+        # 3. Check that the SPECIFIC LUN group is OK
+        path_ok, strategy_ok = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
+        specific_ok_xpath = f"//tr[contains(., '{lun_group_name}')]//*[text()='OK']"
 
-            assert self.base_ui.check_element_presence(
-                row_locator
-            ), f"LUN group '{lun_group_name}' not found"
+        assert self.base_ui.check_element_presence(
+            (strategy_ok, specific_ok_xpath), timeout=20
+        ), f"LUN group '{lun_group_name}' is not healthy (OK status missing)"
 
-            # LUN group status OK
-            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
-            status_locator = (
-                by,
-                xpath.format(lun_group_name=lun_group_name),
-            )
-            assert self.base_ui.check_element_presence(
-                status_locator
-            ), f"LUN group '{lun_group_name}' is not healthy"
-
-            logger.info(
-                f"LUN group '{lun_group_name}' connection verified successfully"
-            )
-
-        except Exception as e:
-            logger.error(f"LUN group connection verification failed: {e}")
-            self.base_ui.take_screenshot("lun_connection_error")
-            raise
-
-    @retry(AssertionError, tries=20, delay=30)
-    def verify_filesystem_status(self, filesystem_name):
-        """
-        Verify that the filesystem (LUN group) status is OK (green).
-        """
-        try:
-            by, xpath = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
-            locator = (
-                by,
-                xpath.format(lun_group_name=filesystem_name),
-            )
-
-            assert self.base_ui.check_element_presence(
-                locator
-            ), f"Filesystem '{filesystem_name}' is not in OK state"
-
-            logger.info(f"Filesystem '{filesystem_name}' status verified: OK")
-
-        except Exception as e:
-            logger.error(f"Filesystem status verification failed: {e}")
-            self.base_ui.take_screenshot("filesystem_status_error")
-            raise
+        return lun_group_name
