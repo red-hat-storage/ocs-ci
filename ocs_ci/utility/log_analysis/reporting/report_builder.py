@@ -60,9 +60,10 @@ class ReportBuilder:
         return template.render(**context)
 
     def build_html(self, run_analysis: RunAnalysis) -> str:
-        """Build HTML report by converting Markdown to rendered HTML."""
-        md_content = self.build_markdown(run_analysis)
-        return self._md_to_html(md_content, title="OCS-CI Log Analysis Report")
+        """Build HTML report using dedicated HTML template."""
+        template = self.jinja_env.get_template("analysis_report.html.j2")
+        context = self._build_template_context(run_analysis)
+        return template.render(**context)
 
     def _md_to_html(self, md_content: str, title: str = "Report") -> str:
         """
@@ -134,13 +135,12 @@ class ReportBuilder:
         if fmt == "json":
             return json.dumps(trend_report.to_dict(), indent=2)
 
-        template = self.jinja_env.get_template("trends_report.md.j2")
-        md_content = template.render(report=trend_report)
-
         if fmt == "html":
-            return self._md_to_html(md_content, title="OCS-CI Cross-Run Trend Analysis")
+            template = self.jinja_env.get_template("trends_report.html.j2")
+            return template.render(report=trend_report)
 
-        return md_content
+        template = self.jinja_env.get_template("trends_report.md.j2")
+        return template.render(report=trend_report)
 
     def _build_template_context(self, run_analysis: RunAnalysis) -> dict:
         """Build the Jinja2 template context with grouped data."""
@@ -155,8 +155,14 @@ class ReportBuilder:
             squad = fa.test_result.squad or "Unknown"
             squads[squad].append(fa.test_result.name)
 
+        # Map test name -> failure index (1-based) for anchor links
+        failure_index = {}
+        for i, fa in enumerate(run_analysis.failure_analyses, 1):
+            failure_index[fa.test_result.name] = i
+
         return {
             "run": run_analysis,
             "categories": dict(categories),
             "squads": dict(squads),
+            "failure_index": failure_index,
         }

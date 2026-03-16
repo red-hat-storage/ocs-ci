@@ -11,7 +11,7 @@ This module automates that process. Given a test run (either a remote log URL or
 3. **Classifies** remaining failures using AI (Claude) into categories: `product_bug`, `test_bug`, `infra_issue`, `flaky_test`, or `unknown` — when must-gather data is available, the pipeline pre-resolves all paths and Claude investigates Ceph status, pod logs, and cluster state directly
 4. **Searches Jira** for existing bugs that match each failure
 5. **Tracks history** across runs to detect flaky tests and regressions
-6. **Generates reports** in Markdown, JSON, or HTML
+6. **Generates reports** in Markdown, JSON, or HTML -- HTML reports feature interactive collapsible failure cards, color-coded category badges, pass rate progress bars, and Chart.js graphs for trend analysis
 
 The result is a structured report that tells you *why* each test failed, whether it's a known issue, and what to do about it -- in seconds rather than hours.
 
@@ -429,9 +429,11 @@ ocs_ci/utility/log_analysis/
 +-- reporting/                   # Report generation
     |-- report_builder.py        # JSON, Markdown, HTML report builder
     +-- templates/
-        |-- analysis_report.md.j2   # Single-run analysis report
-        |-- trends_report.md.j2     # Cross-run trend report
-        +-- jira_comment.j2         # Jira comment format
+        |-- analysis_report.md.j2     # Single-run Markdown report
+        |-- analysis_report.html.j2   # Single-run HTML report (styled, interactive)
+        |-- trends_report.md.j2       # Cross-run Markdown trend report
+        |-- trends_report.html.j2     # Cross-run HTML trend report (with Chart.js graphs)
+        +-- jira_comment.j2           # Jira comment format
 ```
 
 ## Python API
