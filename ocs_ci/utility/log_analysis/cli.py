@@ -124,6 +124,11 @@ def main(argv=None):
         help="Limit total number of failures to process (for debugging)",
     )
     parser.add_argument(
+        "--sessions-dir",
+        default=None,
+        help="Directory for recorded session transcripts (default: ~/.ocs-ci/recorded_sessions)",
+    )
+    parser.add_argument(
         "--save-prompts",
         action="store_true",
         help="Save AI prompts to ~/.ocs-ci/prompts/<run_id>/ for debugging",
@@ -194,6 +199,7 @@ def main(argv=None):
             squad=args.squad,
             test_filter=args.test,
             save_prompts=args.save_prompts,
+            sessions_dir=args.sessions_dir,
         )
 
         # Generate report

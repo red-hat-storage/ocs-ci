@@ -413,6 +413,8 @@ LOG_ANALYSIS:
   jira_search_enabled: true
   jira_projects:
     - "DFBUGS"
+  # Recorded session transcripts directory
+  sessions_dir: "/mnt/ocsci-jenkins/log_analysis/recorded_sessions"
    # Cross-run history tracking
   history_dir: "~/.ocs-ci/analysis_history"
   # CI/CD post-session hook (opt-in)

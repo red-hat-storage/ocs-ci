@@ -183,6 +183,7 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
         test_logs_dir=manifest.test_logs_dir if ai_backend != "none" else None,
         ui_logs_dir=manifest.ui_logs_dir if ai_backend != "none" else None,
         run_id=run_metadata.run_id,
+        sessions_dir=kwargs.get("sessions_dir"),
     )
 
     failure_analyses = classifier.classify_failures(

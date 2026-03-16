@@ -69,6 +69,7 @@ def pytest_sessionfinish(session, exitstatus):
             jira_projects=la_config.get("jira_projects"),
             record_history=True,
             history_dir=la_config.get("history_dir", "~/.ocs-ci/analysis_history"),
+            sessions_dir=la_config.get("sessions_dir"),
         )
 
         # Generate reports

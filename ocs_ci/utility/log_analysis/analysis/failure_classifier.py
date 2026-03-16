@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 # Directory for extracted must-gather archives
 MG_CACHE_DIR = os.path.expanduser("~/.ocs-ci/must_gather_cache")
 
-# Directory for recorded agentic session outputs
-SESSIONS_DIR = os.path.expanduser("~/.ocs-ci/recorded_sessions")
+# Default directory for recorded agentic session outputs
+DEFAULT_SESSIONS_DIR = "~/.ocs-ci/recorded_sessions"
 
 
 class FailureClassifier:
@@ -59,6 +59,7 @@ class FailureClassifier:
         test_logs_dir: Optional[str] = None,
         ui_logs_dir: Optional[str] = None,
         run_id: Optional[str] = None,
+        sessions_dir: Optional[str] = None,
     ):
         """
         Args:
@@ -71,6 +72,7 @@ class FailureClassifier:
             test_logs_dir: URL to ocs-ci-logs-{runid} dir for per-test logs
             ui_logs_dir: URL to ui_logs_dir_{runid} for UI test artifacts
             run_id: Run ID extracted from directory names
+            sessions_dir: Directory for recorded session transcripts
         """
         self.ai_backend = ai_backend
         self.known_issues = known_issues_matcher or KnownIssuesMatcher()
@@ -81,6 +83,7 @@ class FailureClassifier:
         self.test_logs_dir = test_logs_dir
         self.ui_logs_dir = ui_logs_dir
         self.run_id = run_id or "unknown"
+        self.sessions_dir = os.path.expanduser(sessions_dir or DEFAULT_SESSIONS_DIR)
         self.log_parser = TestLogParser()
         self.mg_parser = MustGatherParser()
         self._http_session = None
@@ -563,10 +566,10 @@ class FailureClassifier:
 
         Returns the file path, or empty string on failure.
         """
-        os.makedirs(SESSIONS_DIR, exist_ok=True)
+        os.makedirs(self.sessions_dir, exist_ok=True)
         safe_name = re.sub(r"[^\w\-]", "_", test_name)[:80]
         filename = f"{self.run_id}_session_record_{safe_name}.txt"
-        filepath = os.path.join(SESSIONS_DIR, filename)
+        filepath = os.path.join(self.sessions_dir, filename)
 
         try:
             # Find the JSONL session transcript
@@ -647,7 +650,8 @@ class FailureClassifier:
                                         if len(result_content) > 3000:
                                             out_file.write(result_content[:1500])
                                             out_file.write(
-                                                f"\n... [{len(result_content) - 3000} chars omitted] ...\n"
+                                                f"\n... [{len(result_content) - 3000}"
+                                                f" chars omitted] ...\n"
                                             )
                                             out_file.write(result_content[-1500:])
                                         else:
