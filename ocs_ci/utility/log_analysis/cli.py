@@ -255,6 +255,15 @@ def trends_main(argv=None):
         help="Filter by OCS version (e.g., 4.21)",
     )
     parser.add_argument(
+        "--flavour",
+        nargs="+",
+        default=None,
+        help=(
+            "Filter by flavour substrings in launch_name "
+            "(e.g., --flavour tier1, --flavour BAREMETAL tier1)"
+        ),
+    )
+    parser.add_argument(
         "--format",
         "-f",
         choices=["json", "markdown", "html"],
@@ -295,6 +304,7 @@ def trends_main(argv=None):
             max_runs=args.max_runs,
             platform=args.platform,
             ocs_version=args.ocs_version,
+            flavour=args.flavour,
         )
 
         if not history:

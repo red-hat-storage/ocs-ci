@@ -32,7 +32,7 @@ class RunRecord:
     failed: int = 0
     error: int = 0
     skipped: int = 0
-    # Per-test outcomes: {test_full_name: {"status": str, "category": str, "duration": float, "squad": str}}
+    # Per-test outcomes: {test_full_name: {status, category, duration, squad}}
     test_outcomes: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -168,6 +168,7 @@ class RunHistoryStore:
         max_runs: Optional[int] = None,
         platform: Optional[str] = None,
         ocs_version: Optional[str] = None,
+        flavour: Optional[list] = None,
     ) -> list:
         """
         Load historical records, optionally filtered.
@@ -176,6 +177,7 @@ class RunHistoryStore:
             max_runs: Max records to return (None = use self.max_runs)
             platform: Filter by platform (e.g., "baremetal", "aws")
             ocs_version: Filter by OCS version (e.g., "4.21")
+            flavour: Filter by launch_name substrings (all must match)
 
         Returns:
             List of RunRecord, sorted by timestamp (newest first)
@@ -203,6 +205,10 @@ class RunHistoryStore:
                     continue
                 if ocs_version and record.ocs_version != ocs_version:
                     continue
+                if flavour:
+                    name_lower = record.launch_name.lower()
+                    if not all(f.lower() in name_lower for f in flavour):
+                        continue
 
                 records.append(record)
             except (json.JSONDecodeError, IOError, KeyError) as e:

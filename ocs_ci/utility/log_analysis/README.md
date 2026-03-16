@@ -149,7 +149,7 @@ Classification complete in 12.3min, $4.56: 8 AI calls, 2 cache hits, 3 known iss
 
 **Step 3: Enrich.** Classified failures are enriched with:
 
-- **Jira search results** -- JQL queries built from product/component keywords in the root cause analysis (e.g., ceph, osd, noobaa, pvc), searching projects like DFBUGS, RHSTOR, OCSQE for matching bugs
+- **Jira search results** -- JQL queries built from must-gather evidence error messages (exact phrase match) and product/component keywords from the root cause analysis, searching DFBUGS for matching bugs
 - **Cross-run context** -- if history is enabled, each failure is annotated with flakiness rate and regression status from previous runs
 
 ### Classification Categories
@@ -269,9 +269,12 @@ The Jira config file is a simple INI file:
 
 ```ini
 [DEFAULT]
-url = https://issues.redhat.com
-token = YOUR_JIRA_TOKEN
+url = https://redhat.atlassian.net
+username = you@redhat.com
+token = YOUR_JIRA_API_TOKEN
 ```
+
+For Atlassian Cloud (`atlassian.net`), both `username` and `token` are required (Basic auth). For on-prem Jira, only `token` is needed (Bearer auth).
 
 ### `analyze-trends`
 
@@ -287,6 +290,7 @@ python3 -c "from ocs_ci.utility.log_analysis.cli import trends_main; trends_main
 | `--max-runs` | `100` | Maximum runs to analyze |
 | `--platform` | all | Filter by platform (e.g., `aws`, `baremetal`) |
 | `--ocs-version` | all | Filter by OCS version (e.g., `4.21`) |
+| `--flavour` | all | Filter by launch name substrings (e.g., `--flavour tier1`, `--flavour BAREMETAL tier1`) |
 | `-f`, `--format` | `markdown` | Output format: `json`, `markdown`, `html` |
 | `-o`, `--output` | stdout | Write report to file |
 | `-v`, `--verbose` | off | Enable debug logging |
@@ -306,6 +310,18 @@ from ocs_ci.utility.log_analysis.cli import trends_main
 trends_main(['--platform', 'baremetal', '--ocs-version', '4.21', '-o', 'trends.md'])
 "
 
+# Filter by run flavour (e.g., only tier1 runs)
+python3 -c "
+from ocs_ci.utility.log_analysis.cli import trends_main
+trends_main(['--flavour', 'tier1', '-o', 'trends_tier1.md'])
+"
+
+# Combine filters: tier1 runs on baremetal only
+python3 -c "
+from ocs_ci.utility.log_analysis.cli import trends_main
+trends_main(['--flavour', 'tier1', 'BAREMETAL', '-o', 'trends_bm_tier1.md'])
+"
+
 # Export as JSON for dashboard consumption
 python3 -c "
 from ocs_ci.utility.log_analysis.cli import trends_main
@@ -315,6 +331,7 @@ trends_main(['-f', 'json', '-o', 'trends.json'])
 
 **The trend report includes:**
 
+- **Analyzed runs table** -- each run with flavour (launch name), platform, OCS version, pass rate, and links to Jenkins and logs
 - **Pass rate trend** -- pass rate per run over time
 - **Regressions** -- tests that recently started failing after previously passing, with the date they broke
 - **Flaky tests** -- tests that intermittently pass and fail, with flakiness rate and recent result pattern (e.g., `P F P F P`)
@@ -335,15 +352,15 @@ LOG_ANALYSIS:
   ci_post_hook_enabled: true    # Enable automatic post-run analysis
   ai_backend: "claude-code"     # or "anthropic" or "none"
   model: "sonnet"
-  ci_report_format: "both"      # "json", "markdown", or "both"
+  ci_report_format: "all"       # "json", "markdown", "html", "both", or "all"
 ```
 
 When enabled, after `pytest` finishes (and there are failures), the hook will:
 
 1. Find the JUnit XML in the log directory
 2. Run `analyze_run()` with `record_history=True`
-3. Save `ai_analysis_report.json` and/or `ai_analysis_report.md` to the log directory
-4. Record the run to history for cross-run trend tracking
+3. Save reports to the log directory: `ai_analysis_report.json`, `ai_analysis_report.md`, and `ai_analysis_report.html`
+4. Record the run to history for cross-run trend tracking (including run flavour, run_id, and Jenkins URL)
 
 The hook is fully non-fatal -- if analysis fails for any reason, the test run result is unaffected.
 
@@ -361,10 +378,10 @@ All settings under `LOG_ANALYSIS:` in the ocs-ci config:
 | `cache_enabled` | `true` | Enable analysis caching |
 | `cache_dir` | `"~/.ocs-ci/analysis_cache"` | Cache directory |
 | `jira_search_enabled` | `true` | Search Jira for matching bugs |
-| `jira_projects` | `["DFBUGS", "RHSTOR", "OCSQE"]` | Jira projects to search |
+| `jira_projects` | `["DFBUGS"]` | Jira projects to search |
 | `history_dir` | `"~/.ocs-ci/analysis_history"` | Run history directory |
 | `ci_post_hook_enabled` | `false` | Enable CI post-session hook |
-| `ci_report_format` | `"both"` | CI report format |
+| `ci_report_format` | `"all"` | CI report format: `json`, `markdown`, `html`, `both`, or `all` |
 
 ## Adding Custom Known Issue Patterns
 
@@ -455,7 +472,7 @@ result = analyze_run(
     cache_dir="~/.ocs-ci/analysis_cache",
     cache_enabled=True,
     no_jira=False,                 # True = skip Jira search
-    jira_projects=["DFBUGS", "RHSTOR", "OCSQE"],
+    jira_projects=["DFBUGS"],
     record_history=False,          # True = save to history store
     history_dir="~/.ocs-ci/analysis_history",
 )
@@ -522,6 +539,9 @@ store = RunHistoryStore(history_dir="~/.ocs-ci/analysis_history")
 
 # Load history (optionally filtered)
 history = store.get_history(max_runs=50, platform="aws", ocs_version="4.21")
+
+# Filter by flavour (launch name substrings, all must match)
+history = store.get_history(flavour=["tier1", "BAREMETAL"])
 
 detector = PatternDetector(history)
 
