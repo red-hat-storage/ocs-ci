@@ -154,64 +154,64 @@ class JiraSearchIntegration:
 
     def _build_search_key(self, fa: FailureAnalysis) -> str:
         """Build a cache key for deduplicating Jira searches."""
-        # Key on product/component keywords rather than test name
         rc_keywords = (
             self._extract_root_cause_keywords(fa.root_cause_summary)
             if fa.root_cause_summary
             else []
         )
-        exception_type = self._extract_exception_type(fa)
+        evidence_error = self._extract_primary_evidence_error(fa.evidence)
+        if rc_keywords and evidence_error:
+            return f"{':'.join(rc_keywords[:3])}:{evidence_error[:80]}"
+        if evidence_error:
+            return evidence_error[:80]
         if rc_keywords:
-            return f"{':'.join(rc_keywords[:3])}:{exception_type}"
-        if exception_type:
-            return exception_type
-        return fa.test_result.name
+            return ":".join(rc_keywords[:3])
+        return ""
 
     def _build_jql(self, fa: FailureAnalysis) -> str:
         """
         Build a JQL query from failure analysis.
 
-        Strategy: Focus on product/component keywords from the root cause
-        analysis and exception type — these match ODF bugs better than
-        test names which are test-framework specific.
+        Strategy: Search for the primary error message found in must-gather
+        evidence (exact phrase) combined with product/component keywords
+        from the root cause summary. This matches actual ODF bugs much
+        better than test framework exception types or test names.
         """
         project_clause = self._project_clause()
 
-        # Build search terms — prioritize product/component keywords
-        search_terms = []
+        # Extract the primary error from must-gather evidence
+        evidence_error = self._extract_primary_evidence_error(fa.evidence)
 
-        # Root cause keywords are the best signal for product bugs
+        # Root cause keywords for broad context
+        rc_keywords = []
         if fa.root_cause_summary:
             rc_keywords = self._extract_root_cause_keywords(fa.root_cause_summary)
-            search_terms.extend(rc_keywords[:4])
 
-        # Exception type as secondary signal
-        exception_type = self._extract_exception_type(fa)
-        if exception_type:
-            clean_type = exception_type.split(".")[-1]
-            search_terms.append(clean_type)
-
-        # Only fall back to test name if no product keywords found
-        if not search_terms:
-            test_keywords = self._extract_test_keywords(fa.test_result.name)
-            if test_keywords:
-                search_terms.extend(test_keywords[:3])
-
-        if not search_terms:
+        if not evidence_error and not rc_keywords:
             return ""
-
-        # Build text search clause
-        text_query = " ".join(search_terms)
-        text_query = text_query.replace('"', '\\"')
 
         # Only search open or recently resolved issues
         status_clause = (
             'status in ("Open", "In Progress", "To Do", "New", "Closed", "Done")'
         )
 
+        # Build text search — prefer evidence error as exact phrase
+        if evidence_error:
+            # Escape quotes in the error message
+            safe_error = evidence_error.replace('"', '\\"')
+            # Truncate to avoid overly specific queries
+            if len(safe_error) > 120:
+                safe_error = safe_error[:120]
+            text_clause = f'text ~ "{safe_error}"'
+        else:
+            # Fall back to root cause keywords only
+            text_query = " ".join(rc_keywords[:4])
+            text_query = text_query.replace('"', '\\"')
+            text_clause = f'text ~ "{text_query}"'
+
         jql = (
             f"{project_clause} AND {status_clause} "
-            f'AND text ~ "{text_query}" '
+            f"AND {text_clause} "
             f"ORDER BY updated DESC"
         )
 
@@ -225,29 +225,73 @@ class JiraSearchIntegration:
         return f"project in ({projects_str})"
 
     @staticmethod
-    def _extract_exception_type(fa: FailureAnalysis) -> str:
-        """Extract exception type from traceback."""
-        if not fa.test_result.traceback:
-            return ""
-        lines = fa.test_result.traceback.strip().splitlines()
-        if not lines:
-            return ""
-        last_line = lines[-1].strip()
-        match = re.match(r"^([\w.]+(?:Error|Exception|Failure))", last_line)
-        if match:
-            return match.group(1)
-        return ""
+    def _extract_primary_evidence_error(evidence: list) -> str:
+        """
+        Extract the primary error message from must-gather evidence entries.
 
-    @staticmethod
-    def _extract_test_keywords(test_name: str) -> list:
-        """Extract meaningful keywords from a test name."""
-        # Remove parametrize markers
-        clean = re.sub(r"\[.*\]$", "", test_name)
-        # Remove test_ prefix
-        clean = re.sub(r"^test_", "", clean)
-        # Split on underscores and filter short words
-        words = [w for w in clean.split("_") if len(w) > 2]
-        return words
+        Evidence entries follow the format:
+          '<explanation> — <source_file>: '<quoted log line>''
+
+        We extract the quoted log portions and pick the most specific
+        error message for Jira search.
+        """
+        if not evidence:
+            return ""
+
+        candidates = []
+        for entry in evidence:
+            if not isinstance(entry, str):
+                continue
+            # Extract text within single quotes (the actual log messages)
+            quoted = re.findall(r"'([^']{15,})'", entry)
+            for q in quoted:
+                # Skip generic/noisy strings
+                if any(
+                    skip in q.lower()
+                    for skip in [
+                        "health_ok",
+                        "running normally",
+                        "successfully",
+                        "search by name",
+                    ]
+                ):
+                    continue
+                candidates.append(q)
+
+        if not candidates:
+            return ""
+
+        # Score candidates — prefer longer messages with error indicators
+        error_indicators = [
+            "error",
+            "fail",
+            "crash",
+            "warn",
+            "down",
+            "degraded",
+            "timeout",
+            "refused",
+            "denied",
+            "not found",
+            "invalid",
+            "EINVAL",
+            "exit status",
+            "not exist",
+            "exception",
+        ]
+
+        def score(text):
+            lower = text.lower()
+            s = 0
+            for ind in error_indicators:
+                if ind in lower:
+                    s += 10
+            # Bonus for longer, more specific messages
+            s += min(len(text), 100) // 10
+            return s
+
+        candidates.sort(key=score, reverse=True)
+        return candidates[0]
 
     @staticmethod
     def _extract_root_cause_keywords(summary: str) -> list:
@@ -281,8 +325,16 @@ class JiraSearchIntegration:
         Returns:
             dict with keys: project, summary, description, labels, priority
         """
-        exception_type = self._extract_exception_type(fa)
-        clean_exception = exception_type.split(".")[-1] if exception_type else "Failure"
+        # Extract exception type from traceback for bug summary
+        clean_exception = "Failure"
+        if fa.test_result.traceback:
+            tb_lines = fa.test_result.traceback.strip().splitlines()
+            if tb_lines:
+                match = re.match(
+                    r"^([\w.]+(?:Error|Exception|Failure))", tb_lines[-1].strip()
+                )
+                if match:
+                    clean_exception = match.group(1).split(".")[-1]
 
         # Build summary
         test_short = fa.test_result.name
