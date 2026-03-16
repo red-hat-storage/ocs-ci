@@ -488,13 +488,48 @@ def is_fdf_on_provider():
 _fdf_catalog_image_cache = None
 
 
+def _resolve_image_through_itms(image):
+    """
+    Resolve a container image reference through ImageTagMirrorSet on the
+    management cluster. If the image source matches an ITMS entry, replace
+    the source with the mirror URL so it is pullable from spoke clusters
+    that lack ITMS support (e.g. HyperShift hosted clusters).
+
+    Args:
+        image (str): Original image reference (e.g. icr.io/cpopen/catalog:v4.21)
+
+    Returns:
+        str: Resolved image with mirror URL, or original if no ITMS match
+
+    """
+    ocp_obj = OCP(kind="ImageTagMirrorSet")
+    try:
+        itms_list = ocp_obj.get(all_namespaces=True)
+    except CommandFailed:
+        logger.debug("No ImageTagMirrorSet resources found on management cluster")
+        return image
+
+    for itms in itms_list.get("items", []):
+        for entry in itms.get("spec", {}).get("imageTagMirrors", []):
+            source = entry.get("source", "")
+            mirrors = entry.get("mirrors", [])
+            if source and mirrors and image.startswith(source):
+                resolved = image.replace(source, mirrors[0], 1)
+                logger.info(f"Resolved image through ITMS: {image} -> {resolved}")
+                return resolved
+    return image
+
+
 def get_fdf_catalog_image():
     """
     Get the FDF CatalogSource image from the management cluster.
+    If the image uses a registry that requires ITMS (tag-based mirrors),
+    resolve it through the management cluster's ImageTagMirrorSet so it is
+    pullable from spoke clusters.
     Result is cached to avoid redundant API calls across HostedFDF instances.
 
     Returns:
-        str: The full image reference (with digest) from the FDF CatalogSource
+        str: The pullable image reference for the FDF CatalogSource
 
     Raises:
         ValueError: If the CatalogSource is not found or has no image
@@ -520,7 +555,10 @@ def get_fdf_catalog_image():
         raise ValueError(
             f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' has no image in spec"
         )
-    logger.info(f"FDF CatalogSource image from provider: {image}")
+
+    image = _resolve_image_through_itms(image)
+
+    logger.info(f"FDF CatalogSource image for spoke: {image}")
     _fdf_catalog_image_cache = image
     return image
 
