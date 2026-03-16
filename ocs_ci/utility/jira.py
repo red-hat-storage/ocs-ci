@@ -32,12 +32,21 @@ class JiraHelper:
 
         self.url = jira_auth["url"]
         self.token = jira_auth["token"]
+        self.username = jira_auth.get("username", "")
         self.visibility = jira_auth.get(
             "visibility", {"type": "group", "value": "Red Hat Employee"}
         )
 
-        log.debug(f"Initializing Jira: {self.url}")
-        self.jira = Jira(url=self.url, token=self.token, cloud=False)
+        # Detect Atlassian Cloud by URL
+        is_cloud = "atlassian.net" in self.url
+
+        log.debug(f"Initializing Jira: {self.url} (cloud={is_cloud})")
+        if is_cloud:
+            self.jira = Jira(
+                url=self.url, username=self.username, password=self.token, cloud=True
+            )
+        else:
+            self.jira = Jira(url=self.url, token=self.token, cloud=False)
 
     @staticmethod
     def _load_from_file(path: str) -> dict:
@@ -57,10 +66,13 @@ class JiraHelper:
 
         section = config["DEFAULT"]
 
-        return {
+        result = {
             "url": section["url"],
             "token": section["token"],
         }
+        if "username" in section:
+            result["username"] = section["username"]
+        return result
 
     def get_issue(self, issue_key: str) -> dict:
         """

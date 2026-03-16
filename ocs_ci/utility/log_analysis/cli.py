@@ -167,10 +167,13 @@ def main(argv=None):
 
         cp = configparser.ConfigParser()
         cp.read(args.jira_config)
-        ocsci_config.AUTH["jira"] = {
+        jira_auth = {
             "url": cp["DEFAULT"]["url"],
             "token": cp["DEFAULT"]["token"],
         }
+        if "username" in cp["DEFAULT"]:
+            jira_auth["username"] = cp["DEFAULT"]["username"]
+        ocsci_config.AUTH["jira"] = jira_auth
 
     try:
         # Run analysis
