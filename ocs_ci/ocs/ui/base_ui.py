@@ -164,6 +164,9 @@ class BaseUI:
         self.topology_loc = self.deep_get(
             locators_for_current_ocp_version(), "topology"
         )
+        self.external_systems = self.deep_get(
+            locators_for_current_ocp_version(), "external_systems"
+        )
         self.storage_clients_loc = self.deep_get(
             locators_for_current_ocp_version(), "storage"
         )
