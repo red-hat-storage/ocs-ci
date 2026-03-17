@@ -357,15 +357,14 @@ class ClaudeCodeBackend(AIBackend):
         # Accumulate cost and token usage
         cost = response.get("total_cost_usd")
         usage = response.get("usage", {})
-        input_tokens = usage.get("input_tokens", 0)
-        output_tokens = usage.get("output_tokens", 0)
+        input_tokens, output_tokens = self._extract_tokens(usage)
         if cost is not None:
             self._total_cost += cost
         self._total_input_tokens += input_tokens
         self._total_output_tokens += output_tokens
         logger.debug(
             f"Claude Code call: ${cost or 0:.4f}, "
-            f"{input_tokens} in / {output_tokens} out tokens"
+            f"{input_tokens:,} in / {output_tokens:,} out tokens"
         )
 
         return structured
@@ -455,15 +454,14 @@ class ClaudeCodeBackend(AIBackend):
         num_turns = response.get("num_turns")
         session_id = response.get("session_id", "")
         usage = response.get("usage", {})
-        input_tokens = usage.get("input_tokens", 0)
-        output_tokens = usage.get("output_tokens", 0)
+        input_tokens, output_tokens = self._extract_tokens(usage)
         if cost is not None:
             self._total_cost += cost
         self._total_input_tokens += input_tokens
         self._total_output_tokens += output_tokens
         logger.info(
             f"Agentic session complete: ${cost or 0:.4f}, "
-            f"{input_tokens} in / {output_tokens} out tokens, "
+            f"{input_tokens:,} in / {output_tokens:,} out tokens, "
             f"{num_turns} turns ({context})"
         )
 
@@ -527,6 +525,24 @@ class ClaudeCodeBackend(AIBackend):
             logger.debug(f"Saved prompt to {filepath}")
         except Exception as e:
             logger.warning(f"Failed to save prompt: {e}")
+
+    @staticmethod
+    def _extract_tokens(usage: dict) -> tuple:
+        """Extract total input and output tokens from usage dict.
+
+        The usage dict has separate fields for cached vs non-cached input:
+        - input_tokens: non-cached input
+        - cache_creation_input_tokens: tokens written to cache
+        - cache_read_input_tokens: tokens read from cache
+        Total input = sum of all three.
+        """
+        input_tokens = (
+            usage.get("input_tokens", 0)
+            + usage.get("cache_creation_input_tokens", 0)
+            + usage.get("cache_read_input_tokens", 0)
+        )
+        output_tokens = usage.get("output_tokens", 0)
+        return input_tokens, output_tokens
 
     @staticmethod
     def _truncate(text: str, max_chars: int) -> str:
