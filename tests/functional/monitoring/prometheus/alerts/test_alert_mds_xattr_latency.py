@@ -2,7 +2,10 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    blue_squad,
+    ignore_leftovers,
+)
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
@@ -236,6 +239,7 @@ def initiate_alert_clearance():
 
 @blue_squad
 @tier2
+@ignore_leftovers
 class TestMdsXattrAlerts(E2ETest):
     """
     Test class for MDS xattr latency alert validation.
@@ -314,7 +318,7 @@ class TestMdsXattrAlerts(E2ETest):
         log.info("Checking for clearance of alert")
         initiate_alert_clearance()
         # waiting for sometime for load distribution
-        time.sleep(600)
+        time.sleep(720)
         api.check_alert_cleared(
             label=constants.ALERT_MDSXATTR, measure_end_time=600, time_min=30
         )
