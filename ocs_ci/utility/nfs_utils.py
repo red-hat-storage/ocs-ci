@@ -208,7 +208,7 @@ def update_etc_hosts_on_nfs_client(con, hostname):
     Resolve an NFS LB hostname from within the cluster and update /etc/hosts
     on the NFS client VM.
 
-    IBM Cloud VPC Load Balancer hostnames (*.lb.appdomain.cloud) are only
+    IBM Cloud VPC Load Balancer hostnames (``*.lb.appdomain.cloud``) are only
     resolvable from within the same VPC. When the NFS client VM is in a
     different VPC, DNS resolution fails and mounts hang. This function resolves
     the hostname by exec-ing on the node where the NFS pod runs, then writes
