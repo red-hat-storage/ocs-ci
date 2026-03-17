@@ -143,7 +143,7 @@ class TestCSIADDonDaemonset(ManageTest):
             for container_status in container_status_list:
                 assert container_status[
                     "ready"
-                ], f"container {container_status['name']} in pod {pod.name} is not ready"
+                ], f"container {container_status['name']} in pod {pod['metadata']['name']} is not ready"
         logger.info("All containers in CSI-addon DaemonSet pods are ready")
 
     @pytest.mark.parametrize(
@@ -175,7 +175,7 @@ class TestCSIADDonDaemonset(ManageTest):
             host_network = pod.get("spec").get("hostNetwork", False)
             assert (
                 not host_network
-            ), f" CSI-addon pod {pod.name} is using host network instead of pod network"
+            ), f" CSI-addon pod {pod['metadata']['name']} is using host network instead of pod network"
         logger.info(
             "CSI-addon DaemonSet pods using pod network instead of host-network"
         )
