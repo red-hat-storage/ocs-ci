@@ -469,6 +469,9 @@ class TestHealthOverview(ManageTest):
         )
         time.sleep(90)
         baseline_score = 100
+        assert (
+            baseline_score == self.get_health_score_ui()
+        ), "Full health score not recovered"
 
         severity = SEVERITY_BY_CHECK.get(alert_name)
         PageNavigator().take_screenshot(f"severity_of_alert_{alert_name}")
@@ -555,6 +558,7 @@ class TestHealthOverview(ManageTest):
         for deployment in deployments:
             self.wait_for_deployment_ready_replicas(deployment, expected_replicas=0)
 
+        PageNavigator().take_screenshot("health_overview_page_after_scaling_down")
         logger.info("Measuring health score after scaling down exporters")
         health_score_after_scale_down = request.getfixturevalue("health_score")
         logger.info(
