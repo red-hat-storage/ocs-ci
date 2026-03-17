@@ -16,7 +16,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
 )
-from ocs_ci.ocs import node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import utils
@@ -55,29 +54,15 @@ class TestMonDataAvailWarn(E2ETest):
         Setting up the environment for the test
 
         """
-        if config.DEPLOYMENT.get("local_storage"):
-            self.worker_node = node.get_worker_nodes()[0]
-            self.oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
-            mon_pod_name = self.oc_cmd.exec_oc_debug_cmd(
-                node=self.worker_node,
-                cmd_list=["ls /var/lib/rook/ | grep mon"],
-            )
-            mon_pod_id = mon_pod_name.split("-")[1].replace("\n", "")
-
-            mon_pods_info = pod.get_pods_having_label(
-                label=f"ceph_daemon_id={mon_pod_id}",
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )
-            self.mon_pod = pod.get_pod_obj(
-                name=mon_pods_info[0]["metadata"]["name"],
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )
-        else:
-            self.mon_pod = random.choice(pod.get_mon_pods())
+        self.mon_pod = random.choice(pod.get_mon_pods())
         self.mon_suffix = self.mon_pod.get().get("metadata").get("labels").get("mon")
 
         self.workloads_dir = f"/var/lib/ceph/mon/ceph-{self.mon_suffix}/workloads"
         log.info(f"Selected mon '{self.mon_pod.name}'")
+
+        if config.DEPLOYMENT.get("local_storage"):
+            self.worker_node = self.mon_pod.get()["spec"]["nodeName"]
+            self.oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         self.mon_pod.exec_cmd_on_pod(f"mkdir {self.workloads_dir}")
         self.mon_pod.exec_cmd_on_pod(f"touch {self.workloads_dir}/{TEMP_FILE}")
 
