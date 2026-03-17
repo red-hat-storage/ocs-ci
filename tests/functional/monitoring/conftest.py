@@ -1179,17 +1179,29 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
 
     def change_client_version():
         """
-        Stop heartbeat and change value of ocs version in storage client resource
-        for 3 minutes.
+        Stop heartbeat, wait for it to be missed, then change value of ocs version
+        in storage client resource. This ensures both StorageClientHeartbeatMissed
+        and StorageClientIncompatibleOperatorVersion alerts are triggered.
 
         """
         nonlocal client
-        # run_time of operation
-        run_time = 60 * 7
+        # First, stop heartbeat and wait for it to be missed
         client.stop_heartbeat()
+        # Wait for heartbeat critical alert to fire (300s + margin)
+        heartbeat_wait_time = 60 * 6  # 6 minutes
+        logger.info(
+            f"Waiting {heartbeat_wait_time} seconds for heartbeat to be missed"
+        )
+        time.sleep(heartbeat_wait_time)
+
+        # Now change the version to trigger incompatible version alert
         client.set_ocs_version("4.13.0")
-        logger.info(f"Waiting for {run_time} seconds")
-        time.sleep(run_time)
+        # Wait additional time to ensure all alerts are captured
+        additional_wait_time = 60 * 3  # 3 minutes
+        logger.info(
+            f"Waiting additional {additional_wait_time} seconds with incompatible version"
+        )
+        time.sleep(additional_wait_time)
         return
 
     def teardown():
