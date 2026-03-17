@@ -322,7 +322,7 @@ def create_drs_machine_config():
         # Wait for all worker nodes to be updated
         worker_nodes = get_worker_nodes()
         num_workers = len(worker_nodes)
-        timeout = num_workers * 9 * 60  # 9 minutes per worker node in seconds
+        timeout = num_workers * 15 * 60  # 15 minutes per worker node in seconds
 
         logger.info(
             f"Waiting for all {num_workers} worker nodes to be updated (timeout: {timeout} seconds)"
