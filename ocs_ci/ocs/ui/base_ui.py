@@ -928,6 +928,9 @@ class BaseUI:
             locator (tuple): (By.XPATH, "//input[@placeholder='...']")
             retries (int): number of attempts
             wait_between (int): pause between attempts
+
+        Returns:
+            bool: True if the input element is successfully cleared, False otherwise.
         """
         VALID_BY = {By.ID, By.NAME, By.XPATH}
 
@@ -943,7 +946,7 @@ class BaseUI:
         else:
             raise ValueError(f"Unsupported locator strategy: {locator}")
 
-        # 🔁 Retry clear logic
+        # Retry clear logic
         for attempt in range(1, retries + 1):
             try:
                 element = self.driver.find_element(by, value)

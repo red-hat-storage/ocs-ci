@@ -236,12 +236,12 @@ class AcmAddClusters(AcmPageNavigator):
         log.info(f"Search and select cluster '{cluster_name_a}'")
         self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_a)
         self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
-        log.info(f"Clear search by clicking on cross mark={cluster_name_a}")
+        log.info(f"Clear search by clicking on cross mark for cluster {cluster_name_a}")
         self.do_click(self.page_nav["clear-search"])
         log.info(f"Search and select cluster '{cluster_name_b}'")
         self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_b)
         self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
-        log.info(f"Clear search by clicking on cross mark={cluster_name_b}")
+        log.info(f"Clear search by clicking on cross mark for cluster {cluster_name_b}")
         self.do_click(self.page_nav["clear-search"])
         log.info("Click on 'Review'")
         self.do_click(self.page_nav["review-btn"], enable_screenshot=True)
@@ -367,7 +367,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["submariner-custom-subscription"])
         log.info("Clear existing Source")
         self.clear_input_with_retry(
-            self.page_nav["submariner-custom-source"], retries=2
+            self.page_nav["submariner-custom-source"], retries=3
         )
         source = self.driver.find_element(
             By.XPATH, "//input[@placeholder='Enter the catalog source']"
