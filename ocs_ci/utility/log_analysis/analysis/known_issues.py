@@ -20,40 +20,15 @@ logger = logging.getLogger(__name__)
 #   - issue: Jira issue key
 #   - pattern: regex pattern to match against traceback/log text
 #   - description: (optional) human-readable description
-DEFAULT_KNOWN_ISSUES = [
-    # Ceph health issues (from ocs_ci/utility/utils.py:2982)
-    {
-        "issue": "DFBUGS-2781",
-        "pattern": r"mgr module prometheus crashed in",
-        "description": "Prometheus mgr module crash",
-    },
-    {
-        "issue": "DFBUGS-4521",
-        "pattern": r"Netsplit detected between mon",
-        "description": "Mon netsplit detection",
-    },
-    # Common test infrastructure issues
-    {
-        "issue": "INFRA",
-        "pattern": r"TimeoutExpiredError.*wait_for_resource",
-        "description": "Resource wait timeout - possible infra slowness",
-    },
-    {
-        "issue": "INFRA",
-        "pattern": r"ConnectionRefusedError|ConnectionResetError|ConnectionAbortedError",
-        "description": "Network connection error - possible infra issue",
-    },
-    {
-        "issue": "INFRA",
-        "pattern": r"Unable to connect to the server.*connection refused",
-        "description": "Kubernetes API server unreachable",
-    },
-    {
-        "issue": "INFRA",
-        "pattern": r"error: the server doesn't have a resource type",
-        "description": "Missing CRD - possible deployment issue",
-    },
-]
+#
+# Example entries (add via --known-issues-file YAML or here):
+#   {"issue": "DFBUGS-2781",
+#    "pattern": r"mgr module prometheus crashed in",
+#    "description": "Prometheus mgr module crash"},
+#   {"issue": "DFBUGS-4521",
+#    "pattern": r"Netsplit detected between mon",
+#    "description": "Mon netsplit detection"},
+DEFAULT_KNOWN_ISSUES = []
 
 
 class KnownIssuesMatcher:
