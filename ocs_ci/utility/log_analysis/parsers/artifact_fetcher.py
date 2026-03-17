@@ -72,11 +72,13 @@ class ArtifactFetcher:
         manifest = ArtifactManifest(all_files=files)
         config_candidates = []
 
+        junit_candidates = []
+
         for f in files:
             name = os.path.basename(f.rstrip("/"))
 
             if name.startswith("test_results_") and name.endswith(".xml"):
-                manifest.junit_xml = f
+                junit_candidates.append(f)
             elif name.startswith("run-") and name.endswith("-config-end.yaml"):
                 config_candidates.append(f)
             elif name.startswith("test_report_") and name.endswith(".html"):
@@ -90,6 +92,15 @@ class ArtifactFetcher:
                 manifest.failed_logs_dir = f
             elif name.startswith("ui_logs_dir_"):
                 manifest.ui_logs_dir = f
+
+        # Pick the latest JUnit XML (highest number = most recent run)
+        if junit_candidates:
+            manifest.junit_xml = sorted(junit_candidates)[-1]
+            if len(junit_candidates) > 1:
+                logger.info(
+                    f"Multiple JUnit XMLs found, using latest: "
+                    f"{os.path.basename(manifest.junit_xml)}"
+                )
 
         # Pick the first config that parses as a valid dict
         # (last run in multi-run dirs may be empty/truncated)

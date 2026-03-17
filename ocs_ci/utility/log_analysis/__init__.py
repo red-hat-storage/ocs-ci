@@ -86,10 +86,19 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
         rp_launch = sp.get("rp_launch_name", "")
         if rp_launch:
             run_metadata.launch_name = rp_launch
+        # Use logs-url from JUnit for the run URL (instead of local path)
+        logs_url = sp.get("logs-url", "")
+        if logs_url:
+            run_metadata.logs_url = logs_url
+
+    # Use logs-url from JUnit XML if source is a local path
+    effective_url = source
+    if not source.startswith("http") and run_metadata.logs_url.startswith("http"):
+        effective_url = run_metadata.logs_url
 
     # Build run analysis
     run_analysis = RunAnalysis(
-        run_url=source,
+        run_url=effective_url,
         run_metadata=run_metadata,
         total_tests=len(test_results),
         passed=sum(1 for t in test_results if t.status == TestStatus.PASSED),

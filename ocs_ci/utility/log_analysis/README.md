@@ -267,14 +267,8 @@ python -m ocs_ci.utility.log_analysis.cli \
   --jira-config ~/jira.cfg --known-issues-only
 ```
 
-The Jira config file is a simple INI file:
-
-```ini
-[DEFAULT]
-url = https://redhat.atlassian.net
-username = you@redhat.com
-password = <your-jira-api-token>
-```
+The Jira config file is a simple INI file with a `[DEFAULT]` section containing
+`url`, `username`, and `password` keys (same format as `/etc/jira.cfg`).
 
 ### `analyze-trends`
 

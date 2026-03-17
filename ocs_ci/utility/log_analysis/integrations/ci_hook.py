@@ -170,13 +170,23 @@ def _magna_url(local_path: str) -> str:
 
 
 def _find_junit_xml(log_dir: str) -> str:
-    """Find JUnit XML file in the log directory."""
+    """Find the latest JUnit XML file in the log directory."""
     if not os.path.isdir(log_dir):
         return ""
 
+    candidates = []
     for filename in os.listdir(log_dir):
         if filename.startswith("test_results") and filename.endswith(".xml"):
-            return os.path.join(log_dir, filename)
+            candidates.append(filename)
+
+    if candidates:
+        # Pick the latest (highest number = most recent run)
+        latest = sorted(candidates)[-1]
+        if len(candidates) > 1:
+            log.info(
+                f"Multiple JUnit XMLs found, using latest: {latest}"
+            )
+        return os.path.join(log_dir, latest)
 
     # Also check for junit.xml
     junit_path = os.path.join(log_dir, "junit.xml")
