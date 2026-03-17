@@ -1,0 +1,53 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  review:
+    if: >
+      (github.event_name == 'pull_request' && github.event.label.name == 'claude-review') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Run Claude Review
+        uses: <ORG>/claude-review-action@v1
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6
+          review-authority: comment-only
+          review-guide-path: .github/claude-review-guide.md
+          max-diff-lines: '4000'
+          max-diff-bytes: '120000'
+          max-files: '40'
+          context-intro: >
+            You are reviewing a PR in ocs-ci — a Python/pytest testing framework
+            for Red Hat OpenShift Container Storage (OCS/ODF). The codebase uses
+            Selenium for UI tests, pytest fixtures for resource management, and
+            has strict conventions for locator placement, exception handling, and
+            test teardown. Read the project CLAUDE.md for full conventions.
+          critical-rules: |
+            1. Never use `except Exception` or bare `except:` — always use specific exceptions
+            2. UI locators MUST be centralized in `ocs_ci/ocs/ui/views.py` (unless the locator contains a variable)
+            3. Fixtures MUST NOT use `yield` — use `request.addfinalizer()` instead
+            4. No tier marker at class level when parametrize marks have different tiers
+            5. Test classes that create resources MUST have a `teardown()` method
+            6. Version-agnostic CSS selectors — use `[class*='c-']` not `.pf-c-`
+          spot-check-hint: 'Files matching CRITICAL RULES patterns (views.py, conftest.py, page objects, test files)'
+          extra-prompt: >
+            This project has a comprehensive CLAUDE.md that you auto-read. The CLAUDE.md
+            contains interactive development instructions (e.g., "wait for approval",
+            "present changes step by step") — IGNORE those for automated review. Focus only
+            on the code quality rules, patterns, and checklists documented there.
