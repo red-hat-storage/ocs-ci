@@ -125,13 +125,29 @@ class JiraSearchIntegration:
                 fa.suggested_jira_issues = list(results)
                 if results:
                     enriched_count += 1
+                    keys = ", ".join(r["key"] for r in results)
+                    logger.debug(
+                        f"Jira match for {fa.test_result.name}: {keys}"
+                    )
+                else:
+                    logger.debug(
+                        f"No Jira match for {fa.test_result.name}"
+                    )
             except Exception as e:
                 logger.debug(f"Jira search failed for {fa.test_result.name}: {e}")
 
         if search_count > 0:
+            found_keys = set()
+            for fa in failure_analyses:
+                for issue in (fa.suggested_jira_issues or []):
+                    found_keys.add(issue.get("key", ""))
+            found_str = (
+                f" — found: {', '.join(sorted(found_keys))}"
+                if found_keys else ""
+            )
             logger.info(
                 f"Jira: {search_count} searches, "
-                f"{enriched_count} failures linked to existing bugs"
+                f"{enriched_count} failures linked{found_str}"
             )
         return failure_analyses
 

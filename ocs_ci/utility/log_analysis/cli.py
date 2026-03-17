@@ -168,6 +168,10 @@ def main(argv=None):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
+    # Suppress noisy third-party loggers
+    logging.getLogger("atlassian").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
     # Suppress urllib3 InsecureRequestWarning for self-signed certs
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
