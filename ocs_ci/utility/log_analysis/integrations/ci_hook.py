@@ -124,6 +124,7 @@ def pytest_sessionfinish(session, exitstatus):
 # Pytest markers that indicate a test run (not deployment)
 _TEST_MARKERS = {
     "tier1", "tier2", "tier3", "tier4", "tier4a", "tier4b", "tier4c",
+    "tier_after_upgrade",
     "acceptance", "performance", "scale", "e2e",
     "manage", "ecosystem", "libtest",
     "brown_squad", "green_squad", "red_squad", "blue_squad",
