@@ -261,9 +261,7 @@ class FailureClassifier:
         input_tok = getattr(self.ai_backend, "total_input_tokens", 0)
         output_tok = getattr(self.ai_backend, "total_output_tokens", 0)
         if input_tok or output_tok:
-            token_str = (
-                f", {input_tok:,} in / {output_tok:,} out tokens"
-            )
+            token_str = f", {input_tok:,} in / {output_tok:,} out tokens"
 
         logger.info(
             f"Classification complete in {elapsed_str}{cost_str}{token_str}: "
@@ -302,6 +300,10 @@ class FailureClassifier:
         """Replace brackets with dashes for test log directory names."""
         return test_name.replace("[", "-").replace("]", "")
 
+    def _is_local_path(self, path: str) -> bool:
+        """Check if a path is a local filesystem path (not HTTP)."""
+        return bool(path) and not path.startswith(("http://", "https://"))
+
     def _list_http_dir(self, url: str) -> list:
         """List entries in an HTTP directory listing. Returns list of names."""
         try:
@@ -312,8 +314,27 @@ class FailureClassifier:
         except requests.RequestException:
             return []
 
+    def _list_dir(self, path: str) -> list:
+        """List directory entries for both local paths and HTTP URLs."""
+        if self._is_local_path(path):
+            try:
+                return os.listdir(path)
+            except (OSError, IOError) as e:
+                logger.debug(f"Cannot list local directory {path}: {e}")
+                return []
+        return self._list_http_dir(path)
+
+    def _join_path(self, base: str, *parts: str) -> str:
+        """Join path components for both local paths and HTTP URLs."""
+        if self._is_local_path(base):
+            return os.path.join(base, *parts)
+        return "/".join([base.rstrip("/")] + list(parts))
+
     def _resolve_must_gather(self, test_name: str) -> dict:
         """Pre-resolve must-gather paths for a test.
+
+        Works with both HTTP URLs (personal computer / CLI) and local
+        filesystem paths (Jenkins slave / CI hook).
 
         Returns a dict with:
             mg_type: "local" | "http" | "none"
@@ -325,22 +346,31 @@ class FailureClassifier:
         if not self.failed_logs_dir:
             return {"mg_type": "none"}
 
-        safe_name = self._url_encode_test_name(test_name)
+        is_local = self._is_local_path(self.failed_logs_dir)
+
+        # On HTTP, brackets are URL-encoded; on local filesystem they're literal
+        safe_name = test_name if is_local else self._url_encode_test_name(test_name)
         base = self.failed_logs_dir.rstrip("/")
-        test_mg_url = f"{base}/{safe_name}_ocs_logs"
+        test_mg_path = self._join_path(base, f"{safe_name}_ocs_logs")
 
         # Step 1: Find cluster ID directory
-        entries = self._list_http_dir(test_mg_url)
+        entries = self._list_dir(test_mg_path)
         if not entries:
-            logger.debug(f"No must-gather directory found at {test_mg_url}")
+            logger.debug(f"No must-gather directory found at {test_mg_path}")
+            return {"mg_type": "none"}
+
+        # Filter out non-directory entries and hidden files
+        dir_entries = [e.rstrip("/") for e in entries if not e.startswith(".")]
+        if not dir_entries:
+            logger.debug(f"No cluster directories in {test_mg_path}")
             return {"mg_type": "none"}
 
         # Cluster ID is typically the only directory entry
-        cluster_id = entries[0].rstrip("/")
-        cluster_url = f"{test_mg_url}/{cluster_id}"
+        cluster_id = dir_entries[0]
+        cluster_path = self._join_path(test_mg_path, cluster_id)
 
         # Step 2: Check what's inside (extracted dirs or tar.gz)
-        cluster_entries = self._list_http_dir(cluster_url)
+        cluster_entries = self._list_dir(cluster_path)
         if not cluster_entries:
             return {"mg_type": "none"}
 
@@ -348,42 +378,53 @@ class FailureClassifier:
         has_tar = any(e.endswith(".tar.gz") for e in cluster_entries)
 
         if has_ocs_dir:
-            # Already extracted — resolve the quay-io hash dir via HTTP
-            return self._resolve_extracted_mg(cluster_url, cluster_id)
+            # Already extracted — resolve the quay-io hash dir
+            return self._resolve_extracted_mg(cluster_path, cluster_id)
 
         if has_tar:
-            # Download and extract tar.gz archives locally
-            ocs_tar = next(
-                (e for e in cluster_entries if e == "ocs_must_gather.tar.gz"),
-                None,
-            )
-            ocp_tar = next(
-                (e for e in cluster_entries if e == "ocp_must_gather.tar.gz"),
-                None,
-            )
-            if not ocs_tar:
-                # Fallback: pick any tar.gz
+            if is_local:
+                # Local tar.gz — extract directly from filesystem
+                return self._extract_local_mg_tarball(
+                    cluster_path, cluster_entries, test_name, cluster_id
+                )
+            else:
+                # Remote tar.gz — download via HTTP and extract
                 ocs_tar = next(
-                    (e for e in cluster_entries if e.endswith(".tar.gz")),
+                    (e for e in cluster_entries if e == "ocs_must_gather.tar.gz"),
                     None,
                 )
-            if ocs_tar:
-                tar_url = f"{cluster_url}/{ocs_tar}"
-                ocp_tar_url = f"{cluster_url}/{ocp_tar}" if ocp_tar else ""
-                return self._extract_mg_tarball(
-                    tar_url,
-                    test_name,
-                    cluster_id,
-                    ocp_tar_url=ocp_tar_url,
+                ocp_tar = next(
+                    (e for e in cluster_entries if e == "ocp_must_gather.tar.gz"),
+                    None,
                 )
+                if not ocs_tar:
+                    ocs_tar = next(
+                        (e for e in cluster_entries if e.endswith(".tar.gz")),
+                        None,
+                    )
+                if ocs_tar:
+                    tar_url = f"{cluster_path}/{ocs_tar}"
+                    ocp_tar_url = f"{cluster_path}/{ocp_tar}" if ocp_tar else ""
+                    return self._extract_mg_tarball(
+                        tar_url,
+                        test_name,
+                        cluster_id,
+                        ocp_tar_url=ocp_tar_url,
+                    )
 
-        logger.debug(f"Must-gather at {cluster_url} has no ocs_must_gather/ or tar.gz")
+        logger.debug(f"Must-gather at {cluster_path} has no ocs_must_gather/ or tar.gz")
         return {"mg_type": "none"}
 
-    def _resolve_extracted_mg(self, cluster_url: str, cluster_id: str) -> dict:
-        """Resolve paths for an already-extracted must-gather on HTTP."""
-        ocs_url = f"{cluster_url}/ocs_must_gather"
-        ocs_entries = self._list_http_dir(ocs_url)
+    def _resolve_extracted_mg(self, cluster_path: str, cluster_id: str) -> dict:
+        """Resolve paths for an already-extracted must-gather.
+
+        Works with both local paths and HTTP URLs.
+        """
+        is_local = self._is_local_path(cluster_path)
+        mg_type = "local" if is_local else "http"
+
+        ocs_path = self._join_path(cluster_path, "ocs_must_gather")
+        ocs_entries = self._list_dir(ocs_path)
 
         # Find the quay-io image hash directory
         quay_dir = ""
@@ -393,31 +434,31 @@ class FailureClassifier:
                 quay_dir = name
                 break
 
-        ocs_data_url = f"{ocs_url}/{quay_dir}" if quay_dir else ocs_url
+        ocs_data_path = self._join_path(ocs_path, quay_dir) if quay_dir else ocs_path
 
         # Check for OCP must-gather
-        ocp_url = f"{cluster_url}/ocp_must_gather"
-        ocp_entries = self._list_http_dir(ocp_url)
-        ocp_data_url = ""
+        ocp_path = self._join_path(cluster_path, "ocp_must_gather")
+        ocp_entries = self._list_dir(ocp_path)
+        ocp_data_path = ""
         if ocp_entries:
             for entry in ocp_entries:
                 name = entry.rstrip("/")
                 if name.startswith("quay-io") or name.startswith("quay.io"):
-                    ocp_data_url = f"{ocp_url}/{name}"
+                    ocp_data_path = self._join_path(ocp_path, name)
                     break
-            if not ocp_data_url:
-                ocp_data_url = ocp_url
+            if not ocp_data_path:
+                ocp_data_path = ocp_path
 
         logger.info(
-            f"Resolved must-gather (HTTP): ocs={ocs_data_url}, "
-            f"ocp={'yes' if ocp_data_url else 'no'}"
+            f"Resolved must-gather ({mg_type}): ocs={ocs_data_path}, "
+            f"ocp={'yes' if ocp_data_path else 'no'}"
         )
 
         return {
-            "mg_type": "http",
-            "mg_base": ocs_data_url,
-            "ocs_mg": ocs_data_url,
-            "ocp_mg": ocp_data_url,
+            "mg_type": mg_type,
+            "mg_base": ocs_data_path,
+            "ocs_mg": ocs_data_path,
+            "ocp_mg": ocp_data_path,
             "cluster_id": cluster_id,
         }
 
@@ -498,6 +539,82 @@ class FailureClassifier:
             "cluster_id": cluster_id,
         }
 
+    def _extract_local_mg_tarball(
+        self,
+        cluster_path: str,
+        cluster_entries: list,
+        test_name: str,
+        cluster_id: str,
+    ) -> dict:
+        """Extract must-gather tar.gz from local filesystem path."""
+        safe_test = re.sub(r"[^\w\-]", "_", test_name)[:80]
+        extract_dir = os.path.join(MG_CACHE_DIR, self.run_id, safe_test)
+        os.makedirs(extract_dir, exist_ok=True)
+        self._mg_cleanup_paths.append(extract_dir)
+
+        ocs_tar = next(
+            (e for e in cluster_entries if e == "ocs_must_gather.tar.gz"), None
+        )
+        ocp_tar = next(
+            (e for e in cluster_entries if e == "ocp_must_gather.tar.gz"), None
+        )
+        if not ocs_tar:
+            ocs_tar = next((e for e in cluster_entries if e.endswith(".tar.gz")), None)
+
+        for tar_name, label in [(ocs_tar, "ocs"), (ocp_tar, "ocp")]:
+            if not tar_name:
+                continue
+            tar_path = os.path.join(cluster_path, tar_name)
+            try:
+                size_mb = os.path.getsize(tar_path) / 1024 / 1024
+                logger.info(
+                    f"Extracting local {label} must-gather ({size_mb:.1f} MB): "
+                    f"{tar_path}"
+                )
+                with tarfile.open(tar_path, "r:gz") as tar:
+                    tar.extractall(path=extract_dir)
+            except Exception as e:
+                logger.warning(f"Failed to extract {label} must-gather: {e}")
+
+        # Find the extracted data directories
+        ocs_mg_path = self._find_local_mg_dir(extract_dir, "ocs_must_gather")
+        ocp_mg_path = self._find_local_mg_dir(extract_dir, "ocp_must_gather")
+
+        if not ocs_mg_path:
+            logger.warning(
+                f"No ocs_must_gather found in extracted archive at {extract_dir}"
+            )
+            return {"mg_type": "none"}
+
+        # Find quay-io hash dir inside ocs_must_gather
+        ocs_data_path = ocs_mg_path
+        for entry in os.listdir(ocs_mg_path):
+            if entry.startswith("quay-io") or entry.startswith("quay.io"):
+                ocs_data_path = os.path.join(ocs_mg_path, entry)
+                break
+
+        ocp_data_path = ""
+        if ocp_mg_path:
+            for entry in os.listdir(ocp_mg_path):
+                if entry.startswith("quay-io") or entry.startswith("quay.io"):
+                    ocp_data_path = os.path.join(ocp_mg_path, entry)
+                    break
+            if not ocp_data_path:
+                ocp_data_path = ocp_mg_path
+
+        logger.info(
+            f"Resolved must-gather (local from tar): ocs={ocs_data_path}, "
+            f"ocp={'yes' if ocp_data_path else 'no'}"
+        )
+
+        return {
+            "mg_type": "local",
+            "mg_base": ocs_data_path,
+            "ocs_mg": ocs_data_path,
+            "ocp_mg": ocp_data_path,
+            "cluster_id": cluster_id,
+        }
+
     @staticmethod
     def _find_local_mg_dir(base_dir: str, target: str) -> str:
         """Recursively find a directory by name under base_dir."""
@@ -540,24 +657,25 @@ class FailureClassifier:
         return url
 
     def _build_ui_logs_url(self, test_name: str) -> dict:
-        """Check if UI logs exist for this test and return URLs.
+        """Check if UI logs exist for this test and return paths/URLs.
 
         Returns dict with dom_url and screenshots_url, or empty dict.
         """
         if not self.ui_logs_dir:
             return {}
 
-        safe_name = self._url_encode_test_name(test_name)
+        is_local = self._is_local_path(self.ui_logs_dir)
+        safe_name = test_name if is_local else self._url_encode_test_name(test_name)
         base = self.ui_logs_dir.rstrip("/")
-        dom_url = f"{base}/dom/{safe_name}"
-        screenshots_url = f"{base}/screenshots_ui/{safe_name}"
+        dom_url = self._join_path(base, "dom", safe_name)
+        screenshots_url = self._join_path(base, "screenshots_ui", safe_name)
 
         # Check if this test has UI logs
-        dom_entries = self._list_http_dir(dom_url)
+        dom_entries = self._list_dir(dom_url)
         if not dom_entries:
             return {}
 
-        screenshots_entries = self._list_http_dir(screenshots_url)
+        screenshots_entries = self._list_dir(screenshots_url)
 
         logger.debug(
             f"UI logs found for {test_name}: "

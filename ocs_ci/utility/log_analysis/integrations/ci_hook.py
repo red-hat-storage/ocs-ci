@@ -54,6 +54,10 @@ def pytest_sessionfinish(session, exitstatus):
         log.warning(f"No JUnit XML found in {log_dir}, skipping AI log analysis")
         return
 
+    # Enable verbose (DEBUG) logging if configured
+    if la_config.get("verbose", False):
+        logging.getLogger("ocs_ci.utility.log_analysis").setLevel(logging.DEBUG)
+
     log.info("Running post-session AI log analysis...")
 
     try:
@@ -123,13 +127,32 @@ def pytest_sessionfinish(session, exitstatus):
 
 # Pytest markers that indicate a test run (not deployment)
 _TEST_MARKERS = {
-    "tier1", "tier2", "tier3", "tier4", "tier4a", "tier4b", "tier4c",
+    "tier1",
+    "tier2",
+    "tier3",
+    "tier4",
+    "tier4a",
+    "tier4b",
+    "tier4c",
     "tier_after_upgrade",
-    "acceptance", "performance", "scale", "e2e",
-    "manage", "ecosystem", "libtest",
-    "brown_squad", "green_squad", "red_squad", "blue_squad",
-    "black_squad", "purple_squad", "orange_squad", "yellow_squad",
-    "grey_squad", "aqua_squad", "magenta_squad",
+    "acceptance",
+    "performance",
+    "scale",
+    "e2e",
+    "manage",
+    "ecosystem",
+    "libtest",
+    "brown_squad",
+    "green_squad",
+    "red_squad",
+    "blue_squad",
+    "black_squad",
+    "purple_squad",
+    "orange_squad",
+    "yellow_squad",
+    "grey_squad",
+    "aqua_squad",
+    "magenta_squad",
 }
 
 
@@ -165,7 +188,7 @@ def _magna_url(local_path: str) -> str:
     """Convert a /mnt/ocsci-jenkins/ path to its magna002 HTTP equivalent."""
     expanded = os.path.expanduser(local_path) if local_path else ""
     if expanded.startswith(_MAGNA_MOUNT):
-        return _MAGNA_HTTP + expanded[len(_MAGNA_MOUNT):]
+        return _MAGNA_HTTP + expanded[len(_MAGNA_MOUNT) :]
     return ""
 
 
@@ -183,9 +206,7 @@ def _find_junit_xml(log_dir: str) -> str:
         # Pick the latest (highest number = most recent run)
         latest = sorted(candidates)[-1]
         if len(candidates) > 1:
-            log.info(
-                f"Multiple JUnit XMLs found, using latest: {latest}"
-            )
+            log.info(f"Multiple JUnit XMLs found, using latest: {latest}")
         return os.path.join(log_dir, latest)
 
     # Also check for junit.xml
