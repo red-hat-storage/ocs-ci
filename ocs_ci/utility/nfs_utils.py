@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.utils import convert_device_size, exec_cmd, TimeoutSampler
@@ -237,30 +237,30 @@ def update_etc_hosts_on_nfs_client(con, hostname):
     log.info("Resolving %s from cluster node %s", hostname, nfs_node)
 
     lb_ips = []
-    for sample in TimeoutSampler(
-        timeout=300,
-        sleep=15,
-        func=exec_cmd,
-        cmd=(
-            f"oc debug node/{nfs_node} --to-namespace=default "
-            f"-- chroot /host getent hosts {hostname}"
-        ),
-        ignore_error=True,
-    ):
-        if sample and sample.stdout:
-            try:
-                lb_ips = [
-                    line.split()[0]
-                    for line in sample.stdout.decode().strip().splitlines()
-                    if line.strip()
-                ]
-            except (UnicodeDecodeError, AttributeError) as e:
-                log.warning("Failed to decode getent output: %s", e)
-        if lb_ips:
-            break
-        log.info("Could not resolve %s yet, retrying in 15s...", hostname)
-
-    if not lb_ips:
+    try:
+        for sample in TimeoutSampler(
+            timeout=300,
+            sleep=15,
+            func=exec_cmd,
+            cmd=(
+                f"oc debug node/{nfs_node} --to-namespace=default "
+                f"-- chroot /host getent hosts {hostname}"
+            ),
+            ignore_error=True,
+        ):
+            if sample and sample.stdout:
+                try:
+                    lb_ips = [
+                        line.split()[0]
+                        for line in sample.stdout.decode().strip().splitlines()
+                        if line.strip()
+                    ]
+                except (UnicodeDecodeError, AttributeError) as e:
+                    log.warning("Failed to decode getent output: %s", e)
+            if lb_ips:
+                break
+            log.info("Could not resolve %s yet, retrying in 15s...", hostname)
+    except TimeoutExpiredError:
         log.warning(
             "Could not resolve %s from within the cluster after waiting, "
             "skipping /etc/hosts update",
