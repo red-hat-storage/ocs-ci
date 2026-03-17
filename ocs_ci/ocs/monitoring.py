@@ -451,15 +451,17 @@ def validate_no_prometheus_rule_failures(threading_lock=None):
     )
     for pod_name in prometheus_pods:
         logger.info(f"Checking logs of pod {pod_name}")
-        pod_logs = get_pod_logs(
+        matching_logs = get_pod_logs(
             pod_name=pod_name,
             namespace=constants.MONITORING_NAMESPACE,
-        ).splitlines()
-        pod_logs.reverse()
-        for log_line in pod_logs:
-            if "many-to-many matching not allowed" in log_line.lower():
-                test_results[f"many-to-many-error-present-{pod_name}-check"] = False
-                break
+            grep="many-to-many matching not allowed",
+            case_senitive=False,
+            first_match_only=True,
+            return_empty_string=True,
+        )
+        # If grep returns non-empty string, the error is present
+        if matching_logs.strip():
+            test_results[f"many-to-many-error-present-{pod_name}-check"] = False
         else:
             test_results[f"many-to-many-error-present-{pod_name}-check"] = True
 
