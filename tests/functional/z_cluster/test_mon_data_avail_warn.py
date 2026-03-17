@@ -81,11 +81,18 @@ class TestMonDataAvailWarn(E2ETest):
             int: Used space percentage
 
         """
-        path = f"/var/lib/ceph/mon/ceph-{self.mon_suffix}"
         if config.DEPLOYMENT.get("local_storage"):
-            path = "/etc/hosts"
-        cmd = f"df -Th | grep {path}"
-        mount_details = self.mon_pod.exec_sh_cmd_on_pod(command=cmd, sh="sh")
+            path = f"/var/lib/rook/mon-{self.mon_suffix}/data"
+            cmd = f"df -Th {path}"
+            result = self.oc_cmd.exec_oc_debug_cmd(
+                node=self.worker_node,
+                cmd_list=[cmd],
+            )
+            mount_details = result.strip().splitlines()[-1]
+        else:
+            path = f"/var/lib/ceph/mon/ceph-{self.mon_suffix}"
+            cmd = f"df -Th {path}"
+            mount_details = self.mon_pod.exec_sh_cmd_on_pod(command=cmd, sh="sh")
         used_percent = mount_details.split()[5].replace("%", "")
         return int(used_percent)
 
