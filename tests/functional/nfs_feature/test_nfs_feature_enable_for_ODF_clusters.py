@@ -334,9 +334,18 @@ class TestNfsEnable(ManageTest):
         con = __make_connection()
         hostname_add = getattr(self, "hostname_add", None)
         if hostname_add:
+            is_ip = False
             try:
                 ipaddress.ip_address(hostname_add)
+                is_ip = True
             except ValueError:
+                pass
+            if not is_ip:
+                log.info(
+                    "NFS LB endpoint %s is a hostname, resolving and "
+                    "updating /etc/hosts on NFS client VM",
+                    hostname_add,
+                )
                 nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
         return con
 
