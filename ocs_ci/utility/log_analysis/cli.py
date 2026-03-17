@@ -187,10 +187,9 @@ def main(argv=None):
         cp.read(args.jira_config)
         jira_auth = {
             "url": cp["DEFAULT"]["url"],
-            "token": cp["DEFAULT"]["token"],
+            "username": cp["DEFAULT"]["username"],
+            "password": cp["DEFAULT"]["password"],
         }
-        if "username" in cp["DEFAULT"]:
-            jira_auth["username"] = cp["DEFAULT"]["username"]
         ocsci_config.AUTH["jira"] = jira_auth
 
     # Compute sessions_url when running on Jenkins slave

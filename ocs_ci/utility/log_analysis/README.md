@@ -209,7 +209,7 @@ python -m ocs_ci.utility.log_analysis.cli <source> [options]
 | `--model` | `sonnet` | AI model: `sonnet`, `haiku`, `opus` |
 | `--known-issues-only` | off | Regex-only mode, no AI, no cost |
 | `--no-jira` | off | Skip Jira integration |
-| `--jira-config` | none | Path to Jira INI config file (with `url` and `token` in `[DEFAULT]` section) |
+| `--jira-config` | none | Path to Jira INI config file (with `url`, `username`, `password` in `[DEFAULT]` section) |
 | `--max-budget-usd` | `0.50` | Max spend per AI classification call |
 | `--max-failures` | `30` | Max unique failure signatures to classify with AI |
 | `--test` | all | Only analyze failures matching these test name substrings (e.g., `--test noobaa pvc_clone`) |
@@ -273,10 +273,8 @@ The Jira config file is a simple INI file:
 [DEFAULT]
 url = https://redhat.atlassian.net
 username = you@redhat.com
-token = YOUR_JIRA_API_TOKEN
+password = YOUR_JIRA_API_TOKEN
 ```
-
-For Atlassian Cloud (`atlassian.net`), both `username` and `token` are required (Basic auth). For on-prem Jira, only `token` is needed (Bearer auth).
 
 ### `analyze-trends`
 
