@@ -239,7 +239,7 @@ def update_etc_hosts_on_nfs_client(con, hostname):
         timeout=300,
         sleep=15,
         func=exec_cmd,
-        command=(
+        cmd=(
             f"oc debug node/{nfs_node} --to-namespace=default "
             f"-- chroot /host getent hosts {hostname}"
         ),
