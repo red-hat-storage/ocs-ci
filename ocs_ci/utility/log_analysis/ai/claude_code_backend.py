@@ -356,8 +356,9 @@ class ClaudeCodeBackend(AIBackend):
 
         # Accumulate cost and token usage
         cost = response.get("total_cost_usd")
-        input_tokens = response.get("input_tokens_used", 0)
-        output_tokens = response.get("output_tokens_used", 0)
+        usage = response.get("usage", {})
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
         if cost is not None:
             self._total_cost += cost
         self._total_input_tokens += input_tokens
@@ -453,8 +454,9 @@ class ClaudeCodeBackend(AIBackend):
         cost = response.get("total_cost_usd")
         num_turns = response.get("num_turns")
         session_id = response.get("session_id", "")
-        input_tokens = response.get("input_tokens_used", 0)
-        output_tokens = response.get("output_tokens_used", 0)
+        usage = response.get("usage", {})
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
         if cost is not None:
             self._total_cost += cost
         self._total_input_tokens += input_tokens
