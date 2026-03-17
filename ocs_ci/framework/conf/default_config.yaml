@@ -415,7 +415,9 @@ LOG_ANALYSIS:
     - "DFBUGS"
   # Recorded session transcripts directory
   sessions_dir: "/mnt/ocsci-jenkins/log_analysis/recorded_sessions"
-   # Cross-run history tracking
+  # HTTP base URL for session links (auto-derived from sessions_dir on jslave)
+  sessions_url: "http://magna002.ceph.redhat.com/ocsci-jenkins/log_analysis/recorded_sessions"
+  # Cross-run history tracking
   history_dir: "~/.ocs-ci/analysis_history"
   # CI/CD post-session hook (opt-in)
   ci_post_hook_enabled: true

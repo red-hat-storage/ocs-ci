@@ -60,6 +60,7 @@ class FailureClassifier:
         ui_logs_dir: Optional[str] = None,
         run_id: Optional[str] = None,
         sessions_dir: Optional[str] = None,
+        sessions_url: Optional[str] = None,
     ):
         """
         Args:
@@ -73,6 +74,7 @@ class FailureClassifier:
             ui_logs_dir: URL to ui_logs_dir_{runid} for UI test artifacts
             run_id: Run ID extracted from directory names
             sessions_dir: Directory for recorded session transcripts
+            sessions_url: HTTP base URL for session links in reports
         """
         self.ai_backend = ai_backend
         self.known_issues = known_issues_matcher or KnownIssuesMatcher()
@@ -84,6 +86,7 @@ class FailureClassifier:
         self.ui_logs_dir = ui_logs_dir
         self.run_id = run_id or "unknown"
         self.sessions_dir = os.path.expanduser(sessions_dir or DEFAULT_SESSIONS_DIR)
+        self.sessions_url = sessions_url.rstrip("/") if sessions_url else ""
         self.log_parser = TestLogParser()
         self.mg_parser = MustGatherParser()
         self._http_session = None
@@ -588,6 +591,8 @@ class FailureClassifier:
                     f.write(session_text)
 
             logger.debug(f"Saved session record to {filepath}")
+            if self.sessions_url:
+                return f"{self.sessions_url}/{filename}"
             return filepath
         except Exception as e:
             logger.debug(f"Failed to save session record: {e}")

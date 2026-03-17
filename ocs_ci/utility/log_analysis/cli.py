@@ -12,6 +12,7 @@ Examples:
 
 import argparse
 import logging
+import os
 import sys
 import urllib3
 
@@ -129,6 +130,14 @@ def main(argv=None):
         help="Directory for recorded session transcripts (default: ~/.ocs-ci/recorded_sessions)",
     )
     parser.add_argument(
+        "--jslave",
+        action="store_true",
+        help=(
+            "Running on Jenkins slave: translate session file paths to "
+            "magna002 HTTP URLs in reports"
+        ),
+    )
+    parser.add_argument(
         "--save-prompts",
         action="store_true",
         help="Save AI prompts to ~/.ocs-ci/prompts/<run_id>/ for debugging",
@@ -180,6 +189,11 @@ def main(argv=None):
             jira_auth["username"] = cp["DEFAULT"]["username"]
         ocsci_config.AUTH["jira"] = jira_auth
 
+    # Compute sessions_url when running on Jenkins slave
+    sessions_url = None
+    if args.jslave:
+        sessions_url = _magna_url(args.sessions_dir or "")
+
     try:
         # Run analysis
         run_analysis = analyze_run(
@@ -200,6 +214,7 @@ def main(argv=None):
             test_filter=args.test,
             save_prompts=args.save_prompts,
             sessions_dir=args.sessions_dir,
+            sessions_url=sessions_url,
         )
 
         # Generate report
@@ -341,6 +356,18 @@ def trends_main(argv=None):
     except Exception as e:
         logger.error(f"Trend analysis failed: {e}", exc_info=args.verbose)
         sys.exit(1)
+
+
+MAGNA_MOUNT = "/mnt/ocsci-jenkins/"
+MAGNA_HTTP = "http://magna002.ceph.redhat.com/ocsci-jenkins/"
+
+
+def _magna_url(local_path: str) -> str:
+    """Convert a /mnt/ocsci-jenkins/ path to its magna002 HTTP equivalent."""
+    expanded = os.path.expanduser(local_path) if local_path else ""
+    if expanded.startswith(MAGNA_MOUNT):
+        return MAGNA_HTTP + expanded[len(MAGNA_MOUNT):]
+    return ""
 
 
 if __name__ == "__main__":

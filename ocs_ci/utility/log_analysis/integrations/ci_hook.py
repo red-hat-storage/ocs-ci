@@ -55,6 +55,12 @@ def pytest_sessionfinish(session, exitstatus):
         from ocs_ci.utility.log_analysis import analyze_run
         from ocs_ci.utility.log_analysis.reporting.report_builder import ReportBuilder
 
+        # Compute sessions_url for magna002 HTTP links
+        sessions_dir = la_config.get("sessions_dir")
+        sessions_url = la_config.get("sessions_url")
+        if not sessions_url and sessions_dir:
+            sessions_url = _magna_url(sessions_dir)
+
         # Run analysis using the local log directory
         run_analysis = analyze_run(
             source=log_dir,
@@ -69,7 +75,8 @@ def pytest_sessionfinish(session, exitstatus):
             jira_projects=la_config.get("jira_projects"),
             record_history=True,
             history_dir=la_config.get("history_dir", "~/.ocs-ci/analysis_history"),
-            sessions_dir=la_config.get("sessions_dir"),
+            sessions_dir=sessions_dir,
+            sessions_url=sessions_url,
         )
 
         # Generate reports
@@ -107,6 +114,18 @@ def pytest_sessionfinish(session, exitstatus):
     except Exception as e:
         # Never fail the test run because of analysis errors
         log.warning(f"Post-session AI log analysis failed (non-fatal): {e}")
+
+
+_MAGNA_MOUNT = "/mnt/ocsci-jenkins/"
+_MAGNA_HTTP = "http://magna002.ceph.redhat.com/ocsci-jenkins/"
+
+
+def _magna_url(local_path: str) -> str:
+    """Convert a /mnt/ocsci-jenkins/ path to its magna002 HTTP equivalent."""
+    expanded = os.path.expanduser(local_path) if local_path else ""
+    if expanded.startswith(_MAGNA_MOUNT):
+        return _MAGNA_HTTP + expanded[len(_MAGNA_MOUNT):]
+    return ""
 
 
 def _find_junit_xml(log_dir: str) -> str:
