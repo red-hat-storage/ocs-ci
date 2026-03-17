@@ -31,6 +31,11 @@ def pytest_sessionfinish(session, exitstatus):
     if not la_config.get("ci_post_hook_enabled", False):
         return
 
+    # Only run for test runs, not deployment/install stages
+    if _is_deployment_run(session):
+        log.info("Deployment run detected, skipping AI log analysis")
+        return
+
     # Only run if there were test failures
     if exitstatus == 0:
         log.info("All tests passed, skipping AI log analysis")
@@ -114,6 +119,41 @@ def pytest_sessionfinish(session, exitstatus):
     except Exception as e:
         # Never fail the test run because of analysis errors
         log.warning(f"Post-session AI log analysis failed (non-fatal): {e}")
+
+
+# Pytest markers that indicate a test run (not deployment)
+_TEST_MARKERS = {
+    "tier1", "tier2", "tier3", "tier4", "tier4a", "tier4b", "tier4c",
+    "acceptance", "performance", "scale", "e2e",
+    "manage", "ecosystem", "libtest",
+    "brown_squad", "green_squad", "red_squad", "blue_squad",
+    "black_squad", "purple_squad", "orange_squad", "yellow_squad",
+    "grey_squad", "aqua_squad", "magenta_squad",
+}
+
+
+def _is_deployment_run(session) -> bool:
+    """Check if this is a deployment/install run (not a test run).
+
+    Looks at the pytest -m marker expression. If it contains any known
+    test marker, this is a test run. If it only has deployment markers
+    (or no markers), it's a deployment run.
+    """
+    try:
+        marker_expr = session.config.getoption("-m", default="")
+    except (ValueError, AttributeError):
+        marker_expr = ""
+
+    if not marker_expr:
+        return False  # No markers = let it run (standalone CLI usage)
+
+    marker_lower = marker_expr.lower()
+    for test_marker in _TEST_MARKERS:
+        if test_marker in marker_lower:
+            return False  # Found a test marker — this is a test run
+
+    log.info(f"Marker expression '{marker_expr}' has no test markers")
+    return True
 
 
 _MAGNA_MOUNT = "/mnt/ocsci-jenkins/"
