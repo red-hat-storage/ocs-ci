@@ -273,7 +273,7 @@ The Jira config file is a simple INI file:
 [DEFAULT]
 url = https://redhat.atlassian.net
 username = you@redhat.com
-password = YOUR_JIRA_API_TOKEN
+password = <your-jira-api-token>
 ```
 
 ### `analyze-trends`
