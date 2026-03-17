@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-S3 Logs Uploader for IBM Cloud Object Storage
+S3 Logs Uploader for S3-compatible Storage
 
 This module provides functionality to upload log files (especially must-gather tarballs)
-to IBM Cloud Object Storage (COS) and return object location information for later retrieval.
+to S3-compatible storage and return object location information for later retrieval.
 
 Can be used as a standalone script or imported as a module.
 Integrated with ocs-ci configuration system.
@@ -34,11 +34,11 @@ logger = logging.getLogger(__name__)
 
 class S3LogsUploader:
     """
-    Handles uploading log files to IBM Cloud Object Storage (S3-compatible).
+    Handles uploading log files to S3-compatible storage.
 
     Supports:
     - Uploading files with optional prefix (for organizing files)
-    - Returning detailed object location information (bucket, key, region)
+    - Returning detailed object location information (bucket, key)
     - Integration with ocs-ci config
     """
 
@@ -48,11 +48,13 @@ class S3LogsUploader:
 
         Args:
             config: Dictionary containing S3 endpoint details with keys:
-                - access_key_id: HMAC access key (or nested in cos_hmac_keys)
-                - secret_access_key: HMAC secret key (or nested in cos_hmac_keys)
                 - bucket_name: Target bucket name
-                - region: IBM Cloud region (e.g., 'us-south')
-                - cos_name: (optional) COS instance name for reference
+                - endpoint_url: S3 endpoint URL (e.g., 'https://s3.us-south.cloud-object-storage.appdomain.cloud')
+                - access_key_id: S3 access key (flat format, works with all providers)
+                - secret_access_key: S3 secret key (flat format, works with all providers)
+                - cos_hmac_keys: (optional) IBM Cloud specific - nested credentials with
+                  access_key_id and secret_access_key
+                - cos_name: (optional) Storage instance name for reference
                 - retention_policy: (optional) Dict with min, max, default retention days
         """
         if boto3 is None:
@@ -63,7 +65,6 @@ class S3LogsUploader:
 
         self.config = config
         self.bucket_name = config["bucket_name"]
-        self.region = config["region"]
 
         # Load retention policy if available
         self.retention_policy = config.get(
@@ -75,9 +76,7 @@ class S3LogsUploader:
             f"max={self.retention_policy['max']}, default={self.retention_policy['default']} days"
         )
 
-        # Construct the S3 endpoint URL for IBM Cloud
-        # Format: https://s3.{region}.cloud-object-storage.appdomain.cloud
-        endpoint_url = f"https://s3.{self.region}.cloud-object-storage.appdomain.cloud"
+        endpoint_url = config["endpoint_url"]
 
         # Support both nested and flat credential structure
         if "cos_hmac_keys" in config:
@@ -87,7 +86,7 @@ class S3LogsUploader:
             access_key = config["access_key_id"]
             secret_key = config["secret_access_key"]
 
-        # Initialize boto3 S3 client with IBM Cloud COS configuration
+        # Initialize boto3 S3 client with S3-compatible endpoint
         self.s3_client = boto3.client(
             "s3",
             aws_access_key_id=access_key,
@@ -97,7 +96,7 @@ class S3LogsUploader:
         )
 
         logger.info(
-            f"Initialized S3 client for bucket '{self.bucket_name}' in region '{self.region}'"
+            f"Initialized S3 client for bucket '{self.bucket_name}' with endpoint '{endpoint_url}'"
         )
 
     def _validate_retention_days(self, retention_days: Optional[int]) -> int:
@@ -153,7 +152,6 @@ class S3LogsUploader:
                 - success: Boolean indicating success
                 - object_key: Full S3 object key (including prefix)
                 - bucket: Bucket name
-                - region: Region
                 - size_bytes: File size in bytes
                 - etag: S3 ETag
                 - upload_timestamp: ISO format timestamp
@@ -226,7 +224,6 @@ class S3LogsUploader:
                 "success": True,
                 "object_key": object_key,
                 "bucket": self.bucket_name,
-                "region": self.region,
                 "size_bytes": file_size,
                 "etag": head_response.get("ETag", "").strip('"'),
                 "upload_timestamp": datetime.utcnow().isoformat() + "Z",
@@ -540,7 +537,7 @@ def main():
     Main function for standalone CLI usage.
     """
     parser = argparse.ArgumentParser(
-        description="Upload log files or directories to IBM Cloud Object Storage (S3)",
+        description="Upload log files or directories to S3-compatible storage",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -700,7 +697,6 @@ Examples:
             print(f"Bucket:            {result['bucket']}")
             print(f"Object Key:        {result['object_key']}")
             print(f"S3 URI:            {result['s3_uri']}")
-            print(f"Region:            {result['region']}")
             print(f"Size:              {result['size_bytes']:,} bytes")
             print(f"ETag:              {result['etag']}")
             print(f"Upload Time:       {result['upload_timestamp']}")
@@ -712,7 +708,6 @@ Examples:
             print("To retrieve this object later, use:")
             print(f"  Bucket: {result['bucket']}")
             print(f"  Key:    {result['object_key']}")
-            print(f"  Region: {result['region']}")
             print("=" * 80 + "\n")
             return 0
         else:

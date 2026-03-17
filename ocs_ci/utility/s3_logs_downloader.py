@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-S3 Logs Downloader for IBM Cloud Object Storage
+S3 Logs Downloader for S3-compatible Storage
 
-This module provides functionality to download log files from IBM Cloud Object Storage (COS).
+This module provides functionality to download log files from S3-compatible storage.
 Supports downloading from S3 URIs with automatic directory creation and optional tarball extraction.
 Also supports downloading multiple files by prefix.
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 class S3LogsDownloader:
     """
-    Handles downloading log files from IBM Cloud Object Storage (S3-compatible).
+    Handles downloading log files from S3-compatible storage.
 
     Supports:
     - Downloading files from S3 URIs
@@ -49,11 +49,13 @@ class S3LogsDownloader:
 
         Args:
             config: Dictionary containing S3 endpoint details with keys:
-                - access_key_id: HMAC access key (or nested in cos_hmac_keys)
-                - secret_access_key: HMAC secret key (or nested in cos_hmac_keys)
                 - bucket_name: Target bucket name
-                - region: IBM Cloud region (e.g., 'us-south')
-                - cos_name: (optional) COS instance name for reference
+                - endpoint_url: S3 endpoint URL (e.g., 'https://s3.us-south.cloud-object-storage.appdomain.cloud')
+                - access_key_id: S3 access key (flat format, works with all providers)
+                - secret_access_key: S3 secret key (flat format, works with all providers)
+                - cos_hmac_keys: (optional) IBM Cloud specific - nested credentials with access_key_id
+                  and secret_access_key
+                - cos_name: (optional) Storage instance name for reference
         """
         if boto3 is None:
             raise ImportError(
@@ -63,11 +65,7 @@ class S3LogsDownloader:
 
         self.config = config
         self.bucket_name = config["bucket_name"]
-        self.region = config["region"]
-
-        # Construct the S3 endpoint URL for IBM Cloud
-        # Format: https://s3.{region}.cloud-object-storage.appdomain.cloud
-        endpoint_url = f"https://s3.{self.region}.cloud-object-storage.appdomain.cloud"
+        endpoint_url = config["endpoint_url"]
 
         # Support both nested and flat credential structure
         if "cos_hmac_keys" in config:
@@ -77,7 +75,7 @@ class S3LogsDownloader:
             access_key = config["access_key_id"]
             secret_key = config["secret_access_key"]
 
-        # Initialize boto3 S3 client with IBM Cloud COS configuration
+        # Initialize boto3 S3 client with S3-compatible endpoint
         self.s3_client = boto3.client(
             "s3",
             aws_access_key_id=access_key,
@@ -87,7 +85,7 @@ class S3LogsDownloader:
         )
 
         logger.info(
-            f"Initialized S3 client for bucket '{self.bucket_name}' in region '{self.region}'"
+            f"Initialized S3 client for bucket '{self.bucket_name}' with endpoint '{endpoint_url}'"
         )
 
     def parse_s3_uri(self, s3_uri: str) -> Dict[str, str]:
@@ -660,7 +658,7 @@ def main():
     Main function for standalone CLI usage.
     """
     parser = argparse.ArgumentParser(
-        description="Download log files from IBM Cloud Object Storage (S3)",
+        description="Download log files from S3-compatible storage",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

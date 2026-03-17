@@ -1,6 +1,6 @@
 # S3 Logs Download Guide
 
-This guide explains how to download log files (especially must-gather tarballs) from IBM Cloud Object Storage (COS) using the `download-logs-from-s3` command-line tool.
+This guide explains how to download log files (especially must-gather tarballs) from S3-compatible storage using the `download-logs-from-s3` command-line tool.
 
 ## Overview
 
@@ -13,7 +13,7 @@ The `download-logs-from-s3` tool provides an easy way to:
 
 ## Prerequisites
 
-1. **S3 Credentials**: You need IBM Cloud Object Storage HMAC credentials with read access to the bucket.
+1. **S3 Credentials**: You need S3-compatible storage credentials (access key ID and secret access key) with read access to the bucket.
 
 2. **Installation**: Install ocs-ci with the entrypoint. See the Installing section in [Getting Started](../getting_started.md) for detailed installation instructions.
 
@@ -27,9 +27,10 @@ Create a file at `~/.ocs-ci-s3-logs.yaml` with your S3 credentials:
 
 ```yaml
 bucket_name: "your-bucket-name"
-region: "us-south"  # IBM Cloud region
+endpoint_url: "https://s3.us-south.cloud-object-storage.appdomain.cloud"
 access_key_id: "your-access-key-id"
 secret_access_key: "your-secret-access-key"
+
 ```
 
 **Benefits:**
@@ -316,7 +317,7 @@ download-logs-from-s3 -p lr5026aikv23fc3t1/1770332469850/my_test_name -e -v
 ```yaml
 # Required fields
 bucket_name: "df-logs-mg-ci-bucket-us-south-2026"
-region: "us-south"
+endpoint_url: "https://s3.us-south.cloud-object-storage.appdomain.cloud"
 access_key_id: "your-hmac-access-key-id"
 secret_access_key: "your-hmac-secret-access-key"
 
@@ -324,23 +325,43 @@ secret_access_key: "your-hmac-secret-access-key"
 cos_name: "my-cos-instance"  # For reference only
 ```
 
-### Alternative Format (Nested Credentials)
+### Alternative Format (IBM Cloud - Nested Credentials)
+
+For IBM Cloud users, credentials can optionally be nested under `cos_hmac_keys`:
 
 ```yaml
 bucket_name: "df-logs-mg-ci-bucket-us-south-2026"
-region: "us-south"
+endpoint_url: "https://s3.us-south.cloud-object-storage.appdomain.cloud"
 cos_hmac_keys:
   access_key_id: "your-hmac-access-key-id"
   secret_access_key: "your-hmac-secret-access-key"
 ```
 
-### Getting IBM Cloud COS Credentials
+**Note:** The flat format (shown above) is recommended as it works with all S3-compatible providers.
+
+### Getting S3 Credentials
+
+#### For IBM Cloud Object Storage
 
 1. Log in to IBM Cloud Console
 2. Navigate to your Cloud Object Storage instance
 3. Go to "Service Credentials"
 4. Create new credentials with HMAC enabled
 5. Copy the `access_key_id` and `secret_access_key` from the HMAC credentials section
+6. Use endpoint URL format: `https://s3.{region}.cloud-object-storage.appdomain.cloud`
+
+#### For Other S3-compatible Providers
+
+Consult your provider's documentation for:
+- Access key ID and secret access key generation
+- Endpoint URL format
+
+Examples:
+- **AWS S3:** `https://s3.{region}.amazonaws.com` (e.g., `https://s3.us-east-1.amazonaws.com`)
+- **MinIO:** `http://minio-server:9000` or your MinIO endpoint
+- **NooBaa:** Your NooBaa S3 endpoint URL
+
+**Note on credential format:** The flat credential format (`access_key_id` and `secret_access_key` at the top level) is recommended as it works with all S3-compatible providers. The nested `cos_hmac_keys` format is IBM Cloud specific but supported for backward compatibility.
 
 ## Command-Line Options
 
@@ -410,7 +431,7 @@ ClientError: An error occurred (AccessDenied) when calling the GetObject operati
 **Solution:**
 - Verify your HMAC credentials are correct
 - Ensure your credentials have read access to the bucket
-- Check that the bucket name and region are correct
+- Check that the bucket name and endpoint URL are correct
 
 ### Error: No such key
 
@@ -497,7 +518,7 @@ if result and result["success"]:
 ## Related Documentation
 
 - [S3 Logs Upload Guide](s3_logs_upload.md)
-- [IBM Cloud Object Storage Documentation](https://cloud.ibm.com/docs/cloud-object-storage)
+- [IBM Cloud Object Storage Documentation](https://cloud.ibm.com/docs/cloud-object-storage) (for IBM Cloud users)
 
 ## Support
 
