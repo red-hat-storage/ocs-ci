@@ -23,7 +23,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_managed_service,
     skipif_mcg_only,
-    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import fiojob
@@ -36,7 +35,6 @@ logger = logging.getLogger(__name__)
 @tier2
 @skipif_managed_service
 @skipif_mcg_only
-@skipif_hci_provider_and_client
 def test_workload_with_checksum_rbd(
     workload_storageutilization_checksum_rbd,
     tmp_path,
