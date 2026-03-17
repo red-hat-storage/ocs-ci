@@ -256,8 +256,17 @@ class FailureClassifier:
         cost = self.ai_backend.total_cost_usd
         cost_str = f", ${cost:.2f}" if cost > 0 else ""
 
+        # Token usage summary (if backend tracks it)
+        token_str = ""
+        input_tok = getattr(self.ai_backend, "total_input_tokens", 0)
+        output_tok = getattr(self.ai_backend, "total_output_tokens", 0)
+        if input_tok or output_tok:
+            token_str = (
+                f", {input_tok:,} in / {output_tok:,} out tokens"
+            )
+
         logger.info(
-            f"Classification complete in {elapsed_str}{cost_str}: "
+            f"Classification complete in {elapsed_str}{cost_str}{token_str}: "
             f"{ai_call_count} AI calls, "
             f"{cache_hit_count} cache hits, {known_issue_count} known issues"
         )

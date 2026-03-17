@@ -103,6 +103,8 @@ class ClaudeCodeBackend(AIBackend):
         self.max_budget_usd = max_budget_usd
         self.save_prompts_dir = save_prompts_dir
         self._total_cost = 0.0
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
         self.jinja_env = Environment(
             loader=FileSystemLoader(PROMPT_TEMPLATES_DIR),
             trim_blocks=True,
@@ -116,6 +118,14 @@ class ClaudeCodeBackend(AIBackend):
     @property
     def total_cost_usd(self) -> float:
         return self._total_cost
+
+    @property
+    def total_input_tokens(self) -> int:
+        return self._total_input_tokens
+
+    @property
+    def total_output_tokens(self) -> int:
+        return self._total_output_tokens
 
     def classify_failure(
         self,
@@ -344,11 +354,18 @@ class ClaudeCodeBackend(AIBackend):
                     f"result: {result_text[:500]}"
                 )
 
-        # Accumulate cost
+        # Accumulate cost and token usage
         cost = response.get("total_cost_usd")
+        input_tokens = response.get("input_tokens_used", 0)
+        output_tokens = response.get("output_tokens_used", 0)
         if cost is not None:
             self._total_cost += cost
-            logger.debug(f"Claude Code call cost: ${cost:.4f}")
+        self._total_input_tokens += input_tokens
+        self._total_output_tokens += output_tokens
+        logger.debug(
+            f"Claude Code call: ${cost or 0:.4f}, "
+            f"{input_tokens} in / {output_tokens} out tokens"
+        )
 
         return structured
 
@@ -432,16 +449,21 @@ class ClaudeCodeBackend(AIBackend):
                 f"stdout: {result.stdout[:500]}"
             )
 
-        # Accumulate cost
+        # Accumulate cost and token usage
         cost = response.get("total_cost_usd")
         num_turns = response.get("num_turns")
         session_id = response.get("session_id", "")
+        input_tokens = response.get("input_tokens_used", 0)
+        output_tokens = response.get("output_tokens_used", 0)
         if cost is not None:
             self._total_cost += cost
-            logger.debug(
-                f"Claude Code agentic call cost: ${cost:.4f} "
-                f"({num_turns} turns, context={context})"
-            )
+        self._total_input_tokens += input_tokens
+        self._total_output_tokens += output_tokens
+        logger.info(
+            f"Agentic session complete: ${cost or 0:.4f}, "
+            f"{input_tokens} in / {output_tokens} out tokens, "
+            f"{num_turns} turns ({context})"
+        )
 
         # Extract classification JSON from the result text
         result_text = response.get("result", "")
