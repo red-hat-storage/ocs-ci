@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1, tier4
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
+from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_nodes_having_label
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -25,26 +25,42 @@ class Test2AZFailoverAndRelocateZoneFailure:
     """
 
     @pytest.mark.parametrize(
-        argnames=["pvc_interface"],
+        argnames=["pvc_interface", "power_off_zone"],
         argvalues=[
             pytest.param(
                 constants.CEPHBLOCKPOOL,
+                "data-a",
                 marks=[tier1, acceptance],
-                id="rbd",
+                id="rbd-zone-data-a",
+            ),
+            pytest.param(
+                constants.CEPHBLOCKPOOL,
+                "arbiter",
+                marks=[tier1, acceptance],
+                id="rbd-zone-arbiter",
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM,
+                "data-a",
                 marks=tier4,
-                id="cephfs",
+                id="cephfs-zone-data-a",
+            ),
+            pytest.param(
+                constants.CEPHFILESYSTEM,
+                "arbiter",
+                marks=tier4,
+                id="cephfs-zone-arbiter",
             ),
         ],
     )
     def test_failover_and_relocate_multiple_workloads(
         self,
         pvc_interface,
+        power_off_zone,
         all_dr_workloads,
         nodes_multicluster,
         node_restart_teardown,
+        verify_arbiter_deployment_with_zone_failure,
     ):
         """
         Tests to verify application failover and relocate with multiple workloads:
@@ -54,12 +70,13 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
         This test covers:
         1. Deploy workloads on primary cluster
-        2. Failover to secondary cluster (with primary cluster DOWN)
+        2. Failover to secondary cluster (with zone failure on primary cluster)
         3. Relocate back to primary cluster
         4. Verify data integrity and application functionality
 
         Args:
             pvc_interface (str): Storage interface (CEPHBLOCKPOOL or CEPHFILESYSTEM)
+            power_off_zone (str): Zone to power off during failover ("data-a" or "arbiter")
             all_dr_workloads: Combined fixture for all DR workload types
             nodes_multicluster: Fixture for multicluster node operations
             node_restart_teardown: Fixture for node restart cleanup
@@ -69,6 +86,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
         logger.info(
             f"Starting test with pvc_interface={pvc_interface}, "
+            f"power_off_zone={power_off_zone}, "
             f"primary_cluster_down={primary_cluster_down}"
         )
 
@@ -173,15 +191,36 @@ class Test2AZFailoverAndRelocateZoneFailure:
             )
 
             if primary_cluster_down:
-                # Stop primary cluster nodes
+                # Stop primary cluster nodes in the specified zone
                 config.switch_to_cluster_by_name(primary_cluster_name)
                 logger.info(
-                    f"Stopping nodes on primary cluster: {primary_cluster_name}"
+                    f"Stopping nodes in zone '{power_off_zone}' on primary cluster: {primary_cluster_name}"
                 )
-                nodes_multicluster[primary_cluster_index].stop_nodes(
-                    primary_cluster_nodes
-                )
-                logger.info("Primary cluster nodes stopped")
+
+                # Get nodes in the specified zone
+                zone_label = f"{constants.ZONE_LABEL}={power_off_zone}"
+                zone_nodes_info = get_nodes_having_label(zone_label)
+                zone_nodes = [
+                    node_obj
+                    for node_obj in primary_cluster_nodes
+                    if node_obj.name
+                    in [node["metadata"]["name"] for node in zone_nodes_info]
+                ]
+
+                if not zone_nodes:
+                    logger.warning(
+                        f"No nodes found in zone '{power_off_zone}'. "
+                        f"Falling back to stopping all primary cluster nodes."
+                    )
+                    zone_nodes = primary_cluster_nodes
+                else:
+                    logger.info(
+                        f"Found {len(zone_nodes)} nodes in zone '{power_off_zone}': "
+                        f"{[node.name for node in zone_nodes]}"
+                    )
+
+                nodes_multicluster[primary_cluster_index].stop_nodes(zone_nodes)
+                logger.info(f"Nodes in zone '{power_off_zone}' stopped")
 
             # Perform failover via CLI
             logger.info("Performing failover via CLI")
@@ -213,18 +252,31 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 f"Workload {idx} successfully failed over to {secondary_cluster_name}"
             )
 
-            # Restart primary cluster if it was stopped
+            # Restart primary cluster zone nodes if they were stopped
             if primary_cluster_down:
                 logger.info(
-                    f"Starting nodes on primary cluster: {primary_cluster_name}"
+                    f"Starting nodes in zone '{power_off_zone}' on primary cluster: {primary_cluster_name}"
                 )
-                nodes_multicluster[primary_cluster_index].start_nodes(
-                    primary_cluster_nodes
-                )
+
+                # Get the same zone nodes that were stopped
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                zone_label = f"{constants.ZONE_LABEL}={power_off_zone}"
+                zone_nodes_info = get_nodes_having_label(zone_label)
+                zone_nodes = [
+                    node_obj
+                    for node_obj in primary_cluster_nodes
+                    if node_obj.name
+                    in [node["metadata"]["name"] for node in zone_nodes_info]
+                ]
+
+                if not zone_nodes:
+                    zone_nodes = primary_cluster_nodes
+
+                nodes_multicluster[primary_cluster_index].start_nodes(zone_nodes)
                 config.switch_to_cluster_by_name(primary_cluster_name)
                 wait_for_nodes_status(timeout=900)
                 ceph_health_check()
-                logger.info("Primary cluster nodes restarted and healthy")
+                logger.info(f"Nodes in zone '{power_off_zone}' restarted and healthy")
 
             # ========================================
             # Step 6: Relocate back to Primary Cluster
