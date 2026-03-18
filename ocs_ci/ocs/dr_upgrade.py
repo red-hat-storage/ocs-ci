@@ -332,6 +332,20 @@ class DRClusterOperatorUpgrade(DRUpgrade):
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "ramen-dr-operator pod is not in Running status"
+
+        # Check if the current CSV version already matches the target upgrade version
+        current_version = self.pre_upgrade_data.get("version", "")
+        if current_version and self.upgrade_version in current_version:
+            log.info(
+                f"DR cluster operator is already at version {current_version} "
+                f"which matches target upgrade version {self.upgrade_version}. "
+                f"Skipping upgrade execution and performing validation only."
+            )
+            self.upgrade_phase = "post_upgrade"
+            self.collect_data()
+            self.validate_upgrade()
+            return
+
         super().run_upgrade()
         self.upgrade_phase = "post_upgrade"
         self.collect_data()
