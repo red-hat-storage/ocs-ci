@@ -107,20 +107,57 @@ class DeploymentUI(PageNavigator):
         Install local storage operator
 
         """
+        wait_time = 60
+        ui_timeout = 300
         if config.DEPLOYMENT.get("local_storage"):
             self.navigate_operatorhub_page()
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
-            logger.info("Choose Local Storage Version")
+
+            # Wait for OperatorHub catalog to load and display operator tiles
+            logger.info("Waiting for Local Storage operator tile to appear in catalog")
             ocp_ga_version = get_ocp_ga_version(self.ocp_version_full)
+            lso_locator = (
+                self.dep_loc["choose_local_storage_version"]
+                if ocp_ga_version
+                else self.dep_loc["choose_local_storage_version_non_ga"]
+            )
+
+            # Wait for operator tile to be available
+            try:
+                for sample in TimeoutSampler(
+                    timeout=ui_timeout,
+                    sleep=wait_time,
+                    func=self.get_elements,
+                    locator=lso_locator,
+                ):
+                    if sample:
+                        logger.info("Local Storage operator tile found in catalog")
+                        break
+            except TimeoutExpiredError as e:
+                logger.error(
+                    "Timeout waiting for Local Storage operator tile to appear. "
+                    "OperatorHub catalog may still be syncing."
+                )
+                raise TimeoutExpiredError(
+                    f"Local Storage operator tile doesn't appear within time limit of {ui_timeout}. Error: {e}"
+                )
+
+            # Additional short wait for tile to be fully interactive
+            time.sleep(wait_time)
+
+            logger.info("Choose Local Storage Version")
             if ocp_ga_version:
                 self.do_click(
-                    self.dep_loc["choose_local_storage_version"], enable_screenshot=True
+                    self.dep_loc["choose_local_storage_version"],
+                    enable_screenshot=True,
+                    timeout=wait_time,
                 )
             else:
                 self.do_click(
                     self.dep_loc["choose_local_storage_version_non_ga"],
                     enable_screenshot=True,
+                    timeout=wait_time,
                 )
 
             logger.info("Click Install LSO")
