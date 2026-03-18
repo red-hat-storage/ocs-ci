@@ -294,7 +294,7 @@ class CephFSStressTestManager:
         self.background_checks_thread.start()
         logger.info("Background checks ('StressWatchdog')thread started.")
 
-    def stop_background_checks(self):
+    def stop_background_checks(self, timeout=10):
         """
         Signals the background thread ('StressWatchdog') to stop and waits for it to join.
 
@@ -304,10 +304,12 @@ class CephFSStressTestManager:
                 "Signaling Background checks ('StressWatchdog') thread to stop..."
             )
             self.stop_event.set()
-            self.background_checks_thread.join()
+            self.background_checks_thread.join(timeout=timeout)
+
             if self.background_checks_thread.is_alive():
                 logger.warning(
-                    "Background checks ('StressWatchdog') thread did not exit cleanly!"
+                    f"Background thread did not stop within {timeout}s - "
+                    "abandoning (daemon thread will terminate on exit)"
                 )
             else:
                 logger.info("Background checks ('StressWatchdog') thread stopped.")
@@ -418,10 +420,12 @@ class CephFSStressTestManager:
         verifications_to_run = [
             check_ceph_health,
             verify_openshift_storage_ns_pods_in_running_state,
-            verify_openshift_storage_ns_pods_health,
         ]
         try:
             for verification_func in verifications_to_run:
+                if self.stop_event.is_set():
+                    logger.info("Stop signal received - aborting checks")
+                    return
                 # Check if paused before each verification (handles mid-execution pause)
                 with self.verification_lock:
                     if self.checks_paused:
@@ -484,10 +488,14 @@ class CephFSStressTestManager:
             (get_nodes_resource_utilization, {}),
             (get_pods_resource_utilization, {}),
             (get_osd_disk_utilization, {}),
+            (verify_openshift_storage_ns_pods_health, {}),
         ]
         for check_func, kwargs in checks_to_run:
+            if self.stop_event.is_set():
+                logger.info("Stop signal received - aborting checks")
+                return
             func_name = check_func.__name__
-            logger.debug(f"Running cluster check: {func_name}")
+            logger.info(f"Running cluster check: {func_name}")
 
             try:
                 check_func(**kwargs)

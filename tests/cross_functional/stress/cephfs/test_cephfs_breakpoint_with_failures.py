@@ -1,6 +1,7 @@
 import logging
 import time
 import re
+import random
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, stress
@@ -16,6 +17,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework import config
+from ocs_ci.ocs.cluster import get_active_mds_pod_objs, CephCluster
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +65,13 @@ class TestCephfsStressWithFailures(E2ETest):
         """
         CHECKS_RUNNER_INTERVAL_MINUTES = 30
         JOB_STATUS_CHECK_INTERVAL = 60
-        REBALANCE_WAIT_TIME = 300
+        REBALANCE_WAIT_TIME = 3600
         HEALTH_CHECK_WAIT_TIME = 180
         POWER_ON_WAIT_TIME = 420
 
         CEPH_COMPONENTS = ["mds", "mgr", "mon", "osd"]
 
-        MULTIPLICATION_FACTORS = "1,2,3,4"
+        MULTIPLICATION_FACTORS = "1,2,3"
 
         proj_name = "cephfs-component-failure-test"
         project_factory(project_name=proj_name)
@@ -88,16 +90,16 @@ class TestCephfsStressWithFailures(E2ETest):
             cephfs_stress_job_obj = stress_mgr.create_cephfs_stress_job(
                 pvc_name=pvc_obj.name,
                 multiplication_factors=MULTIPLICATION_FACTORS,
-                parallelism=2,
-                completions=2,
-                base_file_count=100,
+                parallelism=3,
+                completions=3,
+                base_file_count=10000,
             )
             logger.info(
                 f"CephFS stress job {cephfs_stress_job_obj.name} has been submitted"
             )
 
             logger.info(
-                "====================================================\n"
+                "\n====================================================\n"
                 "Starting component failure tests after each iteration\n"
                 "ALL components (MDS, MGR, MON, OSD) will be tested\n"
                 "===================================================="
@@ -131,10 +133,18 @@ class TestCephfsStressWithFailures(E2ETest):
                     namespace=proj_name,
                 )
 
-                logger.info("Checking logs of all job pods for completed iterations")
-                current_max_iteration = self._get_max_completed_iteration(job_pods)
+                logger.info(f"Found {len(job_pods)} job pods")
+                for jp in job_pods:
+                    pod_name = jp.get("metadata", {}).get("name")
+                    pod_status = jp.get("status", {}).get("phase")
+                    logger.info(f"  Pod: {pod_name}, Status: {pod_status}")
 
-                # If a new iteration has completed, induce failures for ALL components
+                logger.info("Checking logs of all job pods for completed iterations")
+                current_max_iteration = self._get_max_completed_iteration(
+                    job_pods, proj_name
+                )
+                logger.info(f"Current max iteration detected: {current_max_iteration}")
+
                 if current_max_iteration > last_checked_iteration:
                     completed_iterations = current_max_iteration
                     logger.info(
@@ -191,12 +201,13 @@ class TestCephfsStressWithFailures(E2ETest):
         finally:
             stress_mgr.teardown()
 
-    def _get_max_completed_iteration(self, job_pods):
+    def _get_max_completed_iteration(self, job_pods, namespace):
         """
         Get the maximum completed iteration number from all job pods.
 
         Args:
             job_pods (list): List of job pod objects
+            namespace (str): Namespace where the pods are running
 
         Returns:
             int: Maximum completed iteration number (0 if none found)
@@ -206,19 +217,70 @@ class TestCephfsStressWithFailures(E2ETest):
 
         for job_pod in job_pods:
             try:
-                logs = job_pod.get_logs()
+                pod_name = job_pod.get("metadata", {}).get("name")
+                logs = pod.get_pod_logs(pod_name=pod_name, namespace=namespace)
+
+                if not logs or not isinstance(logs, str):
+                    logger.info(
+                        f"Pod {pod_name} has no logs yet or logs are not in string format"
+                    )
+                    continue
+
+                log_lines = logs.split("\n")
+                logger.info(f"Pod {pod_name} has {len(log_lines)} lines of logs")
+                if len(log_lines) > 0:
+                    logger.info(f"Last few lines: {log_lines[-5:]}")
+
                 matches = re.findall(r"Completed iteration:\s*(\d+)", logs)
 
                 if matches:
                     pod_max = max(int(match) for match in matches)
                     max_iteration = max(max_iteration, pod_max)
-                    logger.debug(f"Pod {job_pod.name} completed iteration {pod_max}")
+                    logger.info(f"Pod {pod_name} completed iteration {pod_max}")
 
             except Exception as e:
-                logger.warning(f"Failed to get logs from pod {job_pod.name}: {e}")
+                logger.warning(f"Failed to get logs from pod {pod_name}: {e}")
                 continue
 
         return max_iteration
+
+    def _get_target_pod_for_component(self, component):
+        """
+        Get a target pod for the given component.
+        For MDS: select from active MDS pods
+        For other components: randomly select from available pods
+
+        Args:
+            component (str): Component name (mds, mgr, mon, osd)
+
+        Returns:
+            Pod object to target for failures
+
+        """
+        if component == "mds":
+            active_mds_pods = get_active_mds_pod_objs()
+            if not active_mds_pods:
+                raise Exception("No active MDS pods found")
+            target_pod = (
+                random.choice(active_mds_pods)
+                if len(active_mds_pods) > 1
+                else active_mds_pods[0]
+            )
+            logger.info(
+                f"Selected active {component.upper()} pod: {target_pod.name} "
+                f"(from {len(active_mds_pods)} active MDS pods)"
+            )
+        else:
+            disruption = Disruptions()
+            disruption.set_resource(component)
+            if not disruption.resource_obj:
+                raise Exception(f"No {component} pods found")
+            target_pod = random.choice(disruption.resource_obj)
+            logger.info(
+                f"Randomly selected {component.upper()} pod: {target_pod.name} "
+                f"(from {len(disruption.resource_obj)} available pods)"
+            )
+        return target_pod
 
     def _induce_all_failures_for_component(
         self,
@@ -231,7 +293,7 @@ class TestCephfsStressWithFailures(E2ETest):
         job_obj,
     ):
         """
-        Induce all four types of failures for a given component.
+        Induce all types of failures for a given component.
 
         Args:
             component (str): Component name (mds, mgr, mon, osd)
@@ -243,22 +305,13 @@ class TestCephfsStressWithFailures(E2ETest):
             job_obj: Job object to verify
 
         """
-        disruption = Disruptions()
-        disruption.set_resource(component)
-
-        active_pod = disruption.resource_obj[0]
-        logger.info(f"Active {component} pod: {active_pod.name}")
-
         logger.info(f"\n--- Failure 1/4: Restarting node for {component} pod ---")
-        self._restart_node_with_pod(active_pod, nodes, component)
+        target_pod = self._get_target_pod_for_component(component)
+        self._restart_node_with_pod(target_pod, nodes, component)
         self._wait_for_rebalance_and_health_check(
             component, rebalance_wait, health_check_wait
         )
         self._verify_job_still_running(job_obj)
-
-        # Refresh disruption object after node restart
-        disruption = Disruptions()
-        disruption.set_resource(component)
 
         logger.info("\n--- Failure 2/4: Restarting operator and plugin pods ---")
         self._restart_operator_and_plugin_pods()
@@ -267,30 +320,22 @@ class TestCephfsStressWithFailures(E2ETest):
         )
         self._verify_job_still_running(job_obj)
 
-        # Refresh disruption object after operator restart
-        disruption = Disruptions()
-        disruption.set_resource(component)
-        active_pod = disruption.resource_obj[0]
-
         logger.info(
             f"\n--- Failure 3/4: Abruptly powering off node for {component} pod ---"
         )
-        self._power_off_and_on_node(active_pod, nodes_util, component, power_on_wait)
+        target_pod = self._get_target_pod_for_component(component)
+        self._power_off_and_on_node(target_pod, nodes_util, component, power_on_wait)
         self._wait_for_rebalance_and_health_check(
             component, rebalance_wait, health_check_wait
         )
         self._verify_job_still_running(job_obj)
 
-        # Refresh disruption object after power cycle
-        disruption = Disruptions()
-        disruption.set_resource(component)
-        active_pod = disruption.resource_obj[0]
-
         logger.info(
             f"\n--- Failure 4/4: Inducing network failure on {component} pod node ---"
         )
+        target_pod = self._get_target_pod_for_component(component)
         self._induce_network_failure_on_node(
-            active_pod, nodes_util, component, power_on_wait
+            target_pod, nodes_util, component, power_on_wait
         )
         self._wait_for_rebalance_and_health_check(
             component, rebalance_wait, health_check_wait
@@ -317,7 +362,7 @@ class TestCephfsStressWithFailures(E2ETest):
         nodes.restart_nodes(node_objs, wait=True)
         logger.info(f"Node {node_name} restarted successfully")
 
-        logger.info(f"Waiting for {component} pod to be running after node restart")
+        logger.info("Waiting for pods to be running after node restart")
         pod.wait_for_pods_to_be_running(
             timeout=600, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -381,7 +426,7 @@ class TestCephfsStressWithFailures(E2ETest):
         )
         logger.info(f"Node {node_name} is back online and ready")
 
-        logger.info(f"Waiting for {component} pods to be running after power cycle")
+        logger.info("Waiting for pods to be running after power cycle")
         pod.wait_for_pods_to_be_running(
             timeout=600, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -425,9 +470,7 @@ class TestCephfsStressWithFailures(E2ETest):
         )
         logger.info(f"Node {node_name} recovered from network failure")
 
-        logger.info(
-            f"Waiting for {component} pods to be running after network recovery"
-        )
+        logger.info("Waiting for pods to be running after network recovery")
         pod.wait_for_pods_to_be_running(
             timeout=600, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -444,14 +487,15 @@ class TestCephfsStressWithFailures(E2ETest):
             health_check_wait (int): Time to wait for health check in seconds
 
         """
-        logger.info(
-            f"Waiting {rebalance_wait}s for {component} rebalance to complete..."
-        )
-        time.sleep(rebalance_wait)
+        logger.info(f"Waiting {rebalance_wait}s for rebalance to complete...")
+        ceph_cluster_obj = CephCluster()
+        assert ceph_cluster_obj.wait_for_rebalance(
+            timeout=rebalance_wait
+        ), "Data re-balance failed to complete"
 
         logger.info(f"Performing health check after {component} failure")
         ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
-        logger.info(f"Health check passed for {component}")
+        logger.info(f"Health check passed after {component} failure")
 
         logger.info(f"Waiting additional {health_check_wait}s for stabilization...")
         time.sleep(health_check_wait)
