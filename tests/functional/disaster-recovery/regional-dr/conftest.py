@@ -7,7 +7,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.deployment import acm
 from ocs_ci.ocs.node import get_master_nodes, get_worker_nodes
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
-from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers import helpers
@@ -189,15 +189,15 @@ def verify_arbiter_deployment_with_zone_failure():
         pytest.skip: If the cluster doesn't meet the requirements
 
     """
-    if not config.DEPLOYMENT.get("arbiter_deployment"):
+
+    if get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment", False):
         pytest.skip(
             "Test requires arbiter deployment. "
             "Set 'arbiter_deployment: true' in deployment config."
         )
 
     # Check node counts on each managed cluster
-    for cluster in get_non_acm_cluster_config():
-        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+    with config.RunWithPrimaryConfigContext():
 
         master_nodes = get_master_nodes()
         worker_nodes = get_worker_nodes()
@@ -206,7 +206,7 @@ def verify_arbiter_deployment_with_zone_failure():
         worker_count = len(worker_nodes)
 
         log.info(
-            f"Cluster {cluster.ENV_DATA.get('cluster_name', 'unknown')}: "
+            f"Cluster {config.ENV_DATA.get('cluster_name', 'unknown')}: "
             f"{master_count} masters, {worker_count} workers"
         )
 
