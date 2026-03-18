@@ -633,6 +633,89 @@ MULTICLUSTER = {
 
 ## Testing and Validation
 
+### Running RDR Deployment and Tests
+
+#### Deployment Command
+
+To deploy RDR infrastructure across three clusters (ACM Hub, Primary ODF, Secondary ODF), use the following `run-ci` command:
+
+```bash
+run-ci \
+  multicluster 3 tests/ \
+  -m deployment \
+  --deploy \
+  --ocsci-conf conf/ocsci/multicluster_mode_rdr.yaml \
+  --color=yes \
+  --squad-analysis \
+  --cluster1 \
+    --cluster-name acm-hub-cluster \
+    --cluster-path /home/user/clusters/acm-hub-cluster/openshift-cluster-dir \
+    --ocp-version 4.17 \
+    --ocs-version 4.17 \
+    --osd-size 512 \
+    --ocsci-conf conf/deployment/aws/ipi_3az_rhcos_compactmode_3m_0w.yaml \
+    --ocsci-conf conf/ocsci/multicluster_active_acm_cluster.yaml \
+    --ocsci-conf conf/ocsci/submariner_downstream.yaml \
+    --ocsci-conf conf/ocsci/multicluster_dr_rbd.yaml \
+  --cluster2 \
+    --cluster-name primary-odf-cluster \
+    --cluster-path /home/user/clusters/primary-odf-cluster/openshift-cluster-dir \
+    --ocp-version 4.17 \
+    --ocs-version 4.17 \
+    --osd-size 512 \
+    --ocsci-conf conf/deployment/aws/ipi_3az_rhcos_3m_3w.yaml \
+    --ocsci-conf conf/ocsci/multicluster_primary_cluster.yaml \
+    --ocsci-conf conf/ocsci/multicluster_dr_rbd.yaml \
+    --ocsci-conf conf/ocsci/submariner_downstream.yaml \
+  --cluster3 \
+    --cluster-name secondary-odf-cluster \
+    --cluster-path /home/user/clusters/secondary-odf-cluster/openshift-cluster-dir \
+    --ocp-version 4.17 \
+    --ocs-version 4.17 \
+    --osd-size 512 \
+    --ocsci-conf conf/deployment/aws/ipi_3az_rhcos_3m_3w.yaml \
+    --ocsci-conf conf/ocsci/multicluster_dr_rbd.yaml \
+    --ocsci-conf conf/ocsci/submariner_downstream.yaml
+```
+
+**Command Breakdown:**
+- `multicluster 3`: Deploy 3 clusters in multicluster mode
+- `-m deployment --deploy`: Run deployment marker and execute deployment
+- `--ocsci-conf conf/ocsci/multicluster_mode_rdr.yaml`: Enable RDR mode
+- `--cluster1`: ACM Hub cluster configuration (compact mode, 3 masters, 0 workers)
+- `--cluster2`: Primary ODF cluster configuration (3 masters, 3 workers)
+- `--cluster3`: Secondary ODF cluster configuration (3 masters, 3 workers)
+- `--ocsci-conf conf/ocsci/multicluster_dr_rbd.yaml`: Enable RBD DR scenario
+- `--ocsci-conf conf/ocsci/submariner_downstream.yaml`: Enable Submariner networking
+
+#### Running RDR Tests
+
+After deployment, run RDR tests with tier1 and rdr markers:
+
+```bash
+run-ci \
+  multicluster 3 \
+  -m "tier1 and rdr" \
+  --ocsci-conf conf/ocsci/multicluster_mode_rdr.yaml \
+  --color=yes \
+  --cluster1 \
+    --cluster-name acm-hub-cluster \
+    --cluster-path /home/user/clusters/acm-hub-cluster/openshift-cluster-dir \
+    --ocsci-conf conf/ocsci/multicluster_active_acm_cluster.yaml \
+  --cluster2 \
+    --cluster-name primary-odf-cluster \
+    --cluster-path /home/user/clusters/primary-odf-cluster/openshift-cluster-dir \
+    --ocsci-conf conf/ocsci/multicluster_primary_cluster.yaml \
+  --cluster3 \
+    --cluster-name secondary-odf-cluster \
+    --cluster-path /home/user/clusters/secondary-odf-cluster/openshift-cluster-dir \
+```
+
+**Test Command Options:**
+- `-m "tier1 and rdr"`: Run tests marked with both tier1 and rdr markers
+- Test path: `tests/functional/disaster-recovery/regional-dr/` for all RDR tests
+- Specific test: Add test file and method name for targeted testing
+
 ### Test Categories
 
 1. **Failover Tests** ([`test_failover.py`](tests/functional/disaster-recovery/regional-dr/test_failover.py))
