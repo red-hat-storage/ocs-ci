@@ -3558,10 +3558,11 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
     """
     query = f"{metric_name} {{bucket_name='{bucket_name}'}}"
     api = PrometheusAPI(threading_lock=threading_lock)
-    resp = api.get("query", payload={"query": query})
+    logger.info(f"Prometheus query: {query}")
+    resp = api.get("query", payload={"query": query}, timeout=1200)
 
     if resp.ok:
-        logger.debug(query)
+        logger.info(f"Prometheus response: {resp.text}")
         metrics_output = json.loads(resp.text)
         got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
         logger.info(f"Metrics {metric_name} : {got_metrics_value}")
