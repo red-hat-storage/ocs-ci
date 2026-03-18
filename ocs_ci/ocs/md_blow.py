@@ -33,13 +33,35 @@ class MdBlow(object):
         self.password = self.creds["password"]
         self.noobaa_core_pod = get_noobaa_core_pod()
         self.noobaa_db_pod = get_noobaa_db_pod()
+
+    def increase_core_pod_cpu_memory(self):
+        """
+        Increase memory to 4Gi and CPU to 6 for faster IO operations
+        """
         namespace = config.ENV_DATA["cluster_namespace"]
         storage_cluster = constants.DEFAULT_STORAGE_CLUSTER
 
-        ptch = '{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": "6","memory": "4Gi"}}}}}}}}}}'
+        ptch = '{"spec": {"resources": {"noobaa-core": {"limits": {"cpu": "6","memory": "4Gi"}}}}}'
         ptch_cmd = (
             f"oc patch storagecluster {storage_cluster} "
             f"-n {namespace}  --type merge --patch '{ptch}'"
+        )
+        run_cmd(ptch_cmd)
+        logger.info("Wait for noobaa-core pod move to Running state")
+        helpers.wait_for_resource_state(
+            self.noobaa_core_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
+
+    def reduce_core_pod_cpu_memory(self):
+        """
+        Reduce memory and CPU to default values
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        storage_cluster = constants.DEFAULT_STORAGE_CLUSTER
+        params = """[{"op": "remove", "path": "/spec/resources"}]"""
+        ptch_cmd = (
+            f"oc patch storagecluster {storage_cluster} "
+            f"-n {namespace} --patch '{params}' --type=json"
         )
         run_cmd(ptch_cmd)
         logger.info("Wait for noobaa-core pod move to Running state")
@@ -56,6 +78,7 @@ class MdBlow(object):
         """
         current_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
             "df -h | grep postgresql | awk '{print $5}'",
+            container_name="postgres",
             shell=True,
         )
         current_db_usage = int(current_db_percentage.strip().replace("%", ""))
@@ -67,6 +90,7 @@ class MdBlow(object):
                 logger.info(f"DB is filled with {threshold_pct}")
             prev_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
                 "df -h | grep postgresql | awk '{print $5}'",
+                container_name="postgres",
                 shell=True,
             )
             prev_db_usage = int(prev_db_percentage.strip().replace("%", ""))
@@ -81,6 +105,7 @@ class MdBlow(object):
                 self.stop_dumping.set()
             current_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
                 "df -h | grep postgresql | awk '{print $5}'",
+                container_name="postgres",
                 shell=True,
             )
             current_db_usage = int(current_db_percentage.strip().replace("%", ""))
@@ -120,12 +145,15 @@ class MdBlow(object):
                 f"--chunks={chunks} "
                 f"--chunk_size={chunk_size}"
             )
-            self.noobaa_core_pod.exec_cmd_on_pod(base_cmd + cmd)
+            self.noobaa_core_pod.exec_cmd_on_pod(
+                base_cmd + cmd, container_name="core", ignore_error=True
+            )
             logger.info("Workload executed successfully")
         else:
             assert threshold_pct <= 100, f"Invalid value. Given {threshold_pct}"
             current_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
                 "df -h | grep postgresql | awk '{print $5}'",
+                container_name="postgres",
                 shell=True,
             )
             current_db_usage = int(current_db_percentage.strip().replace("%", ""))
@@ -142,6 +170,7 @@ class MdBlow(object):
                     args=(threshold_pct,),
                     name="MonitorThread",
                 )
+                t1.daemon = True
                 t1.start()
                 # Adding sleep to validate invalid percentage usage
                 sleep(10)
@@ -153,7 +182,9 @@ class MdBlow(object):
                 )
                 logger.info("Initiating IO dump directly into DB")
                 while not self.stop_dumping.is_set():
-                    self.noobaa_core_pod.exec_cmd_on_pod(base_cmd + cmd)
+                    self.noobaa_core_pod.exec_cmd_on_pod(
+                        base_cmd + cmd, container_name="core", ignore_error=True
+                    )
                     sleep(5)
                 t1.join()
                 logger.info(f"Stopping the IO... DB is filled with {threshold_pct}")

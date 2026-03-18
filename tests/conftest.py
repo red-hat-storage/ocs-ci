@@ -49,7 +49,15 @@ from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
-from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs import (
+    constants,
+    defaults,
+    fio_artefacts,
+    node,
+    ocp,
+    platform_nodes,
+    md_blow,
+)
 from ocs_ci.ocs.constants import (
     RECLAIMSPACE_SCHEDULE_ANNOTATION,
     KEYROTATION_SCHEDULE_ANNOTATION,
@@ -11956,3 +11964,18 @@ def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def md_blow_factory(request):
+    """
+    Returns md_blow object
+    """
+    blow_io = md_blow.MdBlow()
+    blow_io.increase_core_pod_cpu_memory()
+
+    def teardown():
+        blow_io.reduce_core_pod_cpu_memory()
+
+    request.addfinalizer(teardown)
+    return blow_io
