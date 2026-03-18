@@ -421,6 +421,35 @@ def get_autodistributed_volume_snapshot_classes():
     return snapshot_class_names
 
 
+def get_autodistributed_volumegroup_snapshot_classes():
+    """
+    Get the list of VolumeGroupSnapshotClasses that were provisioned by ODF
+
+    Returns:
+        list: List of VolumeGroupSnapshotClass names that were provisioned by ODF
+
+    """
+    groupsnapshot_class = OCP(
+        kind=constants.VOLUMESNAPSHOTCLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    groupsnapshot_classes = groupsnapshot_class.get()
+    # filter only those that were provisioned by ODF
+    groupsnapshot_classes["items"] = [
+        item
+        for item in groupsnapshot_classes["items"]
+        if item["driver"]
+        in [
+            constants.RBD_PROVISIONER,
+            constants.CEPHFS_PROVISIONER,
+        ]
+    ]
+    groupsnapshot_class_names = [
+        item["metadata"]["name"] for item in groupsnapshot_classes["items"]
+    ]
+    return groupsnapshot_class_names
+
+
 def get_provider_address():
     """
     Get the provider address
@@ -6740,12 +6769,16 @@ class SpokeODF(SpokeOCP, ABC):
 
         storage_class_names = get_autodistributed_storage_classes()
         volumesnapshot_class_names = get_autodistributed_volume_snapshot_classes()
+        volumegroup_snapshot_classes = (
+            get_autodistributed_volumegroup_snapshot_classes()
+        )
 
         start_time = time.time()
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
             storage_consumer_name,
             storage_classes=storage_class_names,
             volume_snapshot_classes=volumesnapshot_class_names,
+            volume_group_snapshot_classes=volumegroup_snapshot_classes,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
