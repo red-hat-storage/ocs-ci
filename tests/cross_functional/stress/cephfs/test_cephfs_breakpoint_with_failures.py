@@ -5,7 +5,10 @@ import random
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, stress
-from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
+from ocs_ci.helpers.cephfs_stress_helpers import (
+    CephFSStressTestManager,
+    verify_openshift_storage_ns_pods_in_running_state,
+)
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
@@ -182,6 +185,8 @@ class TestCephfsStressWithFailures(E2ETest):
                         f"Completed ALL component failures after iteration {completed_iterations}\n"
                         f"Components tested: {', '.join(CEPH_COMPONENTS)}\n"
                     )
+                    logger.info("Performing Health checks after ALL component failures")
+                    verify_openshift_storage_ns_pods_in_running_state()
 
                 logger.info(
                     f"Job still running. Waiting {JOB_STATUS_CHECK_INTERVAL}s "
