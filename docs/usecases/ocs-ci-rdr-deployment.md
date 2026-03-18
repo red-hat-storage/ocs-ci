@@ -72,7 +72,7 @@ graph TB
 ### Network Connectivity
 
 RDR requires network connectivity between clusters:
-- **Submariner** (optional): Provides secure Layer 3 connectivity
+- **Submariner** : Provides secure Layer 3 connectivity
 - **Globalnet**: Enables overlapping CIDR ranges
 - **S3 Storage**: For metadata and backup storage
 - **Latency Requirement**: < 10ms RTT for hub-spoke communication
@@ -85,7 +85,7 @@ RDR requires network connectivity between clusters:
 
 #### Advanced Cluster Management (ACM)
 - **Purpose**: Central management and orchestration
-- **Version**: 4.14+
+- **Version**: 2.12+
 - **Key Functions**:
   - Cluster lifecycle management
   - Application deployment via GitOps
@@ -148,11 +148,11 @@ RDR requires network connectivity between clusters:
 #### Token Exchange Agent
 - **Label**: `app=token-exchange-agent`
 - **Purpose**: Secure credential exchange between clusters
-- **Namespace**: `openshift-dr-systems`
+- **Namespace**: `openshift-storage`
 
 ### 3. Workload Types
 
-#### Subscription-based Applications
+#### Subscription-based Applications (Soon to be Deprecated)
 - **Namespace**: Application-specific
 - **DRPC Location**: Application namespace
 - **GitOps**: ACM ApplicationSet or Subscription
@@ -185,10 +185,6 @@ config.switch_acm_ctx()
 # Switch to primary cluster
 primary_config = get_primary_cluster_config()
 config.switch_ctx(primary_config.MULTICLUSTER["multicluster_index"])
-
-# Switch to secondary cluster
-secondary_config = get_secondary_cluster_config()
-config.switch_ctx(secondary_config.MULTICLUSTER["multicluster_index"])
 
 # Switch by cluster name
 config.switch_to_cluster_by_name("cluster-name")
@@ -555,7 +551,7 @@ RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
 
 #### Namespaces
 ```python
-DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
+DR_DEFAULT_NAMESPACE = "openshift-dr-system"
 DR_OPS_NAMESPACE = "openshift-dr-ops"  # For discovered apps
 ```
 
