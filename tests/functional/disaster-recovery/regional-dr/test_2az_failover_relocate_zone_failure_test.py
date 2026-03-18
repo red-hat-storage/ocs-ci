@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import acceptance, tier1, tier4
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
-from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -165,12 +164,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
             wait_time = 2 * scheduling_interval
             logger.info(f"Waiting {wait_time} minutes for IOs to complete")
             sleep(wait_time * 60)
-
-            # Create DRPC object
-            drpc_obj = DRPC(
-                namespace=constants.DR_OPS_NAMESPACE,
-                resource_name=resource_name,
-            )
 
             # ========================================
             # Step 5: Failover to Secondary Cluster
