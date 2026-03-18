@@ -187,6 +187,9 @@ class TestCephfsStressWithFailures(E2ETest):
                     )
                     logger.info("Performing Health checks after ALL component failures")
                     verify_openshift_storage_ns_pods_in_running_state()
+                    logger.info("Performing health check after ALL failures")
+                    ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
+                    logger.info("Health check passed after ALL failure")
 
                 logger.info(
                     f"Job still running. Waiting {JOB_STATUS_CHECK_INTERVAL}s "
