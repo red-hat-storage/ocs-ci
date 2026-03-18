@@ -480,6 +480,12 @@ body {
           <span class="meta-value" style="font-size:12px">{% if fa.session_file %}<a href="{{ fa.session_file }}" style="color:var(--accent)">{{ fa.session_id }}</a>{% else %}{{ fa.session_id }}{% endif %}</span>
         </div>
         {% endif %}
+        {% if fa.must_gather_url %}
+        <div class="meta-item">
+          <span class="meta-label">Must Gather</span>
+          <span class="meta-value" style="font-size:12px"><a href="{{ fa.must_gather_url }}" style="color:var(--accent)">logs</a></span>
+        </div>
+        {% endif %}
       </div>
 
       {% if fa.matched_known_issues %}

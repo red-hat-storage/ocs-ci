@@ -115,6 +115,7 @@ class FailureAnalysis:
     recommended_action: str = ""
     session_id: str = ""
     session_file: str = ""
+    must_gather_url: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -132,6 +133,7 @@ class FailureAnalysis:
             "recommended_action": self.recommended_action,
             "session_id": self.session_id,
             "session_file": self.session_file,
+            "must_gather_url": self.must_gather_url,
         }
 
     @staticmethod

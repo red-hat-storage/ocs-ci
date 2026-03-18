@@ -369,7 +369,7 @@ def _magna_url(local_path: str) -> str:
     """Convert a /mnt/ocsci-jenkins/ path to its magna002 HTTP equivalent."""
     expanded = os.path.expanduser(local_path) if local_path else ""
     if expanded.startswith(MAGNA_MOUNT):
-        return MAGNA_HTTP + expanded[len(MAGNA_MOUNT):]
+        return MAGNA_HTTP + expanded[len(MAGNA_MOUNT) :]
     return ""
 
 

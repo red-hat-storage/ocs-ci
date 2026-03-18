@@ -248,6 +248,11 @@ class FailureClassifier:
                     "recommended_action": f"AI classification failed: {e}",
                 }
 
+            # Build must-gather URL for the report
+            mg_url = self._build_must_gather_url(representative.name)
+            if mg_url:
+                analysis_dict["must_gather_url"] = mg_url
+
             for f in group_failures:
                 results.append(self._build_analysis(f, analysis_dict))
 
@@ -623,6 +628,25 @@ class FailureClassifier:
                 return os.path.join(root, target)
         return ""
 
+    def _build_must_gather_url(self, test_name: str) -> str:
+        """Build the HTTP URL to the must-gather directory for a test."""
+        if not self.failed_logs_dir:
+            return ""
+
+        is_local = self._is_local_path(self.failed_logs_dir)
+        safe_name = test_name if is_local else self._url_encode_test_name(test_name)
+        base = self.failed_logs_dir.rstrip("/")
+        mg_path = f"{base}/{safe_name}_ocs_logs"
+
+        if is_local:
+            # Convert local path to magna HTTP URL
+            magna_mount = "/mnt/ocsci-jenkins/"
+            magna_http = "http://magna002.ceph.redhat.com/ocsci-jenkins/"
+            if mg_path.startswith(magna_mount):
+                return magna_http + mg_path[len(magna_mount) :]
+            return ""
+        return mg_path
+
     def _build_test_log_url(self, test_name: str, test_class: str) -> str:
         """Build the direct URL to the per-test log file.
 
@@ -861,6 +885,7 @@ class FailureClassifier:
             recommended_action=analysis_dict.get("recommended_action", ""),
             session_id=analysis_dict.get("session_id", ""),
             session_file=analysis_dict.get("session_file", ""),
+            must_gather_url=analysis_dict.get("must_gather_url", ""),
         )
 
     @staticmethod

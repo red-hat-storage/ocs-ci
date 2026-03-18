@@ -297,6 +297,17 @@ class ClaudeCodeBackend(AIBackend):
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
 
+        # Auto-detect GCP service account credentials for Vertex AI auth
+        if "GOOGLE_APPLICATION_CREDENTIALS" not in env:
+            for cred_path in [
+                "/opt/claude/auth/gcp-auth.json",
+                os.path.expanduser("~/.gcp/gcp-auth.json"),
+            ]:
+                if os.path.isfile(cred_path):
+                    env["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
+                    logger.debug(f"Using GCP credentials from {cred_path}")
+                    break
+
         try:
             result = subprocess.run(
                 cmd,
@@ -414,6 +425,17 @@ class ClaudeCodeBackend(AIBackend):
 
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
+
+        # Auto-detect GCP service account credentials for Vertex AI auth
+        if "GOOGLE_APPLICATION_CREDENTIALS" not in env:
+            for cred_path in [
+                "/opt/claude/auth/gcp-auth.json",
+                os.path.expanduser("~/.gcp/gcp-auth.json"),
+            ]:
+                if os.path.isfile(cred_path):
+                    env["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
+                    logger.debug(f"Using GCP credentials from {cred_path}")
+                    break
 
         try:
             result = subprocess.run(

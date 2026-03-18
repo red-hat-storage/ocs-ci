@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class RunConfigParser:
-    """Parse run-*-config-end.yaml files for environment metadata."""
+    """Parse run config YAML files for environment metadata."""
 
     @staticmethod
     def parse(yaml_content: str, source_url: str = "") -> RunMetadata:

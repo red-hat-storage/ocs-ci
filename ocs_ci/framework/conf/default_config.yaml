@@ -132,7 +132,6 @@ DEPLOYMENT:
   host_network: False # Use host network for ODF pods, propagates to spec of StorageCluster. Mandatory for Hub/Spoke deployments.
   enable_data_replication_separation: False # separates client data path from data replication
 
-
 # Section for reporting configuration
 REPORTING:
   email:
@@ -418,7 +417,7 @@ LOG_ANALYSIS:
   # HTTP base URL for session links (auto-derived from sessions_dir on jslave)
   sessions_url: "http://magna002.ceph.redhat.com/ocsci-jenkins/log_analysis/recorded_sessions"
   # Cross-run history tracking
-  history_dir: "~/.ocs-ci/analysis_history"
+  history_dir: "/mnt/ocsci-jenkins/log_analysis/history_dir/4_21_history_dir"
   # Running on Jenkins slave (enables local path handling, magna002 URL translation)
   jslave: true
   # Verbose logging (DEBUG level for log_analysis module)

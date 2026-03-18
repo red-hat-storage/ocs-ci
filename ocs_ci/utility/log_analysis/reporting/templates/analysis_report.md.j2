@@ -43,6 +43,7 @@
 | **Confidence** | {{ "%.0f"|format(fa.confidence * 100) }}% |
 {% if fa.session_id %}| **Session ID** | {{ fa.session_id }} |
 {% endif %}{% if fa.session_file %}| **Session Record** | [{{ fa.session_file | basename }}]({{ fa.session_file }}) |
+{% endif %}{% if fa.must_gather_url %}| **Must Gather** | [logs]({{ fa.must_gather_url }}) |
 {% endif %}
 
 {% if fa.matched_known_issues %}

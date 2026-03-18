@@ -92,26 +92,31 @@ def pytest_sessionfinish(session, exitstatus):
         builder = ReportBuilder()
         report_format = la_config.get("ci_report_format", "all")
 
+        # Convert log_dir to magna HTTP URL for report links
+        log_dir_url = _magna_url(log_dir) or log_dir
+        if not log_dir_url.endswith("/"):
+            log_dir_url += "/"
+
         if report_format in ("json", "both", "all"):
             json_path = os.path.join(log_dir, "ai_analysis_report.json")
             json_report = builder.build(run_analysis, fmt="json")
             with open(json_path, "w") as f:
                 f.write(json_report)
-            log.info(f"AI analysis JSON report: {json_path}")
+            log.info(f"AI analysis JSON report: {log_dir_url}ai_analysis_report.json")
 
         if report_format in ("markdown", "both", "all"):
             md_path = os.path.join(log_dir, "ai_analysis_report.md")
             md_report = builder.build(run_analysis, fmt="markdown")
             with open(md_path, "w") as f:
                 f.write(md_report)
-            log.info(f"AI analysis Markdown report: {md_path}")
+            log.info(f"AI analysis Markdown report: {log_dir_url}ai_analysis_report.md")
 
         if report_format in ("html", "all"):
             html_path = os.path.join(log_dir, "ai_analysis_report.html")
             html_report = builder.build(run_analysis, fmt="html")
             with open(html_path, "w") as f:
                 f.write(html_report)
-            log.info(f"AI analysis HTML report: {html_path}")
+            log.info(f"AI analysis HTML report: {log_dir_url}ai_analysis_report.html")
 
         # Log summary stats
         classified = sum(
