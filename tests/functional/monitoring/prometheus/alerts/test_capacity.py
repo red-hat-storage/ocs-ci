@@ -36,7 +36,13 @@ def test_rbd_capacity_workload_alerts(
 
     # Check utilization on 97%
     alerts = workload_storageutilization_97p_rbd.get("prometheus_alerts")
-
+    for alert in alerts:
+        if alert.get("labels").get(
+            "alertname"
+        ) == constants.ALERT_ODF_DISK_UTILIZATION_HIGH and (
+            alert.get("state") == "pending" or alert["state"] == "firing"
+        ):
+            log.info("Disk utilization alert active")
     if config.ENV_DATA.get("ocs_version") == "4.2":
         nearfull_message = "Storage cluster is nearing full. Expansion is required."
         criticallfull_mesage = (
@@ -102,6 +108,13 @@ def test_cephfs_capacity_workload_alerts(
 
     # Check utilization on 97%
     alerts = workload_storageutilization_97p_cephfs.get("prometheus_alerts")
+    for alert in alerts:
+        if alert.get("labels").get(
+            "alertname"
+        ) == constants.ALERT_ODF_DISK_UTILIZATION_HIGH and (
+            alert.get("state") == "pending" or alert["state"] == "firing"
+        ):
+            log.info("Disk utilization alert active")
 
     if config.ENV_DATA.get("ocs_version") == "4.2":
         nearfull_message = "Storage cluster is nearing full. Expansion is required."
