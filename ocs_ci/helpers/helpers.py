@@ -4091,10 +4091,10 @@ def get_event_line_datetime(event_line):
     """
     event_line_dt = None
     regex = r"\d{4}-\d{2}-\d{2}"
-    if re.search(regex + "T", event_line):
+    if re.match(regex + "T", event_line):
         dt_string = event_line[:23].replace("T", " ")
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
-    elif re.search(regex, event_line):
+    elif re.match(regex, event_line):
         dt_string = event_line[:26]
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
 
