@@ -498,7 +498,7 @@ class FailureClassifier:
                     f"({os.path.getsize(tar_path) / 1024 / 1024:.1f} MB)"
                 )
                 with tarfile.open(tar_path, "r:gz") as tar:
-                    tar.extractall(path=extract_dir)
+                    tar.extractall(path=extract_dir, filter="data")
 
                 os.remove(tar_path)
 
@@ -577,7 +577,7 @@ class FailureClassifier:
                     f"{tar_path}"
                 )
                 with tarfile.open(tar_path, "r:gz") as tar:
-                    tar.extractall(path=extract_dir)
+                    tar.extractall(path=extract_dir, filter="data")
             except Exception as e:
                 logger.warning(f"Failed to extract {label} must-gather: {e}")
 
