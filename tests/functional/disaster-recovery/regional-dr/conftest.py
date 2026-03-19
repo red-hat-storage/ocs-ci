@@ -201,7 +201,7 @@ def verify_arbiter_deployment_with_zone_failure():
     with config.RunWithPrimaryConfigContext():
 
         master_nodes = get_master_nodes()
-        worker_nodes = get_worker_nodes()
+        worker_nodes = get_worker_nodes(skip_master_nodes=True)
 
         master_count = len(master_nodes)
         worker_count = len(worker_nodes)
