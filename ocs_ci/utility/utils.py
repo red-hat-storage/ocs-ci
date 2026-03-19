@@ -64,6 +64,7 @@ from ocs_ci.ocs.exceptions import (
     ClusterNotInSTSModeException,
 )
 from ocs_ci.utility import version as version_module
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.jira import JiraHelper
@@ -5593,6 +5594,7 @@ def get_pytest_fixture_value(request, fixture_name):
     return request.getfixturevalue(fixture_name)
 
 
+@switch_to_orig_index_at_last
 def get_client_type_by_name(cluster_name):
     """
     Get the client type by the cluster name
@@ -5609,6 +5611,7 @@ def get_client_type_by_name(cluster_name):
         get_hosted_cluster_type,
     )
 
+    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
     if not is_hosted_cluster(cluster_name):
         return constants.NON_HOSTED_CLUSTER
 
