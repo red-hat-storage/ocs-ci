@@ -4948,6 +4948,28 @@ def verify_log_exist_in_pods_logs(
     return False
 
 
+@retry(CommandFailed, tries=3, delay=10, backoff=2)
+def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
+    """
+    Extract CLI binary from container image with retry for transient network errors.
+
+    Args:
+        pull_secret_path (str): Path to pull secret file
+        image (str): Container image URL
+        remote_path (str): Path inside container to extract
+        local_cli_dir (str): Local directory to extract to
+
+    Raises:
+        CommandFailed: If extraction fails after retries
+
+    """
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {remote_path}:{local_cli_dir}"
+    )
+
+
 def retrieve_cli_binary(cli_type="mcg"):
     """
     Download the MCG-CLI/ODF-CLI binary and store it locally.
@@ -5021,10 +5043,8 @@ def retrieve_cli_binary(cli_type="mcg"):
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
-    exec_cmd(
-        f"oc image extract --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    _extract_cli_image(
+        pull_secret_path, image, get_architecture_path(cli_type), local_cli_dir
     )
     os.rename(
         os.path.join(local_cli_dir, remote_cli_basename),
