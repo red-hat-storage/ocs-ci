@@ -191,9 +191,7 @@ def verify_arbiter_deployment_with_zone_failure():
     """
     # log.info(f'======={get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment"}')
 
-    s = get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment")
-    log.info(f"======={s}")
-    if get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment", False):
+    if not get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment", False):
         pytest.skip(
             "Test requires arbiter deployment. "
             "Set 'arbiter_deployment: true' in deployment config."
