@@ -136,6 +136,7 @@ deployment = {
     ),
     "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
     "choose_local_storage_version": (
+        'button[id="local-storage-operator-redhat-operators-openshift-marketplace-input"], '
         'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
@@ -146,6 +147,7 @@ deployment = {
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
     "choose_local_storage_version_non_ga": (
+        'button[id="local-storage-operator-optional-operators-openshift-marketplace-input"], '
         'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
