@@ -153,6 +153,11 @@ def main(argv=None):
         help="Directory for run history files (default: ~/.ocs-ci/analysis_history)",
     )
     parser.add_argument(
+        "--no-summary",
+        action="store_true",
+        help="Skip AI-generated run summary (saves tokens/cost)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -218,6 +223,7 @@ def main(argv=None):
             save_prompts=args.save_prompts,
             sessions_dir=args.sessions_dir,
             sessions_url=sessions_url,
+            no_summary=args.no_summary,
         )
 
         # Generate report

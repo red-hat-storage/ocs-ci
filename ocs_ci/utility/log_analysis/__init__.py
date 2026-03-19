@@ -218,7 +218,8 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
             logger.debug(f"Jira integration failed (non-fatal): {e}")
 
     # Generate AI-powered run summary if using an AI backend
-    if ai_backend != "none" and failure_analyses:
+    no_summary = kwargs.get("no_summary", False)
+    if ai_backend != "none" and failure_analyses and not no_summary:
         try:
             failure_summaries = [
                 {

@@ -158,6 +158,18 @@ class ClaudeCodeBackend(AIBackend):
                 ui_logs=ui_logs,
             )
 
+        if ui_logs:
+            return self._classify_ui_agentic(
+                test_name=test_name,
+                test_class=test_class,
+                duration=duration,
+                squad=squad,
+                traceback=traceback,
+                log_excerpt=log_excerpt,
+                test_log_url=test_log_url,
+                ui_logs=ui_logs,
+            )
+
         template = self.jinja_env.get_template("classify_failure.j2")
         prompt = template.render(
             test_name=test_name,
@@ -213,6 +225,52 @@ class ClaudeCodeBackend(AIBackend):
         allowed_tools = "Bash"
         if must_gather_info.get("mg_type") == "local":
             allowed_tools = "Bash,Read"
+
+        result = self._call_claude_agentic(
+            prompt, context=test_name, allowed_tools=allowed_tools
+        )
+
+        return {
+            "category": result.get("category", "unknown"),
+            "confidence": float(result.get("confidence", 0.5)),
+            "root_cause_summary": result.get("root_cause_summary", ""),
+            "evidence": result.get("evidence", []),
+            "recommended_action": result.get("recommended_action", ""),
+            "session_id": result.get("session_id", ""),
+            "session_text": result.get("session_text", ""),
+        }
+
+    def _classify_ui_agentic(
+        self,
+        test_name: str,
+        test_class: str,
+        duration: float,
+        squad: str,
+        traceback: str,
+        log_excerpt: str,
+        test_log_url: str = "",
+        ui_logs: dict = None,
+    ) -> dict:
+        """Classify using agentic mode — Claude investigates UI artifacts."""
+        dom_url = ui_logs.get("dom_url", "")
+        ui_local = bool(dom_url) and not dom_url.startswith(("http://", "https://"))
+        template = self.jinja_env.get_template("classify_failure_ui.j2")
+        prompt = template.render(
+            test_name=test_name,
+            test_class=test_class,
+            duration=duration,
+            squad=squad or "Unknown",
+            traceback=traceback,
+            log_excerpt=self._truncate(log_excerpt, 6000),
+            test_log_url=test_log_url,
+            dom_url=ui_logs.get("dom_url", ""),
+            screenshots_url=ui_logs.get("screenshots_url", ""),
+            dom_files=ui_logs.get("dom_files", []),
+            screenshot_files=ui_logs.get("screenshot_files", []),
+            ui_local=ui_local,
+        )
+
+        allowed_tools = "Bash,Read" if ui_local else "Bash"
 
         result = self._call_claude_agentic(
             prompt, context=test_name, allowed_tools=allowed_tools

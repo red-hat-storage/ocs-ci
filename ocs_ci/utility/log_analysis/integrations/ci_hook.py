@@ -86,6 +86,7 @@ def pytest_sessionfinish(session, exitstatus):
             history_dir=la_config.get("history_dir", "~/.ocs-ci/analysis_history"),
             sessions_dir=sessions_dir,
             sessions_url=sessions_url,
+            no_summary=la_config.get("no_summary", False),
         )
 
         # Generate reports
