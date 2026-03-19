@@ -318,9 +318,10 @@ class TestMdsXattrAlerts(E2ETest):
         log.info("Checking for clearance of alert")
         initiate_alert_clearance()
         # waiting for sometime for load distribution
-        time.sleep(720)
+        time.sleep(600)
+        test_end_time = int(time.time())
         api.check_alert_cleared(
-            label=constants.ALERT_MDSXATTR, measure_end_time=600, time_min=30
+            label=constants.ALERT_MDSXATTR, measure_end_time=test_end_time, time_min=600
         )
 
     @pytest.mark.polarion_id("OCS-7734")
