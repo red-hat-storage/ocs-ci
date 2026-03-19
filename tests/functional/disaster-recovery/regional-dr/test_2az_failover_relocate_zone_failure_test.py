@@ -36,7 +36,8 @@ class Test2AZFailoverAndRelocateZoneFailure:
             pytest.param(
                 constants.CEPHBLOCKPOOL,
                 "arbiter",
-                marks=[tier1, acceptance],
+                # marks=[tier1, acceptance],
+                marks=[acceptance],
                 id="rbd-zone-arbiter",
             ),
             pytest.param(

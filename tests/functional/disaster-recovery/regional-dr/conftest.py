@@ -189,7 +189,9 @@ def verify_arbiter_deployment_with_zone_failure():
         pytest.skip: If the cluster doesn't meet the requirements
 
     """
-
+    log.info("Verifying arbiter deployment with zone failure")
+    log.info(get_primary_cluster_config())
+    log.info("Verifying arbiter deployment with zone failure")
     if get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment", False):
         pytest.skip(
             "Test requires arbiter deployment. "
