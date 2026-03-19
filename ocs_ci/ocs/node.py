@@ -81,7 +81,7 @@ def get_node_objs(node_names=None):
     return nodes
 
 
-def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
+def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None, retry=3):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type.
@@ -90,6 +90,8 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     Args:
         node_type (str): The node type (e.g. worker, master)
         num_of_nodes (int): The number of nodes to be returned
+        retry (int): Number of attempts to retry to get the node
+            resource via ``oc get``.
 
     Returns:
         list: The nodes OCP instances
@@ -105,23 +107,31 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
             node
             for node in get_node_objs()
             if node_type
-            in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+            in node.ocp.get_resource(
+                resource_name=node.name, column="ROLES", retry=retry
+            )
             and constants.INFRA_MACHINE
-            not in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+            not in node.ocp.get_resource(
+                resource_name=node.name, column="ROLES", retry=retry
+            )
         ]
     else:
         typed_nodes = [
             node
             for node in get_node_objs()
             if node_type
-            in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+            in node.ocp.get_resource(
+                resource_name=node.name, column="ROLES", retry=retry
+            )
         ]
     if is_hci_provider_cluster() and node_type == constants.WORKER_MACHINE:
         typed_nodes = [
             node
             for node in typed_nodes
             if constants.MASTER_MACHINE
-            not in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+            not in node.ocp.get_resource(
+                resource_name=node.name, column="ROLES", retry=retry
+            )
         ]
 
     if num_of_nodes:
