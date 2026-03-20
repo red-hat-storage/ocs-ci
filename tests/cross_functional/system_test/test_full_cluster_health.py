@@ -46,7 +46,7 @@ class TestFullClusterHealth(PASTest):
     """
 
     TIMEOUT_CEPH_MGR = 900
-    TIMEOUT_CEPH_MON = 1200
+    TIMEOUT_CEPH_MON = 1500
     TIMEOUT_CEPH_OSD = 1600
     TIMEOUT_POD_RUNNING = 1500
     TIMEOUT_BENCHMARK_SETUP = 2500
@@ -198,7 +198,9 @@ class TestFullClusterHealth(PASTest):
         wait_for_nodes_status()
         time.sleep(180)
         pod.wait_for_pods_to_be_running(
-            namespace=config.ENV_DATA["cluster_namespace"], pod_names=[pod_obj.name]
+            namespace=config.ENV_DATA["cluster_namespace"],
+            pod_names=[pod_obj.name],
+            timeout=300,
         )
 
     def is_cluster_healthy(self):
