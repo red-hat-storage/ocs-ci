@@ -78,14 +78,7 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-        try:
-            wait_for_install_plan_and_approve(
-                constants.OPENSHIFT_STORAGE_NAMESPACE, 5 * 60
-            )
-        except TimeoutExpiredError:
-            logger.warning(
-                "Timeout waiting for install plan approval. Continuing execution..."
-            )
+        self.ensure_install_plan_approval()
         if not self.fdf_skip_storage_setup:
             wait_for_storageclusters_crd()
             self.setup_storage()
@@ -213,6 +206,19 @@ class FusionDataFoundationDeployment:
         fusion_service_instance_health_check()
         self.get_installed_version()
         logger.info("FDF successfully installed")
+
+    def ensure_install_plan_approval(self):
+        """
+        Wait for install plan and approve once available.
+        """
+        try:
+            wait_for_install_plan_and_approve(
+                constants.OPENSHIFT_STORAGE_NAMESPACE, 5 * 60
+            )
+        except TimeoutExpiredError:
+            logger.warning(
+                "Timeout waiting for install plan approval. Continuing execution..."
+            )
 
     def get_installed_version(self):
         """
