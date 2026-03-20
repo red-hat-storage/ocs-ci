@@ -881,10 +881,50 @@ class AzureAroUtil(AZURE):
 
         """
         base_domain = config.ENV_DATA["base_domain"]
-        self.delete_dns_records(cluster_name, resource_group, base_domain)
-        cmd = f"az aro delete --resource-group {resource_group} --name {cluster_name} --yes"
-        out = exec_cmd(cmd, timeout=3600).stdout
-        logger.info(f"Destroy command output: {out}")
+
+        # Delete DNS records - continue even if they don't exist
+        try:
+            self.delete_dns_records(cluster_name, resource_group, base_domain)
+        except CommandFailed as e:
+            if any(
+                pattern in str(e).lower()
+                for pattern in [
+                    "was not found",
+                    "resourcenotfound",
+                    "does not exist",
+                    "could not be found",
+                ]
+            ):
+                logger.info(
+                    f"DNS records for cluster '{cluster_name}' do not exist or were already deleted"
+                )
+            else:
+                logger.warning(
+                    f"Failed to delete DNS records for cluster '{cluster_name}': {e}"
+                )
+                logger.info("Continuing with remaining cleanup operations")
+
+        # Delete ARO cluster - continue even if it doesn't exist
+        try:
+            cmd = f"az aro delete --resource-group {resource_group} --name {cluster_name} --yes"
+            out = exec_cmd(cmd, timeout=3600).stdout
+            logger.info(f"Destroy command output: {out}")
+        except CommandFailed as e:
+            if any(
+                pattern in str(e).lower()
+                for pattern in [
+                    "was not found",
+                    "resourcenotfound",
+                    "does not exist",
+                    "could not be found",
+                ]
+            ):
+                logger.info(
+                    f"ARO cluster '{cluster_name}' was not found and is considered deleted"
+                )
+            else:
+                logger.warning(f"Failed to delete ARO cluster '{cluster_name}': {e}")
+                logger.info("Continuing with remaining cleanup operations")
 
         # Delete the VNET after cluster deletion
         self.delete_network(cluster_name, resource_group)
