@@ -1246,19 +1246,19 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
 
     # pvc name for the disks created with LSO and ODF is dynamic and depends on the
     # storage cluster name, so we need to get it here
-    storage_device_set_name = ""
+    storage_device_set_names = []
     if lso_deployed:
         storage_cluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
             namespace=namespace,
             resource_name=config.ENV_DATA["storage_cluster_name"],
         )
-        storage_device_set_name = (
-            storage_cluster_obj.get()
+        storage_device_set_names = [
+            ds.get("name", "")
+            for ds in storage_cluster_obj.get()
             .get("spec", {})
-            .get("storageDeviceSets", [])[0]
-            .get("name", "")
-        )
+            .get("storageDeviceSets", [])
+        ]
 
     def _get_matching_bound_pvcs():
         ocs_pvc_obj = get_all_pvc_objs(namespace=namespace)
@@ -1267,7 +1267,7 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
             for pvc_obj in ocs_pvc_obj
             if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
             or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)
-            or pvc_obj.name.startswith(storage_device_set_name)
+            or any(pvc_obj.name.startswith(name) for name in storage_device_set_names)
         ]
         not_bound = [
             pvc_obj.name
@@ -1326,9 +1326,7 @@ def validate_cluster_on_pvc():
             "deployment we don't have mon pods backed by PVC"
         )
     logger.info("Validating all osd pods have PVC")
-    osd_deviceset_pods = get_pod_name_by_pattern(
-        "rook-ceph-osd-prepare-ocs-deviceset", ns
-    )
+    osd_deviceset_pods = get_pod_name_by_pattern("rook-ceph-osd-prepare", ns)
     validate_ocs_pods_on_pvc(
         osd_deviceset_pods,
         pvc_names,
