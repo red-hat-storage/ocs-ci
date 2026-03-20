@@ -32,7 +32,7 @@ class TestCephfsStressWithFailures(E2ETest):
     CephFS stress test with comprehensive component failures
     """
 
-    def test_cephfs_breakpoint_with_failures(
+    def test_cephfs_stress_with_component_failures(
         self,
         project_factory,
         nodes,
@@ -70,7 +70,7 @@ class TestCephfsStressWithFailures(E2ETest):
         JOB_STATUS_CHECK_INTERVAL = 60
         REBALANCE_WAIT_TIME = 3600
         HEALTH_CHECK_WAIT_TIME = 180
-        POWER_ON_WAIT_TIME = 420
+        POWER_ON_WAIT_TIME = 600
 
         CEPH_COMPONENTS = ["mds", "mgr", "mon", "osd"]
 
