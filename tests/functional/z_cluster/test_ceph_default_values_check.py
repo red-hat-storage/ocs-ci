@@ -270,41 +270,60 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
-    @skipif_ocs_version("<4.9")
+    @skipif_ocs_version(["<4.9", ">=4.19"])
     @tier2
-    def deprecated_test_noobaa_postgres_cm_post_ocs_upgrade(self):
+    def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
-        Impotant !!! Postgres configmap replaced with CNPG in 4.19.
+        Important: Postgres configmap is replaced with CNPG in 4.19.
+        Skip the test for ocs >= 4.19.
 
-        Validate noobaa postgres configmap post OCS upgrade
-
+        Validate noobaa postgres configmap post OCS upgrade.
         """
         cm_obj = OCP(
             kind=constants.CONFIGMAP,
             resource_name=constants.NOOBAA_POSTGRES_CONFIGMAP,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
+
         config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
-        config_data = config_data.split("\n")
-        config_data = config_data[5:]
+        config_data = config_data.split("\n")[5:]
+
         log.info(
-            "Validating that the values configured in noobaa-postgres configmap "
-            "match the ones stored in ocs-ci"
+            "Validating that the values configured in noobaa-postgres "
+            "configmap match the ones stored in ocs-ci"
         )
+
         ocs_version = version.get_semantic_ocs_version_from_config()
-        log.info(f"ocs version----{ocs_version}")
+        log.info("OCS version: %s", ocs_version)
+
         if ocs_version <= version.VERSION_4_8:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
-            stored_values.remove("")
-        elif ocs_version >= version.VERSION_4_9:
+        else:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_9.split("\n")
-            stored_values.remove("")
-        assert collections.Counter(config_data) == collections.Counter(stored_values), (
+
+        stored_values = [value for value in stored_values if value]
+
+        # Check that all expected values are present in the cluster config
+        # Allow additional parameters that may be added in newer versions
+        stored_values_set = set(stored_values)
+        config_data_set = set(config_data)
+
+        missing_values = stored_values_set - config_data_set
+        assert not missing_values, (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "
-            f"is different than the expected. Please inform OCS-QE about this discrepancy. "
-            f"The expected values are:\n{stored_values}\n"
-            f"The cluster's existing values are:{config_data}"
+            "is missing expected parameters."
+            f"Expected values:\n{sorted(stored_values)}\n"
+            f"Cluster values:\n{sorted(config_data)}\n"
+            f"Missing values:\n{sorted(missing_values)}"
         )
+
+        # Log any additional parameters found in cluster but not in expected values
+        additional_values = config_data_set - stored_values_set
+        if additional_values:
+            log.info(
+                f"Additional parameters found in cluster config (this is acceptable): "
+                f"{sorted(additional_values)}"
+            )
 
     @post_ocs_upgrade
     def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):

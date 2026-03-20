@@ -5,6 +5,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     green_squad,
+    skipif_ocs_version,
 )
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.ocs.resources.pod import get_csi_addons_pod
@@ -15,6 +16,7 @@ log = logging.getLogger(__name__)
 @tier1
 @green_squad
 @polarion_id("OCS-6807")
+@skipif_ocs_version("<4.20")
 class TestCSIAddonPodSecurity:
     """This class contains tests to Validate if CSI Addon pod enforces security
     by allowing HTTPS and rejecting HTTP connections.

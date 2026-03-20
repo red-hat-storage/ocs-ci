@@ -168,6 +168,7 @@ class TestPvcExpand(ManageTest):
                 io_direction="write",
                 runtime=60,
                 fio_filename=f"{pod_obj.name}_{io_phase}",
+                direct=int(storage_type == "block"),
             )
             log.info(f"{io_phase} IO started on pod {pod_obj.name}.")
         log.info(f"{io_phase} IO started on pods.")

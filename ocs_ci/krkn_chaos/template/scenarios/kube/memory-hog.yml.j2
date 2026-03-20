@@ -3,7 +3,7 @@ workers: '{{ workers | default("") }}' # leave it empty '' node cpu auto-detecti
 hog-type: {{ hog_type | default("memory") }}
 image: {{ image | default("quay.io/krkn-chaos/krkn-hog") }}
 namespace: {{ namespace | default("default") }}
-memory-vm-bytes: {{ memory_vm_bytes | default("90%") }}
+memory-vm-bytes: {{ memory_vm_bytes | default("95%") }}
 {%- if node_name %}
 # node-name: "{{ node_name }}" # Uncomment to target a specific node by name
 {%- else %}

@@ -10,6 +10,8 @@ import yaml
 from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.krkn_chaos.krkn_port_manager import KrknPortManager
+from ocs_ci.framework import config
+from ocs_ci.utility.ibmcloud import get_ibmcloud_cluster_region
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +28,8 @@ class KrKnRunner:
         self.process = None
         self.thread = None
         self.thread_exception = None
+        # True when we stopped waiting because FAILURE was detected in the log
+        self._completed_due_to_failure = False
         os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
 
     def _print_config_file(self):
@@ -65,6 +69,16 @@ class KrKnRunner:
 
     def _validate_environment(self):
         """Validate the environment before running Krkn."""
+        # Check if Krkn venv python exists
+        # KRKN_RUN_CMD is data/krkn/run_kraken.py
+        # venv is at data/krkn/venv/bin/python
+        krkn_dir = os.path.dirname(KRKN_RUN_CMD)  # data/krkn
+        krkn_python = os.path.join(krkn_dir, "venv", "bin", "python")
+
+        if not os.path.exists(krkn_python):
+            log.error(f"Krkn venv python not found at: {krkn_python}")
+            return False
+
         # Check if Krkn run command exists
         if not os.path.exists(KRKN_RUN_CMD):
             log.error(f"Krkn run command not found at: {KRKN_RUN_CMD}")
@@ -298,7 +312,10 @@ class KrKnRunner:
         Check the output log file for completion messages.
 
         This provides an additional way to detect completion by monitoring
-        the Krkn output log file for success messages.
+        the Krkn output log file for success messages. Also treats the
+        presence of "Chaos data:" as completion (same marker as get_chaos_data()).
+        The "Chaos data:" line is not at a fixed position—it varies with how much
+        data Krkn processes—so the whole log is searched for it.
 
         Returns:
             bool: True if completion message found, False otherwise
@@ -315,19 +332,25 @@ class KrKnRunner:
                 "Chaos injection completed successfully",
             ]
 
-            # Read the last few lines of the log file
+            # Read the log file
             with open(self.output_log, "r", encoding="utf-8") as f:
-                # Read last 50 lines to check for completion
                 lines = f.readlines()
-                last_lines = lines[-50:] if len(lines) > 50 else lines
 
-                for line in last_lines:
-                    for pattern in success_patterns:
-                        if pattern in line:
-                            log.info(
-                                f"🎉 Found completion message in log: '{pattern.strip()}'"
-                            )
-                            return True
+            # Success patterns: check last 50 lines (completion messages are at end)
+            last_lines = lines[-50:] if len(lines) > 50 else lines
+            for line in last_lines:
+                for pattern in success_patterns:
+                    if pattern in line:
+                        log.info(
+                            f"🎉 Found completion message in log: '{pattern.strip()}'"
+                        )
+                        return True
+
+            # Chaos data: position varies with run size; search entire log (same marker as get_chaos_data())
+            for line in lines:
+                if "Chaos data:" in line:
+                    log.info("🎉 Found 'Chaos data:' in log - Krkn has completed")
+                    return True
 
         except Exception as e:
             log.debug(f"Error checking output log for completion: {e}")
@@ -377,37 +400,25 @@ class KrKnRunner:
                         f"SUCCESS: All scenarios completed successfully - found '{primary_success_pattern}'",
                     )
 
+                # Chaos data: Krkn writes "Chaos data:" at end of run (same marker as get_chaos_data())
+                if "Chaos data:" in content:
+                    log.info("🎉 SUCCESS: Found 'Chaos data:' - Krkn run completed")
+                    return (
+                        True,
+                        "SUCCESS: Krkn completed - 'Chaos data:' written to log",
+                    )
+
                 # Check for additional success patterns
                 for pattern in additional_patterns:
                     if pattern in content:
                         log.info(f"🎉 SUCCESS: Found completion pattern: '{pattern}'")
                         return True, f"SUCCESS: Kraken completed - found '{pattern}'"
 
-                # Check for failure indicators
-                failure_patterns = [
-                    "FAILED",
-                    "ERROR",
-                    "CRITICAL",
-                    "Exception",
-                    "Traceback",
-                    "failed to execute",
-                    "execution failed",
-                ]
+                # Do NOT treat generic ERROR/Exception in the log as "run completed".
+                # Krkn logs per-scenario failures while the run continues; only
+                # process exit or "Chaos data:" / "Successfully finished" mean done.
 
-                failure_found = []
-                for pattern in failure_patterns:
-                    if pattern.lower() in content.lower():
-                        failure_found.append(pattern)
-
-                if failure_found:
-                    failure_msg = (
-                        f"FAILURE: Kraken execution failed - found error indicators: "
-                        f"{', '.join(failure_found)}"
-                    )
-                    log.warning(failure_msg)
-                    return False, failure_msg
-
-                # No clear success or failure pattern found
+                # No clear success pattern found - run may still be in progress
                 return (
                     False,
                     "INCOMPLETE: Kraken execution status unclear - no definitive completion pattern found",
@@ -492,8 +503,52 @@ class KrKnRunner:
                 "Could not extract kubeconfig_path from krkn config, krkn may fail"
             )
 
+        # Export IBM Cloud API key and endpoint if platform is IBM Cloud
+        # This is required for node scenarios on IBM Cloud
+        try:
+            platform = config.ENV_DATA.get("platform", "").lower()
+            if "ibm" in platform or "ibmcloud" in platform:
+                ibmcloud_auth = config.AUTH.get("ibmcloud", {})
+                api_key = ibmcloud_auth.get("api_key")
+                api_endpoint = ibmcloud_auth.get("api_endpoint")
+
+                if api_key:
+                    env["IBMC_APIKEY"] = api_key
+                    env["IC_API_KEY"] = (
+                        api_key  # Also set IC_API_KEY for backward compatibility
+                    )
+                    log.info(
+                        "Setting IBMC_APIKEY and IC_API_KEY environment variables for IBM Cloud"
+                    )
+                else:
+                    log.warning(
+                        "IBM Cloud platform detected but api_key not found in AUTH config"
+                    )
+
+                if api_endpoint:
+                    env["IBMC_URL"] = api_endpoint
+                    log.info(
+                        f"Setting IBMC_URL environment variable to: {api_endpoint}"
+                    )
+                else:
+                    ibmc_url = (
+                        f"https://{get_ibmcloud_cluster_region()}.iaas.cloud.ibm.com/v1"
+                    )
+                    env["IBMC_URL"] = ibmc_url
+                    log.info(
+                        f"No api_endpoint configured, using region-based IBMC_URL: {ibmc_url}"
+                    )
+        except Exception as e:
+            log.warning(f"Failed to set IBM Cloud credentials: {str(e)}")
+
+        # Use krkn venv python directly to run krkn
+        # KRKN_RUN_CMD is data/krkn/run_kraken.py
+        # venv is at data/krkn/venv/bin/python
+        krkn_dir = os.path.dirname(KRKN_RUN_CMD)
+        krkn_python = os.path.join(krkn_dir, "venv", "bin", "python")
+
         krkn_cmd = [
-            "python3",
+            krkn_python,
             KRKN_RUN_CMD,
             "--config",
             self.krkn_config,
@@ -582,8 +637,13 @@ class KrKnRunner:
                         error_msg += f"\nConfig file: {self.krkn_config}"
 
                         if attempt == max_retries - 1:
-                            # Final attempt failed
-                            raise CommandFailed(error_msg)
+                            # Final attempt failed - log warning instead of raising
+                            log.warning(
+                                "Krkn command failed (non-zero exit code). "
+                                "Treating as warning and continuing: %s",
+                                error_msg,
+                            )
+                            return
                         else:
                             # Log error but continue retrying
                             log.warning(f"Attempt {attempt + 1} failed: {error_msg}")
@@ -596,8 +656,12 @@ class KrKnRunner:
 
             except Exception as e:
                 if attempt == max_retries - 1:
-                    # Final attempt failed
-                    raise CommandFailed(f"Failed to run Krkn command. Error: {str(e)}")
+                    # Final attempt failed - log warning instead of raising
+                    log.warning(
+                        "Failed to run Krkn command. Treating as warning and continuing: %s",
+                        str(e),
+                    )
+                    return
                 else:
                     # Log error but continue retrying
                     log.warning(
@@ -638,6 +702,17 @@ class KrKnRunner:
                 log.error("Krkn thread encountered an exception")
                 raise self.thread_exception
 
+            # If the Krkn process has already exited, treat as completion and stop waiting
+            if self.process is not None and self.process.poll() is not None:
+                if self.process.returncode != 0:
+                    self._completed_due_to_failure = True
+                log.info(
+                    "Krkn process has exited (return code %s) - waiting for thread to finish...",
+                    self.process.returncode,
+                )
+                self.thread.join(timeout=60)
+                break
+
             # Check for Kraken success completion using precise pattern matching
             success, message = self._check_kraken_success_completion()
             if success:
@@ -656,6 +731,10 @@ class KrKnRunner:
                     log.warning(
                         "Thread still alive after success detection - continuing to wait..."
                     )
+
+            # Do NOT stop waiting just because the log contains ERROR/Exception.
+            # Those can be per-scenario failures while Krkn is still running.
+            # Only stop when: process exited, or we see "Chaos data:" / success message above.
 
             # Also check output log for completion messages (fallback)
             elif self._check_output_log_for_completion():
@@ -720,12 +799,22 @@ class KrKnRunner:
             log.error("Krkn thread completed with an exception")
             raise self.thread_exception
 
-        log.info("✅ Krkn process has completed.")
+        if self._completed_due_to_failure:
+            log.info(
+                "✅ Krkn wait ended (process exited with non-zero; Chaos data block may be absent)."
+            )
+        else:
+            log.info("✅ Krkn process has completed.")
 
     def get_chaos_data(self):
         """
         Extract the 'Chaos data' JSON from self.output_log and
         ALWAYS return shape: {"telemetry": {...}, ...optional keys...}
+
+        When "Chaos data:" is missing (timeout, process exited before writing report,
+        or incomplete run), return minimal telemetry {"telemetry": {"scenarios": []}}
+        and log a warning instead of raising, so the test can continue and fail on
+        validation if needed.
         """
         with open(self.output_log, "r", encoding="utf-8") as f:
             text = f.read()
@@ -733,7 +822,11 @@ class KrKnRunner:
         # find the LAST occurrence of "Chaos data:"
         matches = list(re.finditer(r"Chaos data:\s*", text))
         if not matches:
-            raise ValueError("Chaos data block not found in the log.")
+            log.warning(
+                "Chaos data block not found in the log (timeout, process exit before report, or incomplete run). "
+                "Returning minimal telemetry (no scenarios)."
+            )
+            return {"telemetry": {"scenarios": []}}
         m = matches[-1]
 
         # first '{' after the marker

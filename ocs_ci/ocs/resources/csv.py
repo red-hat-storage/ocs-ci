@@ -135,16 +135,25 @@ def get_operator_csv_names(namespace=None):
 
 
 def check_operatorcondition_upgradeable_false(
-    operator_name, csv_name, namespace, timeout=300
+    operator_name,
+    csv_name,
+    namespace,
+    timeout=300,
+    reason=None,
+    message_pattern=None,
 ):
     """
-    Check if OperatorCondition shows Upgradeable=False with health warning.
+    Check if OperatorCondition shows Upgradeable=False with specified reason.
 
     Args:
         operator_name (str): Name of the operator (for logging)
         csv_name (str): CSV name of the operator
         namespace (str): Namespace where OperatorCondition is located
         timeout (int): Timeout in seconds to wait for condition
+        reason (str): Expected reason in OperatorCondition. If None, checks
+            for any reason when Upgradeable=False
+        message_pattern (str): Expected message pattern in OperatorCondition.
+            If None, only reason is checked
 
     Returns:
         bool: True if condition is met, False otherwise
@@ -183,20 +192,26 @@ def check_operatorcondition_upgradeable_false(
             for condition in conditions:
                 if condition.get("type") == "Upgradeable":
                     status = condition.get("status")
-                    reason = condition.get("reason", "")
+                    condition_reason = condition.get("reason", "")
                     message = condition.get("message", "")
                     log.info(
                         f"{operator_name} OperatorCondition Upgradeable "
-                        f"status: {status}, reason: {reason}, "
+                        f"status: {status}, reason: {condition_reason}, "
                         f"message: {message}"
                     )
-                    # Check for exact reason "CephCluster health warning"
-                    # or similar
-                    if status == "False" and (
-                        "CephClusterHealthNotOK" in reason
-                        or ("CephCluster health is HEALTH_WARN. " in message)
-                    ):
-                        return True
+                    if status == "False":
+                        # If reason is specified, check for it
+                        if reason:
+                            if reason in condition_reason:
+                                # If message_pattern is also specified, check it
+                                if message_pattern:
+                                    if message_pattern in message:
+                                        return True
+                                else:
+                                    return True
+                        else:
+                            # No specific reason expected, just check status
+                            return True
         return False
 
     sample = TimeoutSampler(
@@ -209,7 +224,7 @@ def check_operatorcondition_upgradeable_false(
         if sample.wait_for_func_status(result=True):
             log.info(
                 f"{operator_name} OperatorCondition shows "
-                "Upgradeable=False with health warning reason"
+                f"Upgradeable=False with reason '{reason}'"
             )
             return True
         else:

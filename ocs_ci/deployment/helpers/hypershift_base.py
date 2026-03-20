@@ -12,7 +12,7 @@ from ocs_ci.deployment.helpers.idms_parser import (
     extract_image_content_sources,
 )
 from ocs_ci.deployment.ocp import download_pull_secret
-from ocs_ci.framework import config
+from ocs_ci.framework import config, Config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
@@ -171,6 +171,38 @@ def get_binary_hcp_version():
         return exec_cmd("hcp --version").stdout.decode("utf-8").strip()
 
 
+def get_binary_hcp_ocp_version():
+    """
+    Extract the OCP version from hypershift version output.
+
+    Example output:
+        Client Version: openshift/hypershift: 4be85900d761c04ab69fdf79408ced718cef5628. Latest supported OCP: 4.21.0
+        Server Version: c20bbad4d528bfb51687f02684ef5eb79669b850
+        Server Supports OCP Versions: 4.21, 4.20, 4.19, 4.18, 4.17, 4.16, 4.15, 4.14
+
+    Returns:
+        str: OCP version in 'major.minor' format (e.g., '4.21') or None if not found
+
+    """
+    try:
+        version_output = exec_cmd("hypershift version").stdout.decode("utf-8").strip()
+        # Parse "Latest supported OCP: 4.21.0" from the output
+        for line in version_output.split("\n"):
+            if "Latest supported OCP:" in line:
+                # Extract version like "4.21.0"
+                version_str = line.split("Latest supported OCP:")[1].strip()
+                # Parse to get major.minor (e.g., "4.21")
+                v = parse_version(version_str)
+                return f"{v.major}.{v.minor}"
+        logger.warning(
+            "Could not find 'Latest supported OCP' in hypershift version output"
+        )
+        return None
+    except CommandFailed as e:
+        logger.warning(f"Failed to get hypershift version: {e}")
+        return None
+
+
 @switch_to_orig_index_at_last
 def get_cluster_vm_namespace(cluster_name=None):
     """
@@ -195,7 +227,7 @@ def get_cluster_vm_namespace(cluster_name=None):
     return cluster_vm_namespaces[0]
 
 
-@switch_to_orig_index_at_last
+@config.run_with_provider_context_if_available
 def is_hosted_cluster(cluster_name=None):
     """
     Check if the cluster is a hosted cluster
@@ -209,7 +241,6 @@ def is_hosted_cluster(cluster_name=None):
     """
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
-    config.switch_to_provider()
     ocp_obj = OCP(
         kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
     )
@@ -230,6 +261,7 @@ def get_hosted_cluster_type(cluster_name=None):
 
     """
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
     config.switch_to_provider()
     ocp_hosted_cluster_obj = OCP(
         kind=constants.HOSTED_CLUSTERS,
@@ -410,6 +442,33 @@ def get_latest_supported_hypershift_version() -> str | None:
     return hcp_version
 
 
+def resolve_ocp_image(ocp_version: str) -> str:
+    """
+    Resolve OCP image based on the provided ocp_version.
+    If ocp_version is not provided, it will use the version from the hosting platform.
+
+    Args:
+        ocp_version (str): OCP version of the cluster
+
+    Returns:
+        str: OCP index image (registry:tag)
+
+    """
+    if not ocp_version:
+        with config.RunWithProviderConfigContextIfAvailable():
+            provider_version = get_ocp_version()
+        if "nightly" in provider_version:
+            index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+        else:
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+    else:
+        if "nightly" in ocp_version:
+            index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
+        else:
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+    return index_image
+
+
 class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
@@ -566,7 +625,11 @@ class HyperShiftBase:
 
     def update_hcp_binary(self, install_latest=False):
         """
-        Update hcp binary
+        Update hcp binary only if a newer version is available.
+
+        Compares the current installed hypershift binary version with the latest
+        supported version from the hub cluster. Only performs update if the hub
+        version is higher than the current binary version.
 
         Args:
             install_latest (bool): If True, install the latest Hypershift version from git.
@@ -575,7 +638,43 @@ class HyperShiftBase:
 
         if not config.ENV_DATA.get("hcp_version"):
             logger.error("hcp_version is not set in config.ENV_DATA")
-            return
+            install_latest = True
+
+        # Get current binary version
+        current_version = None
+        if self.hcp_binary_exists() and self.hypershift_binary_exists():
+            current_version = get_binary_hcp_ocp_version()
+            if current_version:
+                logger.info(f"Current hypershift binary version: {current_version}")
+
+        # Get latest supported version from hub
+        latest_version = get_latest_supported_hypershift_version()
+
+        if current_version and latest_version:
+            # Compare versions
+            current_parsed = parse_version(current_version)
+            latest_parsed = parse_version(latest_version)
+
+            if current_parsed >= latest_parsed:
+                logger.info(
+                    f"Current hypershift binary version {current_version} is already "
+                    f"up to date (>= {latest_version}). Skipping update."
+                )
+                return
+            else:
+                logger.info(
+                    f"Newer hypershift version available: {latest_version} "
+                    f"(current: {current_version}). Updating binary..."
+                )
+        elif current_version:
+            logger.info(
+                f"Could not determine latest version from hub. "
+                f"Current version: {current_version}. Proceeding with update..."
+            )
+        else:
+            logger.info(
+                "Hypershift binary not found or version could not be determined. Installing..."
+            )
 
         self.delete_hcp_and_hypershift_bin()
         self.install_hcp_and_hypershift_from_git(install_latest)
@@ -610,6 +709,7 @@ class HyperShiftBase:
         cp_availability_policy=None,
         infra_availability_policy=None,
         disable_default_sources=None,
+        data_replication_separation=False,
         auto_repair=True,
     ):
         """
@@ -630,6 +730,8 @@ class HyperShiftBase:
                 selected, cluster will be created with etcd ingress controller, monitoring, cloud controller with min
                 available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
+            data_replication_separation (bool): If the deployment uses data replication separation
+                then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
 
         Returns:
@@ -677,6 +779,108 @@ class HyperShiftBase:
             f"--image-content-sources {self.idms_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
             "--olm-catalog-placement Guest "
+        )
+
+        if auto_repair:
+            create_hcp_cluster_cmd += " --auto-repair"
+
+        if (
+            cp_availability_policy
+            and cp_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            create_hcp_cluster_cmd += (
+                f" --control-plane-availability-policy {cp_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Control plane availability policy {cp_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
+            )
+
+        if (
+            infra_availability_policy
+            and infra_availability_policy in constants.AVAILABILITY_POLICIES
+        ):
+            create_hcp_cluster_cmd += (
+                f" --infra-availability-policy {infra_availability_policy} "
+            )
+        else:
+            logger.error(
+                f"Infrastructure availability policy {infra_availability_policy} is not valid. "
+                f"Valid values are: {constants.AVAILABILITY_POLICIES}"
+            )
+
+        if data_replication_separation:
+            create_hcp_cluster_cmd += (
+                f" --additional-network name:clusters-{name}/storage"
+            )
+
+        if disable_default_sources:
+            create_hcp_cluster_cmd += " --olm-disable-default-sources"
+
+        logger.info("Creating HyperShift hosted cluster")
+        exec_cmd(create_hcp_cluster_cmd)
+
+        return name
+
+    @config.run_with_provider_context_if_available
+    def create_agent_ocp_cluster(
+        self,
+        name: str = None,
+        nodepool_replicas: int = defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT,
+        ocp_version=None,
+        cp_availability_policy=None,
+        infra_availability_policy=None,
+        disable_default_sources=None,
+        auto_repair=True,
+    ):
+        """
+        Create agent hosted cluster. Default parameters have minimal requirements for the cluster.
+
+        Args:
+            name (str): Name of the cluster
+            nodepool_replicas (int): Number of nodes in the cluster
+            ocp_version (str): OCP version of the cluster
+            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable; if SingleReplica
+                selected, cluster will be created with etcd kube-apiserver, kube-controller-manager,
+                openshift-oauth-apiserver, openshift-controller-manager, kube-scheduler with min available
+                quorum 1 in pdb.
+            infra_availability_policy (str): Infra availability policy, default HighlyAvailable, if SingleReplica
+                selected, cluster will be created with etcd ingress controller, monitoring, cloud controller with min
+                available quorum 1 in pdb.
+            disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
+            auto_repair (bool): Enables machine autorepair with machine health checks, default True
+
+        Returns:
+            str: Name of the hosted cluster
+
+        """
+
+        self.save_mirrors_list_to_file()
+        pull_secret_path = download_pull_secret()
+
+        # If ocp_version is not provided, get the version from Hosting Platform
+        index_image = resolve_ocp_image(ocp_version)
+
+        if not name:
+            name = "hcp-" + datetime.now().strftime("%f")
+
+        logger.info("Creating agent hosted cluster")
+
+        create_hcp_cluster_cmd = (
+            f"{self.hypershift_binary_path} create cluster agent "
+            f"--name {name} "
+            f"--agent-namespace {name} "
+            f"--base-domain {config.ENV_DATA['base_domain']} "
+            f"--api-server-address api.{name}.{config.ENV_DATA['base_domain']} "
+            f"--release-image {index_image} "
+            f"--node-pool-replicas {nodepool_replicas} "
+            f"--pull-secret {pull_secret_path} "
+            f"--ssh-key {os.path.expanduser(config.DEPLOYMENT.get('ssh_key'))} "
+            f"--image-content-sources {self.idms_mirrors_path} "
+            "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
+            "--olm-catalog-placement Guest "
+            f"--etcd-storage-class {constants.DEFAULT_STORAGECLASS_RBD} "
         )
 
         if auto_repair:
@@ -803,21 +1007,21 @@ class HyperShiftBase:
                 return True
 
     def download_hosted_cluster_kubeconfig(
-        self, name: str, hosted_cluster_path: str, from_hcp: bool = True
+        self, name: str, cluster_path: str, from_hcp: bool = True
     ):
         """
         Download HyperShift hosted cluster kubeconfig
 
         Args:
             name (str): name of the cluster
-            hosted_cluster_path (str): path to create auth_path folder and download kubeconfig there
+            cluster_path (str): path to create auth_path folder and download kubeconfig there
             from_hcp (bool): if True, use hcp binary to download kubeconfig, otherwise use ocp secret
 
         Returns:
             str: path to the downloaded kubeconfig, None if failed
 
         """
-        path_abs = os.path.expanduser(hosted_cluster_path)
+        path_abs = os.path.expanduser(cluster_path)
         auth_path = os.path.join(path_abs, "auth")
         os.makedirs(auth_path, exist_ok=True)
         kubeconfig_path = os.path.join(auth_path, "kubeconfig")
@@ -1107,3 +1311,215 @@ def create_cluster_dir(cluster_name):
     )
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def prepare_vsphere_agent_host_cluster_config():
+    """
+    Prepares config object for the HUB Cluster to be used as host cluster
+    for vSphere Agent Assisted Installer deployment
+
+    Returns:
+        Config: Config object for the HUB Cluster
+
+    """
+    cluster_config = Config()
+    cluster_path = os.path.expanduser(config.DEPLOYMENT.get("hub_cluster_path"))
+    def_client_config_dict = {
+        "DEPLOYMENT": {},
+        "ENV_DATA": {
+            "cluster_name": config.DEPLOYMENT.get("hub_cluster_name"),
+            "cluster_path": cluster_path,
+            "platform": "vsphere",
+            "deployment_type": "ai",
+            "cluster_type": "provider",
+        },
+        "RUN": {
+            "kubeconfig": os.path.join(
+                cluster_path, cluster_config.RUN["kubeconfig_location"]
+            )
+        },
+    }
+    keys = [
+        "run_id",
+        "log_dir",
+        "bin_dir",
+        "jenkins_build_url",
+        "logs_url",
+    ]
+    for key in keys:
+        def_client_config_dict["RUN"][key] = config.RUN.get(key, "")
+    cluster_config.update(def_client_config_dict)
+    return cluster_config
+
+
+@retry(CommandFailed, tries=5, delay=30, backoff=1)
+def create_kubeconfig_file_hosted_cluster():
+    """
+    Export kubeconfig to auth directory in cluster path.
+
+    This function is wrapped with retry decorator to handle CommandFailed errors.
+    It will retry up to 5 times with 30 sec  delay between attempts.
+    """
+    cluster_path = config.ENV_DATA["cluster_path"]
+    cluster_name = config.ENV_DATA["cluster_name"]
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        hypershift = HyperShiftBase()
+        kubeconfig_path = hypershift.download_hosted_cluster_kubeconfig(
+            cluster_name, cluster_path=cluster_path
+        )
+
+    config.RUN["kubeconfig"] = kubeconfig_path
+    logger.info("Created kubeconfig file")
+
+
+def wait_for_worker_nodes_ready(timeout=600, sleep=10, expected_nodes=None):
+    """
+    Wait for worker nodes to appear in the agent cluster inventory and become ready.
+    This function operates on the default context (agent cluster).
+
+    Args:
+        timeout (int): Maximum time in seconds to wait for nodes to be ready (default: 600)
+        sleep (int): Time in seconds to sleep between checks (default: 10)
+        expected_nodes (int): Expected number of worker nodes. If None, waits for at least one node.
+
+    Raises:
+        TimeoutExpiredError: If worker nodes don't appear or become ready within the timeout
+
+    """
+    from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
+
+    logger.info("Waiting for worker nodes to appear in agent cluster inventory")
+
+    try:
+        worker_nodes = []
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_nodes,
+            node_type=constants.WORKER_MACHINE,
+        ):
+            if sample:
+                worker_nodes = sample
+                if expected_nodes is None and len(worker_nodes) > 0:
+                    logger.info(
+                        f"Found {len(worker_nodes)} worker node(s): "
+                        f"{[node.name for node in worker_nodes]}"
+                    )
+                    break
+                elif expected_nodes and len(worker_nodes) >= expected_nodes:
+                    logger.info(
+                        f"Found {len(worker_nodes)} worker node(s) (expected: {expected_nodes}): "
+                        f"{[node.name for node in worker_nodes]}"
+                    )
+                    break
+                else:
+                    current_count = len(worker_nodes) if worker_nodes else 0
+                    expected_count = expected_nodes if expected_nodes else "at least 1"
+                    logger.info(
+                        f"Waiting for worker nodes to appear. "
+                        f"Current: {current_count}, Expected: {expected_count}"
+                    )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Worker nodes did not appear in agent cluster inventory within {timeout} seconds"
+        )
+        raise
+
+    # Wait for worker nodes to become Ready
+    logger.info("Waiting for worker nodes to become Ready")
+    node_names = [node.name for node in worker_nodes]
+    wait_for_nodes_status(
+        node_names=node_names,
+        status=constants.NODE_READY,
+        timeout=timeout,
+        sleep=sleep,
+    )
+    logger.info("All worker nodes are ready")
+
+
+@config.run_with_provider_context_if_available
+def get_hosted_cluster_condition_status(cluster_name, condition_type="Available"):
+    """
+    Get hosted cluster condition status
+
+    Equivalent to: oc get hostedcluster <cluster_name> -n clusters
+                   -o jsonpath='{.status.conditions[?(@.type=="<condition_type>")].status}'
+
+    Args:
+        cluster_name (str): Name of the hosted cluster
+        condition_type (str): Type of condition to check (default: "Available")
+                             Other common types: "Ready", "Progressing", "Degraded"
+
+    Returns:
+        str: Condition status (typically "True", "False", or "Unknown")
+        None: If condition not found or command fails
+
+    """
+
+    logger.info(
+        f"Getting hosted cluster '{cluster_name}' condition status for type '{condition_type}'"
+    )
+
+    try:
+        ocp_hc = OCP(
+            kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+        )
+        jsonpath = f'{{.status.conditions[?(@.type=="{condition_type}")].status}}'
+
+        status = ocp_hc.exec_oc_cmd(
+            f"get hostedclusters {cluster_name} -o jsonpath='{jsonpath}'",
+            out_yaml_format=False,
+        )
+
+        # status is a string when out_yaml_format=False
+        status_str = str(status) if status else ""
+
+        logger.info(
+            f"Hosted cluster '{cluster_name}' condition '{condition_type}' status: {status_str}"
+        )
+        return status_str.strip() if status_str else None
+
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to get hosted cluster '{cluster_name}' condition status: {e}"
+        )
+        return None
+
+
+def wait_for_hosted_cluster_available(cluster_name, timeout=600, sleep=30):
+    """
+    Wait for hosted cluster to become available using TimeoutSampler
+
+    ! Executed always from Provider context !
+
+    Args:
+        cluster_name (str): Name of the hosted cluster
+        timeout (int): Timeout in seconds (default: 600 = 10 minutes)
+        sleep (int): Sleep interval between checks in seconds (default: 30)
+
+    Returns:
+        bool: True if cluster becomes available, False if timeout
+
+    Raises:
+        TimeoutExpiredError: If cluster doesn't become available within timeout
+
+    """
+    logger.info(f"Waiting for hosted cluster '{cluster_name}' to become available")
+
+    for sample in TimeoutSampler(
+        timeout,
+        sleep,
+        get_hosted_cluster_condition_status,
+        cluster_name,
+        constants.STATUS_AVAILABLE,
+    ):
+        if sample == "True":
+            logger.info(f"Hosted cluster '{cluster_name}' is available")
+            return True
+        else:
+            logger.info(
+                f"Hosted cluster '{cluster_name}' availability status: {sample}. Waiting..."
+            )
+
+    return False

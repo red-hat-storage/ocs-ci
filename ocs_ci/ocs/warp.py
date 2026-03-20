@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
 from ocs_ci.utility import templating
+from ocs_ci.ocs.ui.workload_ui import wait_for_container_status_ready
 
 log = logging.getLogger(__name__)
 
@@ -95,16 +96,20 @@ class Warp(object):
             ports=self.ports,
         )
 
-        helpers.wait_for_resource_state(
-            self.pod_obj, constants.STATUS_RUNNING, timeout=120
-        )
+        all_warp_pods = [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                label="app=warppod", namespace=self.pod_obj.namespace
+            )
+        ]
+
+        for con in all_warp_pods:
+            wait_for_container_status_ready(pod=con)
 
         if multi_client:
             self.client_pods = [
-                Pod(**pod_info)
-                for pod_info in get_pods_having_label(
-                    label="app=warppod", namespace=self.pod_obj.namespace
-                )
+                pod_info
+                for pod_info in all_warp_pods
                 if pod_info.get("metadata").get("name") != self.pod_obj.name
             ]
             self.client_ips = {}

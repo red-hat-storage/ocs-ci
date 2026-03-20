@@ -205,8 +205,11 @@ class TestBucketCreationAndDeletion(MCGTest):
         )
         for bucket_name in bucket_set:
             try:
+                logger.info(f"Trying to create a bucket with name {bucket_name}")
                 bucket = BUCKET_MAP[interface.lower()](bucket_name, mcg=mcg_obj)
-                assert not bucket, "Unexpected: Duplicate creation hasn't failed."
+                assert (
+                    not bucket
+                ), f"Unexpected: Duplicate creation of {bucket_name} hasn't failed."
             except (CommandFailed, botocore.exceptions.ClientError) as err:
                 assert re.search(expected_err, str(err)), (
                     "Couldn't verify OBC creation. Unexpected error " f"{str(err)}"

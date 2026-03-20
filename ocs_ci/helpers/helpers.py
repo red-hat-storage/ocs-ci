@@ -113,6 +113,25 @@ def create_resource(do_reload=True, **kwargs):
     return ocs_obj
 
 
+def apply_resource(**kwargs):
+    """
+    Apply a resource. Safe for both create and update operations.
+
+    Args:
+        kwargs (dict): Dictionary of the OCS resource
+
+    Returns:
+        OCS: An OCS instance
+
+    Raises:
+        AssertionError: In case of any failure
+    """
+    ocs_obj = OCS(**kwargs)
+    kwargs.get("metadata").get("name")
+    ocs_obj.apply(**kwargs)
+    return ocs_obj
+
+
 def wait_for_resource_state(resource, state, timeout=60):
     """
     Wait for a resource to get to a given status
@@ -3582,6 +3601,54 @@ def default_volumesnapshotclass(interface_type):
     return OCS(**base_snapshot_class.data)
 
 
+def get_default_cluster_volumesnapshotclass():
+    """
+    Get the default VolumeSnapshotClass available in the OCS cluster.
+
+    This helper function retrieves the VolumeSnapshotClass that is marked as default
+    using the annotation 'snapshot.storage.kubernetes.io/is-default-class: "true"'.
+    If a driver is specified, it will return the default snapshot class for that driver.
+
+    Returns:
+        str: The name of the default VolumeSnapshotClass, or None if not found
+
+    Raises:
+        ResourceNotFoundError: If no default VolumeSnapshotClass is found
+
+    Examples:
+        >>> # Get the default volume snapshot class
+        >>> default_snapclass = get_default_volumesnapshotclass()
+        >>> print(default_snapclass)
+        'vpc-block-snapshot'
+    """
+    vsc_obj = ocp.OCP(kind=constants.VOLUMESNAPSHOTCLASS)
+
+    try:
+        volumesnapshotclasses = vsc_obj.get()
+    except Exception as e:
+        logger.error(f"Failed to get VolumeSnapshotClasses: {e}")
+        raise ResourceNotFoundError(
+            "Unable to retrieve VolumeSnapshotClasses from the cluster"
+        )
+
+    for vsc in volumesnapshotclasses.get("items", []):
+        annotations = vsc.get("metadata", {}).get("annotations", {})
+        is_default = (
+            annotations.get("snapshot.storage.kubernetes.io/is-default-class") == "true"
+        )
+
+        if is_default:
+            vsc_name = vsc["metadata"]["name"]
+            return vsc_name
+    else:
+        logger.error("No default VolumeSnapshotClass found in the cluster")
+        raise ResourceNotFoundError(
+            "No default VolumeSnapshotClass found in the cluster. "
+            "Please ensure at least one VolumeSnapshotClass has the annotation "
+            "'snapshot.storage.kubernetes.io/is-default-class: \"true\"'"
+        )
+
+
 def get_snapshot_content_obj(snap_obj):
     """
     Get volume snapshot content of a volume snapshot
@@ -4193,10 +4260,10 @@ def get_event_line_datetime(event_line):
     """
     event_line_dt = None
     regex = r"\d{4}-\d{2}-\d{2}"
-    if re.search(regex + "T", event_line):
+    if re.match(regex + "T", event_line):
         dt_string = event_line[:23].replace("T", " ")
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
-    elif re.search(regex, event_line):
+    elif re.match(regex, event_line):
         dt_string = event_line[:26]
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
 
@@ -4403,25 +4470,9 @@ def induce_mon_quorum_loss():
     # Wait for sometime after the mon crashes
     time.sleep(300)
 
-    # Check the operator log mon quorum lost
-    operator_logs = get_logs_rook_ceph_operator()
-    pattern = (
-        "op-mon: failed to check mon health. "
-        "failed to get mon quorum status: mon "
-        "quorum status failed: exit status 1"
-    )
-    logger.info(f"Check the operator log for the pattern : {pattern}")
-    if not re.search(pattern=pattern, string=operator_logs):
-        logger.error(
-            f"Pattern {pattern} couldn't find in operator logs. "
-            "Mon quorum may not have been lost after deleting "
-            "var/lib/ceph/mon. Please check"
-        )
-        raise UnexpectedBehaviour(
-            f"Pattern {pattern} not found in operator logs. "
-            "Maybe mon quorum not failed or  mon crash failed Please check"
-        )
-    logger.info(f"Pattern found: {pattern}. Mon quorum lost")
+    # Check the mon pods status to verify mon quorum lost
+    for mon in mon_pod_obj:
+        wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
     return mon_pod_obj_list, mon_pod_running[0], ceph_mon_daemon_id
 
@@ -4898,6 +4949,92 @@ def verify_quota_resource_exist(quota_name):
     return quota_name in [
         quota_resource.get("metadata").get("name") for quota_resource in quota_resources
     ]
+
+
+def verify_substrings_in_string(output_string, expected_strings):
+    """
+    Verify all expected substrings are present in the output string
+
+    Args:
+        output_string (str): String to check
+        expected_strings (list): Expected substrings
+
+    Returns:
+        bool: True if all expected strings found, False otherwise
+
+    """
+    for expected_string in expected_strings:
+        if expected_string not in output_string:
+            logger.error(f"Expected string: {expected_string} not in {output_string}")
+            return False
+    return True
+
+
+def wait_for_quota_usage_update(
+    clusterresourcequota_obj,
+    quota_name,
+    quota_key,
+    expected_strings,
+    operation_description,
+    timeout=120,
+):
+    """
+    Wait for ClusterResourceQuota usage to update and verify expected strings
+
+    Args:
+        clusterresourcequota_obj (obj): ClusterResourceQuota OCP object
+        quota_name (str): Name of the quota resource
+        quota_key (str): Quota key to check (e.g., 'requests.storage')
+        expected_strings (list): Strings to verify (e.g., ['8Gi', '7Gi'])
+        operation_description (str): Operation description for logging
+        timeout (int): Timeout in seconds (default: 120)
+
+    Raises:
+        TimeoutExpiredError: If quota usage doesn't update within timeout
+
+    """
+    logger.info(f"Waiting for quota usage to reflect {operation_description}")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=clusterresourcequota_obj.get,
+        resource_name=quota_name,
+    )
+    for quota_resource in sample:
+        # Extract used and hard quota values from the resource
+        try:
+            used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+            hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+
+            # Get storage request values using the specified quota key
+            used_storage = used.get(quota_key, "0")
+            hard_storage = hard.get(quota_key, "0")
+
+            logger.info(
+                f"Quota usage for {quota_name}: "
+                f"used={used_storage}, hard={hard_storage}"
+            )
+
+            # Check if the expected values are present
+            quota_info = f"{used_storage} {hard_storage}"
+            if verify_substrings_in_string(
+                output_string=quota_info,
+                expected_strings=expected_strings,
+            ):
+                logger.info(
+                    f"Quota usage updated successfully after {operation_description}"
+                )
+                return
+        except (KeyError, AttributeError) as e:
+            logger.warning(f"Failed to parse quota resource: {e}")
+            continue
+    else:
+        err_str = (
+            f"Quota usage did not update to show {expected_strings} after {timeout} seconds "
+            f"for {operation_description}."
+        )
+        logger.error(err_str)
+        raise TimeoutExpiredError(err_str)
 
 
 def check_cluster_is_compact():
@@ -5424,18 +5561,27 @@ def add_route_public_nad():
     """
     Add route section to network_attachment_definitions object
 
+    Adds route to shim network for host-to-pod communication in VLAN mode.
+    The shim network is configured via 'multus_public_net_shim_network' ENV_DATA
+    parameter (default: 192.168.252.0/24). This route enables communication between
+    baremetal hosts and pods attached to the public Multus network.
     """
+
     nad_obj = get_network_attachment_definitions(
         nad_name=config.ENV_DATA.get("multus_public_net_name"),
         namespace=config.ENV_DATA.get("multus_public_net_namespace"),
     )
     nad_config_str = nad_obj.data["spec"]["config"]
     nad_config_dict = json.loads(nad_config_str)
-    nad_config_dict["ipam"]["routes"] = [
-        {"dst": config.ENV_DATA["multus_destination_route"]}
-    ]
+
+    shim_network = config.ENV_DATA.get(
+        "multus_public_net_shim_network", "192.168.252.0/24"
+    )
+    nad_config_dict["ipam"]["routes"] = [{"dst": shim_network}]
+    logger.info(f"VLAN mode: Adding route to shim network: {shim_network}")
+
     nad_config_dict_string = json.dumps(nad_config_dict)
-    logger.info("Creating Multus public network")
+
     if config.DEPLOYMENT.get("ipv6"):
         constants.MULTUS_PUBLIC_NET_YAML = constants.MULTUS_PUBLIC_NET_IPV6_YAML
     public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
@@ -5517,16 +5663,53 @@ def delete_csi_holder_pods():
         schedule_nodes([worker_node_name])
 
 
+def ip_from_subnet_offset(subnet: str, offset: int) -> str:
+    """
+    Return an IP address from a subnet offset from the network address.
+
+    The function takes a subnet in CIDR notation and returns the IP address
+    obtained by adding the given offset to the subnet's network address.
+
+    Args:
+        subnet (str): Subnet in CIDR notation (e.g. "192.168.252.0/24").
+        offset (int): Number of IP addresses to add to the network address.
+
+    Returns:
+        str: The resulting IP address as a string.
+
+    Raises:
+        ValueError: If the subnet is invalid or the resulting IP is outside
+            of the subnet range.
+
+    Example:
+        ip_from_subnet_offset("192.168.252.0/24", 5)
+        '192.168.252.5'
+        ip_from_subnet_offset("192.168.252.16/28", 5)
+        '192.168.252.21'
+    """
+    network = ipaddress.ip_network(subnet)
+
+    ip = network.network_address + offset
+    if ip not in network:
+        raise ValueError(f"Offset {offset} is outside of subnet {subnet}")
+
+    return str(ip)
+
+
 def configure_node_network_configuration_policy_on_all_worker_nodes():
     """
     Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
 
+    Supports both traditional shim-based approach and VLAN-based approach.
+    Use multus_use_vlan config parameter to enable VLAN mode.
     """
 
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = node.get_worker_nodes()
     ip_version = "ipv4"
+    use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+
     if (
         config.DEPLOYMENT.get("ipv6")
         and config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
@@ -5535,37 +5718,228 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             constants.NODE_NETWORK_CONFIGURATION_POLICY_IPV6
         )
         ip_version = "ipv6"
+
     interface_num = 0
     for worker_node_name in worker_node_names:
-        node_network_configuration_policy = templating.load_yaml(
-            constants.NODE_NETWORK_CONFIGURATION_POLICY
-        )
+        # Determine which template to use based on VLAN mode
+        if use_vlan:
+            # VLAN-based approach: check if we need single or dual VLAN
+            create_public_net = config.ENV_DATA.get("multus_create_public_net", False)
+            create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net", False)
+
+            if create_public_net and create_cluster_net:
+                # Dual VLAN template
+                logger.info(f"Using dual VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL
+                )
+            elif create_public_net or create_cluster_net:
+                # Single VLAN template
+                logger.info(f"Using single VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN
+                )
+            else:
+                logger.warning("VLAN mode enabled but no networks configured to create")
+                continue
+        else:
+            # Traditional shim-based approach
+            node_network_configuration_policy = templating.load_yaml(
+                constants.NODE_NETWORK_CONFIGURATION_POLICY
+            )
 
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
-            worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
-                worker_node_name
-            ]
+            # Set node selector
             node_network_configuration_policy["spec"]["nodeSelector"][
                 "kubernetes.io/hostname"
             ] = worker_node_name
-            node_network_configuration_policy["metadata"]["name"] = (
-                worker_network_configuration["node_network_configuration_policy_name"]
-            )
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["ip"] = worker_network_configuration[
-                "node_network_configuration_policy_ip"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["prefix-length"] = worker_network_configuration[
-                "node_network_configuration_policy_prefix_length"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["routes"][
-                "config"
-            ][0]["destination"] = worker_network_configuration[
-                "node_network_configuration_policy_destination_route"
-            ]
+
+            if use_vlan:
+                # VLAN-based configuration for BAREMETAL
+                logger.info(
+                    f"Configuring VLAN interfaces for baremetal node {worker_node_name}"
+                )
+                create_public_net = config.ENV_DATA.get(
+                    "multus_create_public_net", False
+                )
+                create_cluster_net = config.ENV_DATA.get(
+                    "multus_create_cluster_net", False
+                )
+
+                if create_public_net and create_cluster_net:
+                    # Configure dual VLAN
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-networks-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    public_vlan_id = config.ENV_DATA.get(
+                        "multus_public_net_vlan_id", 201
+                    )
+                    public_base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{public_base_interface}.{public_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = public_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = public_vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Cluster VLAN configuration (interface 2 - NO IP)
+                    cluster_vlan_id = config.ENV_DATA.get(
+                        "multus_cluster_net_vlan_id", 202
+                    )
+                    cluster_base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["name"] = f"{cluster_base_interface}.{cluster_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["base-iface"] = cluster_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["id"] = cluster_vlan_id
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_public_net:
+                    # Configure single VLAN for public network
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-public-net-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_cluster_net:
+                    # Configure single VLAN for cluster network
+                    # Note: Cluster network does NOT need shim interface per Red Hat docs
+                    # (cluster network is pod-to-pod only, no host connectivity needed)
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-cluster-net-vlan-{worker_node_name}"
+
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # No shim interface or routes needed for cluster network
+
+                # Increment interface_num for next node (for shim IP allocation)
+                if create_public_net:
+                    interface_num += 1
+
+            else:
+                # Traditional shim-based configuration for BAREMETAL without VLANs
+                worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+                    worker_node_name
+                ]
+                node_network_configuration_policy["metadata"]["name"] = (
+                    worker_network_configuration[
+                        "node_network_configuration_policy_name"
+                    ]
+                )
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
+                    "node_network_configuration_policy_ip"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
+                    "node_network_configuration_policy_prefix_length"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                    "config"
+                ][0]["destination"] = worker_network_configuration[
+                    "node_network_configuration_policy_destination_route"
+                ]
         elif config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
 
             node_network_configuration_policy["spec"]["nodeSelector"][
@@ -6156,9 +6530,10 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
         else:
             param = (
-                f'"all": {tolerations}, "api-server": {tolerations}, "csi-plugin": {tolerations}, '
-                f'"csi-provisioner": {tolerations}, "mds": {tolerations}, "metrics-exporter": {tolerations}, '
-                f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}'
+                f'"all": {tolerations}, "api-server": {tolerations}, "blackbox-exporter": {tolerations}, '
+                f'"csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, "mds": {tolerations}, '
+                f'"metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, "rgw": {tolerations}, '
+                f'"toolbox": {tolerations}'
             )
             param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
@@ -6266,10 +6641,31 @@ def remove_toleration():
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
-    params = '[{"op": "remove", "path": "/spec/placement"}]'
-    result = storagecluster_obj.patch(params=params, format_type="json")
-    if not result:
-        logger.error("Failed to remove toleration from storagecluster")
+    try:
+        # Check if placement exists before trying to remove it
+        storagecluster_data = storagecluster_obj.get()
+        if "placement" in storagecluster_data.get("spec", {}):
+            params = '[{"op": "remove", "path": "/spec/placement"}]'
+            result = storagecluster_obj.patch(params=params, format_type="json")
+            if not result:
+                logger.error("Failed to remove toleration from storagecluster")
+                success = False
+            else:
+                logger.info(
+                    "Successfully removed placement section from storagecluster"
+                )
+        else:
+            logger.info(
+                "No placement section found in storagecluster, skipping removal"
+            )
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to remove placement from storagecluster: {e}. "
+            "This may be expected if placement was not previously set."
+        )
+        # Avoided to mark as failure since this might be expected
+    except Exception as e:
+        logger.error(f"Unexpected error removing placement from storagecluster: {e}")
         success = False
     logger.info("Remove tolerations from subscriptions")
 
@@ -6295,20 +6691,56 @@ def remove_toleration():
         )
         driver_list = ocp.get_all_resource_names_of_a_kind(kind=constants.DRIVER)
         for driver_name in driver_list:
-            params = (
-                '[{"op": "remove", "path": "/spec/controllerPlugin/tolerations"},'
-                '{"op": "remove", "path": "/spec/nodePlugin/tolerations"}]'
-            )
-            result = driver_obj.patch(
-                resource_name=driver_name, params=params, format_type="json"
-            )
-            if result:
-                logger.info(
-                    f"Successfully removed tolerations from CSI driver {driver_name}"
+            try:
+                # Check if tolerations exist before attempt to remove toleration
+                driver_data = driver_obj.get(resource_name=driver_name)
+                spec = driver_data.get("spec", {})
+                controller_plugin = spec.get("controllerPlugin") or {}
+                node_plugin = spec.get("nodePlugin") or {}
+
+                # Build patch command if paths exist
+                params = []
+                if (
+                    isinstance(controller_plugin, dict)
+                    and "tolerations" in controller_plugin
+                ):
+                    params.append(
+                        {"op": "remove", "path": "/spec/controllerPlugin/tolerations"}
+                    )
+                if isinstance(node_plugin, dict) and "tolerations" in node_plugin:
+                    params.append(
+                        {"op": "remove", "path": "/spec/nodePlugin/tolerations"}
+                    )
+
+                if params:
+                    result = driver_obj.patch(
+                        resource_name=driver_name,
+                        params=json.dumps(params),
+                        format_type="json",
+                    )
+                    if result:
+                        logger.info(
+                            f"Successfully removed tolerations from CSI driver {driver_name}"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to remove tolerations from CSI driver {driver_name}"
+                        )
+                        success = False
+                else:
+                    logger.info(
+                        f"No tolerations found in CSI driver {driver_name}, skipping removal"
+                    )
+            except CommandFailed as e:
+                # Handle case where patch fails (e.g., path doesn't exist)
+                logger.warning(
+                    f"Failed to remove tolerations from CSI driver {driver_name}: {e}. "
+                    "This may be expected if tolerations were not previously added."
                 )
-            else:
+                # Don't mark as failure since this might be expected in negative test cases
+            except Exception as e:
                 logger.error(
-                    f"Failed to remove tolerations from CSI driver {driver_name}"
+                    f"Unexpected error while removing tolerations from CSI driver {driver_name}: {e}"
                 )
                 success = False
 

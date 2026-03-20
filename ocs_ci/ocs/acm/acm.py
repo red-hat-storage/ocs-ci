@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
 )
 
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.helpers.dr_helpers import get_cluster_set_name
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -40,6 +41,7 @@ from ocs_ci.utility.utils import (
     get_running_acm_version,
     string_chunkify,
     run_cmd,
+    get_client_type_by_name,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
@@ -200,6 +202,15 @@ class AcmAddClusters(AcmPageNavigator):
 
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
         cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
+        if dr_cluster_relations:
+            if is_hosted_cluster(cluster_name_a):
+                cluster_name_a = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_a}"
+                )
+            if is_hosted_cluster(cluster_name_b):
+                cluster_name_b = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_b}"
+                )
         self.navigate_clusters_page()
         self.page_has_loaded(retries=15, sleep_time=5)
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
@@ -273,10 +284,36 @@ class AcmAddClusters(AcmPageNavigator):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
+        azure_ipi_clusters_indices = [
+            cluster_index
+            for cluster_index in [primary_index, secondary_index]
+            if config.clusters[cluster_index].ENV_DATA["platform"]
+            == constants.AZURE_PLATFORM
+            and config.clusters[cluster_index].ENV_DATA.get("deployment_type") == "ipi"
+        ]
+
         increase_gateway_number = 2
-        if ibm_cloud_managed:
+        if ibm_cloud_managed or azure_ipi_clusters_indices:
             increase_gateway_number = 1
+
+        found_azure_page = False
         for cluster_nr in range(1, 3):
+            if azure_ipi_clusters_indices:
+                try:
+                    azure_page = self.get_element_text(
+                        self.page_nav["submariner_addon_azure_page"]
+                    )
+                    found_azure_page = True
+                    azure_index = [
+                        cluster_index
+                        for cluster_index in azure_ipi_clusters_indices
+                        if config.clusters[cluster_index].ENV_DATA["cluster_name"]
+                        in azure_page
+                    ][0]
+                    self.enter_azure_details(azure_cluster_index=azure_index)
+                except NoSuchElementException:
+                    if (not found_azure_page) and cluster_nr == 2:
+                        raise
             if not ibm_cloud_managed:
                 log.info(
                     f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
@@ -303,6 +340,25 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+
+        # Add loadBalancerEnable: true and hostedCluster: true in the submarinerconfig for kubevirt hcp clusters
+        if dr_cluster_relations:
+            for dr_cluster in [primary_index, secondary_index]:
+                cluster_name = config.get_cluster_name_by_index(dr_cluster)
+                if get_client_type_by_name(cluster_name) == "kubevirt":
+                    cluster_name = (
+                        f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                    )
+                    submariner_config = OCP(
+                        kind=constants.SUBMARINERCONFIG,
+                        namespace=cluster_name,
+                        resource_name="submariner",
+                    )
+                    patch_param = (
+                        '[{"op": "replace", "path": "/spec/hostedCluster", "value": true }, '
+                        '{"op": "replace", "path": "/spec/loadBalancerEnable", "value": true }]'
+                    )
+                    submariner_config.patch(params=patch_param, format_type="json")
         return cluster_set_name
 
     def submariner_downstream_info(self):
@@ -344,11 +400,19 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
         timeout = 600
+        cluster_set_name = (
+            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+        )
+        azure_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get(
+            selector=f"cluster.open-cluster-management.io/clusterset={cluster_set_name},cloud=Azure",
+            dont_raise=True,
+        )
+
         ibm_cloud_managed = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
-        if ibm_cloud_managed:
+        if ibm_cloud_managed or azure_clusters:
             timeout = 2100
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
@@ -362,9 +426,6 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
-        cluster_set_name = (
-            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
-        )
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
@@ -468,6 +529,7 @@ class AcmAddClusters(AcmPageNavigator):
                     if config.ENV_DATA.get("submariner_channel")
                     else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
                 )
+
                 channel_name = "stable-" + submariner_channel
                 subscription_config = {
                     "source": "submariner-catalogsource",
@@ -537,6 +599,38 @@ class AcmAddClusters(AcmPageNavigator):
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
         config.switch_ctx(old_ctx)
+
+    def enter_azure_details(self, azure_cluster_index):
+        """
+        Enter Azure details in Submariner install page
+
+        Args:
+            azure_cluster_index (str): The index of the Azure cluster
+
+        """
+        log.info("Enter Azure cluster details")
+        self.do_send_keys(
+            self.page_nav["azure_base_domain_resource_group"],
+            config.clusters[azure_cluster_index].ENV_DATA.get(
+                "azure_base_domain_resource_group_name"
+            ),
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_secret"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_secret"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_subscription_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["subscription_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_tenent_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["tenant_id"],
+        )
 
 
 def copy_kubeconfig(file=None, return_str=False):

@@ -81,6 +81,11 @@ class StorageClusterSetup(object):
         if config.ENV_DATA.get("odf_provider_mode_deployment", False):
             cluster_data["spec"]["providerAPIServerServiceType"] = "NodePort"
 
+        if config.DEPLOYMENT.get("provider_api_server_service_type"):
+            cluster_data["spec"]["providerAPIServerServiceType"] = (
+                config.DEPLOYMENT.get("provider_api_server_service_type")
+            )
+
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
             comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
@@ -135,7 +140,7 @@ class StorageClusterSetup(object):
             and self.ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
-            and not (self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS)
+            and self.platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
@@ -196,6 +201,13 @@ class StorageClusterSetup(object):
             ] = f"{device_size}Gi"
 
         # set storage class to OCS default on current platform
+        if not config.ENV_DATA.get("storage_class"):
+            resolved_sc = storage_class.get_storageclass()
+            if resolved_sc:
+                logger.info(
+                    f"No storage_class in config, resolved from platform: {resolved_sc}"
+                )
+                config.ENV_DATA["storage_class"] = resolved_sc
         if config.ENV_DATA.get("storage_class"):
             deviceset_data["dataPVCTemplate"]["spec"]["storageClassName"] = (
                 config.ENV_DATA["storage_class"]
@@ -303,6 +315,31 @@ class StorageClusterSetup(object):
             )["hostNetwork"] = False
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
+        if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
+            pv_size_list = helpers.get_pv_size(
+                storageclass=constants.DEFAULT_STORAGECLASS_LSO + "-part"
+            )
+            pv_size_list.sort()
+            deviceset_data_part = deepcopy(deviceset_data)
+            deviceset_data_part["name"] = (
+                constants.DEFAULT_DEVICESET_LSO_PVC_NAME + "-part"
+            )
+            if config.ENV_DATA.get("storage_class"):
+                deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
+                    config.ENV_DATA["storage_class"] + "-part"
+                )
+            elif deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"]:
+                deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"] = (
+                    deviceset_data_part["dataPVCTemplate"]["spec"]["storageClassName"]
+                    + "-part"
+                )
+            deviceset_data_part["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = f"{pv_size_list[0]}"
+            deviceset_data_part["primaryAffinity"] = config.DEPLOYMENT.get(
+                "partitioned_disk_primary_affinity", "0.0"
+            )
+            cluster_data["spec"]["storageDeviceSets"].append(deviceset_data_part)
 
         if self.managed_ibmcloud:
             mon_pvc_template = {
@@ -444,9 +481,57 @@ class StorageClusterSetup(object):
                 db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
             )
             create_external_pgsql_secret()
-            cluster_data["spec"]["multiCloudGateway"] = {
-                "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
+            merge_dict(
+                cluster_data,
+                {
+                    "spec": {
+                        "multiCloudGateway": {
+                            "externalPgConfig": {
+                                "pgSecretName": constants.NOOBAA_POSTGRES_SECRET
+                            }
+                        }
+                    }
+                },
+            )
+            config.ENV_DATA.set("noobaa_db_backup_enabled", False)
+        # Add NooBaa DB backup configuration if enabled
+        if config.ENV_DATA.get("noobaa_db_backup_enabled"):
+            log_step("Adding NooBaa DB backup configuration to StorageCluster")
+            db_schedule_map = {
+                "daily": "0 0 * * *",
+                "Weekly": "0 0 * * 0",
+                "Monthly": "0 0 1 * *",
             }
+            schedule_cron_interval = db_schedule_map[
+                config.ENV_DATA.get("noobaa_db_backup_schedule", "daily")
+            ]
+            max_snapshots = config.ENV_DATA.get("noobaa_db_backup_max_snapshots", 5)
+            snapshot_class = config.ENV_DATA.get(
+                "noobaa_db_backup_snapshot_class",
+                constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
+            )
+            merge_dict(
+                cluster_data,
+                {
+                    "spec": {
+                        "multiCloudGateway": {
+                            "dbBackup": {
+                                "schedule": schedule_cron_interval,
+                                "volumeSnapshot": {
+                                    "maxSnapshots": max_snapshots,
+                                    "volumeSnapshotClass": snapshot_class,
+                                },
+                            },
+                        }
+                    }
+                },
+            )
+            logger.info(
+                f"NooBaa DB backup configuration added to StorageCluster: "
+                f"schedule={schedule_cron_interval}, "
+                f"maxSnapshots={max_snapshots}, "
+                f"volumeSnapshotClass={snapshot_class}"
+            )
         # To be able to verify: https://bugzilla.redhat.com/show_bug.cgi?id=2276694
         wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
             "wait_timeout_for_healthy_osd_in_minutes"

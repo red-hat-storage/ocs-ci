@@ -25,6 +25,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
     get_pods_having_label,
+    wait_for_matching_pattern_in_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import (
@@ -281,6 +282,7 @@ def relocate(
     workload_instance=None,
     multi_ns=False,
     workload_instances_shared=None,
+    vm_auto_cleanup=False,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -296,6 +298,7 @@ def relocate(
         workload_instance (object): Discovered App instance to get namespace and dir location
         multi_ns (bool): Multi Namespace
         workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
+        vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
 
     """
     restore_index = config.cur_index
@@ -338,7 +341,12 @@ def relocate(
             old_primary=old_primary, workload_instance=workload_instance
         )
     else:
-        if discovered_apps and workload_instance and not workload_instances_shared:
+        if (
+            discovered_apps
+            and workload_instance
+            and not workload_instances_shared
+            and not vm_auto_cleanup
+        ):
             logger.info("Doing Cleanup Operations")
             do_discovered_apps_cleanup(
                 drpc_name=workload_placement_name,
@@ -347,7 +355,12 @@ def relocate(
                 workload_dir=workload_instance.workload_dir,
                 vrg_name=workload_instance.discovered_apps_placement_name,
             )
-        elif discovered_apps and workload_instance and workload_instances_shared:
+        elif (
+            discovered_apps
+            and workload_instance
+            and workload_instances_shared
+            and not vm_auto_cleanup
+        ):
             logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
             for cnv_wl in workload_instances_shared:
                 do_discovered_apps_cleanup(
@@ -454,8 +467,13 @@ def check_mirroring_status_ok(
             if current_stopped_value in expected_value:
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
                 return True
-            else:
-                return False
+            # Fail fast if count exceeds expected range - indicates leftover resources
+            if current_value > max(expected_value):
+                raise UnexpectedBehaviour(
+                    f"Replaying count ({current_value}) exceeds expected ({max(expected_value)}). "
+                    f"Clean up leftover DRPCs and namespaces before retrying."
+                )
+            return False
 
     return True
 
@@ -1235,7 +1253,8 @@ def get_backend_volumes_for_pvcs(namespace):
         logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            if pvc_obj.name.startswith("volsync"):
+            # Skip volsync related PVCs
+            if pvc_obj.name.startswith("volsync") or pvc_obj.name.startswith("vs-"):
                 continue
 
             if pvc_obj.backed_sc in [
@@ -2388,7 +2407,7 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
             "There is no lastKubeObjectProtectionTime. "
             "Verify that certificates are included correctly in the Ramen Hub configuration map."
         )
-    # Verify lastGroupSyncTime
+    # Verify lastKubeObjectProtectionTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
     last_kubeobject_protection_time_formatted = datetime.strptime(
         last_kubeobject_protection_time, time_format
@@ -2581,8 +2600,8 @@ def create_service_exporter(annotate=True):
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
         if (
-            get_provider_service_type() != "NodePort"
-            and cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
+            cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
+            or get_provider_service_type() == "NodePort"
         ):
             logger.info("Skipping ServiceExport creation for multiclient cluster")
             continue
@@ -2705,26 +2724,31 @@ def validate_volumegroupsnapshot(vgs_namespace):
     Validates Volume Group Snapshot resource creation from odf external snapshotter
 
     Args:
-        namespace (str): the namespace of the Volume Group snapshot resources
+        vgs_namespace (str): the namespace of the Volume Group snapshot resources
 
     """
-    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = config.ENV_DATA["cluster_namespace"]
     odf_external_snapshotter_pod = get_pods_having_label(
         constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
     )[0]["metadata"]["name"]
     vgs_name = get_vgs_name(vgs_namespace)
-    sample = TimeoutSampler(
-        timeout=300,
-        sleep=5,
-        func=run_cmd_verify_cli_output,
-        cmd=f"oc logs {odf_external_snapshotter_pod} -n {namespace}",
-        expected_output_lst=(
-            f"{vgs_name} was successfully created by the CSI driver",
-            f"{vgs_name} is ready to use",
-        ),
+    expected_output_lst = (
+        f"{vgs_name} was successfully created by the CSI driver",
+        f"{vgs_name} is ready to use",
     )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("VolumeGroupSnapshot has not been created..")
+    try:
+        for expected_val in expected_output_lst:
+            wait_for_matching_pattern_in_pod_logs(
+                pod_name=odf_external_snapshotter_pod,
+                pattern=expected_val,
+                namespace=namespace,
+                timeout=300,
+                sleep=5,
+            )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+        )
 
 
 def is_cg_cephfs_enabled():
@@ -2738,3 +2762,39 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+
+def validate_protection_label(kind, namespace, protection_name=None):
+    """
+    Gets the yaml file for specified resource kind in the given namespace
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VM, constants.PVC, etc.)
+        namespace (str): the namespace of the specified resource
+        protection_name (str) : name of protection in UI
+
+    Raises:
+        AssertionError: If the protection label is not found on any of the resources of the
+        specified kind in the given namespace
+
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+    resource_items = resource_obj.get().get("items", [])
+
+    label_to_validate = constants.RDR_VM_PROTECTION_LABEL
+    label_validation_failed = False
+    for item in resource_items:
+        protection_name_in_yaml = (
+            item.get("metadata", {}).get("labels", {}).get(label_to_validate, " ")
+        )
+
+        if protection_name_in_yaml != protection_name:
+            logger.info(f"Label is not added to {kind} {item}")
+            label_validation_failed = True
+
+    assert not label_validation_failed, f"Label is not added to one or more {kind}"
+
+    logger.info(
+        f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
+    )

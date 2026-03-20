@@ -33,7 +33,13 @@ class DeploymentFactory(object):
                 }
             )
         elif self.deployment_platform == constants.VSPHERE_PLATFORM:
-            from .vmware import VSPHEREUPI, VSPHEREIPI, VSPHEREUPIFlexy, VSPHEREAI
+            from .vmware import (
+                VSPHEREUPI,
+                VSPHEREIPI,
+                VSPHEREUPIFlexy,
+                VSPHEREAI,
+                VSPHEREAgentAI,
+            )
 
             self.cls_map.update(
                 {
@@ -41,6 +47,9 @@ class DeploymentFactory(object):
                     "vsphere_ipi": VSPHEREIPI,
                     "vsphere_upi_flexy": VSPHEREUPIFlexy,
                     "vsphere_ai": VSPHEREAI,
+                    # this deployment type is not independent and rely on hub cluster existence and InfraEnv resource
+                    # therefore this is just a placeholder here to stick with the factory pattern
+                    "vsphere_ai_agent": VSPHEREAgentAI,
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:

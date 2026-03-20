@@ -170,6 +170,9 @@ MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
 MUST_GATHER_TIMEOUT = 3600
 
+# AI / Claude Code defaults:
+AI_GCP_CREDENTIALS_PATH = os.path.expanduser("~/.gcp/gcp-auth.json")
+
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
 
@@ -179,7 +182,7 @@ IBM_CLOUD_LOAD_BALANCER_QUOTA = 100
 IBM_CLOUD_REGIONS = {"us-south", "us-east"}
 
 # HyperShift defaults
-HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 2
+HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 3
 HYPERSHIFT_MEMORY_DEFAULT = "12Gi"
 HYPERSHIFT_CPU_CORES_DEFAULT = 6
 HOSTED_ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"

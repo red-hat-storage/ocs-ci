@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 
-osd_sizes = ("512", "2048", "4096")
+osd_sizes = ("512", "2048", "4096", "0.5 TiB", "1 TiB", "2 TiB", "4 TiB", "8 TiB")
 
 OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
@@ -28,6 +28,9 @@ login = {
         By.CSS_SELECTOR,
     ),
     "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),
+    # Console logout locators
+    "user_dropdown": ("//button[contains(@class, 'co-user-menu')]", By.XPATH),
+    "logout_button": ("//span[text()='Log out']/ancestor::button", By.XPATH),
 }
 
 ibm_cloud_managed = (
@@ -335,6 +338,10 @@ deployment_4_21 = {
         By.XPATH,
     ),
     "0.5 TiB": ('//li[@data-test-dropdown-menu="0.5 TiB"]/button', By.XPATH),
+    "1 TiB": ('//li[@data-test-dropdown-menu="1 TiB"]/button', By.XPATH),
+    "2 TiB": ('//li[@data-test-dropdown-menu="2 TiB"]/button', By.XPATH),
+    "4 TiB": ('//li[@data-test-dropdown-menu="4 TiB"]/button', By.XPATH),
+    "8 TiB": ('//li[@data-test-dropdown-menu="8 TiB"]/button', By.XPATH),
     "drop_down_performance": (
         "//button[contains(@class,'odf-configure-performance__selector')]",
         By.XPATH,
@@ -788,6 +795,18 @@ pvc_4_19 = {
     ),
     "new-capacity": (
         "//dd[@data-test-id='pvc-capacity']//div[text()='{}']",
+        By.XPATH,
+    ),
+}
+
+pvc_4_21 = {
+    "search_pvc": ("input[placeholder='Filter by name']", By.CSS_SELECTOR),
+    "pvc_filter_dropdown_status": (
+        "//div[contains(@class, 'pf-m-filter-group')]//button[.//span[normalize-space()='Status']]",
+        By.XPATH,
+    ),
+    "pvc_filter_name_option": (
+        "//li[.//span[normalize-space()='Name']]",
         By.XPATH,
     ),
 }
@@ -1461,6 +1480,38 @@ acm_configuration_4_20 = {
     "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
     "cnv-vm-name": ('//a[@data-test-id="{}"]', By.XPATH),
     "vm-actions": ('//div[@data-test="actions-dropdown"]', By.XPATH),
+    "azure_base_domain_resource_group": (
+        "//input[@id='baseDomainResourceGroupName']",
+        By.XPATH,
+    ),
+    "azure_client_id": ("//input[@id='clientId']", By.XPATH),
+    "azure_client_secret": ("//input[@id='clientSecret']", By.XPATH),
+    "azure_subscription_id": ("//input[@id='subscriptionId']", By.XPATH),
+    "azure_tenent_id": ("//input[@id='tenantId']", By.XPATH),
+    "submariner_addon_azure_page": (
+        "//*[contains(text(), 'on Microsoft Azure')]",
+        By.XPATH,
+    ),
+}
+
+acm_configuration_4_21 = {
+    "vm-actions": ('//button[@data-test="actions-dropdown"]', By.XPATH),
+    "dr-policy": (
+        "//button[@aria-label='Typeahead single select']",
+        By.XPATH,
+    ),
+    "select-policy": (
+        "//div[@id='dr-policy-dropdown']",
+        By.XPATH,
+    ),
+    "vm-page-next-btn": (
+        "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Next')]",
+        By.XPATH,
+    ),
+    "assign": (
+        "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Assign')]",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
@@ -1497,6 +1548,23 @@ add_capacity = {
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
+attach_storage = {
+    "storage_cluster_actions": (
+        '[data-test-id="details-actions"] button[data-test="kebab-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "attach_storage_button": ("ATTACH_STORAGE", By.ID),
+    "device_class_input": ("device-class", By.ID),
+    "type_block_btn": ("type-block", By.ID),
+    "type_fs_btn": ("type-filesystem", By.ID),
+    "pool_name_input": ("pool-name", By.ID),
+    "select_replication_dropdown": ("replica-dropdown", By.ID),
+    "replication_2": ("//button[contains(., '2-way Replication')]", By.XPATH),
+    "replication_3": ("//button[contains(., '3-way Replication')]", By.XPATH),
+    "new_sc_name_input": ("attach-storage-storageclass-name", By.ID),
+    "confirm_action_btn": ('[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+}
+
 add_capacity_4_11 = {
     "thin_sc": ("thin-link", By.ID),
     "gp2_sc": ("gp2-link", By.ID),
@@ -1514,13 +1582,15 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//span[text()='Actions']/.. | //button[@data-test='kebab-button']",
+        "//button[@data-test='storage-pool-kebab-button'] | //button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
+    "title_pool_details_page": ("//title[@data-telemetry='Details']", By.XPATH),
 }
 block_pool_4_13 = {
     "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
@@ -1614,8 +1684,9 @@ block_pool = {
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
     "status_text_in_pool": (
         "//div[contains(@class, '-c-card__body')]//span[@data-test='status-text']",
@@ -1863,6 +1934,7 @@ validation = {
         "button[data-test='horizontal-link-Block and File']",
         By.CSS_SELECTOR,
     ),
+    "storage_cluster_title": ('[data-test-id="resource-title"]', By.CSS_SELECTOR),
 }
 
 validation_4_7 = {
@@ -2221,6 +2293,82 @@ validation_4_20 = {
         "//a[contains(@class, '-c-breadcrumb__link') and text()='Storage pools']",
         By.XPATH,
     ),
+}
+
+validation_4_21 = {
+    "breadcrumbs": (
+        "//a[contains(@class, '-c-breadcrumb__link') and text()='Overview']",
+        By.XPATH,
+    ),
+    "silenced_alerts_btn": ("//span[contains(text(), 'Silenced Alerts')]/..", By.XPATH),
+    "last_24_hours_btn": ("//span[contains(text(), 'Last 24 hours')]/..", By.XPATH),
+    "severity_filter": (
+        "//button[contains(@class,'health-overview-filter-toolbox__check-type')]",
+        By.XPATH,
+    ),
+    "severity": (
+        "//button//span[contains(text(),'{}')]",
+        By.XPATH,
+    ),
+    "filter_by_details": (
+        "//input[@placeholder='Find by name or details'] | //input[@placeholder='Find by name']",
+        By.XPATH,
+    ),
+    "issue_table_checkbox": (
+        "//input[@name='check-all']",
+        By.XPATH,
+    ),
+    "silence_alerts": (
+        "//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "unsilence_alerts": (
+        "//button[normalize-space()='Unsilence']",
+        By.XPATH,
+    ),
+    "silence_popup": (
+        "//span[contains(text(),'Silence alert')]",
+        By.XPATH,
+    ),
+    "duration_input": (
+        "//input[@name='duration']",
+        By.XPATH,
+    ),
+    "duration_increase": (
+        "//button[@aria-label='Increase duration']",
+        By.XPATH,
+    ),
+    "duration_decrease": (
+        "//button[@aria-label='Decrease duration']",
+        By.XPATH,
+    ),
+    "silence_popup_button": (
+        "//footer//button[normalize-space()='Silence']",
+        By.XPATH,
+    ),
+    "infra_health_checks": (
+        "//a[text()='View health checks']",
+        By.XPATH,
+    ),
+    # web element returns overall score with text like '66%'
+    "infra_health_score": (
+        "//div[@class='odf-infrastructure-health-card__score']//h2",
+        By.XPATH,
+    ),
+    # web element returns number of checks with text like '3'
+    "critical_issues_count": (
+        "//small[normalize-space(.)='Critical']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "moderate_issues_count": (
+        "//small[normalize-space(.)='Moderate']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "minor_issues_count": (
+        "//small[normalize-space(.)='Minor']/preceding-sibling::h4",
+        By.XPATH,
+    ),
+    "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
 }
 
 topology = {
@@ -2871,6 +3019,41 @@ bucket_tab = {
         "#expired-delete-marker",
         By.CSS_SELECTOR,
     ),
+    "s3_login_project_dropdown": (
+        "//span[text()='Secret namespace']/ancestor::div[contains(@class, 'form__group')]"
+        "//div[contains(@class, 'odf-s3-secret__dropdown')]//button",
+        By.XPATH,
+    ),
+    "s3_login_secret_dropdown": (
+        "//span[text()='Secret name']/ancestor::div[contains(@class, 'form__group')]"
+        "//div[contains(@class, 'odf-s3-secret__dropdown')]//button",
+        By.XPATH,
+    ),
+    "s3_login_dropdown_search": (
+        "search-bar",
+        By.ID,
+    ),
+    "s3_login_dropdown_item": (
+        "//span[@class='odf-resource-item' and contains(., '{}')]",
+        By.XPATH,
+    ),
+    "s3_login_sign_in_button": (
+        "//button[text()='Sign in']",
+        By.XPATH,
+    ),
+    "s3_login_success_label": (
+        "//*[contains(text(), 'Signed in with credentials')]",
+        By.XPATH,
+    ),
+    "s3_login_selected_project": (
+        "//span[text()='Secret namespace']/ancestor::div[contains(@class, 'form__group')]"
+        "//span[@class='odf-resource-item']",
+        By.XPATH,
+    ),
+    "s3_login_selected_secret": (
+        "//span[text()='Secret name']/ancestor::div[contains(@class, 'form__group')]//span[@class='odf-resource-item']",
+        By.XPATH,
+    ),
 }
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
@@ -2890,6 +3073,112 @@ data_foundation_overview = {
     "external_storage_systems_link": (
         "//button[normalize-space()='View external systems']",
         By.XPATH,
+    ),
+}
+external_systems = {
+    "connect_external_system": (
+        "//button[@data-test='configure-external-systems']",
+        By.XPATH,
+    ),
+    "connect_flash": (
+        "connect-flash-system",
+        By.ID,
+    ),
+    "connect_scale": (
+        "setup-scale-storage",
+        By.ID,
+    ),
+    "next_button": (
+        "//button[contains(text(), 'Next')]",
+        By.XPATH,
+    ),
+    "scale_name": (
+        "name",
+        By.ID,
+    ),
+    "selected_nodes": (
+        "use-selected-nodes",
+        By.ID,
+    ),
+    "mandatory_endpoit": (
+        "mandatory-endpoint-host",
+        By.ID,
+    ),
+    "mandatory_port": (
+        "mandatory-endpoint-port",
+        By.ID,
+    ),
+    "scale_username": (
+        "userName",
+        By.ID,
+    ),
+    "scale_password": (
+        "password",
+        By.ID,
+    ),
+    "filesystem_name": (
+        "fileSystemName",
+        By.ID,
+    ),
+    "connect_scale_final": (
+        "button[data-test='connect-scale-system']",
+        By.CSS_SELECTOR,
+    ),
+    "alert_description": (
+        "[class*='-c-alert__description']",
+        By.CSS_SELECTOR,
+    ),
+    "filter": (
+        "//input[@data-test='name-filter-input']",
+        By.XPATH,
+    ),
+    "actions_button": (
+        "//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "add_filesystem": (
+        "ADD_REMOTE_FILE_SYSTEM",
+        By.ID,
+    ),
+    "filesystem_name_input": (
+        "input[name='remoteFileSystemName']",
+        By.CSS_SELECTOR,
+    ),
+    "add_button": (
+        "//footer//button[contains(text(), 'Add')]",
+        By.XPATH,
+    ),
+    "scale_link": (
+        "//a[contains(@href, '/odf/external-systems/scale')]",
+        By.XPATH,
+    ),
+    "filesystem_link": (
+        "//td/a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "delete_filesystem": (
+        "Delete",
+        By.ID,
+    ),
+    "confirm_delete": (
+        "//button[@data-test='delete-action']",
+        By.XPATH,
+    ),
+    "scale_dashboard_link": (
+        "a[href*='scale.spectrum.ibm']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_operator_health": (
+        "div[data-item-id='Operator-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "scale_connection_health": (
+        "div[data-item-id='Connection-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "breadcrumb-link": (
+        "a[data-test-id='breadcrumb-link-0']",
+        By.CSS_SELECTOR,
     ),
 }
 locators = {
@@ -2920,6 +3209,7 @@ locators = {
             **pvc_4_12,
             **pvc_4_14,
             **pvc_4_19,
+            **pvc_4_21,
         },
         "acm_page": {
             **acm_page_nav,
@@ -2934,6 +3224,7 @@ locators = {
             **acm_configuration_4_19,
             **acm_page_nav_420,
             **acm_configuration_4_20,
+            **acm_configuration_4_21,
         },
         "validation": {
             **validation,
@@ -2947,6 +3238,7 @@ locators = {
             **validation_4_17,
             **validation_4_18,
             **validation_4_20,
+            **validation_4_21,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
@@ -2955,7 +3247,9 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
+        "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
+        "attach_storage": attach_storage,
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -3019,6 +3313,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
+        "external_systems": external_systems,
     },
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},

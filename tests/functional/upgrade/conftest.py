@@ -16,6 +16,10 @@ from ocs_ci.ocs.resources.pod import Pod, cal_md5sum
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.utility.utils import run_ceph_health_cmd, TimeoutSampler
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_storage_cluster,
+    StorageCluster,
+)
 
 
 log = logging.getLogger(__name__)
@@ -849,3 +853,143 @@ def mon_pod_down(request):
 
     request.addfinalizer(finalizer)
     return mon_deployment_name
+
+
+@pytest.fixture(scope="function")
+def storagecluster_to_progressing(request):
+    """
+    Fixture that patches StorageCluster resourceProfile to trigger Progressing
+    state and restores it in teardown.
+
+    This fixture changes the resourceProfile spec field, which triggers a
+    Progressing state transition (3-5 minutes).
+
+    Returns:
+        str: The StorageCluster resource name that was patched
+
+    """
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    # Get StorageCluster object
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_data = sc_obj.get()
+    sc_items = sc_data.get("items", [])
+    if not sc_items:
+        pytest.skip("No StorageCluster found in namespace")
+
+    sc_name = sc_items[0]["metadata"]["name"]
+    storage_cluster = StorageCluster(resource_name=sc_name, namespace=namespace)
+    storage_cluster.reload_data()
+
+    # Get current resourceProfile value
+    current_spec = storage_cluster.data.get("spec", {})
+    original_resource_profile = current_spec.get("resourceProfile")
+    log.info(
+        f"Current StorageCluster {sc_name} resourceProfile: "
+        f"{original_resource_profile}"
+    )
+
+    # Determine new resourceProfile value to trigger Progressing state
+    # Cycle through available profiles: balanced -> performance -> lean
+    # or set to a different value if already set
+    available_profiles = [
+        constants.PERFORMANCE_PROFILE_BALANCED,
+        constants.PERFORMANCE_PROFILE_PERFORMANCE,
+        constants.PERFORMANCE_PROFILE_LEAN,
+    ]
+    if original_resource_profile in available_profiles:
+        # Get next profile in cycle
+        current_index = available_profiles.index(original_resource_profile)
+        new_resource_profile = available_profiles[
+            (current_index + 1) % len(available_profiles)
+        ]
+    else:
+        # If no profile set or unknown, set to balanced
+        new_resource_profile = constants.PERFORMANCE_PROFILE_BALANCED
+
+    log.info(
+        f"Patching StorageCluster {sc_name} resourceProfile from "
+        f"{original_resource_profile} to {new_resource_profile} to trigger "
+        "Progressing state"
+    )
+
+    # Patch StorageCluster to change resourceProfile
+    patch_params = f'{{"spec": {{"resourceProfile": "{new_resource_profile}"}}}}'
+    storage_cluster.patch(params=patch_params, format_type="merge")
+    log.info(
+        f"Successfully patched StorageCluster {sc_name} resourceProfile to "
+        f"{new_resource_profile}"
+    )
+
+    # Wait for StorageCluster to transition to Progressing state
+    log.info("Waiting for StorageCluster to transition to Progressing state...")
+    timeout = 300  # 5 minutes
+
+    def check_progressing():
+        """Check if StorageCluster is in Progressing phase"""
+        storage_cluster.reload_data()
+        phase = storage_cluster.data.get("status", {}).get("phase")
+        log.info(f"StorageCluster phase: {phase}")
+        return phase == constants.STATUS_PROGRESSING
+
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=check_progressing,
+    )
+
+    try:
+        if sample.wait_for_func_status(result=True):
+            log.info(
+                f"StorageCluster {sc_name} successfully transitioned to "
+                "Progressing state"
+            )
+        else:
+            log.warning(
+                f"StorageCluster {sc_name} did not reach Progressing state "
+                "within timeout, but continuing with test"
+            )
+    except Exception as e:
+        log.warning(
+            f"Failed to verify Progressing state for StorageCluster "
+            f"{sc_name}: {e}. Continuing with test."
+        )
+
+    # Add finalizer to restore original resourceProfile
+    def finalizer():
+        """Teardown: Restore original resourceProfile"""
+        log.info(
+            f"Restoring StorageCluster {sc_name} resourceProfile to "
+            f"{original_resource_profile}..."
+        )
+        try:
+            storage_cluster.reload_data()
+            if original_resource_profile is None:
+                # Remove resourceProfile if it was not set originally
+                patch_params = '[{"op": "remove", "path": "/spec/resourceProfile"}]'
+                storage_cluster.patch(params=patch_params, format_type="json")
+            else:
+                # Restore original resourceProfile
+                patch_params = (
+                    f'{{"spec": {{"resourceProfile": '
+                    f'"{original_resource_profile}"}}}}'
+                )
+                storage_cluster.patch(params=patch_params, format_type="merge")
+            log.info(
+                f"Successfully restored StorageCluster {sc_name} "
+                f"resourceProfile to {original_resource_profile}"
+            )
+
+            # Wait for StorageCluster to return to Ready state
+            log.info("Waiting for StorageCluster to return to Ready state...")
+            storage_cluster.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
+            log.info(f"StorageCluster {sc_name} returned to Ready state")
+        except Exception as e:
+            log.error(
+                f"Failed to restore StorageCluster {sc_name} " f"resourceProfile: {e}"
+            )
+            # Log but don't fail - this is teardown
+
+    request.addfinalizer(finalizer)
+    return sc_name

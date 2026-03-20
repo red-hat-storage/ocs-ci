@@ -106,11 +106,13 @@ class PlatformNodesFactory:
             "vsphere_ipi": VMWareIPINodes,
             "rosa": AWSNodes,
             "rosa_hcp": ROSAHCPNode,
+            "aws_hcp": HypershiftAWSNode,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
             "hci_baremetal": IBMCloudBMNodes,
             "kubevirt_vm": KubevirtVMNodes,
             "ibm_cloud_ipi": IBMCloudIPI,
+            "baremetal_ai": IBMCloudBMNodes,
         }
 
     def get_nodes_platform(self):
@@ -122,12 +124,12 @@ class PlatformNodesFactory:
                 platform += "_lso"
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
-        elif (
-            config.hci_client_exist()
-            and get_client_type_by_name(cluster_name)
-            == constants.HOSTED_CLUSTER_KUBEVIRT
-        ):
-            platform = "kubevirt_vm"
+        elif config.hci_client_exist():
+            client_type = get_client_type_by_name(cluster_name)
+            if client_type == constants.HOSTED_CLUSTER_KUBEVIRT:
+                platform = "kubevirt_vm"
+            elif client_type == constants.AWS_PLATFORM:
+                platform = "aws_hcp"
 
         if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "managed_cp":
@@ -136,6 +138,11 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ipi":
                 platform += "_ipi"
+
+        if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ai":
+                platform += "_ai"
+
         return self.cls_map[platform]()
 
 
@@ -3706,5 +3713,164 @@ class ROSAHCPNode(AWSNodes):
         for _ in range(num_nodes):
             # adding created nodes to the list of a nodes returned by this method
             node_list.append(ROSAHCPNode(node_conf, constants.RHCOS))
+
+        return node_list
+
+
+class HypershiftAWSNode(AWSNodes):
+    """
+    AWS HCP (Hypershift) Nodes class.
+
+    Manages worker nodes for AWS HCP clusters deployed via the hypershift CLI.
+    Unlike ROSA HCP which uses ``rosa`` CLI and MachinePools, AWS HCP clusters
+    use Kubernetes NodePool custom resources on the management cluster.
+
+    Node scaling is performed by patching the NodePool's ``spec.replicas``
+    field via ``oc`` on the management cluster.
+    """
+
+    def __init__(self, node_conf=None, node_type=None):
+        self.node_conf = node_conf
+        self.node_type = node_type
+        super(HypershiftAWSNode, self).__init__()
+
+    def _get_nodepools_for_cluster(self, cluster_name):
+        """
+        Get all NodePool resources for the given cluster from the management cluster.
+
+        Args:
+            cluster_name (str): Name of the hosted cluster.
+
+        Returns:
+            list: List of NodePool dicts from the API response.
+        """
+        with config.RunWithProviderConfigContextIfAvailable():
+            nodepool_ocp = ocp.OCP(
+                kind="NodePool",
+                namespace=constants.CLUSTERS_NAMESPACE,
+            )
+            nodepools = nodepool_ocp.get().get("items", [])
+
+        cluster_nodepools = [
+            np
+            for np in nodepools
+            if np.get("spec", {}).get("clusterName") == cluster_name
+        ]
+        logger.info(
+            f"Found {len(cluster_nodepools)} NodePool(s) for cluster '{cluster_name}'"
+        )
+        return cluster_nodepools
+
+    def create_and_attach_nodes_to_cluster(
+        self, node_conf, node_type=constants.RHCOS, num_nodes=None
+    ):
+        """
+        Create nodes and attach them to the AWS HCP cluster.
+
+        Args:
+            node_conf (dict): Node configuration.
+            node_type (str): Type of node (only RHCOS supported).
+            num_nodes (int): Number of nodes to add.
+        """
+        if node_type != constants.RHCOS:
+            raise UnsupportedOSType("Only RHCOS is supported for AWS HCP clusters.")
+
+        node_conf = node_conf or {}
+        node_list = self.create_nodes(node_conf, node_type, num_nodes)
+        self.attach_nodes_to_cluster(node_list)
+
+    def _wait_nodepool_replicas_ready(self, np_name, target_replicas, timeout=2400):
+        """
+        Wait until the NodePool's current replicas reach the target count.
+
+        Args:
+            np_name (str): NodePool resource name.
+            target_replicas (int): Expected number of ready replicas.
+            timeout (int): Maximum wait time in seconds.
+        """
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=self._get_nodepool_current_replicas,
+            np_name=np_name,
+        ):
+            if sample == target_replicas:
+                logger.info(f"NodePool '{np_name}' reached {target_replicas} replicas")
+                return
+            logger.info(
+                f"NodePool '{np_name}': current replicas {sample}/{target_replicas}"
+            )
+
+    def _get_nodepool_current_replicas(self, np_name):
+        """
+        Get the current ready replicas count for a NodePool.
+
+        Args:
+            np_name (str): NodePool resource name.
+
+        Returns:
+            int: Number of current ready replicas.
+        """
+        with config.RunWithProviderConfigContextIfAvailable():
+            nodepool_ocp = ocp.OCP(
+                kind="NodePool",
+                namespace=constants.CLUSTERS_NAMESPACE,
+                resource_name=np_name,
+            )
+            np_data = nodepool_ocp.get()
+        return np_data.get("status", {}).get("replicas", 0)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        Scale up an existing NodePool on the management cluster.
+
+        Finds the NodePool for the current cluster and patches its replicas
+        count to add ``num_nodes`` additional workers.
+
+        Args:
+            node_conf (dict): Node configuration (used for metadata only).
+            node_type (str): Type of node.
+            num_nodes (int): Number of nodes to add.
+
+        Returns:
+            list: List of HypershiftAWSNode objects.
+        """
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        nodepools = self._get_nodepools_for_cluster(cluster_name)
+
+        if not nodepools:
+            raise UnavailableResourceException(
+                f"No NodePool found for cluster '{cluster_name}'. "
+                "AWS HCP NodePools are created during cluster deployment."
+            )
+
+        nodepool = nodepools[0]
+        np_name = nodepool["metadata"]["name"]
+        current_replicas = nodepool.get("spec", {}).get("replicas", 0)
+        new_replicas = current_replicas + num_nodes
+
+        logger.info(
+            f"Scaling NodePool '{np_name}' from {current_replicas} "
+            f"to {new_replicas} replicas"
+        )
+
+        with config.RunWithProviderConfigContextIfAvailable():
+            nodepool_ocp = ocp.OCP(
+                kind="NodePool",
+                namespace=constants.CLUSTERS_NAMESPACE,
+                resource_name=np_name,
+            )
+            patch = {"spec": {"replicas": new_replicas}}
+            nodepool_ocp.patch(params=json.dumps(patch), format_type="merge")
+
+        logger.info(
+            f"Patched NodePool '{np_name}' to {new_replicas} replicas, "
+            "waiting for nodes to become ready"
+        )
+        self._wait_nodepool_replicas_ready(np_name, new_replicas)
+
+        node_list = []
+        for _ in range(num_nodes):
+            node_list.append(HypershiftAWSNode(node_conf, constants.RHCOS))
 
         return node_list

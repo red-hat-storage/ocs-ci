@@ -578,7 +578,6 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscalerBase):
     The absence of autoscaler activity in these tests is the expected and correct behavior.
     """
 
-    @pytest.mark.skip_resize_pre_conditions
     @tier2
     @polarion_id("OCS-6877")
     def test_create_autoscaler_and_delete_before_threshold(self):
@@ -609,7 +608,6 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscalerBase):
         self.verify_storage_not_change()
 
     @tier2
-    @pytest.mark.skip_resize_pre_conditions
     @polarion_id("OCS-6878")
     def test_create_autoscaler_and_shutdown_osd_node(
         self, nodes, node_restart_teardown
@@ -638,7 +636,6 @@ class TestStorageAutoscalerNoTrigger(TestStorageAutoscalerBase):
         self.verify_autoscaler_no_trigger_steps(auto_scaler.name, auto_scaler.namespace)
 
     @tier2
-    @pytest.mark.skip_resize_pre_conditions
     @polarion_id("OCS-6879")
     def test_storage_capacity_limit_reached(self):
         """

@@ -5,10 +5,12 @@ import os
 import pickle
 import re
 import threading
+import tarfile
 import time
 import traceback
 import subprocess
 import shlex
+import shutil
 from subprocess import TimeoutExpired
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -942,12 +944,14 @@ def run_must_gather(
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
     mg_options=None,
+    since_time=None,
 ):
     """
     Runs the must-gather tool against the cluster
 
     Args:
-        log_dir_path (str): directory for dumped must-gather logs
+        log_dir_path (str): directory for dumped must-gather logs (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
         cluster_config (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
@@ -958,6 +962,7 @@ def run_must_gather(
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
         mg_options (str): Options of must gather command For example "--host_network=True"
+        since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     Returns:
         mg_output (str): must-gather cli output
@@ -983,6 +988,8 @@ def run_must_gather(
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if since_time:
+        cmd += f" --since-time={since_time}"
     if mg_options:
         cmd += f" {mg_options}"
     if command:
@@ -1013,6 +1020,16 @@ def run_must_gather(
         if mg_output:
             log.error(f"Must-Gather Output: {mg_output}")
         export_mg_pods_logs(log_dir_path=log_dir_path)
+
+    if config.REPORTING.get("tarball_mg_logs"):
+        tarball_path = f"{log_dir_path}.tar.gz"
+        try:
+            with tarfile.open(tarball_path, "w:gz") as tar:
+                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            if config.REPORTING.get("delete_packed_mg_logs"):
+                shutil.rmtree(log_dir_path)
+        except Exception as err:
+            log.error(f"Failed during packing files! Error: {err}")
 
     return mg_output
 
@@ -1209,6 +1226,7 @@ def _collect_ocs_logs(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    since_time=None,
 ):
     """
     This function runs in thread
@@ -1271,6 +1289,7 @@ def _collect_ocs_logs(
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
             mg_options=mg_options,
+            since_time=since_time,
         )
         mg_collected_types.add("ocs")
         if (
@@ -1290,6 +1309,9 @@ def _collect_ocs_logs(
             collect_ceph_external(path=external_ceph_log_dir_path)
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
+        ocp_service_log_dir_path = os.path.join(
+            log_dir_path, "ocp_service_logs_must_gather"
+        )
         ocp_must_gather_image = cluster_config.REPORTING["ocp_must_gather_image"]
         if cluster_config.DEPLOYMENT.get("disconnected"):
             ocp_must_gather_image = mirror_image(ocp_must_gather_image)
@@ -1300,15 +1322,17 @@ def _collect_ocs_logs(
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            since_time=since_time,
         )
         run_must_gather(
-            ocp_log_dir_path,
+            ocp_service_log_dir_path,
             ocp_must_gather_image,
             "/usr/bin/gather_service_logs worker",
             cluster_config=cluster_config,
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            since_time=since_time,
         )
         mg_collected_types.add("ocp")
     if mcg:
@@ -1397,6 +1421,7 @@ def collect_ocs_logs(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    since_time=None,
 ):
     """
     Collects OCS logs
@@ -1417,6 +1442,7 @@ def collect_ocs_logs(
         skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
+        since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     """
     cwd = os.getcwd()
@@ -1439,6 +1465,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
             if ocs:
@@ -1457,6 +1484,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
             if mcg:
@@ -1475,6 +1503,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
 
@@ -1955,7 +1984,8 @@ def collect_pod_container_rpm_package(dir_name):
     Collect information about rpm packages from all containers + go version
 
     Args:
-        dir_name(str): directory to store container rpm package info
+        dir_name(str): directory to store container rpm package info (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
 
     """
     # Import pod here to avoid circular dependency issue
@@ -2021,6 +2051,16 @@ def collect_pod_container_rpm_package(dir_name):
                     go_log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-go-version.log"
                     with open(go_log_file_name, "w") as f:
                         f.write(go_output)
+
+    if config.REPORTING.get("tarball_mg_logs"):
+        tarball_path = f"{package_log_dir_path}.tar.gz"
+        try:
+            with tarfile.open(tarball_path, "w:gz") as tar:
+                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            if config.REPORTING.get("delete_packed_mg_logs"):
+                shutil.rmtree(log_dir_path)
+        except Exception as err:
+            log.error(f"Failed during packing files! Error: {err}")
 
 
 def is_dr_scenario():

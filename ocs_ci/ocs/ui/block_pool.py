@@ -92,15 +92,11 @@ class BlockPoolUI(PageNavigator):
 
         """
 
-        self.navigate_storage_pools_page()
-        self.page_has_loaded()
-        self.do_click((f"{pool_name}", By.LINK_TEXT))
-        self.do_click(self.bp_loc["actions_inside_pool"])
-        self.do_click(self.bp_loc["delete_pool_inside_pool"])
-        self.do_click(self.bp_loc["confirm_delete_inside_pool"])
-        # wait for pool to deleted
-        time.sleep(2)
-        return not self.check_pool_existence(pool_name)
+        return (
+            self.navigate_storage()
+            .navigate_storage_pools_page()
+            .delete_block_pool(pool_name)
+        )
 
     def edit_pool_parameters(self, pool_name, replica=3, compression=True):
         """

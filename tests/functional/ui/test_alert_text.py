@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     tier2,
     ui,
+    jira,
     skipif_ibm_cloud_managed,
 )
 from ocs_ci.ocs import constants
@@ -56,6 +57,12 @@ internal_mode_OCP_ODF_alerts = {
     constants.ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL: "441dabf582bf8c22e456d1e83677a6eb",
     constants.ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS: "3c0c7404d9421b0ebf8015b449f82d87",
     constants.ALERT_OBC_QUOTA_BYTES_ALERT: "0086e448dea6c1ac13fcfcb0185ed061",
+    constants.ALERT_ODF_CORE_POD_RESTART: "c04b7cd1b421c8426d33afa13cc95f25",
+    constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000: "2222d8cc6bbeb0908cff916878166cc3",
+    constants.ALERT_ODF_DISK_UTILIZATION_HIGH: "b9b9c37988637890af937238aa6c9d36",
+    constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: "491f5986666df9a88537f98fcd6d0be6",
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES: "a69390757c49cd65566128207d38e115",
+    constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES: "b00c0638019d337cc8ca01734331cf2f",
 }
 provider_mode_alerts = {
     constants.ALERT_STORAGECLIENTHEARTBEATMISSED: "f649b222a76e8b5e72ad6427fa610bdc",
@@ -77,6 +84,7 @@ def alerts_expected():
 
 @tier2
 @black_squad
+@jira("DFBUGS-5660")
 @skipif_ibm_cloud_managed
 @skipif_mcg_only
 @skipif_hci_client

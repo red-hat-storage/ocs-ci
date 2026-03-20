@@ -36,7 +36,6 @@ from ocs_ci.ocs.defaults import (
     OCS_OPERATOR_NAME,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.resources.csv import (
@@ -49,6 +48,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     verify_pods_upgraded,
 )
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -312,7 +312,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         version_before_upgrade (float): version of OCS before upgrade
 
     """
-    number_of_worker_nodes = len(get_nodes())
+    # Get all worker nodes for CSI nodeplugin count (they run on all workers, not just storage-labeled)
+    all_worker_nodes = get_worker_nodes(skip_master_nodes=False)
+    number_of_all_worker_nodes = len(all_worker_nodes)
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     if not (
         config.ENV_DATA.get("mcg_only_deployment")
@@ -335,8 +337,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
         )
         csi_rbdplugin_provisioner_label = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+        # CSI nodeplugin pods run on ALL worker nodes (including app nodes), not just storage-labeled nodes
         count_csi_cephfsplugin_label = count_csi_rbdplugin_label = (
-            number_of_worker_nodes
+            number_of_all_worker_nodes
         )
         if odf_running_version >= version.VERSION_4_19:
             csi_cephfsplugin_label = constants.CSI_CEPHFSPLUGIN_LABEL_419
@@ -347,8 +350,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             csi_rbdplugin_provisioner_label = (
                 constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419
             )
+            # CSI nodeplugin pods run on ALL worker nodes (including app nodes), not just storage-labeled nodes
             count_csi_cephfsplugin_label = count_csi_rbdplugin_label = (
-                number_of_worker_nodes
+                number_of_all_worker_nodes
             )
         else:
             log.info(
@@ -415,7 +419,17 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 count=rgw_count,
             )
     if upgrade_version >= parse_version("4.6"):
-        verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
+        skip_metrics_exporter = upgrade_version >= parse_version("4.21") and (
+            config.DEPLOYMENT.get("external_mode")
+            or config.ENV_DATA.get("mcg_only_deployment")
+        )
+        if not skip_metrics_exporter:
+            verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
+        else:
+            log.info(
+                "Skipping ocs-metrics-exporter upgrade verification for ODF 4.21 "
+                "external mode deployment due to bug DFBUGS-5811"
+            )
 
 
 class OCSUpgrade(object):
@@ -731,9 +745,9 @@ class OCSUpgrade(object):
             exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
             log_step("Sleeping 60 seconds after applying tag mirror set.")
             time.sleep(60)
-            log_step("Waiting max 30 mins for master MCP to get updated")
+            log_step("Waiting max 50 mins for master MCP to get updated")
             exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
+                "oc wait --for=condition=Updated --timeout=50m mcp/master", timeout=3600
             )
             log_step("Waiting max 30 mins for worker MCP to get updated")
             exec_cmd(

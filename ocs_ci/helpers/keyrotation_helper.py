@@ -539,7 +539,8 @@ class PVKeyrotation(KeyRotation):
             object: The CronJob object associated with the PVC.
 
         Raises:
-            ValueError: If the PVC lacks the key rotation CronJob annotation.
+            ValueError: If the PVC lacks the key rotation CronJob annotation
+                       and no cronjob can be found by naming convention.
         """
         # Ensure annotations are loaded in the PVC object
         if "annotations" not in pvc_obj.data["metadata"]:
@@ -552,11 +553,15 @@ class PVKeyrotation(KeyRotation):
             .get("keyrotation.csiaddons.openshift.io/cronjob")
         )
 
+        # If annotation is not present, try naming convention
         if not cron_job_name:
-            log.error(f"PVC '{pvc_obj.name}' lacks keyrotation cronjob annotation.")
-            raise ValueError(f"Missing keyrotation cronjob for PVC '{pvc_obj.name}'")
+            log.warning(
+                f"PVC '{pvc_obj.name}' lacks keyrotation cronjob annotation. "
+                "Trying naming convention '{pvc_name}-keyrotation'."
+            )
+            cron_job_name = f"{pvc_obj.name}-keyrotation"
 
-        log.info(f"Found CronJob '{cron_job_name}' for PVC '{pvc_obj.name}'.")
+        log.info(f"Looking for CronJob '{cron_job_name}' for PVC '{pvc_obj.name}'.")
 
         cronjob_obj = OCP(
             kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
@@ -566,44 +571,141 @@ class PVKeyrotation(KeyRotation):
 
         if not cronjob_obj.is_exist():
             log.error(
-                f"cronjob {cron_job_name} is not exists for the PVC: {pvc_obj.name}"
+                f"cronjob {cron_job_name} does not exist for the PVC: {pvc_obj.name}"
             )
             raise ValueError(
                 f"Missing keyrotation cronjob Object for PVC '{pvc_obj.name}'"
             )
 
+        log.info(f"Found CronJob '{cron_job_name}' for PVC '{pvc_obj.name}'.")
         return OCP(
             kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
             namespace=pvc_obj.namespace,
             resource_name=cron_job_name,
         )
 
+    def get_pvc_kms_id(self, pvc_obj):
+        """
+        Get the encryption KMS ID for a PVC from its PV volumeAttributes.
+
+        Args:
+            pvc_obj (object): The PVC object
+
+        Returns:
+            str: The encryption KMS ID, or None if not found
+        """
+        try:
+            pv_name = pvc_obj.backed_pv
+            pv_obj = OCP(kind="PersistentVolume", resource_name=pv_name)
+            pv_data = pv_obj.get()
+
+            kms_id = (
+                pv_data.get("spec", {})
+                .get("csi", {})
+                .get("volumeAttributes", {})
+                .get("encryptionKMSID")
+            )
+
+            if kms_id:
+                log.info(f"PVC '{pvc_obj.name}' uses KMS ID: {kms_id}")
+            else:
+                log.warning(f"PVC '{pvc_obj.name}' has no encryptionKMSID in PV")
+
+            return kms_id
+        except Exception as e:
+            log.error(f"Error getting KMS ID for PVC '{pvc_obj.name}': {e}")
+            return None
+
     def get_pvc_keys_data(self, pvc_objs):
         """
         Retrieves key data for PVCs.
+
+        Returns:
+            dict: Dictionary mapping PVC names to their device handles and vault keys.
+                  Returns None for vault_key if the key doesn't exist yet.
         """
-        return {
-            pvc.name: {
-                "device_handle": pvc.get_pv_volume_handle_name,
-                "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
+        import subprocess
+
+        keys_data = {}
+        for pvc in pvc_objs:
+            device_handle = pvc.get_pv_volume_handle_name
+
+            # Get the KMS ID for this PVC to use the correct Vault backend path
+            kms_id = self.get_pvc_kms_id(pvc)
+
+            try:
+                # Pass kms_id to ensure we use the correct backend path
+                vault_key = self.kms.get_pv_secret(device_handle, kms_id=kms_id)
+            except subprocess.CalledProcessError as e:
+                log.warning(
+                    f"Could not retrieve vault key for PVC '{pvc.name}' "
+                    f"(device: {device_handle}, kms_id: {kms_id}). "
+                    f"Key may not exist yet. Error: {e}"
+                )
+                vault_key = None
+
+            keys_data[pvc.name] = {
+                "device_handle": device_handle,
+                "vault_key": vault_key,
+                "kms_id": kms_id,
             }
-            for pvc in pvc_objs
-        }
+
+        return keys_data
 
     @retry(UnexpectedBehaviour, tries=10, delay=20)
     def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
         """
         Waits for all PVC keys to be rotated in the Vault KMS.
+
+        This method:
+        1. On first call: Captures baseline keys (initializes all_pvc_key_data)
+        2. On subsequent retries: Compares current keys with baseline
+        3. Raises UnexpectedBehaviour if keys haven't rotated yet (triggers retry)
+        4. Returns True when all keys have been rotated
+
+        Note: If baseline keys don't exist yet (None), waits for them to appear
+        before considering rotation complete.
         """
         if not self.all_pvc_key_data:
             self.all_pvc_key_data = self.get_pvc_keys_data(pvc_objs)
+
+            # Check if all baseline keys exist
+            missing_keys = [
+                pvc_name
+                for pvc_name, data in self.all_pvc_key_data.items()
+                if data["vault_key"] is None
+            ]
+            if missing_keys:
+                log.warning(
+                    f"Baseline keys not yet available for PVCs: {', '.join(missing_keys)}. "
+                    "Will retry to establish baseline."
+                )
+                self.all_pvc_key_data = None
+                raise UnexpectedBehaviour("Baseline keys not yet available in Vault")
+
+            log.info("Baseline PVC vault key data captured successfully.")
             raise UnexpectedBehaviour("Initializing PVC vault key data")
 
         new_pvc_keys = self.get_pvc_keys_data(pvc_objs)
+
+        # Check if any new keys are missing
+        missing_new_keys = [
+            pvc_name
+            for pvc_name, data in new_pvc_keys.items()
+            if data["vault_key"] is None
+        ]
+        if missing_new_keys:
+            raise UnexpectedBehaviour(
+                f"Keys still missing in Vault for PVCs: {', '.join(missing_new_keys)}"
+            )
+
+        # Compare keys to detect rotation
         if self.all_pvc_key_data == new_pvc_keys:
             raise UnexpectedBehaviour("PVC keys have not rotated yet.")
 
         log.info("PVC keys rotated successfully.")
+        log.debug(f"Old keys: {self.all_pvc_key_data}")
+        log.debug(f"New keys: {new_pvc_keys}")
         return True
 
     def change_pvc_keyrotation_cronjob_state(self, pvc_objs, disable=True):
@@ -676,7 +778,66 @@ class PVKeyrotation(KeyRotation):
             "Reset key rotation baseline - will capture new baseline on next verification."
         )
 
-    @retry(UnexpectedBehaviour, tries=10, delay=10)
+    @retry(UnexpectedBehaviour, tries=15, delay=10)
+    def wait_for_keyrotation_cronjobs_deletion(
+        self, pvc_objs, timeout=300, interval=10
+    ):
+        """
+        Wait for key rotation cronjobs to be deleted for all PVCs after disabling.
+
+        Args:
+            pvc_objs (list): List of PVC objects to check.
+            timeout (int): Maximum time to wait in seconds (default: 300).
+            interval (int): Time between checks in seconds (default: 10).
+
+        Returns:
+            bool: True if all cronjobs are deleted.
+
+        Raises:
+            UnexpectedBehaviour: If cronjobs are not deleted within timeout.
+        """
+        log.info(
+            f"Waiting up to {timeout}s for key rotation cronjobs to be deleted "
+            f"for {len(pvc_objs)} PVCs..."
+        )
+
+        @retry(
+            UnexpectedBehaviour, tries=timeout // interval, delay=interval, backoff=1
+        )
+        def check_cronjobs_deleted():
+            existing_cronjobs = []
+
+            for pvc_obj in pvc_objs:
+                pvc_obj.reload()
+
+                try:
+                    cronjob = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
+                    if cronjob.is_exist():
+                        existing_cronjobs.append(pvc_obj.name)
+                        log.info(
+                            f"Cronjob for PVC '{pvc_obj.name}' still exists. Waiting..."
+                        )
+                except ValueError:
+                    # Expected: cronjob should not exist or annotation should be missing
+                    log.info(
+                        f"Cronjob for PVC '{pvc_obj.name}' is deleted (as expected)."
+                    )
+                    continue
+
+            if existing_cronjobs:
+                raise UnexpectedBehaviour(
+                    f"Key rotation cronjobs still exist for PVCs: {', '.join(existing_cronjobs)}"
+                )
+
+            log.info("All key rotation cronjobs have been deleted.")
+            return True
+
+        try:
+            return check_cronjobs_deleted()
+        except UnexpectedBehaviour as e:
+            log.error(f"Timeout waiting for cronjob deletion: {e}")
+            return False
+
     def wait_for_keyrotation_cronjobs_recreation(self, pvc_objs):
         """
         Wait for key rotation cronjobs to be recreated for all PVCs after re-enabling.

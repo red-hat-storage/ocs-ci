@@ -14,7 +14,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd, exec_cmd
 from ocs_ci.utility import utils
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 openshift_dedicated = config.AUTH.get("openshiftdedicated", {})
 _credentials_cache = {}
 

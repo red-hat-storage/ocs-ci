@@ -5,6 +5,10 @@ This test verifies that when Azure Performance Plus is enabled,
 OSD PVCs are created with the correct CSI volume parameters,
 specifically that enablePerformancePlus=true is present in the
 PV volume attributes.
+
+Applies to both supported disk types:
+- Standard SSD (StandardSSD_LRS) via azure_performance_plus_disk_type
+- Premium SSD (Premium_LRS), default when azure_performance_plus is true
 """
 
 import logging
@@ -38,8 +42,8 @@ class TestAzurePerformancePlusCSIParameters(ManageTest):
     Test class to verify Azure Performance Plus CSI volume parameters.
 
     This test verifies that OSD PVCs created with Performance Plus
-    storage class have the correct CSI volume attributes set,
-    specifically enablePerformancePlus=true.
+    storage class (Standard SSD or Premium SSD) have the correct CSI
+    volume attributes set, specifically enablePerformancePlus=true.
     """
 
     @polarion_id("OCS-7413")

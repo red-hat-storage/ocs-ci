@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import pytest
 from ocs_ci.ocs.constants import (
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
@@ -17,6 +18,27 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
     # Container chaos specific labels
     NOOBAA_APP_LABEL,
+    # Platform constants
+    AWS_PLATFORM,
+    ROSA_PLATFORM,
+    ROSA_HCP_PLATFORM,
+    AZURE_PLATFORM,
+    AZURE_WITH_LOGS_PLATFORM,
+    IBMCLOUD_PLATFORM,
+    IBM_PLATFORM,
+    IBM_POWER_PLATFORM,
+    IBM_CLOUD_BAREMETAL_PLATFORM,
+    VSPHERE_PLATFORM,
+    HCI_VSPHERE,
+    BAREMETAL_PLATFORM,
+    BAREMETALPSI_PLATFORM,
+    HCI_BAREMETAL,
+    # Krkn cloud type constants
+    KRKN_CLOUD_AWS,
+    KRKN_CLOUD_AZURE,
+    KRKN_CLOUD_IBM,
+    KRKN_CLOUD_VMWARE,
+    KRKN_CLOUD_BAREMETAL,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
@@ -25,10 +47,95 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     NetworkOutageScenarios,
     HogScenarios,
     PodScenarios,
+    NodeScenarios,
 )
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
+
+# ============================================================================
+# PLATFORM DETECTION HELPER CLASS
+# ============================================================================
+
+
+# Platform to Krkn cloud type mapping
+PLATFORM_TO_KRKN_CLOUD_TYPE = {
+    # AWS platforms
+    AWS_PLATFORM: KRKN_CLOUD_AWS,
+    ROSA_PLATFORM: KRKN_CLOUD_AWS,
+    ROSA_HCP_PLATFORM: KRKN_CLOUD_AWS,
+    # Azure platforms
+    AZURE_PLATFORM: KRKN_CLOUD_AZURE,
+    AZURE_WITH_LOGS_PLATFORM: KRKN_CLOUD_AZURE,
+    # IBM platforms
+    IBMCLOUD_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_POWER_PLATFORM: KRKN_CLOUD_IBM,
+    IBM_CLOUD_BAREMETAL_PLATFORM: KRKN_CLOUD_IBM,
+    # VMware/vSphere platforms
+    VSPHERE_PLATFORM: KRKN_CLOUD_VMWARE,
+    HCI_VSPHERE: KRKN_CLOUD_VMWARE,
+    # BareMetal platforms
+    BAREMETAL_PLATFORM: KRKN_CLOUD_BAREMETAL,
+    BAREMETALPSI_PLATFORM: KRKN_CLOUD_BAREMETAL,
+    HCI_BAREMETAL: KRKN_CLOUD_BAREMETAL,
+}
+
+
+def get_krkn_cloud_type():
+    """
+    Get the Krkn cloud type based on the current platform.
+
+    Returns:
+        str: Krkn cloud type (aws, azure, ibm, vmware, bm)
+
+    Raises:
+        pytest.skip: If platform is not supported for node chaos testing
+    """
+    platform = config.ENV_DATA.get("platform", "").lower()
+
+    if not platform:
+        pytest.skip("Platform not configured in ENV_DATA")
+
+    cloud_type = PLATFORM_TO_KRKN_CLOUD_TYPE.get(platform)
+
+    if not cloud_type:
+        pytest.skip(
+            f"Platform '{platform}' is not supported for Krkn node chaos testing. "
+            f"Supported platforms: {list(PLATFORM_TO_KRKN_CLOUD_TYPE.keys())}"
+        )
+
+    return cloud_type
+
+
+def get_node_scenario_generator():
+    """
+    Get the appropriate NodeScenarios generator method based on the platform.
+
+    Returns:
+        tuple: (generator_method, cloud_type, platform)
+    """
+    platform = config.ENV_DATA.get("platform", "").lower()
+    cloud_type = get_krkn_cloud_type()
+
+    # Map cloud types to their specific generator methods
+    generator_map = {
+        KRKN_CLOUD_AWS: NodeScenarios.aws_node_scenarios,
+        KRKN_CLOUD_AZURE: NodeScenarios.azure_node_scenarios,
+        KRKN_CLOUD_IBM: NodeScenarios.ibmcloud_node_scenarios,
+        KRKN_CLOUD_VMWARE: NodeScenarios.vmware_node_scenarios,
+        KRKN_CLOUD_BAREMETAL: NodeScenarios.baremetal_node_scenarios,
+    }
+
+    generator = generator_map.get(cloud_type)
+    if not generator:
+        pytest.skip(
+            f"No node scenario generator available for cloud type '{cloud_type}'"
+        )
+
+    return generator, cloud_type, platform
+
 
 # ============================================================================
 # BASE SCENARIO HELPER CLASS
@@ -922,7 +1029,7 @@ class HogScenarioHelper(BaseScenarioHelper):
         super().__init__(scenario_dir, namespace)
 
     def create_cpu_hog_scenario(
-        self, duration=None, namespace=None, node_selector=None
+        self, duration=None, namespace=None, node_selector=None, output_name=None
     ):
         """Create CPU hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
@@ -934,15 +1041,17 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "cpu_hog.yaml"
         return HogScenarios.cpu_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
     def create_memory_hog_scenario(
-        self, duration=None, namespace=None, node_selector=None
+        self, duration=None, namespace=None, node_selector=None, output_name=None
     ):
         """Create memory hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
@@ -952,14 +1061,18 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "memory_hog.yaml"
         return HogScenarios.memory_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
-    def create_io_hog_scenario(self, duration=None, namespace=None, node_selector=None):
+    def create_io_hog_scenario(
+        self, duration=None, namespace=None, node_selector=None, output_name=None
+    ):
         """Create IO hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
         target_namespace = namespace or "default"
@@ -968,28 +1081,54 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "io_hog.yaml"
         return HogScenarios.io_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
-    def create_strength_test_scenarios(self, stress_level="high", duration=None):
-        """Create hog scenarios for strength testing."""
+    def create_strength_test_scenarios(
+        self, stress_level="high", duration=None, node_selector=None
+    ):
+        """Create hog scenarios for strength testing.
+
+        Each scenario is written to a unique file to avoid overwriting (e.g.
+        cpu_hog_strength_0.yaml, memory_hog_strength_1.yaml). Pass node_selector
+        to target worker vs master nodes (e.g. when running multi-stress test).
+        """
         stress_config = self.get_stress_config(stress_level)
         base_duration = duration or self.DEFAULT_TEST_DURATION
 
         scenarios = []
 
-        # Create multiple hog scenarios based on stress level
+        # Default to worker nodes when no selector provided
+        default_node_selector = "node-role.kubernetes.io/worker="
+        selector = node_selector or default_node_selector
+
+        # Create multiple hog scenarios with unique filenames to avoid overwriting
         for i in range(stress_config["multiplier"]):
             test_duration = min(300, base_duration * (i + 1))  # Capped at 5 minutes
+            suffix = f"{stress_level}_{i}"
             scenarios.extend(
                 [
-                    self.create_cpu_hog_scenario(duration=test_duration),
-                    self.create_memory_hog_scenario(duration=test_duration),
-                    self.create_io_hog_scenario(duration=test_duration),
+                    self.create_cpu_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"cpu_hog_{suffix}.yaml",
+                    ),
+                    self.create_memory_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"memory_hog_{suffix}.yaml",
+                    ),
+                    self.create_io_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"io_hog_{suffix}.yaml",
+                    ),
                 ]
             )
 
@@ -1566,18 +1705,60 @@ class KrknResultAnalyzer(BaseScenarioHelper):
             # Variable names and code references
             r".*\w+_error\w*.*",  # Variable names like "last_error", "error_code"
             r".*error_\w+.*",  # Variable names like "error_message", "error_handler"
+            # Network cleanup errors (non-critical - interface may disappear during chaos)
+            r".*Cannot find device.*",  # Network interface disappeared during cleanup
+            r".*RTNETLINK answers: No such device.*",  # Network device not found
+            r".*tc qdisc del.*Cannot find device.*",  # Traffic control cleanup on missing interface
+            r".*Deleting.*virtual interfaces.*",  # Virtual interface cleanup (may fail gracefully)
         ]
 
         filtered_errors = []
+        cleanup_errors = []
+
+        # Network cleanup error patterns (tracked separately for informational purposes)
+        cleanup_error_patterns = [
+            r".*Cannot find device.*",
+            r".*RTNETLINK answers: No such device.*",
+            r".*tc qdisc del.*Cannot find device.*",
+            r".*Deleting.*virtual interfaces.*",
+        ]
+
         for error in detected_errors:
             is_false_positive = False
-            for fp_pattern in false_positive_patterns:
-                if re.search(fp_pattern, error["context"], re.IGNORECASE):
-                    is_false_positive = True
+            is_cleanup_error = False
+
+            # Check if this is a cleanup-related error
+            for cleanup_pattern in cleanup_error_patterns:
+                if re.search(cleanup_pattern, error["context"], re.IGNORECASE):
+                    is_cleanup_error = True
+                    cleanup_errors.append(error)
                     break
 
-            if not is_false_positive:
+            # Check if this is a false positive
+            if not is_cleanup_error:
+                for fp_pattern in false_positive_patterns:
+                    if re.search(fp_pattern, error["context"], re.IGNORECASE):
+                        is_false_positive = True
+                        break
+
+            if not is_false_positive and not is_cleanup_error:
                 filtered_errors.append(error)
+
+        # Log cleanup errors as warnings (non-critical)
+        if cleanup_errors:
+            self.log.warning(
+                f"Detected {len(cleanup_errors)} cleanup error(s) for {component_name} {test_type} (non-critical)"
+            )
+            self.log.warning(
+                "These errors occur during cleanup phase when network interfaces "
+                "may have already been removed by pod restarts/deletions during chaos."
+            )
+            for i, error in enumerate(cleanup_errors[:3], 1):  # Show first 3
+                self.log.debug(f"   Cleanup error {i}: {error['match']}")
+            if len(cleanup_errors) > 3:
+                self.log.debug(
+                    f"   ... and {len(cleanup_errors) - 3} more cleanup errors"
+                )
 
         # Log and assert if errors are found
         if filtered_errors:
@@ -1604,7 +1785,13 @@ class KrknResultAnalyzer(BaseScenarioHelper):
 
             raise AssertionError(error_summary)
         else:
-            success_msg = f"✅ No error messages detected in Krkn output for {component_name} {test_type}"
+            if cleanup_errors:
+                success_msg = (
+                    f"No critical errors detected in Krkn output for {component_name} {test_type} "
+                    f"({len(cleanup_errors)} non-critical cleanup errors filtered)"
+                )
+            else:
+                success_msg = f"No error messages detected in Krkn output for {component_name} {test_type}"
             self.log.info(success_msg)
 
     def validate_krkn_execution_with_error_check(
@@ -2121,18 +2308,35 @@ class ValidationHelper(BaseScenarioHelper):
 
         self.log.info(f"✅ Strength test validation passed for {component_name}")
 
-    def handle_krkn_command_failure(self, error, component_name, test_type="chaos"):
+    def handle_krkn_command_failure(
+        self, error, component_name, test_type="chaos", health_helper=None
+    ):
         """
         Handle Krkn command execution failures with detailed logging.
+        Before reporting, checks for Ceph crashes if health_helper is provided.
 
         Args:
             error (Exception): The exception that occurred
             component_name (str): Name of the component
             test_type (str): Type of test
+            health_helper (CephHealthHelper, optional): If provided, checks for
+                Ceph crashes before reporting and includes result in the failure message.
         """
+        ceph_crash_details = ""
+        if health_helper is not None:
+            no_crashes, ceph_crash_details = health_helper.check_ceph_crashes(
+                component_name, test_type
+            )
+            if not no_crashes and ceph_crash_details:
+                self.log.error(
+                    f"Ceph crash check (before reporting failure): {ceph_crash_details}"
+                )
+
         error_msg = (
             f"Krkn {test_type} command failed for {component_name}: {str(error)}"
         )
+        if ceph_crash_details:
+            error_msg += f"\nCeph crash check: {ceph_crash_details}"
         self.log.error(f"❌ {error_msg}")
 
         # Log additional context if available

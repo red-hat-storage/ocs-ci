@@ -11,6 +11,26 @@ from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 logger = logging.getLogger(__name__)
 
 
+def machineconfig_exists(mc_name):
+    """
+    Check if a MachineConfig with the given name exists.
+
+    Args:
+        mc_name (str): Name of the MachineConfig to check
+
+    Returns:
+        bool: True if MachineConfig exists, False otherwise
+    """
+    mc_obj = OCP(kind="MachineConfig", namespace=constants.OPENSHIFT_CONFIG_NAMESPACE)
+    try:
+        mc_obj.get(resource_name=mc_name)
+        logger.info("MachineConfig %s already exists", mc_name)
+        return True
+    except Exception:
+        logger.debug("MachineConfig %s does not exist", mc_name)
+        return False
+
+
 def deploy_machineconfig(tmp_path, mc_name, mc_dict, mcp_num=2):
     """
     Deploy given ``MachineConfig`` dict and wait for the configuration to be

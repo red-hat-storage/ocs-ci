@@ -589,13 +589,38 @@ class Pod(OCS):
         Install packages in a Pod
 
         Args:
-            packages (list): List of packages to install
-
+            packages (list or str): List of packages to install
         """
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        cmd = f"yum install {packages} -y"
+        # Detect OS inside pod
+        os_release = self.exec_cmd_on_pod(
+            "cat /etc/os-release || true", out_yaml_format=False
+        )
+
+        os_release_lower = os_release.lower() if os_release else ""
+
+        if "alpine" in os_release_lower:
+            # Alpine uses apk
+            cmd = f"apk add --no-cache {packages}"
+        elif any(
+            x in os_release_lower
+            for x in ["rhel", "centos", "fedora", "ubi", "red hat"]
+        ):
+            # RHEL-based uses yum
+            cmd = f"yum install -y {packages}"
+        elif any(x in os_release_lower for x in ["debian", "ubuntu"]):
+            # Debian-based uses apt
+            cmd = (
+                "apt-get update && "
+                f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}"
+            )
+        else:
+            raise RuntimeError(
+                f"Unsupported OS for package install. /etc/os-release:\n{os_release}"
+            )
+
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
@@ -1404,7 +1429,8 @@ def cal_md5sum(pod_obj, file_name, block=False, raw_path=False):
         file_path = file_name
 
     md5sum_cmd_out = pod_obj.ocp.exec_oc_cmd(
-        command=f"exec {pod_obj.name} -- md5sum {file_path}"
+        command=f"exec {pod_obj.name} -- md5sum {file_path}",
+        out_yaml_format=False,
     )
     md5sum = md5sum_cmd_out.split()[0]
 
@@ -2593,6 +2619,7 @@ def get_pod_restarts_count(namespace=None, label=None, list_of_pods=None):
             "rook-ceph-osd-prepare",
             "rook-ceph-drain-canary",
             "ceph-file-controller-detect-version",
+            "status-reporter",
         )
         if all(exclude_name not in p.name for exclude_name in exclude_names):
             pod_count = ocp_pod_obj.get_resource(p.name, "RESTARTS")
@@ -2643,12 +2670,16 @@ def check_pods_in_running_state(
     )
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        # Also skip CatalogSource pods (managed by OLM) — they may be Pending
+        # when nodes are tainted with custom taints that lack matching tolerations
+        # on the CatalogSource resource.
         if (
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
             and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
             and ("status-reporter" not in p.name)
+            and not p.get_labels().get("olm.catalogSource")
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
@@ -3807,21 +3838,25 @@ def exit_osd_maintenance_mode(osd_deployment):
     helpers.modify_deployment_replica_count(
         deployment_name=constants.OCS_CSV_PREFIX, replica_count=1
     )
+    try:
+        # UnSet ceph osd noout and pause flags BEFORE waiting for pods.
+        # Pods cannot fully start while I/O is paused, so unsetting first
+        # avoids a deadlock where we wait for pods that can never be ready.
+        ct_pod = get_ceph_tools_pod()
+        logger.info("UnSet osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
+        logger.info("UnSet osd pause flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset pause")
+    finally:
+        # Remove the backup files regardless of flag-unset outcome
+        for deployment in osd_deployment:
+            if os.path.isfile(f"backup_{deployment.name}.yaml"):
+                os.remove(f"backup_{deployment.name}.yaml")
     # Sleep for 60 sec for the OSD pods to respin
     logger.info("Sleeping for 60s for the osd pods to stabilize")
     time.sleep(60)
     for pod in get_osd_pods():
         helpers.wait_for_resource_state(resource=pod, state=constants.STATUS_RUNNING)
-    ct_pod = get_ceph_tools_pod()
-    # UnSet ceph osd noout and pause flags
-    logger.info("UnSet osd noout flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset noout")
-    logger.info("UnSet osd pause flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset pause")
-    # Remove the backup files
-    for deployment in osd_deployment:
-        if os.path.isfile(f"backup_{deployment.name}.yaml"):
-            os.remove(f"backup_{deployment.name}.yaml")
 
 
 def restart_pods_having_label(label, namespace=None):
@@ -4641,3 +4676,27 @@ def get_mon_pod_by_id(mon_id, namespace=None):
         raise ValueError(f"Monitor pod with id {mon_id} not found")
 
     return Pod(**mons[0])
+
+
+def get_deviceclass_osd_pods(deviceclass_name, namespace=None):
+    """
+    Get the deviceclass osd pods
+
+    Args:
+        deviceclass_name (str): The deviceclass name
+        namespace (str): Namespace in which ceph cluster lives
+            (default: config.ENV_DATA["cluster_namespace"])
+
+    Returns:
+        list : The deviceclass osd pod objects
+
+    """
+    from ocs_ci.ocs.resources.pvc import get_deviceclass_pvcs
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvcs = get_deviceclass_pvcs(deviceclass_name, namespace)
+    pvc_names = [pvc.name for pvc in pvcs]
+    osd_pods = get_osd_pods()
+    deviceclass_osd_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
+
+    return deviceclass_osd_pods

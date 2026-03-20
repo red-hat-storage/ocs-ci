@@ -65,18 +65,17 @@ def verify_provider_mode_deployment():
 
     if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         assert backingstore_type == constants.BACKINGSTORE_TYPE_S3_COMP
+        # Verify rgw pod restart count is 0
+        rgw_restart_count = pod.fetch_rgw_pod_restart_count()
+        assert (
+            rgw_restart_count == 0
+        ), f"Error rgw pod has restarted {rgw_restart_count} times"
     elif config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
         assert backingstore_type == constants.BACKINGSTORE_TYPE_IBMCOS
     elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
         assert backingstore_type == constants.BACKINGSTORE_TYPE_AWS
     else:
         raise AssertionError("Backing store mapping for the platform is not provided")
-
-    # Verify rgw pod restart count is 0
-    rgw_restart_count = pod.fetch_rgw_pod_restart_count()
-    assert (
-        rgw_restart_count == 0
-    ), f"Error rgw pod has restarted {rgw_restart_count} times"
 
     Deployment().wait_for_csv(
         defaults.OCS_CLIENT_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]

@@ -14,8 +14,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.retry import retry
 
 
-logger = logging.getLogger(name=__file__)
-ibm_config = config.AUTH.get("ibmcloud", {})
+logger = logging.getLogger(__name__)
 
 
 class IBMCloudBM(object):
@@ -31,6 +30,11 @@ class IBMCloudBM(object):
             region (str): The region of the IBM Cloud Bare Metal machines
 
         """
+        ibm_config = config.AUTH.get("ibmcloud", {})
+        if not ibm_config:
+            raise ValueError(
+                "IBM Cloud Bare Metal is only supported on cluster which has IBM cloud details in AUTH section"
+            )
         self.api_key = ibm_config["api_key"]
         self.account_id = ibm_config.get("account_id")
         self.region = region or config.ENV_DATA.get("region")
@@ -49,7 +53,6 @@ class IBMCloudBM(object):
         tries=3,
         delay=20,
         backoff=1,
-        text_in_exception="Remote management command has recently been issued for server",
     )
     def run_ibmcloud_bm_cmd(
         self, cmd, secrets=None, timeout=600, ignore_error=False, **kwargs

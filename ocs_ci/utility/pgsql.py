@@ -8,7 +8,7 @@ import functools
 from psycopg2 import connect, OperationalError
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class PgsqlManager:

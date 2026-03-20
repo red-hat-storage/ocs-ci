@@ -8,6 +8,7 @@ import json
 import re
 from packaging.version import parse as parse_version
 
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -33,6 +34,22 @@ from ocs_ci.ocs.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def set_mirror_registry_configmap():
+    """
+    Set mirror registry config cm for mce/hypershift
+
+    Raises:
+        CommandFailed: If the 'oc create' command fails.
+    """
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        logger.info("Setting mirror registry cm for mce/hypershift")
+        mirror_registry_cm_yaml = templating.load_yaml(
+            constants.MIRROR_REGISTRY_CONFIG_CM_YAML
+        )
+        helpers.apply_resource(**mirror_registry_cm_yaml)
 
 
 class MCEInstaller(object):
@@ -172,7 +189,7 @@ class MCEInstaller(object):
                 mce_subscription_yaml_data, mce_subscription_manifest.name
             )
             logger.info("Creating subscription for the mce operator")
-            exec_cmd(f"oc create -f {mce_subscription_manifest.name}")
+            exec_cmd(f"oc apply -f {mce_subscription_manifest.name}")
             OCP(
                 kind=constants.SUBSCRIPTION_COREOS,
                 namespace=self.mce_namespace,
@@ -239,6 +256,7 @@ class MCEInstaller(object):
         if sampler.wait_for_func_value(True):
             logger.info(f"Version {ocp_version} found in supported-versions configmap")
 
+    @config.run_with_provider_context_if_available
     def get_supported_versions(self):
         """
         Get supported versions from the supported-versions configmap.
@@ -271,6 +289,48 @@ class MCEInstaller(object):
         self.multicluster_engine.annotate(
             annotation=f"imageOverridesCM={self.hypershift_override_image_cm}"
         )
+
+    def enable_hypershift_preview(self):
+        """
+        Enable hypershift-preview component in MultiClusterEngine.
+
+        Patches the multiclusterengine resource to enable the hypershift-preview component
+        which is required for HyperShift hosted control plane functionality.
+
+        Equivalent to:
+            oc patch mce multiclusterengine --type=merge \
+                -p '{"spec":{"overrides":{"components":[{"name":"hypershift-preview","enabled": true}]}}}'
+
+        Returns:
+            bool: True if patch was successful, False otherwise
+
+        Raises:
+            CommandFailed: If the patch operation fails
+
+        """
+        logger.info("Enabling hypershift-preview component in MultiClusterEngine")
+
+        patch_params = json.dumps(
+            {
+                "spec": {
+                    "overrides": {
+                        "components": [{"name": "hypershift-preview", "enabled": True}]
+                    }
+                }
+            }
+        )
+
+        try:
+            self.multicluster_engine.patch(
+                resource_name=constants.MULTICLUSTER_ENGINE,
+                params=patch_params,
+                format_type="merge",
+            )
+            logger.info("hypershift-preview component enabled successfully")
+            return True
+        except CommandFailed as e:
+            logger.error(f"Failed to enable hypershift-preview component: {e}")
+            raise
 
     def deploy_mce(self):
         """
