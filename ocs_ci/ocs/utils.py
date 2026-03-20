@@ -1269,7 +1269,18 @@ def _collect_ocs_logs(
                 cluster_config.DEPLOYMENT["default_latest_tag"],
             ),
         )
-        ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
+        # Get ODF version for directory naming
+        try:
+            ocs_version_obj = version.get_ocs_version_from_csv(only_major_minor=True)
+            ocs_version_str = f"_ODF-{ocs_version_obj}"
+        except Exception:
+            # Omit version if not available
+            ocs_version_str = ""
+        # Include test name for failed test cases
+        test_name_str = f"_{dir_name}" if status_failure else ""
+        ocs_log_dir_path = os.path.join(
+            log_dir_path, f"ocs_must_gather{ocs_version_str}{test_name_str}"
+        )
         ocs_must_gather_image = cluster_config.REPORTING.get(
             "ocs_must_gather_image",
             cluster_config.REPORTING["default_ocs_must_gather_image"],
@@ -1308,9 +1319,21 @@ def _collect_ocs_logs(
             )
             collect_ceph_external(path=external_ceph_log_dir_path)
     if ocp:
-        ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
+        # Get OCP version for directory naming
+        try:
+            ocp_version_obj = version.get_semantic_ocp_running_version()
+            ocp_version_str = f"_OCP-{ocp_version_obj.major}.{ocp_version_obj.minor}"
+        except Exception:
+            # Omit version if not available
+            ocp_version_str = ""
+        # Include test name for failed test cases
+        test_name_str = f"_{dir_name}" if status_failure else ""
+        ocp_log_dir_path = os.path.join(
+            log_dir_path, f"ocp_must_gather{ocp_version_str}{test_name_str}"
+        )
         ocp_service_log_dir_path = os.path.join(
-            log_dir_path, "ocp_service_logs_must_gather"
+            log_dir_path,
+            f"ocp_service_logs_must_gather{ocp_version_str}{test_name_str}",
         )
         ocp_must_gather_image = cluster_config.REPORTING["ocp_must_gather_image"]
         if cluster_config.DEPLOYMENT.get("disconnected"):
