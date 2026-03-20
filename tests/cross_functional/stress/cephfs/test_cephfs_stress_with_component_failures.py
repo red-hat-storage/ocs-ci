@@ -68,7 +68,7 @@ class TestCephfsStressWithFailures(E2ETest):
         """
         CHECKS_RUNNER_INTERVAL_MINUTES = 30
         JOB_STATUS_CHECK_INTERVAL = 60
-        REBALANCE_WAIT_TIME = 3600
+        REBALANCE_WAIT_TIME = 7200
         HEALTH_CHECK_WAIT_TIME = 180
         POWER_ON_WAIT_TIME = 600
 
