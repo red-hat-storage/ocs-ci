@@ -240,7 +240,7 @@ class CephFSStressTestManager:
         return cephfs_stress_job_obj
 
     @retry(CommandFailed, tries=3, delay=2, backoff=1)
-    def _wait_with_retry(resource, state, timeout):
+    def _wait_with_retry(self, resource, state, timeout):
         """
         Wrapper to retry wait_for_resource_state in case of transient failures
 
