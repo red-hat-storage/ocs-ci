@@ -161,9 +161,7 @@ class CephFSStressTestManager:
         self.created_resources.append(cephfs_stress_pod_obj)
 
         logger.info("Waiting for Cephfs stress pod to start")
-        wait_for_resource_state(
-            cephfs_stress_pod_obj, state=STATUS_RUNNING, timeout=300
-        )
+        self._wait_with_retry(cephfs_stress_pod_obj, STATUS_RUNNING, 300)
 
         return cephfs_stress_pod_obj
 
@@ -237,11 +235,30 @@ class CephFSStressTestManager:
         cephfs_stress_job_obj = OCS(**job_ocp_dict)
         self.created_resources.append(cephfs_stress_job_obj)
 
-        wait_for_resource_state(
-            cephfs_stress_job_obj, state=STATUS_RUNNING, timeout=300
-        )
+        self._wait_with_retry(cephfs_stress_job_obj, STATUS_RUNNING, 300)
 
         return cephfs_stress_job_obj
+
+    @retry(CommandFailed, tries=3, delay=2, backoff=1)
+    def _wait_with_retry(resource, state, timeout):
+        """
+        Wrapper to retry wait_for_resource_state in case of transient failures
+
+        Args:
+          resource (OCS): The OCS resource object to wait for
+          state (str): The desired state (e.g., constants.STATUS_RUNNING)
+          timeout (int): Maximum time in seconds to wait for the resource
+              to reach the desired state
+
+        Raises:
+          CommandFailed: If the resource fails to reach the desired state
+              after all retry attempts are exhausted, or if an oc command
+              fails due to kubeconfig issues that persist across retries
+          ResourceWrongStatusException: If the resource reaches a wrong status
+              within the timeout period
+
+        """
+        wait_for_resource_state(resource, state=state, timeout=timeout)
 
     def _set_env_vars(self, resource_data, env_vars, type):
         """

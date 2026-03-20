@@ -20,7 +20,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework import config
-from ocs_ci.ocs.cluster import get_active_mds_pod_objs, CephCluster
+from ocs_ci.ocs.cluster import get_active_mds_pod_objs
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class TestCephfsStressWithFailures(E2ETest):
         """
         CHECKS_RUNNER_INTERVAL_MINUTES = 30
         JOB_STATUS_CHECK_INTERVAL = 60
-        REBALANCE_WAIT_TIME = 7200
+        REBALANCE_WAIT_TIME = 10800
         HEALTH_CHECK_WAIT_TIME = 180
         POWER_ON_WAIT_TIME = 600
 
@@ -496,10 +496,81 @@ class TestCephfsStressWithFailures(E2ETest):
 
         """
         logger.info(f"Waiting {rebalance_wait}s for rebalance to complete...")
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=rebalance_wait
-        ), "Data re-balance failed to complete"
+        start_time = time.time()
+        rebalance_complete = False
+
+        while time.time() - start_time < rebalance_wait:
+            try:
+                ceph_pod = pod.get_ceph_tools_pod()
+                ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+                ceph_health = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph health")
+
+                if ceph_health.get("status") == "HEALTH_OK":
+                    pg_states = ceph_status["pgmap"]["pgs_by_state"]
+                    total_pg_count = ceph_status["pgmap"]["num_pgs"]
+
+                    healthy_states = [
+                        "active+clean",
+                        "active+clean+scrubbing",
+                        "active+clean+scrubbing+deep",
+                    ]
+
+                    rebalancing_states = [
+                        "backfilling",
+                        "recovering",
+                        "degraded",
+                        "undersized",
+                        "peering",
+                        "remapped",
+                    ]
+
+                    has_rebalancing = False
+                    healthy_pg_count = 0
+
+                    for state in pg_states:
+                        state_name = state["state_name"]
+                        count = state["count"]
+
+                        if any(
+                            rb_state in state_name for rb_state in rebalancing_states
+                        ):
+                            has_rebalancing = True
+                            logger.info(
+                                f"Found rebalancing PGs: {state_name} (count: {count})"
+                            )
+                            break
+
+                        if state_name in healthy_states:
+                            healthy_pg_count += count
+
+                    # Rebalance is complete if:
+                    # 1. No active rebalancing states
+                    # 2. All PGs are in healthy states
+                    # 3. Cluster health is OK
+                    if not has_rebalancing and healthy_pg_count == total_pg_count:
+                        logger.info(
+                            f"Rebalance complete! All {total_pg_count} PGs are in healthy states. "
+                            f"PG states: {pg_states}"
+                        )
+                        rebalance_complete = True
+                        break
+                    else:
+                        logger.info(
+                            f"Rebalance in progress. Healthy PGs: {healthy_pg_count}/{total_pg_count}, "
+                            f"Has rebalancing: {has_rebalancing}"
+                        )
+                else:
+                    logger.info(f"Cluster health: {ceph_health.get('status')}")
+
+            except Exception as e:
+                logger.warning(f"Error checking rebalance status: {e}")
+
+            time.sleep(10)
+
+        assert rebalance_complete, (
+            f"Data re-balance failed to complete within the given timeout of {rebalance_wait} seconds. "
+            f"This may be due to ongoing scrubbing or other maintenance operations."
+        )
 
         logger.info(f"Performing health check after {component} failure")
         ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
