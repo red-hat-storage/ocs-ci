@@ -113,6 +113,7 @@ class TestMonDataAvailWarn(E2ETest):
             self.oc_cmd.exec_oc_debug_cmd(
                 node=self.worker_node,
                 cmd_list=[write_cmd],
+                timeout=600,
             )
         else:
             self.mon_pod.exec_sh_cmd_on_pod(command=write_cmd, sh="sh")
