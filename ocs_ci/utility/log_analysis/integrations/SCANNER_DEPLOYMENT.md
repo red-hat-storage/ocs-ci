@@ -44,16 +44,7 @@ CLOUD_ML_REGION=us-east5 \
 claude -p 'say hello' --max-turns 1
 ```
 
-## 5. Create shared directories
-
-```bash
-mkdir -p /mnt/ocsci-jenkins/log_analysis/session_manage
-mkdir -p /mnt/ocsci-jenkins/log_analysis/history_dir
-mkdir -p /mnt/ocsci-jenkins/log_analysis/cache_dir
-mkdir -p /mnt/ocsci-jenkins/log_analysis/sessions_dir
-```
-
-## 6. Verify scanner works (dry-run)
+## 5. Verify scanner works (dry-run)
 
 ```bash
 cd /home/jenkins/ocs-ci-analysis/ocs-ci
@@ -67,7 +58,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/opt/claude/auth/gcp-auth.json \
     --no-git-pull --dry-run -v
 ```
 
-## 7. Install crontab
+## 6. Install crontab
 
 ```bash
 cat <<'EOF' | crontab -
