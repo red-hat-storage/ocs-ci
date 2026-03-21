@@ -233,12 +233,15 @@ def find_runs_to_analyze(
 
 
 def _find_all_xmls(logs_dir: str) -> list[str]:
-    """Find all test_results_*.xml files in a logs directory."""
+    """Find all *test_results_*.xml files in a logs directory.
+
+    Matches both test_results_*.xml and upgrade_test_results_*.xml.
+    """
     try:
         candidates = [
             f
             for f in os.listdir(logs_dir)
-            if f.startswith("test_results") and f.endswith(".xml")
+            if "test_results" in f and f.endswith(".xml")
         ]
     except OSError:
         return []
@@ -250,12 +253,18 @@ def _xml_suffix(xml_path: str) -> str:
     """Extract suffix from XML filename for use in output naming.
 
     e.g. test_results_1774030457.xml -> _1774030457
+         upgrade_test_results_1774030457.xml -> _upgrade_1774030457
     """
     basename = os.path.basename(xml_path)
-    # Remove .xml extension and test_results prefix
     stem = basename.removesuffix(".xml")
-    if stem.startswith("test_results"):
-        return stem[len("test_results") :]
+    # Extract the numeric ID after the last underscore in test_results names
+    idx = stem.find("test_results")
+    if idx >= 0:
+        prefix = stem[:idx].rstrip("_")  # e.g. "upgrade" or ""
+        after = stem[idx + len("test_results") :]  # e.g. "_1774030457"
+        if prefix:
+            return f"_{prefix}{after}"
+        return after
     return f"_{stem}"
 
 
