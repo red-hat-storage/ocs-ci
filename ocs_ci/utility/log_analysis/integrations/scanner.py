@@ -50,12 +50,43 @@ _OCS_BUILD_RE = re.compile(
 
 
 def load_state(state_file: str) -> dict:
-    """Load the scanner state file."""
+    """Load the scanner state file.
+
+    Handles migration from logs_dir-keyed state to xml_path-keyed state.
+    Old keys ending in /logs are converted by finding their XML files.
+    """
     if os.path.exists(state_file):
         with open(state_file) as f:
             state = json.load(f)
         if "pending" not in state:
             state["pending"] = []
+        # Migrate old logs_dir-keyed processed entries to xml_path-keyed
+        migrated = {}
+        for key, val in state.get("processed", {}).items():
+            if key.endswith("/logs"):
+                # Old format: key is logs_dir — expand to all XMLs in that dir
+                xml_paths = _find_all_xmls(key)
+                if xml_paths:
+                    for xp in xml_paths:
+                        migrated[xp] = {**val, "logs_dir": key}
+                else:
+                    # Dir gone, keep with original key so it's not re-discovered
+                    migrated[key] = val
+            else:
+                migrated[key] = val
+        state["processed"] = migrated
+        # Migrate old pending entries that lack xml_path
+        new_pending = []
+        for entry in state["pending"]:
+            if "xml_path" not in entry:
+                logs_dir = entry["logs_dir"]
+                xml_paths = _find_all_xmls(logs_dir)
+                for xp in xml_paths:
+                    if xp not in migrated:
+                        new_pending.append({**entry, "xml_path": xp})
+            else:
+                new_pending.append(entry)
+        state["pending"] = new_pending
         return state
     return {"processed": {}, "pending": []}
 
@@ -133,11 +164,12 @@ def find_runs_to_analyze(
     Directory structure:
         scan_dir/j-*/j-*_TIMESTAMP/logs/test_results_*.xml
 
+    Each XML file with failures becomes a separate entry.
     Returns list of dicts with keys: logs_dir, xml_path, version
     """
     runs = []
     processed = state.get("processed", {})
-    pending_dirs = {r["logs_dir"] for r in state.get("pending", [])}
+    pending_xmls = {r["xml_path"] for r in state.get("pending", [])}
     cutoff_time = 0.0
     if max_age_days > 0:
         cutoff_time = time.time() - (max_age_days * 86400)
@@ -175,32 +207,33 @@ def find_runs_to_analyze(
                 except OSError:
                     continue
 
-            # Already processed or pending?
-            if logs_dir in processed or logs_dir in pending_dirs:
+            # Find all test_results XML files
+            xml_paths = _find_all_xmls(logs_dir)
+            if not xml_paths:
                 continue
 
-            # Find test_results XML files
-            xml_path = _find_latest_xml(logs_dir)
-            if not xml_path:
-                continue
+            for xml_path in xml_paths:
+                # Already processed or pending?
+                if xml_path in processed or xml_path in pending_xmls:
+                    continue
 
-            if not has_failures(xml_path):
-                continue
+                if not has_failures(xml_path):
+                    continue
 
-            version = detect_odf_version(xml_path)
-            runs.append(
-                {
-                    "logs_dir": logs_dir,
-                    "xml_path": xml_path,
-                    "version": version,
-                }
-            )
+                version = detect_odf_version(xml_path)
+                runs.append(
+                    {
+                        "logs_dir": logs_dir,
+                        "xml_path": xml_path,
+                        "version": version,
+                    }
+                )
 
     return runs
 
 
-def _find_latest_xml(logs_dir: str) -> str:
-    """Find the latest test_results_*.xml in a logs directory."""
+def _find_all_xmls(logs_dir: str) -> list[str]:
+    """Find all test_results_*.xml files in a logs directory."""
     try:
         candidates = [
             f
@@ -208,13 +241,22 @@ def _find_latest_xml(logs_dir: str) -> str:
             if f.startswith("test_results") and f.endswith(".xml")
         ]
     except OSError:
-        return ""
+        return []
 
-    if not candidates:
-        return ""
+    return [os.path.join(logs_dir, f) for f in sorted(candidates)]
 
-    latest = sorted(candidates)[-1]
-    return os.path.join(logs_dir, latest)
+
+def _xml_suffix(xml_path: str) -> str:
+    """Extract suffix from XML filename for use in output naming.
+
+    e.g. test_results_1774030457.xml -> _1774030457
+    """
+    basename = os.path.basename(xml_path)
+    # Remove .xml extension and test_results prefix
+    stem = basename.removesuffix(".xml")
+    if stem.startswith("test_results"):
+        return stem[len("test_results") :]
+    return f"_{stem}"
 
 
 def git_pull(ocs_ci_path: str):
@@ -241,18 +283,22 @@ def git_pull(ocs_ci_path: str):
 def _build_analysis_cmd(run: dict, args) -> tuple[list[str], str]:
     """Build the CLI command for a run. Returns (cmd, output_path)."""
     logs_dir = run["logs_dir"]
+    xml_path = run["xml_path"]
     version = run["version"]
 
     history_dir = os.path.join(args.history_base, f"{version}_history_dir")
     cache_dir = os.path.join(args.cache_base, f"{version}_cache_dir")
     sessions_dir = os.path.join(args.sessions_base, f"{version}_sessions_dir")
-    output_path = os.path.join(logs_dir, "ai_analysis_report.html")
+    suffix = _xml_suffix(xml_path)
+    output_path = os.path.join(logs_dir, f"ai_analysis_report{suffix}.html")
 
     cmd = [
         sys.executable,
         "-m",
         "ocs_ci.utility.log_analysis.cli",
         logs_dir,
+        "--junit-xml",
+        xml_path,
         "--model",
         "sonnet",
         "--jslave",
@@ -307,11 +353,13 @@ def scan(args):
         args.scan_dir, state, max_age_days=args.max_age_days
     )
 
-    # Drop pending entries whose directories no longer exist
-    valid_pending = [r for r in state["pending"] if os.path.isdir(r["logs_dir"])]
+    # Drop pending entries whose XML files no longer exist
+    valid_pending = [r for r in state["pending"] if os.path.isfile(r["xml_path"])]
     if len(valid_pending) < len(state["pending"]):
         dropped = len(state["pending"]) - len(valid_pending)
-        log.info(f"Dropped {dropped} pending run(s) whose directories no longer exist")
+        log.info(
+            f"Dropped {dropped} pending entry(ies) whose XML files no longer exist"
+        )
 
     # Merge new discoveries into pending
     if new_runs:
@@ -335,8 +383,11 @@ def scan(args):
             history_dir = os.path.join(args.history_base, f"{version}_history_dir")
             cache_dir = os.path.join(args.cache_base, f"{version}_cache_dir")
             sessions_dir = os.path.join(args.sessions_base, f"{version}_sessions_dir")
+            suffix = _xml_suffix(run["xml_path"])
             print(f"  {run['logs_dir']}")
+            print(f"    XML:           {os.path.basename(run['xml_path'])}")
             print(f"    ODF version:   {version}")
+            print(f"    output:        ai_analysis_report{suffix}.html")
             print(f"    history-dir:   {history_dir}")
             print(f"    cache-dir:     {cache_dir}")
             print(f"    sessions-dir:  {sessions_dir}")
@@ -359,10 +410,12 @@ def scan(args):
         while work_queue and len(active) < parallel:
             run = work_queue.pop(0)
             cmd, output_path = _build_analysis_cmd(run, args)
-            log_path = os.path.join(run["logs_dir"], "ai_analysis.log")
+            suffix = _xml_suffix(run["xml_path"])
+            log_path = os.path.join(run["logs_dir"], f"ai_analysis{suffix}.log")
+            xml_name = os.path.basename(run["xml_path"])
             log.info(
                 f"Launching [{completed + len(active) + 1}/{total}]: "
-                f"{run['logs_dir']} (ODF {run['version']})"
+                f"{run['logs_dir']} [{xml_name}] (ODF {run['version']})"
             )
             log.info(f"  Live log: {log_path}")
             log_fd = open(log_path, "w")
@@ -392,14 +445,15 @@ def scan(args):
             proc.returncode = exit_code
             _log_process_result(proc, run, output_path, log_path)
             success = exit_code == 0
-            # Move from pending to processed
-            state["processed"][run["logs_dir"]] = {
+            # Move from pending to processed (keyed by xml_path)
+            state["processed"][run["xml_path"]] = {
                 "timestamp": now,
                 "status": "done" if success else "failed",
                 "version": run["version"],
+                "logs_dir": run["logs_dir"],
             }
             state["pending"] = [
-                r for r in state["pending"] if r["logs_dir"] != run["logs_dir"]
+                r for r in state["pending"] if r["xml_path"] != run["xml_path"]
             ]
             save_state(args.state_file, state)
             completed += 1

@@ -116,19 +116,36 @@ These must be in the crontab because cron has a minimal environment:
 - `--max-failures 70` - analyze up to 70 failures per run
 - Lock file prevents concurrent scanner instances
 
+## Per-XML tracking
+
+The scanner tracks each JUnit XML file individually. This supports upgrade runs that produce
+multiple `test_results_*.xml` files (e.g., tier1 on 4.16, then upgrade and tier1 on 4.17).
+
+- Each XML with failures becomes a separate pending/processed entry
+- State file keys are full XML paths (e.g., `.../logs/test_results_1774030457.xml`)
+- Output files are suffixed with the XML identifier:
+  - `ai_analysis_report_1774030457.html` (report)
+  - `ai_analysis_1774030457.log` (analysis log)
+- The CLI receives `--junit-xml <path>` to analyze a specific XML
+- ODF version is detected per-XML from `rp_ocs_build`, so upgrade runs
+  use the correct version-specific cache/history for each phase
+
+**State migration**: old state files with `logs_dir` keys are automatically
+migrated to `xml_path` keys on first load.
+
 ## Pending queue
 
-Runs go through three states: **discovered → pending → processed**.
+Entries go through three states: **discovered → pending → processed**.
 
-- **Discovery**: directory scan finds new runs with failures (age filter applies only here)
+- **Discovery**: directory scan finds new XML files with failures (age filter applies only here)
 - **Pending**: saved in the `"pending"` list in the state file — survives across scanner cycles, cannot age out
 - **Processed**: moved to `"processed"` dict after analysis completes (status: `done` or `failed`)
 
-Each cycle: discover new runs → merge into pending → sort oldest-first → process up to `--max-runs-per-cycle` from the front → move completed to processed.
+Each cycle: discover new XMLs → merge into pending → sort oldest-first → process up to `--max-runs-per-cycle` from the front → move completed to processed.
 
-This prevents runs from being missed when the backlog takes multiple cycles to drain. Pending entries whose directories no longer exist on disk are automatically dropped.
+This prevents runs from being missed when the backlog takes multiple cycles to drain. Pending entries whose XML files no longer exist on disk are automatically dropped.
 
-Per-run analysis logs are written to `<logs_dir>/ai_analysis.log` for live tailing.
+Per-XML analysis logs are written to `<logs_dir>/ai_analysis_<suffix>.log` for live tailing.
 
 ## Troubleshooting
 
@@ -154,7 +171,7 @@ Then clear state: `echo '{"processed": {}, "pending": []}' > /mnt/ocsci-jenkins/
 `GOOGLE_APPLICATION_CREDENTIALS` not set or file missing. Verify `/opt/claude/auth/gcp-auth.json` exists.
 
 ### Re-analyze specific runs
-Remove the run from `"processed"` in the state file. It will be rediscovered (if within `--max-age-days`) and added to the pending queue.
+Remove the XML path from `"processed"` in the state file. It will be rediscovered (if within `--max-age-days`) and added to the pending queue.
 To re-analyze all: `echo '{"processed": {}, "pending": []}' > /mnt/ocsci-jenkins/log_analysis/session_manage/scanner_state.json`
 
 ### Check scanner status
@@ -162,8 +179,8 @@ To re-analyze all: `echo '{"processed": {}, "pending": []}' > /mnt/ocsci-jenkins
 # Follow scanner log
 tail -f /mnt/ocsci-jenkins/log_analysis/session_manage/scanner.log
 
-# Follow a specific run's analysis log
-tail -f /mnt/ocsci-jenkins/openshift-clusters/j-xxx/j-xxx_TIMESTAMP/logs/ai_analysis.log
+# Follow a specific run's analysis log (suffix matches the XML timestamp)
+tail -f /mnt/ocsci-jenkins/openshift-clusters/j-xxx/j-xxx_TIMESTAMP/logs/ai_analysis_NNNNNNN.log
 
 # Summary of state
 python3 -c '

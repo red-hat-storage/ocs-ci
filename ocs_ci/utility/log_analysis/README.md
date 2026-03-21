@@ -223,6 +223,8 @@ python -m ocs_ci.utility.log_analysis.cli <source> [options]
 | `--record-history` | off | Save results to history store for cross-run analysis |
 | `--history-dir` | `~/.ocs-ci/analysis_history` | History store directory |
 | `--save-prompts` | off | Save AI prompts to `~/.ocs-ci/prompts/<run_id>/` for debugging |
+| `--junit-xml` | auto | Path to a specific JUnit XML to analyze (overrides auto-discovery) |
+| `--no-summary` | off | Skip AI-generated run summary (saves tokens/cost) |
 | `-v`, `--verbose` | off | Enable debug logging |
 
 **Examples:**
@@ -265,6 +267,13 @@ python -m ocs_ci.utility.log_analysis.cli \
 python -m ocs_ci.utility.log_analysis.cli \
   "http://magna002.ceph.redhat.com/ocsci-jenkins/openshift-clusters/j043vu6mlvt33t1/j043vu6mlvt33t1_20260122T042132/logs/" \
   --jira-config ~/jira.cfg --known-issues-only
+
+# Analyze a specific XML (for upgrade runs with multiple XMLs per logs dir)
+python -m ocs_ci.utility.log_analysis.cli \
+  /mnt/ocsci-jenkins/openshift-clusters/j-upgrade-1/j-upgrade-1_20260321T120000/logs/ \
+  --junit-xml /mnt/ocsci-jenkins/openshift-clusters/j-upgrade-1/j-upgrade-1_20260321T120000/logs/test_results_1774030457.xml \
+  --model sonnet --no-jira \
+  -o ai_analysis_report_1774030457.html
 ```
 
 The Jira config file is a simple INI file with a `[DEFAULT]` section containing
@@ -437,7 +446,8 @@ ocs_ci/utility/log_analysis/
 |
 |-- integrations/                # External integrations
 |   |-- jira_search.py           # Search Jira for matching bugs
-|   +-- ci_hook.py               # pytest plugin for CI post-session analysis
+|   |-- ci_hook.py               # pytest plugin for CI post-session analysis
+|   +-- scanner.py               # Cron-driven scanner for unprocessed test runs
 |
 +-- reporting/                   # Report generation
     |-- report_builder.py        # JSON, Markdown, HTML report builder
@@ -471,6 +481,7 @@ result = analyze_run(
     jira_projects=["DFBUGS"],
     record_history=False,          # True = save to history store
     history_dir="~/.ocs-ci/analysis_history",
+    junit_xml=None,                # Path to specific XML (overrides auto-discovery)
 )
 
 # result.total_tests, result.passed, result.failed, result.error, result.skipped

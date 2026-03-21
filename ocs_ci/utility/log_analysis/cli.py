@@ -153,6 +153,11 @@ def main(argv=None):
         help="Directory for run history files (default: ~/.ocs-ci/analysis_history)",
     )
     parser.add_argument(
+        "--junit-xml",
+        default=None,
+        help="Path to a specific JUnit XML file to analyze (overrides auto-discovery)",
+    )
+    parser.add_argument(
         "--no-summary",
         action="store_true",
         help="Skip AI-generated run summary (saves tokens/cost)",
@@ -224,6 +229,7 @@ def main(argv=None):
             sessions_dir=args.sessions_dir,
             sessions_url=sessions_url,
             no_summary=args.no_summary,
+            junit_xml=args.junit_xml,
         )
 
         # Generate report

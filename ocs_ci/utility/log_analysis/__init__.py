@@ -34,6 +34,7 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
             max_failures (int): Max unique failures for AI analysis (default: 30)
             no_jira (bool): Skip Jira integration (default: False)
             jira_projects (list): Jira project keys to search (default: DFBUGS, RHSTOR, OCSQE)
+            junit_xml (str): Path to specific JUnit XML file (overrides auto-discovery)
 
     Returns:
         RunAnalysis: Complete analysis of the test run
@@ -57,6 +58,11 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
             run_metadata = RunConfigParser.parse(config_content, source)
         except Exception as e:
             logger.warning(f"Failed to parse config YAML: {e}")
+
+    # Override JUnit XML if explicitly specified
+    junit_xml_override = kwargs.get("junit_xml")
+    if junit_xml_override:
+        manifest.junit_xml = junit_xml_override
 
     # Parse JUnit XML
     if not manifest.junit_xml:
