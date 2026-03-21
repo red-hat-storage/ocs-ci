@@ -315,9 +315,47 @@ def _log_process_result(proc, run: dict, output_path: str, log_path: str):
         )
 
 
+def _backup_state(state_file: str, max_backups: int = 7):
+    """Create a daily backup of the state file.
+
+    Backs up to a backup_scanner_state/ directory next to the state file.
+    Skips if today's backup already exists. Removes backups older than max_backups days.
+    """
+    import shutil
+
+    if not os.path.exists(state_file):
+        return
+
+    backup_dir = os.path.join(os.path.dirname(state_file), "backup_scanner_state")
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    backup_path = os.path.join(backup_dir, f"scanner_state.json.{today}")
+
+    if os.path.exists(backup_path):
+        return
+
+    try:
+        os.makedirs(backup_dir, exist_ok=True)
+        shutil.copy2(state_file, backup_path)
+        log.info(f"State backup created: {backup_path}")
+
+        # Clean old backups
+        for f in os.listdir(backup_dir):
+            fp = os.path.join(backup_dir, f)
+            if os.path.isfile(fp) and f.startswith("scanner_state.json."):
+                age_days = (time.time() - os.path.getmtime(fp)) / 86400
+                if age_days > max_backups:
+                    os.remove(fp)
+                    log.info(f"Removed old backup: {f}")
+    except OSError as e:
+        log.warning(f"State backup failed: {e}")
+
+
 def scan(args):
     """Main scan cycle."""
     now = datetime.now(timezone.utc).isoformat()
+
+    # Step 0: Daily state backup
+    _backup_state(args.state_file)
 
     # Step 1: Update ocs-ci clone
     if not args.no_git_pull:
