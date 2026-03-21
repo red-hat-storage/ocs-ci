@@ -38,6 +38,8 @@ DEFAULT_SESSIONS_BASE = "/mnt/ocsci-jenkins/log_analysis/sessions_dir"
 DEFAULT_LOCK_FILE = "/mnt/ocsci-jenkins/log_analysis/session_manage/scanner.lock"
 DEFAULT_VERSION_FALLBACK = "4_21"
 
+# Directories to scan: j+digit, lr+digit, or containing "anyz"
+_SCAN_DIR_RE = re.compile(r"^(j\d|lr\d)|anyz", re.IGNORECASE)
 # Regex to detect failures/errors in JUnit XML without full parsing
 _FAILURES_RE = re.compile(r'failures="(\d+)"')
 _ERRORS_RE = re.compile(r'errors="(\d+)"')
@@ -150,7 +152,7 @@ def find_runs_to_analyze(
         return runs
 
     for cluster_dir_name in top_entries:
-        if not cluster_dir_name.startswith("j"):
+        if not _SCAN_DIR_RE.search(cluster_dir_name):
             continue
 
         cluster_path = os.path.join(scan_dir, cluster_dir_name)
