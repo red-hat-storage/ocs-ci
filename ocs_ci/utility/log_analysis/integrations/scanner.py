@@ -50,43 +50,12 @@ _OCS_BUILD_RE = re.compile(
 
 
 def load_state(state_file: str) -> dict:
-    """Load the scanner state file.
-
-    Handles migration from logs_dir-keyed state to xml_path-keyed state.
-    Old keys ending in /logs are converted by finding their XML files.
-    """
+    """Load the scanner state file."""
     if os.path.exists(state_file):
         with open(state_file) as f:
             state = json.load(f)
         if "pending" not in state:
             state["pending"] = []
-        # Migrate old logs_dir-keyed processed entries to xml_path-keyed
-        migrated = {}
-        for key, val in state.get("processed", {}).items():
-            if key.endswith("/logs"):
-                # Old format: key is logs_dir — expand to all XMLs in that dir
-                xml_paths = _find_all_xmls(key)
-                if xml_paths:
-                    for xp in xml_paths:
-                        migrated[xp] = {**val, "logs_dir": key}
-                else:
-                    # Dir gone, keep with original key so it's not re-discovered
-                    migrated[key] = val
-            else:
-                migrated[key] = val
-        state["processed"] = migrated
-        # Migrate old pending entries that lack xml_path
-        new_pending = []
-        for entry in state["pending"]:
-            if "xml_path" not in entry:
-                logs_dir = entry["logs_dir"]
-                xml_paths = _find_all_xmls(logs_dir)
-                for xp in xml_paths:
-                    if xp not in migrated:
-                        new_pending.append({**entry, "xml_path": xp})
-            else:
-                new_pending.append(entry)
-        state["pending"] = new_pending
         return state
     return {"processed": {}, "pending": []}
 

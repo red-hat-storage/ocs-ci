@@ -121,9 +121,6 @@ multiple `test_results_*.xml` files (e.g., tier1 on 4.16, then upgrade and tier1
 - ODF version is detected per-XML from `rp_ocs_build`, so upgrade runs
   use the correct version-specific cache/history for each phase
 
-**State migration**: old state files with `logs_dir` keys are automatically
-migrated to `xml_path` keys on first load.
-
 ## Pending queue
 
 Entries go through three states: **discovered → pending → processed**.
