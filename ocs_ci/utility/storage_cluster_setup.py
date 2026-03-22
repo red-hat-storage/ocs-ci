@@ -453,7 +453,10 @@ class StorageClusterSetup(object):
 
             ec_managed_resources.setdefault("cephObjectStores", {}).update(
                 {
-                    "dataPoolSpec": {"erasureCoded": ec_spec},
+                    "dataPoolSpec": {
+                        "failureDomain": fd,
+                        "erasureCoded": ec_spec,
+                    },
                 }
             )
 
