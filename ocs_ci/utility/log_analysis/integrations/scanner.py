@@ -5,10 +5,14 @@ Scans /mnt/ocsci-jenkins/openshift-clusters/ for j-prefixed directories
 containing JUnit XML results with failures, and triggers log analysis
 via the CLI for each unprocessed run.
 
-Designed to run as a cron job on the Jenkins agent:
-    */5 * * * * /opt/ocs-ci-analysis/venv/bin/python \
-        -m ocs_ci.utility.log_analysis.integrations.scanner \
-        >> /mnt/ocsci-jenkins/log_analysis/scanner.log 2>&1
+Designed to run as a cron job on the Jenkins agent (crontab -e):
+    CLAUDE_CODE_USE_VERTEX=1
+    ANTHROPIC_VERTEX_PROJECT_ID=itpc-gcp-core-pe-eng-claude
+    CLOUD_ML_REGION=us-east5
+    GOOGLE_APPLICATION_CREDENTIALS=/opt/claude/auth/gcp-auth.json
+    PATH=/home/jenkins/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+    */5 * * * * cd /home/jenkins/ocs-ci-analysis/ocs-ci && /home/jenkins/ocs-ci-analysis/venv/bin/python -m ocs_ci.utility.log_analysis.integrations.scanner --ocs-ci-path /home/jenkins/ocs-ci-analysis/ocs-ci --no-git-pull >> /mnt/ocsci-jenkins/log_analysis/session_manage/scanner.log 2>&1
 """
 
 import argparse
