@@ -95,8 +95,12 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # Step 1: Deploy 2 GitOps/Subscription Apps
         # ========================================
         logger.info("Deploying 2 GitOps/Subscription apps")
-        gitops_workload_1 = all_dr_workloads["dr_workload"]()
-        gitops_workload_2 = all_dr_workloads["dr_workload"]()
+        gitops_workload_1 = all_dr_workloads["dr_workload"](
+            skip_mirroring_validation=True
+        )
+        gitops_workload_2 = all_dr_workloads["dr_workload"](
+            skip_mirroring_validation=True
+        )
         gitops_workloads = [gitops_workload_1, gitops_workload_2]
         logger.info(f"Deployed {len(gitops_workloads)} GitOps workloads")
 
@@ -131,7 +135,20 @@ class Test2AZFailoverAndRelocateZoneFailure:
         logger.info(f"Total workloads deployed: {len(all_workloads)}")
 
         # ========================================
-        # Step 4: Perform Failover and Relocate for each workload
+        # Step 4: Validate mirroring status for all deployed workloads
+        # ========================================
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            total_pvc_count = sum([wl.workload_pvc_count for wl in all_workloads])
+            logger.info(
+                f"Validating mirroring status for {total_pvc_count} PVCs across {len(all_workloads)} workloads"
+            )
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=total_pvc_count, timeout=900
+            )
+            logger.info("Mirroring status validation successful for all workloads")
+
+        # ========================================
+        # Step 5: Perform Failover and Relocate for each workload
         # ========================================
         for idx, workload in enumerate(all_workloads, 1):
             workload_type = (
@@ -185,7 +202,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
             sleep(wait_time * 60)
 
             # ========================================
-            # Step 5: Failover to Secondary Cluster
+            # Step 6: Failover to Secondary Cluster
             # ========================================
             logger.info(
                 f"Starting failover for workload {idx} to {secondary_cluster_name}"
@@ -280,7 +297,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 logger.info(f"Nodes in zone '{power_off_zone}' restarted and healthy")
 
             # ========================================
-            # Step 6: Relocate back to Primary Cluster
+            # Step 7: Relocate back to Primary Cluster
             # ========================================
             logger.info(
                 f"Starting relocate for workload {idx} back to {primary_cluster_name}"
