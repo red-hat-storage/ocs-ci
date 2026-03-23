@@ -398,7 +398,7 @@ class CacheBackfiller:
 
     # ---- AI call helpers ----
 
-    def _call_ai(self, prompt, context=""):
+    def _call_ai(self, prompt, context="", retries=1):
         """Make a single-turn AI call via claude CLI with JSON schema."""
         schema = json.dumps({
             "type": "object",
@@ -429,60 +429,62 @@ class CacheBackfiller:
                     env["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
                     break
 
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=120, env=env,
-            )
-        except subprocess.TimeoutExpired:
-            logger.warning(f"AI call timed out for {context}")
-            self._stats["errors"] += 1
-            return None
-        except FileNotFoundError:
-            logger.error("claude CLI not found")
-            return None
-
-        if result.returncode != 0:
-            logger.warning(f"AI call failed for {context}: {result.stderr[:200]}")
-            self._stats["errors"] += 1
-            return None
-
-        try:
-            response = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse AI response for {context}")
-            self._stats["errors"] += 1
-            return None
-
-        # Extract structured output
-        structured = response.get("structured_output")
-        if structured is None:
-            result_text = response.get("result", "")
-            # Try direct JSON parse first
+        for attempt in range(1 + retries):
             try:
-                structured = json.loads(result_text)
-            except (json.JSONDecodeError, TypeError):
-                pass
-            # Fall back to brace-depth extraction from result text
-            if structured is None and result_text:
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=120, env=env,
+                )
+            except subprocess.TimeoutExpired:
+                logger.warning(f"AI call timed out for {context}")
+                self._stats["errors"] += 1
+                return None
+            except FileNotFoundError:
+                logger.error("claude CLI not found")
+                return None
+
+            if result.returncode != 0:
+                logger.warning(f"AI call failed for {context}: {result.stderr[:200]}")
+                self._stats["errors"] += 1
+                return None
+
+            try:
+                response = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse AI response for {context}")
+                self._stats["errors"] += 1
+                return None
+
+            # Extract structured output
+            structured = response.get("structured_output")
+            if structured is None:
+                result_text = response.get("result", "")
+                # Try direct JSON parse first
                 try:
-                    structured = self._extract_json_brace_depth(result_text)
-                except ValueError:
-                    logger.warning(f"No structured output from AI for {context}")
-                    self._stats["errors"] += 1
-                    return None
+                    structured = json.loads(result_text)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                # Fall back to brace-depth extraction from result text
+                if structured is None and result_text:
+                    try:
+                        structured = self._extract_json_brace_depth(result_text)
+                    except ValueError:
+                        pass
 
-        cost = response.get("total_cost_usd", 0)
-        logger.debug(f"AI call: ${cost:.4f} ({context})")
+            cost = response.get("total_cost_usd", 0)
+            logger.debug(f"AI call: ${cost:.4f} ({context})")
 
-        if structured and isinstance(structured, dict):
-            logger.debug(f"AI result keys: {list(structured.keys())} ({context})")
-        elif structured is not None:
-            logger.warning(f"AI returned non-dict structured output: {type(structured).__name__} ({context})")
+            if structured and isinstance(structured, dict):
+                logger.debug(f"AI result keys: {list(structured.keys())} ({context})")
+                return structured
+
+            # Retry if we got nothing
+            if attempt < retries:
+                logger.info(f"Retrying AI call for {context} (empty response)")
+                time.sleep(2)
+                continue
+
+            logger.warning(f"AI returned no usable output after {1 + retries} attempts ({context})")
             return None
-        else:
-            logger.warning(f"AI returned None after all extraction attempts ({context})")
-            return None
-        return structured
 
     def _build_bug_details_prompt(
         self, test_name, root_cause, evidence, traceback, run_metadata
