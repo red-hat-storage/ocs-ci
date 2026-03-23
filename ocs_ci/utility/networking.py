@@ -363,6 +363,48 @@ def create_drs_machine_config():
 
         logger.info("All worker nodes have been updated successfully")
 
+        # Verify HCP hosted clusters are operational after node reboots
+        logger.info(
+            "Verifying HCP hosted clusters are operational after MachineConfig update"
+        )
+        from ocs_ci.deployment.helpers.hypershift_base import get_hosted_cluster_names
+        from ocs_ci.ocs.resources.pod import (
+            wait_for_pods_to_be_in_statuses_concurrently,
+        )
+
+        hosted_clusters = get_hosted_cluster_names()
+        if hosted_clusters:
+            logger.info(
+                f"Found {len(hosted_clusters)} hosted clusters to verify: {hosted_clusters}"
+            )
+            for cluster_name in hosted_clusters:
+                namespace = f"clusters-{cluster_name}"
+                logger.info(
+                    f"Checking critical HCP pods in namespace '{namespace}' are running"
+                )
+
+                # Check critical HCP control plane pods
+                app_selectors_to_resource_count_list = [
+                    {"app=capi-provider-controller-manager": 1},
+                    {"app=catalog-operator": 1},
+                    {"app=cluster-api": 1},
+                ]
+
+                if not wait_for_pods_to_be_in_statuses_concurrently(
+                    app_selectors_to_resource_count_list,
+                    namespace,
+                    timeout=600,  # 10 minutes timeout for pods to recover
+                ):
+                    logger.warning(
+                        f"HCP pods in cluster '{cluster_name}' are not running yet after MachineConfig update"
+                    )
+                else:
+                    logger.info(
+                        f"HCP pods in cluster '{cluster_name}' are running successfully"
+                    )
+        else:
+            logger.info("No hosted clusters found, skipping HCP verification")
+
 
 def create_drs_nad(cluster_name):
     """
