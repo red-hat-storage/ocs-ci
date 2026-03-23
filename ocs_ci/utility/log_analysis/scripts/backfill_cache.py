@@ -505,9 +505,7 @@ a structured bug report (DFBUGS form) based on the existing analysis.
 - ODF Version: {ocs_ver}
 - ODF Build: {ocs_build}
 
-## Output
-
-Return a JSON object with a `bug_details` field containing:
+Respond with ONLY a JSON object (no markdown, no explanation outside the JSON). The JSON must have a single top-level key "bug_details" containing:
 - bug_subject: "ODF: <concise bug title>"
 - description: detailed description with log snippets
 - platform: "{platform}"
@@ -562,9 +560,7 @@ a suggested code fix based on the existing analysis and the actual source code.
 {tb_str}
 ```
 {source_section}
-## Output
-
-Return a JSON object with a `suggested_fix` field containing:
+Respond with ONLY a JSON object (no markdown, no explanation outside the JSON). The JSON must have a single top-level key "suggested_fix" containing:
 - file: path to the file (e.g., ocs_ci/ocs/bucket_utils.py)
 - function: function name where the fix goes
 - line: exact line number where the change starts (verify from the source code above)
