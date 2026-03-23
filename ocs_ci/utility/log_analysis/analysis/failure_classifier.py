@@ -70,6 +70,8 @@ class FailureClassifier:
         run_metadata: dict = None,
         bug_details_dir: Optional[str] = None,
         ocs_ci_repo: Optional[str] = None,
+        keep_mg: bool = False,
+        jslave: bool = False,
     ):
         """
         Args:
@@ -99,6 +101,8 @@ class FailureClassifier:
         self.run_metadata = run_metadata
         self.bug_details_dir = bug_details_dir
         self.ocs_ci_repo = os.path.expanduser(ocs_ci_repo or DEFAULT_UPSTREAM_REPO_DIR)
+        self.keep_mg = keep_mg
+        self.jslave = jslave
         self._release_branch = ""
         self.log_parser = TestLogParser()
         self.mg_parser = MustGatherParser()
@@ -183,8 +187,14 @@ class FailureClassifier:
                 if cache_result:
                     cached, cache_path = cache_result
                     cached["cache_file"] = self._cache_path_to_url(cache_path)
+                    # Track origin test name when cache hit is from a different test
+                    cached_test_name = cached.pop("_cached_test_name", "")
                     cache_hit_count += len(group_failures)
                     for f in group_failures:
+                        if cached_test_name and cached_test_name != f.name:
+                            cached["cache_test"] = cached_test_name
+                        else:
+                            cached.pop("cache_test", None)
                         results.append(self._build_analysis(f, cached))
                     continue
 
@@ -238,6 +248,12 @@ class FailureClassifier:
                 )
                 ai_call_count += 1
 
+                # Record classification metadata
+                analysis_dict["model_used"] = getattr(self.ai_backend, "model", "")
+                analysis_dict["agentic"] = bool(
+                    analysis_dict.get("session_text") or analysis_dict.get("session_id")
+                )
+
                 # Save agentic session output
                 session_text = analysis_dict.pop("session_text", "")
                 if session_text:
@@ -255,14 +271,27 @@ class FailureClassifier:
                         m["issue"] for m in known_matches
                     )
 
+                # Build must-gather URLs before caching
+                mg_url = self._build_must_gather_url(representative.name)
+                if mg_url:
+                    analysis_dict["must_gather_url"] = mg_url
+                mg_data_url = self._build_mg_data_url(must_gather_info)
+                if mg_data_url:
+                    analysis_dict["mg_data_url"] = mg_data_url
+
                 # Cache the result (without session_text which was already popped)
                 if self.cache:
-                    ocs_ver = (
-                        self.run_metadata.get("ocs_version", "")
-                        if self.run_metadata
-                        else ""
+                    self.cache.put(
+                        sig,
+                        analysis_dict,
+                        run_metadata=self.run_metadata,
+                        test_name=representative.name,
+                        test_class=representative.classname or "",
+                        squad=representative.squad or "",
+                        traceback=representative.traceback or "",
+                        status=representative.status.value,
+                        polarion_id=representative.polarion_id or "",
                     )
-                    self.cache.put(sig, analysis_dict, ocs_version=ocs_ver)
 
             except Exception as e:
                 ai_call_count += 1  # Count failed calls toward the limit
@@ -276,11 +305,13 @@ class FailureClassifier:
                     "evidence": [],
                     "recommended_action": f"AI classification failed: {e}",
                 }
-
-            # Build must-gather URL for the report
-            mg_url = self._build_must_gather_url(representative.name)
-            if mg_url:
-                analysis_dict["must_gather_url"] = mg_url
+                # Still build must-gather URLs for the report
+                mg_url = self._build_must_gather_url(representative.name)
+                if mg_url:
+                    analysis_dict["must_gather_url"] = mg_url
+                mg_data_url = self._build_mg_data_url(must_gather_info)
+                if mg_data_url:
+                    analysis_dict["mg_data_url"] = mg_data_url
 
             for f in group_failures:
                 results.append(self._build_analysis(f, analysis_dict))
@@ -511,7 +542,8 @@ class FailureClassifier:
         safe_test = re.sub(r"[^\w\-]", "_", test_name)[:80]
         extract_dir = os.path.join(MG_CACHE_DIR, self.run_id, safe_test)
         os.makedirs(extract_dir, exist_ok=True)
-        self._mg_cleanup_paths.append(extract_dir)
+        if not self.keep_mg:
+            self._mg_cleanup_paths.append(extract_dir)
 
         # Download and extract each archive
         for url, label in [(tar_url, "ocs"), (ocp_tar_url, "ocp")]:
@@ -585,10 +617,15 @@ class FailureClassifier:
         cluster_id: str,
     ) -> dict:
         """Extract must-gather tar.gz from local filesystem path."""
-        safe_test = re.sub(r"[^\w\-]", "_", test_name)[:80]
-        extract_dir = os.path.join(MG_CACHE_DIR, self.run_id, safe_test)
-        os.makedirs(extract_dir, exist_ok=True)
-        self._mg_cleanup_paths.append(extract_dir)
+        if self.jslave:
+            # Extract in-place on NFS so files are accessible via HTTP
+            extract_dir = cluster_path
+        else:
+            safe_test = re.sub(r"[^\w\-]", "_", test_name)[:80]
+            extract_dir = os.path.join(MG_CACHE_DIR, self.run_id, safe_test)
+            os.makedirs(extract_dir, exist_ok=True)
+        if not self.keep_mg and not self.jslave:
+            self._mg_cleanup_paths.append(extract_dir)
 
         ocs_tar = next(
             (e for e in cluster_entries if e == "ocs_must_gather.tar.gz"), None
@@ -679,6 +716,32 @@ class FailureClassifier:
                 return magna_http + mg_path[len(magna_mount) :]
             return ""
         return mg_path
+
+    def _build_mg_data_url(self, must_gather_info: dict) -> str:
+        """Build a browsable URL to the OCS must-gather data directory.
+
+        For jslave (NFS paths): convert to magna002 HTTP URL.
+        For keep_mg (local paths): return file:// URL.
+        Otherwise: return empty (files will be cleaned up).
+        """
+        if not must_gather_info or must_gather_info.get("mg_type") == "none":
+            return ""
+
+        ocs_mg = must_gather_info.get("ocs_mg", "")
+        if not ocs_mg:
+            return ""
+
+        magna_mount = "/mnt/ocsci-jenkins/"
+        magna_http = "http://magna002.ceph.redhat.com/ocsci-jenkins/"
+
+        if self.jslave and ocs_mg.startswith(magna_mount):
+            return magna_http + ocs_mg[len(magna_mount) :]
+        elif self.keep_mg and not ocs_mg.startswith("http"):
+            return f"file://{ocs_mg}"
+        elif ocs_mg.startswith("http"):
+            return ocs_mg
+
+        return ""
 
     def _build_test_log_url(self, test_name: str, test_class: str) -> str:
         """Build the direct URL to the per-test log file.
@@ -1013,9 +1076,11 @@ class FailureClassifier:
             session_id=analysis_dict.get("session_id", ""),
             session_file=analysis_dict.get("session_file", ""),
             must_gather_url=analysis_dict.get("must_gather_url", ""),
+            mg_data_url=analysis_dict.get("mg_data_url", ""),
             bug_details=analysis_dict.get("bug_details", {}),
             suggested_fix=analysis_dict.get("suggested_fix", {}),
             cache_file=analysis_dict.get("cache_file", ""),
+            cache_test=analysis_dict.get("cache_test", ""),
         )
 
     @staticmethod

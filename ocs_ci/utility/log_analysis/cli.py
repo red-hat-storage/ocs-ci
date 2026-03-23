@@ -179,6 +179,14 @@ def main(argv=None):
         ),
     )
     parser.add_argument(
+        "--keep-mg",
+        action="store_true",
+        help=(
+            "Keep extracted must-gather files after analysis (enables evidence "
+            "links to local files in the report)"
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -248,6 +256,8 @@ def main(argv=None):
             junit_xml=args.junit_xml,
             bug_details_dir=args.bug_details_dir,
             ocs_ci_repo=args.ocs_ci_repo,
+            keep_mg=args.keep_mg,
+            jslave=args.jslave,
         )
 
         # Generate report

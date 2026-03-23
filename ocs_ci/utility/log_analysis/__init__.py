@@ -102,6 +102,10 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
     if not source.startswith("http") and run_metadata.logs_url.startswith("http"):
         effective_url = run_metadata.logs_url
 
+    # Store run timestamp in metadata for cache/reports
+    run_timestamp = parser.suite_timestamp or datetime.utcnow().isoformat()
+    run_metadata.run_timestamp = run_timestamp
+
     # Build run analysis
     run_analysis = RunAnalysis(
         run_url=effective_url,
@@ -111,7 +115,7 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
         failed=sum(1 for t in test_results if t.status == TestStatus.FAILED),
         skipped=sum(1 for t in test_results if t.status == TestStatus.SKIPPED),
         error=sum(1 for t in test_results if t.status == TestStatus.ERROR),
-        timestamp=parser.suite_timestamp or datetime.utcnow().isoformat(),
+        timestamp=run_timestamp,
     )
 
     # Filter to failures only
@@ -203,6 +207,8 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
         run_metadata=run_metadata.to_dict() if ai_backend != "none" else None,
         bug_details_dir=kwargs.get("bug_details_dir"),
         ocs_ci_repo=kwargs.get("ocs_ci_repo"),
+        keep_mg=kwargs.get("keep_mg", False),
+        jslave=kwargs.get("jslave", False),
     )
 
     failure_analyses = classifier.classify_failures(

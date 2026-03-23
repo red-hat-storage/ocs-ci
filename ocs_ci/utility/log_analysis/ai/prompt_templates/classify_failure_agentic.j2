@@ -177,11 +177,13 @@ Use `curl -sk` to fetch DOM HTML files for error messages or UI state at the tim
 2. Investigate the must-gather data to find the root cause
 3. In the **evidence** array, each entry must have TWO parts:
    your interpretation/explanation FOLLOWED BY the actual log quote with source file.
-   Format: `<your explanation> — <source_file>: '<quoted log line(s)>'`
+   Format: `<your explanation> — <source_file_path>: '<quoted log line(s)>'`
+   **IMPORTANT**: Use the FULL relative path from the must-gather root for `<source_file_path>`,
+   not just the filename. This is critical for evidence links to work.
    Examples:
-   - `Ceph cluster has degraded OSDs causing I/O failures — ceph_health_detail: 'HEALTH_WARN 1 osds down; Degraded data redundancy: 24/72 objects degraded'`
-   - `NooBaa block store failing to verify replicated blocks — noobaa-core-0/current.log: 'Block data must be a buffer' (27069 occurrences)`
-   - `BackingStore secret was deleted during test execution — events.yaml: 'BackingStore Secret "secret-cldmgr-aws-..." not found or deleted'`
+   - `Ceph cluster has degraded OSDs causing I/O failures — ceph/ceph_health_detail: 'HEALTH_WARN 1 osds down; Degraded data redundancy: 24/72 objects degraded'`
+   - `NooBaa block store failing to verify replicated blocks — noobaa/namespaces/openshift-storage/pods/noobaa-core-0/current.log: 'Block data must be a buffer' (27069 occurrences)`
+   - `BackingStore secret was deleted during test execution — namespaces/all/namespaces/openshift-storage/events.yaml: 'BackingStore Secret "secret-cldmgr-aws-..." not found or deleted'`
    Always include both your analysis AND the real log text you found.
 4. Classify the failure into exactly ONE category:
 
@@ -229,8 +231,8 @@ Your response MUST end with exactly this format — no narrative text after it:
     "confidence": <0.0 to 1.0>,
     "root_cause_summary": "<one paragraph explaining the root cause based on your investigation>",
     "evidence": [
-        "<your explanation> — <source_file>: '<quoted log line>'",
-        "<another finding explanation> — <source_file>: '<quoted log line>'",
+        "<your explanation> — <full/relative/path/to/source_file>: '<quoted log line>'",
+        "<another finding> — <full/relative/path/to/source_file>: '<quoted log line>'",
         "..."
     ],
     "recommended_action": "<what should be done about this failure>",

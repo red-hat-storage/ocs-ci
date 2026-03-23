@@ -116,9 +116,11 @@ class FailureAnalysis:
     session_id: str = ""
     session_file: str = ""
     must_gather_url: str = ""
+    mg_data_url: str = ""
     bug_details: dict = field(default_factory=dict)
     suggested_fix: dict = field(default_factory=dict)
     cache_file: str = ""
+    cache_test: str = ""
 
     def to_dict(self) -> dict:
         d = {
@@ -137,8 +139,11 @@ class FailureAnalysis:
             "session_id": self.session_id,
             "session_file": self.session_file,
             "must_gather_url": self.must_gather_url,
+            "mg_data_url": self.mg_data_url,
             "cache_file": self.cache_file,
         }
+        if self.cache_test:
+            d["cache_test"] = self.cache_test
         if self.bug_details:
             d["bug_details"] = self.bug_details
         if self.suggested_fix:
@@ -156,9 +161,11 @@ class FailureAnalysis:
             matched_known_issues=data.get("matched_known_issues", []),
             suggested_jira_issues=data.get("suggested_jira_issues", []),
             recommended_action=data.get("recommended_action", ""),
+            mg_data_url=data.get("mg_data_url", ""),
             bug_details=data.get("bug_details", {}),
             suggested_fix=data.get("suggested_fix", {}),
             cache_file=data.get("cache_file", ""),
+            cache_test=data.get("cache_test", ""),
         )
 
 
@@ -175,6 +182,7 @@ class RunMetadata:
     logs_url: str = ""
     jenkins_url: str = ""
     launch_name: str = ""
+    run_timestamp: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)

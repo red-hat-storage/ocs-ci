@@ -391,9 +391,15 @@ body {
     </div>
     {% endif %}
     <div class="meta-item">
-      <span class="meta-label">Analyzed</span>
-      <span class="meta-value">{{ run.timestamp }}</span>
+      <span class="meta-label">Run Time</span>
+      <span class="meta-value">{{ run.run_metadata.run_timestamp or run.timestamp }}</span>
     </div>
+    {% if run.run_metadata.jenkins_url %}
+    <div class="meta-item">
+      <span class="meta-label">Jenkins</span>
+      <span class="meta-value"><a href="{{ run.run_metadata.jenkins_url }}" target="_blank" style="color:var(--accent)">build</a></span>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -489,6 +495,12 @@ body {
           <span class="meta-label">Cache</span>
           <span class="meta-value" style="font-size:12px">{% if fa.cache_file.startswith('http') %}<a href="{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">hit</a>{% else %}<a href="file://{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">hit</a>{% endif %}</span>
         </div>
+        {% if fa.cache_test %}
+        <div class="meta-item">
+          <span class="meta-label">Cache Test</span>
+          <span class="meta-value" style="font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis" title="{{ fa.cache_test }}">{{ fa.cache_test }}</span>
+        </div>
+        {% endif %}
         {% endif %}
       </div>
 
@@ -530,7 +542,7 @@ body {
       <div class="section-label">Evidence</div>
       <ul class="evidence-list">
         {% for e in fa.evidence %}
-        <li>{{ e }}</li>
+        <li>{{ e }}{% if fa.mg_data_url %}{% set parts = e.split(' — ') %}{% if parts | length > 1 %}{% set source_part = parts[-1].split(':')[0].strip() %}{% if source_part and ' ' not in source_part and ('/' in source_part or source_part.startswith('ceph_') or source_part.endswith('.log') or source_part.endswith('.yaml')) and not source_part.endswith('.py') and not source_part.startswith('ocs_ci/') and not source_part.startswith('tests/') %} <a href="{{ fa.mg_data_url.rstrip('/') }}/{{ source_part }}" target="_blank" style="color:var(--accent);font-size:11px;margin-left:6px" title="{{ source_part }}">{{ source_part.split('/')[-1] }}</a>{% endif %}{% endif %}{% endif %}</li>
         {% endfor %}
       </ul>
       {% endif %}

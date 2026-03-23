@@ -136,9 +136,23 @@ Evidence entries include both the AI's interpretation and the actual log line th
 Ceph cluster has degraded OSDs — ceph_health_detail: 'HEALTH_WARN 1 osds down; Degraded data redundancy'
 ```
 
+When evidence links are available (via `--jslave` or `--keep-mg`), each evidence card in the HTML report includes a clickable link to the referenced must-gather file.
+
 This produces significantly more accurate classifications because Claude can correlate the traceback with the actual cluster state at the time of failure. Agentic calls are slower (3-10 minutes) and cost more (~$0.50-$1.50 per failure) but provide evidence-based root cause analysis with quoted log lines.
 
-If must-gather data is not available, classification falls back to the standard non-agentic mode using only the traceback and test log excerpts.
+The pipeline always tries agentic mode first (even without must-gather data). If agentic classification fails, it falls back to non-agentic single-turn classification.
+
+**Bug details for product bugs.** When a failure is classified as `product_bug`, the AI generates a structured DFBUGS-compatible bug report with all form fields pre-filled: bug subject, detailed description with log quotes, platform, deployment type, component versions, impact assessment, workaround, reproducibility, steps to reproduce, actual/expected results, and additional diagnostic data. Bug details appear as a collapsible red "Show Bug Details" button in the HTML report. Individual bug detail JSON files can also be written to a shared directory via `--bug-details-dir`.
+
+**Suggested fixes for test bugs.** When a failure is classified as `test_bug`, the AI generates a suggested code fix. If the upstream ocs-ci repo is accessible (cloned automatically to `~/.ocs-ci/upstream-repo/ocs-ci`), the AI reads the actual source file from the matching release branch using `git show` to verify the bug exists and produce an accurate fix. It also checks `master` to determine if the fix already exists and just needs a cherry-pick. The suggested fix includes:
+- **File and function** where the change goes
+- **Line number** verified by reading the actual source code
+- **Description** of what's wrong and how to fix it
+- **Code snippet** showing only the new/changed code
+- **Unified diff** with context lines showing exactly where to apply the change (rendered with color highlighting in HTML)
+- **Branch status** — whether the fix exists on `master` and needs cherry-picking to the release branch
+
+Suggested fixes appear as a collapsible yellow "Show Suggested Fix" button in the HTML report.
 
 **Session recording.** Every agentic investigation is automatically saved to `~/.ocs-ci/recorded_sessions/`. The transcript includes Claude's full tool call chain — every `cat`, `curl`, `grep` command and its output — so you can review exactly what data Claude examined and how it reached its conclusion. Session files are linked from the report.
 
@@ -156,8 +170,8 @@ Classification complete in 12.3min, $4.56: 8 AI calls, 2 cache hits, 3 known iss
 
 | Category | What it means | Examples |
 |----------|--------------|---------|
-| `product_bug` | Bug in ODF/OCS/Ceph/NooBaa/Rook | Unexpected API errors, wrong component status, data corruption |
-| `test_bug` | Bug in the test code itself | Wrong assertions, hardcoded values, stale UI locators |
+| `product_bug` | Bug in ODF/OCS/Ceph/NooBaa/Rook — the product failed to do something it should | Unexpected API errors, wrong component status, data corruption |
+| `test_bug` | Bug in the test code itself — includes tests using invalid/hardcoded data that the product correctly rejects | Wrong assertions, hardcoded values, placeholder credentials, stale UI locators |
 | `infra_issue` | Environment/infrastructure problem | Network timeouts, node not ready, cloud API errors |
 | `flaky_test` | Intermittent timing/race condition | Timeout waiting for resource state, poll window missed |
 | `known_issue` | Matched a known regex pattern | Pre-cataloged bugs like DFBUGS-2781 |
@@ -182,7 +196,7 @@ AI classification costs money. The module has several safeguards:
 
 - **Known issues bypass AI** -- regex-matched failures skip AI entirely (free)
 - **Signature deduplication** -- failures with identical tracebacks share one AI call. A run with 40 failures but only 10 unique tracebacks makes 10 AI calls, not 40.
-- **Caching** -- results cached for 30 days (configurable via `--cache-ttl`). Re-analyzing the same run is free.
+- **Caching** -- results cached for 30 days (configurable via `--cache-ttl`). Re-analyzing the same run is free. Cache files are self-contained records that include: full run metadata (platform, ODF/OCP versions, deployment type, launch name, Jenkins URL, run timestamp), test details (name, class, squad, status, polarion ID, traceback), classification metadata (model used, agentic flag), and all analysis fields (bug details, suggested fix, must-gather URLs). Cache hits are indicated in the HTML report with a clickable link to the cache file. When a cache hit comes from a different test (same failure signature), the report shows the original "Cache Test" name for traceability.
 - **Budget cap** -- `--max-budget-usd 0.50` (default) limits spend per AI call
 - **Failure limit** -- `--max-failures 30` (default) caps total AI calls per run
 
@@ -219,7 +233,10 @@ python -m ocs_ci.utility.log_analysis.cli <source> [options]
 | `--cache-ttl` | `720` | Cache time-to-live in hours (default: 30 days) |
 | `--known-issues-file` | none | Path to YAML file with additional known issue patterns |
 | `--sessions-dir` | `~/.ocs-ci/recorded_sessions` | Directory for recorded session transcripts |
-| `--jslave` | off | Running on Jenkins slave: translate session paths to magna002 HTTP URLs |
+| `--jslave` | off | Running on Jenkins slave: translate session/cache paths to magna002 HTTP URLs, extract must-gather in-place on NFS for evidence links |
+| `--keep-mg` | off | Keep extracted must-gather files after analysis (enables evidence links to local files) |
+| `--bug-details-dir` | none | Directory to write individual bug detail JSON files for `product_bug` failures |
+| `--ocs-ci-repo` | `~/.ocs-ci/upstream-repo/ocs-ci` | Path to bare clone of upstream ocs-ci repo for reading test source code |
 | `--record-history` | off | Save results to history store for cross-run analysis |
 | `--history-dir` | `~/.ocs-ci/analysis_history` | History store directory |
 | `--save-prompts` | off | Save AI prompts to `~/.ocs-ci/prompts/<run_id>/` for debugging |
@@ -427,8 +444,9 @@ ocs_ci/utility/log_analysis/
 |   |-- claude_code_backend.py   # Claude Code CLI backend (no API key)
 |   |-- anthropic_backend.py     # Anthropic API backend (needs API key)
 |   +-- prompt_templates/
-|       |-- classify_failure.j2          # Failure classification prompt
+|       |-- classify_failure.j2          # Non-agentic failure classification prompt (fallback)
 |       |-- classify_failure_agentic.j2  # Agentic prompt with must-gather investigation
+|       |-- classify_failure_ui.j2       # Agentic prompt for UI tests (DOM/screenshots)
 |       +-- run_summary.j2              # Run summary prompt
 |
 |-- analysis/                    # Analysis engines
@@ -482,6 +500,10 @@ result = analyze_run(
     record_history=False,          # True = save to history store
     history_dir="~/.ocs-ci/analysis_history",
     junit_xml=None,                # Path to specific XML (overrides auto-discovery)
+    bug_details_dir=None,          # Write bug detail JSONs for product_bug failures
+    ocs_ci_repo=None,              # Path to bare clone of upstream ocs-ci repo
+    keep_mg=False,                 # Keep extracted must-gather files
+    jslave=False,                  # Jenkins slave mode (NFS paths, HTTP URLs)
 )
 
 # result.total_tests, result.passed, result.failed, result.error, result.skipped
@@ -509,6 +531,12 @@ fa.matched_known_issues      # ["DFBUGS-2781"] if regex-matched
 fa.suggested_jira_issues     # [{"key": "DFBUGS-5678", "summary": "...", ...}]
 fa.session_id                # "abc123..." Claude session ID (agentic mode)
 fa.session_file              # "/home/user/.ocs-ci/recorded_sessions/run_session_test.txt"
+fa.must_gather_url           # URL to the must-gather directory for this test
+fa.mg_data_url               # URL to the OCS must-gather data (for evidence links)
+fa.bug_details               # {} or DFBUGS form dict (product_bug only)
+fa.suggested_fix             # {} or {file, function, line, diff, ...} (test_bug only)
+fa.cache_file                # "" or path/URL to cache file (cache hits only)
+fa.cache_test                # "" or original test name (when cache hit from different test)
 ```
 
 ### Report generation

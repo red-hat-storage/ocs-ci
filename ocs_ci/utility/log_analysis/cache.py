@@ -62,16 +62,38 @@ class AnalysisCache:
             return None
 
         logger.debug(f"Cache hit for {signature.cache_key}")
-        return data.get("analysis"), path
+        analysis = data.get("analysis")
+        # Include the cached test name so callers can detect cross-test hits
+        cached_test_name = data.get("test_name", "")
+        if cached_test_name and analysis is not None:
+            analysis["_cached_test_name"] = cached_test_name
+        return analysis, path
 
-    def put(self, signature: FailureSignature, analysis: dict, ocs_version: str = ""):
+    def put(
+        self,
+        signature: FailureSignature,
+        analysis: dict,
+        run_metadata: dict = None,
+        test_name: str = "",
+        test_class: str = "",
+        squad: str = "",
+        traceback: str = "",
+        status: str = "",
+        polarion_id: str = "",
+    ):
         """
         Store analysis result in cache.
 
         Args:
             signature: FailureSignature key
             analysis: Analysis dict to cache
-            ocs_version: ODF version string for traceability
+            run_metadata: Run metadata (platform, versions, etc.) for traceability
+            test_name: Human-readable test name
+            test_class: Test classname
+            squad: Test squad
+            traceback: Full traceback text
+            status: Test status (failed/error)
+            polarion_id: Polarion test case ID
         """
         path = self._cache_path(signature)
         try:
@@ -80,8 +102,34 @@ class AnalysisCache:
                 "signature": signature.to_dict(),
                 "analysis": analysis,
             }
-            if ocs_version:
-                data["ocs_version"] = ocs_version
+            if test_name:
+                data["test_name"] = test_name
+            if test_class:
+                data["test_class"] = test_class
+            if squad:
+                data["squad"] = squad
+            if traceback:
+                data["traceback"] = traceback
+            if status:
+                data["status"] = status
+            if polarion_id:
+                data["polarion_id"] = polarion_id
+            if run_metadata:
+                data["run_metadata"] = {
+                    k: run_metadata.get(k, "")
+                    for k in [
+                        "platform",
+                        "deployment_type",
+                        "ocp_version",
+                        "ocs_version",
+                        "ocs_build",
+                        "logs_url",
+                        "run_id",
+                        "launch_name",
+                        "jenkins_url",
+                        "run_timestamp",
+                    ]
+                }
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
             logger.debug(f"Cached analysis for {signature.cache_key}")
