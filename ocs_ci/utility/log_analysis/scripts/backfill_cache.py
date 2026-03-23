@@ -476,6 +476,12 @@ class CacheBackfiller:
 
         if structured and isinstance(structured, dict):
             logger.debug(f"AI result keys: {list(structured.keys())} ({context})")
+        elif structured is not None:
+            logger.warning(f"AI returned non-dict structured output: {type(structured).__name__} ({context})")
+            return None
+        else:
+            logger.warning(f"AI returned None after all extraction attempts ({context})")
+            return None
         return structured
 
     def _build_bug_details_prompt(
