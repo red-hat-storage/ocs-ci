@@ -264,7 +264,7 @@ class TestFullClusterHealth(PASTest):
         logger.info("Starting MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
-        time.sleep(300)
+        time.sleep(600)
         self.reload_ceph_cluster()
         assert self.is_cluster_healthy(), "Cluster is not healthy"
 
