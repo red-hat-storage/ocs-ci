@@ -242,7 +242,11 @@ class CacheBackfiller:
             return False
 
         bug_details = result.get("bug_details")
+        # AI sometimes returns the fields directly without the wrapper
+        if not bug_details and result.get("bug_subject"):
+            bug_details = result
         if not bug_details:
+            logger.debug(f"AI returned no bug_details for {test_name}, keys: {list(result.keys())}")
             return False
 
         analysis["bug_details"] = bug_details
@@ -284,7 +288,11 @@ class CacheBackfiller:
             return False
 
         suggested_fix = result.get("suggested_fix")
+        # AI sometimes returns the fields directly without the wrapper
+        if not suggested_fix and result.get("file") and result.get("description"):
+            suggested_fix = result
         if not suggested_fix:
+            logger.debug(f"AI returned no suggested_fix for {test_name}, keys: {list(result.keys())}")
             return False
 
         analysis["suggested_fix"] = suggested_fix
