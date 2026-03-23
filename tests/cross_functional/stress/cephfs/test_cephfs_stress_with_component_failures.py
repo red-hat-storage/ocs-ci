@@ -70,7 +70,7 @@ class TestCephfsStressWithFailures(E2ETest):
         JOB_STATUS_CHECK_INTERVAL = 60
         REBALANCE_WAIT_TIME = 10800
         HEALTH_CHECK_WAIT_TIME = 180
-        POWER_ON_WAIT_TIME = 600
+        POWER_ON_WAIT_TIME = 1800
 
         CEPH_COMPONENTS = ["mds", "mgr", "mon", "osd"]
 
