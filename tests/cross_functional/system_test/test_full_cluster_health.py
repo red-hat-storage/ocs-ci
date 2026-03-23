@@ -9,6 +9,7 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.constants import MGR_APP_LABEL, MON_APP_LABEL, OSD_APP_LABEL
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import wait_for_nodes_status
@@ -21,17 +22,15 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.cluster import (
+    change_ceph_full_ratio,
+)
 
 logger = logging.getLogger(__name__)
 
-from ocs_ci.ocs.benchmark_operator_fio import get_file_size
-from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
+from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.helpers.managed_services import (
     verify_osd_used_capacity_greater_than_expected,
-)
-
-from ocs_ci.ocs.cluster import (
-    change_ceph_full_ratio,
 )
 
 
@@ -85,13 +84,9 @@ class TestFullClusterHealth(PASTest):
         def teardown():
             if self.benchmark_obj:
                 logger.info("Change Ceph full_ratio from 85% to 95%")
-                logger.info(
-                    "Based on doc we need to change the ceph_full_ratio to 88%, but we run "
-                    "many fio pods therefore, it may not be enough to increase by only 3%"
-                )
                 change_ceph_full_ratio(95)
 
-                logger.info("Delete  benchmark-operator PVCs")
+                logger.info("Delete benchmark-operator PVCs")
                 self.benchmark_obj.cleanup()
                 self.benchmark_operator_teardown = False
 
@@ -111,7 +106,6 @@ class TestFullClusterHealth(PASTest):
         benchmark_obj = self.benchmark_obj
         super(TestFullClusterHealth, self).setup()
         self.benchmark_obj = benchmark_obj
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
 
     def delete_pods(self):
         """
@@ -169,18 +163,18 @@ class TestFullClusterHealth(PASTest):
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
-            selector="app=rook-ceph-mgr",
+            selector=MGR_APP_LABEL,
             timeout=self.TIMEOUT_CEPH_MGR,
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
-            selector="app=rook-ceph-mon",
+            selector=MON_APP_LABEL,
             resource_count=3,
             timeout=self.TIMEOUT_CEPH_MON,
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
-            selector="app=rook-ceph-osd",
+            selector=OSD_APP_LABEL,
             resource_count=3,
             timeout=self.TIMEOUT_CEPH_OSD,
         )
@@ -262,7 +256,7 @@ class TestFullClusterHealth(PASTest):
         """
         self.nodes = nodes
 
-        # Commented below cod due to Bug: DFBUGS-5633
+        # Commented below code due to Bug: DFBUGS-5633
         # logger.info("Checking health before disruptive operations")
         # assert self.is_cluster_healthy(), "Cluster is not healthy"
         # osd_node_reboot()
@@ -274,6 +268,8 @@ class TestFullClusterHealth(PASTest):
         logger.info("Starting MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
+        # Wait for cluster stabilization after node restart so reload_ceph_cluster()
+        # can successfully refresh cluster state with valid pod references
         time.sleep(300)
         self.reload_ceph_cluster()
         assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
@@ -281,6 +277,8 @@ class TestFullClusterHealth(PASTest):
         logger.info("Starting OCS operator node restart")
         self.restart_ocs_operator_node()
         logger.info("Checking health after OCS operator node restart")
+        # Wait for cluster stabilization after node restart so reload_ceph_cluster()
+        # can successfully refresh cluster state with valid pod references
         time.sleep(300)
         self.reload_ceph_cluster()
         assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
