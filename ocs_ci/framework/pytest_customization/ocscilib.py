@@ -407,6 +407,7 @@ def pytest_configure(config):
     set_log_record_factory()
     # Ensure custom log levels are registered
     from ocs_ci.framework.custom_logger import TEST_STEP, ASSERTION, AI_DATA
+    from ocs_ci.utility.utils import auto_configure_acm, auto_configure_submariner
 
     logging.addLevelName(TEST_STEP, "TEST_STEP")
     logging.addLevelName(ASSERTION, "ASSERTION")
@@ -422,6 +423,8 @@ def pytest_configure(config):
 
         if not (config.getoption("--help") or config.getoption("collectonly")):
             process_cluster_cli_params(config)
+            auto_configure_acm()
+            auto_configure_submariner()
             config_file = os.path.expanduser(
                 os.path.join(
                     ocsci_config.RUN["log_dir"],
