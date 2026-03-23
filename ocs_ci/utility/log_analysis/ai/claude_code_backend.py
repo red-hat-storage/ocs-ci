@@ -593,25 +593,27 @@ class ClaudeCodeBackend(AIBackend):
         """Extract JSON classification dict from Claude's result text."""
         candidates = []
 
-        # Try JSON in code blocks first
-        for match in re.finditer(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL):
-            try:
-                parsed = json.loads(match.group(1))
-                if isinstance(parsed, dict) and "category" in parsed:
-                    return parsed
-                candidates.append(parsed)
-            except json.JSONDecodeError:
-                pass
-
-        # Try to find JSON objects in the text
-        for match in re.finditer(r"\{[^{}]*\}", text, re.DOTALL):
-            try:
-                parsed = json.loads(match.group(0))
-                if isinstance(parsed, dict) and "category" in parsed:
-                    return parsed
-                candidates.append(parsed)
-            except json.JSONDecodeError:
-                pass
+        # Strategy 1: Find the outermost { that starts a valid JSON with "category"
+        # This handles nested objects (bug_details, suggested_fix) and embedded
+        # code blocks inside string values that break the regex approach.
+        for i, ch in enumerate(text):
+            if ch == "{":
+                # Try progressively longer substrings from this position
+                depth = 0
+                for j in range(i, len(text)):
+                    if text[j] == "{":
+                        depth += 1
+                    elif text[j] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            try:
+                                parsed = json.loads(text[i : j + 1])
+                                if isinstance(parsed, dict) and "category" in parsed:
+                                    return parsed
+                                candidates.append(parsed)
+                            except json.JSONDecodeError:
+                                pass
+                            break
 
         # Fall back to any dict we found
         for c in candidates:
