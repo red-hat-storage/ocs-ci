@@ -139,25 +139,14 @@ class ClaudeCodeBackend(AIBackend):
         must_gather_info: dict = None,
         test_log_url: str = "",
         ui_logs: dict = None,
+        run_metadata: dict = None,
     ) -> dict:
         """Classify a test failure using Claude Code CLI.
 
         When must_gather_info indicates available must-gather data,
         uses agentic mode with Bash tool so Claude can investigate.
         """
-        if must_gather_info and must_gather_info.get("mg_type") != "none":
-            return self._classify_agentic(
-                test_name=test_name,
-                test_class=test_class,
-                duration=duration,
-                squad=squad,
-                traceback=traceback,
-                log_excerpt=log_excerpt,
-                must_gather_info=must_gather_info,
-                test_log_url=test_log_url,
-                ui_logs=ui_logs,
-            )
-
+        # UI tests with DOM snapshots get their own agentic template
         if ui_logs:
             return self._classify_ui_agentic(
                 test_name=test_name,
@@ -168,8 +157,30 @@ class ClaudeCodeBackend(AIBackend):
                 log_excerpt=log_excerpt,
                 test_log_url=test_log_url,
                 ui_logs=ui_logs,
+                run_metadata=run_metadata,
             )
 
+        # Always try agentic first (even without must-gather)
+        try:
+            return self._classify_agentic(
+                test_name=test_name,
+                test_class=test_class,
+                duration=duration,
+                squad=squad,
+                traceback=traceback,
+                log_excerpt=log_excerpt,
+                must_gather_info=must_gather_info or {"mg_type": "none"},
+                test_log_url=test_log_url,
+                ui_logs=ui_logs,
+                run_metadata=run_metadata,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Agentic classification failed for {test_name}, "
+                f"falling back to non-agentic: {e}"
+            )
+
+        # Fallback: non-agentic single-turn classification
         template = self.jinja_env.get_template("classify_failure.j2")
         prompt = template.render(
             test_name=test_name,
@@ -179,18 +190,23 @@ class ClaudeCodeBackend(AIBackend):
             traceback=traceback,
             log_excerpt=self._truncate(log_excerpt, 6000),
             infra_context=self._truncate(infra_context, 4000),
+            run_metadata=run_metadata,
         )
 
         result = self._call_claude(prompt, CLASSIFICATION_SCHEMA, context=test_name)
 
-        # Validate and provide defaults
-        return {
+        d = {
             "category": result.get("category", "unknown"),
             "confidence": float(result.get("confidence", 0.5)),
             "root_cause_summary": result.get("root_cause_summary", ""),
             "evidence": result.get("evidence", []),
             "recommended_action": result.get("recommended_action", ""),
         }
+        if result.get("bug_details"):
+            d["bug_details"] = result["bug_details"]
+        if result.get("suggested_fix"):
+            d["suggested_fix"] = result["suggested_fix"]
+        return d
 
     def _classify_agentic(
         self,
@@ -203,6 +219,7 @@ class ClaudeCodeBackend(AIBackend):
         must_gather_info: dict,
         test_log_url: str = "",
         ui_logs: dict = None,
+        run_metadata: dict = None,
     ) -> dict:
         """Classify using agentic mode — Claude investigates must-gather."""
         template = self.jinja_env.get_template("classify_failure_agentic.j2")
@@ -219,6 +236,7 @@ class ClaudeCodeBackend(AIBackend):
             cluster_id=must_gather_info.get("cluster_id", ""),
             test_log_url=test_log_url,
             ui_logs=ui_logs,
+            run_metadata=run_metadata,
         )
 
         # Local must-gather needs Read tool; HTTP needs Bash for curl
@@ -230,7 +248,7 @@ class ClaudeCodeBackend(AIBackend):
             prompt, context=test_name, allowed_tools=allowed_tools
         )
 
-        return {
+        d = {
             "category": result.get("category", "unknown"),
             "confidence": float(result.get("confidence", 0.5)),
             "root_cause_summary": result.get("root_cause_summary", ""),
@@ -239,6 +257,11 @@ class ClaudeCodeBackend(AIBackend):
             "session_id": result.get("session_id", ""),
             "session_text": result.get("session_text", ""),
         }
+        if result.get("bug_details"):
+            d["bug_details"] = result["bug_details"]
+        if result.get("suggested_fix"):
+            d["suggested_fix"] = result["suggested_fix"]
+        return d
 
     def _classify_ui_agentic(
         self,
@@ -250,6 +273,7 @@ class ClaudeCodeBackend(AIBackend):
         log_excerpt: str,
         test_log_url: str = "",
         ui_logs: dict = None,
+        run_metadata: dict = None,
     ) -> dict:
         """Classify using agentic mode — Claude investigates UI artifacts."""
         dom_url = ui_logs.get("dom_url", "")
@@ -268,6 +292,7 @@ class ClaudeCodeBackend(AIBackend):
             dom_files=ui_logs.get("dom_files", []),
             screenshot_files=ui_logs.get("screenshot_files", []),
             ui_local=ui_local,
+            run_metadata=run_metadata,
         )
 
         allowed_tools = "Bash,Read" if ui_local else "Bash"
@@ -276,7 +301,7 @@ class ClaudeCodeBackend(AIBackend):
             prompt, context=test_name, allowed_tools=allowed_tools
         )
 
-        return {
+        d = {
             "category": result.get("category", "unknown"),
             "confidence": float(result.get("confidence", 0.5)),
             "root_cause_summary": result.get("root_cause_summary", ""),
@@ -285,6 +310,11 @@ class ClaudeCodeBackend(AIBackend):
             "session_id": result.get("session_id", ""),
             "session_text": result.get("session_text", ""),
         }
+        if result.get("bug_details"):
+            d["bug_details"] = result["bug_details"]
+        if result.get("suggested_fix"):
+            d["suggested_fix"] = result["suggested_fix"]
+        return d
 
     def generate_run_summary(
         self,

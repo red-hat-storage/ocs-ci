@@ -40,4 +40,36 @@ Classify this failure into exactly ONE of these categories:
 
 5. **unknown** - Use only if you genuinely cannot determine the category from the available information.
 
+**Classification guidance**: When a test uses hardcoded or placeholder values (e.g., dummy account IDs like '123456789012', fake credentials) and the product correctly rejects them with a validation error, this is a `test_bug` — the product is working correctly. product_bug means the product ACCEPTED something it shouldn't have, or FAILED to do something it should have done.
+
 Analyze the traceback and any log context carefully. Focus on the FINAL error and its chain of causes, not intermediate framework code.
+
+{% if run_metadata %}
+## Run Metadata
+- **Platform**: {{ run_metadata.platform or 'unknown' }}
+- **Deployment Type**: {{ run_metadata.deployment_type or 'unknown' }}
+- **OCP Version**: {{ run_metadata.ocp_version or 'unknown' }}
+- **ODF Version**: {{ run_metadata.ocs_version or 'unknown' }}
+- **ODF Build**: {{ run_metadata.ocs_build or 'unknown' }}
+{% endif %}
+
+Respond with a JSON object containing:
+- category, confidence, root_cause_summary, evidence (array), recommended_action
+
+**If category is `product_bug`**, also include a `bug_details` object with these DFBUGS form fields:
+- bug_subject: "ODF: <concise bug title>"
+- description: detailed description with log snippets
+- platform, deployment_type_ocp, deployment_type_odf: from run metadata
+- component_versions: {ocp, odf, rhcs, acm} from run metadata
+- impacts_ability_to_work, workaround, reproducible, reproducible_from_ui, regression_info
+- steps_to_reproduce (array), actual_results, expected_results, additional_info
+
+For non-product_bug categories, do NOT include bug_details.
+
+**If category is `test_bug`**, also include a `suggested_fix` object:
+- file: path to the test file from the traceback
+- line: line number from traceback
+- description: what's wrong and how to fix it
+- code_snippet: corrected code or pseudo-code
+
+For non-test_bug categories, do NOT include suggested_fix.

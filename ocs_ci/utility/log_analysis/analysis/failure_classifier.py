@@ -9,10 +9,12 @@ Coordinates the full analysis pipeline for each test failure:
 5. Cache storage of results
 """
 
+import json
 import logging
 import os
 import re
 import shutil
+import subprocess
 import tarfile
 import time
 from typing import Optional
@@ -39,6 +41,10 @@ MG_CACHE_DIR = os.path.expanduser("~/.ocs-ci/must_gather_cache")
 # Default directory for recorded agentic session outputs
 DEFAULT_SESSIONS_DIR = "~/.ocs-ci/recorded_sessions"
 
+# Upstream repo for reading test code from release branches
+DEFAULT_UPSTREAM_REPO_DIR = "~/.ocs-ci/upstream-repo/ocs-ci"
+UPSTREAM_REPO_URL = "https://github.com/red-hat-storage/ocs-ci.git"
+
 
 class FailureClassifier:
     """
@@ -61,6 +67,9 @@ class FailureClassifier:
         run_id: Optional[str] = None,
         sessions_dir: Optional[str] = None,
         sessions_url: Optional[str] = None,
+        run_metadata: dict = None,
+        bug_details_dir: Optional[str] = None,
+        ocs_ci_repo: Optional[str] = None,
     ):
         """
         Args:
@@ -87,6 +96,10 @@ class FailureClassifier:
         self.run_id = run_id or "unknown"
         self.sessions_dir = os.path.expanduser(sessions_dir or DEFAULT_SESSIONS_DIR)
         self.sessions_url = sessions_url.rstrip("/") if sessions_url else ""
+        self.run_metadata = run_metadata
+        self.bug_details_dir = bug_details_dir
+        self.ocs_ci_repo = os.path.expanduser(ocs_ci_repo or DEFAULT_UPSTREAM_REPO_DIR)
+        self._release_branch = ""
         self.log_parser = TestLogParser()
         self.mg_parser = MustGatherParser()
         self._http_session = None
@@ -112,6 +125,14 @@ class FailureClassifier:
         cache_hit_count = 0
         known_issue_count = 0
         start_time = time.monotonic()
+
+        # Prepare upstream repo for test code lookups
+        self._setup_upstream_repo()
+
+        # Enrich run_metadata with repo info for suggested_fix
+        if self.run_metadata and self._release_branch:
+            self.run_metadata["ocs_ci_repo"] = self.ocs_ci_repo
+            self.run_metadata["release_branch"] = self._release_branch
 
         # Group failures by signature to avoid duplicate AI calls
         signature_groups = {}
@@ -158,8 +179,10 @@ class FailureClassifier:
 
             # Step 2: Cache lookup
             if self.cache:
-                cached = self.cache.get(sig)
-                if cached:
+                cache_result = self.cache.get(sig)
+                if cache_result:
+                    cached, cache_path = cache_result
+                    cached["cache_file"] = self._cache_path_to_url(cache_path)
                     cache_hit_count += len(group_failures)
                     for f in group_failures:
                         results.append(self._build_analysis(f, cached))
@@ -211,6 +234,7 @@ class FailureClassifier:
                     must_gather_info=must_gather_info,
                     test_log_url=test_log_url,
                     ui_logs=ui_logs,
+                    run_metadata=self.run_metadata,
                 )
                 ai_call_count += 1
 
@@ -273,6 +297,10 @@ class FailureClassifier:
             f"{ai_call_count} AI calls, "
             f"{cache_hit_count} cache hits, {known_issue_count} known issues"
         )
+
+        # Write individual bug detail JSON files for product_bug results
+        if self.bug_details_dir:
+            self._write_bug_details(results)
 
         # Clean up any locally extracted must-gather archives
         self.cleanup_must_gather()
@@ -498,7 +526,7 @@ class FailureClassifier:
                     f"({os.path.getsize(tar_path) / 1024 / 1024:.1f} MB)"
                 )
                 with tarfile.open(tar_path, "r:gz") as tar:
-                    tar.extractall(path=extract_dir, filter="data")
+                    tar.extractall(path=extract_dir)
 
                 os.remove(tar_path)
 
@@ -577,7 +605,7 @@ class FailureClassifier:
                     f"{tar_path}"
                 )
                 with tarfile.open(tar_path, "r:gz") as tar:
-                    tar.extractall(path=extract_dir, filter="data")
+                    tar.extractall(path=extract_dir)
             except Exception as e:
                 logger.warning(f"Failed to extract {label} must-gather: {e}")
 
@@ -869,6 +897,100 @@ class FailureClassifier:
         except OSError:
             pass
 
+    def _setup_upstream_repo(self):
+        """Ensure upstream ocs-ci repo exists and is fetched. Derive release branch."""
+        if not self.run_metadata:
+            return
+
+        # Derive release branch from OCS version (e.g., "4.21.1-2.konflux" → "release-4.21")
+        ocs_version = self.run_metadata.get("ocs_version", "")
+        match = re.match(r"(\d+\.\d+)", ocs_version)
+        if not match:
+            logger.debug(
+                f"Cannot derive release branch from ocs_version: {ocs_version}"
+            )
+            return
+        self._release_branch = f"release-{match.group(1)}"
+
+        # Clone repo if it doesn't exist
+        if not os.path.isdir(os.path.join(self.ocs_ci_repo, ".git")):
+            parent = os.path.dirname(self.ocs_ci_repo)
+            os.makedirs(parent, exist_ok=True)
+            logger.info(f"Cloning upstream ocs-ci repo to {self.ocs_ci_repo}")
+            try:
+                subprocess.run(
+                    ["git", "clone", "--bare", UPSTREAM_REPO_URL, self.ocs_ci_repo],
+                    capture_output=True,
+                    timeout=120,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to clone upstream repo: {e}")
+                self._release_branch = ""
+                return
+
+        # Fetch latest from all branches
+        try:
+            logger.debug("Fetching upstream ocs-ci repo")
+            subprocess.run(
+                ["git", "fetch", "--all", "--quiet"],
+                cwd=self.ocs_ci_repo,
+                capture_output=True,
+                timeout=60,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to fetch upstream repo: {e}")
+
+        # Verify the release branch exists
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", self._release_branch],
+            cwd=self.ocs_ci_repo,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                f"Release branch {self._release_branch} not found in upstream repo"
+            )
+            self._release_branch = ""
+
+    @staticmethod
+    def _cache_path_to_url(path: str) -> str:
+        """Convert a local NFS cache path to its magna002 HTTP equivalent."""
+        magna_mount = "/mnt/ocsci-jenkins/"
+        magna_http = "http://magna002.ceph.redhat.com/ocsci-jenkins/"
+        if path.startswith(magna_mount):
+            return magna_http + path[len(magna_mount) :]
+        return path
+
+    def _write_bug_details(self, results: list):
+        """Write individual bug detail JSON files for product_bug results."""
+        try:
+            os.makedirs(self.bug_details_dir, exist_ok=True)
+        except OSError as e:
+            logger.warning(f"Cannot create bug_details_dir {self.bug_details_dir}: {e}")
+            return
+
+        for fa in results:
+            if fa.category != FailureCategory.PRODUCT_BUG or not fa.bug_details:
+                continue
+            safe_name = re.sub(r"[^\w\-]", "_", fa.test_result.name)[:80]
+            timestamp = time.strftime("%Y%m%dT%H%M%S")
+            filename = f"{safe_name}_{timestamp}.json"
+            filepath = os.path.join(self.bug_details_dir, filename)
+            data = {
+                "test_name": fa.test_result.full_name,
+                "category": fa.category.value,
+                "root_cause_summary": fa.root_cause_summary,
+                "bug_details": fa.bug_details,
+            }
+            if self.run_metadata:
+                data["run_metadata"] = self.run_metadata
+            try:
+                with open(filepath, "w") as f:
+                    json.dump(data, f, indent=2)
+                logger.info(f"Bug details written to {filepath}")
+            except OSError as e:
+                logger.warning(f"Failed to write bug details to {filepath}: {e}")
+
     @staticmethod
     def _build_analysis(
         test_result: TestResult, analysis_dict: dict
@@ -886,6 +1008,9 @@ class FailureClassifier:
             session_id=analysis_dict.get("session_id", ""),
             session_file=analysis_dict.get("session_file", ""),
             must_gather_url=analysis_dict.get("must_gather_url", ""),
+            bug_details=analysis_dict.get("bug_details", {}),
+            suggested_fix=analysis_dict.get("suggested_fix", {}),
+            cache_file=analysis_dict.get("cache_file", ""),
         )
 
     @staticmethod

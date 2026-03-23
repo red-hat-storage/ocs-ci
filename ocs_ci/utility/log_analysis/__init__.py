@@ -200,6 +200,9 @@ def analyze_run(source, ai_backend="claude-code", known_issues_only=False, **kwa
         run_id=run_metadata.run_id,
         sessions_dir=kwargs.get("sessions_dir"),
         sessions_url=kwargs.get("sessions_url"),
+        run_metadata=run_metadata.to_dict() if ai_backend != "none" else None,
+        bug_details_dir=kwargs.get("bug_details_dir"),
+        ocs_ci_repo=kwargs.get("ocs_ci_repo"),
     )
 
     failure_analyses = classifier.classify_failures(

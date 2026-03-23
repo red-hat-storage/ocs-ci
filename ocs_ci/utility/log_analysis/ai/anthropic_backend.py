@@ -90,6 +90,7 @@ class AnthropicBackend(AIBackend):
         must_gather_info: dict = None,
         test_log_url: str = "",
         ui_logs: dict = None,
+        run_metadata: dict = None,
     ) -> dict:
         """Classify a test failure using Anthropic API."""
         template = self.jinja_env.get_template("classify_failure.j2")
@@ -101,6 +102,7 @@ class AnthropicBackend(AIBackend):
             traceback=traceback,
             log_excerpt=self._truncate(log_excerpt, 6000),
             infra_context=self._truncate(infra_context, 4000),
+            run_metadata=run_metadata,
         )
 
         response_text = self._call_api(
@@ -116,13 +118,18 @@ class AnthropicBackend(AIBackend):
             # Try to extract JSON from markdown code blocks
             result = self._extract_json(response_text)
 
-        return {
+        d = {
             "category": result.get("category", "unknown"),
             "confidence": float(result.get("confidence", 0.5)),
             "root_cause_summary": result.get("root_cause_summary", ""),
             "evidence": result.get("evidence", []),
             "recommended_action": result.get("recommended_action", ""),
         }
+        if result.get("bug_details"):
+            d["bug_details"] = result["bug_details"]
+        if result.get("suggested_fix"):
+            d["suggested_fix"] = result["suggested_fix"]
+        return d
 
     def generate_run_summary(
         self,

@@ -480,10 +480,14 @@ body {
           <span class="meta-value" style="font-size:12px">{% if fa.session_file %}<a href="{{ fa.session_file }}" style="color:var(--accent)">{{ fa.session_id }}</a>{% else %}{{ fa.session_id }}{% endif %}</span>
         </div>
         {% endif %}
-        {% if fa.must_gather_url %}
         <div class="meta-item">
           <span class="meta-label">Must Gather</span>
-          <span class="meta-value" style="font-size:12px"><a href="{{ fa.must_gather_url }}" style="color:var(--accent)">logs</a></span>
+          <span class="meta-value" style="font-size:12px">{% if fa.must_gather_url %}<a href="{{ fa.must_gather_url }}" style="color:var(--accent)">logs</a>{% else %}N/A{% endif %}</span>
+        </div>
+        {% if fa.cache_file %}
+        <div class="meta-item">
+          <span class="meta-label">Cache</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.cache_file.startswith('http') %}<a href="{{ fa.cache_file }}" style="color:var(--accent)">hit</a>{% else %}<a href="file://{{ fa.cache_file }}" style="color:var(--accent)">hit</a>{% endif %}</span>
         </div>
         {% endif %}
       </div>
@@ -535,6 +539,114 @@ body {
       <button class="traceback-toggle" onclick="var el=this.nextElementSibling;el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Traceback':'Show Traceback'">Show Traceback</button>
       <div class="traceback-content">
         <pre>{{ fa.test_result.traceback }}</pre>
+      </div>
+      {% endif %}
+
+      {% if fa.bug_details %}
+      <button class="traceback-toggle" style="margin-left:8px;border-color:#fecaca;color:#dc2626" onclick="var el=this.nextElementSibling;el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Bug Details':'Show Bug Details'">Show Bug Details</button>
+      <div class="traceback-content">
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;font-size:13px">
+          {% if fa.bug_details.bug_subject %}
+          <div style="font-size:16px;font-weight:700;color:#dc2626;margin-bottom:12px">{{ fa.bug_details.bug_subject }}</div>
+          {% endif %}
+          <dl style="display:grid;grid-template-columns:160px 1fr;gap:6px 12px;margin:0">
+            {% if fa.bug_details.description %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Description</dt>
+            <dd style="margin:0;white-space:pre-wrap">{{ fa.bug_details.description }}</dd>
+            {% endif %}
+            {% if fa.bug_details.platform %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Platform</dt>
+            <dd style="margin:0">{{ fa.bug_details.platform }}</dd>
+            {% endif %}
+            {% if fa.bug_details.deployment_type_ocp %}
+            <dt style="font-weight:600;color:var(--text-secondary)">OCP Deployment</dt>
+            <dd style="margin:0">{{ fa.bug_details.deployment_type_ocp }}</dd>
+            {% endif %}
+            {% if fa.bug_details.deployment_type_odf %}
+            <dt style="font-weight:600;color:var(--text-secondary)">ODF Deployment</dt>
+            <dd style="margin:0">{{ fa.bug_details.deployment_type_odf }}</dd>
+            {% endif %}
+            {% if fa.bug_details.component_versions %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Versions</dt>
+            <dd style="margin:0">
+              {% for k, v in fa.bug_details.component_versions.items() %}{% if v %}{{ k | upper }}: {{ v }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}
+            </dd>
+            {% endif %}
+            {% if fa.bug_details.impacts_ability_to_work %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Impacts Work</dt>
+            <dd style="margin:0">{{ fa.bug_details.impacts_ability_to_work }}</dd>
+            {% endif %}
+            {% if fa.bug_details.workaround %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Workaround</dt>
+            <dd style="margin:0">{{ fa.bug_details.workaround }}</dd>
+            {% endif %}
+            {% if fa.bug_details.reproducible %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Reproducible</dt>
+            <dd style="margin:0">{{ fa.bug_details.reproducible }}</dd>
+            {% endif %}
+            {% if fa.bug_details.reproducible_from_ui %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Reproducible (UI)</dt>
+            <dd style="margin:0">{{ fa.bug_details.reproducible_from_ui }}</dd>
+            {% endif %}
+            {% if fa.bug_details.regression_info %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Regression</dt>
+            <dd style="margin:0">{{ fa.bug_details.regression_info }}</dd>
+            {% endif %}
+            {% if fa.bug_details.steps_to_reproduce %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Steps to Reproduce</dt>
+            <dd style="margin:0">
+              <ol style="margin:0;padding-left:18px">
+                {% for step in fa.bug_details.steps_to_reproduce %}
+                <li>{{ step }}</li>
+                {% endfor %}
+              </ol>
+            </dd>
+            {% endif %}
+            {% if fa.bug_details.actual_results %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Actual Results</dt>
+            <dd style="margin:0">{{ fa.bug_details.actual_results }}</dd>
+            {% endif %}
+            {% if fa.bug_details.expected_results %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Expected Results</dt>
+            <dd style="margin:0">{{ fa.bug_details.expected_results }}</dd>
+            {% endif %}
+            {% if fa.bug_details.additional_info %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Additional Info</dt>
+            <dd style="margin:0;white-space:pre-wrap">{{ fa.bug_details.additional_info }}</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if fa.suggested_fix %}
+      <button class="traceback-toggle" style="margin-left:8px;border-color:#fde68a;color:#ca8a04" onclick="var el=this.nextElementSibling;el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Suggested Fix':'Show Suggested Fix'">Show Suggested Fix</button>
+      <div class="traceback-content">
+        <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;font-size:13px">
+          <div style="font-size:15px;font-weight:700;color:#ca8a04;margin-bottom:12px">Suggested Fix</div>
+          <dl style="display:grid;grid-template-columns:130px 1fr;gap:6px 12px;margin:0">
+            {% if fa.suggested_fix.file %}
+            <dt style="font-weight:600;color:var(--text-secondary)">File</dt>
+            <dd style="margin:0;font-family:monospace;font-size:12px">{{ fa.suggested_fix.file }}{% if fa.suggested_fix.line %}:{{ fa.suggested_fix.line }}{% endif %}</dd>
+            {% endif %}
+            {% if fa.suggested_fix.description %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Description</dt>
+            <dd style="margin:0;white-space:pre-wrap">{{ fa.suggested_fix.description }}</dd>
+            {% endif %}
+            {% if fa.suggested_fix.code_snippet %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Code</dt>
+            <dd style="margin:0"><pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word">{{ fa.suggested_fix.code_snippet }}</pre></dd>
+            {% endif %}
+            {% if fa.suggested_fix.fixed_on_master is defined %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Fixed on master</dt>
+            <dd style="margin:0">{{ 'Yes' if fa.suggested_fix.fixed_on_master else 'No' }}</dd>
+            {% endif %}
+            {% if fa.suggested_fix.needs_cherry_pick %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Cherry-pick</dt>
+            <dd style="margin:0;color:#dc2626;font-weight:600">Needs cherry-pick from master to release branch</dd>
+            {% endif %}
+          </dl>
+        </div>
       </div>
       {% endif %}
     </div>

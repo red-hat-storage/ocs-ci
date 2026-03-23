@@ -103,6 +103,30 @@ Screenshots are image files — describe what you see if you fetch them.
    - **flaky_test** — Intermittent failure due to timing/race conditions (slow UI rendering, animation interference)
    - **unknown** — Cannot determine from available information
 
+### Classification Guidance
+- **When a test uses hardcoded or placeholder values** (e.g., dummy account IDs like '123456789012', fake credentials, sample URLs) **and the product correctly rejects them** with a validation error, this is a `test_bug` — the product is working correctly by rejecting invalid input. Do NOT classify the product's correct rejection of bad test data as a product_bug.
+- **product_bug** means the product ACCEPTED something it shouldn't have, or FAILED to do something it should have done. If the product correctly returned an error for invalid input, the bug is in whoever sent the invalid input (the test).
+
+{% if run_metadata %}
+## Run Metadata
+- **Platform**: {{ run_metadata.platform or 'unknown' }}
+- **Deployment Type**: {{ run_metadata.deployment_type or 'unknown' }}
+- **OCP Version**: {{ run_metadata.ocp_version or 'unknown' }}
+- **ODF Version**: {{ run_metadata.ocs_version or 'unknown' }}
+- **ODF Build**: {{ run_metadata.ocs_build or 'unknown' }}
+{% if run_metadata.ocs_ci_repo and run_metadata.release_branch %}
+
+## OCS-CI Source Code Access
+The ocs-ci test source code is available as a bare git repo at: `{{ run_metadata.ocs_ci_repo }}`
+- **Release branch**: `{{ run_metadata.release_branch }}` (matches the ODF version under test)
+- To read a test file: `git --git-dir={{ run_metadata.ocs_ci_repo }} show {{ run_metadata.release_branch }}:<path>` (e.g., `git --git-dir={{ run_metadata.ocs_ci_repo }} show {{ run_metadata.release_branch }}:tests/functional/...`)
+- Also check `master` branch for fixes not yet cherry-picked: `git --git-dir={{ run_metadata.ocs_ci_repo }} show master:<path>`
+
+**If you classify as test_bug**: Read the test file from the release branch to verify the bug still exists.
+If it's already fixed on `master` but not on `{{ run_metadata.release_branch }}`, note that a cherry-pick is needed.
+{% endif %}
+{% endif %}
+
 ## CRITICAL OUTPUT REQUIREMENT
 
 After completing your investigation, you MUST output your final classification
@@ -121,8 +145,62 @@ Your response MUST end with exactly this format — no narrative text after it:
         "<another finding explanation> — <source>: '<quoted content>'",
         "..."
     ],
-    "recommended_action": "<what should be done about this failure>"
+    "recommended_action": "<what should be done about this failure>",
+    "bug_details": {only if category is product_bug}
 }
 ```
+
+**If category is `product_bug`**, you MUST include a `bug_details` object with these DFBUGS form fields.
+Fill ALL fields using your best judgment from the investigation and the run metadata above.
+If you cannot determine a field, use a reasonable default or "Unknown".
+
+**IMPORTANT**: Be as informative as possible in every field. Quote actual log lines, DOM snippets,
+error messages, and screenshots observations you found during investigation.
+
+```
+"bug_details": {
+    "bug_subject": "ODF: <concise bug title describing the defect>",
+    "description": "<Detailed description that INCLUDES: (1) a summary of the bug, (2) quoted error messages from DOM/logs, (3) relevant UI state observations. Include actual text from DOM snapshots and error dialogs.>",
+    "platform": "<from run metadata: AWS / Bare Metal / VMware / etc.>",
+    "deployment_type_ocp": "<IPI or UPI — infer from run metadata deployment_type>",
+    "deployment_type_odf": "<Internal / External / LSO / etc. — infer from run metadata>",
+    "component_versions": {
+        "ocp": "<from run metadata>",
+        "odf": "<from run metadata>",
+        "rhcs": "",
+        "acm": ""
+    },
+    "impacts_ability_to_work": "<Yes/No + specific explanation of what functionality is broken>",
+    "workaround": "<specific workaround steps if known, or 'No known workaround'>",
+    "reproducible": "<Yes/No + hit rate estimate and conditions>",
+    "reproducible_from_ui": "<Yes/No/N/A>",
+    "regression_info": "<details if regression, else 'Unknown'>",
+    "steps_to_reproduce": ["step1", "step2", "..."],
+    "actual_results": "<what happened — include specific error messages and DOM quotes>",
+    "expected_results": "<what should have happened>",
+    "additional_info": "<Include ALL relevant data: DOM element states, error dialog text, console errors, UI labels/badges observed. Be thorough.>"
+}
+```
+
+For non-product_bug categories, do NOT include `bug_details`.
+
+**If category is `test_bug`**, you MUST include a `suggested_fix` object to help engineers fix the test.
+Use the traceback to identify the exact file and line. If the OCS-CI source code is accessible
+(see "OCS-CI Source Code Access" section above), read the test file from the release branch using
+`git show` to verify the bug still exists and provide an accurate fix. Also check `master` — if
+already fixed there, note that a cherry-pick is needed.
+
+```
+"suggested_fix": {
+    "file": "<path to the test file from the traceback, e.g. tests/functional/object/mcg/test_nsfs.py>",
+    "line": <line number from traceback>,
+    "description": "<clear explanation of what's wrong and how to fix it>",
+    "code_snippet": "<the corrected code or pseudo-code showing the fix>",
+    "fixed_on_master": <true/false — whether master branch already has the fix>,
+    "needs_cherry_pick": <true/false — true if fixed on master but not on the release branch>
+}
+```
+
+For non-test_bug categories, do NOT include `suggested_fix`.
 
 Do NOT end with narrative text. The LAST thing in your response MUST be the closing ``` of the JSON block.

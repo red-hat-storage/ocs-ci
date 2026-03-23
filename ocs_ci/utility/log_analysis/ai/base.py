@@ -27,6 +27,7 @@ class AIBackend(ABC):
         must_gather_info: dict = None,
         test_log_url: str = "",
         ui_logs: dict = None,
+        run_metadata: dict = None,
     ) -> dict:
         """
         Classify a test failure into a category.

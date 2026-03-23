@@ -163,6 +163,22 @@ def main(argv=None):
         help="Skip AI-generated run summary (saves tokens/cost)",
     )
     parser.add_argument(
+        "--bug-details-dir",
+        default=None,
+        help=(
+            "Directory to write individual bug detail JSON files for product_bug "
+            "failures (default: disabled)"
+        ),
+    )
+    parser.add_argument(
+        "--ocs-ci-repo",
+        default=None,
+        help=(
+            "Path to bare clone of upstream ocs-ci repo for reading test source code "
+            "(default: ~/.ocs-ci/upstream-ocs-ci.git)"
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -230,6 +246,8 @@ def main(argv=None):
             sessions_url=sessions_url,
             no_summary=args.no_summary,
             junit_xml=args.junit_xml,
+            bug_details_dir=args.bug_details_dir,
+            ocs_ci_repo=args.ocs_ci_repo,
         )
 
         # Generate report

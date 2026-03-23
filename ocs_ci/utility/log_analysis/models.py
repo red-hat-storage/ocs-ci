@@ -116,9 +116,12 @@ class FailureAnalysis:
     session_id: str = ""
     session_file: str = ""
     must_gather_url: str = ""
+    bug_details: dict = field(default_factory=dict)
+    suggested_fix: dict = field(default_factory=dict)
+    cache_file: str = ""
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "test_name": self.test_result.full_name,
             "status": self.test_result.status.value,
             "duration": self.test_result.duration,
@@ -134,7 +137,13 @@ class FailureAnalysis:
             "session_id": self.session_id,
             "session_file": self.session_file,
             "must_gather_url": self.must_gather_url,
+            "cache_file": self.cache_file,
         }
+        if self.bug_details:
+            d["bug_details"] = self.bug_details
+        if self.suggested_fix:
+            d["suggested_fix"] = self.suggested_fix
+        return d
 
     @staticmethod
     def from_dict(data: dict, test_result: "TestResult") -> "FailureAnalysis":
@@ -147,6 +156,9 @@ class FailureAnalysis:
             matched_known_issues=data.get("matched_known_issues", []),
             suggested_jira_issues=data.get("suggested_jira_issues", []),
             recommended_action=data.get("recommended_action", ""),
+            bug_details=data.get("bug_details", {}),
+            suggested_fix=data.get("suggested_fix", {}),
+            cache_file=data.get("cache_file", ""),
         )
 
 

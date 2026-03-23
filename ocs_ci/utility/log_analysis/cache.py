@@ -32,7 +32,7 @@ class AnalysisCache:
         os.makedirs(self.cache_dir, exist_ok=True)
         logger.debug(f"Analysis cache: {self.cache_dir} (TTL: {ttl_hours}h)")
 
-    def get(self, signature: FailureSignature) -> Optional[dict]:
+    def get(self, signature: FailureSignature) -> Optional[tuple]:
         """
         Retrieve cached analysis for a failure signature.
 
@@ -40,7 +40,7 @@ class AnalysisCache:
             signature: FailureSignature to look up
 
         Returns:
-            Cached analysis dict, or None if not found/expired
+            Tuple of (analysis_dict, cache_file_path), or None if not found/expired
         """
         path = self._cache_path(signature)
         if not os.path.exists(path):
@@ -62,7 +62,7 @@ class AnalysisCache:
             return None
 
         logger.debug(f"Cache hit for {signature.cache_key}")
-        return data.get("analysis")
+        return data.get("analysis"), path
 
     def put(self, signature: FailureSignature, analysis: dict):
         """
