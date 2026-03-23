@@ -332,12 +332,6 @@ class ClaudeClient(LLMClient):
             logger.warning(f"Claude CLI check failed: {e}")
             return False
 
-    # Well-known paths for GCP credential files (checked in order)
-    _GCP_CREDENTIAL_PATHS = (
-        "/opt/claude/auth/gcp-auth.json",
-        defaults.AI_GCP_CREDENTIALS_PATH,
-    )
-
     # Shell file installed by the claude-code Ansible role with Vertex env vars
     _CLAUDE_ENV_FILE = "/etc/profile.d/claude-code.sh"
 
@@ -376,13 +370,17 @@ class ClaudeClient(LLMClient):
         # Fallback: if GOOGLE_APPLICATION_CREDENTIALS is still not set, try
         # well-known file paths so the GCP SDK can find credentials.
         if "GOOGLE_APPLICATION_CREDENTIALS" not in env:
-            for cred_path in self._GCP_CREDENTIAL_PATHS:
-                if os.path.isfile(cred_path):
-                    env["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
-                    logger.debug(
-                        "Set GOOGLE_APPLICATION_CREDENTIALS=%s (fallback)", cred_path
-                    )
-                    break
+            if os.path.isfile(defaults.AI_GCP_CREDENTIALS_PATH):
+                env["GOOGLE_APPLICATION_CREDENTIALS"] = defaults.AI_GCP_CREDENTIALS_PATH
+                logger.debug(
+                    "Set GOOGLE_APPLICATION_CREDENTIALS=%s (fallback)",
+                    defaults.AI_GCP_CREDENTIALS_PATH,
+                )
+            else:
+                logger.error(
+                    "GOOGLE_APPLICATION_CREDENTIALS not set and default path "
+                    f"{defaults.AI_GCP_CREDENTIALS_PATH} does not exist"
+                )
 
         for key in self._CLAUDE_ENV_VARS:
             env.pop(key, None)
