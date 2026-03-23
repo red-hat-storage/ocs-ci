@@ -219,11 +219,6 @@ class TestCephfsStressWithFailures(E2ETest):
                         f"Completed ALL component failures after iteration {completed_iterations}\n"
                         f"Components tested: {', '.join(CEPH_COMPONENTS)}\n"
                     )
-                    logger.info("Performing Health checks after ALL component failures")
-                    verify_openshift_storage_ns_pods_in_running_state()
-                    logger.info("Performing health check after ALL failures")
-                    ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
-                    logger.info("Health check passed after ALL failure")
 
                 logger.info(
                     f"Job still running. Waiting {JOB_STATUS_CHECK_INTERVAL}s "
@@ -350,14 +345,14 @@ class TestCephfsStressWithFailures(E2ETest):
         logger.info(f"\n--- Failure 1/4: Restarting node for {component} pod ---")
         target_pod = self._get_target_pod_for_component(component)
         self._restart_node_with_pod(target_pod, nodes, component)
-        self._wait_for_rebalance_and_health_check(
+        self._wait_for_rebalance_and_health_checks(
             component, rebalance_wait, health_check_wait
         )
         self._verify_job_still_running(job_obj)
 
         logger.info("\n--- Failure 2/4: Restarting operator and plugin pods ---")
         self._restart_operator_and_plugin_pods()
-        self._wait_for_rebalance_and_health_check(
+        self._wait_for_rebalance_and_health_checks(
             component, rebalance_wait, health_check_wait
         )
         self._verify_job_still_running(job_obj)
@@ -367,7 +362,7 @@ class TestCephfsStressWithFailures(E2ETest):
         )
         target_pod = self._get_target_pod_for_component(component)
         self._power_off_and_on_node(target_pod, nodes_util, component, power_on_wait)
-        self._wait_for_rebalance_and_health_check(
+        self._wait_for_rebalance_and_health_checks(
             component, rebalance_wait, health_check_wait
         )
         self._verify_job_still_running(job_obj)
@@ -379,7 +374,7 @@ class TestCephfsStressWithFailures(E2ETest):
         self._induce_network_failure_on_node(
             target_pod, nodes_util, component, power_on_wait
         )
-        self._wait_for_rebalance_and_health_check(
+        self._wait_for_rebalance_and_health_checks(
             component, rebalance_wait, health_check_wait
         )
         self._verify_job_still_running(job_obj)
@@ -517,11 +512,11 @@ class TestCephfsStressWithFailures(E2ETest):
             timeout=600, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-    def _wait_for_rebalance_and_health_check(
+    def _wait_for_rebalance_and_health_checks(
         self, component, rebalance_wait, health_check_wait
     ):
         """
-        Wait for rebalance to complete and perform health check.
+        Wait for rebalance to complete and perform health checks.
 
         Args:
             component (str): Component name
@@ -605,13 +600,12 @@ class TestCephfsStressWithFailures(E2ETest):
             f"Data re-balance failed to complete within the given timeout of {rebalance_wait} seconds. "
             f"This may be due to ongoing scrubbing or other maintenance operations."
         )
-
-        logger.info(f"Performing health check after {component} failure")
-        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
-        logger.info(f"Health check passed after {component} failure")
-
         logger.info(f"Waiting additional {health_check_wait}s for stabilization...")
         time.sleep(health_check_wait)
+        logger.info(f"Performing health checks after {component} failure")
+        verify_openshift_storage_ns_pods_in_running_state()
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
+        logger.info(f"Health checks passed after {component} failure")
 
     def _verify_job_still_running(self, job_obj):
         """
