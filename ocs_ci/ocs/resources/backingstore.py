@@ -133,6 +133,55 @@ class BackingStore:
                 else:
                     raise
 
+        def _check_if_rejected_due_to_missing_secret():
+            """
+            Check if backingstore is in Rejected phase due to missing secret.
+            If so, remove finalizers to allow deletion.
+
+            Returns:
+                bool: True if backingstore was in Rejected phase with missing secret
+            """
+            try:
+                bs_obj = OCP(
+                    kind=constants.BACKINGSTORE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )
+                bs_data = bs_obj.get(resource_name=self.name)
+
+                phase = bs_data.get("status", {}).get("phase")
+                conditions = bs_data.get("status", {}).get("conditions", [])
+
+                # Check if phase is Rejected and reason is MissingSecret
+                is_rejected_missing_secret = False
+                if phase == "Rejected":
+                    for condition in conditions:
+                        if condition.get(
+                            "reason"
+                        ) == "MissingSecret" and "not found or deleted" in condition.get(
+                            "message", ""
+                        ):
+                            is_rejected_missing_secret = True
+                            break
+
+                if is_rejected_missing_secret:
+                    log.warning(
+                        f"Backingstore {self.name} is in Rejected phase due to missing secret. "
+                        "Removing finalizers to allow deletion."
+                    )
+                    # Remove finalizers
+                    bs_obj.patch(
+                        resource_name=self.name,
+                        params='{"metadata":{"finalizers":null}}',
+                        format_type="merge",
+                    )
+                    log.info(f"Finalizers removed from {self.name}")
+                    return True
+
+            except Exception as e:
+                log.warning(f"Could not check backingstore status: {e}")
+
+            return False
+
         def _cli_deletion_flow():
             try:
                 self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")

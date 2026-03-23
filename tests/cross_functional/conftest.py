@@ -10,6 +10,7 @@ from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     create_unique_resource_name,
+    # get_default_cluster_volumesnapshotclass,
 )
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
 from ocs_ci.framework import config
@@ -89,161 +90,166 @@ def start_noobaa_services(noobaa_endpoint_dc, noobaa_operator_dc):
     )
 
 
-def _get_storage_cluster_obj():
-    """
-    Get the OCS storage cluster object.
+# def _get_storage_cluster_obj():
+#     """
+#     Get the OCS storage cluster object.
 
-    Returns:
-        OCP: OCS storage cluster OCP object
-    """
-    return OCP(
-        kind="storagecluster",
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-    )
-
-
-def _patch_db_backup_config(
-    ocs_storage_obj, schedule_cron_interval, num_backups, snapshot_class
-):
-    """
-    Patch the storage cluster with DB backup configuration.
-
-    Args:
-        ocs_storage_obj (OCP): OCS storage cluster object
-        schedule_cron_interval (int): Cron schedule interval in minutes
-        num_backups (int): Maximum number of backups to retain
-        snapshot_class (str): Volume snapshot class name
-
-    Returns:
-        None
-    """
-    db_backup_param = (
-        f'{{"spec": {{"multiCloudGateway": '
-        f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
-        f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
-    )
-    ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
-    logger.info(
-        f"DB backup info patched successfully with maxSnapshots={num_backups}, "
-        f"schedule=*/{schedule_cron_interval} * * * *"
-    )
-    time.sleep(15)
+#     Returns:
+#         OCP: OCS storage cluster OCP object
+#     """
+#     return OCP(
+#         kind="storagecluster",
+#         namespace=config.ENV_DATA["cluster_namespace"],
+#         resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+#     )
 
 
-def _get_noobaa_obj():
-    """
-    Get the NooBaa CR object.
+# def _patch_db_backup_config(
+#     ocs_storage_obj, schedule_cron_interval, num_backups, snapshot_class
+# ):
+#     """
+#     Patch the storage cluster with DB backup configuration.
 
-    Returns:
-        OCP: NooBaa OCP object
-    """
-    return OCP(
-        kind="noobaa",
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.NOOBAA_RESOURCE_NAME,
-    )
+#     Args:
+#         ocs_storage_obj (OCP): OCS storage cluster object
+#         schedule_cron_interval (int): Cron schedule interval in minutes
+#         num_backups (int): Maximum number of backups to retain
+#         snapshot_class (str): Volume snapshot class name
 
-
-def _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj):
-    """
-    Verify that DB backup configuration is propagated from storage cluster to NooBaa CR.
-
-    Args:
-        ocs_storage_obj (OCP): OCS storage cluster object
-        noobaa_obj (OCP): NooBaa object
-
-    Returns:
-        dict: DB backup info from NooBaa CR
-
-    Raises:
-        AssertionError: If configuration mismatch is detected
-    """
-    ocs_storage_obj.reload_data()
-    noobaa_obj.reload_data()
-    db_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
-        "multiCloudGateway"
-    ]["dbBackup"]
-    db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
-    assert (
-        db_info_from_ocs_storage == db_info_from_noobaa_cr
-    ), "Mismatch in DB backup info between ocs-storagecluster and noobaa CR"
-    return db_info_from_noobaa_cr
+#     Returns:
+#         None
+#     """
+#     db_backup_param = (
+#         f'{{"spec": {{"multiCloudGateway": '
+#         f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+#         f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+#     )
+#     ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
+#     logger.info(
+#         f"DB backup info patched successfully with maxSnapshots={num_backups}, "
+#         f"schedule=*/{schedule_cron_interval} * * * *"
+#     )
+#     time.sleep(15)
 
 
-def _patch_db_recovery_config(ocs_storage_obj, backup_name):
-    """
-    Patch the storage cluster with DB recovery configuration.
+# def _get_noobaa_obj():
+#     """
+#     Get the NooBaa CR object.
 
-    Args:
-        ocs_storage_obj (OCP): OCS storage cluster object
-        backup_name (str): Name of the backup to use for recovery
-
-    Returns:
-        None
-    """
-    db_recovery_param = (
-        f'{{"spec": {{"multiCloudGateway": '
-        f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_name}"}}}}}}}}'
-    )
-    ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
-    logger.info("DB recovery info patched successfully")
-    time.sleep(15)
+#     Returns:
+#         OCP: NooBaa OCP object
+#     """
+#     return OCP(
+#         kind="noobaa",
+#         namespace=config.ENV_DATA["cluster_namespace"],
+#         resource_name=constants.NOOBAA_RESOURCE_NAME,
+#     )
 
 
-def _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj):
-    """
-    Verify that DB recovery configuration is propagated from storage cluster to NooBaa CR.
+# def _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj):
+#     """
+#     Verify that DB backup configuration is propagated from storage cluster to NooBaa CR.
 
-    Args:
-        ocs_storage_obj (OCP): OCS storage cluster object
-        noobaa_obj (OCP): NooBaa object
+#     Args:
+#         ocs_storage_obj (OCP): OCS storage cluster object
+#         noobaa_obj (OCP): NooBaa object
 
-    Raises:
-        AssertionError: If configuration mismatch is detected
-    """
-    ocs_storage_obj.reload_data()
-    noobaa_obj.reload_data()
-    recovery_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
-        "multiCloudGateway"
-    ]["dbRecovery"]
-    recovery_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
-        "dbRecovery"
-    ]
-    assert (
-        recovery_info_from_ocs_storage == recovery_info_from_noobaa_cr
-    ), "Mismatch in DB recovery info between ocs-storagecluster and noobaa CR"
+#     Returns:
+#         dict: DB backup info from NooBaa CR
+
+#     Raises:
+#         AssertionError: If configuration mismatch is detected
+#     """
+#     ocs_storage_obj.reload_data()
+#     noobaa_obj.reload_data()
+#     db_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+#         "multiCloudGateway"
+#     ]["dbBackup"]
+#     db_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
+#     assert (
+#         db_info_from_ocs_storage == db_info_from_noobaa_cr
+#     ), "Mismatch in DB backup info between ocs-storagecluster and noobaa CR"
+#     return db_info_from_noobaa_cr
 
 
-def _delete_and_wait_for_cluster_recovery(db_cluster_name):
-    """
-    Delete NooBaa DB cluster and wait for automatic recovery.
+# def _patch_db_recovery_config(ocs_storage_obj, backup_name):
+#     """
+#     Patch the storage cluster with DB recovery configuration.
 
-    Args:
-        db_cluster_name (str): Name of the DB cluster to delete
+#     Args:
+#         ocs_storage_obj (OCP): OCS storage cluster object
+#         backup_name (str): Name of the backup to use for recovery
 
-    Returns:
-        None
-    """
-    cluster_obj = OCP(kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"])
-    cluster_obj.delete(resource_name=db_cluster_name, force=True)
-    cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+#     Returns:
+#         None
+#     """
+#     db_recovery_param = (
+#         f'{{"spec": {{"multiCloudGateway": '
+#         f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_name}"}}}}}}}}'
+#     )
+#     ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
+#     logger.info("DB recovery info patched successfully")
+#     time.sleep(15)
 
-    # Validate noobaa pods are up and running after recovery
-    noobaa_pods = get_noobaa_pods()
-    pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
-    pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        resource_count=len(noobaa_pods),
-        selector=constants.NOOBAA_APP_LABEL,
-        timeout=3600,
-    )
-    logger.info("NooBaa pods are up and running after recovery")
+
+# def _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj):
+#     """
+#     Verify that DB recovery configuration is propagated from storage cluster to NooBaa CR.
+
+#     Args:
+#         ocs_storage_obj (OCP): OCS storage cluster object
+#         noobaa_obj (OCP): NooBaa object
+
+#     Raises:
+#         AssertionError: If configuration mismatch is detected
+#     """
+#     ocs_storage_obj.reload_data()
+#     noobaa_obj.reload_data()
+#     recovery_info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+#         "multiCloudGateway"
+#     ]["dbRecovery"]
+#     recovery_info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"][
+#         "dbRecovery"
+#     ]
+#     assert (
+#         recovery_info_from_ocs_storage == recovery_info_from_noobaa_cr
+#     ), "Mismatch in DB recovery info between ocs-storagecluster and noobaa CR"
+
+
+# def _delete_and_wait_for_cluster_recovery(db_cluster_name):
+#     """
+#     Delete NooBaa DB cluster and wait for automatic recovery.
+
+#     Args:
+#         db_cluster_name (str): Name of the DB cluster to delete
+
+#     Returns:
+#         None
+#     """
+#     cluster_obj = OCP(kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"])
+#     cluster_obj.delete(resource_name=db_cluster_name, force=True)
+#     cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+
+#     # Validate noobaa pods are up and running after recovery
+#     noobaa_pods = get_noobaa_pods()
+#     pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+#     pod_obj.wait_for_resource(
+#         condition=constants.STATUS_RUNNING,
+#         resource_count=len(noobaa_pods),
+#         selector=constants.NOOBAA_APP_LABEL,
+#         timeout=3600,
+#     )
+#     logger.info("NooBaa pods are up and running after recovery")
 
 
 @pytest.fixture()
 def noobaa_db_backup_and_recovery_locally(
-    request, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
+    request,
+    mcg_obj,
+    awscli_pod,
+    bucket_factory,
+    test_directory_setup,
+    noobaa_db_recovery_patch,
 ):
     """
     Test to verify CNPG based noobaa DB Backup and recovery for Multicloud Object Gateway database locally
@@ -257,11 +263,18 @@ def noobaa_db_backup_and_recovery_locally(
         * Validate data is present in OBC after recovery
     """
 
+    # SNAPSHOT_CLASS = (
+    #     get_default_cluster_volumesnapshotclass()
+    #     if config.ENV_DATA["mcg_only_deployment"]
+    #     else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+    # )
+
     def factory(
         mcg_obj=mcg_obj,
         awscli_pod=awscli_pod,
         bucket_factory=bucket_factory,
         test_directory_setup=test_directory_setup,
+        noobaa_db_recovery_patch=noobaa_db_recovery_patch,
     ):
 
         # 1: Create OBC and write data
@@ -284,22 +297,40 @@ def noobaa_db_backup_and_recovery_locally(
         )
 
         # 2: Add backup info in OCS Storage cluster CR
-        ocs_storage_obj = _get_storage_cluster_obj()
-        noobaa_obj = _get_noobaa_obj()
-
-        _patch_db_backup_config(
-            ocs_storage_obj=ocs_storage_obj,
-            schedule_cron_interval=15,
-            num_backups=1,
-            snapshot_class=constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
+        ocs_storage_obj = OCP(
+            kind="storagecluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
         )
-        _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj)
+        noobaa_obj = OCP(
+            kind="noobaa",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+        )
+
+        # noobaa_db_backup_patch(
+        #     schedule_cron_interval=15,
+        #     num_backups=1,
+        #     snapshot_class=SNAPSHOT_CLASS,
+        # )
+        # Verify that DB backup or recovery configuration is propagated from storage cluster to NooBaa CR.
+
+        ocs_storage_obj.reload_data()
+        noobaa_obj.reload_data()
+        info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+            "multiCloudGateway"
+        ]["dbBackup"]
+
+        info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbBackup"]
+        assert (
+            info_from_ocs_storage == info_from_noobaa_cr
+        ), "Mismatch in dbBackup info between ocs-storagecluster and noobaa CR"
+
         logger.info("DB backup configuration added to OCS Storage cluster CR")
 
         # 3: Run noobaa cli command to create on demand backup and validate backup is getting created or not
         logger.info("Creating on-demand backup using NooBaa CLI")
         backup_name = create_unique_resource_name("noobaa-cli", "backup")
-        logger.info(backup_name)
 
         mcg_obj.exec_mcg_cmd(
             cmd=f"system db-backup --name {backup_name}",
@@ -323,15 +354,42 @@ def noobaa_db_backup_and_recovery_locally(
         logger.info(f"On-demand backup {backup_name} completed successfully")
 
         # 4: Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
-        _patch_db_recovery_config(ocs_storage_obj, backup_name)
-        _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj)
+
+        noobaa_db_recovery_patch(backup_name)
+        ocs_storage_obj.reload_data()
+        noobaa_obj.reload_data()
+        info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+            "multiCloudGateway"
+        ]["dbRecovery"]
+        info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbRecovery"]
+        assert (
+            info_from_ocs_storage == info_from_noobaa_cr
+        ), "Mismatch in dbRecovery info between ocs-storagecluster and noobaa CR"
+
         logger.info("DB recovery configuration added to OCS Storage cluster CR")
 
         # 5: Delete Cluster CR and check automatic recovery is getting triggered
         db_cluster_name = get_all_resource_of_kind_containing_string(
             "noobaa-db-pg-cluster", "Cluster"
         )[0]
-        _delete_and_wait_for_cluster_recovery(db_cluster_name)
+        cluster_obj = OCP(
+            kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        cluster_obj.delete(resource_name=db_cluster_name, force=True)
+        cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+
+        # Validate noobaa pods are up and running after recovery
+        noobaa_pods = get_noobaa_pods()
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_count=len(noobaa_pods),
+            selector=constants.NOOBAA_APP_LABEL,
+            timeout=900,
+        )
+        logger.info("NooBaa pods are up and running after recovery")
 
         # Verify Bucket health after recovery process
         bucket_obj.verify_health(timeout=600)
@@ -355,145 +413,145 @@ def noobaa_db_backup_and_recovery_locally(
             "Cluster recovered successfully using CLI-created backup and validated data after recovery"
         )
 
-    def finalizer():
-        """
-        removes the DB backup and recovery information from storage cluster CR
-        """
+    # def finalizer():
+    #     """
+    #     removes the DB backup and recovery information from storage cluster CR
+    #     """
 
-        ocs_storage_obj = _get_storage_cluster_obj()
-        backup_params = '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
-        recovery_params = (
-            '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
-        )
-        for i in [backup_params, recovery_params]:
-            try:
-                ocs_storage_obj.patch(
-                    resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-                    params=i,
-                    format_type="json",
-                )
-            except Exception as e:
-                logger.error(e)
-                pass
-        logger.info(
-            "Successfully removed backup and recovery section from Storage cluster"
-        )
-        logger.info("Removing created backups now")
-        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
-        backup_names = get_all_resource_of_kind_containing_string(
-            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
-        )
-        for bkp_name in backup_names:
-            backup_obj.delete(resource_name=bkp_name, force=True)
-            backup_obj.wait_for_delete(resource_name=bkp_name)
-        logger.info("Backups created by CNPG operator Removed successfully")
+    #     ocs_storage_obj = _get_storage_cluster_obj()
+    #     backup_params = '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
+    #     recovery_params = (
+    #         '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
+    #     )
+    #     for i in [backup_params, recovery_params]:
+    #         try:
+    #             ocs_storage_obj.patch(
+    #                 resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    #                 params=i,
+    #                 format_type="json",
+    #             )
+    #         except Exception as e:
+    #             logger.error(e)
+    #             pass
+    #     logger.info(
+    #         "Successfully removed backup and recovery section from Storage cluster"
+    #     )
+    #     logger.info("Removing created backups now")
+    #     backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+    #     backup_names = get_all_resource_of_kind_containing_string(
+    #         "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+    #     )
+    #     for bkp_name in backup_names:
+    #         backup_obj.delete(resource_name=bkp_name, force=True)
+    #         backup_obj.wait_for_delete(resource_name=bkp_name)
+    #     logger.info("Backups created by CNPG operator Removed successfully")
 
-    request.addfinalizer(finalizer)
+    # request.addfinalizer(finalizer)
     return factory
 
 
-@pytest.fixture()
-def noobaa_db_backup_locally(request, mcg_obj):
-    """
-    Noobaa db backup locally
+# @pytest.fixture()
+# def noobaa_db_backup_locally(request, mcg_obj):
+#     """
+#     Noobaa db backup locally
 
-    """
+#     """
 
-    def factory(mcg_obj=mcg_obj):
+#     def factory(mcg_obj=mcg_obj):
 
-        # add in testcase to wait for 1 minute for async backup to trigger between primary and secondary db
+#         # add in testcase to wait for 1 minute for async backup to trigger between primary and secondary db
 
-        # 1: Add backup info in OCS Storage cluster CR
-        ocs_storage_obj = _get_storage_cluster_obj()
-        noobaa_obj = _get_noobaa_obj()
+#         # 1: Add backup info in OCS Storage cluster CR
+#         ocs_storage_obj = _get_storage_cluster_obj()
+#         noobaa_obj = _get_noobaa_obj()
 
-        _patch_db_backup_config(
-            ocs_storage_obj=ocs_storage_obj,
-            schedule_cron_interval=15,
-            num_backups=1,
-            snapshot_class=constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
-        )
-        _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj)
-        logger.info("DB backup configuration added to OCS Storage cluster CR")
+#         _patch_db_backup_config(
+#             ocs_storage_obj=ocs_storage_obj,
+#             schedule_cron_interval=15,
+#             num_backups=1,
+#             snapshot_class=constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD,
+#         )
+#         _verify_backup_config_propagation(ocs_storage_obj, noobaa_obj)
+#         logger.info("DB backup configuration added to OCS Storage cluster CR")
 
-        # 2: Run noobaa cli command to create on demand backup and validate backup is getting created or not
-        logger.info("Creating on-demand backup using NooBaa CLI")
-        backup_name = create_unique_resource_name("noobaa-cli", "backup")
-        mcg_obj.exec_mcg_cmd(
-            cmd=f"system db-backup --name {backup_name}",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            use_yes=True,
-            ignore_error=False,
-        )
-        logger.info("On-demand backup command executed")
+#         # 2: Run noobaa cli command to create on demand backup and validate backup is getting created or not
+#         logger.info("Creating on-demand backup using NooBaa CLI")
+#         backup_name = create_unique_resource_name("noobaa-cli", "backup")
+#         mcg_obj.exec_mcg_cmd(
+#             cmd=f"system db-backup --name {backup_name}",
+#             namespace=config.ENV_DATA["cluster_namespace"],
+#             use_yes=True,
+#             ignore_error=False,
+#         )
+#         logger.info("On-demand backup command executed")
 
-        # Get on-demand backup
-        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+#         # Get on-demand backup
+#         backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
 
-        # Wait for on-demand backup to complete
-        backup_obj.wait_for_resource(
-            "completed",
-            resource_name=backup_name,
-            column="PHASE",
-            timeout=300,
-        )
-        logger.info(f"On-demand backup {backup_name} completed successfully")
+#         # Wait for on-demand backup to complete
+#         backup_obj.wait_for_resource(
+#             "completed",
+#             resource_name=backup_name,
+#             column="PHASE",
+#             timeout=300,
+#         )
+#         logger.info(f"On-demand backup {backup_name} completed successfully")
 
-        return ocs_storage_obj, backup_name, noobaa_obj
+#         return ocs_storage_obj, backup_name, noobaa_obj
 
-    return factory
+#     return factory
 
 
-@pytest.fixture()
-def noobaa_db_recovery_from_local(request):
+# @pytest.fixture()
+# def noobaa_db_recovery_from_local(request):
 
-    def factory(ocs_storage_obj, backup_name, noobaa_obj):
+#     def factory(ocs_storage_obj, backup_name, noobaa_obj):
 
-        # 1: Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
-        _patch_db_recovery_config(ocs_storage_obj, backup_name)
-        _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj)
-        logger.info("DB recovery configuration added to OCS Storage cluster CR")
+#         # 1: Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
+#         _patch_db_recovery_config(ocs_storage_obj, backup_name)
+#         _verify_recovery_config_propagation(ocs_storage_obj, noobaa_obj)
+#         logger.info("DB recovery configuration added to OCS Storage cluster CR")
 
-        # 2: Delete Cluster CR and check automatic recovery is getting triggered
-        db_cluster_name = get_all_resource_of_kind_containing_string(
-            "noobaa-db-pg-cluster", "Cluster"
-        )[0]
-        _delete_and_wait_for_cluster_recovery(db_cluster_name)
+#         # 2: Delete Cluster CR and check automatic recovery is getting triggered
+#         db_cluster_name = get_all_resource_of_kind_containing_string(
+#             "noobaa-db-pg-cluster", "Cluster"
+#         )[0]
+#         _delete_and_wait_for_cluster_recovery(db_cluster_name)
 
-        # add in tetscase to wait for bucket to reach healthy state
+#         # add in tetscase to wait for bucket to reach healthy state
 
-    def finalizer():
+#     def finalizer():
 
-        ocs_storage_obj = _get_storage_cluster_obj()
-        backup_params = '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
-        recovery_params = (
-            '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
-        )
-        for i in [backup_params, recovery_params]:
-            try:
-                ocs_storage_obj.patch(
-                    resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-                    params=i,
-                    format_type="json",
-                )
-            except Exception as e:
-                logger.error(e)
-                pass
-        logger.info(
-            "Successfully removed backup and recovery section from Storage cluster"
-        )
-        logger.info("Removing created backups now")
-        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
-        backup_names = get_all_resource_of_kind_containing_string(
-            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
-        )
-        for bkp_name in backup_names:
-            backup_obj.delete(resource_name=bkp_name, force=True)
-            backup_obj.wait_for_delete(resource_name=bkp_name)
-        logger.info("Backups created by CNPG operator Removed successfully")
+#         ocs_storage_obj = _get_storage_cluster_obj()
+#         backup_params = '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
+#         recovery_params = (
+#             '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
+#         )
+#         for i in [backup_params, recovery_params]:
+#             try:
+#                 ocs_storage_obj.patch(
+#                     resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+#                     params=i,
+#                     format_type="json",
+#                 )
+#             except Exception as e:
+#                 logger.error(e)
+#                 pass
+#         logger.info(
+#             "Successfully removed backup and recovery section from Storage cluster"
+#         )
+#         logger.info("Removing created backups now")
+#         backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+#         backup_names = get_all_resource_of_kind_containing_string(
+#             "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+#         )
+#         for bkp_name in backup_names:
+#             backup_obj.delete(resource_name=bkp_name, force=True)
+#             backup_obj.wait_for_delete(resource_name=bkp_name)
+#         logger.info("Backups created by CNPG operator Removed successfully")
 
-    request.addfinalizer(finalizer)
-    return factory
+#     request.addfinalizer(finalizer)
+#     return factory
 
 
 @pytest.fixture()
