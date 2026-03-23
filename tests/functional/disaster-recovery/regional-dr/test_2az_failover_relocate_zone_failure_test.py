@@ -120,7 +120,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
         if pvc_interface == constants.CEPHBLOCKPOOL:
             logger.info("Deploying 2 CNV apps (RBD only)")
             cnv_workloads = all_dr_workloads["discovered_apps_cnv"](
-                pvc_vm=2,
+                pvc_vm=1,
                 custom_sc=False,
                 dr_protect=True,
                 shared_drpc_protection=False,
