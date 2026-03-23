@@ -28,8 +28,6 @@ from ocs_ci.ocs.ui.ols_ui import OLSUI
 
 log = logging.getLogger(__name__)
 
-ACCURACY_THRESHOLD = 0.75
-
 
 @cyan_squad
 @tier1
@@ -38,6 +36,8 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
     This test case covers the successful deployment of the RAG image and the initial configuration of OLS to use it.
     This will validate the core prerequisites for RAG functionality, and also verifies the response given by OLS.
+
+    UI tests use the ``setup_ui`` fixture from ``tests/conftest.py`` (browser login and teardown).
 
     """
 
@@ -67,11 +67,8 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         # Create custom resource "ols-config"
         assert create_ols_config(), "Failed to create ols-config"
 
-        # Wait for the resources to be up
-        time.sleep(300)
-
         # Verify OLS successfully connects to and utilizes the specified IBM watsonx LLM provider
-        # Verify all OLS pods are up and running
+        # Verify all OLS pods are up and running (polls ApiReady; do not use fixed sleeps)
         verify_ols_connects_to_llm()
 
     @pytest.mark.polarion_id("OCS-7484")
@@ -110,7 +107,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
             if qtype == "valid":
                 assert (
-                    accuracy >= ACCURACY_THRESHOLD
+                    accuracy >= constants.OLS_QA_ACCURACY_THRESHOLD
                 ), f"Q{qid}: Accuracy failed ({accuracy})"
 
             elif qtype == "invalid":
@@ -139,8 +136,11 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             pvc_yaml_path
         ), f"OLS attached PVC YAML not found: {pvc_yaml_path}"
 
-        with open(pvc_yaml_path) as f:
-            pvc_yaml_content = f.read()
+        try:
+            with open(pvc_yaml_path, encoding="utf-8") as f:
+                pvc_yaml_content = f.read()
+        except OSError as e:
+            pytest.fail(f"Could not read OLS attached PVC YAML {pvc_yaml_path}: {e}")
 
         ols = OLSUI()
         ols.open_ols()
@@ -158,18 +158,20 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             "5Gi",
         ]
         accuracy = calculate_accuracy(answer, required_terms)
-        assert accuracy >= ACCURACY_THRESHOLD, (
+        assert accuracy >= constants.OLS_QA_ACCURACY_THRESHOLD, (
             f"OLS response for attached PVC YAML should contain expected terms "
             f"(storageClassName and storage); accuracy={accuracy}, required_terms={required_terms}"
         )
 
+    @pytest.mark.order("last")
     @pytest.mark.polarion_id("OCS-7513")
     def test_ols_byok_negative_misconfigured(self):
         """
 
         Integration with OLS BYOK Tech Preview - negative scenario (intentionally misconfigured).
         Tests two misconfigurations: invalid URL, then invalid projectID.
-        Intended to run after deployment and UI tests (leaves OLS misconfigured).
+        Marked ``order(last)`` so it runs after other tests in this class that need a working OLS config;
+        cleanup at the end removes OLSConfig and secret.
 
         Phase 1 - Invalid URL:
         1. Deploy OLS Operator if not already installed.
@@ -196,7 +198,8 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             overrides={"url": "https://invalid-llm.example.com"}
         ), "Failed to create ols-config with invalid URL"
 
-        time.sleep(60)
+        # Allow the operator to reconcile the misconfigured OLSConfig before asserting failure
+        time.sleep(constants.OLS_POST_MISCONFIG_APPLY_WAIT_SEC)
         assert verify_ols_connection_fails(
             timeout=300
         ), "OLS should not reach Available state when URL is invalid"
@@ -217,7 +220,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             overrides={"projectID": invalid_project_id}
         ), "Failed to create ols-config with invalid projectID"
 
-        time.sleep(60)
+        time.sleep(constants.OLS_POST_MISCONFIG_APPLY_WAIT_SEC)
         assert verify_ols_connection_fails(
             timeout=300
         ), "OLS should not reach Available state when projectID is invalid"

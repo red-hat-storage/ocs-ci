@@ -179,6 +179,12 @@ def _is_ols_connection_ready(conditions):
     Ready when ApiReady has reason=Available and status=True.
     Other condition types (e.g. ConsolePluginReady, CacheReady) are not checked.
 
+    Args:
+        conditions (list): OLSConfig ``status.conditions`` list from the cluster.
+
+    Returns:
+        bool: True if ApiReady indicates Available/True.
+
     """
     by_type = {c.get("type"): c for c in conditions if c.get("type")}
     cond = by_type.get(OLS_READY_CONDITION_TYPE)
@@ -246,6 +252,14 @@ def verify_ols_connects_to_llm(timeout=600, interval=15):
 
     Ready is defined as ApiReady having reason=Available, status=True.
 
+    Args:
+        timeout (int): Seconds to wait for ApiReady (connection ready).
+        interval (int): Seconds between polls of OLSConfig status.
+
+    Raises:
+        ResourceWrongStatusException: If pods are not Running or connection
+            does not become ready within ``timeout``.
+
     """
     if not wait_for_pods_to_be_running(namespace=constants.OLS_OPERATOR_NAMESPACE):
         raise ResourceWrongStatusException("OLS pods did not reach Running state")
@@ -270,6 +284,13 @@ def verify_ols_connection_fails(timeout=300, interval=15):
     Ready is defined as ApiReady Available/True. Returns True if OLS never became
     ready (expected); False if it became ready.
 
+    Args:
+        timeout (int): Maximum seconds to wait without seeing a ready state.
+        interval (int): Seconds between polls of OLSConfig status.
+
+    Returns:
+        bool: True if misconfiguration prevented reaching ready within ``timeout``.
+
     """
     return wait_for_ols_connection_state(
         expect_ready=False, timeout=timeout, interval=interval
@@ -282,6 +303,8 @@ def delete_ols_config_and_secret():
     Delete the cluster OLSConfig and the watsonx API secret so that a new
     (e.g. misconfigured) config can be applied. Used before negative tests.
 
+    Waits briefly after delete so subsequent ``oc create`` does not race the API server.
+
     """
     run_cmd(
         f"oc delete {constants.OLS_CONFIG_KIND} cluster -n {constants.OLS_OPERATOR_NAMESPACE} --ignore-not-found=true"
@@ -289,7 +312,7 @@ def delete_ols_config_and_secret():
     run_cmd(
         f"oc delete secret watsonx-api-keys -n {constants.OLS_OPERATOR_NAMESPACE} --ignore-not-found=true"
     )
-    time.sleep(10)
+    time.sleep(constants.OLS_CONFIG_DELETE_WAIT_SEC)
 
 
 def verify_ols_pod_logs_contain_expected_errors(
