@@ -77,6 +77,10 @@ def get_rp_launch_attributes():
         > config.RUN["skipped_on_ceph_health_threshold"]
     ):
         rp_attrs["ceph_health_skips_over_threshold"] = True
+    if config.REPORTING.get("primary_assignee"):
+        rp_attrs["primary_assignee"] = config.REPORTING.get("primary_assignee")
+    if config.REPORTING.get("backup_assignee"):
+        rp_attrs["backup_assignee"] = config.REPORTING.get("backup_assignee")
 
     return rp_attrs
 
