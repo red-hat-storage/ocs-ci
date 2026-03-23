@@ -1276,10 +1276,11 @@ def _collect_ocs_logs(
         except Exception:
             # Omit version if not available
             ocs_version_str = ""
-        # Include test name for failed test cases
+        # Include run_id and test name for better identification
+        run_id_str = f"_{cluster_config.RUN['run_id']}"
         test_name_str = f"_{dir_name}" if status_failure else ""
         ocs_log_dir_path = os.path.join(
-            log_dir_path, f"ocs_must_gather{ocs_version_str}{test_name_str}"
+            log_dir_path, f"ocs_must_gather{run_id_str}{ocs_version_str}{test_name_str}"
         )
         ocs_must_gather_image = cluster_config.REPORTING.get(
             "ocs_must_gather_image",
@@ -1326,14 +1327,15 @@ def _collect_ocs_logs(
         except Exception:
             # Omit version if not available
             ocp_version_str = ""
-        # Include test name for failed test cases
+        # Include run_id and test name for better identification
+        run_id_str = f"_{cluster_config.RUN['run_id']}"
         test_name_str = f"_{dir_name}" if status_failure else ""
         ocp_log_dir_path = os.path.join(
-            log_dir_path, f"ocp_must_gather{ocp_version_str}{test_name_str}"
+            log_dir_path, f"ocp_must_gather{run_id_str}{ocp_version_str}{test_name_str}"
         )
         ocp_service_log_dir_path = os.path.join(
             log_dir_path,
-            f"ocp_service_logs_must_gather{ocp_version_str}{test_name_str}",
+            f"ocp_service_logs_must_gather{run_id_str}{ocp_version_str}{test_name_str}",
         )
         ocp_must_gather_image = cluster_config.REPORTING["ocp_must_gather_image"]
         if cluster_config.DEPLOYMENT.get("disconnected"):
