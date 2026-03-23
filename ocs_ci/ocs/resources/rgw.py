@@ -101,6 +101,8 @@ def create_ec_cephobjectstore():
         ec_coding_chunks (int): number of coding chunks, m value (default: 1)
         ec_failure_domain (str): failure domain (default: "host")
     """
+    # K + M must be changed to 4+2 whenever it is possible.
+    # 2 + 1 is not officially supported due to poor data redundancy
     k = config.DEPLOYMENT.get("ec_data_chunks", 2)
     m = config.DEPLOYMENT.get("ec_coding_chunks", 1)
     fd = config.DEPLOYMENT.get("ec_failure_domain", "host")
