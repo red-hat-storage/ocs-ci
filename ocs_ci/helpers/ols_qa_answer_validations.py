@@ -5,7 +5,10 @@ from ocs_ci.utility import templating
 def load_test_data():
     """
 
-    Loads 20 sample QnA is set "qa-expectation.yaml" and returns dict generated from template file
+    Load Q&A cases from ``qa-expectations.yaml`` (via ``constants.OLS_QA_EXPECTATIONS``).
+
+    Returns:
+        list or dict: Parsed YAML (typically a list of question item dicts).
 
     """
     return templating.generate_yaml_from_jinja2_template_with_data(
@@ -16,11 +19,19 @@ def load_test_data():
 def calculate_accuracy(answer, keywords):
     """
 
-    Calculates accuracy based on the keywords given in "qa-expectation.yaml"
+    Calculates accuracy based on the keywords given in "qa-expectation.yaml".
+
+    Args:
+        answer (str): Model response text.
+        keywords (list): Required substrings; each match counts toward accuracy.
+
+    Returns:
+        float: Ratio of matched keywords to total keywords. Returns 0.0 when
+            ``keywords`` is empty (no terms to verify).
 
     """
     if not keywords:
-        return 1.0
+        return 0.0
     matched = sum(1 for k in keywords if k.lower() in answer.lower())
     return matched / len(keywords)
 
@@ -28,7 +39,13 @@ def calculate_accuracy(answer, keywords):
 def is_uncertain(answer):
     """
 
-    Verify that question is not valid based on the phrases
+    Return True if the answer indicates the model could not answer (no RAG / unknown).
+
+    Args:
+        answer (str): Model response text.
+
+    Returns:
+        bool: True if any uncertainty phrase appears (case-insensitive substring match).
 
     """
 
