@@ -94,15 +94,11 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # ========================================
         # Step 1: Deploy 2 GitOps/Subscription Apps
         # ========================================
-        logger.info("Deploying 2 GitOps/Subscription apps")
-        gitops_workloads = []
-        gitops_workloads.extend(
-            all_dr_workloads["dr_workload"](skip_mirroring_validation=True)
+        logger.info("Deploying 2 GitOps/ApplicationSet apps")
+        gitops_workloads = all_dr_workloads["dr_workload"](
+            num_of_subscription=0, num_of_appset=2, skip_mirroring_validation=True
         )
-        gitops_workloads.extend(
-            all_dr_workloads["dr_workload"](skip_mirroring_validation=True)
-        )
-        logger.info(f"Deployed {len(gitops_workloads)} GitOps workloads")
+        logger.info(f"Deployed {len(gitops_workloads)} GitOps/ApplicationSet workloads")
 
         # ========================================
         # Step 2: Deploy 2 Discovered Apps
