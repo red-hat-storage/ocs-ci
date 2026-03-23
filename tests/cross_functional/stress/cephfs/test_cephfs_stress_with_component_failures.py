@@ -21,8 +21,42 @@ from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import get_active_mds_pod_objs
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import ActiveMDSNotFoundException
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 logger = logging.getLogger(__name__)
+
+
+@retry(Exception, tries=5, delay=10, backoff=1)
+def get_active_mds_pods_with_retry():
+    """
+    Gets active MDS pods with retry logic to handle MDS active/standby transitions.
+
+    During MDS failover or transitions, there might be a brief period where no
+    active MDS pods are available. This function retries to handle such transient states.
+
+    Returns:
+        list: Active MDS pod objects
+
+    Raises:
+        Exception: If no active MDS pods are found after all retry attempts
+
+    """
+    active_mds_pods = get_active_mds_pod_objs()
+    if not active_mds_pods:
+        try:
+            ct_pod = get_ceph_tools_pod()
+            ceph_fs_status = ct_pod.exec_ceph_cmd("ceph fs status")
+            logger.warning(
+                f"No active MDS pods found. Ceph FS status:\n{ceph_fs_status}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to get ceph fs status: {e}")
+
+        raise ActiveMDSNotFoundException("No active MDS pods found")
+    logger.info(f"Found {len(active_mds_pods)} active MDS pod(s)")
+    return active_mds_pods
 
 
 @magenta_squad
@@ -255,7 +289,7 @@ class TestCephfsStressWithFailures(E2ETest):
     def _get_target_pod_for_component(self, component):
         """
         Get a target pod for the given component.
-        For MDS: select from active MDS pods
+        For MDS: select from active MDS pods with retry logic to handle transitions
         For other components: randomly select from available pods
 
         Args:
@@ -266,7 +300,7 @@ class TestCephfsStressWithFailures(E2ETest):
 
         """
         if component == "mds":
-            active_mds_pods = get_active_mds_pod_objs()
+            active_mds_pods = get_active_mds_pods_with_retry()
             if not active_mds_pods:
                 raise Exception("No active MDS pods found")
             target_pod = (
