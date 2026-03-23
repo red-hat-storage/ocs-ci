@@ -168,6 +168,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
             # Get workload details
             workload_namespace = workload.workload_namespace
             is_discovered_app = workload in (discovered_workloads + cnv_workloads)
+            is_appset = workload in gitops_workloads
 
             if is_discovered_app:
                 resource_name = workload.discovered_apps_placement_name
@@ -177,6 +178,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
             # Get primary and secondary cluster names
             primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
                 workload_namespace,
+                workload_type=(
+                    constants.APPLICATION_SET if is_appset else constants.SUBSCRIPTION
+                ),
                 discovered_apps=is_discovered_app,
                 resource_name=resource_name,
             )
@@ -186,6 +190,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
             secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
                 workload_namespace,
+                workload_type=(
+                    constants.APPLICATION_SET if is_appset else constants.SUBSCRIPTION
+                ),
                 discovered_apps=is_discovered_app,
                 resource_name=resource_name,
             )
@@ -198,6 +205,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
             # Get scheduling interval and wait for IOs
             scheduling_interval = dr_helpers.get_scheduling_interval(
                 workload_namespace,
+                workload_type=(
+                    constants.APPLICATION_SET if is_appset else constants.SUBSCRIPTION
+                ),
                 discovered_apps=is_discovered_app,
                 resource_name=resource_name,
             )
