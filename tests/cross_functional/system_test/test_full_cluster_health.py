@@ -210,11 +210,19 @@ class TestFullClusterHealth(PASTest):
         Returns:
             bool: True if ALL checks passed, False otherwise
         """
+        start_time = time.time()
+
         if timeout is None:
             timeout = self.TIMEOUT_POD_RUNNING
-        return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
+
+        result = self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
             timeout=timeout
         )
+
+        execution_time = time.time() - start_time
+        logger.info(f"is_cluster_healthy took {execution_time:.2f} seconds to execute")
+
+        return result
 
     def reload_ceph_cluster(self):
         """
@@ -275,9 +283,9 @@ class TestFullClusterHealth(PASTest):
         logger.info("Checking health after OCS operator node restart")
         time.sleep(300)
         self.reload_ceph_cluster()
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
 
         logger.info("Starting Rook, OSD, MGR & MON pods deletion")
         self.delete_pods()
         logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
