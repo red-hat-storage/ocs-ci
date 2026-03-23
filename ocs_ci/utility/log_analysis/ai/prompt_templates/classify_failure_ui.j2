@@ -198,7 +198,7 @@ cherry-pick is needed.
     "function": "<function name where the fix goes, e.g. craft_s3_command>",
     "line": <exact line number where the change starts — MUST be verified by reading the file>,
     "description": "<clear explanation of what's wrong and how to fix it>",
-    "code_snippet": "<ONLY the new or changed code — NOT the entire file. Show just the lines to add or modify, ready to paste>",
+    "code_snippet": "<ONLY the added or changed lines — match the + lines in the diff. Do NOT include surrounding unchanged code or the full expression/block>",
     "diff": "<unified diff showing the fix with context lines, using - for removed and + for added lines>",
     "fixed_on_master": <true/false — whether master branch already has the fix>,
     "needs_cherry_pick": <true/false — true if fixed on master but not on the release branch>
