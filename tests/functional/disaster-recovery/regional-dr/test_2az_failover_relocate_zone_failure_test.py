@@ -264,7 +264,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 "discovered_apps": is_discovered_app,
             }
             if not is_discovered_app:
-                failover_params["workload_type"] = constants.SUBSCRIPTION
+                failover_params["workload_type"] = (
+                    constants.APPLICATION_SET if is_appset else constants.SUBSCRIPTION
+                )
             dr_helpers.failover(**failover_params)
 
             # Wait for failover to complete
@@ -330,7 +332,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 "discovered_apps": is_discovered_app,
             }
             if not is_discovered_app:
-                relocate_params["workload_type"] = constants.SUBSCRIPTION
+                relocate_params["workload_type"] = (
+                    constants.APPLICATION_SET if is_appset else constants.SUBSCRIPTION
+                )
             dr_helpers.relocate(**relocate_params)
 
             # Wait for relocate to complete
