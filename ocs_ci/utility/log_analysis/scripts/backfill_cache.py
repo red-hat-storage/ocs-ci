@@ -398,7 +398,7 @@ class CacheBackfiller:
 
     # ---- AI call helpers ----
 
-    def _call_ai(self, prompt, context="", retries=1):
+    def _call_ai(self, prompt, context="", retries=2):
         """Make a single-turn AI call via claude CLI with JSON schema."""
         schema = json.dumps({
             "type": "object",
@@ -584,10 +584,12 @@ Respond with ONLY a JSON object (no markdown, no explanation outside the JSON). 
 - function: function name where the fix goes
 - line: exact line number where the change starts (verify from the source code above)
 - description: what's wrong and how to fix it
-- code_snippet: ONLY the added/changed lines (match the + lines in the diff, not surrounding code)
-- diff: unified diff showing the fix with context lines
+- code_snippet: ALL the + lines from the diff below, exactly as they appear. Must match the diff — if the diff has 2 changed lines, code_snippet must have 2 lines, not 1.
+- diff: unified diff showing the fix with context lines (- for removed, + for added)
 - fixed_on_master: false
 - needs_cherry_pick: false
+
+IMPORTANT: code_snippet and diff must be consistent. Every + line in the diff must appear in code_snippet. Do NOT summarize multiple changed lines into one.
 
 Use the actual source code provided to produce accurate line numbers and a correct diff.
 If no source code is available, use the traceback to identify the file and provide your best fix."""
