@@ -95,13 +95,13 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # Step 1: Deploy 2 GitOps/Subscription Apps
         # ========================================
         logger.info("Deploying 2 GitOps/Subscription apps")
-        gitops_workload_1 = all_dr_workloads["dr_workload"](
-            skip_mirroring_validation=True
+        gitops_workloads = []
+        gitops_workloads.extend(
+            all_dr_workloads["dr_workload"](skip_mirroring_validation=True)
         )
-        gitops_workload_2 = all_dr_workloads["dr_workload"](
-            skip_mirroring_validation=True
+        gitops_workloads.extend(
+            all_dr_workloads["dr_workload"](skip_mirroring_validation=True)
         )
-        gitops_workloads = [gitops_workload_1, gitops_workload_2]
         logger.info(f"Deployed {len(gitops_workloads)} GitOps workloads")
 
         # ========================================
@@ -138,14 +138,23 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # Step 4: Validate mirroring status for all deployed workloads
         # ========================================
         if pvc_interface == constants.CEPHBLOCKPOOL:
-            total_pvc_count = sum([wl.workload_pvc_count for wl in all_workloads])
+            # Flatten the list if any workload is itself a list
+            flattened_workloads = []
+            for wl in all_workloads:
+                if isinstance(wl, list):
+                    flattened_workloads.extend(wl)
+                else:
+                    flattened_workloads.append(wl)
+            total_pvc_count = sum([wl.workload_pvc_count for wl in flattened_workloads])
             logger.info(
-                f"Validating mirroring status for {total_pvc_count} PVCs across {len(all_workloads)} workloads"
+                f"Validating mirroring status for {total_pvc_count} PVCs across {len(flattened_workloads)} workloads"
             )
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=total_pvc_count, timeout=900
             )
             logger.info("Mirroring status validation successful for all workloads")
+            # Use flattened list for the rest of the test
+            all_workloads = flattened_workloads
 
         # ========================================
         # Step 5: Perform Failover and Relocate for each workload
