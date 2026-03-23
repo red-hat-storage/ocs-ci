@@ -67,9 +67,11 @@ Respond with a JSON object containing:
 For non-product_bug categories, do NOT include bug_details.
 
 **If category is `test_bug`**, also include a `suggested_fix` object:
-- file: path to the test file from the traceback
-- line: line number from traceback
+- file: path to the file from the traceback
+- function: function name where the fix goes
+- line: exact line number where the change starts (verify from actual code, not traceback)
 - description: what's wrong and how to fix it
-- code_snippet: corrected code or pseudo-code
+- code_snippet: ONLY the new or changed code (NOT the entire file), ready to paste
+- diff: unified diff showing the fix with context lines (use - for removed, + for added lines)
 
 For non-test_bug categories, do NOT include suggested_fix.

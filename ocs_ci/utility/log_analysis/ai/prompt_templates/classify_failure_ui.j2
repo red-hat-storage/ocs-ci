@@ -185,21 +185,30 @@ error messages, and screenshots observations you found during investigation.
 For non-product_bug categories, do NOT include `bug_details`.
 
 **If category is `test_bug`**, you MUST include a `suggested_fix` object to help engineers fix the test.
-Use the traceback to identify the exact file and line. If the OCS-CI source code is accessible
-(see "OCS-CI Source Code Access" section above), read the test file from the release branch using
-`git show` to verify the bug still exists and provide an accurate fix. Also check `master` — if
-already fixed there, note that a cherry-pick is needed.
+Use the traceback to identify the file and function. If the OCS-CI source code is accessible
+(see "OCS-CI Source Code Access" section above), you MUST read the actual source file from the
+release branch using `git show` before writing the fix. This is critical for accuracy — do NOT
+guess line numbers or code structure from memory. Read the file, find the exact function, and
+produce a correct unified diff. Also check `master` — if already fixed there, note that a
+cherry-pick is needed.
 
 ```
 "suggested_fix": {
-    "file": "<path to the test file from the traceback, e.g. tests/functional/object/mcg/test_nsfs.py>",
-    "line": <line number from traceback>,
+    "file": "<path to the file from the traceback, e.g. ocs_ci/ocs/bucket_utils.py>",
+    "function": "<function name where the fix goes, e.g. craft_s3_command>",
+    "line": <exact line number where the change starts — MUST be verified by reading the file>,
     "description": "<clear explanation of what's wrong and how to fix it>",
-    "code_snippet": "<the corrected code or pseudo-code showing the fix>",
+    "code_snippet": "<ONLY the new or changed code — NOT the entire file. Show just the lines to add or modify, ready to paste>",
+    "diff": "<unified diff showing the fix with context lines, using - for removed and + for added lines>",
     "fixed_on_master": <true/false — whether master branch already has the fix>,
     "needs_cherry_pick": <true/false — true if fixed on master but not on the release branch>
 }
 ```
+
+**IMPORTANT — accurate line numbers**: Do NOT use the line number from the traceback blindly.
+The traceback line is where the *error was raised*, not necessarily where the *fix* should go.
+After reading the file with `git show`, count the actual line number of the code you are changing.
+Use `git show <branch>:<file> | head -N` or `grep -n` to verify the exact line.
 
 For non-test_bug categories, do NOT include `suggested_fix`.
 

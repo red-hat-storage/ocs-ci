@@ -477,7 +477,7 @@ body {
         {% if fa.session_id %}
         <div class="meta-item">
           <span class="meta-label">Session</span>
-          <span class="meta-value" style="font-size:12px">{% if fa.session_file %}<a href="{{ fa.session_file }}" style="color:var(--accent)">{{ fa.session_id }}</a>{% else %}{{ fa.session_id }}{% endif %}</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.session_file %}<a href="{{ fa.session_file }}" target="_blank" style="color:var(--accent)">{{ fa.session_id }}</a>{% else %}{{ fa.session_id }}{% endif %}</span>
         </div>
         {% endif %}
         <div class="meta-item">
@@ -487,7 +487,7 @@ body {
         {% if fa.cache_file %}
         <div class="meta-item">
           <span class="meta-label">Cache</span>
-          <span class="meta-value" style="font-size:12px">{% if fa.cache_file.startswith('http') %}<a href="{{ fa.cache_file }}" style="color:var(--accent)">hit</a>{% else %}<a href="file://{{ fa.cache_file }}" style="color:var(--accent)">hit</a>{% endif %}</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.cache_file.startswith('http') %}<a href="{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">hit</a>{% else %}<a href="file://{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">hit</a>{% endif %}</span>
         </div>
         {% endif %}
       </div>
@@ -629,6 +629,10 @@ body {
             <dt style="font-weight:600;color:var(--text-secondary)">File</dt>
             <dd style="margin:0;font-family:monospace;font-size:12px">{{ fa.suggested_fix.file }}{% if fa.suggested_fix.line %}:{{ fa.suggested_fix.line }}{% endif %}</dd>
             {% endif %}
+            {% if fa.suggested_fix.function %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Function</dt>
+            <dd style="margin:0;font-family:monospace;font-size:12px">{{ fa.suggested_fix.function }}</dd>
+            {% endif %}
             {% if fa.suggested_fix.description %}
             <dt style="font-weight:600;color:var(--text-secondary)">Description</dt>
             <dd style="margin:0;white-space:pre-wrap">{{ fa.suggested_fix.description }}</dd>
@@ -636,6 +640,13 @@ body {
             {% if fa.suggested_fix.code_snippet %}
             <dt style="font-weight:600;color:var(--text-secondary)">Code</dt>
             <dd style="margin:0"><pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word">{{ fa.suggested_fix.code_snippet }}</pre></dd>
+            {% endif %}
+            {% if fa.suggested_fix.diff %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Diff</dt>
+            <dd style="margin:0"><pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word">{% for line in fa.suggested_fix.diff.split('\n') %}{% if line.startswith('+') %}<span style="color:#4ade80">{{ line }}</span>
+{% elif line.startswith('-') %}<span style="color:#f87171">{{ line }}</span>
+{% else %}{{ line }}
+{% endif %}{% endfor %}</pre></dd>
             {% endif %}
             {% if fa.suggested_fix.fixed_on_master is defined %}
             <dt style="font-weight:600;color:var(--text-secondary)">Fixed on master</dt>

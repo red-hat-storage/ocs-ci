@@ -64,26 +64,26 @@ class AnalysisCache:
         logger.debug(f"Cache hit for {signature.cache_key}")
         return data.get("analysis"), path
 
-    def put(self, signature: FailureSignature, analysis: dict):
+    def put(self, signature: FailureSignature, analysis: dict, ocs_version: str = ""):
         """
         Store analysis result in cache.
 
         Args:
             signature: FailureSignature key
             analysis: Analysis dict to cache
+            ocs_version: ODF version string for traceability
         """
         path = self._cache_path(signature)
         try:
+            data = {
+                "timestamp": time.time(),
+                "signature": signature.to_dict(),
+                "analysis": analysis,
+            }
+            if ocs_version:
+                data["ocs_version"] = ocs_version
             with open(path, "w") as f:
-                json.dump(
-                    {
-                        "timestamp": time.time(),
-                        "signature": signature.to_dict(),
-                        "analysis": analysis,
-                    },
-                    f,
-                    indent=2,
-                )
+                json.dump(data, f, indent=2)
             logger.debug(f"Cached analysis for {signature.cache_key}")
         except IOError as e:
             logger.warning(f"Cache write failed for {signature.cache_key}: {e}")

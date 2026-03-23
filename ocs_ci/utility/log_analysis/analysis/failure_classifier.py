@@ -257,7 +257,12 @@ class FailureClassifier:
 
                 # Cache the result (without session_text which was already popped)
                 if self.cache:
-                    self.cache.put(sig, analysis_dict)
+                    ocs_ver = (
+                        self.run_metadata.get("ocs_version", "")
+                        if self.run_metadata
+                        else ""
+                    )
+                    self.cache.put(sig, analysis_dict, ocs_version=ocs_ver)
 
             except Exception as e:
                 ai_call_count += 1  # Count failed calls toward the limit
@@ -930,7 +935,7 @@ class FailureClassifier:
 
         # Fetch latest from all branches
         try:
-            logger.debug("Fetching upstream ocs-ci repo")
+            logger.info("Fetching upstream ocs-ci repo")
             subprocess.run(
                 ["git", "fetch", "--all", "--quiet"],
                 cwd=self.ocs_ci_repo,
