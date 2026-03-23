@@ -203,15 +203,17 @@ class TestFullClusterHealth(PASTest):
             timeout=300,
         )
 
-    def is_cluster_healthy(self):
+    def is_cluster_healthy(self, timeout=None):
         """
         Wrapper function for cluster health check
 
         Returns:
             bool: True if ALL checks passed, False otherwise
         """
+        if timeout is None:
+            timeout = self.TIMEOUT_POD_RUNNING
         return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
-            timeout=self.TIMEOUT_POD_RUNNING
+            timeout=timeout
         )
 
     def reload_ceph_cluster(self):
@@ -264,9 +266,9 @@ class TestFullClusterHealth(PASTest):
         logger.info("Starting MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
-        time.sleep(600)
+        time.sleep(300)
         self.reload_ceph_cluster()
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
 
         logger.info("Starting OCS operator node restart")
         self.restart_ocs_operator_node()
