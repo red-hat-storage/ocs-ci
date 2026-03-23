@@ -7367,6 +7367,7 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_mirroring_validation=False,
     ):
         """
         Args:
@@ -7377,6 +7378,8 @@ def create_workload_factory():
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             switch_ctx (int): The cluster index by the cluster name
+            skip_mirroring_validation (bool): If True, skip mirroring status validation after deployment.
+                Useful when deploying multiple workloads and validation will be done later.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7442,6 +7445,7 @@ def create_workload_factory():
         if (
             ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             and pvc_interface == constants.CEPHBLOCKPOOL
+            and not skip_mirroring_validation
         ):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
@@ -7465,9 +7469,15 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_mirroring_validation=False,
     ):
         return _create_resources(
-            num_of_subscription, num_of_appset, appset_model, pvc_interface, switch_ctx
+            num_of_subscription,
+            num_of_appset,
+            appset_model,
+            pvc_interface,
+            switch_ctx,
+            skip_mirroring_validation,
         )
 
     return factory, _teardown
