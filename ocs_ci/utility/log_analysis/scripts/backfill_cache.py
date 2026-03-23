@@ -449,12 +449,19 @@ class CacheBackfiller:
         structured = response.get("structured_output")
         if structured is None:
             result_text = response.get("result", "")
+            # Try direct JSON parse first
             try:
                 structured = json.loads(result_text)
             except (json.JSONDecodeError, TypeError):
-                logger.warning(f"No structured output from AI for {context}")
-                self._stats["errors"] += 1
-                return None
+                pass
+            # Fall back to brace-depth extraction from result text
+            if structured is None and result_text:
+                try:
+                    structured = self._extract_json_brace_depth(result_text)
+                except ValueError:
+                    logger.warning(f"No structured output from AI for {context}")
+                    self._stats["errors"] += 1
+                    return None
 
         cost = response.get("total_cost_usd", 0)
         logger.debug(f"AI call: ${cost:.4f} ({context})")
@@ -680,11 +687,16 @@ If no source code is available, use the traceback to identify the file and provi
     # ---- JSON extraction ----
 
     @staticmethod
-    def _extract_json_brace_depth(text):
-        """Extract JSON classification dict using brace-depth counting.
+    def _extract_json_brace_depth(text, preferred_keys=None):
+        """Extract JSON dict from text using brace-depth counting.
 
-        Same algorithm as ClaudeCodeBackend._extract_json.
+        Args:
+            text: Text containing embedded JSON
+            preferred_keys: If set, prefer dicts containing one of these keys.
+                            Defaults to ["bug_details", "suggested_fix", "category"].
         """
+        if preferred_keys is None:
+            preferred_keys = ["bug_details", "suggested_fix", "category"]
         candidates = []
         for i, ch in enumerate(text):
             if ch == "{":
@@ -697,9 +709,10 @@ If no source code is available, use the traceback to identify the file and provi
                         if depth == 0:
                             try:
                                 parsed = json.loads(text[i : j + 1])
-                                if isinstance(parsed, dict) and "category" in parsed:
-                                    return parsed
-                                candidates.append(parsed)
+                                if isinstance(parsed, dict):
+                                    if any(k in parsed for k in preferred_keys):
+                                        return parsed
+                                    candidates.append(parsed)
                             except json.JSONDecodeError:
                                 pass
                             break
