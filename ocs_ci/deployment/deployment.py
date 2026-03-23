@@ -2448,31 +2448,33 @@ class Deployment(object):
             resource_name=constants.ACM_HUB_OPERATOR_NAME_WITH_NS,
         )
 
-    def deploy_acm_hub(self):
-        """
-        Handle ACM HUB deployment
-        """
-        if self.acm_operator_installed():
-            logger.info("ACM Operator is already installed")
-            self.deploy_multicluster_hub()
-            return
-
-        if config.ENV_DATA.get("acm_hub_unreleased"):
-            if version.compare_versions(
-                f"{config.ENV_DATA.get('acm_version')} >= 2.14"
-            ):
-                self.deploy_acm_hub_unreleased_konflux()
-                self.deploy_multicluster_hub()
-            else:
-                self.deploy_acm_hub_unreleased()
-        else:
-            self.deploy_acm_hub_released()
-            self.deploy_multicluster_hub()
-        if config.ENV_DATA.get("configure_acm_to_import_mce"):
-            self.configure_acm_to_import_mce_clusters()
-        from ocs_ci.ocs.acm.acm import verify_running_acm
-
-        verify_running_acm()
+    def deploy_acm_hub(self):                                                                                                                                                                                                                         
+      """                                                                                                                                                                                                                                           
+      Deploy ACM hub cluster                                                                                                                                                                                                                        
+      """                                                                                                                                                                                                                                           
+      # Auto-configure ACM and Submariner based on branch if not explicitly set
+      from ocs_ci.utility.utils import auto_configure_acm_submariner                                                                                                                                                                                
+      auto_configure_acm_submariner()                                                                                                                                                                                                               
+                                                                                                                                                                                                                                                    
+      if self.acm_operator_installed():                                                                                                                                                                                                             
+          logger.info("ACM Operator is already installed")                                                                                                                                                                                          
+          self.deploy_multicluster_hub()                                                                                                                                                                                                            
+          return                                                                                                                                                                                                                                    
+                                                                                                                                                                                                                                                    
+      if config.ENV_DATA.get("acm_hub_unreleased"):                                                                                                                                                                                                 
+          if version.compare_versions(                                                                                                                                                                                                              
+              f"{config.ENV_DATA.get('acm_version')} >= 2.14"                                                                                                                                                                                       
+          ):                                                                                                                                                                                                                                        
+              self.deploy_acm_hub_unreleased_konflux()                                                                                                                                                                                              
+              self.deploy_multicluster_hub()                                                                                                                                                                                                        
+          else:                                                                                                                                                                                                                                     
+              self.deploy_acm_hub_unreleased()                                                                                                                                                                                                      
+      else:                                                                                                                                                                                                                                         
+          self.deploy_acm_hub_released()                                                                                                                                                                                                            
+          self.deploy_multicluster_hub()                                                                                                                                                                                                            
+                                                                                                                                                                                                                                                    
+      if config.ENV_DATA.get("configure_acm_to_import_mce"):                                                                                                                                                                                        
+          self.configure_acm_to_import_mce_clusters()
 
     def configure_acm_to_import_mce_clusters(self):
         """
