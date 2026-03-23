@@ -246,7 +246,7 @@ class CacheBackfiller:
         if not bug_details and result.get("bug_subject"):
             bug_details = result
         if not bug_details:
-            logger.debug(f"AI returned no bug_details for {test_name}, keys: {list(result.keys())}")
+            logger.warning(f"AI returned no bug_details for {test_name}, keys: {list(result.keys())[:10]}")
             return False
 
         analysis["bug_details"] = bug_details
@@ -292,7 +292,7 @@ class CacheBackfiller:
         if not suggested_fix and result.get("file") and result.get("description"):
             suggested_fix = result
         if not suggested_fix:
-            logger.debug(f"AI returned no suggested_fix for {test_name}, keys: {list(result.keys())}")
+            logger.warning(f"AI returned no suggested_fix for {test_name}, keys: {list(result.keys())[:10]}")
             return False
 
         analysis["suggested_fix"] = suggested_fix
@@ -473,6 +473,9 @@ class CacheBackfiller:
 
         cost = response.get("total_cost_usd", 0)
         logger.debug(f"AI call: ${cost:.4f} ({context})")
+
+        if structured and isinstance(structured, dict):
+            logger.debug(f"AI result keys: {list(structured.keys())} ({context})")
         return structured
 
     def _build_bug_details_prompt(
