@@ -1175,6 +1175,64 @@ def wait_for_condition(condition_func, timeout=300):
     return False
 ```
 
+### Pattern: TimeoutSampler Logging
+
+Use TimeoutSampler for polling operations while avoiding repetitive logs:
+
+```python
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+
+def wait_for_pods_ready(namespace, timeout=300):
+    """
+    Wait for all pods to be ready using TimeoutSampler.
+
+    Demonstrates how to limit repetitive logs during polling operations.
+    """
+    logger.info(f"Waiting for pods in '{namespace}' to be ready (timeout: {timeout}s)")
+
+    try:
+        # TimeoutSampler automatically rate-limits exception logs to once per minute
+        # Log only state changes, not every iteration
+        last_pod_count = None
+        last_ready_count = None
+
+        for pod_list in TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=get_all_pods,
+            namespace=namespace
+        ):
+            total_pods = len(pod_list)
+            ready_pods = sum(
+                1 for pod in pod_list
+                if pod.data["status"]["phase"] == constants.STATUS_RUNNING
+            )
+
+            # Log only when counts change (avoid duplicate logs)
+            if (total_pods, ready_pods) != (last_pod_count, last_ready_count):
+                logger.debug(
+                    f"Pod status: {ready_pods}/{total_pods} ready"
+                )
+                last_pod_count = total_pods
+                last_ready_count = ready_pods
+
+            # Check condition
+            if total_pods > 0 and ready_pods == total_pods:
+                logger.info(f"All {total_pods} pods are ready")
+                return True
+
+    except TimeoutExpiredError:
+        logger.error(
+            f"Timeout waiting for pods in '{namespace}' to be ready after {timeout}s"
+        )
+        # Log final state for debugging
+        logger.error(f"Final status: {last_ready_count}/{last_pod_count} pods ready")
+        raise
+```
+
 ### Pattern: Conditional Logging
 
 Use DEBUG for verbose details, INFO for summaries:
