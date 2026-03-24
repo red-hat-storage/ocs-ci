@@ -452,14 +452,21 @@ class Deployment(object):
             # Find the DR clusters under test
             dr_cluster_names = []
             dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
-            for cluster_relation in dr_cluster_relations:
-                dr_cluster_names.extend(cluster_relation)
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                for index, dr_cluster in enumerate(dr_cluster_names):
+                    if is_hosted_cluster(dr_cluster):
+                        dr_cluster_names[index] = (
+                            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{dr_cluster}"
+                        )
+
             if dr_cluster_names:
                 managed_clusters = [
                     cluster
                     for cluster in managed_clusters
                     if cluster["metadata"]["name"] in dr_cluster_names
                 ]
+
             # TODO: Iterate over dr_cluster_names when dr_cluster_names becomes a mandatory config parameter
             for cluster in managed_clusters:
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
