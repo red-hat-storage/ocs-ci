@@ -1086,6 +1086,7 @@ def wait_for_replication_resources_deletion(
                 kind=constants.VOLUME_GROUP_REPLICATION,
                 namespace=namespace,
                 timeout=timeout,
+                resource_name=vrg_name,
                 should_exist=False,
             )
 
