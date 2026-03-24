@@ -172,6 +172,8 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
             if is_discovered_app:
                 resource_name = workload.discovered_apps_placement_name
+            elif is_appset:
+                resource_name = workload.appset_placement_name
             else:
                 resource_name = workload.workload_name
 
