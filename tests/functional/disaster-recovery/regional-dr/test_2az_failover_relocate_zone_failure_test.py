@@ -29,7 +29,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
         argvalues=[
             pytest.param(
                 constants.CEPHBLOCKPOOL,
-                "data-a",
+                "data-1",
                 marks=[tier1, acceptance],
                 id="rbd-zone-data-a",
             ),
@@ -42,7 +42,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM,
-                "data-a",
+                "data-1",
                 marks=tier4,
                 id="cephfs-zone-data-a",
             ),
