@@ -934,9 +934,9 @@ class HyperShiftBase:
 
         """
 
-        timeout_pods_wait_min = 40
-        timeout_hosted_cluster_completed_min = 40
-        timeout_worker_nodes_ready_min = 60
+        timeout_pods_wait_min = 30
+        timeout_hosted_cluster_completed_min = 20
+        timeout_worker_nodes_ready_min = 30
 
         namespace = f"clusters-{name}"
         logger.info(
