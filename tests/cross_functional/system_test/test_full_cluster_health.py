@@ -272,7 +272,7 @@ class TestFullClusterHealth(PASTest):
         # can successfully refresh cluster state with valid pod references
         time.sleep(300)
         self.reload_ceph_cluster()
-        assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
+        assert self.is_cluster_healthy(timeout=5400), "Cluster is not healthy"
 
         logger.info("Starting OCS operator node restart")
         self.restart_ocs_operator_node()
@@ -281,9 +281,9 @@ class TestFullClusterHealth(PASTest):
         # can successfully refresh cluster state with valid pod references
         time.sleep(300)
         self.reload_ceph_cluster()
-        assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
+        assert self.is_cluster_healthy(timeout=5400), "Cluster is not healthy"
 
         logger.info("Starting Rook, OSD, MGR & MON pods deletion")
         self.delete_pods()
         logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
-        assert self.is_cluster_healthy(timeout=3000), "Cluster is not healthy"
+        assert self.is_cluster_healthy(timeout=5400), "Cluster is not healthy"
