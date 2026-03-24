@@ -1,4 +1,9 @@
 import logging
+import random
+import time
+
+from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK
+from ocs_ci.ocs.resources.pod import calculate_md5sum_of_pod_files
 
 logger = logging.getLogger(__name__)
 
@@ -143,3 +148,93 @@ def validate_all_pods_container_resources(pods_resources_details_dict):
                 invalid_values[pod_name] = res["invalid_values"]
 
     return {"result": all_ok, "invalid_values": invalid_values}
+
+
+def run_io_on_pods(pods, pod_file_name, size="1G", runtime=30):
+    """
+    Helper function to run IO on the pods
+
+    Args:
+        pods (list): The list of pods for running the IO
+        pod_file_name (str): The pod file name for fio
+        size (str): Size in MB or Gi, e.g. '200M'.
+            Default value is '1G'
+        runtime (int): The number of seconds IO should run for
+
+    """
+    logger.info("Starting IO on all pods")
+    for pod_obj in pods:
+        storage_type = "block" if pod_obj.pvc.volume_mode == VOLUME_MODE_BLOCK else "fs"
+        rate = f"{random.randint(1, 5)}M"
+        pod_obj.run_io(
+            storage_type=storage_type,
+            size=size,
+            runtime=runtime,
+            rate=rate,
+            fio_filename=pod_file_name,
+            end_fsync=1,
+        )
+        logger.info("IO started on pod %s", pod_obj.name)
+    logger.info("Started IO on all pods")
+
+
+def run_io_on_small_groups_of_pods(
+    pods,
+    pod_file_name,
+    size="1G",
+    runtime=30,
+    num_of_groups=3,
+    do_md5sum=False,
+    wait_between_groups=30,
+):
+    """
+    Run IO on pods in smaller groups to avoid overwhelming
+    the Ceph cluster with simultaneous writes.
+
+    After each group starts, the function waits
+    'wait_between_groups' seconds before starting the next
+    group. If do_md5sum is True, it also waits for IO to
+    complete and calculates md5sum per group.
+
+    Args:
+        pods (list): The list of pods for running the IO
+        pod_file_name (str): The pod file name for fio
+        size (str): Size in MB or Gi, e.g. '200M'.
+            Default value is '1G'
+        runtime (int): The number of seconds IO should
+            run for
+        num_of_groups (int): The number of groups to
+            divide the pods into for running IO
+        do_md5sum (bool): If True, wait for IO to
+            complete and calculate md5sum per group
+        wait_between_groups (int): Seconds to wait
+            between starting each group
+
+    """
+    total_pods = len(pods)
+    group_size = max(1, total_pods // num_of_groups)
+    num_groups = (total_pods + group_size - 1) // group_size
+    logger.info(
+        "Dividing %d pods into %d groups of ~%d for running IO",
+        total_pods,
+        num_groups,
+        group_size,
+    )
+
+    for i in range(0, total_pods, group_size):
+        group_num = i // group_size + 1
+        pod_group = pods[i : i + group_size]
+        logger.info(
+            "Running IO on pod group %d/%d (%d pods)",
+            group_num,
+            num_groups,
+            len(pod_group),
+        )
+        run_io_on_pods(pod_group, pod_file_name, size=size, runtime=runtime)
+        if do_md5sum:
+            calculate_md5sum_of_pod_files(pod_group, pod_file_name)
+        logger.info(
+            "Waiting %d seconds between groups",
+            wait_between_groups,
+        )
+        time.sleep(wait_between_groups)
