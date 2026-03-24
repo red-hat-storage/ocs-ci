@@ -3,7 +3,7 @@ import time
 import re
 import random
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, ignore_leftovers
 from ocs_ci.framework.testlib import E2ETest, stress
 from ocs_ci.helpers.cephfs_stress_helpers import (
     CephFSStressTestManager,
@@ -59,6 +59,7 @@ def get_active_mds_pods_with_retry():
     return active_mds_pods
 
 
+@ignore_leftovers
 @magenta_squad
 @stress
 class TestCephfsStressWithFailures(E2ETest):
@@ -127,9 +128,9 @@ class TestCephfsStressWithFailures(E2ETest):
             cephfs_stress_job_obj = stress_mgr.create_cephfs_stress_job(
                 pvc_name=pvc_obj.name,
                 multiplication_factors=MULTIPLICATION_FACTORS,
-                parallelism=3,
-                completions=3,
-                base_file_count=10000,
+                parallelism=4,
+                completions=4,
+                base_file_count=50000,
             )
             logger.info(
                 f"CephFS stress job {cephfs_stress_job_obj.name} has been submitted"
