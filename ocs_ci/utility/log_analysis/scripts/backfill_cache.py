@@ -46,14 +46,18 @@ class CacheBackfiller:
         cache_dir,
         upstream_repo=None,
         sessions_dir=None,
+        scanner_state=None,
         model="sonnet",
         delay=1.0,
     ):
         self.cache_dir = os.path.expanduser(cache_dir)
         self.upstream_repo = os.path.expanduser(upstream_repo or DEFAULT_UPSTREAM_REPO)
         self.sessions_dir = os.path.expanduser(sessions_dir or DEFAULT_SESSIONS_DIR)
+        self.scanner_state = scanner_state or "/mnt/ocsci-jenkins/log_analysis/session_manage/scanner_state.json"
         self.model = model
         self.delay = delay
+        self._hash_index = None  # lazy-built: hash -> {test_name, logs_dir, version}
+        self._report_cache = {}  # logs_dir -> parsed report data
         self._stats = {
             "scanned": 0,
             "needs_bug_details": 0,
@@ -127,16 +131,23 @@ class CacheBackfiller:
         return candidates
 
     def backfill_metadata_from_reports(self, path, data):
-        """Try to fill run_metadata, traceback, status from scanner logs or reports.
+        """Fill run_metadata, traceback, status, test_class, squad, polarion_id
+        from scanner logs and HTML reports.
 
-        Looks for the scanner .log file that mentions this cache file's hash,
-        then extracts run_metadata from the same log or associated report.
+        Uses the hash index to find which run produced this cache file,
+        then extracts metadata from the corresponding HTML report.
         """
         cache_hash = os.path.basename(path).replace(".json", "")
-        test_name = data.get("test_name", "")
 
         # If we already have all metadata, skip
-        if data.get("run_metadata") and data.get("traceback") and data.get("status"):
+        if (
+            data.get("run_metadata")
+            and data.get("traceback")
+            and data.get("status")
+            and data.get("test_class")
+            and data.get("squad")
+            and data.get("polarion_id")
+        ):
             return False
 
         # Search scanner logs for this cache hash
@@ -145,21 +156,14 @@ class CacheBackfiller:
             return False
 
         updated = False
-
-        # Fill run_metadata from log
-        if not data.get("run_metadata") and log_data.get("run_metadata"):
-            data["run_metadata"] = log_data["run_metadata"]
-            updated = True
-
-        # Fill status
-        if not data.get("status") and log_data.get("status"):
-            data["status"] = log_data["status"]
-            updated = True
-
-        # Fill test_class
-        if not data.get("test_class") and log_data.get("test_class"):
-            data["test_class"] = log_data["test_class"]
-            updated = True
+        fields_to_fill = [
+            "run_metadata", "traceback", "status", "test_class",
+            "squad", "polarion_id", "test_name",
+        ]
+        for field in fields_to_fill:
+            if not data.get(field) and log_data.get(field):
+                data[field] = log_data[field]
+                updated = True
 
         if updated:
             self._write_cache(path, data)
@@ -399,19 +403,15 @@ class CacheBackfiller:
     # ---- AI call helpers ----
 
     def _call_ai(self, prompt, context="", retries=2):
-        """Make a single-turn AI call via claude CLI with JSON schema."""
-        schema = json.dumps({
-            "type": "object",
-            "properties": {
-                "bug_details": {"type": "object"},
-                "suggested_fix": {"type": "object"},
-            },
-        })
+        """Make a single-turn AI call via claude CLI.
 
+        Uses --output-format json without --json-schema to avoid the
+        Vertex AI empty structured_output issue. JSON is extracted from
+        the result text using brace-depth parsing.
+        """
         cmd = [
             "claude", "-p", prompt,
             "--output-format", "json",
-            "--json-schema", schema,
             "--model", self.model,
             "--max-budget-usd", "0.10",
         ]
@@ -690,16 +690,224 @@ If no source code is available, use the traceback to identify the file and provi
                     continue
         return ""
 
-    def _find_scanner_log_for_hash(self, cache_hash):
-        """Search scanner logs for a cache hash and extract metadata.
+    def _build_hash_index(self):
+        """Build a global index mapping cache hashes to runs.
 
-        Scanner logs contain lines like:
-          'Cached analysis for <hash>'
-        and session records with run metadata.
+        Parses ai_analysis_*.log files from each processed run (found via
+        scanner_state.json). Each log contains lines like:
+            'Cached analysis for <hash>'
+        preceded by context lines showing which test produced the cache entry.
         """
-        # This is a best-effort search — scanner logs may not exist for all runs
-        # For now, return empty dict; can be enhanced later with actual log parsing
-        return {}
+        self._hash_index = {}
+
+        # Load scanner state to get all processed logs dirs
+        try:
+            with open(self.scanner_state) as f:
+                state = json.load(f)
+        except (IOError, json.JSONDecodeError) as e:
+            logger.warning(f"Cannot read scanner state {self.scanner_state}: {e}")
+            return
+
+        processed = state.get("processed", {})
+        logger.info(f"Building hash index from {len(processed)} processed runs")
+
+        for xml_path, info in processed.items():
+            logs_dir = info.get("logs_dir", "")
+            version = info.get("version", "")
+            if not logs_dir:
+                continue
+
+            # Find ai_analysis_*.log in this logs_dir
+            log_files = glob.glob(os.path.join(logs_dir, "ai_analysis_*.log"))
+            for log_file in log_files:
+                self._parse_ai_log(log_file, logs_dir, version)
+
+        logger.info(f"Hash index built: {len(self._hash_index)} cache entries mapped")
+
+    def _parse_ai_log(self, log_file, logs_dir, version):
+        """Parse an ai_analysis log file to extract cache hash -> test name mappings.
+
+        The log has this pattern:
+          ... context=<test_name>)
+          ... Cached analysis for <hash>
+        or:
+          ... Cache hit for <hash>
+        """
+        try:
+            with open(log_file) as f:
+                lines = f.readlines()
+        except IOError:
+            return
+
+        current_test = ""
+        for line in lines:
+            # Track current test from context= in Claude CLI calls
+            ctx_match = re.search(r"context=([^\)]+)\)", line)
+            if ctx_match:
+                current_test = ctx_match.group(1)
+
+            # Map "Cached analysis for <hash>" to current test
+            cache_match = re.search(r"Cached analysis for (\w+)", line)
+            if cache_match and current_test:
+                cache_hash = cache_match.group(1)
+                self._hash_index[cache_hash] = {
+                    "test_name": current_test,
+                    "logs_dir": logs_dir,
+                    "version": version,
+                    "log_file": log_file,
+                }
+
+            # Also track cache hits (same test context)
+            hit_match = re.search(r"Cache hit for (\w+)", line)
+            if hit_match and current_test:
+                cache_hash = hit_match.group(1)
+                if cache_hash not in self._hash_index:
+                    self._hash_index[cache_hash] = {
+                        "test_name": current_test,
+                        "logs_dir": logs_dir,
+                        "version": version,
+                        "log_file": log_file,
+                    }
+
+    def _parse_html_report(self, logs_dir):
+        """Parse an ai_analysis_report HTML to extract per-test metadata.
+
+        Returns dict: test_name -> {test_class, status, squad, polarion_id, traceback,
+                                     run_metadata}
+        """
+        if logs_dir in self._report_cache:
+            return self._report_cache[logs_dir]
+
+        report_files = glob.glob(os.path.join(logs_dir, "ai_analysis_report*.html"))
+        if not report_files:
+            self._report_cache[logs_dir] = {}
+            return {}
+
+        try:
+            with open(report_files[0]) as f:
+                html = f.read()
+        except IOError:
+            self._report_cache[logs_dir] = {}
+            return {}
+
+        result = {}
+
+        # Extract run_metadata from the "Run Summary" card
+        run_metadata = self._extract_run_metadata_from_html(html, logs_dir)
+
+        # Extract per-failure data from failure cards
+        # Pattern: failure-name title="...">test_name</div> ... meta items ... traceback
+        failure_blocks = re.split(r'<div class="failure-card"', html)
+        for block in failure_blocks[1:]:  # skip before first card
+            test_data = self._parse_failure_card(block)
+            if test_data and test_data.get("test_name"):
+                test_data["run_metadata"] = run_metadata
+                result[test_data["test_name"]] = test_data
+
+        self._report_cache[logs_dir] = result
+        return result
+
+    def _extract_run_metadata_from_html(self, html, logs_dir):
+        """Extract run metadata from the Run Summary card in the HTML report."""
+        metadata = {}
+        # Map HTML label -> dict key
+        label_map = {
+            "Platform": "platform",
+            "Deployment": "deployment_type",
+            "OCP Version": "ocp_version",
+            "OCS Version": "ocs_version",
+            "OCS Build": "ocs_build",
+            "Run ID": "run_id",
+            "Launch Name": "launch_name",
+            "Jenkins URL": "jenkins_url",
+        }
+
+        for label, key in label_map.items():
+            pattern = (
+                rf'<span class="meta-label">{re.escape(label)}</span>\s*'
+                rf'<span class="meta-value"[^>]*>([^<]+)</span>'
+            )
+            match = re.search(pattern, html)
+            if match:
+                metadata[key] = match.group(1).strip()
+
+        # Derive logs_url from logs_dir
+        if logs_dir and "/mnt/ocsci-jenkins/" in logs_dir:
+            rel = logs_dir.replace("/mnt/ocsci-jenkins/", "")
+            metadata["logs_url"] = f"http://magna002.ceph.redhat.com/ocsci-jenkins/{rel}"
+
+        return metadata
+
+    def _parse_failure_card(self, block):
+        """Parse a single failure card block from HTML to extract test metadata."""
+        data = {}
+
+        # Test name from failure-name
+        name_match = re.search(
+            r'class="failure-name"[^>]*title="([^"]*)"', block
+        )
+        if not name_match:
+            name_match = re.search(
+                r'class="failure-name"[^>]*>([^<]+)<', block
+            )
+        if name_match:
+            data["test_name"] = name_match.group(1).strip()
+
+        # Meta items: Class, Status, Squad, Polarion ID
+        meta_patterns = {
+            "test_class": r'<span class="meta-label">Class</span>\s*<span class="meta-value"[^>]*>([^<]+)</span>',
+            "status": r'<span class="meta-label">Status</span>\s*<span class="meta-value"[^>]*>([^<]+)</span>',
+            "squad": r'<span class="meta-label">Squad</span>\s*<span class="meta-value"[^>]*>([^<]+)</span>',
+            "polarion_id": r'<span class="meta-label">Polarion ID</span>\s*<span class="meta-value"[^>]*>([^<]+)</span>',
+        }
+        for key, pattern in meta_patterns.items():
+            match = re.search(pattern, block)
+            if match:
+                data[key] = match.group(1).strip()
+
+        # Traceback from collapsible section
+        tb_match = re.search(
+            r'class="traceback-content"[^>]*>\s*<pre>(.*?)</pre>',
+            block,
+            re.DOTALL,
+        )
+        if tb_match:
+            data["traceback"] = tb_match.group(1).strip()
+
+        return data
+
+    def _find_scanner_log_for_hash(self, cache_hash):
+        """Look up a cache hash in the index and return metadata from the HTML report.
+
+        Returns dict with: test_name, test_class, status, squad, polarion_id,
+                          traceback, run_metadata — or empty dict if not found.
+        """
+        # Build the index on first call
+        if self._hash_index is None:
+            self._build_hash_index()
+
+        entry = self._hash_index.get(cache_hash)
+        if not entry:
+            return {}
+
+        # Parse the HTML report for this run
+        report_data = self._parse_html_report(entry["logs_dir"])
+        test_name = entry["test_name"]
+
+        # Look up this test in the report
+        test_data = report_data.get(test_name, {})
+        if not test_data:
+            # Try fuzzy match — test name in log may differ slightly
+            for rpt_name, rpt_data in report_data.items():
+                if test_name in rpt_name or rpt_name in test_name:
+                    test_data = rpt_data
+                    break
+
+        if not test_data:
+            # Return at least the test_name and version from the log
+            return {"test_name": test_name, "version": entry.get("version", "")}
+
+        return test_data
 
     # ---- JSON extraction ----
 
@@ -800,6 +1008,11 @@ def main():
         help="Directory containing recorded session files",
     )
     parser.add_argument(
+        "--scanner-state",
+        default="/mnt/ocsci-jenkins/log_analysis/session_manage/scanner_state.json",
+        help="Path to scanner_state.json (maps runs to log dirs)",
+    )
+    parser.add_argument(
         "--model",
         default="sonnet",
         help="AI model for bug_details/suggested_fix generation",
@@ -844,6 +1057,7 @@ def main():
         cache_dir=args.cache_dir,
         upstream_repo=args.upstream_repo,
         sessions_dir=args.sessions_dir,
+        scanner_state=args.scanner_state,
         model=args.model,
         delay=args.delay,
     )

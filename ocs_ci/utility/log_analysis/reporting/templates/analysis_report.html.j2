@@ -530,19 +530,19 @@ body {
 
       {% if fa.root_cause_summary %}
       <div class="section-label">Root Cause</div>
-      <div class="root-cause">{{ fa.root_cause_summary }}</div>
+      <div class="root-cause">{{ fa.root_cause_summary | e }}</div>
       {% endif %}
 
       {% if fa.recommended_action %}
       <div class="section-label">Recommended Action</div>
-      <div class="action-box">{{ fa.recommended_action }}</div>
+      <div class="action-box">{{ fa.recommended_action | e }}</div>
       {% endif %}
 
       {% if fa.evidence %}
       <div class="section-label">Evidence</div>
       <ul class="evidence-list">
         {% for e in fa.evidence %}
-        <li>{{ e }}{% if fa.mg_data_url %}{% set parts = e.split(' — ') %}{% if parts | length > 1 %}{% set source_part = parts[-1].split(':')[0].strip() %}{% if source_part and ' ' not in source_part and ('/' in source_part or source_part.startswith('ceph_') or source_part.endswith('.log') or source_part.endswith('.yaml')) and not source_part.endswith('.py') and not source_part.startswith('ocs_ci/') and not source_part.startswith('tests/') %} <a href="{{ fa.mg_data_url.rstrip('/') }}/{{ source_part }}" target="_blank" style="color:var(--accent);font-size:11px;margin-left:6px" title="{{ source_part }}">{{ source_part.split('/')[-1] }}</a>{% endif %}{% endif %}{% endif %}</li>
+        <li>{{ e | e }}{% if fa.mg_data_url %}{% set parts = e.split(' — ') %}{% if parts | length > 1 %}{% set source_part = parts[-1].split(':')[0].strip() %}{% if source_part and ' ' not in source_part and ('/' in source_part or source_part.startswith('ceph_') or source_part.endswith('.log') or source_part.endswith('.yaml')) and not source_part.endswith('.py') and not source_part.startswith('ocs_ci/') and not source_part.startswith('tests/') %} <a href="{{ fa.mg_data_url.rstrip('/') }}/{{ source_part }}" target="_blank" style="color:var(--accent);font-size:11px;margin-left:6px" title="{{ source_part }}">{{ source_part.split('/')[-1] }}</a>{% endif %}{% endif %}{% endif %}</li>
         {% endfor %}
       </ul>
       {% endif %}
@@ -550,7 +550,7 @@ body {
       {% if fa.test_result.traceback %}
       <button class="traceback-toggle" onclick="var el=this.nextElementSibling;el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Traceback':'Show Traceback'">Show Traceback</button>
       <div class="traceback-content">
-        <pre>{{ fa.test_result.traceback }}</pre>
+        <pre>{{ fa.test_result.traceback | e }}</pre>
       </div>
       {% endif %}
 
