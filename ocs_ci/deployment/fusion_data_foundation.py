@@ -241,6 +241,14 @@ class FusionDataFoundationDeployment:
         Setup storage
         """
         logger.info("Configuring storage.")
+        storage_namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        logger.info(f"Adding cluster-monitoring label to namespace {storage_namespace}")
+        OCP(kind="namespace").add_label(
+            resource_name=storage_namespace,
+            label="openshift.io/cluster-monitoring=true",
+        )
         if self.lso_enabled:
             self.ensure_lso_installed()
         self.patch_catalogsource()
