@@ -1,11 +1,12 @@
 import logging
+import os
 import tempfile
 import time
 
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -15,6 +16,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.utility.utils import exec_cmd, run_cmd
 from ocs_ci.utility import templating
+from ocs_ci.utility import version as version_util
 from ocs_ci.utility.retry import retry
 
 
@@ -23,6 +25,29 @@ log = logging.getLogger(__name__)
 # OLSConfig status condition type used to determine connection ready state.
 # Only ApiReady is checked; ready when ApiReady has reason=Available, status=True.
 OLS_READY_CONDITION_TYPE = "ApiReady"
+
+
+def get_ols_rag_content_image():
+    """
+
+    Build the OLS RAG content image reference for the cluster under test.
+
+    Uses ``quay.io/rhceph-dev/odf4-odf-lightspeed-rag-content-rhel9`` with tag
+    ``v{major}.{minor}`` derived from ``ENV_DATA["ocs_version"]`` (same ODF version
+    as the rest of ocs-ci). Override with full image ref in
+    ``AUTH["ibm_watsonx_llm_for_ols"]["rag_content_image"]`` when needed.
+
+    Returns:
+        str: Container image pull spec (repo:tag).
+
+    """
+    auth_ols = ocsci_config.AUTH.get("ibm_watsonx_llm_for_ols") or {}
+    override = auth_ols.get("rag_content_image")
+    if override:
+        return override
+    sv = version_util.get_semantic_ocs_version_from_config()
+    tag = f"v{sv.major}.{sv.minor}"
+    return f"{constants.OLS_RAG_CONTENT_IMAGE_REPO}:{tag}"
 
 
 def do_deploy_ols():
@@ -46,8 +71,11 @@ def do_deploy_ols():
         validate_ols_operator_installed()
         wait_for_pods_to_be_running(namespace=constants.OLS_OPERATOR_NAMESPACE)
         return True
+    except (CommandFailed, ResourceWrongStatusException) as ex:
+        log.error("Failed to install OLS Operator: %s", ex)
+        return False
     except Exception as ex:
-        log.error(f"Failed to install OLS Operator. Exception is: {ex}")
+        log.error("Unexpected error installing OLS Operator: %s", ex)
         return False
 
 
@@ -68,7 +96,7 @@ def validate_ols_operator_installed(
         timeout (int): Time to wait OLS CSV reached in succeeded state
 
     Returns:
-        bool : True if operator installation succeeaded
+        bool: True if operator installation succeeded.
 
     Raises:
         ResourceWrongStatusException: In case the resource is not in expected phase.
@@ -97,6 +125,11 @@ def create_ols_secret(api_token=None):
 
     """
     log.info("Create credential secret for LLM provider")
+    secret_file = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="ols_secret_", suffix=".yaml", delete=False
+    )
+    secret_path = secret_file.name
+    secret_file.close()
     try:
         secret_data = templating.load_yaml(constants.OLS_SECRET_YAML)
         token = (
@@ -105,17 +138,20 @@ def create_ols_secret(api_token=None):
             else ocsci_config.AUTH["ibm_watsonx_llm_for_ols"]["api_token"]
         )
         secret_data["stringData"]["apitoken"] = token
-        secret_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="ols_secret_", suffix=".yaml", delete=False
-        )
-        templating.dump_data_to_temp_yaml(secret_data, secret_file.name)
-        run_cmd(f"oc create -f {secret_file.name}")
+        templating.dump_data_to_temp_yaml(secret_data, secret_path)
+        run_cmd(f"oc create -f {secret_path}")
         return True
-    except Exception as ex:
+    except (CommandFailed, KeyError, OSError) as ex:
         log.error(
-            f"Failed to create credential secret for LLM provider, Exception is: {ex}"
+            "Failed to create credential secret for LLM provider: %s",
+            ex,
         )
         return False
+    finally:
+        try:
+            os.unlink(secret_path)
+        except OSError:
+            pass
 
 
 def create_ols_config(overrides=None):
@@ -127,7 +163,9 @@ def create_ols_config(overrides=None):
     Args:
         overrides (dict, optional): Override LLM provider settings. Keys can be
             "url", "projectID", "model". Used for negative (misconfiguration) tests,
-            e.g. overrides={"url": "https://invalid.example.com", "projectID": "invalid"}
+            e.g. overrides={"url": "https://invalid.example.com", "projectID": "invalid"}.
+            RAG image is ``get_ols_rag_content_image()`` (Quay dev repo, tag ``v{major}.{minor}``
+            from ``ENV_DATA["ocs_version"]``) unless ``AUTH[...]["rag_content_image"]`` is set.
 
     Returns:
         bool: True is ols-config is created, False otherwise
@@ -136,9 +174,12 @@ def create_ols_config(overrides=None):
     log.info(
         "Create custom resource ols-config file that contains the yaml content for the LLM provider"
     )
+    config_file = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="ols_config_", suffix=".yaml", delete=False
+    )
+    config_path = config_file.name
+    config_file.close()
     try:
-        # ToDo: when we get konflux build the code need to be modified to get lightspeed-image
-
         auth = ocsci_config.AUTH["ibm_watsonx_llm_for_ols"]
         project_id = (overrides or {}).get("projectID", auth["projectID"])
         url = (overrides or {}).get("url", auth["url"])
@@ -148,19 +189,32 @@ def create_ols_config(overrides=None):
         ols_config_data["spec"]["llm"]["providers"][0]["url"] = url
         ols_config_data["spec"]["llm"]["providers"][0]["models"][0]["name"] = model_name
         ols_config_data["spec"]["ols"]["defaultModel"] = model_name
-        config_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="ols_config_", suffix=".yaml", delete=False
-        )
-        templating.dump_data_to_temp_yaml(ols_config_data, config_file.name)
-        run_cmd(f"oc create -f {config_file.name}")
+        rag = ols_config_data.get("spec", {}).get("ols", {}).get("rag") or []
+        if rag:
+            rag[0]["image"] = get_ols_rag_content_image()
+            log.info("OLS RAG content image: %s", rag[0]["image"])
+        templating.dump_data_to_temp_yaml(ols_config_data, config_path)
+        run_cmd(f"oc create -f {config_path}")
         return True
-    except Exception as ex:
-        log.error(f"Failed to create ols-config. Exception is: {ex}")
+    except (CommandFailed, KeyError, OSError) as ex:
+        log.error("Failed to create ols-config: %s", ex)
         return False
+    finally:
+        try:
+            os.unlink(config_path)
+        except OSError:
+            pass
 
 
 def _get_ols_config_conditions():
-    """Fetch OLSConfig status conditions from the cluster."""
+    """
+
+    Fetch OLSConfig status conditions from the cluster.
+
+    Returns:
+        list: ``status.conditions`` for the cluster OLSConfig, or empty list if missing.
+
+    """
     ols_config_obj = OCP(
         kind=constants.OLS_CONFIG_KIND, namespace=constants.OLS_OPERATOR_NAMESPACE
     )
@@ -295,6 +349,46 @@ def verify_ols_connection_fails(timeout=300, interval=15):
     return wait_for_ols_connection_state(
         expect_ready=False, timeout=timeout, interval=interval
     )
+
+
+def wait_for_ols_config_status_after_apply(
+    timeout=None,
+    interval=None,
+):
+    """
+
+    Poll until OLSConfig has non-empty ``status.conditions`` (operator reconciled).
+
+    Used after applying a misconfigured OLSConfig so subsequent checks run against
+    real status instead of a fixed sleep.
+
+    Args:
+        timeout (int, optional): Max seconds to poll. Defaults to
+            ``constants.OLS_POST_MISCONFIG_APPLY_WAIT_SEC``.
+        interval (int, optional): Seconds between polls. Defaults to
+            ``constants.OLS_POST_MISCONFIG_POLL_INTERVAL_SEC``.
+
+    Returns:
+        bool: True if conditions appeared within ``timeout``, False otherwise.
+
+    """
+    timeout = timeout or constants.OLS_POST_MISCONFIG_APPLY_WAIT_SEC
+    interval = interval or constants.OLS_POST_MISCONFIG_POLL_INTERVAL_SEC
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            conditions = _get_ols_config_conditions()
+            if conditions:
+                log.info("OLSConfig status conditions present after apply.")
+                return True
+        except Exception as ex:
+            log.debug("Waiting for OLSConfig status: %s", ex)
+        time.sleep(interval)
+    log.warning(
+        "OLSConfig status conditions not populated within %s s; continuing checks.",
+        timeout,
+    )
+    return False
 
 
 def delete_ols_config_and_secret():

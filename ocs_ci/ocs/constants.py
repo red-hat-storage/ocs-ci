@@ -3179,9 +3179,15 @@ OLS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-secret.yaml")
 OLS_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-config.yaml")
 OLS_QA_EXPECTATIONS = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "qa-expectations.yaml")
 OLS_ATTACHED_PVC_YAML = os.path.join(CONF_DIR, "ocsci", "ols_attached_pvc.yaml")
+# OLS RAG content image repository (tag is ``v{major}.{minor}`` from ODF ``ocs_version``).
+OLS_RAG_CONTENT_IMAGE_REPO = (
+    "quay.io/rhceph-dev/odf4-odf-lightspeed-rag-content-rhel9"
+)
 # Waits and thresholds for OLS helper/UI tests (avoid magic numbers in tests and helpers)
 OLS_CONFIG_DELETE_WAIT_SEC = 10
 OLS_POST_MISCONFIG_APPLY_WAIT_SEC = 60
+OLS_POST_MISCONFIG_POLL_INTERVAL_SEC = 5
+# Default minimum keyword match ratio (0.0-1.0) for "valid" OLS Q&A; tune per environment if needed.
 OLS_QA_ACCURACY_THRESHOLD = 0.75
 OLS_UI_IMPLICIT_WAIT_SEC = 5
 OLS_UI_INPUT_LOCATOR_TIMEOUT_SEC = 5

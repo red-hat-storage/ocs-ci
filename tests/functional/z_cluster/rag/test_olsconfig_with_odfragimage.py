@@ -1,7 +1,5 @@
 import logging
-import os
 import pytest
-import time
 import uuid
 
 from ocs_ci.framework.pytest_customization.marks import cyan_squad
@@ -17,6 +15,7 @@ from ocs_ci.helpers.ols_helpers import (
     verify_ols_connection_fails,
     verify_ols_pod_logs_contain_expected_errors,
     delete_ols_config_and_secret,
+    wait_for_ols_config_status_after_apply,
 )
 from ocs_ci.helpers.ols_qa_answer_validations import (
     load_test_data,
@@ -68,24 +67,25 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         assert create_ols_config(), "Failed to create ols-config"
 
         # Verify OLS successfully connects to and utilizes the specified IBM watsonx LLM provider
-        # Verify all OLS pods are up and running (polls ApiReady; do not use fixed sleeps)
+        # Verify all the OLS pods are up and running (polls ApiReady; do not use fixed sleeps)
         verify_ols_connects_to_llm()
 
     @pytest.mark.polarion_id("OCS-7484")
     def test_data_foundation_answers(self, setup_ui):
         """
 
-        This will validate the core prerequisites for RAG functionality, by validating the response given by OLS
+        Validate OLS responses against ``qa-expectation.yaml``.
 
-        1. Loads 20 sample QnA is set "qa-expectation.yaml"
-        2. Ask each valid, valid but no rag answer, invalid questions one by one
-            a. calculate the accuracy based on the keywords of expected answer
-            b. calculate the consistency by repeating question twice
-            c. results are appended for graph
+        1. Load sample Q&A from ``qa-expectation.yaml``.
+        2. For each case: ask the question, then validate by type (valid / invalid / no_rag_answer).
+        3. For ``valid`` cases: ask the same question twice and require both answers to meet the
+           keyword accuracy threshold (consistency check).
+        4. Collect all failures and report once at the end so every question is exercised.
 
         """
 
         results = []
+        failures = []
         test_data = load_test_data()
 
         ols = OLSUI()
@@ -102,21 +102,37 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             ans1 = ols.ask_question(question)
             accuracy = calculate_accuracy(ans1, keywords)
 
-            # Store results for graph
-            results.append({"id": qid, "accuracy": accuracy})
-
+            entry = {"id": qid, "type": qtype, "accuracy": accuracy}
             if qtype == "valid":
-                assert (
-                    accuracy >= constants.OLS_QA_ACCURACY_THRESHOLD
-                ), f"Q{qid}: Accuracy failed ({accuracy})"
+                ans2 = ols.ask_question(question)
+                accuracy_repeat = calculate_accuracy(ans2, keywords)
+                entry["accuracy_repeat"] = accuracy_repeat
+                results.append(entry)
+                for label, acc in (
+                    ("first", accuracy),
+                    ("repeat", accuracy_repeat),
+                ):
+                    if acc < constants.OLS_QA_ACCURACY_THRESHOLD:
+                        failures.append(
+                            f"Q{qid} ({label}): accuracy {acc} below threshold "
+                            f"{constants.OLS_QA_ACCURACY_THRESHOLD}"
+                        )
+            else:
+                results.append(entry)
 
-            elif qtype == "invalid":
-                assert (
-                    "data foundation" not in ans1.lower()
-                ), f"Q{qid}: Hallucinated answer"
+            if qtype == "invalid":
+                if "data foundation" in ans1.lower():
+                    failures.append(f"Q{qid}: Hallucinated answer (unexpected data foundation mention)")
 
             elif qtype == "no_rag_answer":
-                assert is_uncertain(ans1), f"Q{qid}: Should say answer not available"
+                if not is_uncertain(ans1):
+                    failures.append(f"Q{qid}: Should indicate answer not available")
+
+        log.info("OLS Q&A summary: %s", results)
+        if failures:
+            pytest.fail(
+                "One or more OLS Q&A checks failed:\n" + "\n".join(failures)
+            )
 
     @pytest.mark.polarion_id("OCS-7514")
     def test_ols_attach_yaml_and_validate_response(self, setup_ui):
@@ -132,15 +148,8 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
         """
         pvc_yaml_path = constants.OLS_ATTACHED_PVC_YAML
-        assert os.path.isfile(
-            pvc_yaml_path
-        ), f"OLS attached PVC YAML not found: {pvc_yaml_path}"
-
-        try:
-            with open(pvc_yaml_path, encoding="utf-8") as f:
-                pvc_yaml_content = f.read()
-        except OSError as e:
-            pytest.fail(f"Could not read OLS attached PVC YAML {pvc_yaml_path}: {e}")
+        with open(pvc_yaml_path, encoding="utf-8") as f:
+            pvc_yaml_content = f.read()
 
         ols = OLSUI()
         ols.open_ols()
@@ -198,8 +207,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             overrides={"url": "https://invalid-llm.example.com"}
         ), "Failed to create ols-config with invalid URL"
 
-        # Allow the operator to reconcile the misconfigured OLSConfig before asserting failure
-        time.sleep(constants.OLS_POST_MISCONFIG_APPLY_WAIT_SEC)
+        wait_for_ols_config_status_after_apply()
         assert verify_ols_connection_fails(
             timeout=300
         ), "OLS should not reach Available state when URL is invalid"
@@ -220,7 +228,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
             overrides={"projectID": invalid_project_id}
         ), "Failed to create ols-config with invalid projectID"
 
-        time.sleep(constants.OLS_POST_MISCONFIG_APPLY_WAIT_SEC)
+        wait_for_ols_config_status_after_apply()
         assert verify_ols_connection_fails(
             timeout=300
         ), "OLS should not reach Available state when projectID is invalid"
