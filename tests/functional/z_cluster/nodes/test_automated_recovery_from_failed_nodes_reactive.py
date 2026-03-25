@@ -58,10 +58,10 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     Knip-678 Automated recovery from failed nodes - Reactive
     """
 
-    threads = []
-
     @pytest.fixture(autouse=True)
     def teardown(self, request):
+        self.threads = []
+
         def finalizer():
             worker_nodes = get_worker_nodes()
             # Removing created label on all worker nodes
@@ -183,12 +183,18 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 else:
                     node_type = constants.RHCOS
                 node_conf = {"stack_name": common_nodes[0]}
-                print(f"node_conf: {node_conf}")
+                log.info(f"node_conf: {node_conf}")
                 new_ocs_node_names = add_new_node_and_label_upi(
-                    node_type, 1, mark_for_ocs_label=True
+                    node_type, 1, mark_for_ocs_label=True, node_conf=node_conf
                 )
-        except ValueError as e:
-            log.error(f"Unsupported deployment type: {e}")
+            else:
+                raise ValueError(
+                    f"Unsupported deployment type: {deployment_type}. "
+                    "Expected 'ipi' or 'upi'."
+                )
+        except (ValueError, IndexError) as e:
+            log.error(f"Failed to add new node: {e}")
+            raise
 
         failure_domain = get_failure_domain()
         log.info("Wait for the nodes racks or zones to appear...")
