@@ -77,7 +77,7 @@ class TestCustomLogLevels:
         """Test ASSERTION level is registered with correct value"""
         from ocs_ci.framework.custom_logger import ASSERTION
 
-        assert ASSERTION == 27
+        assert ASSERTION == 15
         assert logging.getLevelName(ASSERTION) == "ASSERTION"
         assert logging.getLevelName("ASSERTION") == ASSERTION
 
@@ -93,11 +93,12 @@ class TestCustomLogLevels:
         """Test custom levels are ordered correctly relative to standard levels"""
         from ocs_ci.framework.custom_logger import TEST_STEP, ASSERTION, AI_DATA
 
-        # AI_DATA < DEBUG < INFO < TEST_STEP < ASSERTION < WARNING < ERROR < CRITICAL
+        # AI_DATA < DEBUG < ASSERTION < INFO < TEST_STEP < WARNING < ERROR < CRITICAL
         assert AI_DATA < logging.DEBUG  # 5 < 10
+        assert logging.DEBUG < ASSERTION  # 10 < 15
+        assert ASSERTION < logging.INFO  # 15 < 20
         assert logging.INFO < TEST_STEP  # 20 < 25
-        assert TEST_STEP < ASSERTION  # 25 < 27
-        assert ASSERTION < logging.WARNING  # 27 < 30
+        assert TEST_STEP < logging.WARNING  # 25 < 30
         assert logging.WARNING < logging.ERROR  # 30 < 40
 
     def test_idempotent_registration(self):
