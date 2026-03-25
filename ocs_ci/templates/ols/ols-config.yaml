@@ -1,3 +1,5 @@
+# OLSConfig template: placeholders (model, url, projectID) and RAG image are set at
+# runtime by ``create_ols_config()`` (RAG image: quay.io/rhceph-dev/... tag vX.Y from ocs_version).
 ---
 apiVersion: ols.openshift.io/v1alpha1
 kind: OLSConfig
@@ -22,6 +24,6 @@ spec:
     defaultProvider: myWatsonx
     logLevel: DEBUG
     rag:
-      - image: 'registry.redhat.io/odf4/odf-lightspeed-rag-content-rhel9@sha256:93c3f3792cbf9a348c90d0bc37bb92c0f78c1b48cd74c9ea94f9b3a4e7463902'
+      - image: 'quay.io/rhceph-dev/odf4-odf-lightspeed-rag-content-rhel9:vplaceholder'
   olsDataCollector:
     logLevel: DEBUG

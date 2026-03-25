@@ -1,9 +1,11 @@
 import time
 import logging
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import (
     TimeoutException,
     StaleElementReferenceException,
+    WebDriverException,
 )
 
 from ocs_ci.ocs import constants
@@ -33,12 +35,11 @@ class OLSUI(BaseUI):
     def _wait_until_elements_exist(self, xpath, timeout=None):
         """
 
-        Polls until at least one element exists for the xpath.
-        Safe for dynamic / multi-element locators.
+        Wait until at least one element exists for the xpath using ``WebDriverWait``.
 
         Args:
             xpath (str): XPath locator.
-            timeout (float, optional): Max seconds to poll. Defaults to
+            timeout (float, optional): Max seconds to wait. Defaults to
                 ``constants.OLS_UI_ELEMENT_POLL_TIMEOUT_SEC``.
 
         Returns:
@@ -50,19 +51,14 @@ class OLSUI(BaseUI):
         """
         if timeout is None:
             timeout = constants.OLS_UI_ELEMENT_POLL_TIMEOUT_SEC
-        start = time.time()
-        while time.time() - start < timeout:
-            elements = self.driver.find_elements(By.XPATH, xpath)
-            if elements:
-                return elements
-            time.sleep(0.5)
-
-        raise TimeoutException(f"Elements not found for xpath: {xpath}")
+        wait = WebDriverWait(self.driver, timeout, poll_frequency=0.5)
+        wait.until(lambda d: len(d.find_elements(By.XPATH, xpath)) > 0)
+        return self.driver.find_elements(By.XPATH, xpath)
 
     def open_ols(self):
         """
 
-        Navigate to OLS Chat Box
+        Navigate to OLS Chat Box.
 
         """
         log.info("Opening OLS chat")
@@ -91,6 +87,14 @@ class OLSUI(BaseUI):
         )
 
     def _click_send(self):
+        """
+
+        Click the send control (submit button or Send aria button).
+
+        Raises:
+            TimeoutException: If no send control is found.
+
+        """
         for xpath in (self.SEND_BUTTON_TYPE_XPATH, self.SEND_BUTTON_ARIA_XPATH):
             try:
                 self._wait_until_elements_exist(
@@ -103,6 +107,17 @@ class OLSUI(BaseUI):
         raise TimeoutException("No send button found for OLS chat")
 
     def _wait_for_answer(self, timeout=None):
+        """
+
+        Wait until at least one answer message element exists.
+
+        Args:
+            timeout (float, optional): Max seconds to wait for a response.
+
+        Returns:
+            list: Non-empty list of answer elements.
+
+        """
         if timeout is None:
             timeout = constants.OLS_UI_ANSWER_APPEAR_TIMEOUT_SEC
         return self._wait_until_elements_exist(self.ANSWERS_XPATH, timeout=timeout)
@@ -152,13 +167,35 @@ class OLSUI(BaseUI):
         raise TimeoutError("OLS answer took too long to complete.")
 
     def ask_question(self, question):
+        """
+
+        Submit a question to OLS and return the final streamed answer text.
+
+        Args:
+            question (str): Text to send to the chat.
+
+        Returns:
+            str: Stabilized answer text from the last response bubble.
+
+        Raises:
+            TimeoutException: If UI elements are not found in time.
+            TimeoutError: If the answer does not finish streaming in time.
+            WebDriverException: On other Selenium/driver failures.
+
+        """
         log.info(f"Asking question: {question}")
+        try:
+            input_elem = self._get_question_input()
+            input_elem.clear()
+            input_elem.send_keys(question)
 
-        input_elem = self._get_question_input()
-        input_elem.clear()
-        input_elem.send_keys(question)
+            self._click_send()
 
-        self._click_send()
-
-        self._wait_for_answer()
-        return self._get_stable_text()
+            self._wait_for_answer()
+            return self._get_stable_text()
+        except (TimeoutException, TimeoutError) as e:
+            log.error("OLS UI timed out during question or answer: %s", e)
+            raise
+        except WebDriverException as e:
+            log.error("WebDriver error during OLS question: %s", e)
+            raise
