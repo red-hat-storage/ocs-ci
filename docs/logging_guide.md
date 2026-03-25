@@ -38,9 +38,9 @@ From highest to lowest severity:
 | **CRITICAL** | 50 | `logger.critical()` | System failures, framework crashes |
 | **ERROR** | 40 | `logger.error()` | Test failures, exceptions, errors |
 | **WARNING** | 30 | `logger.warning()` | Deprecations, retries, potential issues |
-| **ASSERTION** | 27 | `logger.assertion()` | Test validations and assertions |
 | **TEST_STEP** | 25 | `logger.test_step()` | Major test workflow phases |
 | **INFO** | 20 | `logger.info()` | General progress, operations |
+| **ASSERTION** | 15 | `logger.assertion()` | Test validations and assertions |
 | **DEBUG** | 10 | `logger.debug()` | Detailed diagnostic info |
 | **AI_DATA** | 5 | `logger.ai_data()` | ML predictions, metrics, analysis |
 
@@ -188,89 +188,6 @@ WARNING - old_function() is deprecated and will be removed in v5.0. Use new_func
 WARNING - Operation failed (attempt 2/3): Connection timeout. Retrying in 5s...
 WARNING - optimal_setting not configured. Using default value which may impact performance.
 WARNING - Available memory (8GB) is below recommended (16GB). Tests may run slower.
-```
-
----
-
-### ASSERTION (27) - Test Validations
-
-**When to use:**
-- Before/after Python assertions
-- Test checkpoint validations
-- Expected vs actual comparisons
-- Pass/fail validations
-
-**Examples:**
-
-```python
-# Basic assertion logging
-def test_pvc_creation(self):
-    pvc = create_pvc(size="10Gi")
-
-    logger.assertion(
-        f"PVC status: expected='Bound', actual='{pvc.status}'"
-    )
-    assert pvc.status == "Bound", f"PVC not bound: {pvc.status}"
-
-# Numeric comparisons
-def test_performance_threshold(self):
-    iops = measure_iops()
-    min_iops = 1000
-
-    logger.assertion(
-        f"IOPS check: measured={iops}, minimum={min_iops}, "
-        f"passed={iops >= min_iops}"
-    )
-    assert iops >= min_iops, f"IOPS below threshold: {iops} < {min_iops}"
-
-# Multiple conditions
-def test_cluster_health(self):
-    health_checks = {
-        "operators_ready": check_operators(),
-        "storage_cluster_healthy": check_storage_cluster(),
-        "ceph_healthy": check_ceph_health(),
-        "all_pods_running": check_all_pods_ready(),
-    }
-
-    for check_name, result in health_checks.items():
-        logger.assertion(f"{check_name}: {result}")
-        assert result, f"Health check failed: {check_name}"
-
-# List/collection validations
-def test_pod_count(self):
-    pods = get_pods_in_namespace("openshift-storage")
-    expected_count = 12
-
-    logger.assertion(
-        f"Pod count: expected={expected_count}, actual={len(pods)}, "
-        f"match={len(pods) == expected_count}"
-    )
-    assert len(pods) == expected_count, \
-        f"Expected {expected_count} pods, found {len(pods)}"
-
-# Validation with tolerance
-def test_capacity_usage(self):
-    usage_pct = get_cluster_capacity_usage()
-    expected = 75.0
-    tolerance = 5.0
-
-    within_tolerance = abs(usage_pct - expected) <= tolerance
-    logger.assertion(
-        f"Capacity usage: measured={usage_pct}%, expected={expected}%, "
-        f"tolerance=±{tolerance}%, passed={within_tolerance}"
-    )
-    assert within_tolerance, \
-        f"Usage {usage_pct}% outside expected range {expected}±{tolerance}%"
-```
-
-**Output:**
-```
-ASSERTION - PVC status: expected='Bound', actual='Bound'
-ASSERTION - IOPS check: measured=1250, minimum=1000, passed=True
-ASSERTION - operators_ready: True
-ASSERTION - storage_cluster_healthy: True
-ASSERTION - Pod count: expected=12, actual=12, match=True
-ASSERTION - Capacity usage: measured=73.5%, expected=75%, tolerance=±5%, passed=True
 ```
 
 ---
@@ -493,6 +410,89 @@ INFO - Storage class: ocs-storagecluster-ceph-rbd
 INFO - Cluster monitoring configured successfully
 INFO - Scaling deployment 'rook-ceph-mon': 3 -> 5 replicas
 INFO - Deployment 'rook-ceph-mon' scaled successfully
+```
+
+---
+
+### ASSERTION (15) - Test Validations
+
+**When to use:**
+- Before/after Python assertions
+- Test checkpoint validations
+- Expected vs actual comparisons
+- Pass/fail validations
+
+**Examples:**
+
+```python
+# Basic assertion logging
+def test_pvc_creation(self):
+    pvc = create_pvc(size="10Gi")
+
+    logger.assertion(
+        f"PVC status: expected='Bound', actual='{pvc.status}'"
+    )
+    assert pvc.status == "Bound", f"PVC not bound: {pvc.status}"
+
+# Numeric comparisons
+def test_performance_threshold(self):
+    iops = measure_iops()
+    min_iops = 1000
+
+    logger.assertion(
+        f"IOPS check: measured={iops}, minimum={min_iops}, "
+        f"passed={iops >= min_iops}"
+    )
+    assert iops >= min_iops, f"IOPS below threshold: {iops} < {min_iops}"
+
+# Multiple conditions
+def test_cluster_health(self):
+    health_checks = {
+        "operators_ready": check_operators(),
+        "storage_cluster_healthy": check_storage_cluster(),
+        "ceph_healthy": check_ceph_health(),
+        "all_pods_running": check_all_pods_ready(),
+    }
+
+    for check_name, result in health_checks.items():
+        logger.assertion(f"{check_name}: {result}")
+        assert result, f"Health check failed: {check_name}"
+
+# List/collection validations
+def test_pod_count(self):
+    pods = get_pods_in_namespace("openshift-storage")
+    expected_count = 12
+
+    logger.assertion(
+        f"Pod count: expected={expected_count}, actual={len(pods)}, "
+        f"match={len(pods) == expected_count}"
+    )
+    assert len(pods) == expected_count, \
+        f"Expected {expected_count} pods, found {len(pods)}"
+
+# Validation with tolerance
+def test_capacity_usage(self):
+    usage_pct = get_cluster_capacity_usage()
+    expected = 75.0
+    tolerance = 5.0
+
+    within_tolerance = abs(usage_pct - expected) <= tolerance
+    logger.assertion(
+        f"Capacity usage: measured={usage_pct}%, expected={expected}%, "
+        f"tolerance=±{tolerance}%, passed={within_tolerance}"
+    )
+    assert within_tolerance, \
+        f"Usage {usage_pct}% outside expected range {expected}±{tolerance}%"
+```
+
+**Output:**
+```
+ASSERTION - PVC status: expected='Bound', actual='Bound'
+ASSERTION - IOPS check: measured=1250, minimum=1000, passed=True
+ASSERTION - operators_ready: True
+ASSERTION - storage_cluster_healthy: True
+ASSERTION - Pod count: expected=12, actual=12, match=True
+ASSERTION - Capacity usage: measured=73.5%, expected=75%, tolerance=±5%, passed=True
 ```
 
 ---
