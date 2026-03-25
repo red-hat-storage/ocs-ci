@@ -44,7 +44,6 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
     skipif_bm,
     skipif_managed_service,
-    skipif_hci_provider_and_client,
     skipif_more_than_three_workers,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
@@ -132,6 +131,22 @@ class TestNodesMaintenance(ManageTest):
             # skip because ceph is not in good health
             pytest.skip(str(e))
 
+    @pytest.fixture()
+    def skip_on_hci_provider_client(self):
+        """
+        Skip the test at runtime when running on Fusion HCI provider+client
+        setup. Uses a fixture instead of pytest.mark.skipif to avoid the
+        eager-evaluation issue where config.clusters is not yet populated at
+        module import time.
+        """
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and config.hci_provider_exist()
+            and config.hci_client_exist()
+        ):
+            pytest.skip("Test will not run on Fusion HCI provider and Client clusters")
+
     @tier1
     @skipif_managed_service
     @skipif_hci_provider
@@ -213,7 +228,6 @@ class TestNodesMaintenance(ManageTest):
     @tier4a
     @skipif_bm
     @skipif_managed_service
-    @skipif_hci_provider_and_client
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -222,6 +236,7 @@ class TestNodesMaintenance(ManageTest):
     )
     def test_node_maintenance_restart_activate(
         self,
+        skip_on_hci_provider_client,
         nodes,
         pvc_factory,
         pod_factory,
@@ -492,12 +507,12 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.health_check()
 
     @skipif_managed_service
-    @skipif_hci_provider_and_client
     @skipif_more_than_three_workers
     @pytest.mark.polarion_id("OCS-2524")
     @tier4a
     def test_pdb_check_simultaneous_node_drains(
         self,
+        skip_on_hci_provider_client,
         pvc_factory,
         pod_factory,
         bucket_factory,
