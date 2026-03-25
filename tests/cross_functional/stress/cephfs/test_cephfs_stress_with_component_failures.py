@@ -24,6 +24,7 @@ from ocs_ci.ocs.cluster import get_active_mds_pod_objs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import ActiveMDSNotFoundException
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.utility.decorators import enable_high_recovery_during_rebalance_flag
 
 logger = logging.getLogger(__name__)
 
@@ -513,6 +514,7 @@ class TestCephfsStressWithFailures(E2ETest):
             timeout=600, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
+    @enable_high_recovery_during_rebalance_flag
     def _wait_for_rebalance_and_health_checks(
         self, component, rebalance_wait, health_check_wait
     ):
@@ -582,7 +584,9 @@ class TestCephfsStressWithFailures(E2ETest):
 
         assert rebalance_complete, (
             f"Data re-balance failed to complete within the given timeout of {rebalance_wait} seconds. "
-            f"This may be due to ongoing scrubbing or other maintenance operations."
+            f"Cluster health: {ceph_health.get('status')}. "
+            f"Healthy PGs: {healthy_pg_count}/{total_pg_count}. "
+            f"Unhealthy PGs: {', '.join(unhealthy_pg_details) if unhealthy_pg_details else 'None'}"
         )
         logger.info(f"Waiting additional {health_check_wait}s for stabilization...")
         time.sleep(health_check_wait)
