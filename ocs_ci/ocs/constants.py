@@ -3174,15 +3174,18 @@ PATCH_SPECIFIC_SOURCES_CMD = (
 OLS_CONFIG_KIND = "OLSConfig"
 OLS_OPERATOR_NAMESPACE = "openshift-lightspeed"
 OLS_OPERATOR_NAME = "lightspeed-operator.openshift-lightspeed"
+# CSV resource names are versioned
+OLS_OPERATOR_CSV_NAME_PREFIX = "lightspeed-operator"
 OLS_OPERATOR_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-operator.yaml")
+# Fast path for ``do_deploy_ols``: bounded wait to detect existing CSV (no OCP retry wrapper).
+OLS_OPERATOR_QUICK_CHECK_TIMEOUT_SEC = 10
+OLS_OPERATOR_QUICK_CHECK_INTERVAL_SEC = 1
 OLS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-secret.yaml")
 OLS_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "ols-config.yaml")
 OLS_QA_EXPECTATIONS = os.path.join(TEMPLATE_DEPLOYMENT_DIR_OLS, "qa-expectations.yaml")
 OLS_ATTACHED_PVC_YAML = os.path.join(CONF_DIR, "ocsci", "ols_attached_pvc.yaml")
 # OLS RAG content image repository (tag is ``v{major}.{minor}`` from ODF ``ocs_version``).
-OLS_RAG_CONTENT_IMAGE_REPO = (
-    "quay.io/rhceph-dev/odf4-odf-lightspeed-rag-content-rhel9"
-)
+OLS_RAG_CONTENT_IMAGE_REPO = "quay.io/rhceph-dev/odf4-odf-lightspeed-rag-content-rhel9"
 # Waits and thresholds for OLS helper/UI tests (avoid magic numbers in tests and helpers)
 OLS_CONFIG_DELETE_WAIT_SEC = 10
 OLS_POST_MISCONFIG_APPLY_WAIT_SEC = 60
