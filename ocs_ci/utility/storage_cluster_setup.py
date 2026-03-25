@@ -446,8 +446,6 @@ class StorageClusterSetup(object):
                 f"Configuring EC default pools: k={k}, m={m}, " f"failureDomain={fd}"
             )
 
-            ec_spec = {"dataChunks": k, "codingChunks": m}
-
             # Re-capture managed_resources from the current cluster_data — the two
             # calls above (add_in_transit_encryption_to_cluster_data,
             # add_data_replication_separation_to_cluster_data) may have returned a
@@ -461,7 +459,7 @@ class StorageClusterSetup(object):
                 {
                     "poolSpec": {
                         "failureDomain": fd,
-                        "erasureCoded": ec_spec,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
                     },
                     "erasureCodedMetadataPool": "replicated-metadata-pool",
                 }
@@ -471,7 +469,10 @@ class StorageClusterSetup(object):
             ec_managed_resources.setdefault("cephFilesystems", {}).update(
                 {
                     "additionalDataPools": [
-                        {"name": ec_fs_pool_name, "erasureCoded": ec_spec}
+                        {
+                            "name": ec_fs_pool_name,
+                            "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                        }
                     ],
                     "defaultStorageClassDataPoolName": ec_fs_pool_name,
                 }
@@ -481,7 +482,7 @@ class StorageClusterSetup(object):
                 {
                     "dataPoolSpec": {
                         "failureDomain": fd,
-                        "erasureCoded": ec_spec,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
                     },
                 }
             )

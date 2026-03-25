@@ -7,7 +7,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import (
     create_resource,
     storagecluster_independent_check,
-    wait_for_resource_state,
 )
 from ocs_ci.utility import templating
 
@@ -124,7 +123,12 @@ def create_ec_cephobjectstore():
 
     os_obj = create_resource(**os_data)
     logger.info(f"Waiting for EC CephObjectStore '{os_name}' to reach Ready phase")
-    wait_for_resource_state(os_obj, constants.STATUS_READY, timeout=600)
+    os_obj.ocp.wait_for_resource(
+        condition=constants.STATUS_READY,
+        resource_name=os_name,
+        column="PHASE",
+        timeout=600,
+    )
 
     logger.info(f"Creating bucket StorageClass '{sc_name}' for EC CephObjectStore")
 
