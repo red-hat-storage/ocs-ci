@@ -13,8 +13,8 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.utility.utils import exec_cmd, run_cmd
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.utility.utils import exec_cmd, run_cmd, TimeoutSampler
 from ocs_ci.utility import templating
 from ocs_ci.utility import version as version_util
 from ocs_ci.utility.retry import retry
@@ -50,6 +50,26 @@ def get_ols_rag_content_image():
     return f"{constants.OLS_RAG_CONTENT_IMAGE_REPO}:{tag}"
 
 
+def get_ols_operator_csv_name(namespace=constants.OLS_OPERATOR_NAMESPACE):
+    """
+
+    Resolve the installed OLS ClusterServiceVersion name (e.g. ``lightspeed-operator.v1.0.10``).
+
+    Args:
+        namespace (str): Namespace where the OLS subscription installs the CSV.
+
+    Returns:
+        str or None: CSV ``metadata.name`` if a CSV with the expected prefix exists.
+
+    """
+    matches = get_csvs_start_with_prefix(
+        constants.OLS_OPERATOR_CSV_NAME_PREFIX, namespace
+    )
+    if not matches:
+        return None
+    return matches[0]["metadata"]["name"]
+
+
 def do_deploy_ols():
     """
 
@@ -61,8 +81,8 @@ def do_deploy_ols():
     """
     log.info("Creating OpenshiftLightspeed Operator")
 
-    # check if OLS is already installed
-    if validate_ols_operator_installed(timeout=10):
+    # check if OLS is already installed (short timeout / fast poll)
+    if validate_ols_operator_installed(timeout=10, interval=1):
         log.info("OLS Operator already installed")
         return True
 
@@ -83,32 +103,47 @@ def validate_ols_operator_installed(
     namespace=constants.OLS_OPERATOR_NAMESPACE,
     operator_name=constants.OLS_OPERATOR_NAME,
     timeout=600,
+    interval=5,
 ):
     """
 
     Validate whether the OLS operator is installed.
-
-    The method checks for the presence of a clusterServiceVersion (CSV) and operator.
-
     Args:
         namespace (str): Namespace
-        operator_name (str): Name of the operator
-        timeout (int): Time to wait OLS CSV reached in succeeded state
+        operator_name (str): Subscription/package name (for logging only)
+        timeout (int): Time to wait for the CSV to exist and reach ``Succeeded``
+        interval (int): Seconds between polls when waiting for CSV / phase
 
     Returns:
         bool: True if operator installation succeeded.
 
     Raises:
-        ResourceWrongStatusException: In case the resource is not in expected phase.
+        ResourceWrongStatusException: If CSV not found or not in expected phase in time.
         NotSupportedFunctionError: If resource doesn't have phase!
         ResourceNameNotSpecifiedException: in case the name is not specified.
 
     """
-    log.info(f"Validating installation of OLS operator {operator_name}")
-    csv_obj = CSV(
-        resource_name="lightspeed-operator-controller-manager", namespace=namespace
+    log.info(
+        "Validating OLS operator installation (package ref: %s, CSV prefix: %s)",
+        operator_name,
+        constants.OLS_OPERATOR_CSV_NAME_PREFIX,
     )
-    return csv_obj.wait_for_phase(phase=constants.SUCCEEDED, timeout=timeout)
+
+    def _ols_csv_succeeded():
+        csv_name = get_ols_operator_csv_name(namespace=namespace)
+        if not csv_name:
+            return False
+        log.debug("Resolved OLS CSV name: %s", csv_name)
+        csv_obj = CSV(resource_name=csv_name, namespace=namespace)
+        return csv_obj.check_phase(phase=constants.SUCCEEDED)
+
+    sampler = TimeoutSampler(timeout, interval, func=_ols_csv_succeeded)
+    if not sampler.wait_for_func_status(True):
+        raise ResourceWrongStatusException(
+            f"OLS operator CSV with prefix {constants.OLS_OPERATOR_CSV_NAME_PREFIX!r} "
+            f"not found or not {constants.SUCCEEDED} in namespace {namespace} within {timeout}s"
+        )
+    return True
 
 
 def create_ols_secret(api_token=None):
