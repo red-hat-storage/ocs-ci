@@ -214,6 +214,8 @@ class TestCephDefaultValuesCheck(ManageTest):
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Validate noobaa postgres configmap post OCS upgrade
+        Important: Postgres configmap is replaced with CNPG in 4.19.
+        Skip the test for ocs >= 4.19.
 
         """
         cm_obj = OCP(
@@ -221,33 +223,28 @@ class TestCephDefaultValuesCheck(ManageTest):
             resource_name=constants.NOOBAA_POSTGRES_CONFIGMAP,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-
         config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
-        config_data = config_data.split("\n")[5:]
-
+        config_data = config_data.split("\n")
+        config_data = config_data[5:]
         log.info(
-            "Validating that the values configured in noobaa-postgres "
-            "configmap match the ones stored in ocs-ci"
+            "Validating that the values configured in noobaa-postgres configmap "
+            "match the ones stored in ocs-ci"
         )
-
         ocs_version = version.get_semantic_ocs_version_from_config()
-        log.info("OCS version: %s", ocs_version)
-
+        log.info(f"ocs version----{ocs_version}")
         if ocs_version <= version.VERSION_4_8:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
-        else:
+            stored_values.remove("")
+        elif ocs_version >= version.VERSION_4_9:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_9.split("\n")
-
-        stored_values = [value for value in stored_values if value]
-
+            stored_values.remove("")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "
-            "is different than expected. Please inform OCS-QE about this "
-            "discrepancy.\n"
-            f"Expected values:\n{stored_values}\n"
-            f"Cluster values:\n{config_data}"
+            f"is different than the expected. Please inform OCS-QE about this discrepancy. "
+            f"The expected values are:\n{stored_values}\n"
+            f"The cluster's existing values are:{config_data}"
         )
-
+        
     @post_ocs_upgrade
     def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):
         """
