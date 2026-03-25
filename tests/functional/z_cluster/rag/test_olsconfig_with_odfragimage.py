@@ -40,6 +40,13 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
     """
 
+    def _ensure_ols_operator_installed(self):
+        """
+        Ensure OLS operator is present before executing each test.
+        """
+        assert do_deploy_ols(), "Failed to install/verify OLS Operator"
+
+    @pytest.mark.order("first")
     @pytest.mark.polarion_id("OCS-7483")
     def test_ragimage_deployment_and_configuration(self):
         """
@@ -84,6 +91,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
         """
 
+        self._ensure_ols_operator_installed()
         results = []
         failures = []
         test_data = load_test_data()
@@ -122,7 +130,9 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
             if qtype == "invalid":
                 if "data foundation" in ans1.lower():
-                    failures.append(f"Q{qid}: Hallucinated answer (unexpected data foundation mention)")
+                    failures.append(
+                        f"Q{qid}: Hallucinated answer (unexpected data foundation mention)"
+                    )
 
             elif qtype == "no_rag_answer":
                 if not is_uncertain(ans1):
@@ -130,9 +140,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
         log.info("OLS Q&A summary: %s", results)
         if failures:
-            pytest.fail(
-                "One or more OLS Q&A checks failed:\n" + "\n".join(failures)
-            )
+            pytest.fail("One or more OLS Q&A checks failed:\n" + "\n".join(failures))
 
     @pytest.mark.polarion_id("OCS-7514")
     def test_ols_attach_yaml_and_validate_response(self, setup_ui):
@@ -147,6 +155,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         4. Validate the OLS response contains the expected terms from the YAML.
 
         """
+        self._ensure_ols_operator_installed()
         pvc_yaml_path = constants.OLS_ATTACHED_PVC_YAML
         with open(pvc_yaml_path, encoding="utf-8") as f:
             pvc_yaml_content = f.read()
@@ -198,7 +207,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
            (code 404, Failed to retrieve project, not_found, Resource requested by the client was not found).
 
         """
-        assert do_deploy_ols(), "Failed to install OLS Operator"
+        self._ensure_ols_operator_installed()
         delete_ols_config_and_secret()
 
         # ---------- Phase 1: Invalid URL (valid secret / projectID) ----------
