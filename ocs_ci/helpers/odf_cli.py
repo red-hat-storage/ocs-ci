@@ -8,6 +8,7 @@ from typing import Union
 from ocs_ci.ocs.exceptions import NotSupportedException
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
 from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.ocs.constants import (
@@ -211,6 +212,7 @@ class ODFCliRunner:
     def run_get_health(self):
         return self.run_command(" get health")
 
+    @retry(Exception, tries=3, delay=5, backoff=2)
     def run_get_recovery_profile(self):
         return self.run_command(" get recovery-profile")
 

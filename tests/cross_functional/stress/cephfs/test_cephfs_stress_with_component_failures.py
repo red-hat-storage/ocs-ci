@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import E2ETest, stress
 from ocs_ci.helpers.cephfs_stress_helpers import (
     CephFSStressTestManager,
     verify_openshift_storage_ns_pods_in_running_state,
+    collect_stress_job_pod_logs,
 )
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import constants
@@ -599,21 +600,27 @@ class TestCephfsStressWithFailures(E2ETest):
         ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info(f"Health checks passed after {component} failure")
 
-    def _verify_job_still_running(self, job_obj):
+    def _verify_job_still_running(self, stress_job_obj):
         """
         Verify that the stress job is still running.
 
         Args:
-            job_obj: Job object to check
+            stress_job_obj: Stress job object to check
 
         Raises:
-            Exception: If job is not in running or complete state
+            Exception: If stress job is not in running or complete state
 
         """
-        status = job_obj.status()
+        status = stress_job_obj.status()
         if status not in [constants.STATUS_RUNNING, "Complete"]:
+            logger.info(
+                f"Stress job {stress_job_obj.name} is in {status} state, collecting pod logs"
+            )
+            collect_stress_job_pod_logs(
+                stress_job_obj, dir_name=f"{stress_job_obj.name}_{status}"
+            )
             raise Exception(
-                f"Job {job_obj.name} is in unexpected state: {status}. "
+                f"Job {stress_job_obj.name} is in unexpected state: {status}. "
                 "Expected Running or Complete."
             )
-        logger.info(f"Job {job_obj.name} is still in {status} state")
+        logger.info(f"Job {stress_job_obj.name} is still in {status} state")

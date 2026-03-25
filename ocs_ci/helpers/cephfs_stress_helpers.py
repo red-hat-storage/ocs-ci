@@ -7,6 +7,8 @@ and resource cleanup.
 
 """
 
+import os
+from pathlib import Path
 import logging
 import threading
 
@@ -19,9 +21,11 @@ from ocs_ci.ocs.constants import (
     STATUS_RUNNING,
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.job import get_job_pods
 from ocs_ci.helpers.helpers import (
     validate_pod_oomkilled,
     validate_pods_are_running_and_not_restarted,
@@ -29,6 +33,7 @@ from ocs_ci.helpers.helpers import (
     create_pod,
     create_pvc,
     wait_for_resource_state,
+    get_current_test_name,
 )
 from ocs_ci.ocs.resources.pod import (
     check_pods_in_running_state,
@@ -940,3 +945,56 @@ def run_stress_cleanup(pod_obj, top_dir, timeout=3600, parallelism_count=25):
 
     except (KeyError, IndexError) as e:
         raise ValueError(f"Invalid pod structure: {e}")
+
+
+def collect_stress_job_pod_logs(stress_job_obj, dir_name=None):
+    """
+    Collect stress job pod logs and store them in ocs-ci log directory.
+
+    Args:
+        stress_job_obj: Stress job object whose pod logs need to be collected
+        dir_name (str): Optional subdirectory name. By default logs are stored in
+            ocs-ci-logs-<run_id>/<test_name>/failed_stress_job_logs directory.
+            When dir_name is provided, logs are stored in
+            ocs-ci-logs-<run_id>/<test_name>/failed_stress_job_logs/<dir_name>
+
+    """
+    tmp_path = Path(ocsci_log_path())
+    base_log_dir = os.path.join(
+        tmp_path, get_current_test_name(), "failed_stress_job_logs"
+    )
+    destination_dir = f"{base_log_dir}/{dir_name}" if dir_name else base_log_dir
+    if not os.path.isdir(destination_dir):
+        Path(destination_dir).mkdir(parents=True, exist_ok=True)
+
+    logger.info(
+        f"Collecting logs from stress job {stress_job_obj.name} pods to {destination_dir}"
+    )
+    try:
+        stress_job_pods = get_job_pods(
+            job_name=stress_job_obj.name, namespace=stress_job_obj.namespace
+        )
+        if not stress_job_pods:
+            logger.warning(f"No pods found for stress job {stress_job_obj.name}")
+            return
+        for stress_job_pod in stress_job_pods:
+            pod_name = stress_job_pod.get("metadata", {}).get("name")
+            if not pod_name:
+                logger.warning("Pod name not found in stress job pod metadata")
+                continue
+            try:
+                logger.info(f"Collecting logs from pod {pod_name}")
+                logs = pod.get_pod_logs(
+                    pod_name=pod_name,
+                    namespace=stress_job_obj.namespace,
+                    all_containers=True,
+                )
+                log_file_path = os.path.join(destination_dir, f"{pod_name}.log")
+                with open(log_file_path, "w") as log_file:
+                    log_file.write(logs if logs else "No logs available")
+
+                logger.info(f"Logs saved to {log_file_path}")
+            except Exception as e:
+                logger.error(f"Failed to collect logs from pod {pod_name}: {e}")
+    except Exception as e:
+        logger.error(f"Failed to collect stress job pod logs: {e}")
