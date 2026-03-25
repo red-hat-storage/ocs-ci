@@ -26,7 +26,7 @@ from threading import Lock
 
 # Custom log levels
 TEST_STEP = 25  # Between INFO (20) and WARNING (30)
-ASSERTION = 27  # Between TEST_STEP (25) and WARNING (30)
+ASSERTION = 15  # Between DEBUG (10) and INFO (20)
 AI_DATA = 5  # Below DEBUG (10) - verbose, specialized logging
 
 # Register levels globally (idempotent - safe to call multiple times)
