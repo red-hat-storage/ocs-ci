@@ -339,6 +339,32 @@ def fetch_pool_names(namespace=config.ENV_DATA["cluster_namespace"]):
     return [pool["metadata"]["name"] for pool in pool_obj]
 
 
+def get_ec_pool_names(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Fetch the list of Erasure Coded (EC) Ceph block pools in the specified namespace.
+
+    Args:
+        namespace (str): The namespace to search for EC pools.
+                         Defaults to the cluster namespace from config.
+
+    Returns:
+        list: A list of names of Erasure Coded Ceph block pools.
+    """
+    pool_obj = (
+        ocp.OCP(
+            kind=constants.CEPHBLOCKPOOL,
+            namespace=namespace,
+        )
+        .get()
+        .get("items", [])
+    )
+    return [
+        pool["metadata"]["name"]
+        for pool in pool_obj
+        if pool.get("spec", {}).get("erasureCoded")
+    ]
+
+
 def fetch_filesystem_names(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Fetch the list of Ceph Filesystems in the specified namespace.
@@ -358,22 +384,30 @@ def fetch_filesystem_names(namespace=config.ENV_DATA["cluster_namespace"]):
     return [fs["metadata"]["name"] for fs in filesystems.get("items", [])]
 
 
-def fetch_rados_namespaces(namespace=config.ENV_DATA["cluster_namespace"]):
+def fetch_rados_namespaces(
+    namespace=config.ENV_DATA["cluster_namespace"], only_ready=False
+):
     """
-    Verify if rados namespace exists
+    Fetch rados namespace names from the cluster.
 
     Args:
         namespace(str): cluster namespace
+        only_ready(bool): if True, return only namespaces in Ready phase
 
     Returns:
-        list: list of rados namespaces
+        list: list of rados namespace names
     """
     logger.info("Fetch radosnamespaces exist")
     rados_ns_obj = ocp.OCP(kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=namespace)
     result = rados_ns_obj.get()
     sample = result["items"]
-    rados_ns_list = [item.get("metadata").get("name") for item in sample]
-    return rados_ns_list
+    if only_ready:
+        return [
+            item.get("metadata").get("name")
+            for item in sample
+            if item.get("status", {}).get("phase") == constants.STATUS_READY
+        ]
+    return [item.get("metadata").get("name") for item in sample]
 
 
 def fetch_cephfilesystem_subvolume_groups(

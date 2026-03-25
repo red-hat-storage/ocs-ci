@@ -50,6 +50,7 @@ from ocs_ci.ocs.rados_utils import (
     fetch_pool_names,
     fetch_rados_namespaces,
     fetch_filesystem_names,
+    get_ec_pool_names,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -289,6 +290,28 @@ def verify_backing_ceph_storage_for_clients():
 
     all_checks = [check_consumers_svg(), check_consumers_rns()]
     return all(all_checks)
+
+
+@if_version(">4.18")
+def verify_internal_ceph_resources():
+    """
+    Verify that internal (builtin-implicit) RNS and SVG exist on the Provider cluster
+    before any client cluster is connected. Raises AssertionError if either check fails.
+    """
+    pool_names = fetch_pool_names()
+    ec_pool_names = set(get_ec_pool_names())
+    pool_names = [p for p in pool_names if p not in ec_pool_names]
+    rados_namespaces = fetch_rados_namespaces(only_ready=True)
+    filesystems = fetch_filesystem_names()
+    svg_names = get_cephfs_subvolumegroup_names()
+
+    rns_ok = check_consumer_rns("internal", pool_names, rados_namespaces)
+    svg_ok = check_consumer_svg("internal", filesystems, svg_names)
+
+    assert (
+        rns_ok
+    ), "Internal builtin-implicit RNS missing or not Ready on one or more pools"
+    assert svg_ok, "Internal 'csi' subvolumegroup missing on one or more filesystems"
 
 
 def enable_nested_virtualization():
@@ -606,7 +629,9 @@ def check_ceph_resources(cluster_names):
         f"from all consumers: {consumer_names}"
     )
     pool_names = fetch_pool_names()
-    rados_namespaces = fetch_rados_namespaces()
+    ec_pool_names = set(get_ec_pool_names())
+    pool_names = [p for p in pool_names if p not in ec_pool_names]
+    rados_namespaces = fetch_rados_namespaces(only_ready=True)
     svg_names = get_cephfs_subvolumegroup_names()
     filesystems = fetch_filesystem_names()
     rns_for_consumer_verified = []
@@ -1032,6 +1057,7 @@ class ExternalClients:
         # Backing Ceph resources
         logger.info("Verify backing Ceph storage (RNS + SVG)")
         rns_verified, svg_verified = check_ceph_resources(valid_clusters)
+        backing_storage_verified = verify_backing_ceph_storage_for_clients()
 
         # Aggregate failures
         failures = []
@@ -1052,6 +1078,10 @@ class ExternalClients:
             failures.append("RNS verification failed for one or more consumers")
         if not all(svg_verified):
             failures.append("SVG verification failed for one or more consumers")
+        if not backing_storage_verified:
+            failures.append(
+                "Backing Ceph storage verification failed for all consumers"
+            )
 
         if storage_consumer_checks and not all(storage_consumer_checks.values()):
             failed = [c for c, ok in storage_consumer_checks.items() if not ok]
@@ -1108,6 +1138,9 @@ class HostedClients(HyperShiftBase):
         Returns:
             list: the list of HostedODF objects for all hosted OCP clusters deployed by the method successfully
         """
+
+        log_step("Verify internal Ceph resources (builtin-implicit RNS + csi SVG)")
+        verify_internal_ceph_resources()
 
         # stage 1 deploy multiple hosted OCP clusters
         # Check which desired clusters already exist and only deploy the ones that don't.
@@ -1327,6 +1360,7 @@ class HostedClients(HyperShiftBase):
         rns_for_consumer_verified, svg_for_consumer_verified = check_ceph_resources(
             cluster_names
         )
+        backing_storage_verified = verify_backing_ceph_storage_for_clients()
 
         heartbeat_stable = []
         for cluster_name in cluster_names:
@@ -1351,6 +1385,9 @@ class HostedClients(HyperShiftBase):
         assert all(
             svg_for_consumer_verified
         ), "SVG for consumers of deployed clusters failed verification"
+        assert (
+            backing_storage_verified
+        ), "Backing Ceph storage verification failed for all consumers"
         assert all(
             storage_consumers_verified
         ), "Storage consumer resources verification failed for some of the clusters"
