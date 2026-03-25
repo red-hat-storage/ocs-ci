@@ -530,13 +530,16 @@ class TestCephfsStressWithFailures(E2ETest):
         logger.info(f"Waiting {rebalance_wait}s for rebalance to complete...")
         start_time = time.time()
         rebalance_complete = False
+        last_ceph_status_output = "Not available"
 
         while time.time() - start_time < rebalance_wait:
             try:
                 ceph_pod = pod.get_ceph_tools_pod()
                 ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
                 ceph_health = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph health")
-
+                last_ceph_status_output = ceph_pod.exec_ceph_cmd(
+                    ceph_cmd="ceph -s", format="", out_yaml_format=False
+                )
                 pg_states = ceph_status["pgmap"]["pgs_by_state"]
                 total_pg_count = ceph_status["pgmap"]["num_pgs"]
 
@@ -580,13 +583,14 @@ class TestCephfsStressWithFailures(E2ETest):
             except Exception as e:
                 logger.warning(f"Error checking rebalance status: {e}")
 
+            logger.debug(
+                "Wait for 10 seconds before next attempt to check re-balance status"
+            )
             time.sleep(10)
 
         assert rebalance_complete, (
-            f"Data re-balance failed to complete within the given timeout of {rebalance_wait} seconds. "
-            f"Cluster health: {ceph_health.get('status')}. "
-            f"Healthy PGs: {healthy_pg_count}/{total_pg_count}. "
-            f"Unhealthy PGs: {', '.join(unhealthy_pg_details) if unhealthy_pg_details else 'None'}"
+            f"Data re-balance failed to complete within the given timeout of {rebalance_wait} seconds.\n"
+            f"Last ceph status output:\n{last_ceph_status_output}"
         )
         logger.info(f"Waiting additional {health_check_wait}s for stabilization...")
         time.sleep(health_check_wait)
