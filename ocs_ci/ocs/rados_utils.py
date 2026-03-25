@@ -339,6 +339,32 @@ def fetch_pool_names(namespace=config.ENV_DATA["cluster_namespace"]):
     return [pool["metadata"]["name"] for pool in pool_obj]
 
 
+def get_ec_pool_names(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Return names of CephBlockPools configured as erasure-coded (dataChunks > 0).
+
+    Args:
+        namespace (str): The namespace to search for Ceph block pools.
+
+    Returns:
+        list: Names of erasure-coded CephBlockPools.
+
+    """
+    pool_obj = (
+        ocp.OCP(
+            kind=constants.CEPHBLOCKPOOL,
+            namespace=namespace,
+        )
+        .get()
+        .get("items")
+    )
+    return [
+        pool["metadata"]["name"]
+        for pool in pool_obj
+        if pool.get("spec", {}).get("erasureCoded", {}).get("dataChunks", 0) > 0
+    ]
+
+
 def fetch_filesystem_names(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Fetch the list of Ceph Filesystems in the specified namespace.
