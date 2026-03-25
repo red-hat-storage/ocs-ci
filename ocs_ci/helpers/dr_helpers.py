@@ -378,16 +378,22 @@ def relocate(
 
 
 def check_mirroring_status_ok(
-    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+    replaying_images=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
+    replaying_groups=None,
 ):
     """
-    Check if mirroring status has health OK and expected number of replaying images
+    Check if mirroring status has health OK and expected number of replaying images.
+    For ODF >= 4.21 with CG enabled, also validates group-level counters.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
         storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
+        replaying_groups (int): Expected number of consistency groups in replaying state.
+            Applicable for ODF >= 4.21 with CG enabled. 1 group per workload.
 
     Returns:
         bool: True if status contains expected health and states values, False otherwise
@@ -475,16 +481,33 @@ def check_mirroring_status_ok(
                 )
             return False
 
+    if is_cg_enabled() and ocs_version >= version.VERSION_4_21:
+        if replaying_groups is not None:
+            current_replaying_groups = mirroring_status.get("group_states", {}).get(
+                "replaying"
+            )
+            if current_replaying_groups != replaying_groups:
+                logger.warning(
+                    f"Unexpected replaying groups. Current: {current_replaying_groups}, "
+                    f"expected: {replaying_groups}"
+                )
+                return False
+
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
+def wait_for_mirroring_status_ok(
+    replaying_images=None, replaying_groups=None, timeout=900
+):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
-    images for each of the ODF cluster
+    images for each of the ODF cluster. For ODF >= 4.21 with CG enabled, also
+    validates group-level counters.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of consistency groups in replaying state.
+            Applicable for ODF >= 4.21 with CG enabled. 1 group per workload.
         timeout (int): time in seconds to wait for mirroring status reach OK
 
     Returns:
@@ -505,6 +528,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
             sleep=5,
             func=check_mirroring_status_ok,
             replaying_images=replaying_images,
+            replaying_groups=replaying_groups,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -1564,7 +1588,14 @@ def verify_last_group_sync_time(
                 "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
             )
     else:
-        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+        logger.info("Waiting for lastGroupSyncTime to be set")
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info("lastGroupSyncTime not yet set, retrying...")
 
     # Verify lastGroupSyncTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -2199,6 +2230,7 @@ def do_discovered_apps_cleanup(
     vrg_name,
     skip_resource_deletion_verification=False,
     ignore_resource_not_found=False,
+    extra_resources_to_delete=None,
 ):
     """
     Function to clean up Resources
@@ -2212,9 +2244,10 @@ def do_discovered_apps_cleanup(
         skip_resource_deletion_verification (bool): False by default and runs always, else resource verification is
                                                     handled separately in the test when Shared protection type is used
                                                     for DR protection via ACM UI
-
         ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
                                         DR protected via ACM UI is deleted, refer DFBUGS-3706
+        extra_resources_to_delete (list|None): Optional list of OCS resource objects (e.g. standalone
+                                        pods or PVCs created during test) to delete on old_primary.
 
     """
     restore_index = config.cur_index
@@ -2229,6 +2262,14 @@ def do_discovered_apps_cleanup(
         f'Progression status after 90 seconds is {drpc_obj.get()["status"]["progression"]}'
     )
     config.switch_to_cluster_by_name(old_primary)
+    if extra_resources_to_delete:
+        logger.info(
+            f"Deleting {len(extra_resources_to_delete)} extra resource(s) "
+            f"on old primary ({old_primary})"
+        )
+        for resource in extra_resources_to_delete:
+            logger.info(f"Deleting resource '{resource.name}'")
+            resource.delete(wait=False, force=True)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     if not ignore_resource_not_found:
 
@@ -2798,3 +2839,293 @@ def validate_protection_label(kind, namespace, protection_name=None):
     logger.info(
         f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
     )
+
+
+def validate_vrg_pvc_count(
+    namespace, expected_count, vrg_name="", timeout=900, discovered_apps=False
+):
+    """
+    Wait until VolumeReplicationGroup status.pvcgroups reflects the expected number
+    of protected PVCs. Applicable for both RBD and CephFS.
+
+    Args:
+        namespace (str): Workload namespace (used as VRG namespace unless discovered_apps)
+        expected_count (int): Expected number of PVCs in the VRG pvcgroups list
+        vrg_name (str): Name of the VRG resource (optional)
+        timeout (int): Time in seconds to wait
+        discovered_apps (bool): If True, VRG lives in openshift-dr-ops namespace
+
+    Raises:
+        TimeoutExpiredError: If VRG does not reflect expected count within timeout
+
+    """
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
+    logger.info(
+        f"Waiting for VRG pvcgroups to reflect {expected_count} PVCs "
+        f"in namespace {vrg_namespace}"
+    )
+
+    def _get_vrg_pvc_count():
+        vrg_obj = ocp.OCP(
+            kind=constants.VOLUME_REPLICATION_GROUP, namespace=vrg_namespace
+        )
+        items = vrg_obj.get().get("items", [])
+        if not items:
+            logger.info("No VRG found yet")
+            return 0
+        vrg_data = items[0] if not vrg_name else None
+        if vrg_name:
+            for item in items:
+                if item["metadata"]["name"] == vrg_name:
+                    vrg_data = item
+                    break
+        if not vrg_data:
+            logger.info(f"VRG {vrg_name} not found")
+            return 0
+        pvcgroups = vrg_data.get("status", {}).get("pvcgroups", [])
+        pvcs = []
+        for group in pvcgroups:
+            pvcs.extend(group.get("grouped", []))
+        logger.info(f"VRG pvcgroups current count: {len(pvcs)}")
+        return len(pvcs)
+
+    sampler = TimeoutSampler(timeout=timeout, sleep=15, func=_get_vrg_pvc_count)
+    for count in sampler:
+        if count == expected_count:
+            logger.info(f"VRG pvcgroups count matches expected: {expected_count}")
+            return
+    raise TimeoutExpiredError(
+        f"VRG pvcgroups did not reach expected count {expected_count} within {timeout}s"
+    )
+
+
+def validate_vgr_pvc_ref_list(namespace, expected_count, timeout=900):
+    """
+    Wait until VolumeGroupReplication status reflects the expected number of PVCs
+    in persistentVolumeClaimsRefList. Applicable for RBD with CG enabled only.
+
+    Args:
+        namespace (str): Namespace of the VolumeGroupReplication resource
+        expected_count (int): Expected number of PVC references
+        timeout (int): Time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: If VGR does not reflect expected count within timeout
+
+    """
+    logger.info(
+        f"Waiting for VGR persistentVolumeClaimsRefList to reflect "
+        f"{expected_count} PVCs in namespace {namespace}"
+    )
+
+    def _get_vgr_pvc_count():
+        vgr_obj = ocp.OCP(kind=constants.VOLUME_GROUP_REPLICATION, namespace=namespace)
+        items = vgr_obj.get().get("items", [])
+        if not items:
+            logger.info("No VGR found yet")
+            return 0
+        pvc_refs = items[0].get("status", {}).get("persistentVolumeClaimsRefList", None)
+        if pvc_refs is None:
+            logger.info("persistentVolumeClaimsRefList not found in VGR status yet")
+            return 0
+        pvc_names = [item["name"] for item in pvc_refs]
+        logger.info(
+            f"VGR persistentVolumeClaimsRefList ({len(pvc_names)} PVCs): {pvc_names}"
+        )
+        return len(pvc_refs)
+
+    sampler = TimeoutSampler(timeout=timeout, sleep=15, func=_get_vgr_pvc_count)
+    for count in sampler:
+        if count == expected_count:
+            logger.info(
+                f"VGR persistentVolumeClaimsRefList count matches expected: {expected_count}"
+            )
+            return
+    raise TimeoutExpiredError(
+        f"VGR persistentVolumeClaimsRefList did not reach expected count "
+        f"{expected_count} within {timeout}s"
+    )
+
+
+def get_vrg_pvc_names(namespace, vrg_name="", discovered_apps=False):
+    """
+    Return the list of PVC names from VolumeReplicationGroup status.pvcgroups.
+    Call after validate_vrg_pvc_count succeeds; no polling is needed.
+
+    Args:
+        namespace (str): Workload namespace (overridden by DR_OPS_NAMESPACE when discovered_apps)
+        vrg_name (str): VRG resource name; when empty the first VRG found is used
+        discovered_apps (bool): If True, look in openshift-dr-ops namespace
+
+    Returns:
+        list[str]: PVC names across all pvcgroups entries
+
+    """
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
+    vrg_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION_GROUP, namespace=vrg_namespace)
+    items = vrg_obj.get().get("items", [])
+    vrg_data = None
+    if vrg_name:
+        for item in items:
+            if item["metadata"]["name"] == vrg_name:
+                vrg_data = item
+                break
+    else:
+        vrg_data = items[0] if items else None
+    if not vrg_data:
+        logger.warning(f"VRG not found in namespace {vrg_namespace}")
+        return []
+    pvcgroups = vrg_data.get("status", {}).get("pvcgroups", [])
+    pvcs = []
+    for group in pvcgroups:
+        pvcs.extend(group.get("grouped", []))
+    logger.info(f"VRG pvcgroups PVC names: {pvcs}")
+    return pvcs
+
+
+def get_vgr_pvc_names(namespace):
+    """
+    Return the list of PVC names from VolumeGroupReplication
+    status.persistentVolumeClaimsRefList.
+    Call after validate_vgr_pvc_ref_list succeeds; no polling is needed.
+
+    Args:
+        namespace (str): Namespace of the VolumeGroupReplication resource
+
+    Returns:
+        list[str]: PVC names from the ref list
+
+    """
+    vgr_obj = ocp.OCP(kind=constants.VOLUME_GROUP_REPLICATION, namespace=namespace)
+    items = vgr_obj.get().get("items", [])
+    if not items:
+        logger.warning(f"No VGR found in namespace {namespace}")
+        return []
+    pvc_refs = items[0].get("status", {}).get("persistentVolumeClaimsRefList", [])
+    names = [item["name"] for item in pvc_refs if "name" in item]
+    logger.info(f"VGR persistentVolumeClaimsRefList PVC names: {names}")
+    return names
+
+
+def get_replication_source_names(namespace):
+    """
+    Return the list of ReplicationSource resource names in the given namespace.
+    For CephFS workloads each RS is named after its PVC.
+
+    Args:
+        namespace (str): Namespace of the ReplicationSource resources
+
+    Returns:
+        list[str]: RS resource names (== PVC names)
+
+    """
+    rs_obj = ocp.OCP(kind=constants.REPLICATION_SOURCE, namespace=namespace)
+    items = rs_obj.get().get("items", [])
+    names = [item["metadata"]["name"] for item in items]
+    logger.info(f"ReplicationSource names: {names}")
+    return names
+
+
+def get_replication_destination_names(namespace):
+    """
+    Return the list of ReplicationDestination resource names in the given namespace.
+    For CephFS workloads each RD is named after its PVC.
+
+    Args:
+        namespace (str): Namespace of the ReplicationDestination resources
+
+    Returns:
+        list[str]: RD resource names (== PVC names)
+
+    """
+    rd_obj = ocp.OCP(kind=constants.REPLICATIONDESTINATION, namespace=namespace)
+    items = rd_obj.get().get("items", [])
+    names = [item["metadata"]["name"] for item in items]
+    logger.info(f"ReplicationDestination names: {names}")
+    return names
+
+
+def get_replication_group_source_pvc_names(namespace):
+    """
+    Return the list of PVC names referenced by ReplicationGroupSource
+    status.replicationSources in the given namespace.
+
+    Args:
+        namespace (str): Namespace of the ReplicationGroupSource resource
+
+    Returns:
+        list[str]: PVC names (== RS names) listed in status.replicationSources
+
+    """
+    rgs_obj = ocp.OCP(kind=constants.REPLICATION_GROUP_SOURCE, namespace=namespace)
+    items = rgs_obj.get().get("items", [])
+    if not items:
+        logger.warning(f"No ReplicationGroupSource found in namespace {namespace}")
+        return []
+    sources = items[0].get("status", {}).get("replicationSources", [])
+    names = [s["name"] for s in sources if "name" in s]
+    logger.info(f"ReplicationGroupSource replicationSources PVC names: {names}")
+    return names
+
+
+def get_replication_group_destination_pvc_names(namespace):
+    """
+    Return the list of PVC names from ReplicationGroupDestination
+    spec.rdSpecs[*].protectedPVC.name in the given namespace.
+
+    Args:
+        namespace (str): Namespace of the ReplicationGroupDestination resource
+
+    Returns:
+        list[str]: PVC names listed in spec.rdSpecs
+
+    """
+    rgd_obj = ocp.OCP(kind=constants.REPLICATION_GROUP_DESTINATION, namespace=namespace)
+    items = rgd_obj.get().get("items", [])
+    if not items:
+        logger.warning(f"No ReplicationGroupDestination found in namespace {namespace}")
+        return []
+    rd_specs = items[0].get("spec", {}).get("rdSpecs", [])
+    names = [
+        spec["protectedPVC"]["name"]
+        for spec in rd_specs
+        if spec.get("protectedPVC", {}).get("name")
+    ]
+    logger.info(f"ReplicationGroupDestination rdSpecs PVC names: {names}")
+    return names
+
+
+def add_label_to_pvc(pvc_name, namespace, label_key, label_value):
+    """
+    Add a label to a PVC so it matches the DR pvcSelector.
+
+    Args:
+        pvc_name (str): Name of the PVC
+        namespace (str): Namespace of the PVC
+        label_key (str): Label key to add
+        label_value (str): Label value to set
+
+    """
+    logger.info(
+        f"Adding label {label_key}={label_value} to PVC {pvc_name} in namespace {namespace}"
+    )
+    pvc_ocp = ocp.OCP(kind=constants.PVC, namespace=namespace)
+    pvc_ocp.add_label(resource_name=pvc_name, label=f"{label_key}={label_value}")
+
+
+def remove_label_from_pvc(pvc_name, namespace, label_key):
+    """
+    Remove a label from a PVC to exclude it from the DR pvcSelector.
+    The PVC and its consuming pod remain running; only DR protection is dropped.
+
+    Args:
+        pvc_name (str): Name of the PVC
+        namespace (str): Namespace of the PVC
+        label_key (str): Label key to remove
+
+    """
+    logger.info(
+        f"Removing label '{label_key}' from PVC {pvc_name} in namespace {namespace}"
+    )
+    pvc_ocp = ocp.OCP(kind=constants.PVC, namespace=namespace)
+    pvc_ocp.remove_label(resource_name=pvc_name, label=label_key)
