@@ -227,7 +227,7 @@ def get_cluster_vm_namespace(cluster_name=None):
     return cluster_vm_namespaces[0]
 
 
-@config.run_with_provider_context_if_available
+@switch_to_orig_index_at_last
 def is_hosted_cluster(cluster_name=None):
     """
     Check if the cluster is a hosted cluster
@@ -241,6 +241,8 @@ def is_hosted_cluster(cluster_name=None):
     """
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+    config.switch_to_provider()
     ocp_obj = OCP(
         kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
     )
