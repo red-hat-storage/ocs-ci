@@ -220,6 +220,25 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 status=constants.NODE_NOT_READY,
                 timeout=300,
             )
+            # Force-delete DC app pods on the failed node to immediately
+            # release RBD/CephFS VolumeAttachments. For stopped (not
+            # terminated) nodes the CSI external-attacher waits for kubelet
+            # confirmation of unmount which never comes, leaving the
+            # VolumeAttachment permanently stuck and blocking the replacement
+            # pod with a Multi-Attach error. Force-deleting the old pod
+            # removes the VolumeAttachment without CSI confirmation.
+            log.info(
+                f"Force-deleting DC app pods on failed node "
+                f"{failure_node_obj[0].name} to release VolumeAttachments"
+            )
+            for dc_pod in dc_pod_obj:
+                try:
+                    dc_pod_node = get_pod_node(dc_pod)
+                    if dc_pod_node.name == failure_node_obj[0].name:
+                        log.info(f"Force-deleting pod {dc_pod.name} on failed node")
+                        dc_pod.delete(force=True, wait=False)
+                except Exception as ex:
+                    log.warning(f"Could not force-delete DC pod {dc_pod.name}: {ex}")
         elif failure == "terminate":
             nodes.terminate_nodes(failure_node_obj, wait=True)
             log.info(
