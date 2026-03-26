@@ -1,6 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
+from math import floor
 from time import sleep
 import pytest
 from functools import partial
@@ -216,15 +217,20 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         """
         # Start IO on each pod. RWX PVC will be used on two pods. So split the
         # size accordingly
+        pvcs_used = []
         for pod_obj in pod_objs:
             if pod_obj.pvc.get_pvc_vol_mode == "Block":
                 storage_type = "block"
             else:
                 storage_type = "fs"
             if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX:
-                io_size = int((self.pvc_size - 1) / 2)
+                io_size = floor((self.pvc_size - 2) / 2)
             else:
-                io_size = self.pvc_size - 1
+                io_size = self.pvc_size - 2
+            # If volumemode is block , run I/O from one pod only
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+                if pod_obj.pvc.name in pvcs_used:
+                    continue
             pod_obj.run_io(
                 storage_type=storage_type,
                 size=f"{io_size}G",
@@ -232,6 +238,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 fio_filename=f"{pod_obj.name}_io",
                 direct=int(storage_type == "block"),
             )
+            pvcs_used.append(pod_obj.pvc.name)
 
     @polarion_id("OCS-5176")
     def test_resource_deletion_during_pvc_pod_creation_deletion_and_io(
