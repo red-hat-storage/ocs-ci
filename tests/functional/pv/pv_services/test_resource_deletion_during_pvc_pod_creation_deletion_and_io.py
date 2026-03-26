@@ -237,6 +237,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 runtime=30,
                 fio_filename=f"{pod_obj.name}_io",
             )
+            pod_obj.io_running = True
             pvcs_used.append(pod_obj.pvc.name)
 
     @polarion_id("OCS-5176")
@@ -470,7 +471,9 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods having PVCs to delete.")
         for pod_obj in pods_for_pvc_io:
-            pod_obj.get_fio_results(300)
+            if pod_obj.io_running:
+                pod_obj.get_fio_results(300)
+                pod_obj.io_running = False
         log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
@@ -656,11 +659,13 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
-            fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get("jobs")[0].get("error")
-            assert (
-                err_count == 0
-            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
+            if pod_obj.io_running:
+                fio_result = pod_obj.get_fio_results()
+                pod_obj.io_running = False
+                err_count = fio_result.get("jobs")[0].get("error")
+                assert (
+                    err_count == 0
+                ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
         log.info("Verified IO result on pods.")
 
         # Verify that the new PVCs are usable by creating new pods
@@ -717,7 +722,9 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the new pods.")
         for pod_obj in new_pods:
-            get_fio_rw_iops(pod_obj)
+            if pod_obj.io_running:
+                get_fio_rw_iops(pod_obj)
+                pod_obj.io_running = False
         log.info("Verified IO result on the new pods.")
 
         # Verify number of pods of each daemon type
