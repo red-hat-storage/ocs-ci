@@ -471,7 +471,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods having PVCs to delete.")
         for pod_obj in pods_for_pvc_io:
-            if pod_obj.io_running:
+            if getattr(pod_obj, "io_running", False):
                 pod_obj.get_fio_results(300)
                 pod_obj.io_running = False
         log.info("Verified IO result on pods having PVCs to delete.")
@@ -659,7 +659,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
-            if pod_obj.io_running:
+            if getattr(pod_obj, "io_running", False):
                 fio_result = pod_obj.get_fio_results()
                 pod_obj.io_running = False
                 err_count = fio_result.get("jobs")[0].get("error")
@@ -722,7 +722,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the new pods.")
         for pod_obj in new_pods:
-            if pod_obj.io_running:
+            if getattr(pod_obj, "io_running", False):
                 get_fio_rw_iops(pod_obj)
                 pod_obj.io_running = False
         log.info("Verified IO result on the new pods.")
