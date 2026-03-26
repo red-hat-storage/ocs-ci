@@ -212,6 +212,14 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         if failure == "shutdown":
             nodes.stop_nodes(failure_node_obj, wait=True)
             log.info(f"Successfully powered off node: " f"{failure_node_obj[0].name}")
+            log.info(
+                f"Waiting for node {failure_node_obj[0].name} to reach NotReady state"
+            )
+            wait_for_nodes_status(
+                node_names=[failure_node_obj[0].name],
+                status=constants.NODE_NOT_READY,
+                timeout=300,
+            )
         elif failure == "terminate":
             nodes.terminate_nodes(failure_node_obj, wait=True)
             log.info(
@@ -219,10 +227,13 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 f"{failure_node_obj[0].name} instance"
             )
 
+        dc_pod_timeout = 900 if failure == "shutdown" else 720
         try:
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
-            pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=720)
+            pod.wait_for_dc_app_pods_to_reach_running_state(
+                dc_pod_obj, timeout=dc_pod_timeout
+            )
             log.info("All the dc pods reached running state")
             pod.wait_for_storage_pods(timeout=300)
 
