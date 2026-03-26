@@ -329,6 +329,8 @@ class StorageClusterSetup(object):
                 "second_device_type", defaults.DEVICE_TYPE
             )
             second_device_size = config.ENV_DATA.get("second_device_size")
+            # "1" is the minimum valid PVC request size; LSO ignores the actual
+            # value since local PVs are pre-provisioned with a fixed disk size.
             storage = f"{second_device_size}Gi" if second_device_size else "1"
             deviceset_data_2 = deepcopy(deviceset_data)
             deviceset_data_2["name"] = second_device_class
