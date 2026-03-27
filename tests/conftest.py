@@ -9335,9 +9335,9 @@ def scale_noobaa_db_pv(request):
         constants.OCS_OPERATOR_LABEL,
         constants.OPERATOR_LABEL,
         constants.NOOBAA_OPERATOR_POD_LABEL,
-        constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
+        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
     ]
-    nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
+    nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_47_AND_ABOVE)[0]
 
     def factory(pv_size="50"):
         """
