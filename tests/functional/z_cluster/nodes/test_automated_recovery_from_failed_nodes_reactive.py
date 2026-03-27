@@ -265,6 +265,18 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 )
             raise
 
+        # For shutdown, the stopped node is permanently replaced by the new
+        # node added before the failure. Terminate it now so the node object
+        # is removed from the cluster before health_check calls
+        # wait_for_nodes_status for all nodes (the stopped node would never
+        # return to Ready and would cause health_check to time out).
+        if failure == "shutdown":
+            nodes.terminate_nodes(failure_node_obj, wait=True)
+            log.info(
+                f"Successfully terminated stopped node : "
+                f"{failure_node_obj[0].name} instance"
+            )
+
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
