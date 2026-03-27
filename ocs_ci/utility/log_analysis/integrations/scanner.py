@@ -38,6 +38,7 @@ DEFAULT_MAX_FAILURES = 70
 DEFAULT_MAX_AGE_DAYS = 7
 DEFAULT_MAX_RUNS_PER_CYCLE = 5
 DEFAULT_PARALLEL = 3
+DEFAULT_LONG_RUN_HOURS = 3
 DEFAULT_SESSIONS_BASE = "/mnt/ocsci-jenkins/log_analysis/sessions_dir"
 DEFAULT_LOCK_FILE = "/mnt/ocsci-jenkins/log_analysis/session_manage/scanner.lock"
 DEFAULT_VERSION_FALLBACK = "4_21"
@@ -62,8 +63,12 @@ def load_state(state_file: str) -> dict:
             state = json.load(f)
         if "pending" not in state:
             state["pending"] = []
+        if "in_progress" not in state:
+            state["in_progress"] = []
+        if "long_run" not in state:
+            state["long_run"] = []
         return state
-    return {"processed": {}, "pending": []}
+    return {"processed": {}, "pending": [], "in_progress": [], "long_run": []}
 
 
 def save_state(state_file: str, state: dict):
@@ -145,6 +150,7 @@ def find_runs_to_analyze(
     runs = []
     processed = state.get("processed", {})
     pending_xmls = {r["xml_path"] for r in state.get("pending", [])}
+    in_progress_xmls = {r["xml_path"] for r in state.get("in_progress", [])}
     cutoff_time = 0.0
     if max_age_days > 0:
         cutoff_time = time.time() - (max_age_days * 86400)
@@ -189,7 +195,11 @@ def find_runs_to_analyze(
 
             for xml_path in xml_paths:
                 # Already processed or pending?
-                if xml_path in processed or xml_path in pending_xmls:
+                if (
+                    xml_path in processed
+                    or xml_path in pending_xmls
+                    or xml_path in in_progress_xmls
+                ):
                     continue
 
                 if not has_failures(xml_path):
@@ -321,6 +331,87 @@ def _log_process_result(proc, run: dict, output_path: str, log_path: str):
         )
 
 
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is still running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
+def _reap_workers(
+    state: dict, now_str: str, long_run_hours: float = DEFAULT_LONG_RUN_HOURS
+):
+    """Check in_progress workers: reap dead ones, flag long-running ones.
+
+    - Dead PIDs: moved from in_progress to processed (status based on output file).
+    - Workers running > long_run_hours: added to long_run list (stay in in_progress).
+
+    Returns number of reaped (dead) workers.
+    """
+    reaped = 0
+    still_active = []
+    long_run_xmls = {r["xml_path"] for r in state.get("long_run", [])}
+
+    for entry in state.get("in_progress", []):
+        pid = entry.get("pid")
+        if pid is None or not _is_pid_alive(pid):
+            # Worker finished or crashed — move to processed
+            xml_path = entry["xml_path"]
+            output_path = entry.get("output_path", "")
+            success = os.path.isfile(output_path) if output_path else False
+            state["processed"][xml_path] = {
+                "timestamp": now_str,
+                "status": "done" if success else "failed",
+                "version": entry.get("version", ""),
+                "logs_dir": entry.get("logs_dir", ""),
+            }
+            # Also remove from long_run if present
+            state["long_run"] = [
+                r for r in state.get("long_run", []) if r["xml_path"] != xml_path
+            ]
+            status = "done" if success else "failed"
+            log.info(
+                f"  Worker PID {pid} finished ({status}): "
+                f"{entry.get('logs_dir', '')}"
+            )
+            reaped += 1
+        else:
+            still_active.append(entry)
+
+    state["in_progress"] = still_active
+
+    # Flag long-running workers
+    for entry in state["in_progress"]:
+        started = entry.get("started_at", "")
+        if not started or entry["xml_path"] in long_run_xmls:
+            continue
+        try:
+            started_dt = datetime.fromisoformat(started)
+            elapsed_hours = (
+                datetime.now(timezone.utc) - started_dt
+            ).total_seconds() / 3600
+            if elapsed_hours >= long_run_hours:
+                state["long_run"].append(
+                    {
+                        "xml_path": entry["xml_path"],
+                        "logs_dir": entry.get("logs_dir", ""),
+                        "pid": entry.get("pid"),
+                        "started_at": started,
+                        "flagged_at": now_str,
+                    }
+                )
+                log.info(
+                    f"  Worker PID {entry.get('pid')} flagged as long_run "
+                    f"({elapsed_hours:.1f}h): {entry.get('logs_dir', '')}"
+                )
+        except (ValueError, TypeError):
+            pass
+
+    return reaped
+
+
 def _backup_state(state_file: str, max_backups: int = 7):
     """Create a daily backup of the state file.
 
@@ -357,7 +448,15 @@ def _backup_state(state_file: str, max_backups: int = 7):
 
 
 def scan(args):
-    """Main scan cycle."""
+    """Main scan cycle.
+
+    Non-blocking architecture:
+    - Reap dead workers from in_progress (move to processed)
+    - Flag workers exceeding long_run threshold
+    - Discover new runs and merge into pending
+    - Launch new workers up to available slots (parallel - in_progress)
+    - Save state and exit immediately (don't wait for workers)
+    """
     now = datetime.now(timezone.utc).isoformat()
 
     # Step 0: Daily state backup
@@ -367,13 +466,28 @@ def scan(args):
     if not args.no_git_pull:
         git_pull(args.ocs_ci_path)
 
-    # Step 2: Load state
+    # Step 2: Load state and reap finished workers
     state = load_state(args.state_file)
+    reaped = _reap_workers(state, now, args.long_run_hours)
+    if reaped:
+        log.info(f"Reaped {reaped} finished worker(s)")
+
+    active_count = len(state["in_progress"])
+    long_run_count = len(state.get("long_run", []))
+    if active_count:
+        log.info(
+            f"Active workers: {active_count}"
+            + (f" ({long_run_count} long_run)" if long_run_count else "")
+        )
 
     # Step 3: Discover new runs and merge into pending queue
+    # Also exclude in_progress XMLs from discovery
+    in_progress_xmls = {r["xml_path"] for r in state["in_progress"]}
     new_runs = find_runs_to_analyze(
         args.scan_dir, state, max_age_days=args.max_age_days
     )
+    # Filter out any runs already in_progress
+    new_runs = [r for r in new_runs if r["xml_path"] not in in_progress_xmls]
 
     # Drop pending entries whose XML files no longer exist
     valid_pending = [r for r in state["pending"] if os.path.isfile(r["xml_path"])]
@@ -393,95 +507,102 @@ def scan(args):
     state["pending"] = valid_pending
     save_state(args.state_file, state)
 
+    if args.dry_run:
+        if active_count:
+            print(f"\nActive workers: {active_count}")
+            for entry in state["in_progress"]:
+                is_long = entry["xml_path"] in {
+                    r["xml_path"] for r in state.get("long_run", [])
+                }
+                flag = " [LONG_RUN]" if is_long else ""
+                print(f"  PID {entry.get('pid')}: {entry.get('logs_dir', '')}{flag}")
+        if valid_pending:
+            print(f"\nPending: {len(valid_pending)}")
+            for run in valid_pending:
+                version = run["version"]
+                history_dir = os.path.join(args.history_base, f"{version}_history_dir")
+                cache_dir = os.path.join(args.cache_base, f"{version}_cache_dir")
+                sessions_dir = os.path.join(
+                    args.sessions_base, f"{version}_sessions_dir"
+                )
+                suffix = _xml_suffix(run["xml_path"])
+                print(f"  {run['logs_dir']}")
+                print(f"    XML:           {os.path.basename(run['xml_path'])}")
+                print(f"    ODF version:   {version}")
+                print(f"    output:        ai_analysis_report{suffix}.html")
+                print(f"    history-dir:   {history_dir}")
+                print(f"    cache-dir:     {cache_dir}")
+                print(f"    sessions-dir:  {sessions_dir}")
+        else:
+            print("\nNo pending runs")
+        return
+
+    # Step 4: Launch workers up to available slots
+    parallel = max(1, args.parallel)
+    available_slots = parallel - active_count
+    if available_slots <= 0:
+        log.info(
+            f"All {parallel} worker slots occupied, " f"{len(valid_pending)} pending"
+        )
+        return
+
     if not valid_pending:
-        log.info("No pending runs to analyze")
+        if not active_count:
+            log.info("No pending runs to analyze")
         return
 
     log.info(f"{len(valid_pending)} pending run(s) in queue")
 
-    if args.dry_run:
-        for run in valid_pending:
-            version = run["version"]
-            history_dir = os.path.join(args.history_base, f"{version}_history_dir")
-            cache_dir = os.path.join(args.cache_base, f"{version}_cache_dir")
-            sessions_dir = os.path.join(args.sessions_base, f"{version}_sessions_dir")
-            suffix = _xml_suffix(run["xml_path"])
-            print(f"  {run['logs_dir']}")
-            print(f"    XML:           {os.path.basename(run['xml_path'])}")
-            print(f"    ODF version:   {version}")
-            print(f"    output:        ai_analysis_report{suffix}.html")
-            print(f"    history-dir:   {history_dir}")
-            print(f"    cache-dir:     {cache_dir}")
-            print(f"    sessions-dir:  {sessions_dir}")
-        return
-
-    # Step 4: Analyze runs (limited per cycle, parallel)
+    # Respect max_runs_per_cycle as a limit on NEW launches this cycle
     limit = args.max_runs_per_cycle
-    to_process = valid_pending[:limit] if limit > 0 else list(valid_pending)
-    if limit > 0 and len(valid_pending) > limit:
-        log.info(f"Processing {limit} of {len(valid_pending)} pending runs this cycle")
+    to_launch = min(available_slots, len(valid_pending))
+    if limit > 0:
+        to_launch = min(to_launch, limit)
 
-    parallel = max(1, args.parallel)
-    active = {}  # pid -> (proc, run, output_path, log_path, log_fd)
-    work_queue = list(to_process)
-    total = len(work_queue)
-    completed = 0
+    launched = 0
+    for run in valid_pending[:to_launch]:
+        cmd, output_path = _build_analysis_cmd(run, args)
+        suffix = _xml_suffix(run["xml_path"])
+        log_path = os.path.join(run["logs_dir"], f"ai_analysis{suffix}.log")
+        xml_name = os.path.basename(run["xml_path"])
+        log.info(
+            f"Launching [{launched + 1}/{to_launch}]: "
+            f"{run['logs_dir']} [{xml_name}] (ODF {run['version']})"
+        )
+        log.info(f"  Live log: {log_path}")
+        log_fd = open(log_path, "w")
+        proc = subprocess.Popen(
+            cmd,
+            cwd=args.ocs_ci_path,
+            stdout=log_fd,
+            stderr=log_fd,
+            start_new_session=True,  # Detach from scanner process
+        )
+        log_fd.close()  # Scanner doesn't need the fd, worker owns it
 
-    while work_queue or active:
-        # Launch new processes up to parallel limit
-        while work_queue and len(active) < parallel:
-            run = work_queue.pop(0)
-            cmd, output_path = _build_analysis_cmd(run, args)
-            suffix = _xml_suffix(run["xml_path"])
-            log_path = os.path.join(run["logs_dir"], f"ai_analysis{suffix}.log")
-            xml_name = os.path.basename(run["xml_path"])
-            log.info(
-                f"Launching [{completed + len(active) + 1}/{total}]: "
-                f"{run['logs_dir']} [{xml_name}] (ODF {run['version']})"
-            )
-            log.info(f"  Live log: {log_path}")
-            log_fd = open(log_path, "w")
-            proc = subprocess.Popen(
-                cmd,
-                cwd=args.ocs_ci_path,
-                stdout=log_fd,
-                stderr=log_fd,
-            )
-            active[proc.pid] = (proc, run, output_path, log_path, log_fd)
-
-        if not active:
-            break
-
-        # Wait for any child to finish
-        try:
-            finished_pid, wait_status = os.waitpid(-1, 0)
-        except ChildProcessError:
-            break
-
-        if finished_pid in active:
-            proc, run, output_path, log_path, log_fd = active.pop(finished_pid)
-            log_fd.close()
-            # Extract exit code from waitpid status (Popen.returncode stays None
-            # when we use os.waitpid directly instead of proc.wait)
-            exit_code = os.waitstatus_to_exitcode(wait_status)
-            proc.returncode = exit_code
-            _log_process_result(proc, run, output_path, log_path)
-            success = exit_code == 0
-            # Move from pending to processed (keyed by xml_path)
-            state["processed"][run["xml_path"]] = {
-                "timestamp": now,
-                "status": "done" if success else "failed",
-                "version": run["version"],
+        # Add to in_progress with PID and start time
+        state["in_progress"].append(
+            {
                 "logs_dir": run["logs_dir"],
+                "xml_path": run["xml_path"],
+                "version": run["version"],
+                "pid": proc.pid,
+                "started_at": now,
+                "output_path": output_path,
             }
-            state["pending"] = [
-                r for r in state["pending"] if r["xml_path"] != run["xml_path"]
-            ]
-            save_state(args.state_file, state)
-            completed += 1
+        )
+        # Remove from pending
+        state["pending"] = [
+            r for r in state["pending"] if r["xml_path"] != run["xml_path"]
+        ]
+        launched += 1
 
+    save_state(args.state_file, state)
     remaining = len(state["pending"])
-    log.info(f"Cycle complete: {completed} runs processed, {remaining} pending")
+    total_active = len(state["in_progress"])
+    log.info(
+        f"Launched {launched} worker(s), " f"{total_active} active, {remaining} pending"
+    )
 
 
 def main(argv=None):
@@ -558,6 +679,12 @@ def main(argv=None):
         type=int,
         default=DEFAULT_MAX_FAILURES,
         help=f"Max failures to analyze per run (default: {DEFAULT_MAX_FAILURES})",
+    )
+    parser.add_argument(
+        "--long-run-hours",
+        type=float,
+        default=DEFAULT_LONG_RUN_HOURS,
+        help=f"Hours before flagging a worker as long_run (default: {DEFAULT_LONG_RUN_HOURS})",
     )
     parser.add_argument(
         "--dry-run",
