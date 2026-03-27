@@ -390,7 +390,7 @@ def _reap_workers(
         try:
             started_dt = datetime.fromisoformat(started)
             elapsed_hours = (
-                datetime.now(timezone.utc) - started_dt
+                datetime.now().astimezone() - started_dt
             ).total_seconds() / 3600
             if elapsed_hours >= long_run_hours:
                 state["long_run"].append(
@@ -457,7 +457,7 @@ def scan(args):
     - Launch new workers up to available slots (parallel - in_progress)
     - Save state and exit immediately (don't wait for workers)
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now().astimezone().isoformat()
 
     # Step 0: Daily state backup
     _backup_state(args.state_file)
@@ -711,7 +711,7 @@ def main(argv=None):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    log.info(f"Scanner starting at {datetime.now(timezone.utc).isoformat()}")
+    log.info(f"Scanner starting at {datetime.now().astimezone().isoformat()}")
     start = time.monotonic()
 
     # Acquire exclusive lock to prevent concurrent scanner instances
