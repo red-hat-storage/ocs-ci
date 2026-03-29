@@ -985,6 +985,65 @@ function showFieldsForCategory(idx, cat, originalCat) {
     if (selected) selected.classList.add('changed');
   }
 }
+
+function submitFeedback(idx) {
+  var form = document.getElementById('fb-form-' + idx);
+  var card = form.closest('.failure-card');
+  var testName = card.dataset.testName;
+  var emailInput = document.getElementById('fb-email-' + idx);
+
+  // Validate email per D-04
+  if (!emailInput.value || !emailInput.checkValidity()) {
+    emailInput.reportValidity();
+    return;
+  }
+
+  var originalCat = form.querySelector('input[name="original_category"]').value;
+  var selectedCat = form.querySelector('input[name="category"]:checked').value;
+
+  // Per D-15: only include fields the user modified (compare with data-original)
+  var editedFields = {};
+  form.querySelectorAll('textarea[data-original]').forEach(function(ta) {
+    if (ta.value !== ta.dataset.original) {
+      editedFields[ta.name] = ta.value;
+    }
+  });
+
+  var comment = form.querySelector('textarea[name="comment"]').value;
+
+  var feedback = {
+    version: 1,
+    timestamp: new Date().toISOString(),
+    test_name: testName,
+    user_email: emailInput.value,
+    original_category: originalCat,
+    new_category: selectedCat,
+    category_changed: originalCat !== selectedCat,
+    original_confidence: parseFloat(form.querySelector('input[name="original_confidence"]').value),
+    edited_fields: editedFields,
+    comment: comment || null,
+    cache_file: card.dataset.cacheFile || null
+  };
+
+  // Download as JSON file
+  var blob = new Blob([JSON.stringify(feedback, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  // Sanitize test name for filename
+  var safeName = testName.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 80);
+  link.download = 'feedback-' + safeName + '.json';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  // Show confirmation state per D-14
+  var btn = document.getElementById('fb-btn-' + idx);
+  btn.classList.add('saved');
+  var status = document.getElementById('fb-status-' + idx);
+  status.textContent = '\u2713 Downloaded';
+}
 </script>
 
 </div><!-- /container -->
