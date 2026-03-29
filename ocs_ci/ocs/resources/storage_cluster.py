@@ -484,7 +484,7 @@ def ocs_install_verification(
             log.info("Verifying OSDs are distributed evenly across worker nodes")
             ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
             osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)["items"]
-            deviceset_count = get_deviceset_count()
+            deviceset_count = get_total_deviceset_count()
             node_names = [osd["spec"]["nodeName"] for osd in osds]
             for node in node_names:
                 assert (
@@ -1987,7 +1987,22 @@ def get_osd_size():
 
 def get_deviceset_count():
     """
-    Get storageDeviceSets count  from storagecluster
+    Get the first storageDeviceSet count from storagecluster
+
+    Returns:
+        int: The count of the first storageDeviceSet
+
+    """
+    sc = get_storage_cluster()
+    return int(
+        sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("count")
+    )
+
+
+def get_total_deviceset_count():
+    """
+    Get the total storageDeviceSets count from storagecluster,
+    summed across all storageDeviceSets.
 
     Returns:
         int: Total count across all storageDeviceSets
