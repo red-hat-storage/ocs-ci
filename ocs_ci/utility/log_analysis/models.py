@@ -121,6 +121,7 @@ class FailureAnalysis:
     suggested_fix: dict = field(default_factory=dict)
     cache_file: str = ""
     cache_test: str = ""
+    cache_hit: bool = False
 
     def to_dict(self) -> dict:
         d = {

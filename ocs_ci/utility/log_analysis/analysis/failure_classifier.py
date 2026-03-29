@@ -187,6 +187,7 @@ class FailureClassifier:
                 if cache_result:
                     cached, cache_path = cache_result
                     cached["cache_file"] = self._cache_path_to_url(cache_path)
+                    cached["cache_hit"] = True
                     # Track origin test name when cache hit is from a different test
                     cached_test_name = cached.pop("_cached_test_name", "")
                     cache_hit_count += len(group_failures)
@@ -292,6 +293,9 @@ class FailureClassifier:
                         status=representative.status.value,
                         polarion_id=representative.polarion_id or "",
                     )
+                    cache_path = self.cache._cache_path(sig)
+                    analysis_dict["cache_file"] = self._cache_path_to_url(cache_path)
+                analysis_dict["cache_hit"] = False
 
             except Exception as e:
                 ai_call_count += 1  # Count failed calls toward the limit
@@ -709,11 +713,17 @@ class FailureClassifier:
         mg_path = f"{base}/{safe_name}_ocs_logs"
 
         if is_local:
+            # Check directory exists before generating URL
+            if not os.path.isdir(mg_path):
+                return ""
             # Convert local path to magna HTTP URL
             magna_mount = "/mnt/ocsci-jenkins/"
             magna_http = "http://magna002.ceph.redhat.com/ocsci-jenkins/"
             if mg_path.startswith(magna_mount):
                 return magna_http + mg_path[len(magna_mount) :]
+            return ""
+        # HTTP: check directory exists by listing it
+        if not self._list_dir(mg_path):
             return ""
         return mg_path
 
@@ -1081,6 +1091,7 @@ class FailureClassifier:
             suggested_fix=analysis_dict.get("suggested_fix", {}),
             cache_file=analysis_dict.get("cache_file", ""),
             cache_test=analysis_dict.get("cache_test", ""),
+            cache_hit=analysis_dict.get("cache_hit", False),
         )
 
     @staticmethod
