@@ -426,6 +426,22 @@ body {
   font-weight: 600;
 }
 .feedback-panel .btn-save:hover { opacity: 0.9; }
+.fb-static-text {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+.fb-agree-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+}
 .feedback-panel .save-status {
   font-size: 12px;
   color: var(--green);
@@ -849,15 +865,16 @@ body {
           </div>
 
           {# Category selection - per D-05 #}
+          {% set card_idx = loop.index %}
           <fieldset>
             <legend>Classification</legend>
             {% for cat in ['product_bug', 'test_bug', 'infra_issue', 'flaky_test', 'known_issue'] %}
             <label class="radio-label{% if fa.category.value != cat %} {% else %} {% endif %}"
-                   id="fb-cat-label-{{ loop.parent.loop.index }}-{{ cat }}">
+                   id="fb-cat-label-{{ card_idx }}-{{ cat }}">
               <input type="radio" name="category" value="{{ cat }}"
                      {% if fa.category.value == cat %}checked{% endif %}
                      data-original="{{ fa.category.value }}"
-                     onclick="showFieldsForCategory({{ loop.parent.loop.index }}, '{{ cat }}', '{{ fa.category.value }}')">
+                     onclick="showFieldsForCategory({{ card_idx }}, '{{ cat }}', '{{ fa.category.value }}')">
               {{ cat | replace('_', ' ') | title }}
             </label>
             {% endfor %}
@@ -866,41 +883,67 @@ body {
           {# Hidden field for original category per D-15 #}
           <input type="hidden" name="original_category" value="{{ fa.category.value }}">
           <input type="hidden" name="original_confidence" value="{{ fa.confidence }}">
+          <input type="hidden" name="run_id" value="{{ run.run_metadata.run_id | default('', true) | e }}">
+          <input type="hidden" name="logs_url" value="{{ run.run_metadata.logs_url | default('', true) | e }}">
+          <input type="hidden" name="jenkins_url" value="{{ run.run_metadata.jenkins_url | default('', true) | e }}">
 
           {# Context-dependent fields per D-06, D-07 #}
 
-          {# Common fields: root_cause, recommended_action, evidence (all categories) #}
+          {# Common fields: root_cause, recommended_action, evidence — static text + agree/disagree #}
           <div class="field-group">
             <div class="field-label">Root Cause</div>
-            <textarea name="root_cause" rows="3" data-original="{{ fa.root_cause_summary | e }}">{{ fa.root_cause_summary | e }}</textarea>
+            <div class="fb-static-text">{{ fa.root_cause_summary | e }}</div>
+            <div class="fb-agree-row">
+              <label class="radio-label"><input type="radio" name="root_cause_agree" value="true" checked> Agree</label>
+              <label class="radio-label"><input type="radio" name="root_cause_agree" value="false"> Disagree</label>
+            </div>
           </div>
           <div class="field-group">
             <div class="field-label">Recommended Action</div>
-            <textarea name="recommended_action" rows="3" data-original="{{ fa.recommended_action | e }}">{{ fa.recommended_action | e }}</textarea>
+            <div class="fb-static-text">{{ fa.recommended_action | e }}</div>
+            <div class="fb-agree-row">
+              <label class="radio-label"><input type="radio" name="recommended_action_agree" value="true" checked> Agree</label>
+              <label class="radio-label"><input type="radio" name="recommended_action_agree" value="false"> Disagree</label>
+            </div>
           </div>
           <div class="field-group">
             <div class="field-label">Evidence</div>
-            <textarea name="evidence" rows="3" data-original="{{ fa.evidence | join('\n') | e }}">{{ fa.evidence | join('\n') | e }}</textarea>
+            <div class="fb-static-text">{{ fa.evidence | join('\n') | e }}</div>
+            <div class="fb-agree-row">
+              <label class="radio-label"><input type="radio" name="evidence_agree" value="true" checked> Agree</label>
+              <label class="radio-label"><input type="radio" name="evidence_agree" value="false"> Disagree</label>
+            </div>
           </div>
 
-          {# product_bug fields per D-06 #}
+          {# product_bug fields: bug info + suggested fix as static text with agree/disagree #}
           <div class="category-fields{% if fa.category.value == 'product_bug' %} active{% endif %}" id="fields-{{ loop.index }}-product_bug">
+            {% if fa.bug_details %}
             <div class="field-group">
-              <div class="field-label">Bug Subject</div>
-              <textarea name="bug_subject" rows="2" data-original="{{ fa.bug_details.bug_subject | default('', true) | e }}">{{ fa.bug_details.bug_subject | default('', true) | e }}</textarea>
+              <div class="field-label">Bug Info</div>
+              <div class="fb-static-text">
+                {% if fa.bug_details.bug_subject %}<strong>{{ fa.bug_details.bug_subject | e }}</strong><br>{% endif %}
+                {% if fa.bug_details.description %}{{ fa.bug_details.description | e }}{% endif %}
+              </div>
+              <div class="fb-agree-row">
+                <label class="radio-label"><input type="radio" name="bug_info_agree" value="true" checked> Agree</label>
+                <label class="radio-label"><input type="radio" name="bug_info_agree" value="false"> Disagree</label>
+              </div>
             </div>
+            {% endif %}
+            {% if fa.suggested_fix %}
             <div class="field-group">
-              <div class="field-label">Bug Description</div>
-              <textarea name="bug_description" rows="3" data-original="{{ fa.bug_details.description | default('', true) | e }}">{{ fa.bug_details.description | default('', true) | e }}</textarea>
+              <div class="field-label">Suggested Fix</div>
+              <div class="fb-static-text">
+                {% if fa.suggested_fix.file %}<strong>File:</strong> <code>{{ fa.suggested_fix.file | e }}{% if fa.suggested_fix.line %}:{{ fa.suggested_fix.line }}{% endif %}</code><br>{% endif %}
+                {% if fa.suggested_fix.function %}<strong>Function:</strong> <code>{{ fa.suggested_fix.function | e }}</code><br>{% endif %}
+                {% if fa.suggested_fix.description %}{{ fa.suggested_fix.description | e }}{% endif %}
+              </div>
+              <div class="fb-agree-row">
+                <label class="radio-label"><input type="radio" name="suggested_fix_agree" value="true" checked> Agree</label>
+                <label class="radio-label"><input type="radio" name="suggested_fix_agree" value="false"> Disagree</label>
+              </div>
             </div>
-          </div>
-
-          {# test_bug fields per D-06 #}
-          <div class="category-fields{% if fa.category.value == 'test_bug' %} active{% endif %}" id="fields-{{ loop.index }}-test_bug">
-            <div class="field-group">
-              <div class="field-label">Suggested Fix Description</div>
-              <textarea name="suggested_fix_desc" rows="3" data-original="{{ fa.suggested_fix.description | default('', true) | e }}">{{ fa.suggested_fix.description | default('', true) | e }}</textarea>
-            </div>
+            {% endif %}
           </div>
 
           {# Comment per D-08 #}
@@ -1001,15 +1044,25 @@ function submitFeedback(idx) {
   var originalCat = form.querySelector('input[name="original_category"]').value;
   var selectedCat = form.querySelector('input[name="category"]:checked').value;
 
-  // Per D-15: only include fields the user modified (compare with data-original)
-  var editedFields = {};
-  form.querySelectorAll('textarea[data-original]').forEach(function(ta) {
-    if (ta.value !== ta.dataset.original) {
-      editedFields[ta.name] = ta.value;
-    }
-  });
+  // Agree/disagree for common analysis fields
+  var getAgree = function(name) {
+    var el = form.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value === 'true' : true;
+  };
 
   var comment = form.querySelector('textarea[name="comment"]').value;
+
+  // Require comment if any disagree or category changed
+  var hasDisagree = !getAgree('root_cause_agree') || !getAgree('recommended_action_agree') || !getAgree('evidence_agree') || !getAgree('bug_info_agree') || !getAgree('suggested_fix_agree');
+  var catChanged = originalCat !== selectedCat;
+  if ((hasDisagree || catChanged) && !comment.trim()) {
+    var commentEl = form.querySelector('textarea[name="comment"]');
+    commentEl.focus();
+    commentEl.style.borderColor = '#ef4444';
+    commentEl.placeholder = 'Comment is required when you disagree or change the category';
+    return;
+  }
+
 
   var feedback = {
     version: 1,
@@ -1020,7 +1073,14 @@ function submitFeedback(idx) {
     new_category: selectedCat,
     category_changed: originalCat !== selectedCat,
     original_confidence: parseFloat(form.querySelector('input[name="original_confidence"]').value),
-    edited_fields: editedFields,
+    run_id: form.querySelector('input[name="run_id"]').value || null,
+    logs_url: form.querySelector('input[name="logs_url"]').value || null,
+    jenkins_url: form.querySelector('input[name="jenkins_url"]').value || null,
+    root_cause_agree: getAgree('root_cause_agree'),
+    recommended_action_agree: getAgree('recommended_action_agree'),
+    evidence_agree: getAgree('evidence_agree'),
+    bug_info_agree: getAgree('bug_info_agree'),
+    suggested_fix_agree: getAgree('suggested_fix_agree'),
     comment: comment || null,
     cache_file: card.dataset.cacheFile || null
   };
