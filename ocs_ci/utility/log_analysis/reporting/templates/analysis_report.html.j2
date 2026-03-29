@@ -834,6 +834,88 @@ body {
         </div>
       </div>
       {% endif %}
+
+      {# Feedback Form (per D-01, D-02, D-03) #}
+      <button class="traceback-toggle feedback-toggle" id="fb-btn-{{ loop.index }}" style="margin-left:8px" onclick="event.stopPropagation();var el=document.getElementById('fb-panel-{{ loop.index }}');el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Feedback':'Provide Feedback'">Provide Feedback</button>
+      <div class="feedback-panel" id="fb-panel-{{ loop.index }}">
+        <form class="feedback-form" id="fb-form-{{ loop.index }}" onsubmit="event.preventDefault();submitFeedback({{ loop.index }})">
+          {# Email / Name - required per D-04 #}
+          <div class="field-group">
+            <div class="field-label">Your Red Hat Email (required)</div>
+            <input type="email" name="user_email" required
+                   pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$"
+                   placeholder="username@redhat.com"
+                   id="fb-email-{{ loop.index }}">
+          </div>
+
+          {# Category selection - per D-05 #}
+          <fieldset>
+            <legend>Classification</legend>
+            {% for cat in ['product_bug', 'test_bug', 'infra_issue', 'flaky_test', 'known_issue'] %}
+            <label class="radio-label{% if fa.category.value != cat %} {% else %} {% endif %}"
+                   id="fb-cat-label-{{ loop.parent.loop.index }}-{{ cat }}">
+              <input type="radio" name="category" value="{{ cat }}"
+                     {% if fa.category.value == cat %}checked{% endif %}
+                     data-original="{{ fa.category.value }}"
+                     onclick="showFieldsForCategory({{ loop.parent.loop.index }}, '{{ cat }}', '{{ fa.category.value }}')">
+              {{ cat | replace('_', ' ') | title }}
+            </label>
+            {% endfor %}
+          </fieldset>
+
+          {# Hidden field for original category per D-15 #}
+          <input type="hidden" name="original_category" value="{{ fa.category.value }}">
+          <input type="hidden" name="original_confidence" value="{{ fa.confidence }}">
+
+          {# Context-dependent fields per D-06, D-07 #}
+
+          {# Common fields: root_cause, recommended_action, evidence (all categories) #}
+          <div class="field-group">
+            <div class="field-label">Root Cause</div>
+            <textarea name="root_cause" rows="3" data-original="{{ fa.root_cause_summary | e }}">{{ fa.root_cause_summary | e }}</textarea>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Recommended Action</div>
+            <textarea name="recommended_action" rows="3" data-original="{{ fa.recommended_action | e }}">{{ fa.recommended_action | e }}</textarea>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Evidence</div>
+            <textarea name="evidence" rows="3" data-original="{{ fa.evidence | join('\n') | e }}">{{ fa.evidence | join('\n') | e }}</textarea>
+          </div>
+
+          {# product_bug fields per D-06 #}
+          <div class="category-fields{% if fa.category.value == 'product_bug' %} active{% endif %}" id="fields-{{ loop.index }}-product_bug">
+            <div class="field-group">
+              <div class="field-label">Bug Subject</div>
+              <textarea name="bug_subject" rows="2" data-original="{{ fa.bug_details.bug_subject | default('', true) | e }}">{{ fa.bug_details.bug_subject | default('', true) | e }}</textarea>
+            </div>
+            <div class="field-group">
+              <div class="field-label">Bug Description</div>
+              <textarea name="bug_description" rows="3" data-original="{{ fa.bug_details.description | default('', true) | e }}">{{ fa.bug_details.description | default('', true) | e }}</textarea>
+            </div>
+          </div>
+
+          {# test_bug fields per D-06 #}
+          <div class="category-fields{% if fa.category.value == 'test_bug' %} active{% endif %}" id="fields-{{ loop.index }}-test_bug">
+            <div class="field-group">
+              <div class="field-label">Suggested Fix Description</div>
+              <textarea name="suggested_fix_desc" rows="3" data-original="{{ fa.suggested_fix.description | default('', true) | e }}">{{ fa.suggested_fix.description | default('', true) | e }}</textarea>
+            </div>
+          </div>
+
+          {# Comment per D-08 #}
+          <div class="field-group">
+            <div class="field-label">Comment (optional)</div>
+            <textarea name="comment" rows="4" placeholder="Additional notes about this classification..."></textarea>
+          </div>
+
+          {# Submit — downloads feedback JSON for this card #}
+          <div class="btn-row">
+            <button type="submit" class="btn-save">Submit &amp; Download</button>
+            <span class="save-status" id="fb-status-{{ loop.index }}"></span>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
   {% endfor %}
@@ -887,6 +969,23 @@ body {
   <button class="float-btn" id="toggle-all-btn" onclick="var cards=document.querySelectorAll('.failure-card');var anyOpen=document.querySelector('.failure-card.open');if(anyOpen){cards.forEach(function(c){c.classList.remove('open')});this.innerHTML='&#x25BC; Expand All'}else{cards.forEach(function(c){c.classList.add('open')});this.innerHTML='&#x25B2; Collapse All'}" title="Expand all">&#x25BC; Expand All</button>
 </div>
 {% endif %}
+
+<script>
+function showFieldsForCategory(idx, cat, originalCat) {
+  var panel = document.getElementById('fb-panel-' + idx);
+  panel.querySelectorAll('.category-fields').forEach(function(g) { g.classList.remove('active'); });
+  var target = document.getElementById('fields-' + idx + '-' + cat);
+  if (target) target.classList.add('active');
+  // Per D-10: highlight green if confirmed (same as original), red if changed
+  panel.querySelectorAll('label.radio-label').forEach(function(lbl) {
+    lbl.classList.remove('changed');
+  });
+  if (cat !== originalCat) {
+    var selected = document.getElementById('fb-cat-label-' + idx + '-' + cat);
+    if (selected) selected.classList.add('changed');
+  }
+}
+</script>
 
 </div><!-- /container -->
 </body>
