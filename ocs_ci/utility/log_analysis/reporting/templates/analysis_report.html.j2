@@ -496,7 +496,9 @@ body {
     <div class="failure-header" onclick="this.parentElement.classList.toggle('open')">
       <div class="failure-num">{{ loop.index }}</div>
       <div class="failure-name" title="{{ fa.test_result.name }}">{{ fa.test_result.name }}</div>
+      <button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText('{{ fa.test_result.name | e }}');var b=this;b.textContent='\u2713';setTimeout(function(){b.textContent='\u{1F4CB}'},1500)" title="Copy test name">&#x1F4CB;</button>
       <span class="badge badge-{{ fa.category.value }}">{{ fa.category.value | replace('_', ' ') }}</span>
+      {% if fa.cache_file %}<a href="{{ fa.cache_file }}" class="badge {% if fa.cache_hit %}badge-cache{% else %}badge-new{% endif %}" target="_blank" onclick="event.stopPropagation()">{% if fa.cache_hit %}cache{% else %}new{% endif %}</a>{% endif %}
       <span class="confidence">{{ "%.0f" | format(fa.confidence * 100) }}%</span>
       <span class="chevron">&#9654;</span>
     </div>
@@ -537,7 +539,7 @@ body {
         {% if fa.cache_file %}
         <div class="meta-item">
           <span class="meta-label">Cache</span>
-          <span class="meta-value" style="font-size:12px">{% if fa.cache_file.startswith('http') %}<a href="{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">hit</a>{% else %}<a href="file://{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">hit</a>{% endif %}</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.cache_file.startswith('http') %}<a href="{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">{% if fa.cache_hit %}hit{% else %}new{% endif %}</a>{% else %}<a href="file://{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">{% if fa.cache_hit %}hit{% else %}new{% endif %}</a>{% endif %}</span>
         </div>
         {% if fa.cache_test %}
         <div class="meta-item">
@@ -761,6 +763,13 @@ body {
       {% endfor %}
     </tbody>
   </table>
+</div>
+{% endif %}
+
+{% if run.failure_analyses %}
+<div class="float-controls">
+  <button class="float-btn" onclick="document.querySelectorAll('.failure-card').forEach(function(c){c.classList.add('open')})" title="Expand all">&#x25BC;</button>
+  <button class="float-btn" onclick="document.querySelectorAll('.failure-card').forEach(function(c){c.classList.remove('open')})" title="Collapse all">&#x25B2;</button>
 </div>
 {% endif %}
 
