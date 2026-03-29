@@ -25,8 +25,6 @@ class FusionAccessUI(PageNavigator, BaseUI):
         """
         Click on 'Connect external systems' button.
 
-        Raises:
-            TimeoutExpiredError: If button is not found or clickable
         """
         self.base_ui.do_click(FDF_SAN_LOCATORS["connect_external_storage_button"])
         logger.info("Clicked on Connect external systems button")
@@ -55,8 +53,6 @@ class FusionAccessUI(PageNavigator, BaseUI):
         """
         Select AllNodes (Default) radio button.
 
-        Raises:
-            TimeoutExpiredError: If radio button is not found
         """
 
         elements = self.base_ui.get_elements(FDF_SAN_LOCATORS["all_nodes_radio"])
@@ -81,8 +77,6 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Args:
             lun_group_name (str): Name for the LUN group
 
-        Raises:
-            TimeoutExpiredError: If text field is not found
         """
         self.base_ui.do_send_keys(
             FDF_SAN_LOCATORS["lun_group_name_input"], lun_group_name
@@ -137,8 +131,6 @@ class FusionAccessUI(PageNavigator, BaseUI):
         """
         Navigate to san_storage tab under external systems page
 
-        Raises:
-            TimeoutExpiredError: If tab is not found
         """
         self.base_ui.do_click(
             FDF_SAN_LOCATORS["san_storage_link"], enable_screenshot=True
@@ -154,7 +146,6 @@ class FusionAccessUI(PageNavigator, BaseUI):
             lun_group_name (str): Name for the LUN group
 
         """
-
         # 1. Check Connection (Standard Swap)
         path, strategy = SCALE_DASHBOARD_LOCATORS["scale_connection_green"]
         assert self.base_ui.check_element_presence(
