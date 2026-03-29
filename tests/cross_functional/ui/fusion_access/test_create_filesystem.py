@@ -124,7 +124,7 @@ class TestFDFSANConnection(ManageTest):
         logger.info("Step 11: Wait for LUN group creation and verify SAN Scale state")
         logger.info("Waiting for filesystem creation")
         self.fusion_access.wait_for_filesystem_and_verify_connection(
-            lun_group_name="lungroup-test-ead8da47e581457ea7571659d1"
+            lun_group_name=lun_group_name,
         )
 
 

@@ -160,6 +160,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         assert self.base_ui.check_element_presence(
             (strategy, path), timeout=20
         ), "Scale dashboard connection is not green"
+        logger.info("Scale dashboard connection is green")
 
         # 2. Check for the SPECIFIC LUN group row
         path_row, strategy_row = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
@@ -168,6 +169,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         assert self.base_ui.check_element_presence(
             (strategy_row, specific_row_xpath), timeout=20
         ), f"LUN group '{lun_group_name}' not found in the table"
+        logger.info(f"lun group {lun_group_name} found in the table")
 
         # 3. Check that the SPECIFIC LUN group is OK
         path_ok, strategy_ok = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
@@ -176,5 +178,4 @@ class FusionAccessUI(PageNavigator, BaseUI):
         assert self.base_ui.check_element_presence(
             (strategy_ok, specific_ok_xpath), timeout=20
         ), f"LUN group '{lun_group_name}' is not healthy (OK status missing)"
-
-        return lun_group_name
+        logger.info(f"LUN group {lun_group_name} health status is OK")
