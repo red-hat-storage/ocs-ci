@@ -317,6 +317,121 @@ body {
   word-break: break-word;
 }
 
+/* Feedback panel */
+.feedback-toggle {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+  margin-top: 8px;
+  margin-left: 8px;
+}
+.feedback-toggle:hover { background: #eff6ff; }
+.feedback-toggle.saved { background: #f0fdf4; border-color: var(--green); color: var(--green); }
+.feedback-panel {
+  display: none;
+  margin-top: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+.feedback-panel.show { display: block; }
+.feedback-panel fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.feedback-panel legend {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.feedback-panel label.radio-label {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: background 0.15s, border-color 0.15s;
+}
+.feedback-panel label.radio-label:has(input:checked) {
+  background: #eff6ff;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.feedback-panel label.radio-label.changed:has(input:checked) {
+  background: #fef2f2;
+  border-color: var(--red);
+  color: var(--red);
+}
+.feedback-panel label.radio-label input[type="radio"] {
+  display: none;
+}
+.feedback-panel .field-group {
+  margin-bottom: 12px;
+}
+.feedback-panel .field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.feedback-panel textarea,
+.feedback-panel input[type="text"],
+.feedback-panel input[type="email"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  background: var(--card);
+  resize: vertical;
+}
+.feedback-panel textarea:focus,
+.feedback-panel input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+}
+.feedback-panel .category-fields { display: none; }
+.feedback-panel .category-fields.active { display: block; }
+.feedback-panel .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  align-items: center;
+}
+.feedback-panel .btn-save {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.feedback-panel .btn-save:hover { opacity: 0.9; }
+.feedback-panel .save-status {
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 600;
+}
+
 /* Summary tables */
 .summary-table {
   width: 100%;
@@ -363,18 +478,19 @@ body {
   z-index: 1000;
 }
 .float-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+  padding: 10px 18px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--card);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   cursor: pointer;
-  font-size: 18px;
+  font-size: 13px;
+  font-weight: 600;
   display: flex;
   align-items: center;
+  gap: 6px;
   justify-content: center;
-  color: var(--text-secondary);
   transition: background 0.2s, color 0.2s;
 }
 .float-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
@@ -431,7 +547,7 @@ body {
     {% if run.run_metadata.logs_url %}
     <div class="meta-item">
       <span class="meta-label">Logs</span>
-      <span class="meta-value"><a href="{{ run.run_metadata.logs_url }}" style="color:var(--accent)">{{ run.run_metadata.logs_url }}</a></span>
+      <span class="meta-value"><a href="{{ run.run_metadata.logs_url }}" target="_blank" style="color:var(--accent)">{{ run.run_metadata.logs_url }}</a></span>
     </div>
     {% endif %}
     <div class="meta-item">
@@ -492,7 +608,7 @@ body {
   <h2>Failure Analysis ({{ run.failure_analyses | length }})</h2>
 
   {% for fa in run.failure_analyses %}
-  <div class="failure-card" id="failure-{{ loop.index }}">
+  <div class="failure-card" id="failure-{{ loop.index }}" data-cache-file="{{ fa.cache_file | e }}" data-test-name="{{ fa.test_result.name | e }}">
     <div class="failure-header" onclick="this.parentElement.classList.toggle('open')">
       <div class="failure-num">{{ loop.index }}</div>
       <div class="failure-name" title="{{ fa.test_result.name }}">{{ fa.test_result.name }}</div>
@@ -534,7 +650,7 @@ body {
         {% endif %}
         <div class="meta-item">
           <span class="meta-label">Must Gather</span>
-          <span class="meta-value" style="font-size:12px">{% if fa.must_gather_url %}<a href="{{ fa.must_gather_url }}" style="color:var(--accent)">logs</a>{% else %}N/A{% endif %}</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.must_gather_url %}<a href="{{ fa.must_gather_url }}" target="_blank" style="color:var(--accent)">logs</a>{% else %}N/A{% endif %}</span>
         </div>
         {% if fa.cache_file %}
         <div class="meta-item">
@@ -768,8 +884,7 @@ body {
 
 {% if run.failure_analyses %}
 <div class="float-controls">
-  <button class="float-btn" onclick="document.querySelectorAll('.failure-card').forEach(function(c){c.classList.add('open')})" title="Expand all">&#x25BC;</button>
-  <button class="float-btn" onclick="document.querySelectorAll('.failure-card').forEach(function(c){c.classList.remove('open')})" title="Collapse all">&#x25B2;</button>
+  <button class="float-btn" id="toggle-all-btn" onclick="var cards=document.querySelectorAll('.failure-card');var anyOpen=document.querySelector('.failure-card.open');if(anyOpen){cards.forEach(function(c){c.classList.remove('open')});this.innerHTML='&#x25BC; Expand All'}else{cards.forEach(function(c){c.classList.add('open')});this.innerHTML='&#x25B2; Collapse All'}" title="Expand all">&#x25BC; Expand All</button>
 </div>
 {% endif %}
 
