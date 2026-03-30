@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants, managedservice
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import exec_cmd
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 def set_pagerduty_integration_secret(integration_key):

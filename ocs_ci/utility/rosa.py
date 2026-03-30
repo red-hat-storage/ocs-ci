@@ -37,7 +37,7 @@ from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 from ocs_ci.utility import version
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 rosa = config.AUTH.get("rosa", {})
 rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 # to trace the leftovers of aws resources - use the date + letters for every role, config, etc.

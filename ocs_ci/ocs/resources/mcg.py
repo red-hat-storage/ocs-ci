@@ -52,7 +52,7 @@ from ocs_ci.helpers.helpers import (
 )
 import subprocess
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class MCG:
